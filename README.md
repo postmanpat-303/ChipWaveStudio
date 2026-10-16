@@ -34,4 +34,11 @@ See [docs/PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md) for the core pattern editor
 
 ChipWave Tracker is free software, licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-or-later).
 
-**Next step:** coding the first runnable version, **Windows x86_64 first** (cross-compiled on Linux, tested under Wine). See [docs/PACKAGING.md §0](docs/PACKAGING.md).
+## Build (v0.1.0, first runnable version)
+```
+cargo run --release                     # Linux (needs libasound2-dev)
+cargo build --release --target x86_64-pc-windows-gnu   # Windows exe from Linux (mingw-w64)
+chipwave --self-test [out.wav]          # headless: renders the demo, checks it is not silent
+chipwave --render demo out.wav
+```
+v0.1.0 has the pattern editor (keys per [docs/PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md)), tracker playback, a simple synth with factory psytrance presets, WAV sample import, `.cwt` save/load, WAV export, the first-run demo song, and Dark (default) / Amiga themes. Windows build: `dist/ChipWave-0.1.0-windows-x64.zip` on the Releases page once tagged; screenshot: [dist/screenshot.png](dist/screenshot.png).

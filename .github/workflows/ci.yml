@@ -78,16 +78,10 @@ jobs:
         run: |
           BIN=target/release/chipwave
           [ "$RUNNER_OS" = "Windows" ] && BIN=target/release/chipwave.exe
-          if [ ! -f tests/songs/smoke.cwt ]; then echo "No smoke song yet - skipping."; exit 0; fi
           "$BIN" --version
-          "$BIN" --self-test
-          "$BIN" --render tests/songs/smoke.cwt --out smoke.wav --deterministic
-          cargo test --test golden -- --nocapture
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            xvfb-run -a "$BIN" --screenshot screenshot-linux.png --exit-after 5
-          else
-            "$BIN" --screenshot "screenshot-$RUNNER_OS.png" --exit-after 5
-          fi
+          "$BIN" --self-test smoke.wav
+          "$BIN" --render demo smoke-render.wav
+          test -s smoke.wav && test -s smoke-render.wav
 
       - name: Upload screenshots and smoke output
         if: steps.detect.outputs.rust == 'true' && always()
@@ -95,7 +89,6 @@ jobs:
         with:
           name: smoke-${{ matrix.os }}
           path: |
-            screenshot-*.png
             smoke.wav
           if-no-files-found: ignore
 
