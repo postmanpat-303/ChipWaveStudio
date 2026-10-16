@@ -160,6 +160,8 @@ pub enum ArrAction {
     Copy,
     Paste,
     PasteUnique,
+    /// tag the selected clips' blocks (keys 1–7, 0 clears)
+    Role(Option<crate::arrange::Role>),
 }
 
 /// Arranger shortcuts. Ctrl+D / Ctrl+Shift+D work whenever the arranger is
@@ -197,6 +199,24 @@ pub fn arranger_shortcut(e: &Event, focused: bool) -> Option<ArrAction> {
         Key::Insert => ArrAction::Insert,
         Key::Plus | Key::Equals => ArrAction::ZoomIn,
         Key::Minus => ArrAction::ZoomOut,
+        Key::Num0 if !m.shift => ArrAction::Role(None),
+        Key::Num1 | Key::Num2 | Key::Num3 | Key::Num4 | Key::Num5 | Key::Num6 | Key::Num7
+            if !m.shift =>
+        {
+            let i = [
+                Key::Num1,
+                Key::Num2,
+                Key::Num3,
+                Key::Num4,
+                Key::Num5,
+                Key::Num6,
+                Key::Num7,
+            ]
+            .iter()
+            .position(|k| k == key)
+            .unwrap_or(0);
+            ArrAction::Role(Some(crate::arrange::ROLES[i]))
+        }
         _ => return None,
     })
 }

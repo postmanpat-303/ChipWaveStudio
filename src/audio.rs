@@ -10,6 +10,8 @@ use std::sync::{Arc, Mutex};
 pub struct Shared {
     pub song: Song,
     pub engine: Engine,
+    /// Fill-to-length preview: when set, the audio thread plays this song instead
+    pub preview: Option<Song>,
 }
 
 pub type SharedRef = Arc<Mutex<Shared>>;
@@ -173,8 +175,12 @@ pub fn start_with(
                     if filled + CHUNK * 2 <= target {
                         {
                             let mut s = shared.lock().unwrap();
-                            let Shared { song, engine } = &mut *s;
-                            engine.render(song, &mut buf);
+                            let Shared {
+                                song,
+                                engine,
+                                preview,
+                            } = &mut *s;
+                            engine.render(preview.as_ref().unwrap_or(song), &mut buf);
                         }
                         if let Ok(chunk) = prod.write_chunk_uninit(buf.len()) {
                             chunk.fill_from_iter(buf.iter().copied());

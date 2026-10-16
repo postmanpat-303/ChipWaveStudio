@@ -153,7 +153,7 @@ impl App {
                 s.song.instruments.get(idx).map(|x| &x.kind)
             {
                 let n = *base_note;
-                let Shared { song, engine } = s;
+                let Shared { song, engine, .. } = s;
                 engine.preview(song, PREVIEW_CH, n, ins);
             }
         });

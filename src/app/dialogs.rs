@@ -174,6 +174,9 @@ impl App {
             }
             return true;
         }
+        if self.fill_key(key, m) {
+            return true;
+        }
         if self.show_info && key == Key::Escape {
             self.show_info = false;
             return true;

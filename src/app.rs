@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod dialogs;
+mod fillview;
 mod fxview;
 mod sampleview;
 mod settingsview;
@@ -99,6 +100,8 @@ pub struct App {
     rebinding: Option<crate::keymap::Action>,
     bind_msg: String,
     export_dlg: Option<dialogs::ExportDlg>,
+    /// Song > Fill to length dialog state
+    fill: Option<fillview::FillState>,
     show_info: bool,
     /// action waiting for the Save / Don't save / Cancel answer
     prompt: Option<crate::prompt::Pending>,
@@ -153,6 +156,7 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
     let shared: SharedRef = Arc::new(Mutex::new(Shared {
         song,
         engine: Engine::new(48000.0),
+        preview: None,
     }));
     // crash recovery: find sessions left behind, then start our own
     let rroot = crate::recovery::root();
@@ -227,6 +231,7 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         rebinding: None,
         bind_msg: String::new(),
         export_dlg: None,
+        fill: None,
         show_info: false,
         prompt: None,
         discarded: false,
@@ -489,8 +494,14 @@ impl App {
 
     fn play(&mut self, mode: u8) {
         let (pattern, row) = (self.pattern, self.row);
+        if let Some(f) = &mut self.fill {
+            f.previewing = false;
+        }
         self.with(|s| {
-            let Shared { song, engine } = s;
+            if s.preview.take().is_some() {
+                s.engine.stop();
+            }
+            let Shared { song, engine, .. } = s;
             if engine.playing && mode <= 1 {
                 engine.stop();
                 return;
@@ -720,6 +731,20 @@ impl App {
         let arr_visible =
             self.view == View::Arranger || (self.view == View::Pattern && self.dock_arranger);
         for ev in events {
+            // the Fill to length dialog owns plain keys while it is open
+            if self.fill.is_some() && self.prompt.is_none() {
+                if let egui::Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers: m,
+                    ..
+                } = &ev
+                {
+                    if self.fill_key(*key, *m) {
+                        continue;
+                    }
+                }
+            }
             if input::is_clipboard_key(&ev) {
                 continue;
             }
@@ -930,6 +955,7 @@ impl App {
                 Key::Q if cmd => self.request(crate::prompt::Pending::Quit, ctx),
                 Key::Comma if cmd => self.toggle_settings(),
                 Key::E if cmd && m.shift => self.open_export(),
+                Key::F if cmd && m.shift => self.open_fill(),
                 Key::F12 => self.show_help = !self.show_help,
                 Key::S if cmd => self.save(m.shift),
                 Key::O if cmd => self.request(crate::prompt::Pending::Open, ctx),
@@ -1000,7 +1026,7 @@ impl App {
                         let note = (self.octave as i32 * 12 + off + 1).clamp(1, 120) as u8;
                         let (ch, ins) = (self.ch, self.instr);
                         self.with(|s| {
-                            let Shared { song, engine } = s;
+                            let Shared { song, engine, .. } = s;
                             engine.preview(song, ch, note, ins);
                         });
                         if self.edit {
@@ -2032,6 +2058,7 @@ impl App {
             Cut => self.arr_copy(true, ctx),
             Paste => self.arr_paste(text, false, ctx),
             PasteUnique => self.arr_paste(text, true, ctx),
+            Role(r) => self.set_role(r),
         }
         if matches!(a, Prev | Next) {
             self.row = 0;
@@ -2041,7 +2068,14 @@ impl App {
     #[allow(clippy::type_complexity)]
     fn arranger_view(&mut self, ui: &mut egui::Ui) {
         let (order, blocks, zoom, playing, loop_pat, opos, prow, ppat) = self.with(|s| {
-            let blocks: Vec<(String, usize, Vec<(usize, usize)>)> = s
+            #[allow(clippy::type_complexity)]
+            let blocks: Vec<(
+                String,
+                usize,
+                Vec<(usize, usize)>,
+                Option<crate::arrange::Role>,
+                bool,
+            )> = s
                 .song
                 .patterns
                 .iter()
@@ -2054,7 +2088,7 @@ impl App {
                             }
                         }
                     }
-                    (p.name.clone(), p.rows, ticks)
+                    (p.name.clone(), p.rows, ticks, p.role, p.derived.is_some())
                 })
                 .collect();
             (
@@ -2191,7 +2225,12 @@ impl App {
             }
         }
         let zoom = self.with(|s| s.song.arranger_zoom);
-        let total_w = acc as f32 * zoom + pad * 2.0;
+        let ghost_rows = self
+            .fill
+            .as_ref()
+            .and_then(|f| f.prop.as_ref())
+            .map(|p| p.rows);
+        let total_w = acc.max(ghost_rows.unwrap_or(0)) as f32 * zoom + pad * 2.0;
         let mut lane_ops: Vec<LaneOp> = vec![];
         let mut sa = egui::ScrollArea::both()
             .id_salt("arranger_scroll")
@@ -2212,10 +2251,30 @@ impl App {
             let painter = ui.painter_at(rect);
             theme::crt(&painter, rect);
             let ruler_h = 16.0;
-            let lane = Rect::from_min_max(
+            let full_lane = Rect::from_min_max(
                 Pos2::new(rect.left(), rect.top() + ruler_h + 4.0),
                 Pos2::new(rect.right(), rect.bottom() - 6.0),
             );
+            // with a Fill-to-length proposal: real clips on top, ghost clips below
+            let (lane, ghost) = if ghost_rows.is_some() {
+                let h = full_lane.height();
+                (
+                    Rect::from_min_max(
+                        full_lane.min,
+                        Pos2::new(full_lane.right(), full_lane.top() + h * 0.5),
+                    ),
+                    Some(Rect::from_min_max(
+                        Pos2::new(full_lane.left(), full_lane.top() + h * 0.5 + 14.0),
+                        full_lane.max,
+                    )),
+                )
+            } else {
+                (full_lane, None)
+            };
+            if let Some(g) = ghost {
+                let names: Vec<String> = blocks.iter().map(|b| b.0.clone()).collect();
+                self.ghost_lane(&painter, g, rect.left() + pad, zoom, &names);
+            }
             let xof = |rows: usize| rect.left() + pad + rows as f32 * zoom;
             // ruler: a tick every 16 rows, labels every 64
             let step = if zoom < 1.0 { 64 } else { 16 };
@@ -2243,6 +2302,7 @@ impl App {
             let mods = ui.input(|i| i.modifiers);
             let selected = self.arr_sel_list();
             let mut menu_act: Option<input::ArrAction> = None;
+            let mut bake = false;
             let released = ui.input(|i| i.pointer.any_released());
             for (i, &b) in order.iter().enumerate() {
                 let cr = Rect::from_min_max(
@@ -2287,7 +2347,7 @@ impl App {
                     );
                 }
                 // mini pattern preview: note ticks per channel
-                if let Some((name, rows, ticks)) = blocks.get(b) {
+                if let Some((name, rows, ticks, role, der)) = blocks.get(b) {
                     let body = Rect::from_min_max(
                         Pos2::new(cr.left() + 4.0, cr.top() + 20.0),
                         Pos2::new(cr.right() - 4.0, cr.bottom() - 4.0),
@@ -2311,6 +2371,38 @@ impl App {
                         FontId::proportional(12.0),
                         Color32::WHITE,
                     );
+                    // role badge (muted palette), top-right
+                    if let Some(r) = role {
+                        let txt = if cr.width() > 70.0 {
+                            r.name()
+                        } else {
+                            r.short()
+                        };
+                        let w = txt.len() as f32 * 6.5 + 8.0;
+                        let br = Rect::from_min_size(
+                            Pos2::new(cr.right() - w - 4.0, cr.top() + 3.0),
+                            egui::vec2(w, 14.0),
+                        );
+                        if br.left() > cr.left() + 4.0 {
+                            tp.rect_filled(br, 7, fillview::role_col(*r));
+                            tp.text(
+                                br.center(),
+                                egui::Align2::CENTER_CENTER,
+                                txt,
+                                FontId::proportional(10.0),
+                                Color32::from_rgb(0x16, 0x18, 0x1b),
+                            );
+                        }
+                    }
+                    if *der {
+                        tp.text(
+                            cr.left_bottom() + egui::vec2(6.0, -3.0),
+                            egui::Align2::LEFT_BOTTOM,
+                            "derived'",
+                            FontId::proportional(10.0),
+                            Color32::from_white_alpha(200),
+                        );
+                    }
                 }
                 if resp.clicked() {
                     self.arr_focus = true;
@@ -2357,6 +2449,42 @@ impl App {
                             ui.close();
                         }
                     }
+                    ui.separator();
+                    ui.menu_button("Role", |ui| {
+                        for (k, r) in crate::arrange::ROLES.iter().enumerate() {
+                            let cur = blocks.get(b).and_then(|x| x.3) == Some(*r);
+                            if ui
+                                .selectable_label(
+                                    cur,
+                                    egui::RichText::new(format!("{}  {}", k + 1, r.name()))
+                                        .monospace()
+                                        .color(fillview::role_col(*r)),
+                                )
+                                .clicked()
+                            {
+                                menu_act = Some(A::Role(Some(*r)));
+                                ui.close();
+                            }
+                        }
+                        if ui
+                            .button(egui::RichText::new("0  none").monospace())
+                            .clicked()
+                        {
+                            menu_act = Some(A::Role(None));
+                            ui.close();
+                        }
+                    });
+                    if blocks.get(b).is_some_and(|x| x.4)
+                        && ui
+                            .button("Bake derived block")
+                            .on_hover_text(
+                                "make it an ordinary block that no longer follows its source",
+                            )
+                            .clicked()
+                    {
+                        bake = true;
+                        ui.close();
+                    }
                 });
                 if resp.double_clicked() {
                     self.view = View::Pattern;
@@ -2369,6 +2497,9 @@ impl App {
             }
             if let Some(a) = menu_act {
                 self.arranger_action(a, &ui.ctx().clone());
+            }
+            if bake {
+                self.bake_selected();
             }
             // drag to reorder: insertion marker + drop
             if let (Some(from), Some(p)) = (self.arr_drag, pointer) {
@@ -3182,7 +3313,7 @@ impl App {
                     ("1", "note off"), ("F1 - F8", "base octave 1-8"), ("0-9 A-F", "hex in instr/vol/effect columns"),
                     ("Delete", "clear field"), ("Backspace / Insert", "pull up / push down rows"),
                     ("Space", "play / stop current block (loop)"), ("Shift+Space", "play / stop song"), ("Enter / Ctrl+Enter", "restart block / play from row"), ("Ctrl+= / Ctrl+- / Ctrl+0", "UI scale up / down / 100 %"), ("Esc", "edit mode on/off"),
-                    ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Alt +/- (Shift = octave)", "transpose selection or channel"), ("F9 / F10", "mute / solo channel"),
+                    ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Ctrl+Shift+F", "fill to length (auto arrange)"), ("1-7 / 0 in arranger", "tag block role / clear"), ("Alt +/- (Shift = octave)", "transpose selection or channel"), ("F9 / F10", "mute / solo channel"),
                     ("Numpad - / +", "base octave down / up"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
                     ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Delete (with selection)", "clear selection"),
                     ("Ctrl+Tab, Ctrl+1..5", "views: pattern / arranger / mixer / FX / sample"), ("F12", "this key list"), ("Ctrl+Q", "quit"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"),
@@ -3318,6 +3449,7 @@ impl eframe::App for App {
         }
         self.handle_keys(&ctx);
         self.tick_safety();
+        self.tick_derived();
 
         let full = ui.max_rect();
         theme::gradient(ui.painter(), full, th().bg_top, th().bg_bot);
@@ -3449,6 +3581,7 @@ impl eframe::App for App {
         }
         self.dialogs(&ctx);
         self.modal_dialogs(&ctx);
+        self.fill_dialog(&ctx);
         // window close button: ask first when there are unsaved changes
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
             if self.dirty {

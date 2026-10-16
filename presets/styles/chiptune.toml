@@ -1,0 +1,16 @@
+# Fill to length style: Chiptune demo-scene (I V C V' C' B F C+ O)
+name = "Chiptune demo-scene"
+default_length = "2:30"
+max_repeat = 2
+start = ["Intro"]
+end = ["Outro"]
+energy = [[0.0, 0.3], [0.25, 0.6], [0.6, 0.7], [0.7, 0.4], [0.85, 1.0], [1.0, 0.3]]
+favour = ["octave", "transpose", "drum_fill", "density", "fade"]
+
+[next]
+Intro = [["Verse", 1.0]]
+Verse = [["Chorus", 0.9], ["Verse", 0.1]]
+Chorus = [["Verse", 0.5], ["Bridge", 0.3], ["Fill", 0.1], ["Outro", 0.1]]
+Bridge = [["Fill", 0.6], ["Chorus", 0.4]]
+Fill = [["Chorus", 1.0]]
+Breakdown = [["Fill", 0.5], ["Chorus", 0.5]]

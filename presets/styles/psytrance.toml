@@ -1,0 +1,16 @@
+# Fill to length style: Psytrance 145 (I(32) V Bd F C(drop) V Bd F C O(32)). "Bridge" acts as the build.
+name = "Psytrance 145"
+default_length = "7:00"
+max_repeat = 3
+start = ["Intro"]
+end = ["Outro"]
+energy = [[0.0, 0.4], [0.15, 0.7], [0.3, 0.3], [0.4, 1.0], [0.6, 0.7], [0.7, 0.25], [0.85, 1.0], [1.0, 0.3]]
+favour = ["mute_drums", "density", "drum_fill", "thin", "fade"]
+
+[next]
+Intro = [["Verse", 1.0]]
+Verse = [["Breakdown", 0.5], ["Bridge", 0.3], ["Chorus", 0.2]]
+Breakdown = [["Fill", 0.6], ["Bridge", 0.4]]
+Bridge = [["Fill", 0.5], ["Chorus", 0.5]]
+Fill = [["Chorus", 1.0]]
+Chorus = [["Verse", 0.6], ["Breakdown", 0.2], ["Outro", 0.2]]

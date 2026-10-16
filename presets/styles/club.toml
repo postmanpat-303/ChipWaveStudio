@@ -1,0 +1,16 @@
+# Fill to length style: Club build/drop (I Bd C(drop) Bk V Bd C O). "Bridge" acts as the build.
+name = "Club build/drop"
+default_length = "5:00"
+max_repeat = 2
+start = ["Intro"]
+end = ["Outro"]
+energy = [[0.0, 0.3], [0.2, 0.7], [0.3, 1.0], [0.45, 0.3], [0.6, 0.6], [0.8, 1.0], [1.0, 0.3]]
+favour = ["density", "mute_drums", "drum_fill", "thin"]
+
+[next]
+Intro = [["Bridge", 0.7], ["Verse", 0.3]]
+Bridge = [["Chorus", 1.0]]
+Chorus = [["Breakdown", 0.6], ["Verse", 0.2], ["Outro", 0.2]]
+Breakdown = [["Verse", 0.5], ["Bridge", 0.5]]
+Verse = [["Bridge", 0.8], ["Chorus", 0.2]]
+Fill = [["Chorus", 1.0]]

@@ -80,6 +80,10 @@ chipwave --render demo out.wav
   Ctrl+E                         quick export WAV
   Ctrl+Shift+E                   export dialog (WAV / MP3, tags, range)
   Ctrl+,                         settings (arrows + Enter move/open cards)
+  Ctrl+Shift+F                   Song > Fill to length (auto arrange)
+  1-7 / 0 (arranger focus)       block role Intro/Verse/Chorus/Bridge/Breakdown/Outro/Fill / clear
+  Fill dialog                    G generate, R reroll, L lock, P preview, H hide, S style,
+                                 Up/Down variation, Left/Right section, Enter accept, Esc discard
   Unsaved prompt                 Enter = save, N = don't save, Esc = cancel
 ```
 Effects: 01/02 slide, 09 speed, 0C volume, 0D volume slide, 0F tempo (0F00 = break). BPM/speed changes (toolbar or 09/0F) apply instantly while playing.

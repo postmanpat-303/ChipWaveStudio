@@ -1,0 +1,16 @@
+# Fill to length style: Ambient (I V B V' O, long repeats)
+name = "Ambient"
+default_length = "6:00"
+max_repeat = 3
+start = ["Intro"]
+end = ["Outro"]
+energy = [[0.0, 0.2], [0.4, 0.5], [0.6, 0.4], [0.8, 0.5], [1.0, 0.1]]
+favour = ["thin", "density", "octave", "fade"]
+
+[next]
+Intro = [["Verse", 1.0]]
+Verse = [["Bridge", 0.5], ["Verse", 0.3], ["Outro", 0.2]]
+Bridge = [["Verse", 1.0]]
+Breakdown = [["Verse", 1.0]]
+Chorus = [["Verse", 0.6], ["Bridge", 0.4]]
+Fill = [["Verse", 1.0]]

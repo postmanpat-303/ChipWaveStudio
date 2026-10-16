@@ -407,6 +407,10 @@ impl App {
                 {
                     self.show_info = true;
                 }
+                if item(ui, "Fill to length…", "Ctrl+Shift+F") {
+                    self.open_fill();
+                    ui.close();
+                }
                 ui.separator();
                 if ui.button("Add block").clicked() {
                     self.add_block();

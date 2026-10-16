@@ -107,6 +107,10 @@ struct BlockFile {
     name: String,
     lines: usize,
     tracks: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    role: Option<crate::arrange::Role>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    derived: Option<crate::arrange::Derived>,
     rows: String,
 }
 
@@ -188,6 +192,8 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
                 name: p.name.clone(),
                 lines: p.rows,
                 tracks: song.channels,
+                role: p.role,
+                derived: p.derived.clone(),
                 rows: rows_to_text(p),
             };
             z.start_file(format!("blocks/{:03}.toml", i), defl)
@@ -259,6 +265,9 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
             name: b.name,
             rows,
             cells: rows_from_text(&b.rows, channels, rows),
+            role: b.role,
+            derived: b.derived,
+            cache: vec![],
         });
     }
     if patterns.is_empty() {

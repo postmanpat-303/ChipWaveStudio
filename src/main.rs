@@ -2,6 +2,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
+mod arrange;
 mod audio;
 mod automation;
 mod engine;
@@ -106,7 +107,42 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         ok
     };
-    let ok = peak > 0.05
+    // Fill to length: deterministic, exact length
+    let fill_ok = {
+        let mut s = song.clone();
+        let mut b = s.patterns[0].clone();
+        s.patterns[0].role = Some(arrange::Role::Intro);
+        for r in [
+            arrange::Role::Verse,
+            arrange::Role::Chorus,
+            arrange::Role::Outro,
+        ] {
+            b.role = Some(r);
+            s.patterns.push(b.clone());
+        }
+        let st = arrange::Style::factory(4);
+        let par = arrange::Params {
+            style: &st,
+            target_bars: 64,
+            energy: &st.energy,
+            variation: 0.5,
+            seed: 7,
+            locks: vec![],
+        };
+        let a = arrange::generate(&s, &par);
+        let b = arrange::generate(&s, &par);
+        let ok = matches!((&a, &b), (Ok(x), Ok(y)) if x == y && x.rows == 64 * arrange::rows_per_bar(&s));
+        report.push_str(&format!(
+            "  fill to length: {} ({})\n",
+            a.as_ref()
+                .map(|p| format!("{} sections, {:.0} bars", p.sections.len(), p.bars()))
+                .unwrap_or_else(|e| e.clone()),
+            if ok { "ok" } else { "FAILED" }
+        ));
+        ok
+    };
+    let ok = fill_ok
+        && peak > 0.05
         && rms > 0.005
         && !nan
         && wrote.is_ok()
@@ -145,6 +181,7 @@ fn play_test(secs: u64) -> i32 {
     let shared = std::sync::Arc::new(std::sync::Mutex::new(audio::Shared {
         song: fileio::demo_song(),
         engine: engine::Engine::new(48000.0),
+        preview: None,
     }));
     let a = match audio::start(shared.clone(), settings::load().buffer) {
         Ok(a) => a,
@@ -156,7 +193,7 @@ fn play_test(secs: u64) -> i32 {
     std::thread::sleep(std::time::Duration::from_millis(300));
     {
         let mut s = shared.lock().unwrap();
-        let audio::Shared { song, engine } = &mut *s;
+        let audio::Shared { song, engine, .. } = &mut *s;
         engine.start(song, 0, 0, true, 0);
     }
     std::thread::sleep(std::time::Duration::from_secs(secs));

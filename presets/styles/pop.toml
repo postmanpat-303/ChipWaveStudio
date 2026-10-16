@@ -1,0 +1,18 @@
+# Fill to length style: Pop. Edit freely; ChipWave reloads styles when the dialog opens.
+name = "Pop"
+default_length = "3:30"
+max_repeat = 2
+start = ["Intro"]
+end = ["Outro"]
+# energy curve: [position 0..1, energy 0..1]
+energy = [[0.0, 0.2], [0.3, 0.6], [0.5, 0.5], [0.75, 1.0], [1.0, 0.1]]
+# variations this style likes: transpose, octave, drum_fill, thin, mute_drums, density, key_change, fade
+favour = ["key_change", "drum_fill", "thin", "fade"]
+
+[next]
+Intro = [["Verse", 1.0]]
+Verse = [["Chorus", 0.8], ["Verse", 0.2]]
+Chorus = [["Verse", 0.5], ["Bridge", 0.3], ["Outro", 0.2]]
+Bridge = [["Chorus", 1.0]]
+Breakdown = [["Chorus", 1.0]]
+Fill = [["Chorus", 1.0]]

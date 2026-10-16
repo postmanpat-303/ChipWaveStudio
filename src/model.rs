@@ -31,6 +31,15 @@ pub struct Pattern {
     pub rows: usize,
     /// cells[row][channel]
     pub cells: Vec<Vec<Cell>>,
+    /// arrangement role tag (Fill to length)
+    #[serde(default)]
+    pub role: Option<crate::arrange::Role>,
+    /// derived block (variation of another block); cells are rendered from the source
+    #[serde(default)]
+    pub derived: Option<crate::arrange::Derived>,
+    /// cells as last rendered from the source (detects hand edits -> bake)
+    #[serde(skip)]
+    pub cache: Vec<Vec<Cell>>,
 }
 
 impl Pattern {
@@ -39,6 +48,9 @@ impl Pattern {
             name: name.into(),
             rows,
             cells: vec![vec![Cell::default(); channels]; rows],
+            role: None,
+            derived: None,
+            cache: vec![],
         }
     }
 }
