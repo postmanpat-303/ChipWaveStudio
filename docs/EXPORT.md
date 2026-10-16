@@ -1,7 +1,7 @@
 # ChipWave Tracker: Audio Export (WAV and MP3)
 
 **Status:** design. No code yet.
-
+**Status:** implemented in 0.2.0 (WAV + MP3 via LAME, ID3v2.4 tags, song/block/selection range, limiter/normalise, progress + cancel).
 ## 1. What can be exported
 | Scope | Description |
 |---|---|

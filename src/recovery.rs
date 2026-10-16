@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub const AUTOSAVE_EVERY: Duration = Duration::from_secs(120);
 pub const HEARTBEAT_EVERY: Duration = Duration::from_secs(20);
 /// a session whose heartbeat is older than this is not running any more
 const STALE: Duration = Duration::from_secs(90);
@@ -36,7 +35,7 @@ pub struct SessionInfo {
 }
 
 /// Save atomically: write `<path>.tmp`, fsync, keep the old file as `.bak`, rename.
-pub fn atomic_save(song: &Song, path: &Path, keep_bak: bool) -> Result<(), String> {
+pub fn atomic_save(song: &Song, path: &Path, backups: u32) -> Result<(), String> {
     let tmp = path.with_extension("cwt.tmp");
     crate::fileio::save_cwt(song, &tmp)?;
     if let Ok(f) = std::fs::File::open(&tmp) {
@@ -44,8 +43,20 @@ pub fn atomic_save(song: &Song, path: &Path, keep_bak: bool) -> Result<(), Strin
     }
     // sanity: the temp file must load back before it replaces anything
     crate::fileio::load_cwt(&tmp).map_err(|e| format!("verify failed: {e}"))?;
-    if keep_bak && path.exists() {
-        let _ = std::fs::copy(path, path.with_extension("cwt.bak"));
+    if backups > 0 && path.exists() {
+        // song.cwt.bak (newest), song.cwt.bak2 ... bakN
+        let bak = |i: u32| {
+            if i == 1 {
+                path.with_extension("cwt.bak")
+            } else {
+                path.with_extension(format!("cwt.bak{i}"))
+            }
+        };
+        let _ = std::fs::remove_file(bak(backups));
+        for i in (1..backups).rev() {
+            let _ = std::fs::rename(bak(i), bak(i + 1));
+        }
+        let _ = std::fs::copy(path, bak(1));
     }
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
@@ -89,7 +100,7 @@ impl Session {
             let _ = std::fs::rename(dir.join("autosave.1.cwt"), dir.join("autosave.2.cwt"));
             let _ = std::fs::copy(&a, dir.join("autosave.1.cwt"));
         }
-        atomic_save(song, &a, false)
+        atomic_save(song, &a, 0)
     }
     /// Autosave on a background thread with a snapshot of the song.
     pub fn autosave(&self, song: Song) {
@@ -251,9 +262,14 @@ mod tests {
         let root = tmp_root("c");
         let p = root.join("song.cwt");
         let mut song = crate::fileio::demo_song();
-        atomic_save(&song, &p, true).unwrap();
+        atomic_save(&song, &p, 3).unwrap();
         song.bpm = 99.0;
-        atomic_save(&song, &p, true).unwrap();
+        atomic_save(&song, &p, 3).unwrap();
+        song.bpm = 98.0;
+        atomic_save(&song, &p, 3).unwrap();
+        assert!(p.with_extension("cwt.bak2").exists());
+        song.bpm = 99.0;
+        atomic_save(&song, &p, 3).unwrap();
         assert_eq!(crate::fileio::load_cwt(&p).unwrap().bpm, 99.0);
         assert!(
             crate::fileio::load_cwt(&p.with_extension("cwt.bak"))

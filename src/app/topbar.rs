@@ -235,7 +235,7 @@ impl App {
                     self.synth_key(&ctx, Key::N, cmd);
                 }
                 if item(ui, "Open…", "Ctrl+O") {
-                    self.open();
+                    self.request(crate::prompt::Pending::Open, &ctx);
                 }
                 ui.menu_button("Recent", |ui| self.recent_menu(ui));
                 ui.separator();
@@ -246,12 +246,21 @@ impl App {
                     self.save(true);
                 }
                 ui.separator();
-                if item(ui, "Export WAV…", "Ctrl+E") {
+                if item(ui, "Export…  (WAV / MP3)", "Ctrl+Shift+E") {
+                    self.open_export();
+                }
+                if item(ui, "Export MP3…", "") {
+                    self.open_export();
+                    if let Some(d) = &mut self.export_dlg {
+                        d.opts.format = crate::export::Format::Mp3;
+                    }
+                }
+                if item(ui, "Quick export WAV…", "Ctrl+E") {
                     self.export_wav();
                 }
                 ui.separator();
                 if item(ui, "Quit", "Ctrl+Q") {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    self.request(crate::prompt::Pending::Quit, &ctx);
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -299,6 +308,10 @@ impl App {
                 ui.checkbox(&mut self.dock_arranger, "Dock arranger under pattern");
                 ui.checkbox(&mut self.follow, "Follow playback");
                 ui.separator();
+                if item(ui, "Settings…", "Ctrl+,") {
+                    self.toggle_settings();
+                }
+                ui.separator();
                 ui.menu_button("Theme", |ui| {
                     for opt in theme::THEMES {
                         if ui
@@ -306,7 +319,7 @@ impl App {
                             .clicked()
                         {
                             self.theme = opt;
-                            theme::apply(ui.ctx(), opt);
+                            self.apply_theme(ui.ctx());
                             self.save_settings();
                         }
                     }
@@ -387,6 +400,14 @@ impl App {
                     }
                 });
                 ui.separator();
+                if ui
+                    .button("Song info…")
+                    .on_hover_text("title, artist, album, year, comment (used for MP3 tags)")
+                    .clicked()
+                {
+                    self.show_info = true;
+                }
+                ui.separator();
                 if ui.button("Add block").clicked() {
                     self.add_block();
                 }
@@ -459,7 +480,8 @@ impl App {
             self.save_settings();
         }
         if let Some(p) = open {
-            self.open_path(p);
+            let ctx = ui.ctx().clone();
+            self.request(crate::prompt::Pending::OpenPath(p), &ctx);
         }
     }
 
@@ -579,7 +601,10 @@ impl App {
                     .on_hover_text("rows the cursor moves after entering a note");
             });
             group(ui, "VIEW", |ui| {
-                let cur = VIEWS.iter().position(|v| v.0 == self.view).unwrap_or(0);
+                let cur = VIEWS
+                    .iter()
+                    .position(|v| v.0 == self.view)
+                    .unwrap_or(usize::MAX);
                 let items: Vec<(&str, &str)> = VIEWS.iter().map(|v| (v.1, v.2)).collect();
                 if let Some(i) = segmented(ui, &items, cur) {
                     self.view = VIEWS[i].0;

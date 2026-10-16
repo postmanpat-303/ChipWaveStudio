@@ -1,6 +1,6 @@
 [package]
 name = "chipwave"
-version = "0.1.9"
+version = "0.2.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "ChipWave Tracker - an OctaMED-inspired tracker with a built-in synth"
@@ -22,6 +22,11 @@ toml = "1"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 rfd = "0.17"
 rtrb = "0.4"
+mp3lame-encoder = "0.2.5"
+id3 = "1.17"
+
+[dev-dependencies]
+symphonia = { version = "0.5", default-features = false, features = ["mp3"] }
 
 [profile.release]
 opt-level = 3

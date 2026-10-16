@@ -77,7 +77,10 @@ chipwave --render demo out.wav
     Del, Ctrl+A, Shift+Left/Right, right-click menu; click the pattern to focus it again
   Arranger: Left/Right, Del, Ins, Ctrl+D (Shift = unique copy), +/-  zoom
   Ctrl+N / Ctrl+O / Ctrl+S       new / open / save .cwt   (Ctrl+Shift+S = save as)
-  Ctrl+E                         export WAV
+  Ctrl+E                         quick export WAV
+  Ctrl+Shift+E                   export dialog (WAV / MP3, tags, range)
+  Ctrl+,                         settings (arrows + Enter move/open cards)
+  Unsaved prompt                 Enter = save, N = don't save, Esc = cancel
 ```
 Effects: 01/02 slide, 09 speed, 0C volume, 0D volume slide, 0F tempo (0F00 = break). BPM/speed changes (toolbar or 09/0F) apply instantly while playing.
 

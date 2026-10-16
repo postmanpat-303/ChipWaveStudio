@@ -273,3 +273,20 @@ pub fn crt(painter: &egui::Painter, r: Rect) {
         egui::StrokeKind::Inside,
     );
 }
+
+/// accent colour choices (settings > look); "" = theme default
+pub const ACCENTS: [(&str, u32); 5] = [
+    ("Green", 0x5CC07A),
+    ("Cyan", 0x4FC3D9),
+    ("Amber", 0xE8B04A),
+    ("Magenta", 0xD07ACB),
+    ("Blue", 0x6E9BF0),
+];
+
+/// the theme with an optional accent override
+pub fn with_accent(mut t: Theme, accent: &str) -> Theme {
+    if let Some((_, c)) = ACCENTS.iter().find(|a| a.0 == accent) {
+        t.accent = hex(*c);
+    }
+    t
+}

@@ -1,0 +1,541 @@
+//! Modal dialogs: unsaved-changes prompt, export (WAV / MP3), song info.
+use super::*;
+use crate::export::{self, Format, Mp3Mode, Opts, Scope};
+use crate::prompt::{self, Choice, Pending};
+use std::sync::mpsc::Receiver;
+
+type Job = (Arc<export::Progress>, Receiver<Result<String, String>>);
+
+pub(super) struct ExportDlg {
+    pub opts: Opts,
+    pub path: String,
+    job: Option<Job>,
+    result: Option<Result<String, String>>,
+}
+
+fn music_dir() -> PathBuf {
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    home.join("Music").join("ChipWave")
+}
+
+fn ext(f: Format) -> &'static str {
+    match f {
+        Format::Wav => "wav",
+        Format::Mp3 => "mp3",
+    }
+}
+
+impl App {
+    pub(super) fn apply_theme(&self, ctx: &egui::Context) {
+        theme::apply(ctx, theme::with_accent(self.theme, &self.extra.accent));
+    }
+
+    pub(super) fn toggle_settings(&mut self) {
+        self.view = if self.view == View::Settings {
+            View::Pattern
+        } else {
+            View::Settings
+        };
+        self.rebinding = None;
+    }
+
+    pub(super) fn request(&mut self, p: Pending, ctx: &egui::Context) {
+        match prompt::request(self.dirty, p) {
+            prompt::Step::Run(p) => self.run_pending(p, ctx),
+            prompt::Step::Ask(p) => self.prompt = Some(p),
+        }
+    }
+
+    fn run_pending(&mut self, p: Pending, ctx: &egui::Context) {
+        match p {
+            Pending::Quit => {
+                self.allow_close = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            Pending::New => self.new_song(),
+            Pending::Open => self.open(),
+            Pending::OpenPath(p) => self.open_path(p),
+        }
+    }
+
+    fn answer(&mut self, c: Choice, ctx: &egui::Context) {
+        let Some(p) = self.prompt.take() else { return };
+        let saved = if c == Choice::Save {
+            self.save(false);
+            !self.dirty
+        } else {
+            false
+        };
+        match prompt::resolve(c, saved) {
+            prompt::Outcome::Run { discarded } => {
+                if discarded {
+                    self.discarded = true;
+                    self.dirty = false;
+                }
+                self.run_pending(p, ctx);
+            }
+            prompt::Outcome::Stay => {
+                if c == Choice::Save {
+                    self.status = "Not saved - still open".into();
+                }
+            }
+        }
+    }
+
+    pub(super) fn open_export(&mut self) {
+        if self.export_dlg.is_some() {
+            return;
+        }
+        let title = self.with(|s| s.song.title.clone());
+        let dir = if self.extra.export_dir.is_empty() {
+            music_dir()
+        } else {
+            PathBuf::from(&self.extra.export_dir)
+        };
+        let opts = Opts::default();
+        let path = dir.join(format!("{}.{}", sanitize(&title), ext(opts.format)));
+        self.export_dlg = Some(ExportDlg {
+            opts,
+            path: path.display().to_string(),
+            job: None,
+            result: None,
+        });
+    }
+
+    fn selection_range(&self) -> (usize, usize) {
+        if self.arr_multi.is_empty() {
+            (self.arr_sel, self.arr_sel)
+        } else {
+            let a = *self.arr_multi.iter().min().unwrap();
+            let b = *self.arr_multi.iter().max().unwrap();
+            (a, b)
+        }
+    }
+
+    fn start_export(&mut self) {
+        let song = self.with(|s| s.song.clone());
+        let Some(d) = &mut self.export_dlg else {
+            return;
+        };
+        if d.job.is_some() {
+            return;
+        }
+        let p = PathBuf::from(d.path.trim());
+        if p.as_os_str().is_empty() {
+            d.result = Some(Err("choose an output file".into()));
+            return;
+        }
+        if let Some(dir) = p.parent() {
+            if let Err(e) = std::fs::create_dir_all(dir) {
+                d.result = Some(Err(format!("can't create {}: {e}", dir.display())));
+                return;
+            }
+            self.extra.export_dir = dir.display().to_string();
+        }
+        d.result = None;
+        d.job = Some(export::spawn(song, d.opts.clone(), p));
+        self.save_settings();
+    }
+
+    /// keys for dialogs / the settings screen; true = consumed
+    pub(super) fn modal_key(&mut self, key: Key, m: egui::Modifiers, ctx: &egui::Context) -> bool {
+        if self.prompt.is_some() {
+            match key {
+                Key::Enter => self.answer(Choice::Save, ctx),
+                Key::N | Key::D => self.answer(Choice::DontSave, ctx),
+                Key::Escape => self.answer(Choice::Cancel, ctx),
+                _ => {}
+            }
+            return true;
+        }
+        if let Some(d) = &mut self.export_dlg {
+            let running = d.job.is_some();
+            match key {
+                Key::Escape if running => {
+                    if let Some((p, _)) = &d.job {
+                        p.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                Key::Escape => self.export_dlg = None,
+                Key::Enter if !running => self.start_export(),
+                Key::ArrowLeft | Key::ArrowRight if !running => {
+                    d.opts.format = if d.opts.format == Format::Wav {
+                        Format::Mp3
+                    } else {
+                        Format::Wav
+                    };
+                    let np = PathBuf::from(&d.path).with_extension(ext(d.opts.format));
+                    d.path = np.display().to_string();
+                }
+                _ => {}
+            }
+            return true;
+        }
+        if self.show_info && key == Key::Escape {
+            self.show_info = false;
+            return true;
+        }
+        if self.view == View::Settings && !m.command {
+            let n = settingsview::CARDS.len();
+            match key {
+                Key::ArrowRight => self.set_card = (self.set_card + 1) % n,
+                Key::ArrowLeft => self.set_card = (self.set_card + n - 1) % n,
+                Key::ArrowDown => self.set_card = (self.set_card + 3).min(n - 1),
+                Key::ArrowUp => self.set_card = self.set_card.saturating_sub(3),
+                Key::Enter | Key::Space => {
+                    self.set_open = if self.set_open == Some(self.set_card) {
+                        None
+                    } else {
+                        Some(self.set_card)
+                    };
+                }
+                Key::Escape => self.view = View::Pattern,
+                _ => return false,
+            }
+            return true;
+        }
+        false
+    }
+
+    pub(super) fn modal_dialogs(&mut self, ctx: &egui::Context) {
+        // ---------------------------------------------------- unsaved prompt
+        if let Some(p) = &self.prompt {
+            let what = match p {
+                Pending::Quit => "quitting",
+                Pending::New => "starting a new song",
+                Pending::Open | Pending::OpenPath(_) => "opening another song",
+            };
+            let title = self.with(|s| s.song.title.clone());
+            let mut choice = None;
+            egui::Window::new("Unsaved changes")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    ui.label(
+                        egui::RichText::new(format!("Save changes to \"{title}\" before {what}?"))
+                            .strong(),
+                    );
+                    ui.label(
+                        egui::RichText::new("Your changes will be lost if you don't save them.")
+                            .color(th().ink2),
+                    );
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("  Save  ").strong())
+                                    .fill(th().accent.gamma_multiply(0.6)),
+                            )
+                            .on_hover_text("Enter")
+                            .clicked()
+                        {
+                            choice = Some(Choice::Save);
+                        }
+                        if ui.button("Don't save").on_hover_text("N").clicked() {
+                            choice = Some(Choice::DontSave);
+                        }
+                        if ui.button("Cancel").on_hover_text("Esc").clicked() {
+                            choice = Some(Choice::Cancel);
+                        }
+                    });
+                });
+            if let Some(c) = choice {
+                self.answer(c, ctx);
+            }
+        }
+        // ---------------------------------------------------- song info
+        if self.show_info {
+            let mut open = true;
+            let (mut title, mut info) = self.with(|s| (s.song.title.clone(), s.song.info.clone()));
+            let (t0, i0) = (title.clone(), info.clone());
+            egui::Window::new("Song info").open(&mut open).resizable(false).collapsible(false).show(ctx, |ui| {
+                egui::Grid::new("info").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+                    ui.label("Title");
+                    ui.add(egui::TextEdit::singleline(&mut title).desired_width(260.0));
+                    ui.end_row();
+                    ui.label("Artist");
+                    ui.add(egui::TextEdit::singleline(&mut info.artist).desired_width(260.0));
+                    ui.end_row();
+                    ui.label("Album");
+                    ui.add(egui::TextEdit::singleline(&mut info.album).desired_width(260.0));
+                    ui.end_row();
+                    ui.label("Year");
+                    ui.add(egui::TextEdit::singleline(&mut info.year).desired_width(80.0));
+                    ui.end_row();
+                    ui.label("Comment");
+                    ui.add(egui::TextEdit::multiline(&mut info.comment).desired_rows(3).desired_width(260.0));
+                    ui.end_row();
+                });
+                ui.label(egui::RichText::new("Saved in the song; used for MP3 tags (the comment gets \"Made with ChipWave\").").small().color(th().ink2));
+            });
+            if title != t0 || info != i0 {
+                self.with(|s| {
+                    s.song.title = title;
+                    s.song.info = info;
+                });
+                self.dirty = true;
+            }
+            self.show_info = open;
+        }
+        // ---------------------------------------------------- export
+        let Some(mut d) = self.export_dlg.take() else {
+            return;
+        };
+        if let Some((_, rx)) = &d.job {
+            if let Ok(r) = rx.try_recv() {
+                d.result = Some(match r {
+                    Err(e) if e == export::CANCELLED => Err("Export cancelled".into()),
+                    r => r,
+                });
+                d.job = None;
+                if let Some(Ok(m)) = &d.result {
+                    self.status = m.clone();
+                }
+            } else {
+                ctx.request_repaint();
+            }
+        }
+        let (title, info, npat, cur_pat) = self.with(|s| {
+            (
+                s.song.title.clone(),
+                s.song.info.clone(),
+                s.song.patterns.len(),
+                self.pattern,
+            )
+        });
+        let _ = npat;
+        let (sa, sb) = self.selection_range();
+        let mut open = true;
+        let mut close_btn = false;
+        let mut go = false;
+        let mut browse = false;
+        let mut edit_info = false;
+        let running = d.job.is_some();
+        egui::Window::new("Export audio")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+            .show(ctx, |ui| {
+                ui.add_enabled_ui(!running, |ui| {
+                    egui::Grid::new("exp")
+                        .num_columns(2)
+                        .spacing([14.0, 8.0])
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("Format").strong());
+                            ui.horizontal(|ui| {
+                                let before = d.opts.format;
+                                ui.selectable_value(&mut d.opts.format, Format::Wav, "  WAV  ")
+                                    .on_hover_text("32-bit float, lossless (Left/Right)");
+                                ui.selectable_value(&mut d.opts.format, Format::Mp3, "  MP3  ")
+                                    .on_hover_text("LAME encoder with ID3 tags (Left/Right)");
+                                if before != d.opts.format {
+                                    d.path = PathBuf::from(&d.path)
+                                        .with_extension(ext(d.opts.format))
+                                        .display()
+                                        .to_string();
+                                }
+                            });
+                            ui.end_row();
+                            if d.opts.format == Format::Mp3 {
+                                ui.label("MP3 mode");
+                                ui.vertical(|ui| {
+                                    ui.horizontal(|ui| {
+                                        let vbr = matches!(d.opts.mp3, Mp3Mode::Vbr(_));
+                                        if ui
+                                            .selectable_label(vbr, "VBR")
+                                            .on_hover_text(
+                                                "variable bitrate, best quality per size",
+                                            )
+                                            .clicked()
+                                            && !vbr
+                                        {
+                                            d.opts.mp3 = Mp3Mode::Vbr(2);
+                                        }
+                                        if ui
+                                            .selectable_label(!vbr, "CBR")
+                                            .on_hover_text("constant bitrate")
+                                            .clicked()
+                                            && vbr
+                                        {
+                                            d.opts.mp3 = Mp3Mode::Cbr(320);
+                                        }
+                                    });
+                                    match &mut d.opts.mp3 {
+                                        Mp3Mode::Cbr(k) => {
+                                            ui.horizontal(|ui| {
+                                                for b in [128u16, 192, 256, 320] {
+                                                    ui.selectable_value(k, b, format!("{b} kbps"));
+                                                }
+                                            });
+                                        }
+                                        Mp3Mode::Vbr(q) => {
+                                            ui.horizontal(|ui| {
+                                                ui.add(egui::Slider::new(q, 0..=9).prefix("V"));
+                                                let kb = [
+                                                    245, 225, 190, 175, 165, 130, 115, 100, 85, 65,
+                                                ]
+                                                    [(*q).min(9) as usize];
+                                                ui.label(
+                                                    egui::RichText::new(format!(
+                                                        "≈ {kb} kbps · V0 best"
+                                                    ))
+                                                    .small()
+                                                    .color(th().ink2),
+                                                );
+                                            });
+                                        }
+                                    }
+                                });
+                                ui.end_row();
+                            }
+                            ui.label("Sample rate");
+                            ui.horizontal(|ui| {
+                                ui.selectable_value(&mut d.opts.sample_rate, 44100, "44.1 kHz");
+                                ui.selectable_value(&mut d.opts.sample_rate, 48000, "48 kHz");
+                            });
+                            ui.end_row();
+                            ui.label("Range");
+                            ui.horizontal(|ui| {
+                                ui.selectable_value(&mut d.opts.scope, Scope::Song, "Whole song");
+                                ui.selectable_value(
+                                    &mut d.opts.scope,
+                                    Scope::Block(cur_pat),
+                                    format!("Block {cur_pat:02}"),
+                                )
+                                .on_hover_text("the block open in the pattern editor, once");
+                                ui.selectable_value(
+                                    &mut d.opts.scope,
+                                    Scope::Range(sa, sb),
+                                    format!("Arranger selection {}–{}", sa + 1, sb + 1),
+                                )
+                                .on_hover_text("the clips selected in the arranger");
+                            });
+                            ui.end_row();
+                            ui.label("Level");
+                            ui.horizontal(|ui| {
+                                ui.checkbox(&mut d.opts.normalise, "Normalise to −0.3 dBFS");
+                                ui.checkbox(&mut d.opts.limiter, "Limiter")
+                                    .on_hover_text("soft limiter, ceiling −0.3 dBFS");
+                            });
+                            ui.end_row();
+                            ui.label("Tail");
+                            ui.add(
+                                egui::Slider::new(&mut d.opts.tail_secs, 0.0..=10.0)
+                                    .suffix(" s")
+                                    .step_by(0.5),
+                            )
+                            .on_hover_text(
+                                "extra time after the end for releases, delay and reverb",
+                            );
+                            ui.end_row();
+                            ui.label("Tags");
+                            ui.horizontal(|ui| {
+                                let a = if info.artist.is_empty() {
+                                    "no artist".to_string()
+                                } else {
+                                    info.artist.clone()
+                                };
+                                ui.label(
+                                    egui::RichText::new(format!("{title} · {a}")).color(th().value),
+                                );
+                                if ui.small_button("Edit song info…").clicked() {
+                                    edit_info = true;
+                                }
+                            });
+                            ui.end_row();
+                            ui.label("Save to");
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut d.path).desired_width(360.0),
+                                );
+                                if ui.button("Browse…").clicked() {
+                                    browse = true;
+                                }
+                            });
+                            ui.end_row();
+                        });
+                });
+                ui.add_space(6.0);
+                if let Some((p, _)) = &d.job {
+                    let f = p.get();
+                    ui.add(
+                        egui::ProgressBar::new(f)
+                            .show_percentage()
+                            .text(if f < 0.8 {
+                                format!("Rendering… {:.0} %", f * 100.0)
+                            } else {
+                                format!("Encoding… {:.0} %", f * 100.0)
+                            }),
+                    );
+                }
+                match &d.result {
+                    Some(Ok(m)) => {
+                        ui.label(egui::RichText::new(m).color(th().accent));
+                    }
+                    Some(Err(e)) => {
+                        ui.label(egui::RichText::new(e).color(th().brick));
+                    }
+                    None => {}
+                }
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    if running {
+                        if ui.button("Cancel").on_hover_text("Esc").clicked() {
+                            if let Some((p, _)) = &d.job {
+                                p.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                        }
+                    } else {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("  Export  ").strong())
+                                    .fill(th().accent.gamma_multiply(0.6)),
+                            )
+                            .on_hover_text("Enter")
+                            .clicked()
+                        {
+                            go = true;
+                        }
+                        if ui.button("Close").on_hover_text("Esc").clicked() {
+                            close_btn = true;
+                        }
+                    }
+                });
+            });
+        if browse {
+            let f = d.opts.format;
+            let cur = PathBuf::from(&d.path);
+            let mut fd = rfd::FileDialog::new().add_filter(
+                if f == Format::Wav {
+                    "WAV audio"
+                } else {
+                    "MP3 audio"
+                },
+                &[ext(f)],
+            );
+            if let Some(dir) = cur.parent() {
+                fd = fd.set_directory(dir);
+            }
+            if let Some(n) = cur.file_name() {
+                fd = fd.set_file_name(n.to_string_lossy());
+            }
+            if let Some(p) = fd.save_file() {
+                d.path = p.with_extension(ext(f)).display().to_string();
+            }
+        }
+        if edit_info {
+            self.show_info = true;
+        }
+        if (open && !close_btn) || running {
+            self.export_dlg = Some(d);
+        }
+        if go {
+            self.start_export();
+        }
+    }
+}

@@ -18,6 +18,55 @@ pub struct Settings {
     /// recent songs, newest first (max 20)
     #[serde(default)]
     pub recent: Vec<String>,
+    #[serde(flatten)]
+    pub extra: Extra,
+}
+
+/// Settings screen values (0.2.0)
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Extra {
+    /// output device name, "" = system default
+    #[serde(default)]
+    pub device: String,
+    /// sample rate, 0 = device default
+    #[serde(default)]
+    pub rate: u32,
+    /// accent colour name ("" = theme default)
+    #[serde(default)]
+    pub accent: String,
+    /// autosave interval in minutes, 0 = off
+    #[serde(default = "two")]
+    pub autosave_mins: u32,
+    /// rotating .bak files kept on save
+    #[serde(default = "one")]
+    pub backups: u32,
+    /// default folder for Open / Save
+    #[serde(default)]
+    pub song_dir: String,
+    /// last export folder
+    #[serde(default)]
+    pub export_dir: String,
+}
+
+fn two() -> u32 {
+    2
+}
+fn one() -> u32 {
+    1
+}
+
+impl Default for Extra {
+    fn default() -> Self {
+        Self {
+            device: String::new(),
+            rate: 0,
+            accent: String::new(),
+            autosave_mins: 2,
+            backups: 1,
+            song_dir: String::new(),
+            export_dir: String::new(),
+        }
+    }
 }
 
 fn yes() -> bool {
@@ -33,6 +82,7 @@ impl Default for Settings {
             maximized: true,
             window: None,
             recent: vec![],
+            extra: Extra::default(),
         }
     }
 }

@@ -90,6 +90,20 @@ pub struct Song {
     pub arranger_zoom: f32,
     /// automation lanes (song scope), saved as automation/NN.toml
     pub automation: Vec<crate::automation::Lane>,
+    /// song info (artist, album, year, comment); used for export tags
+    pub info: SongInfo,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SongInfo {
+    #[serde(default)]
+    pub artist: String,
+    #[serde(default)]
+    pub album: String,
+    #[serde(default)]
+    pub year: String,
+    #[serde(default)]
+    pub comment: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -215,6 +229,7 @@ impl Song {
             mixer: Mixer::default(),
             arranger_zoom: 2.0,
             automation: vec![],
+            info: SongInfo::default(),
         }
     }
 

@@ -1,5 +1,7 @@
 # Settings
 
+**Status:** 0.2.0 implements the Audio, Look, Keys (remap + keymap.toml) and Files & Safety cards. MIDI and Plugins are placeholder cards for now.
+
 ![Settings mockup](mockups/settings.png) (SVG: [`mockups/settings.svg`](mockups/settings.svg))
 
 Opened with `Ctrl+,` (`Cmd+,` on macOS). The design goal is that you can **see at a glance** that everything's OK, and only dig in when you need to.

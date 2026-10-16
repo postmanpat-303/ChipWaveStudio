@@ -185,6 +185,9 @@ pub struct Engine {
     rets: Vec<crate::fx::ChainState>,
     /// smoothed sends per channel
     sends: [[f32; 2]; MAX_CHANNELS],
+    /// frames of 440 Hz test tone left (settings > audio)
+    pub test_tone: u32,
+    tone_ph: f32,
 }
 
 impl Engine {
@@ -215,6 +218,8 @@ impl Engine {
             chains: (0..MAX_CHANNELS).map(|_| Default::default()).collect(),
             rets: (0..2).map(|_| Default::default()).collect(),
             sends: [[0.0; 2]; MAX_CHANNELS],
+            test_tone: 0,
+            tone_ph: 0.0,
         }
     }
 
@@ -712,6 +717,14 @@ impl Engine {
                 let (rl, rr) = ch.process(bus[b][0], bus[b][1], &ctx);
                 l += rl * lvl;
                 r += rr * lvl;
+            }
+            if self.test_tone > 0 {
+                self.test_tone -= 1;
+                self.tone_ph = (self.tone_ph + 440.0 / self.sr).fract();
+                let env = (self.test_tone as f32 / (0.02 * self.sr)).min(1.0);
+                let v = (self.tone_ph * std::f32::consts::TAU).sin() * 0.25 * env / 0.6;
+                l += v;
+                r += v;
             }
             // master volume, then soft master limiter
             let l = (l * 0.6 * master).tanh();

@@ -53,16 +53,75 @@ impl Audio {
 const RING_FRAMES: usize = 16384;
 const CHUNK: usize = 256;
 
-pub fn start(shared: SharedRef, buffer_frames: u32) -> Result<Audio, String> {
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or("no audio output device")?;
-    let device_name = device
-        .description()
+fn dev_name(d: &cpal::Device) -> String {
+    d.description()
         .map(|d| d.name().to_string())
-        .unwrap_or_else(|_| "default".into());
-    let cfg = device.default_output_config().map_err(|e| e.to_string())?;
+        .unwrap_or_else(|_| "default".into())
+}
+
+/// names of the output devices of the default host
+pub fn output_devices() -> Vec<String> {
+    let host = cpal::default_host();
+    host.output_devices()
+        .map(|it| it.map(|d| dev_name(&d)).collect())
+        .unwrap_or_default()
+}
+
+/// sample rates commonly supported by the chosen device (empty = unknown)
+pub fn device_rates(device: &str) -> Vec<u32> {
+    let host = cpal::default_host();
+    let d = if device.is_empty() {
+        host.default_output_device()
+    } else {
+        host.output_devices()
+            .ok()
+            .and_then(|mut it| it.find(|d| dev_name(d) == device))
+    };
+    let Some(d) = d else { return vec![] };
+    let Ok(cfgs) = d.supported_output_configs() else {
+        return vec![];
+    };
+    let cfgs: Vec<_> = cfgs.collect();
+    [44100u32, 48000, 88200, 96000]
+        .into_iter()
+        .filter(|r| cfgs.iter().any(|c| (*c).try_with_sample_rate(*r).is_some()))
+        .collect()
+}
+
+pub fn start(shared: SharedRef, buffer_frames: u32) -> Result<Audio, String> {
+    start_with(shared, buffer_frames, "", 0)
+}
+
+/// `device` "" = system default; `rate` 0 = device default
+pub fn start_with(
+    shared: SharedRef,
+    buffer_frames: u32,
+    device: &str,
+    rate: u32,
+) -> Result<Audio, String> {
+    let host = cpal::default_host();
+    let device = if device.is_empty() {
+        None
+    } else {
+        host.output_devices()
+            .ok()
+            .and_then(|mut it| it.find(|d| dev_name(d) == device))
+    }
+    .or_else(|| host.default_output_device())
+    .ok_or("no audio output device")?;
+    let device_name = dev_name(&device);
+    let mut cfg = device.default_output_config().map_err(|e| e.to_string())?;
+    if rate > 0 {
+        if let Ok(mut it) = device.supported_output_configs() {
+            if let Some(c) = it.find_map(|c| {
+                (c.channels() == cfg.channels() && c.sample_format() == cfg.sample_format())
+                    .then(|| c.try_with_sample_rate(rate))
+                    .flatten()
+            }) {
+                cfg = c;
+            }
+        }
+    }
     let sample_rate = cfg.sample_rate();
     let channels = cfg.channels() as usize;
     let mut config: cpal::StreamConfig = cfg.into();

@@ -10,8 +10,10 @@ use eframe::egui::{self, Color32, FontId, Key, Pos2, Rect, Sense, Stroke};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+mod dialogs;
 mod fxview;
 mod sampleview;
+mod settingsview;
 mod topbar;
 
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect
@@ -24,6 +26,7 @@ enum View {
     Mixer,
     Fx,
     Sample,
+    Settings,
 }
 
 /// muted clip palette for the arranger (block id -> colour)
@@ -88,6 +91,20 @@ pub struct App {
     /// crashed sessions found at start (recovery dialog)
     orphans: Vec<crate::recovery::Orphan>,
     smp: sampleview::SampleEd,
+    extra: crate::settings::Extra,
+    keymap: crate::keymap::Keymap,
+    /// settings screen: focused card, expanded card, key being rebound
+    set_card: usize,
+    set_open: Option<usize>,
+    rebinding: Option<crate::keymap::Action>,
+    bind_msg: String,
+    export_dlg: Option<dialogs::ExportDlg>,
+    show_info: bool,
+    /// action waiting for the Save / Don't save / Cancel answer
+    prompt: Option<crate::prompt::Pending>,
+    /// user chose "Don't save" (recovery copy may be deleted on exit)
+    discarded: bool,
+    allow_close: bool,
     /// clip to highlight briefly after duplicate/insert, with start time
     arr_flash: Option<(Vec<usize>, f64)>,
     /// selected song-order entries (multi-select); arr_sel is the anchor
@@ -153,7 +170,13 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
     if let Some(sess) = &session {
         install_panic_hook(shared.clone(), sess.dir.clone());
     }
-    let (audio, audio_err) = match audio::start(shared.clone(), crate::settings::load().buffer) {
+    let st0 = crate::settings::load();
+    let (audio, audio_err) = match audio::start_with(
+        shared.clone(),
+        st0.buffer,
+        &st0.extra.device,
+        st0.extra.rate,
+    ) {
         Ok(a) => (Some(a), None),
         Err(e) => (None, Some(e)),
     };
@@ -197,6 +220,17 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         last_heartbeat: std::time::Instant::now(),
         orphans,
         smp: Default::default(),
+        extra: crate::settings::load().extra,
+        keymap: crate::keymap::Keymap::load(),
+        set_card: 0,
+        set_open: Some(0),
+        rebinding: None,
+        bind_msg: String::new(),
+        export_dlg: None,
+        show_info: false,
+        prompt: None,
+        discarded: false,
+        allow_close: false,
         arr_flash: None,
         arr_multi: Default::default(),
         arr_clip: vec![],
@@ -266,6 +300,26 @@ fn install_panic_hook(shared: SharedRef, dir: PathBuf) {
         crate::recovery::emergency(&dir, song.as_ref(), &info.to_string());
         prev(info);
     }));
+}
+
+/// file-name-safe version of a song title
+fn sanitize(t: &str) -> String {
+    let s: String = t
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || " -_()".contains(c) {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let s = s.trim().to_string();
+    if s.is_empty() {
+        "song".into()
+    } else {
+        s
+    }
 }
 
 fn note_key(k: Key) -> Option<i32> {
@@ -451,11 +505,16 @@ impl App {
 
     fn save(&mut self, as_new: bool) {
         if as_new || self.path.is_none() {
-            let Some(p) = rfd::FileDialog::new()
+            let mut d = rfd::FileDialog::new()
                 .add_filter("ChipWave song", &["cwt"])
-                .set_file_name("song.cwt")
-                .save_file()
-            else {
+                .set_file_name(format!(
+                    "{}.cwt",
+                    sanitize(&self.with(|s| s.song.title.clone()))
+                ));
+            if !self.extra.song_dir.is_empty() {
+                d = d.set_directory(&self.extra.song_dir);
+            }
+            let Some(p) = d.save_file() else {
                 return;
             };
             self.path = Some(if p.extension().is_none() {
@@ -465,7 +524,8 @@ impl App {
             });
         }
         let path = self.path.clone().unwrap();
-        let r = self.with(|s| crate::recovery::atomic_save(&s.song, &path, true));
+        let nb = self.extra.backups.min(10);
+        let r = self.with(|s| crate::recovery::atomic_save(&s.song, &path, nb));
         self.status = match r {
             Ok(()) => {
                 self.dirty = false;
@@ -474,6 +534,22 @@ impl App {
             }
             Err(e) => format!("Save failed: {e} (old file kept; try Save As)"),
         };
+    }
+
+    fn new_song(&mut self) {
+        let ch = self.with(|s| s.song.channels);
+        self.with(|s| {
+            s.engine.stop();
+            let ins = s.song.instruments.clone();
+            s.song = Song::empty();
+            s.song.channels = ch;
+            s.song.channel_names = (1..=ch).map(|i| format!("Ch {i}")).collect();
+            s.song.patterns = vec![Pattern::new("Block 00", ROWS, ch)];
+            s.song.instruments = ins;
+        });
+        self.path = None;
+        self.reset_cursor();
+        self.status = "New song (instruments kept)".into();
     }
 
     fn add_block(&mut self) {
@@ -548,7 +624,8 @@ impl App {
             self.last_heartbeat = std::time::Instant::now();
             sess.heartbeat();
         }
-        if self.dirty && self.last_autosave.elapsed() >= crate::recovery::AUTOSAVE_EVERY {
+        let every = std::time::Duration::from_secs(self.extra.autosave_mins as u64 * 60);
+        if self.extra.autosave_mins > 0 && self.dirty && self.last_autosave.elapsed() >= every {
             self.last_autosave = std::time::Instant::now();
             let song = self.with(|s| s.song.clone());
             sess.autosave(song);
@@ -557,10 +634,11 @@ impl App {
     }
 
     fn open(&mut self) {
-        let Some(p) = rfd::FileDialog::new()
-            .add_filter("ChipWave song", &["cwt"])
-            .pick_file()
-        else {
+        let mut d = rfd::FileDialog::new().add_filter("ChipWave song", &["cwt"]);
+        if !self.extra.song_dir.is_empty() {
+            d = d.set_directory(&self.extra.song_dir);
+        }
+        let Some(p) = d.pick_file() else {
             return;
         };
         self.open_path(p);
@@ -616,7 +694,18 @@ impl App {
     }
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
-        let events = std::mem::take(&mut self.pending);
+        let mut events = std::mem::take(&mut self.pending);
+        // settings > keys: the next key press becomes the new binding
+        if let Some(a) = self.rebinding {
+            if let Some(c) = events.iter().find_map(crate::keymap::Combo::from_event) {
+                self.finish_rebind(a, c);
+            }
+            return;
+        }
+        events = events
+            .iter()
+            .filter_map(|e| self.keymap.translate(e))
+            .collect();
         let channels = self.with(|s| s.song.channels);
         let arr_focus = self.arr_focused();
         self.mods = ctx.input(|i| i.modifiers);
@@ -707,6 +796,9 @@ impl App {
                 continue;
             };
             let cmd = m.command;
+            if self.modal_key(key, m, ctx) {
+                continue;
+            }
             let nav_sel = m.shift
                 && !cmd
                 && matches!(
@@ -759,7 +851,7 @@ impl App {
                         View::Arranger => View::Mixer,
                         View::Mixer => View::Fx,
                         View::Fx => View::Sample,
-                        View::Sample => View::Pattern,
+                        View::Sample | View::Settings => View::Pattern,
                     }
                 }
                 Key::Num1 if cmd => {
@@ -835,26 +927,14 @@ impl App {
                 Key::Z if cmd && m.shift => self.do_undo(true),
                 Key::Z if cmd => self.do_undo(false),
                 Key::Y if cmd => self.do_undo(true),
-                Key::Q if cmd => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                Key::Q if cmd => self.request(crate::prompt::Pending::Quit, ctx),
+                Key::Comma if cmd => self.toggle_settings(),
+                Key::E if cmd && m.shift => self.open_export(),
                 Key::F12 => self.show_help = !self.show_help,
                 Key::S if cmd => self.save(m.shift),
-                Key::O if cmd => self.open(),
+                Key::O if cmd => self.request(crate::prompt::Pending::Open, ctx),
                 Key::E if cmd => self.export_wav(),
-                Key::N if cmd => {
-                    let ch = channels;
-                    self.with(|s| {
-                        s.engine.stop();
-                        let ins = s.song.instruments.clone();
-                        s.song = Song::empty();
-                        s.song.channels = ch;
-                        s.song.channel_names = (1..=ch).map(|i| format!("Ch {i}")).collect();
-                        s.song.patterns = vec![Pattern::new("Block 00", ROWS, ch)];
-                        s.song.instruments = ins;
-                    });
-                    self.path = None;
-                    self.reset_cursor();
-                    self.status = "New song (instruments kept)".into();
-                }
+                Key::N if cmd => self.request(crate::prompt::Pending::New, ctx),
                 Key::Plus | Key::Equals if m.alt => self.transpose(if m.shift { 12 } else { 1 }),
                 Key::Minus if m.alt => self.transpose(if m.shift { -12 } else { -1 }),
                 // numpad -/+ (and the main-row -/+): base octave down / up
@@ -975,7 +1055,12 @@ impl App {
 
     fn restart_audio(&mut self) {
         self.audio = None; // stops the old stream + engine thread
-        match audio::start(self.shared.clone(), self.buffer) {
+        match audio::start_with(
+            self.shared.clone(),
+            self.buffer,
+            &self.extra.device,
+            self.extra.rate,
+        ) {
             Ok(a) => {
                 self.status = format!(
                     "Audio: {} @ {} Hz, buffer {}",
@@ -999,6 +1084,7 @@ impl App {
             maximized: self.win_max,
             window: self.win_rect,
             recent: self.recent.clone(),
+            extra: self.extra.clone(),
         });
     }
 
@@ -3115,7 +3201,14 @@ impl eframe::App for App {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         // clean exit: the recovery folder of this session is not needed
         if let Some(s) = &self.session {
-            s.close();
+            if crate::prompt::may_delete_recovery(self.dirty, self.discarded) {
+                s.close();
+            } else {
+                // unsaved work and no explicit discard: keep a fresh recovery copy
+                let song = self.with(|s| s.song.clone());
+                let _ = crate::recovery::Session::autosave_blocking(&s.dir, &song);
+                std::fs::write(s.dir.join("heartbeat"), "0").ok();
+            }
         }
     }
 
@@ -3158,7 +3251,7 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         if !self.themed {
-            theme::apply(&ctx, self.theme);
+            theme::apply(&ctx, theme::with_accent(self.theme, &self.extra.accent));
             ctx.options_mut(|o| o.zoom_with_keyboard = false);
             self.themed = true;
         }
@@ -3218,7 +3311,7 @@ impl eframe::App for App {
                 .map(|e| e.eq_ignore_ascii_case("cwt"))
                 .unwrap_or(false)
             {
-                self.open_path(p);
+                self.request(crate::prompt::Pending::OpenPath(p), &ctx);
             } else {
                 self.import_sample(p);
             }
@@ -3344,12 +3437,27 @@ impl eframe::App for App {
                             self.sample_view(ui)
                         });
                     }
+                    View::Settings => {
+                        ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                            self.settings_view(ui)
+                        });
+                    }
                 }
             });
         if self.show_help {
             self.help(&ctx);
         }
         self.dialogs(&ctx);
+        self.modal_dialogs(&ctx);
+        // window close button: ask first when there are unsaved changes
+        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+            if self.dirty {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.prompt = Some(crate::prompt::Pending::Quit);
+            } else {
+                self.allow_close = true;
+            }
+        }
         if self.with(|s| s.engine.playing || s.engine.peak > 0.001) {
             ctx.request_repaint();
         }

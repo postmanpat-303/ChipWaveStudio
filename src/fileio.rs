@@ -122,6 +122,8 @@ struct SongFile {
     channel_names: Vec<String>,
     order: Vec<usize>,
     instruments: Vec<Instrument>,
+    #[serde(default)]
+    info: SongInfo,
 }
 
 pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
@@ -176,6 +178,7 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
             channel_names: song.channel_names.clone(),
             order: song.order.clone(),
             instruments,
+            info: song.info.clone(),
         };
         z.start_file("song.toml", defl).map_err(e)?;
         z.write_all(toml::to_string(&sf).map_err(|e| e.to_string())?.as_bytes())
@@ -317,6 +320,7 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
         order: if order.is_empty() { vec![0] } else { order },
         instruments,
         automation,
+        info: sf.info,
         mixer: read_entry(&mut z, "mixer.toml")
             .ok()
             .and_then(|b| toml::from_str::<Mixer>(&String::from_utf8_lossy(&b)).ok())

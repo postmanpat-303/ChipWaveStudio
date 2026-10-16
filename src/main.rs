@@ -5,11 +5,14 @@ mod app;
 mod audio;
 mod automation;
 mod engine;
+mod export;
 mod fileio;
 mod fx;
 mod input;
+mod keymap;
 mod model;
 mod presets;
+mod prompt;
 mod recovery;
 mod sample;
 mod settings;
@@ -83,7 +86,34 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         d > 1.0
     };
-    let ok = peak > 0.05 && rms > 0.005 && !nan && wrote.is_ok() && rt_ok && tempo_ok && auto_ok;
+    // MP3 export through the statically linked LAME, with ID3 tags
+    let mp3_ok = {
+        let p = std::env::temp_dir().join("chipwave_selftest.mp3");
+        let o = export::Opts::default();
+        let r = export::export(&song, &o, &p, &export::Progress::default());
+        let size = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+        let tag = id3::Tag::read_from_path(&p).ok();
+        let tagged = tag
+            .as_ref()
+            .is_some_and(|t| t.comments().any(|c| c.text.contains("Made with ChipWave")));
+        let ok = r.is_ok() && size > 10_000 && tagged;
+        report.push_str(&format!(
+            "  mp3 export: {} ({} bytes, tags {}) ({})\n",
+            p.display(),
+            size,
+            if tagged { "ok" } else { "missing" },
+            if ok { "ok" } else { "FAILED" }
+        ));
+        ok
+    };
+    let ok = peak > 0.05
+        && rms > 0.005
+        && !nan
+        && wrote.is_ok()
+        && rt_ok
+        && tempo_ok
+        && auto_ok
+        && mp3_ok;
     report.push_str(if ok {
         "RESULT: PASS\n"
     } else {
