@@ -60,6 +60,9 @@ pub enum InstrumentKind {
 pub struct Instrument {
     pub name: String,
     pub volume: f32,
+    /// per-instrument transpose in semitones (applied at playback)
+    #[serde(default)]
+    pub transpose: i8,
     pub kind: InstrumentKind,
 }
 
@@ -76,6 +79,73 @@ pub struct Song {
     pub order: Vec<usize>,
     /// index 0 => instrument slot 1
     pub instruments: Vec<Instrument>,
+    pub mixer: Mixer,
+    /// arranger zoom in pixels per row (ChipWave-only, saved in arranger.toml)
+    pub arranger_zoom: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChanMix {
+    /// linear gain 0..=2 (1 = 0 dB)
+    pub volume: f32,
+    /// -1 (left) ..= 1 (right)
+    pub pan: f32,
+    pub mute: bool,
+    pub solo: bool,
+}
+
+impl Default for ChanMix {
+    fn default() -> Self {
+        Self {
+            volume: 1.0,
+            pan: 0.0,
+            mute: false,
+            solo: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Mixer {
+    pub channels: Vec<ChanMix>,
+    pub master: f32,
+}
+
+impl Default for Mixer {
+    fn default() -> Self {
+        Self {
+            channels: vec![ChanMix::default(); MAX_CHANNELS],
+            master: 1.0,
+        }
+    }
+}
+
+impl Mixer {
+    /// effective audibility of a channel (mute + solo logic)
+    pub fn audible(&self, ch: usize) -> bool {
+        let any_solo = self.channels.iter().any(|c| c.solo);
+        match self.channels.get(ch) {
+            Some(c) => !c.mute && (!any_solo || c.solo),
+            None => true,
+        }
+    }
+    pub fn fix(&mut self) {
+        self.channels.resize(MAX_CHANNELS, ChanMix::default());
+        self.master = self.master.clamp(0.0, 2.0);
+        for c in &mut self.channels {
+            c.volume = c.volume.clamp(0.0, 2.0);
+            c.pan = c.pan.clamp(-1.0, 1.0);
+        }
+    }
+}
+
+/// gain to dB text
+pub fn db_text(g: f32) -> String {
+    if g <= 0.0001 {
+        "-inf dB".into()
+    } else {
+        format!("{:+.1} dB", 20.0 * g.log10())
+    }
 }
 
 impl Song {
@@ -90,6 +160,8 @@ impl Song {
             patterns: vec![Pattern::new("Block 00", ROWS, 4)],
             order: vec![0],
             instruments: vec![],
+            mixer: Mixer::default(),
+            arranger_zoom: 2.0,
         }
     }
 

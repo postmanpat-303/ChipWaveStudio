@@ -43,4 +43,32 @@ cargo build --release --target x86_64-pc-windows-gnu   # Windows exe from Linux 
 chipwave --self-test [out.wav]          # headless: renders the demo, checks it is not silent
 chipwave --render demo out.wav
 ```
-v0.1.0 has the pattern editor (keys per [docs/PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md)), tracker playback, a simple synth with factory psytrance presets, WAV sample import, `.cwt` save/load, WAV export, the first-run demo song, and Dark (default) / Amiga themes. Windows build: `ChipWave-0.1.1-windows-x64.zip` on the [Releases page](https://github.com/postmanpat-303/ChipWaveTracker/releases); screenshot: [dist/screenshot.png](dist/screenshot.png).
+### Keys (0.1.3)
+```
+  Arrows, PgUp/PgDn, Home/End    move (Ctrl+Home/End = first/last block)
+  Tab / Shift+Tab                next / previous channel
+  Z S X D C V G B H N J M        notes C..B,  Q 2 W 3 E R 5 T 6 Y 7 U I 9 O 0 P = octave up
+  1                              note off
+  F1..F8, numpad - / +           base octave (also the - / + buttons by "Oct")
+  0-9 A-F                        hex in instrument / volume / effect columns
+  Delete / Backspace / Insert    clear (selection) / pull up / push down
+  Shift+arrows/PgUp/PgDn, drag   select (highlighted green)
+  Ctrl+A                         select channel; press again = whole block
+  Ctrl+C / Ctrl+X / Ctrl+V       copy / cut / paste at cursor
+  Space / Shift+Space            play/stop current block (loop) / play/stop song
+  Enter / Ctrl+Enter             restart block / play from cursor row
+  Esc                            edit mode on/off
+  Ctrl+Z / Ctrl+Y                undo / redo (edits, paste, arranger changes)
+  Alt +/-  (Shift = octave)      transpose selection (or whole channel)
+  Ctrl+= / Ctrl+- / Ctrl+0       UI scale up / down / 100 %
+  F9 / F10                       mute / solo channel
+  Ctrl+Tab, Ctrl+1 / 2 / 3       views: Pattern / Arranger / Mixer
+  Arranger: Left/Right, Del, Ins, Ctrl+D (Shift = unique copy), +/-  zoom
+  Ctrl+N / Ctrl+O / Ctrl+S       new / open / save .cwt   (Ctrl+Shift+S = save as)
+  Ctrl+E                         export WAV
+```
+Effects: 01/02 slide, 09 speed, 0C volume, 0D volume slide, 0F tempo (0F00 = break). BPM/speed changes (toolbar or 09/0F) apply instantly while playing.
+
+v0.1.3 adds a basic arranger (song order as clips: drag to reorder, duplicate, insert, delete, click to open, playhead, zoom, dockable), a basic mixer (fader, pan, mute/solo, peak meters, master; saved in `.cwt` as `mixer.toml`), selection + copy/paste, octave buttons and per-instrument transpose. Screenshots: [arranger](dist/screenshot-0.1.3-arranger.png), [mixer](dist/screenshot-0.1.3-mixer.png), [pattern + selection](dist/screenshot-0.1.3-pattern-selection.png).
+
+v0.1.0 has the pattern editor (keys per [docs/PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md)), tracker playback, a simple synth with factory psytrance presets, WAV sample import, `.cwt` save/load, WAV export, the first-run demo song, and Dark Circuit (default) / Amiga themes. Windows build: `ChipWave-0.1.1-windows-x64.zip` on the [Releases page](https://github.com/postmanpat-303/ChipWaveTracker/releases); screenshot: [dist/screenshot.png](dist/screenshot.png).

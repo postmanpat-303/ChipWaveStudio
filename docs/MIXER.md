@@ -30,3 +30,5 @@ Return A has a synced ping-pong delay and return B a Freeverb-style reverb, both
 - Export renders exactly this chain ([EXPORT.md](EXPORT.md)), with an option to export per-channel stems.
 - Everything here is automatable ([AUTOMATION.md](AUTOMATION.md)) and MIDI-learnable ([MIDI_VST.md](MIDI_VST.md)).
 - Mixer state is saved in `.cwt` as `mixer.toml`. MMD export keeps channel volume and pan only.
+
+**Implemented in 0.1.3 (basic):** per-channel strip with fader (0 to +6 dB, double-click = 0 dB), constant-power pan, mute/solo (shared with F9/F10 and the channel headers), post-fader peak meter; master fader with L/R meters and the existing soft limiter. Gains are smoothed (5 ms). Saved in `.cwt` as `mixer.toml`; WAV export uses the same mix. Deferred: inserts, sends/returns, RMS/peak-hold/clip LED, LUFS, true-peak limiter, stems.

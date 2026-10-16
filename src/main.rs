@@ -13,6 +13,10 @@ mod theme;
 
 use std::path::PathBuf;
 
+fn e_playing_ok(r1: u64, r2: u64) -> bool {
+    (r2 as f64 - r1 as f64 * 1.5).abs() <= 2.0 && r1 > 0
+}
+
 fn self_test(out: Option<PathBuf>) -> i32 {
     let song = fileio::demo_song();
     let data = engine::render_song(&song, 44100);
@@ -28,12 +32,38 @@ fn self_test(out: Option<PathBuf>) -> i32 {
     );
     let tmp = std::env::temp_dir().join("chipwave_selftest.cwt");
     let rt = fileio::save_cwt(&song, &tmp).and_then(|_| fileio::load_cwt(&tmp));
-    let rt_ok = matches!(&rt, Ok(s) if s.patterns[0].cells == song.patterns[0].cells);
+    let rt_ok = matches!(&rt, Ok(s) if s.patterns[0].cells == song.patterns[0].cells && s.mixer == song.mixer && s.order == song.order);
     report.push_str(&format!(
         "  .cwt round-trip: {}\n",
         if rt_ok { "ok" } else { "FAILED" }
     ));
-    let ok = peak > 0.05 && rms > 0.005 && !nan && wrote.is_ok() && rt_ok;
+    // tempo change while playing must apply at once (no restart)
+    let (r1, r2, bpm_now) = {
+        let mut e = engine::Engine::new(48000.0);
+        e.start(&song, 0, 0, true, 0);
+        let mut buf = vec![0.0f32; 512];
+        let mut run = |e: &mut engine::Engine| {
+            let b = e.rows_played;
+            for _ in 0..(2 * 48000 / 256) {
+                e.render(&song, &mut buf);
+            }
+            e.rows_played - b
+        };
+        let r1 = run(&mut e);
+        e.set_tempo(song.bpm * 1.5, song.speed);
+        let r2 = run(&mut e);
+        (r1, r2, e.bpm())
+    };
+    let tempo_ok = e_playing_ok(r1, r2) && (bpm_now - song.bpm * 1.5).abs() < 0.01;
+    report.push_str(&format!(
+        "  tempo change while playing: {} -> {} BPM, rows/2 s {} -> {} ({})\n",
+        song.bpm,
+        bpm_now,
+        r1,
+        r2,
+        if tempo_ok { "ok" } else { "FAILED" }
+    ));
+    let ok = peak > 0.05 && rms > 0.005 && !nan && wrote.is_ok() && rt_ok && tempo_ok;
     report.push_str(if ok {
         "RESULT: PASS\n"
     } else {

@@ -12,6 +12,21 @@ use std::sync::{Arc, Mutex};
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect
 const SUBCOLS: usize = 9;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum View {
+    Pattern,
+    Arranger,
+    Mixer,
+}
+
+/// muted clip palette for the arranger (block id -> colour)
+const CLIP_COLOURS: [u32; 8] = [
+    0x3F7A55, 0x516D96, 0x8A6D3B, 0x7A4E5C, 0x4E7A7A, 0x6B5E8A, 0x7A6A4E, 0x5A7A3F,
+];
+
+type Undo = (Vec<Pattern>, Vec<usize>);
+type Pos = (usize, usize); // (row, channel)
+
 pub struct App {
     shared: SharedRef,
     audio: Option<audio::Audio>,
@@ -25,12 +40,20 @@ pub struct App {
     edit: bool,
     follow: bool,
     instr: u8,
-    undo: Vec<Vec<Pattern>>,
-    redo: Vec<Vec<Pattern>>,
+    undo: Vec<Undo>,
+    redo: Vec<Undo>,
     path: Option<PathBuf>,
     status: String,
     dirty: bool,
-    mutes: Vec<bool>,
+    /// selection anchor and end (row, channel), inclusive
+    sel: Option<(Pos, Pos)>,
+    /// mouse drag-select anchor
+    drag_anchor: Option<Pos>,
+    clip: Vec<Vec<Cell>>,
+    view: View,
+    dock_arranger: bool,
+    arr_sel: usize,
+    arr_drag: Option<usize>,
     zoom: f32,
     buffer: u32,
     max_zoom: f32,
@@ -81,7 +104,13 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         path: open,
         status,
         dirty: false,
-        mutes: vec![false; MAX_CHANNELS],
+        sel: None,
+        drag_anchor: None,
+        clip: vec![],
+        view: View::Pattern,
+        dock_arranger: true,
+        arr_sel: 0,
+        arr_drag: None,
         zoom: crate::settings::load().zoom,
         buffer: crate::settings::load().buffer,
         max_zoom: 3.0,
@@ -180,8 +209,8 @@ impl App {
     }
 
     fn snapshot(&mut self) {
-        let pats = self.with(|s| s.song.patterns.clone());
-        self.undo.push(pats);
+        let st = self.with(|s| (s.song.patterns.clone(), s.song.order.clone()));
+        self.undo.push(st);
         if self.undo.len() > 500 {
             self.undo.remove(0);
         }
@@ -198,11 +227,19 @@ impl App {
         if let Some(p) = from.pop() {
             let cur = {
                 let mut s = self.shared.lock().unwrap();
-                std::mem::replace(&mut s.song.patterns, p)
+                (
+                    std::mem::replace(&mut s.song.patterns, p.0),
+                    std::mem::replace(&mut s.song.order, p.1),
+                )
             };
+
             to.push(cur);
             self.status = if redo { "Redo".into() } else { "Undo".into() };
         }
+        let n = self.with(|s| s.song.patterns.len());
+        self.pattern = self.pattern.min(n - 1);
+        self.row = self.row.min(self.rows() - 1);
+        self.sel = None;
     }
 
     fn rows(&self) -> usize {
@@ -237,14 +274,13 @@ impl App {
     }
 
     fn play(&mut self, mode: u8) {
-        let (pattern, row, mutes) = (self.pattern, self.row, self.mutes.clone());
+        let (pattern, row) = (self.pattern, self.row);
         self.with(|s| {
             let Shared { song, engine } = s;
             if engine.playing && mode <= 1 {
                 engine.stop();
                 return;
             }
-            engine.set_mutes(&mutes);
             match mode {
                 0 => engine.start(song, 0, 0, false, 0),          // song
                 1 | 3 => engine.start(song, 0, 0, true, pattern), // block loop
@@ -307,6 +343,8 @@ impl App {
         self.pattern = 0;
         self.undo.clear();
         self.redo.clear();
+        self.sel = None;
+        self.arr_sel = 0;
         self.dirty = false;
     }
 
@@ -349,7 +387,25 @@ impl App {
     fn handle_keys(&mut self, _ctx: &egui::Context) {
         let events = std::mem::take(&mut self.pending);
         let channels = self.with(|s| s.song.channels);
+        let has_key = |k: Key| {
+            events.iter().any(|e| {
+                matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. }
+                    if *key == k && modifiers.command)
+            })
+        };
+        let (kc, kx, kv) = (has_key(Key::C), has_key(Key::X), has_key(Key::V));
+        for ev in &events {
+            match ev {
+                egui::Event::Copy if !kc => self.copy(false),
+                egui::Event::Cut if !kx => self.copy(true),
+                egui::Event::Paste(_) if !kv => self.paste(),
+                _ => {}
+            }
+        }
         for ev in events {
+            if self.view == View::Arranger && self.arranger_key(&ev) {
+                continue;
+            }
             let egui::Event::Key {
                 key,
                 pressed: true,
@@ -361,7 +417,74 @@ impl App {
                 continue;
             };
             let cmd = m.command;
+            let nav_sel = m.shift
+                && !cmd
+                && matches!(
+                    key,
+                    Key::ArrowUp
+                        | Key::ArrowDown
+                        | Key::PageUp
+                        | Key::PageDown
+                        | Key::ArrowLeft
+                        | Key::ArrowRight
+                        | Key::Home
+                        | Key::End
+                );
+            if nav_sel {
+                let before = (self.row, self.ch);
+                let last = self.rows() as isize - 1;
+                let mv = |r: usize, d: isize| (r as isize + d).clamp(0, last) as usize;
+                match key {
+                    Key::ArrowUp => self.row = mv(self.row, -1),
+                    Key::ArrowDown => self.row = mv(self.row, 1),
+                    Key::PageUp => self.row = mv(self.row, -16),
+                    Key::PageDown => self.row = mv(self.row, 16),
+                    Key::Home => self.row = 0,
+                    Key::End => self.row = last as usize,
+                    Key::ArrowLeft => self.ch = self.ch.saturating_sub(1),
+                    _ => self.ch = (self.ch + 1).min(channels - 1),
+                }
+                let a = self.sel.map(|s| s.0).unwrap_or(before);
+                self.sel = Some((a, (self.row, self.ch)));
+                continue;
+            }
+            if matches!(
+                key,
+                Key::ArrowUp
+                    | Key::ArrowDown
+                    | Key::PageUp
+                    | Key::PageDown
+                    | Key::ArrowLeft
+                    | Key::ArrowRight
+                    | Key::Home
+                    | Key::End
+                    | Key::Escape
+            ) {
+                self.sel = None;
+            }
             match key {
+                Key::Tab if cmd => {
+                    self.view = match self.view {
+                        View::Pattern => View::Arranger,
+                        View::Arranger => View::Mixer,
+                        View::Mixer => View::Pattern,
+                    }
+                }
+                Key::Num1 if cmd => self.view = View::Pattern,
+                Key::Num2 if cmd => self.view = View::Arranger,
+                Key::Num3 if cmd => self.view = View::Mixer,
+                Key::A if cmd => {
+                    let last = self.rows() - 1;
+                    let chsel = Some(((0, self.ch), (last, self.ch)));
+                    self.sel = if self.sel == chsel {
+                        Some(((0, 0), (last, channels - 1)))
+                    } else {
+                        chsel
+                    };
+                }
+                Key::C if cmd => self.copy(false),
+                Key::X if cmd => self.copy(true),
+                Key::V if cmd => self.paste(),
                 Key::ArrowUp => self.move_row(-1),
                 Key::ArrowDown => self.move_row(1),
                 Key::PageUp => self.move_row(-16),
@@ -432,6 +555,9 @@ impl App {
                 }
                 Key::Plus | Key::Equals if m.alt => self.transpose(if m.shift { 12 } else { 1 }),
                 Key::Minus if m.alt => self.transpose(if m.shift { -12 } else { -1 }),
+                // numpad -/+ (and the main-row -/+): base octave down / up
+                Key::Minus if !cmd => self.set_octave(self.octave as i32 - 1),
+                Key::Plus if !cmd => self.set_octave(self.octave as i32 + 1),
                 Key::F1 | Key::F2 | Key::F3 | Key::F4 | Key::F5 | Key::F6 | Key::F7 | Key::F8 => {
                     self.octave = [
                         Key::F1,
@@ -449,17 +575,16 @@ impl App {
                         + 1;
                 }
                 Key::F9 => {
-                    self.mutes[self.ch] = !self.mutes[self.ch];
-                    self.sync_mutes();
+                    let ch = self.ch;
+                    self.with(|s| s.song.mixer.channels[ch].mute ^= true);
+                    self.dirty = true;
                 }
                 Key::F10 => {
-                    let solo = (0..channels).all(|c| c == self.ch || self.mutes[c])
-                        && !self.mutes[self.ch];
-                    for c in 0..channels {
-                        self.mutes[c] = if solo { false } else { c != self.ch };
-                    }
-                    self.sync_mutes();
+                    let ch = self.ch;
+                    self.with(|s| s.song.mixer.channels[ch].solo ^= true);
+                    self.dirty = true;
                 }
+                Key::Delete if self.edit && self.sel.is_some() => self.clear_sel(),
                 Key::Delete if self.edit => {
                     let col = self.col;
                     self.edit_cell(|c| match col {
@@ -562,7 +687,6 @@ impl App {
                 self.audio_err = Some(e);
             }
         }
-        self.sync_mutes();
     }
 
     fn save_settings(&self) {
@@ -573,21 +697,123 @@ impl App {
         });
     }
 
-    fn sync_mutes(&mut self) {
-        let m = self.mutes.clone();
-        self.with(|s| s.engine.set_mutes(&m));
+    fn set_octave(&mut self, o: i32) {
+        self.octave = o.clamp(0, 8) as u8;
+        self.status = format!("Base octave {}", self.octave);
+    }
+
+    /// selection as (row0, row1, ch0, ch1), inclusive and clamped to the block
+    fn sel_rect(&self) -> Option<(usize, usize, usize, usize)> {
+        let ((r0, c0), (r1, c1)) = self.sel?;
+        let rows = self.rows();
+        let chans = self.with(|s| s.song.channels);
+        Some((
+            r0.min(r1).min(rows - 1),
+            r0.max(r1).min(rows - 1),
+            c0.min(c1).min(chans - 1),
+            c0.max(c1).min(chans - 1),
+        ))
+    }
+
+    fn for_sel(&mut self, mut f: impl FnMut(&mut Cell)) -> bool {
+        let Some((r0, r1, c0, c1)) = self.sel_rect() else {
+            return false;
+        };
+        self.snapshot();
+        let p = self.pattern;
+        self.with(|s| {
+            if let Some(p) = s.song.patterns.get_mut(p) {
+                for row in &mut p.cells[r0..=r1] {
+                    for c in &mut row[c0..=c1] {
+                        f(c);
+                    }
+                }
+            }
+        });
+        true
+    }
+
+    fn copy(&mut self, cut: bool) {
+        let rect = self
+            .sel_rect()
+            .unwrap_or((self.row, self.row, self.ch, self.ch));
+        let (r0, r1, c0, c1) = rect;
+        let p = self.pattern;
+        self.clip = self.with(|s| {
+            s.song.patterns[p].cells[r0..=r1]
+                .iter()
+                .map(|r| r[c0..=c1].to_vec())
+                .collect()
+        });
+        if cut {
+            if self.sel.is_none() {
+                self.sel = Some(((r0, c0), (r1, c1)));
+                self.clear_sel();
+                self.sel = None;
+            } else {
+                self.clear_sel();
+            }
+        }
+        self.status = format!(
+            "{} {} rows x {} channels",
+            if cut { "Cut" } else { "Copied" },
+            r1 - r0 + 1,
+            c1 - c0 + 1
+        );
+    }
+
+    fn paste(&mut self) {
+        if self.clip.is_empty() || !self.edit {
+            return;
+        }
+        self.snapshot();
+        let (p, r0, c0) = (self.pattern, self.row, self.ch);
+        let clip = self.clip.clone();
+        self.with(|s| {
+            let chans = s.song.channels;
+            if let Some(p) = s.song.patterns.get_mut(p) {
+                for (dr, row) in clip.iter().enumerate() {
+                    let Some(dst) = p.cells.get_mut(r0 + dr) else {
+                        break;
+                    };
+                    for (dc, cell) in row.iter().enumerate() {
+                        if c0 + dc < chans {
+                            dst[c0 + dc] = *cell;
+                        }
+                    }
+                }
+            }
+        });
+        let h = clip.len();
+        let w = clip.first().map(|r| r.len()).unwrap_or(1);
+        let last_r = (r0 + h - 1).min(self.rows() - 1);
+        let last_c = (c0 + w - 1).min(self.with(|s| s.song.channels) - 1);
+        self.sel = Some(((r0, c0), (last_r, last_c)));
+        self.status = format!("Pasted {h} rows x {w} channels");
+    }
+
+    fn clear_sel(&mut self) {
+        if self.for_sel(|c| *c = Cell::default()) {
+            self.status = "Cleared selection".into();
+        }
     }
 
     fn transpose(&mut self, semis: i32) {
+        let tr = |c: &mut Cell| {
+            if c.note > 0 && c.note != NOTE_OFF {
+                c.note = (c.note as i32 + semis).clamp(1, 120) as u8;
+            }
+        };
+        if self.for_sel(tr) {
+            self.status = format!("Transposed selection by {semis:+} semitones");
+            return;
+        }
         self.snapshot();
         let (p, ch) = (self.pattern, self.ch);
         self.with(|s| {
             if let Some(p) = s.song.patterns.get_mut(p) {
                 for row in &mut p.cells {
-                    let c = &mut row[ch];
-                    if c.note > 0 && c.note != NOTE_OFF {
-                        c.note = (c.note as i32 + semis).clamp(1, 120) as u8;
-                    }
+                    tr(&mut row[ch]);
                 }
             }
         });
@@ -703,20 +929,56 @@ impl App {
                 .add(egui::DragValue::new(&mut speed).range(1..=32))
                 .changed();
             if c1 || c2 {
+                // applies immediately, also while playing (no restart)
                 self.with(|s| {
                     s.song.bpm = bpm;
                     s.song.speed = speed;
+                    s.engine.set_tempo(bpm, speed);
                 });
                 self.dirty = true;
             }
             ui.label(egui::RichText::new("Oct").color(hdr_text));
-            ui.add(egui::DragValue::new(&mut self.octave).range(0..=8));
+            if ui
+                .button(" - ")
+                .on_hover_text("octave down (numpad -)")
+                .clicked()
+            {
+                self.set_octave(self.octave as i32 - 1);
+            }
+            ui.label(
+                egui::RichText::new(format!("{}", self.octave))
+                    .monospace()
+                    .strong()
+                    .size(16.0)
+                    .color(th().value),
+            );
+            if ui
+                .button(" + ")
+                .on_hover_text("octave up (numpad +)")
+                .clicked()
+            {
+                self.set_octave(self.octave as i32 + 1);
+            }
             ui.label(egui::RichText::new("Step").color(hdr_text));
             ui.add(egui::DragValue::new(&mut self.step).range(0..=16));
             ui.checkbox(
                 &mut self.follow,
                 egui::RichText::new("Follow").color(hdr_text),
             );
+            ui.separator();
+            for (v, label) in [
+                (View::Pattern, "Pattern"),
+                (View::Arranger, "Arranger"),
+                (View::Mixer, "Mixer"),
+            ] {
+                ui.selectable_value(&mut self.view, v, label)
+                    .on_hover_text("Ctrl+Tab cycles views, Ctrl+1/2/3");
+            }
+            ui.checkbox(
+                &mut self.dock_arranger,
+                egui::RichText::new("Dock arranger").color(hdr_text),
+            )
+            .on_hover_text("show the arranger below the pattern editor");
             ui.separator();
             ui.label(egui::RichText::new("Theme").color(hdr_text));
             let mut t = self.theme;
@@ -838,6 +1100,27 @@ impl App {
                     .add(egui::Slider::new(&mut inst.volume, 0.0..=1.0))
                     .changed();
             });
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label("Transpose");
+                for (txt, d) in [("-12", -12), (" - ", -1)] {
+                    if ui.button(txt).clicked() {
+                        inst.transpose = (inst.transpose as i32 + d).clamp(-48, 48) as i8;
+                        changed = true;
+                    }
+                }
+                ui.label(
+                    egui::RichText::new(format!("{:+} st", inst.transpose))
+                        .monospace()
+                        .color(th().value),
+                );
+                for (txt, d) in [(" + ", 1), ("+12", 12)] {
+                    if ui.button(txt).clicked() {
+                        inst.transpose = (inst.transpose as i32 + d).clamp(-48, 48) as i8;
+                        changed = true;
+                    }
+                }
+            });
             if let InstrumentKind::Synth(p) = &mut inst.kind {
                 egui::Grid::new("patch")
                     .num_columns(2)
@@ -946,11 +1229,12 @@ impl App {
                 s.engine.playing,
             )
         });
-        let (channels, names, npat) = self.with(|s| {
+        let (channels, names, npat, mixer) = self.with(|s| {
             (
                 s.song.channels,
                 s.song.channel_names.clone(),
                 s.song.patterns.len(),
+                s.song.mixer.clone(),
             )
         });
         if playing && self.follow {
@@ -1046,7 +1330,8 @@ impl App {
         });
 
         let avail = ui.available_rect_before_wrap();
-        let resp = ui.allocate_rect(avail, Sense::click());
+        let resp = ui.allocate_rect(avail, Sense::click_and_drag());
+        let sel = self.sel_rect();
         let painter = ui.painter_at(avail);
         theme::crt(&painter, avail);
         let font = FontId::monospace(14.0);
@@ -1078,7 +1363,7 @@ impl App {
             painter.rect_filled(
                 hr,
                 6,
-                if self.mutes[ch] {
+                if !mixer.audible(ch) {
                     hex(0x4A525E)
                 } else {
                     th().slate
@@ -1094,7 +1379,13 @@ impl App {
             painter.text(
                 hr.right_center() - egui::vec2(6.0, 0.0),
                 egui::Align2::RIGHT_CENTER,
-                if self.mutes[ch] { "MUTED" } else { "" },
+                if mixer.channels[ch].solo {
+                    "SOLO"
+                } else if mixer.channels[ch].mute {
+                    "MUTED"
+                } else {
+                    ""
+                },
                 FontId::proportional(11.0),
                 hex(0xFFB4AE),
             );
@@ -1124,6 +1415,31 @@ impl App {
             }
             if r == self.row {
                 painter.rect_filled(row_rect, 4, th().slate.gamma_multiply(0.7));
+            }
+            if let Some((r0, r1, c0, c1)) = sel {
+                if (r0..=r1).contains(&r) {
+                    for (vi_c, ch) in (first_ch..channels).enumerate() {
+                        if (c0..=c1).contains(&ch) {
+                            let x = x0 + vi_c as f32 * chan_w - 3.0;
+                            let sr =
+                                Rect::from_min_size(Pos2::new(x, y), egui::vec2(chan_w - 4.0, rh));
+                            painter.rect_filled(sr, 0, th().sel);
+                            let st = Stroke::new(1.5, th().accent);
+                            if r == r0 {
+                                painter.hline(sr.x_range(), sr.top(), st);
+                            }
+                            if r == r1 {
+                                painter.hline(sr.x_range(), sr.bottom(), st);
+                            }
+                            if ch == c0 {
+                                painter.vline(sr.left(), sr.y_range(), st);
+                            }
+                            if ch == c1 {
+                                painter.vline(sr.right(), sr.y_range(), st);
+                            }
+                        }
+                    }
+                }
             }
             painter.text(
                 Pos2::new(avail.left() + 10.0, y + 2.0),
@@ -1211,7 +1527,37 @@ impl App {
                 }
             }
         }
+        let cell_at = |p: Pos2| -> Pos {
+            let vr = ((p.y - top) / rh).floor().max(0.0);
+            let vc = ((p.x - x0) / chan_w).floor().max(0.0);
+            (
+                (start + vr as usize).min(pat.rows - 1),
+                (first_ch + vc as usize).min(channels - 1),
+            )
+        };
+        if resp.drag_started() {
+            if let Some(o) = ui.input(|i| i.pointer.press_origin()) {
+                self.drag_anchor = Some(cell_at(o));
+            }
+        }
+        if resp.dragged() {
+            if let (Some(a), Some(p)) = (self.drag_anchor, resp.interact_pointer_pos()) {
+                let c = cell_at(p);
+                self.row = c.0;
+                self.ch = c.1;
+                self.sel = Some((a, c));
+                // auto-scroll when dragging past the edges
+                if p.y > avail.bottom() - rh {
+                    self.row = (self.row + 1).min(pat.rows - 1);
+                    self.sel = Some((a, (self.row, self.ch)));
+                }
+            }
+        }
+        if resp.drag_stopped() {
+            self.drag_anchor = None;
+        }
         if resp.clicked() {
+            self.sel = None;
             if let Some(p) = resp.interact_pointer_pos() {
                 let vr = ((p.y - top) / rh).floor();
                 if vr >= 0.0 {
@@ -1238,6 +1584,498 @@ impl App {
         }
     }
 
+    // ---------------------------------------------------------------- arranger
+
+    fn arr_edit(&mut self, f: impl FnOnce(&mut Song, usize) -> usize) {
+        self.snapshot();
+        let sel = self.arr_sel;
+        let new_sel = self.with(|s| f(&mut s.song, sel));
+        let len = self.with(|s| s.song.order.len());
+        self.arr_sel = new_sel.min(len - 1);
+        self.pattern = self.with(|s| s.song.order[self.arr_sel]);
+        self.row = self.row.min(self.rows() - 1);
+    }
+
+    fn arr_insert(&mut self) {
+        self.arr_edit(|song, sel| {
+            let n = song.patterns.len();
+            song.patterns
+                .push(Pattern::new(&format!("Block {n:02}"), ROWS, song.channels));
+            let at = (sel + 1).min(song.order.len());
+            song.order.insert(at, n);
+            at
+        });
+        self.status = "Inserted a new empty block".into();
+    }
+
+    fn arr_duplicate(&mut self, unique: bool) {
+        self.arr_edit(|song, sel| {
+            let mut b = song.order[sel];
+            if unique {
+                let mut p = song.patterns[b].clone();
+                p.name = format!("{} copy", p.name);
+                song.patterns.push(p);
+                b = song.patterns.len() - 1;
+            }
+            song.order.insert(sel + 1, b);
+            sel + 1
+        });
+        self.status = if unique {
+            "Duplicated as a new block copy".into()
+        } else {
+            "Duplicated clip (same block)".into()
+        };
+    }
+
+    fn arr_delete(&mut self) {
+        if self.with(|s| s.song.order.len()) <= 1 {
+            self.status = "The song needs at least one entry".into();
+            return;
+        }
+        self.arr_edit(|song, sel| {
+            song.order.remove(sel);
+            sel.saturating_sub(if sel >= song.order.len() { 1 } else { 0 })
+        });
+        self.status = "Removed clip (the block stays in the pool)".into();
+    }
+
+    fn arr_move(&mut self, from: usize, to: usize) {
+        if from == to || to == from + 1 {
+            return;
+        }
+        self.arr_edit(|song, _| {
+            let b = song.order.remove(from);
+            let to = if to > from { to - 1 } else { to };
+            song.order.insert(to.min(song.order.len()), b);
+            to
+        });
+        self.status = "Moved clip".into();
+    }
+
+    fn arr_zoom(&mut self, f: f32) {
+        self.with(|s| s.song.arranger_zoom = (s.song.arranger_zoom * f).clamp(0.25, 16.0));
+    }
+
+    /// keys handled by the full-size arranger view; returns true if consumed
+    fn arranger_key(&mut self, ev: &egui::Event) -> bool {
+        let egui::Event::Key {
+            key,
+            pressed: true,
+            modifiers: m,
+            ..
+        } = ev
+        else {
+            return false;
+        };
+        let len = self.with(|s| s.song.order.len());
+        match key {
+            Key::ArrowLeft => self.arr_sel = self.arr_sel.saturating_sub(1),
+            Key::ArrowRight => self.arr_sel = (self.arr_sel + 1).min(len - 1),
+            Key::Delete | Key::Backspace => self.arr_delete(),
+            Key::Insert => self.arr_insert(),
+            Key::D if m.command => self.arr_duplicate(m.shift),
+            Key::Plus | Key::Equals if !m.command => self.arr_zoom(1.25),
+            Key::Minus if !m.command => self.arr_zoom(0.8),
+            _ => return false,
+        }
+        if matches!(key, Key::ArrowLeft | Key::ArrowRight) {
+            self.pattern = self.with(|s| s.song.order[self.arr_sel]);
+            self.row = 0;
+        }
+        true
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn arranger_view(&mut self, ui: &mut egui::Ui) {
+        let (order, blocks, zoom, playing, loop_pat, opos, prow, ppat) = self.with(|s| {
+            let blocks: Vec<(String, usize, Vec<(usize, usize)>)> = s
+                .song
+                .patterns
+                .iter()
+                .map(|p| {
+                    let mut ticks = vec![];
+                    for (r, row) in p.cells.iter().enumerate() {
+                        for (c, cell) in row.iter().enumerate().take(s.song.channels) {
+                            if cell.note > 0 && cell.note != NOTE_OFF {
+                                ticks.push((r, c));
+                            }
+                        }
+                    }
+                    (p.name.clone(), p.rows, ticks)
+                })
+                .collect();
+            (
+                s.song.order.clone(),
+                blocks,
+                s.song.arranger_zoom,
+                s.engine.playing,
+                s.engine.loop_pattern,
+                s.engine.order_pos,
+                s.engine.row,
+                s.engine.pattern,
+            )
+        });
+        let channels = self.with(|s| s.song.channels).max(1);
+        self.arr_sel = self.arr_sel.min(order.len() - 1);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new("Arranger").strong());
+            ui.label(egui::RichText::new("zoom").color(th().ink2));
+            if ui.small_button("-").clicked() {
+                self.arr_zoom(0.8);
+            }
+            if ui.small_button("+").clicked() {
+                self.arr_zoom(1.25);
+            }
+            ui.separator();
+            if ui.button("Insert block").on_hover_text("Ins").clicked() {
+                self.arr_insert();
+            }
+            if ui.button("Duplicate").on_hover_text("Ctrl+D").clicked() {
+                self.arr_duplicate(false);
+            }
+            if ui
+                .button("Copy as new")
+                .on_hover_text("Ctrl+Shift+D: unique copy of the block")
+                .clicked()
+            {
+                self.arr_duplicate(true);
+            }
+            if ui.button("Delete").on_hover_text("Del").clicked() {
+                self.arr_delete();
+            }
+            ui.checkbox(&mut self.follow, "Follow");
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} entries · drag clips to reorder · click = open in editor",
+                    order.len()
+                ))
+                .small()
+                .color(th().ink2),
+            );
+        });
+        // clip x positions (in rows)
+        let mut starts = Vec::with_capacity(order.len() + 1);
+        let mut acc = 0usize;
+        for &b in &order {
+            starts.push(acc);
+            acc += blocks.get(b).map(|x| x.1).unwrap_or(ROWS);
+        }
+        starts.push(acc);
+        let pad = 8.0;
+        let total_w = acc as f32 * zoom + pad * 2.0;
+        let avail_h = ui.available_height().max(80.0);
+        let follow = self.follow && playing;
+        egui::ScrollArea::horizontal()
+            .id_salt("arranger_scroll")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                let w = total_w.max(ui.available_width());
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(w, avail_h - 14.0), Sense::hover());
+                let painter = ui.painter_at(rect);
+                theme::crt(&painter, rect);
+                let ruler_h = 16.0;
+                let lane = Rect::from_min_max(
+                    Pos2::new(rect.left(), rect.top() + ruler_h + 4.0),
+                    Pos2::new(rect.right(), rect.bottom() - 6.0),
+                );
+                let xof = |rows: usize| rect.left() + pad + rows as f32 * zoom;
+                // ruler: a tick every 16 rows, labels every 64
+                let step = if zoom < 1.0 { 64 } else { 16 };
+                let mut r = 0;
+                while r <= acc {
+                    let x = xof(r);
+                    let major = r % 64 == 0;
+                    painter.vline(
+                        x,
+                        rect.top() + if major { 2.0 } else { 9.0 }..=rect.top() + ruler_h,
+                        Stroke::new(1.0, th().ink2.gamma_multiply(0.6)),
+                    );
+                    if major && zoom * 64.0 > 28.0 {
+                        painter.text(
+                            Pos2::new(x + 3.0, rect.top() + 1.0),
+                            egui::Align2::LEFT_TOP,
+                            format!("{}", r / 16 + 1),
+                            FontId::monospace(10.0),
+                            th().ink2,
+                        );
+                    }
+                    r += step;
+                }
+                let pointer = ui.input(|i| i.pointer.interact_pos());
+                let released = ui.input(|i| i.pointer.any_released());
+                for (i, &b) in order.iter().enumerate() {
+                    let cr = Rect::from_min_max(
+                        Pos2::new(xof(starts[i]) + 1.0, lane.top()),
+                        Pos2::new(xof(starts[i + 1]) - 1.0, lane.bottom()),
+                    );
+                    let resp =
+                        ui.interact(cr, ui.scope_id().with(("clip", i)), Sense::click_and_drag());
+                    let col = hex(CLIP_COLOURS[b % CLIP_COLOURS.len()]);
+                    let col = if resp.hovered() {
+                        col.gamma_multiply(1.15)
+                    } else {
+                        col
+                    };
+                    painter.rect_filled(cr, 6, col);
+                    if i == self.arr_sel {
+                        painter.rect_stroke(
+                            cr,
+                            6,
+                            Stroke::new(2.0, th().accent),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
+                    // mini pattern preview: note ticks per channel
+                    if let Some((name, rows, ticks)) = blocks.get(b) {
+                        let body = Rect::from_min_max(
+                            Pos2::new(cr.left() + 4.0, cr.top() + 20.0),
+                            Pos2::new(cr.right() - 4.0, cr.bottom() - 4.0),
+                        );
+                        let lh = (body.height() / channels as f32).max(1.0);
+                        let tick = Color32::from_white_alpha(110);
+                        for &(r, c) in ticks {
+                            let x = body.left() + r as f32 / *rows as f32 * body.width();
+                            let y = body.top() + c as f32 * lh + lh * 0.5;
+                            painter.hline(
+                                x..=x + (zoom * 0.8).max(1.0),
+                                y,
+                                Stroke::new((lh * 0.5).clamp(1.0, 3.0), tick),
+                            );
+                        }
+                        let tp = ui.painter_at(cr.shrink(2.0));
+                        tp.text(
+                            cr.left_top() + egui::vec2(6.0, 3.0),
+                            egui::Align2::LEFT_TOP,
+                            format!("{b:02} {name}"),
+                            FontId::proportional(12.0),
+                            Color32::WHITE,
+                        );
+                    }
+                    if resp.clicked() {
+                        self.arr_sel = i;
+                        self.pattern = b;
+                        self.row = 0;
+                        self.sel = None;
+                    }
+                    if resp.double_clicked() {
+                        self.view = View::Pattern;
+                    }
+                    if resp.drag_started() {
+                        self.arr_drag = Some(i);
+                        self.arr_sel = i;
+                    }
+                    resp.on_hover_text(format!(
+                        "#{} · block {:02} · {} rows",
+                        i + 1,
+                        b,
+                        blocks.get(b).map(|x| x.1).unwrap_or(0)
+                    ));
+                }
+                // drag to reorder: insertion marker + drop
+                if let (Some(from), Some(p)) = (self.arr_drag, pointer) {
+                    let to = (0..order.len())
+                        .find(|&i| p.x < (xof(starts[i]) + xof(starts[i + 1])) * 0.5)
+                        .unwrap_or(order.len());
+                    let x = xof(starts[to]);
+                    painter.vline(x, lane.y_range(), Stroke::new(3.0, th().accent));
+                    if released {
+                        self.arr_drag = None;
+                        self.arr_move(from, to);
+                    }
+                } else if released {
+                    self.arr_drag = None;
+                }
+                // playhead
+                if playing {
+                    let idx = if loop_pat {
+                        if order.get(self.arr_sel) == Some(&ppat) {
+                            Some(self.arr_sel)
+                        } else {
+                            order.iter().position(|&b| b == ppat)
+                        }
+                    } else {
+                        Some(opos.min(order.len() - 1))
+                    };
+                    if let Some(i) = idx {
+                        let x = xof(starts[i] + prow);
+                        painter.vline(x, rect.y_range(), Stroke::new(2.0, th().play));
+                        if follow {
+                            ui.scroll_to_rect(
+                                Rect::from_center_size(
+                                    Pos2::new(x, rect.center().y),
+                                    egui::vec2(zoom * 64.0, 10.0),
+                                ),
+                                None,
+                            );
+                        }
+                    }
+                }
+            });
+    }
+
+    // ---------------------------------------------------------------- mixer
+
+    fn meter(ui: &mut egui::Ui, level: f32, h: f32) {
+        let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, h), Sense::hover());
+        let p = ui.painter();
+        p.rect_filled(r, 3, th().crt_bot);
+        let db = if level > 1e-5 {
+            20.0 * level.log10()
+        } else {
+            -90.0
+        };
+        let frac = ((db + 60.0) / 66.0).clamp(0.0, 1.0);
+        if frac > 0.0 {
+            let top = r.bottom() - frac * r.height();
+            let col = if db > 0.0 {
+                hex(0xD9605A)
+            } else if db > -6.0 {
+                hex(0xE8C35A)
+            } else {
+                hex(0x5CC07A)
+            };
+            p.rect_filled(Rect::from_min_max(Pos2::new(r.left(), top), r.max), 3, col);
+        }
+        // 0 dB line
+        let y0 = r.bottom() - 60.0 / 66.0 * r.height();
+        p.hline(r.x_range(), y0, Stroke::new(1.0, th().ink2));
+    }
+
+    #[allow(clippy::needless_range_loop)]
+    fn mixer_view(&mut self, ui: &mut egui::Ui) {
+        let (mut mix, names, nch, cpk, plr) = self.with(|s| {
+            (
+                s.song.mixer.clone(),
+                s.song.channel_names.clone(),
+                s.song.channels,
+                s.engine.chan_peak,
+                s.engine.peak_lr,
+            )
+        });
+        let before = mix.clone();
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Mixer").strong());
+            ui.label(
+                egui::RichText::new(
+                    "fader 0 dB = double-click · pan C = double-click · M mute · S solo (F9 / F10)",
+                )
+                .small()
+                .color(th().ink2),
+            );
+        });
+        ui.add_space(6.0);
+        let fader_h = (ui.available_height() - 150.0).clamp(80.0, 320.0);
+        egui::ScrollArea::horizontal()
+            .id_salt("mixer_scroll")
+            .show(ui, |ui| {
+                ui.horizontal_top(|ui| {
+                    let strip =
+                        |ui: &mut egui::Ui,
+                         title: String,
+                         spine: Color32,
+                         vol: &mut f32,
+                         levels: &[f32],
+                         extra: &mut dyn FnMut(&mut egui::Ui)| {
+                            egui::Frame::new()
+                                .fill(th().cart_top)
+                                .stroke(Stroke::new(1.0, spine))
+                                .corner_radius(8)
+                                .inner_margin(8)
+                                .show(ui, |ui| {
+                                    ui.set_width(92.0);
+                                    ui.vertical_centered(|ui| {
+                                        ui.label(
+                                            egui::RichText::new(title).strong().color(th().ink),
+                                        );
+                                        ui.add_space(4.0);
+                                        ui.horizontal(|ui| {
+                                            ui.spacing_mut().slider_width = fader_h;
+                                            ui.add_space(8.0);
+                                            let r = ui.add(
+                                                egui::Slider::new(vol, 0.0..=2.0)
+                                                    .vertical()
+                                                    .trailing_fill(true)
+                                                    .show_value(false),
+                                            );
+                                            if r.double_clicked() {
+                                                *vol = 1.0;
+                                            }
+                                            for l in levels {
+                                                Self::meter(ui, *l, fader_h);
+                                            }
+                                        });
+                                        ui.label(
+                                            egui::RichText::new(db_text(*vol))
+                                                .monospace()
+                                                .small()
+                                                .color(th().value),
+                                        );
+                                        extra(ui);
+                                    });
+                                });
+                        };
+                    for ch in 0..nch.min(MAX_CHANNELS) {
+                        let c = &mut mix.channels[ch];
+                        let mut vol = c.volume;
+                        let (mut pan, mut mute, mut solo) = (c.pan, c.mute, c.solo);
+                        strip(
+                            ui,
+                            format!("{} {}", ch + 1, names.get(ch).cloned().unwrap_or_default()),
+                            th().slate,
+                            &mut vol,
+                            &[cpk[ch]],
+                            &mut |ui| {
+                                ui.spacing_mut().slider_width = 76.0;
+                                let r = ui
+                                    .add(egui::Slider::new(&mut pan, -1.0..=1.0).show_value(false));
+                                if r.double_clicked() {
+                                    pan = 0.0;
+                                }
+                                let pt = if pan.abs() < 0.01 {
+                                    "C".to_string()
+                                } else if pan < 0.0 {
+                                    format!("L{:.0}", -pan * 100.0)
+                                } else {
+                                    format!("R{:.0}", pan * 100.0)
+                                };
+                                ui.label(egui::RichText::new(pt).monospace().small());
+                                ui.horizontal(|ui| {
+                                    ui.add_space(14.0);
+                                    ui.toggle_value(&mut mute, egui::RichText::new(" M ").strong())
+                                        .on_hover_text("mute (F9)");
+                                    ui.toggle_value(&mut solo, egui::RichText::new(" S ").strong())
+                                        .on_hover_text("solo (F10)");
+                                });
+                            },
+                        );
+                        let c = &mut mix.channels[ch];
+                        c.volume = vol;
+                        c.pan = pan;
+                        c.mute = mute;
+                        c.solo = solo;
+                    }
+                    ui.add_space(12.0);
+                    let mut master = mix.master;
+                    strip(
+                        ui,
+                        "Master".into(),
+                        th().accent,
+                        &mut master,
+                        &plr,
+                        &mut |ui| {
+                            ui.label(egui::RichText::new("soft limiter").small().color(th().ink2));
+                        },
+                    );
+                    mix.master = master;
+                });
+            });
+        if mix != before {
+            self.with(|s| s.song.mixer = mix);
+            self.dirty = true;
+        }
+    }
+
     fn help(&mut self, ctx: &egui::Context) {
         let mut open = self.show_help;
         egui::Window::new("Keys").open(&mut open).resizable(false).show(ctx, |ui| {
@@ -1249,7 +2087,11 @@ impl App {
                     ("1", "note off"), ("F1 - F8", "base octave 1-8"), ("0-9 A-F", "hex in instr/vol/effect columns"),
                     ("Delete", "clear field"), ("Backspace / Insert", "pull up / push down rows"),
                     ("Space", "play / stop current block (loop)"), ("Shift+Space", "play / stop song"), ("Enter / Ctrl+Enter", "restart block / play from row"), ("Ctrl+= / Ctrl+- / Ctrl+0", "UI scale up / down / 100 %"), ("Esc", "edit mode on/off"),
-                    ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Alt +/- (Shift = octave)", "transpose channel"), ("F9 / F10", "mute / solo channel"),
+                    ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Alt +/- (Shift = octave)", "transpose selection or channel"), ("F9 / F10", "mute / solo channel"),
+                    ("Numpad - / +", "base octave down / up"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
+                    ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Delete (with selection)", "clear selection"),
+                    ("Ctrl+Tab, Ctrl+1/2/3", "views: pattern / arranger / mixer"),
+                    ("Arranger: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
                     ("Ctrl+N / O / S / Shift+S", "new / open / save / save as (.cwt)"), ("Ctrl+E", "export WAV"),
                 ] { ui.label(egui::RichText::new(k).monospace().color(th().value)); ui.label(v); ui.end_row(); }
             });
@@ -1274,7 +2116,10 @@ impl eframe::App for App {
         let mut keep = Vec::with_capacity(raw.events.len());
         for e in raw.events.drain(..) {
             match e {
-                egui::Event::Key { .. } => self.pending.push(e),
+                egui::Event::Key { .. }
+                | egui::Event::Copy
+                | egui::Event::Cut
+                | egui::Event::Paste(_) => self.pending.push(e),
                 egui::Event::Text(_) => {}
                 other => keep.push(other),
             }
@@ -1384,14 +2229,50 @@ impl eframe::App for App {
                 let inner = r.shrink2(egui::vec2(12.0, 8.0));
                 let inner =
                     Rect::from_min_max(Pos2::new(inner.left() + 4.0, inner.top()), inner.max);
-                ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
-                    self.pattern_view(ui)
-                });
+                match self.view {
+                    View::Pattern if self.dock_arranger => {
+                        let h = (inner.height() * 0.3).clamp(120.0, 190.0);
+                        let top = Rect::from_min_max(
+                            inner.min,
+                            Pos2::new(inner.right(), inner.bottom() - h - 6.0),
+                        );
+                        let bot = Rect::from_min_max(
+                            Pos2::new(inner.left(), inner.bottom() - h),
+                            inner.max,
+                        );
+                        ui.scope_builder(egui::UiBuilder::new().max_rect(top), |ui| {
+                            self.pattern_view(ui)
+                        });
+                        ui.painter().hline(
+                            bot.x_range(),
+                            bot.top() - 3.0,
+                            Stroke::new(1.0, th().border.gamma_multiply(0.6)),
+                        );
+                        ui.scope_builder(egui::UiBuilder::new().max_rect(bot), |ui| {
+                            self.arranger_view(ui)
+                        });
+                    }
+                    View::Pattern => {
+                        ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                            self.pattern_view(ui)
+                        });
+                    }
+                    View::Arranger => {
+                        ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                            self.arranger_view(ui)
+                        });
+                    }
+                    View::Mixer => {
+                        ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                            self.mixer_view(ui)
+                        });
+                    }
+                }
             });
         if self.show_help {
             self.help(&ctx);
         }
-        if self.with(|s| s.engine.playing) {
+        if self.with(|s| s.engine.playing || s.engine.peak > 0.001) {
             ctx.request_repaint();
         }
     }

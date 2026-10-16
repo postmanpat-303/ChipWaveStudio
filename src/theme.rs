@@ -36,17 +36,20 @@ pub struct Theme {
     pub fx: Color32,
     pub empty: Color32,
     pub play: Color32,
+    /// selection fill / accent (focus, selection, active)
+    pub sel: Color32,
+    pub accent: Color32,
 }
 
 /// Default: modern dark grey with thin muted-green borders.
 pub const DARK: Theme = Theme {
-    name: "Dark (default)",
+    name: "Dark Circuit (default)",
     light: false,
     border: hex(0x4CAF6A),
-    bg_top: hex(0x1F2124),
-    bg_bot: hex(0x1A1C1F),
-    cart_top: hex(0x2A2D31),
-    cart_bot: hex(0x25282C),
+    bg_top: hex(0x24272B),
+    bg_bot: hex(0x17191C),
+    cart_top: hex(0x33373C),
+    cart_bot: hex(0x26292D),
     pill: hex(0x34383D),
     hdr_top: hex(0x2A2D31),
     hdr_bot: hex(0x232629),
@@ -66,6 +69,8 @@ pub const DARK: Theme = Theme {
     fx: hex(0xE0C46C),
     empty: hex(0x4A4F56),
     play: hex(0xE08A3C),
+    sel: hex(0x2E4A37),
+    accent: hex(0x5CC07A),
 };
 
 /// Optional "Amiga" theme: Workbench Gradient (A2) with the muted palette.
@@ -96,6 +101,8 @@ pub const AMIGA: Theme = Theme {
     fx: hex(0xFFD400),
     empty: hex(0x4F6FA0),
     play: hex(0xFF7A00),
+    sel: hex(0xC9D9F5),
+    accent: hex(0x1F5FD1),
 };
 
 pub const THEMES: [Theme; 2] = [DARK, AMIGA];

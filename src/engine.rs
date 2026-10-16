@@ -21,9 +21,9 @@ struct Chan {
     active: bool,
     slide: f32,
     vol_slide: f32,
-    muted: bool,
-    /// smoothed mute gain (declick)
-    mute_gain: f32,
+    /// smoothed left/right gains (mixer fader, pan, mute; declick)
+    gl: f32,
+    gr: f32,
     /// previous voice fading out over ~5 ms after a retrigger (declick)
     tail: Tail,
 }
@@ -99,8 +99,8 @@ impl Chan {
             active: false,
             slide: 0.0,
             vol_slide: 0.0,
-            muted: false,
-            mute_gain: 1.0,
+            gl: 1.0,
+            gr: 1.0,
             tail: Tail {
                 instr: usize::MAX,
                 freq: 0.0,
@@ -128,6 +128,12 @@ pub struct Engine {
     chans: Vec<Chan>,
     pub song_ended: bool,
     pub peak: f32,
+    /// master peaks (left, right) with decay, for meters
+    pub peak_lr: [f32; 2],
+    /// per-channel peak after fader, for mixer meters
+    pub chan_peak: [f32; MAX_CHANNELS],
+    /// rows played since start (tests / diagnostics)
+    pub rows_played: u64,
 }
 
 impl Engine {
@@ -146,12 +152,29 @@ impl Engine {
             chans: (0..MAX_CHANNELS).map(|_| Chan::new()).collect(),
             song_ended: false,
             peak: 0.0,
+            peak_lr: [0.0; 2],
+            chan_peak: [0.0; MAX_CHANNELS],
+            rows_played: 0,
         }
     }
 
-    pub fn set_mutes(&mut self, mutes: &[bool]) {
-        for (c, m) in self.chans.iter_mut().zip(mutes) {
-            c.muted = *m;
+    pub fn bpm(&self) -> f32 {
+        self.bpm
+    }
+
+    /// Change tempo/speed while playing: takes effect at the next tick
+    /// (no restart, the current row position is kept).
+    pub fn set_tempo(&mut self, bpm: f32, speed: u32) {
+        let old = self.tick_len();
+        self.bpm = bpm.clamp(20.0, 400.0);
+        self.speed = speed.clamp(1, 32);
+        if self.tick >= self.speed {
+            self.tick = self.speed - 1;
+        }
+        // rescale the remaining time of the current tick
+        let new = self.tick_len();
+        if old > 0.0 {
+            self.samples_to_tick = (self.samples_to_tick / old * new).min(new);
         }
     }
 
@@ -172,6 +195,7 @@ impl Engine {
             song.order.get(self.order_pos).copied().unwrap_or(0)
         };
         self.row = row;
+        self.rows_played = 0;
         self.tick = 0;
         self.samples_to_tick = 0.0;
         self.speed = song.speed.max(1);
@@ -224,7 +248,12 @@ impl Engine {
                 c.fade_to_tail();
             }
             c.note = cell.note;
-            c.freq = note_freq(cell.note);
+            let t = song
+                .instruments
+                .get(c.instr)
+                .map(|i| i.transpose)
+                .unwrap_or(0);
+            c.freq = note_freq((cell.note as i32 + t as i32).clamp(1, 127) as u8);
             c.synth = SynthVoice::new();
             c.pos = 0.0;
             c.active = true;
@@ -267,6 +296,7 @@ impl Engine {
 
     fn advance_row(&mut self, song: &Song) {
         self.row += 1;
+        self.rows_played += 1;
         let rows = song
             .patterns
             .get(self.pattern)
@@ -306,6 +336,26 @@ impl Engine {
     /// Render interleaved stereo.
     pub fn render(&mut self, song: &Song, out: &mut [f32]) {
         let mut peak = self.peak * 0.97;
+        let mut plr = [self.peak_lr[0] * 0.97, self.peak_lr[1] * 0.97];
+        let mut cpk = self.chan_peak;
+        for p in &mut cpk {
+            *p *= 0.97;
+        }
+        // mixer targets (computed once per block)
+        let nch = song.channels.min(MAX_CHANNELS);
+        let mut tgt = [(0.0f32, 0.0f32); MAX_CHANNELS];
+        for (i, t) in tgt.iter_mut().enumerate().take(nch) {
+            let m = song.mixer.channels.get(i).copied().unwrap_or_default();
+            let g = if song.mixer.audible(i) { m.volume } else { 0.0 };
+            // constant power pan, normalised so centre = 1.0 per side
+            let a = (m.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+            *t = (
+                g * a.cos() * std::f32::consts::SQRT_2,
+                g * a.sin() * std::f32::consts::SQRT_2,
+            );
+        }
+        let master = song.mixer.master;
+        let k = 1.0 - (-1.0 / (0.005 * self.sr)).exp();
         for frame in out.chunks_mut(2) {
             if self.playing {
                 self.samples_to_tick -= 1.0;
@@ -337,34 +387,28 @@ impl Engine {
                     s += v * t.vol * t.gain;
                     t.gain = if alive { (t.gain - step).max(0.0) } else { 0.0 };
                 }
-                let target = if c.muted { 0.0 } else { 1.0 };
-                if c.mute_gain != target {
-                    c.mute_gain = if target > c.mute_gain {
-                        (c.mute_gain + step).min(1.0)
-                    } else {
-                        (c.mute_gain - step).max(0.0)
-                    };
-                }
-                let s = s * c.mute_gain;
-                // simple fixed pan: alternate channels slightly
-                let pan = if song.channels > 1 {
-                    (i % 2) as f32 * 0.3 - 0.15
-                } else {
-                    0.0
-                };
-                l += s * (1.0 - pan);
-                r += s * (1.0 + pan);
+                let (tl, tr) = tgt[i];
+                c.gl += (tl - c.gl) * k;
+                c.gr += (tr - c.gr) * k;
+                let (sl, sr2) = (s * c.gl, s * c.gr);
+                cpk[i] = cpk[i].max((sl.abs().max(sr2.abs()) * 0.6).min(1.5));
+                l += sl;
+                r += sr2;
             }
-            // soft master limiter
-            let l = (l * 0.6).tanh();
-            let r = (r * 0.6).tanh();
+            // master volume, then soft master limiter
+            let l = (l * 0.6 * master).tanh();
+            let r = (r * 0.6 * master).tanh();
             peak = peak.max(l.abs()).max(r.abs());
+            plr[0] = plr[0].max(l.abs());
+            plr[1] = plr[1].max(r.abs());
             frame[0] = l;
             if frame.len() > 1 {
                 frame[1] = r;
             }
         }
         self.peak = peak;
+        self.peak_lr = plr;
+        self.chan_peak = cpk;
     }
 }
 
@@ -401,4 +445,44 @@ pub fn write_wav(path: &std::path::Path, data: &[f32], sr: u32) -> Result<(), St
             .map_err(|e| e.to_string())?;
     }
     w.finalize().map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rows_in(e: &mut Engine, song: &Song, secs: f32) -> u64 {
+        let before = e.rows_played;
+        let mut buf = vec![0.0f32; 512];
+        for _ in 0..(secs * e.sr / 256.0) as usize {
+            e.render(song, &mut buf);
+        }
+        e.rows_played - before
+    }
+
+    #[test]
+    fn tempo_change_applies_while_playing() {
+        let song = crate::fileio::demo_song();
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, true, 0);
+        let r1 = rows_in(&mut e, &song, 2.0);
+        e.set_tempo(song.bpm * 2.0, song.speed);
+        let r2 = rows_in(&mut e, &song, 2.0);
+        assert!(e.playing);
+        assert!((r2 as f64 - 2.0 * r1 as f64).abs() <= 3.0, "{r1} {r2}");
+    }
+
+    #[test]
+    fn tempo_effect_0f_applies() {
+        let mut song = crate::fileio::demo_song();
+        song.bpm = 100.0;
+        song.patterns[0].cells[0][0].fx = 0x0F;
+        song.patterns[0].cells[0][0].fxp = 200;
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, true, 0);
+        assert_eq!(e.bpm(), 200.0);
+        // 200 BPM * 4 rows per beat = 13.33 rows/s
+        let r = rows_in(&mut e, &song, 3.0);
+        assert!((r as i64 - 40).abs() <= 2, "{r}");
+    }
 }

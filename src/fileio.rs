@@ -192,6 +192,22 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
             z.write_all(toml::to_string(&b).map_err(|e| e.to_string())?.as_bytes())
                 .map_err(|e| e.to_string())?;
         }
+        z.start_file("mixer.toml", defl).map_err(e)?;
+        z.write_all(
+            toml::to_string(&song.mixer)
+                .map_err(|e| e.to_string())?
+                .as_bytes(),
+        )
+        .map_err(|e| e.to_string())?;
+        z.start_file("arranger.toml", defl).map_err(e)?;
+        z.write_all(
+            toml::to_string(&ArrangerFile {
+                zoom: song.arranger_zoom,
+            })
+            .map_err(|e| e.to_string())?
+            .as_bytes(),
+        )
+        .map_err(|e| e.to_string())?;
         z.finish().map_err(e)?;
     }
     if path.exists() {
@@ -270,7 +286,25 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
         patterns,
         order: if order.is_empty() { vec![0] } else { order },
         instruments,
+        mixer: read_entry(&mut z, "mixer.toml")
+            .ok()
+            .and_then(|b| toml::from_str::<Mixer>(&String::from_utf8_lossy(&b)).ok())
+            .map(|mut m| {
+                m.fix();
+                m
+            })
+            .unwrap_or_default(),
+        arranger_zoom: read_entry(&mut z, "arranger.toml")
+            .ok()
+            .and_then(|b| toml::from_str::<ArrangerFile>(&String::from_utf8_lossy(&b)).ok())
+            .map(|a| a.zoom.clamp(0.25, 16.0))
+            .unwrap_or(2.0),
     })
+}
+
+#[derive(Serialize, Deserialize)]
+struct ArrangerFile {
+    zoom: f32,
 }
 
 /// Decode any hound-readable WAV to mono f32.
@@ -304,6 +338,7 @@ pub fn import_wav(path: &Path) -> Result<Instrument, String> {
     Ok(Instrument {
         name,
         volume: 1.0,
+        transpose: 0,
         kind: InstrumentKind::Sample {
             file: String::new(),
             rate,
@@ -357,6 +392,7 @@ pub fn demo_song() -> Song {
             song.instruments.push(Instrument {
                 name: name.into(),
                 volume: 1.0,
+                transpose: 0,
                 kind: InstrumentKind::Synth(p),
             });
         }
@@ -372,6 +408,7 @@ pub fn demo_song() -> Song {
             song.instruments.push(Instrument {
                 name: p.name.clone(),
                 volume: 0.8,
+                transpose: 0,
                 kind: InstrumentKind::Synth(p),
             });
         }

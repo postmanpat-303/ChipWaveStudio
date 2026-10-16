@@ -101,6 +101,7 @@ pub fn start(shared: SharedRef, buffer_frames: u32) -> Result<Audio, String> {
         std::thread::Builder::new()
             .name("chipwave-engine".into())
             .spawn(move || {
+                realtime_thread();
                 let mut buf = vec![0.0f32; CHUNK * 2];
                 // prefill with silence so playback starts on a full buffer
                 let pre = stats.target_frames.load(Ordering::Relaxed) * 2;
@@ -203,3 +204,26 @@ pub fn start(shared: SharedRef, buffer_frames: u32) -> Result<Audio, String> {
         thread: Some(thread),
     })
 }
+
+/// Make the engine thread wake up on time: 1 ms timer resolution and a
+/// high thread priority on Windows (the default 15.6 ms sleep granularity
+/// plus UI load caused underruns).
+#[cfg(windows)]
+fn realtime_thread() {
+    #[link(name = "winmm")]
+    extern "system" {
+        fn timeBeginPeriod(ms: u32) -> u32;
+    }
+    extern "system" {
+        fn GetCurrentThread() -> isize;
+        fn SetThreadPriority(h: isize, prio: i32) -> i32;
+    }
+    unsafe {
+        timeBeginPeriod(1);
+        // THREAD_PRIORITY_TIME_CRITICAL
+        SetThreadPriority(GetCurrentThread(), 15);
+    }
+}
+
+#[cfg(not(windows))]
+fn realtime_thread() {}

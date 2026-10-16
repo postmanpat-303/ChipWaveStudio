@@ -173,4 +173,6 @@ Keys are matched by **physical position** for note entry (so QWERTZ/AZERTY layou
 ## 10. Rust notes
 Use egui `InputState` key events plus `egui::Key` physical scancodes (via `RawInput`/winit `PhysicalKey`) for note entry. The grid is drawn with one painter call per visible cell run (no widgets per cell), and only visible rows are laid out, so 3 200-line blocks scroll smoothly.
 
+**Added in 0.1.3:** selection with Shift+arrows/PgUp/PgDn or mouse drag (green highlight), Ctrl+A (channel, then block), Ctrl+C/X/V (paste at cursor), Delete clears the selection, Alt+=/− transposes the selection (or the channel without one); all undoable. Base octave: F1–F8, numpad −/+, or the −/+ buttons by "Oct". Views: Ctrl+Tab cycles Pattern/Arranger/Mixer (plain Tab stays next channel), Ctrl+1/2/3 pick one.
+
 **Changed in 0.1.2 (Del's testing):** Space now plays/stops the current block, because that's what you want while editing. Song playback moved to Shift+Space (Ctrl+Space is kept for the effect dropdown). Ctrl+=/−/0 now control the UI scale, so transpose moved to Alt+=/−.

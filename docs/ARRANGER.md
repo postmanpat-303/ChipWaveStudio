@@ -1,6 +1,6 @@
 # ChipWave Tracker: Visual Arranger
 
-**Status:** design. No code yet.
+**Status:** basic version implemented in 0.1.3 (see the end of this page).
 
 The arranger is a side-scrolling timeline where your **blocks** (OctaMED's patterns) appear as coloured clips you drag, resize and repeat. It's another view of the same song structure OctaMED stores as **sections** and **playing sequences**, so MMD files still load and save (see [OCTAMED_SPEC.md](OCTAMED_SPEC.md) §2 and §6).
 
@@ -111,3 +111,5 @@ A second lane lets you lay an alternative block under a clip (e.g. drum fill) an
 
 ## 8. Auto arrange
 Fill-to-length with roles, style templates, a seeded generator and non-destructive variations: see [AUTO_ARRANGE.md](AUTO_ARRANGE.md).
+
+**Implemented in 0.1.3 (basic):** single lane over `song.order`: coloured clips (muted palette by block id) with note-density previews, drag to reorder, Duplicate (Ctrl+D), Copy as new block (Ctrl+Shift+D), Insert block (Ins), Delete (Del), click = open block, double-click = pattern view, playhead with follow, zoom (+/−), ruler in bars, dockable under the pattern editor. Zoom is saved in `.cwt` as `arranger.toml`. Deferred: sections/sequences, repeat handles, block pool, colours per block, markers, loop range, lanes, mini-map.
