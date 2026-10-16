@@ -10,6 +10,8 @@ use eframe::egui::{self, Color32, FontId, Key, Pos2, Rect, Sense, Stroke};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+mod fxview;
+
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect
 const SUBCOLS: usize = 9;
 
@@ -18,6 +20,7 @@ enum View {
     Pattern,
     Arranger,
     Mixer,
+    Fx,
 }
 
 /// muted clip palette for the arranger (block id -> colour)
@@ -26,7 +29,13 @@ const CLIP_COLOURS: [u32; 8] = [
     0x516D96, 0x8A6D3B, 0x7A4E5C, 0x5E6B7A, 0x6B5E8A, 0x7A6A4E, 0x8A5A4E, 0x4E6A86,
 ];
 
-type Undo = (Vec<Pattern>, Vec<usize>, Vec<crate::automation::Lane>);
+type Undo = (
+    Vec<Pattern>,
+    Vec<usize>,
+    Vec<crate::automation::Lane>,
+    Vec<Vec<crate::fx::Device>>,
+    Vec<crate::model::Return>,
+);
 
 const LANE_H: f32 = 64.0;
 /// automation curve colours: functional, saturated but muted
@@ -68,6 +77,7 @@ pub struct App {
     dock_arranger: bool,
     arr_sel: usize,
     arr_drag: Option<usize>,
+    fx_drag: Option<usize>,
     /// clip to highlight briefly after duplicate/insert, with start time
     arr_flash: Option<(Vec<usize>, f64)>,
     /// selected song-order entries (multi-select); arr_sel is the anchor
@@ -153,6 +163,7 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         dock_arranger: true,
         arr_sel: 0,
         arr_drag: None,
+        fx_drag: None,
         arr_flash: None,
         arr_multi: Default::default(),
         arr_clip: vec![],
@@ -299,6 +310,8 @@ impl App {
                 s.song.patterns.clone(),
                 s.song.order.clone(),
                 s.song.automation.clone(),
+                s.song.instruments.iter().map(|i| i.fx.clone()).collect(),
+                s.song.mixer.returns.clone(),
             )
         });
         self.undo.push(st);
@@ -322,6 +335,13 @@ impl App {
                     std::mem::replace(&mut s.song.patterns, p.0),
                     std::mem::replace(&mut s.song.order, p.1),
                     std::mem::replace(&mut s.song.automation, p.2),
+                    s.song
+                        .instruments
+                        .iter_mut()
+                        .zip(p.3.into_iter().chain(std::iter::repeat_with(Vec::new)))
+                        .map(|(i, f)| std::mem::replace(&mut i.fx, f))
+                        .collect(),
+                    std::mem::replace(&mut s.song.mixer.returns, p.4),
                 )
             };
 
@@ -619,7 +639,8 @@ impl App {
                     self.view = match self.view {
                         View::Pattern => View::Arranger,
                         View::Arranger => View::Mixer,
-                        View::Mixer => View::Pattern,
+                        View::Mixer => View::Fx,
+                        View::Fx => View::Pattern,
                     }
                 }
                 Key::Num1 if cmd => {
@@ -628,6 +649,7 @@ impl App {
                 }
                 Key::Num2 if cmd => self.view = View::Arranger,
                 Key::Num3 if cmd => self.view = View::Mixer,
+                Key::Num4 if cmd => self.view = View::Fx,
                 Key::A if cmd => {
                     let last = self.rows() - 1;
                     let chsel = Some(((0, self.ch), (last, self.ch)));
@@ -636,6 +658,11 @@ impl App {
                     } else {
                         chsel
                     };
+                }
+                Key::ArrowUp | Key::ArrowDown if self.view == View::Fx => {
+                    let n = self.with(|s| s.song.instruments.len()).max(1) as i32;
+                    let d = if key == Key::ArrowUp { -1 } else { 1 };
+                    self.instr = ((self.instr as i32 - 1 + d).rem_euclid(n) + 1) as u8;
                 }
                 Key::ArrowUp => self.move_row(-1),
                 Key::ArrowDown => self.move_row(1),
@@ -1135,9 +1162,10 @@ impl App {
                 (View::Pattern, "Pattern"),
                 (View::Arranger, "Arranger"),
                 (View::Mixer, "Mixer"),
+                (View::Fx, "FX"),
             ] {
                 ui.selectable_value(&mut self.view, v, label)
-                    .on_hover_text("Ctrl+Tab cycles views, Ctrl+1/2/3");
+                    .on_hover_text("Ctrl+Tab cycles views, Ctrl+1/2/3/4");
             }
             ui.checkbox(
                 &mut self.dock_arranger,
@@ -2119,7 +2147,17 @@ impl App {
         let pad = 8.0;
         let avail_h = ui.available_height().max(80.0);
         let follow = self.follow && playing;
-        let (lanes, song_pos) = self.with(|s| (s.song.automation.clone(), s.engine.song_pos));
+        let (lanes, song_pos, fxk) = self.with(|s| {
+            (
+                s.song.automation.clone(),
+                s.engine.song_pos,
+                s.song
+                    .instruments
+                    .iter()
+                    .map(|i| i.fx.iter().map(|d| d.kind).collect::<Vec<_>>())
+                    .collect::<Vec<_>>(),
+            )
+        });
         let show_auto = self.show_auto;
         let n_lanes = if show_auto { lanes.len() } else { 0 };
         let lanes_h = n_lanes as f32 * (LANE_H + 4.0) + if n_lanes > 0 { 4.0 } else { 0.0 };
@@ -2449,12 +2487,14 @@ impl App {
                         format!(
                             "line {:.0} · {}",
                             pos,
-                            target.map(|t| t.format(to_n(hp.y))).unwrap_or_default()
+                            target
+                                .map(|t| t.format_in(to_n(hp.y), &fxk))
+                                .unwrap_or_default()
                         )
                     } else {
                         let pos = if playing { song_pos } else { 0.0 };
                         crate::automation::value_at(&lane.points, pos)
-                            .and_then(|n| target.map(|t| t.format(n)))
+                            .and_then(|n| target.map(|t| t.format_in(n, &fxk)))
                             .unwrap_or_default()
                     };
                     let lp = Pos2::new(x0 + 8.0, lr.top() + 4.0);
@@ -2604,6 +2644,44 @@ impl App {
                 Target::ChanVolume(c) | Target::ChanPan(c) => {
                     format!("Ch {} {} - {}", c + 1, cname(c), t.param_name())
                 }
+                Target::Fx(i, d, p) => {
+                    let pn = s
+                        .song
+                        .instruments
+                        .get(i)
+                        .and_then(|x| x.fx.get(d))
+                        .map(|dev| {
+                            format!(
+                                "{} {}",
+                                dev.kind.name(),
+                                crate::fx::params(dev.kind)
+                                    .get(p)
+                                    .map(|x| x.name)
+                                    .unwrap_or("")
+                            )
+                        });
+                    format!("{} - {}", iname(i), pn.unwrap_or_default())
+                }
+                Target::Ret(r, p) => {
+                    let k = if r == 0 {
+                        crate::fx::FxKind::Delay
+                    } else {
+                        crate::fx::FxKind::Reverb
+                    };
+                    format!(
+                        "Return {} - {}",
+                        if r == 0 { "A" } else { "B" },
+                        crate::fx::params(k).get(p).map(|x| x.name).unwrap_or("")
+                    )
+                }
+                Target::Send(c, r) => {
+                    format!(
+                        "Ch {} {} - Send {}",
+                        c + 1,
+                        cname(c),
+                        if r == 0 { "A" } else { "B" }
+                    )
+                }
                 _ => t.param_name().to_string(),
             }
         });
@@ -2626,6 +2704,27 @@ impl App {
                 Target::ChanPan(c) => t.to_norm(s.song.mixer.channels[c].pan),
                 Target::Master => t.to_norm(s.song.mixer.master),
                 Target::Tempo => t.to_norm(s.song.bpm),
+                Target::Fx(i, d, p) => s
+                    .song
+                    .instruments
+                    .get(i)
+                    .and_then(|x| x.fx.get(d))
+                    .and_then(|dev| dev.params.get(p).copied())
+                    .unwrap_or(0.5),
+                Target::Ret(r, p) => s
+                    .song
+                    .mixer
+                    .returns
+                    .get(r)
+                    .and_then(|x| x.device.params.get(p).copied())
+                    .unwrap_or(0.5),
+                Target::Send(c, r) => s
+                    .song
+                    .mixer
+                    .channels
+                    .get(c)
+                    .map(|m| m.send[r])
+                    .unwrap_or(0.0),
             };
             let mut lane = Lane::new(t, label.clone());
             lane.points.push(crate::automation::Point {
@@ -2643,6 +2742,13 @@ impl App {
 
     fn automation_bar(&mut self, ui: &mut egui::Ui) {
         use crate::automation::{Shape, Target};
+        let fxdevs = self.with(|s| {
+            s.song
+                .instruments
+                .iter()
+                .map(|i| i.fx.iter().map(|d| d.kind).collect::<Vec<_>>())
+                .collect::<Vec<_>>()
+        });
         let (ninst, synths, nch, nl) = self.with(|s| {
             (
                 s.song.instruments.len(),
@@ -2687,6 +2793,19 @@ impl App {
                                 ui.close();
                             }
                         }
+                        for (d, k) in fxdevs.get(i).into_iter().flatten().enumerate() {
+                            ui.menu_button(
+                                format!("{:02X} {n} - FX {} {}", i + 1, d + 1, k.name()),
+                                |ui| {
+                                    for (p, info) in crate::fx::params(*k).iter().enumerate() {
+                                        if ui.button(info.name).clicked() {
+                                            add = Some(Target::Fx(i, d, p));
+                                            ui.close();
+                                        }
+                                    }
+                                },
+                            );
+                        }
                     }
                     ui.separator();
                     for c in 0..nch {
@@ -2699,6 +2818,38 @@ impl App {
                                 ui.close();
                             }
                         }
+                    }
+                    for c in 0..nch {
+                        for r in 0..2 {
+                            let t = Target::Send(c, r);
+                            if ui
+                                .button(format!(
+                                    "Mixer ch {} - Send {}",
+                                    c + 1,
+                                    if r == 0 { "A" } else { "B" }
+                                ))
+                                .clicked()
+                            {
+                                add = Some(t);
+                                ui.close();
+                            }
+                        }
+                    }
+                    for (r, k) in [crate::fx::FxKind::Delay, crate::fx::FxKind::Reverb]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        ui.menu_button(
+                            format!("Return {} ({})", if r == 0 { "A" } else { "B" }, k.name()),
+                            |ui| {
+                                for (p, info) in crate::fx::params(k).iter().enumerate() {
+                                    if ui.button(info.name).clicked() {
+                                        add = Some(Target::Ret(r, p));
+                                        ui.close();
+                                    }
+                                }
+                            },
+                        );
                     }
                     for t in [Target::Master, Target::Tempo] {
                         if ui.button(t.param_name()).clicked() {
@@ -2891,6 +3042,7 @@ impl App {
                         let c = &mut mix.channels[ch];
                         let mut vol = c.volume;
                         let (mut pan, mut mute, mut solo) = (c.pan, c.mute, c.solo);
+                        let mut send = c.send;
                         strip(
                             ui,
                             format!("{} {}", ch + 1, names.get(ch).cloned().unwrap_or_default()),
@@ -2919,13 +3071,83 @@ impl App {
                                     ui.toggle_value(&mut solo, egui::RichText::new(" S ").strong())
                                         .on_hover_text("solo (F10)");
                                 });
+                                ui.spacing_mut().slider_width = 56.0;
+                                for (b, nm) in ["A", "B"].iter().enumerate() {
+                                    ui.horizontal(|ui| {
+                                        ui.label(
+                                            egui::RichText::new(*nm)
+                                                .small()
+                                                .monospace()
+                                                .color(th().ink2),
+                                        );
+                                        let r = ui
+                                            .add(
+                                                egui::Slider::new(&mut send[b], 0.0..=1.0)
+                                                    .show_value(false),
+                                            )
+                                            .on_hover_text(format!(
+                                                "send {} ({}): {:.0} %",
+                                                nm,
+                                                if b == 0 { "delay" } else { "reverb" },
+                                                send[b] * 100.0
+                                            ));
+                                        if r.double_clicked() {
+                                            send[b] = 0.0;
+                                        }
+                                    });
+                                }
                             },
                         );
                         let c = &mut mix.channels[ch];
+                        c.send = send;
                         c.volume = vol;
                         c.pan = pan;
                         c.mute = mute;
                         c.solo = solo;
+                    }
+                    ui.add_space(12.0);
+                    // return buses (delay / reverb), 100 % wet
+                    for b in 0..mix.returns.len() {
+                        let mut lvl = mix.returns[b].level;
+                        let mut dev = mix.returns[b].device.clone();
+                        strip(
+                            ui,
+                            format!("Ret {}", mix.returns[b].name),
+                            fxview::strip_fill(dev.kind, dev.enabled),
+                            &mut lvl,
+                            &[],
+                            &mut |ui| {
+                                ui.spacing_mut().slider_width = 76.0;
+                                let keys: &[&str] = if b == 0 {
+                                    &["sync", "feedback", "lp"]
+                                } else {
+                                    &["size", "damping", "predelay"]
+                                };
+                                for key in keys {
+                                    let Some(k) = crate::fx::Device::param_index(dev.kind, key)
+                                    else {
+                                        continue;
+                                    };
+                                    let info = &crate::fx::params(dev.kind)[k];
+                                    ui.label(
+                                        egui::RichText::new(format!(
+                                            "{} {}",
+                                            info.name,
+                                            info.format(dev.params[k])
+                                        ))
+                                        .small()
+                                        .color(th().ink2),
+                                    );
+                                    ui.add(
+                                        egui::Slider::new(&mut dev.params[k], 0.0..=1.0)
+                                            .show_value(false),
+                                    );
+                                }
+                                ui.toggle_value(&mut dev.enabled, "On");
+                            },
+                        );
+                        mix.returns[b].level = lvl;
+                        mix.returns[b].device = dev;
                     }
                     ui.add_space(12.0);
                     let mut master = mix.master;
@@ -2962,7 +3184,7 @@ impl App {
                     ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Alt +/- (Shift = octave)", "transpose selection or channel"), ("F9 / F10", "mute / solo channel"),
                     ("Numpad - / +", "base octave down / up"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
                     ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Delete (with selection)", "clear selection"),
-                    ("Ctrl+Tab, Ctrl+1/2/3", "views: pattern / arranger / mixer"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"),
+                    ("Ctrl+Tab, Ctrl+1/2/3/4", "views: pattern / arranger / mixer / FX"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"),
                     ("Arranger (click it to focus)", "click / Shift+click / Ctrl+click select; Ctrl+X/C/V cut/copy/paste after selection; Ctrl+Shift+V paste as new blocks; Del; Ctrl+A; right-click menu"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
                     ("Arranger: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
                     ("Ctrl+N / O / S / Shift+S", "new / open / save / save as (.cwt)"), ("Ctrl+E", "export WAV"),
@@ -3190,6 +3412,11 @@ impl eframe::App for App {
                     View::Mixer => {
                         ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
                             self.mixer_view(ui)
+                        });
+                    }
+                    View::Fx => {
+                        ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                            self.fx_view(ui)
                         });
                     }
                 }

@@ -140,7 +140,7 @@ Del asked for a more modern touch, so all surfaces get rounded corners. Values a
 
 All of it is drawn with `egui::Painter` as vectors, so no assets are needed. The only bundled font is JetBrains Mono (OFL).
 
-### Device side strip (planned: FX chain milestone)
+### Device side strip (implemented in 0.1.8, FX view)
 
 ![Vertical device strip reference](reference/del-vertical-device-strip.png)
 

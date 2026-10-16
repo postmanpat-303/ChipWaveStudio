@@ -63,6 +63,9 @@ pub struct Instrument {
     /// per-instrument transpose in semitones (applied at playback)
     #[serde(default)]
     pub transpose: i8,
+    /// insert FX chain (after the voice, before the mixer channel)
+    #[serde(default)]
+    pub fx: Vec<crate::fx::Device>,
     pub kind: InstrumentKind,
 }
 
@@ -94,6 +97,9 @@ pub struct ChanMix {
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
+    /// post-fader sends to return A (delay) and B (reverb), 0..=1
+    #[serde(default)]
+    pub send: [f32; 2],
 }
 
 impl Default for ChanMix {
@@ -103,6 +109,7 @@ impl Default for ChanMix {
             pan: 0.0,
             mute: false,
             solo: false,
+            send: [0.0; 2],
         }
     }
 }
@@ -111,6 +118,36 @@ impl Default for ChanMix {
 pub struct Mixer {
     pub channels: Vec<ChanMix>,
     pub master: f32,
+    /// send/return buses: A = delay, B = reverb
+    #[serde(default = "default_returns")]
+    pub returns: Vec<Return>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Return {
+    pub name: String,
+    pub level: f32,
+    pub device: crate::fx::Device,
+}
+
+pub fn default_returns() -> Vec<Return> {
+    use crate::fx::{Device, FxKind};
+    let mut d = Device::new(FxKind::Delay);
+    d.set_real("mix", 1.0);
+    let mut r = Device::new(FxKind::Reverb);
+    r.set_real("mix", 1.0);
+    vec![
+        Return {
+            name: "A Delay".into(),
+            level: 1.0,
+            device: d,
+        },
+        Return {
+            name: "B Reverb".into(),
+            level: 1.0,
+            device: r,
+        },
+    ]
 }
 
 impl Default for Mixer {
@@ -118,6 +155,7 @@ impl Default for Mixer {
         Self {
             channels: vec![ChanMix::default(); MAX_CHANNELS],
             master: 1.0,
+            returns: default_returns(),
         }
     }
 }
@@ -134,7 +172,16 @@ impl Mixer {
     pub fn fix(&mut self) {
         self.channels.resize(MAX_CHANNELS, ChanMix::default());
         self.master = self.master.clamp(0.0, 2.0);
+        let def = default_returns();
+        if self.returns.len() != def.len() {
+            self.returns = def;
+        }
+        for r in &mut self.returns {
+            r.device.fix();
+            r.level = r.level.clamp(0.0, 2.0);
+        }
         for c in &mut self.channels {
+            c.send = c.send.map(|v| v.clamp(0.0, 1.0));
             c.volume = c.volume.clamp(0.0, 2.0);
             c.pan = c.pan.clamp(-1.0, 1.0);
         }

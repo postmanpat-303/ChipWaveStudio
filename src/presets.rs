@@ -143,6 +143,17 @@ pub fn factory(name: &str) -> Option<Patch> {
         .and_then(|(n, t)| parse(n, t).ok())
 }
 
+/// The `[[fx]]` chain of a factory preset (unsupported types are skipped).
+pub fn factory_fx(name: &str) -> Vec<crate::fx::Device> {
+    FACTORY
+        .iter()
+        .find(|(n, _)| *n == name)
+        .and_then(|(_, t)| toml::from_str::<Value>(t).ok())
+        .and_then(|v| v.get("fx").and_then(|f| f.as_array()).cloned())
+        .map(|a| a.iter().filter_map(crate::fx::from_preset).collect())
+        .unwrap_or_default()
+}
+
 /// Synthetic hi-hat (factory drum samples are still to be made).
 pub fn hat(open: bool) -> Patch {
     Patch {

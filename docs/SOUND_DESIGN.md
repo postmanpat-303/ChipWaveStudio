@@ -126,7 +126,7 @@ Up to 8 slots, reorderable by drag, each with bypass and dry/wet.
 | Compressor | threshold, ratio, attack, release, knee, makeup | feed-forward, RMS/peak detector |
 | Filter | any filter model from §3 as an FX | reuses filter code |
 
-### Device side strip (planned: FX chain milestone)
+### Device side strip (implemented in 0.1.8, FX view)
 
 ![Vertical device strip reference](reference/del-vertical-device-strip.png)
 

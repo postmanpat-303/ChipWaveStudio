@@ -144,7 +144,15 @@ pub struct AutoState {
     chan_pan: [Option<f32>; MAX_CHANNELS],
     master: Option<f32>,
     countdown: u32,
+    /// automated FX params: (instrument, device, param, normalised value).
+    /// Capacity reserved up front; never grows past it in the audio path.
+    fx: Vec<(usize, usize, usize, f32)>,
+    /// automated return-bus params (bus, param, value)
+    ret: Vec<(usize, usize, f32)>,
+    send: [[Option<f32>; 2]; MAX_CHANNELS],
 }
+
+const FX_OVER_CAP: usize = 64;
 
 pub struct Engine {
     pub sr: f32,
@@ -170,6 +178,12 @@ pub struct Engine {
     auto: AutoState,
     /// current song position in lines (for the UI playhead of lanes)
     pub song_pos: f32,
+    /// per-channel insert chain (follows the channel's current instrument)
+    chains: Vec<crate::fx::ChainState>,
+    /// return buses A (delay) and B (reverb)
+    rets: Vec<crate::fx::ChainState>,
+    /// smoothed sends per channel
+    sends: [[f32; 2]; MAX_CHANNELS],
 }
 
 impl Engine {
@@ -191,8 +205,15 @@ impl Engine {
             peak_lr: [0.0; 2],
             chan_peak: [0.0; MAX_CHANNELS],
             rows_played: 0,
-            auto: AutoState::default(),
+            auto: AutoState {
+                fx: Vec::with_capacity(FX_OVER_CAP),
+                ret: Vec::with_capacity(FX_OVER_CAP),
+                ..Default::default()
+            },
             song_pos: 0.0,
+            chains: (0..MAX_CHANNELS).map(|_| Default::default()).collect(),
+            rets: (0..2).map(|_| Default::default()).collect(),
+            sends: [[0.0; 2]; MAX_CHANNELS],
         }
     }
 
@@ -417,6 +438,9 @@ impl Engine {
         a.chan_vol = [None; MAX_CHANNELS];
         a.chan_pan = [None; MAX_CHANNELS];
         a.master = None;
+        a.fx.clear();
+        a.ret.clear();
+        a.send = [[None; 2]; MAX_CHANNELS];
         let ni = song.instruments.len();
         if a.level.len() != ni {
             a.level.resize(ni, 1.0);
@@ -478,6 +502,17 @@ impl Engine {
                 Target::ChanPan(c) if c < MAX_CHANNELS => a.chan_pan[c] = Some(real),
                 Target::Master => a.master = Some(real),
                 Target::Tempo => self.bpm = real.clamp(20.0, 400.0),
+                Target::Fx(i, d, p) => {
+                    if a.fx.len() < FX_OVER_CAP {
+                        a.fx.push((i, d, p, real));
+                    }
+                }
+                Target::Ret(b, p) => {
+                    if a.ret.len() < FX_OVER_CAP {
+                        a.ret.push((b, p, real));
+                    }
+                }
+                Target::Send(c, b) if c < MAX_CHANNELS && b < 2 => a.send[c][b] = Some(real),
                 _ => {}
             }
         }
@@ -486,6 +521,70 @@ impl Engine {
                 *p = None;
             }
         }
+    }
+
+    /// Bring the FX states in line with the song (structure + param targets).
+    /// Buffers are only (re)allocated when a chain's structure changes.
+    fn refresh_fx(&mut self, song: &Song) {
+        let sr = self.sr;
+        let a = &self.auto;
+        for (i, ch) in self
+            .chains
+            .iter_mut()
+            .enumerate()
+            .take(song.channels.min(MAX_CHANNELS))
+        {
+            let c = &self.chans[i];
+            let owner = if c.instr != usize::MAX {
+                c.instr
+            } else if c.tail.instr != usize::MAX {
+                c.tail.instr
+            } else {
+                ch.owner
+            };
+            let devs: &[crate::fx::Device] = song
+                .instruments
+                .get(owner)
+                .map(|x| x.fx.as_slice())
+                .unwrap_or(&[]);
+            ch.sync(devs, owner, sr);
+            for (d, (st, dev)) in ch.states.iter_mut().zip(devs).enumerate() {
+                st.set_targets(dev, |p| {
+                    a.fx.iter()
+                        .find(|o| o.0 == owner && o.1 == d && o.2 == p)
+                        .map(|o| o.3)
+                });
+            }
+        }
+        for (b, ch) in self.rets.iter_mut().enumerate() {
+            let Some(ret) = song.mixer.returns.get(b) else {
+                ch.sync(&[], b, sr);
+                continue;
+            };
+            let devs = std::slice::from_ref(&ret.device);
+            ch.sync(devs, b, sr);
+            if let Some(st) = ch.states.first_mut() {
+                st.set_targets(&ret.device, |p| {
+                    a.ret.iter().find(|o| o.0 == b && o.1 == p).map(|o| o.2)
+                });
+            }
+        }
+    }
+
+    #[allow(clippy::needless_range_loop)]
+    fn send_targets(&self, song: &Song) -> [[f32; 2]; MAX_CHANNELS] {
+        let mut t = [[0.0; 2]; MAX_CHANNELS];
+        for (i, tt) in t
+            .iter_mut()
+            .enumerate()
+            .take(song.channels.min(MAX_CHANNELS))
+        {
+            let m = song.mixer.channels.get(i).copied().unwrap_or_default();
+            for b in 0..2 {
+                tt[b] = self.auto.send[i][b].unwrap_or(m.send[b]);
+            }
+        }
+        t
     }
 
     /// Render interleaved stereo.
@@ -497,14 +596,18 @@ impl Engine {
             *p *= 0.97;
         }
         self.eval_auto(song);
+        self.refresh_fx(song);
         let (mut tgt, mut master) = self.mix_targets(song);
+        let mut stgt = self.send_targets(song);
         let k = 1.0 - (-1.0 / (0.005 * self.sr)).exp();
         for frame in out.chunks_mut(2) {
             // automation is evaluated every 32 frames (sub-block), values smoothed
             if self.auto.countdown == 0 {
                 self.auto.countdown = 32;
                 self.eval_auto(song);
+                self.refresh_fx(song);
                 (tgt, master) = self.mix_targets(song);
+                stgt = self.send_targets(song);
             }
             self.auto.countdown -= 1;
             if self.playing {
@@ -516,12 +619,15 @@ impl Engine {
             }
             let mut l = 0.0;
             let mut r = 0.0;
+            let mut bus = [[0.0f32; 2]; 2];
+            let ctx = crate::fx::Ctx { bpm: self.bpm };
             let sr = self.sr;
             // 5 ms ramps for tails and mute changes
             let step = 1.0 / (0.005 * sr);
-            for (i, c) in self
+            for (i, (c, chain)) in self
                 .chans
                 .iter_mut()
+                .zip(self.chains.iter_mut())
                 .enumerate()
                 .take(song.channels.min(MAX_CHANNELS))
             {
@@ -556,10 +662,32 @@ impl Engine {
                 let (tl, tr) = tgt[i];
                 c.gl += (tl - c.gl) * k;
                 c.gr += (tr - c.gr) * k;
-                let (sl, sr2) = (s * c.gl, s * c.gr);
+                // insert chain: mono voice in, stereo out
+                let (fl, fr) = if chain.states.is_empty() {
+                    (s, s)
+                } else {
+                    chain.process(s, s, &ctx)
+                };
+                let (sl, sr2) = (fl * c.gl, fr * c.gr);
+                let snd = &mut self.sends[i];
+                for b in 0..2 {
+                    snd[b] += (stgt[i][b] - snd[b]) * k;
+                    bus[b][0] += sl * snd[b];
+                    bus[b][1] += sr2 * snd[b];
+                }
                 cpk[i] = cpk[i].max((sl.abs().max(sr2.abs()) * 0.6).min(1.5));
                 l += sl;
                 r += sr2;
+            }
+            // return buses (100 % wet devices) into the master
+            for (b, ch) in self.rets.iter_mut().enumerate() {
+                if ch.states.is_empty() {
+                    continue;
+                }
+                let lvl = song.mixer.returns.get(b).map(|r| r.level).unwrap_or(0.0);
+                let (rl, rr) = ch.process(bus[b][0], bus[b][1], &ctx);
+                l += rl * lvl;
+                r += rr * lvl;
             }
             // master volume, then soft master limiter
             let l = (l * 0.6 * master).tanh();
@@ -589,9 +717,9 @@ pub fn render_song(song: &Song, sr: u32) -> Vec<f32> {
         e.render(song, &mut buf);
         out.extend_from_slice(&buf);
     }
-    // 1.5 s tail for releases
+    // 3 s tail for releases and delay/reverb tails
     e.playing = false;
-    for _ in 0..(sr as usize * 3 / 2 / 512) {
+    for _ in 0..(sr as usize * 3 / 512) {
         e.render(song, &mut buf);
         out.extend_from_slice(&buf);
     }
@@ -675,5 +803,31 @@ mod tests {
         // 200 BPM * 4 rows per beat = 13.33 rows/s
         let r = rows_in(&mut e, &song, 3.0);
         assert!((r as i64 - 40).abs() <= 2, "{r}");
+    }
+
+    #[test]
+    fn fx_chain_and_sends_render_finite() {
+        let mut song = crate::fileio::demo_song();
+        song.mixer.channels[1].send = [0.5, 0.5];
+        let a = render_song(&song, 22050);
+        assert!(a.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
+        // without FX the render differs (the chains are really in the path)
+        let mut dry = song.clone();
+        dry.instruments.iter_mut().for_each(|i| i.fx.clear());
+        dry.mixer.channels[1].send = [0.0; 2];
+        let b = render_song(&dry, 22050);
+        let diff: f32 = a.iter().zip(&b).map(|(x, y)| (x - y).abs()).sum();
+        assert!(diff > 1.0, "{diff}");
+        // all FX bypassed + no sends == dry
+        let mut byp = song.clone();
+        byp.instruments
+            .iter_mut()
+            .flat_map(|i| i.fx.iter_mut())
+            .for_each(|d| d.enabled = false);
+        byp.mixer.channels[1].send = [0.0; 2];
+        let c = render_song(&byp, 22050);
+        let n = b.len().min(c.len());
+        let md = (0..n).map(|k| (b[k] - c[k]).abs()).fold(0.0f32, f32::max);
+        assert!(md < 1e-3, "{md}");
     }
 }

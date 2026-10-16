@@ -263,6 +263,10 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
     }
     let mut instruments = sf.instruments;
     for inst in instruments.iter_mut() {
+        inst.fx.truncate(16);
+        inst.fx.iter_mut().for_each(|d| d.fix());
+    }
+    for inst in instruments.iter_mut() {
         if let InstrumentKind::Sample {
             file, data, rate, ..
         } = &mut inst.kind
@@ -299,7 +303,7 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
     }
     let mut names = sf.channel_names;
     names.resize(channels, "Ch".into());
-    Ok(Song {
+    let mut song = Song {
         title: sf.title,
         bpm: sf.bpm.clamp(20.0, 400.0),
         speed: sf.speed.clamp(1, 32),
@@ -323,7 +327,17 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
             .and_then(|b| toml::from_str::<ArrangerFile>(&String::from_utf8_lossy(&b)).ok())
             .map(|a| a.zoom.clamp(0.25, 16.0))
             .unwrap_or(2.0),
-    })
+    };
+    // hand-written lanes may name FX params by key ("instrument.2.fx.1.feedback")
+    for k in 0..song.automation.len() {
+        let id = song.automation[k].target.clone();
+        if crate::automation::Target::parse(&id).is_none() {
+            if let Some(t) = crate::automation::Target::parse_in(&id, &song) {
+                song.automation[k].target = t.id();
+            }
+        }
+    }
+    Ok(song)
 }
 
 #[derive(Serialize, Deserialize)]
@@ -363,6 +377,7 @@ pub fn import_wav(path: &Path) -> Result<Instrument, String> {
         name,
         volume: 1.0,
         transpose: 0,
+        fx: vec![],
         kind: InstrumentKind::Sample {
             file: String::new(),
             rate,
@@ -407,8 +422,12 @@ pub fn demo_song() -> Song {
     if let Some(insts) = v.get("instrument").and_then(|x| x.as_array()) {
         for i in insts {
             let name = i.get("name").and_then(|x| x.as_str()).unwrap_or("?");
-            let patch = if let Some(p) = i.get("patch").and_then(|x| x.as_str()) {
-                presets::factory(p.trim_start_matches("factory:"))
+            let pname = i
+                .get("patch")
+                .and_then(|x| x.as_str())
+                .map(|p| p.trim_start_matches("factory:"));
+            let patch = if let Some(p) = pname {
+                presets::factory(p)
             } else {
                 Some(presets::hat(name.to_lowercase().contains("open")))
             };
@@ -417,6 +436,7 @@ pub fn demo_song() -> Song {
                 name: name.into(),
                 volume: 1.0,
                 transpose: 0,
+                fx: pname.map(presets::factory_fx).unwrap_or_default(),
                 kind: InstrumentKind::Synth(p),
             });
         }
@@ -427,12 +447,14 @@ pub fn demo_song() -> Song {
         "psytrance/psy-pluck",
         "psytrance/supersaw-lead",
         "alien/flutter-warble",
+        "psytrance/trance-gate-pad",
     ] {
         if let Some(p) = presets::factory(n) {
             song.instruments.push(Instrument {
                 name: p.name.clone(),
                 volume: 0.8,
                 transpose: 0,
+                fx: presets::factory_fx(n),
                 kind: InstrumentKind::Synth(p),
             });
         }
@@ -460,13 +482,27 @@ pub fn demo_song() -> Song {
         song.patterns.push(Pattern::new("Block 00", ROWS, channels));
     }
     song.order = vec![0; 2];
-    song.automation = demo_lanes(&v);
+    // The bass gets a short tempo-synced delay at the end of its chain: the
+    // demo's "delay feedback" lane drives it.
+    let mut bass_dly = 0;
+    if let Some(b) = song.instruments.get_mut(1) {
+        let mut d = v
+            .get("mixer")
+            .and_then(|m| m.get("return_a"))
+            .and_then(crate::fx::from_preset)
+            .unwrap_or_else(|| crate::fx::Device::new(crate::fx::FxKind::Delay));
+        d.set_real("mix", 0.18);
+        d.set_real("hp", 250.0);
+        b.fx.push(d);
+        bass_dly = b.fx.len() - 1;
+    }
+    song.automation = demo_lanes(&v, bass_dly);
     song
 }
 
-/// The demo's two lanes. Lane 1 targets the delay return's feedback, but there
-/// is no delay yet, so it is mapped to the bass filter resonance instead.
-fn demo_lanes(v: &toml::Value) -> Vec<crate::automation::Lane> {
+/// The demo's two lanes. Lane 2 ("delay feedback") drives the feedback of the
+/// bass's own insert delay (instrument 2, device 1).
+fn demo_lanes(v: &toml::Value, bass_dly: usize) -> Vec<crate::automation::Lane> {
     use crate::automation::{Lane, Point, Shape, Target};
     let mut out = vec![];
     let Some(arr) = v.get("automation").and_then(|a| a.as_array()) else {
@@ -479,14 +515,21 @@ fn demo_lanes(v: &toml::Value) -> Vec<crate::automation::Lane> {
             .and_then(|x| x.as_str())
             .unwrap_or("")
             .to_string();
+        let fb = crate::fx::Device::param_index(crate::fx::FxKind::Delay, "feedback").unwrap_or(2);
         let target = match Target::parse(id) {
+            Some(t) if id.contains("feedback") => {
+                let _ = t;
+                label = "Bass - Delay feedback".into();
+                Target::Fx(1, bass_dly, fb)
+            }
             Some(t) => t,
             None if id.contains("feedback") => {
-                label = "Bass - Resonance (stands in for delay feedback)".into();
-                Target::Resonance(1)
+                label = "Bass - Delay feedback".into();
+                Target::Fx(1, bass_dly, fb)
             }
             None => continue,
         };
+        let fbinfo = &crate::fx::params(crate::fx::FxKind::Delay)[fb];
         let shape = match a.get("curve").and_then(|x| x.as_str()) {
             Some("step") => Shape::Step,
             Some("bezier") | Some("smooth") => Shape::Smooth,
@@ -507,6 +550,8 @@ fn demo_lanes(v: &toml::Value) -> Vec<crate::automation::Lane> {
             };
             let value = if let Some(hz) = num("value_hz") {
                 target.to_norm(hz)
+            } else if matches!(target, Target::Fx(..)) {
+                fbinfo.to_norm(num("value").unwrap_or(0.0))
             } else {
                 num("value").unwrap_or(0.0).clamp(0.0, 1.0)
             };
@@ -556,9 +601,30 @@ mod tests {
         assert!((t.to_real(c.points[2].value) - 2400.0).abs() < 2.0);
         assert_eq!(c.points[0].shape, Shape::Smooth);
         assert_eq!(s.automation[1].points[1].shape, Shape::Step);
+        // lane 2 = the bass's insert delay feedback, 20 -> 45 -> 65 %
+        let fb = &s.automation[1];
+        let t2 = Target::parse(&fb.target).unwrap();
+        let Target::Fx(1, d, _) = t2 else { panic!() };
+        assert_eq!(
+            Target::parse_in(&format!("instrument.2.fx.{}.feedback", d + 1), &s),
+            Some(t2)
+        );
+        assert_eq!(s.instruments[1].fx[d].kind, crate::fx::FxKind::Delay);
+        let info = &crate::fx::params(crate::fx::FxKind::Delay)[2];
+        let vals: Vec<f32> = fb.points.iter().map(|p| info.to_real(p.value)).collect();
+        assert!(
+            (vals[0] - 0.2).abs() < 1e-3 && (vals[2] - 0.65).abs() < 1e-3,
+            "{vals:?}"
+        );
         let f = std::env::temp_dir().join("chipwave_auto_test.cwt");
         save_cwt(&s, &f).unwrap();
         let l = load_cwt(&f).unwrap();
         assert_eq!(l.automation, s.automation);
+        // FX chains and return buses survive save/load
+        for (a, b) in l.instruments.iter().zip(&s.instruments) {
+            assert_eq!(a.fx, b.fx);
+        }
+        assert!(s.instruments.iter().filter(|i| !i.fx.is_empty()).count() >= 3);
+        assert_eq!(l.mixer.returns, s.mixer.returns);
     }
 }

@@ -6,6 +6,7 @@ mod audio;
 mod automation;
 mod engine;
 mod fileio;
+mod fx;
 mod input;
 mod model;
 mod presets;

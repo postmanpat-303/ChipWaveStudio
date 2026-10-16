@@ -62,7 +62,10 @@ chipwave --render demo out.wav
   Alt +/-  (Shift = octave)      transpose selection (or whole channel)
   Ctrl+= / Ctrl+- / Ctrl+0       UI scale up / down / 100 %
   F9 / F10                       mute / solo channel
-  Ctrl+Tab, Ctrl+1 / 2 / 3       views: Pattern / Arranger / Mixer
+  Ctrl+Tab, Ctrl+1 / 2 / 3 / 4   views: Pattern / Arranger / Mixer / FX
+  FX view: Up / Down             previous / next instrument
+  FX device strip                power = bypass, folder = presets, click name =
+                                 collapse, drag name = reorder, right-click = menu
   Ctrl+D / Ctrl+Shift+D          arranger: duplicate clip / as new block (also when docked)
   Mouse wheel                    pattern: 1 row per notch (Shift = 16); arranger: scroll, Ctrl = zoom
   Ctrl+Shift+K                   debug: show the last 10 input events in the status bar

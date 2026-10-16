@@ -99,6 +99,12 @@ pub enum Target {
     ChanPan(usize),
     Master,
     Tempo,
+    /// instrument, device, param index (normalised value = device param)
+    Fx(usize, usize, usize),
+    /// return bus (0 = A, 1 = B), param index
+    Ret(usize, usize),
+    /// channel, return bus
+    Send(usize, usize),
 }
 
 impl Target {
@@ -110,6 +116,33 @@ impl Target {
             ["mixer", "master"] | ["mixer", "master", "volume"] => Some(Target::Master),
             ["mixer", "ch", n, "volume"] => num(n).map(Target::ChanVolume),
             ["mixer", "ch", n, "pan"] => num(n).map(Target::ChanPan),
+            ["mixer", "ch", n, s] if s.starts_with("send_") => {
+                let r = match *s {
+                    "send_a" => 0,
+                    "send_b" => 1,
+                    _ => return None,
+                };
+                num(n).map(|c| Target::Send(c, r))
+            }
+            ["mixer", r, key] if r.starts_with("return_") => {
+                let ri = match *r {
+                    "return_a" => 0,
+                    "return_b" => 1,
+                    _ => return None,
+                };
+                let kind = if ri == 0 {
+                    crate::fx::FxKind::Delay
+                } else {
+                    crate::fx::FxKind::Reverb
+                };
+                param_ix(kind, key).map(|p| Target::Ret(ri, p))
+            }
+            ["instrument", n, "fx", d, key] => {
+                let i = num(n)?;
+                let d = num(d)?;
+                let p = key.strip_prefix('p').and_then(|x| x.parse().ok())?;
+                Some(Target::Fx(i, d, p))
+            }
             ["instrument", n, rest @ ..] => {
                 let i = num(n)?;
                 match rest.last().copied()? {
@@ -134,12 +167,68 @@ impl Target {
             Target::ChanPan(c) => format!("mixer.ch.{}.pan", c + 1),
             Target::Master => "mixer.master".into(),
             Target::Tempo => "tempo".into(),
+            Target::Fx(i, d, p) => format!("instrument.{}.fx.{}.p{}", i + 1, d + 1, p),
+            Target::Ret(r, p) => {
+                let kind = if r == 0 {
+                    crate::fx::FxKind::Delay
+                } else {
+                    crate::fx::FxKind::Reverb
+                };
+                format!(
+                    "mixer.return_{}.{}",
+                    if r == 0 { "a" } else { "b" },
+                    crate::fx::params(kind)[p].key
+                )
+            }
+            Target::Send(c, r) => {
+                format!("mixer.ch.{}.send_{}", c + 1, if r == 0 { "a" } else { "b" })
+            }
+        }
+    }
+
+    /// Parse with the song, so `instrument.N.fx.D.<key>` (named param) resolves.
+    pub fn parse_in(s: &str, song: &crate::model::Song) -> Option<Target> {
+        if let Some(t) = Target::parse(s) {
+            return Some(t);
+        }
+        let p: Vec<&str> = s.split('.').collect();
+        if let ["instrument", n, "fx", d, key] = p.as_slice() {
+            let i = n.parse::<usize>().ok()?.checked_sub(1)?;
+            let d = d.parse::<usize>().ok()?.checked_sub(1)?;
+            let kind = song.instruments.get(i)?.fx.get(d)?.kind;
+            return param_ix(kind, key).map(|p| Target::Fx(i, d, p));
+        }
+        None
+    }
+
+    /// value text; FX params use their own units (`kinds` = FX kinds per instrument)
+    pub fn format_in(self, n: f32, kinds: &[Vec<crate::fx::FxKind>]) -> String {
+        use crate::fx::FxKind;
+        let info = |k: FxKind, p: usize| crate::fx::params(k).get(p).map(|i| i.format(n));
+        match self {
+            Target::Fx(i, d, p) => kinds
+                .get(i)
+                .and_then(|x| x.get(d))
+                .and_then(|&k| info(k, p))
+                .unwrap_or_default(),
+            Target::Ret(r, p) => info(
+                if r == 0 {
+                    FxKind::Delay
+                } else {
+                    FxKind::Reverb
+                },
+                p,
+            )
+            .unwrap_or_default(),
+            Target::Send(..) => format!("{:.0} %", n * 100.0),
+            _ => self.format(n),
         }
     }
 
     /// (min, max, logarithmic)
     fn range(self) -> (f32, f32, bool) {
         match self {
+            Target::Fx(..) | Target::Ret(..) | Target::Send(..) => (0.0, 1.0, false),
             Target::Cutoff(_) => (20.0, 18000.0, true),
             Target::Resonance(_) => (0.0, 0.98, false),
             Target::Drive(_) => (0.0, 1.0, false),
@@ -180,6 +269,8 @@ impl Target {
             Target::ChanPan(_) => "Pan",
             Target::Master => "Master volume",
             Target::Tempo => "Tempo",
+            Target::Fx(..) | Target::Ret(..) => "FX param",
+            Target::Send(..) => "Send",
         }
     }
 
@@ -196,6 +287,10 @@ impl Target {
             _ => format!("{:.0} %", n * 100.0),
         }
     }
+}
+
+fn param_ix(kind: crate::fx::FxKind, key: &str) -> Option<usize> {
+    crate::fx::Device::param_index(kind, key)
 }
 
 #[cfg(test)]
