@@ -126,6 +126,24 @@ Up to 8 slots, reorderable by drag, each with bypass and dry/wet.
 | Compressor | threshold, ratio, attack, release, knee, makeup | feed-forward, RMS/peak detector |
 | Filter | any filter model from §3 as an FX | reuses filter code |
 
+### Device side strip (planned: FX chain milestone)
+
+![Vertical device strip reference](reference/del-vertical-device-strip.png)
+
+Each device or instrument panel in a chain has a slim vertical strip (about 22 px) on its left edge:
+
+| Position | Element |
+|---|---|
+| Top | **Power** toggle (bypass). Off dims the whole device. |
+| Below it | **Preset / folder** icon: open the preset browser for this device. |
+| Middle | **Device name**, written sideways (rotated 90°, reading bottom-to-top). Clicking the name collapses the device to just the strip; clicking again expands it. |
+| Lower | **Collapse / window** icon: collapse, or pop the editor out into its own window (plugins). |
+| Bottom | **Routing / output** icon: where the device sends its output (next device, a send, a sidechain). |
+
+- The strip uses the theme `accent`, tinted per device type and kept muted: for example, instruments a little warmer, filters/EQ cooler, dynamics neutral, and time-based FX (delay/reverb) violet. A bypassed device's strip turns grey.
+- Collapsed devices keep their order and stay draggable by the strip, so a long chain still fits on screen.
+- **egui implementation:** draw the strip with `Painter` (a rounded rect plus icon buttons via `ui.put`). Render the name with `epaint::TextShape` and `angle = -FRAC_PI_2` (the galley laid out normally, then rotated about its position), so it reads bottom-to-top. Hit-test the name with an interact rect matching the rotated bounds.
+
 ## 7. Render to sample (Amiga workflow)
 
 - **Render** button: plays the patch at a chosen note (default C-3), velocity and length (or "until silent", with tail detection) and writes the result into a sample instrument slot.

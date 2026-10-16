@@ -82,6 +82,8 @@ pub struct Song {
     pub mixer: Mixer,
     /// arranger zoom in pixels per row (ChipWave-only, saved in arranger.toml)
     pub arranger_zoom: f32,
+    /// automation lanes (song scope), saved as automation/NN.toml
+    pub automation: Vec<crate::automation::Lane>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -162,6 +164,7 @@ impl Song {
             instruments: vec![],
             mixer: Mixer::default(),
             arranger_zoom: 2.0,
+            automation: vec![],
         }
     }
 

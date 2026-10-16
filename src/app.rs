@@ -26,7 +26,19 @@ const CLIP_COLOURS: [u32; 8] = [
     0x516D96, 0x8A6D3B, 0x7A4E5C, 0x5E6B7A, 0x6B5E8A, 0x7A6A4E, 0x8A5A4E, 0x4E6A86,
 ];
 
-type Undo = (Vec<Pattern>, Vec<usize>);
+type Undo = (Vec<Pattern>, Vec<usize>, Vec<crate::automation::Lane>);
+
+const LANE_H: f32 = 64.0;
+/// automation curve colours: functional, saturated but muted
+const LANE_COLOURS: [u32; 6] = [0x4FC3D9, 0xE8C35A, 0xD98AD0, 0x8FD9A3, 0xE08A5C, 0x9AA8F0];
+
+enum LaneOp {
+    Snapshot,
+    Add(usize, f32, f32),
+    Delete(usize, usize),
+    Move(usize, usize, f32, f32),
+    Pencil(usize, f32, f32),
+}
 type Pos = (usize, usize); // (row, channel)
 
 pub struct App {
@@ -68,6 +80,20 @@ pub struct App {
     mods: egui::Modifiers,
     /// debug key log (Ctrl+Shift+K): last 10 input events
     key_log: Option<std::collections::VecDeque<String>>,
+    show_auto: bool,
+    auto_pencil: bool,
+    auto_shape: crate::automation::Shape,
+    /// selected lane (for Delete lane / shape) and selected point
+    auto_lane: usize,
+    auto_sel: Option<(usize, usize)>,
+    auto_drag: Option<(usize, usize)>,
+    auto_pencil_lane: Option<usize>,
+    /// wheel accumulators (fractional notches) for pattern / arranger
+    wheel_pat: f32,
+    wheel_arr: f32,
+    arr_scroll: f32,
+    arr_scroll_set: Option<f32>,
+    arr_area: Rect,
     zoom: f32,
     buffer: u32,
     win_max: bool,
@@ -133,6 +159,18 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         arr_focus: false,
         mods: Default::default(),
         key_log: None,
+        show_auto: true,
+        auto_pencil: false,
+        auto_shape: crate::automation::Shape::Linear,
+        auto_lane: 0,
+        auto_sel: None,
+        auto_drag: None,
+        auto_pencil_lane: None,
+        wheel_pat: 0.0,
+        wheel_arr: 0.0,
+        arr_scroll: 0.0,
+        arr_scroll_set: None,
+        arr_area: Rect::NOTHING,
         zoom: crate::settings::load().zoom,
         buffer: crate::settings::load().buffer,
         win_max: crate::settings::load().maximized,
@@ -256,7 +294,13 @@ impl App {
     }
 
     fn snapshot(&mut self) {
-        let st = self.with(|s| (s.song.patterns.clone(), s.song.order.clone()));
+        let st = self.with(|s| {
+            (
+                s.song.patterns.clone(),
+                s.song.order.clone(),
+                s.song.automation.clone(),
+            )
+        });
         self.undo.push(st);
         if self.undo.len() > 500 {
             self.undo.remove(0);
@@ -277,6 +321,7 @@ impl App {
                 (
                     std::mem::replace(&mut s.song.patterns, p.0),
                     std::mem::replace(&mut s.song.order, p.1),
+                    std::mem::replace(&mut s.song.automation, p.2),
                 )
             };
 
@@ -1658,6 +1703,21 @@ impl App {
         if resp.clicked() || resp.drag_started() {
             self.arr_focus = false;
         }
+        // mouse wheel: 1 row per notch (Shift = 16 rows); line and pixel deltas
+        if resp.hovered() {
+            let ev = ui.input(|i| i.events.clone());
+            let n = input::take_notches(&mut self.wheel_pat, input::wheel_lines(&ev));
+            if n != 0 {
+                let per = if ui.input(|i| i.modifiers.shift) {
+                    16
+                } else {
+                    1
+                };
+                let last = pat.rows as isize - 1;
+                self.row = (self.row as isize - n as isize * per).clamp(0, last) as usize;
+                self.sel = None;
+            }
+        }
         if self.view == View::Pattern && self.dock_arranger && !self.arr_focus {
             focus_ring(&ui.painter_at(avail.expand(6.0)), avail.expand(2.0));
         }
@@ -2047,6 +2107,7 @@ impl App {
                 .color(th().ink2),
             );
         });
+        self.automation_bar(ui);
         // clip x positions (in rows)
         let mut starts = Vec::with_capacity(order.len() + 1);
         let mut acc = 0usize;
@@ -2056,220 +2117,673 @@ impl App {
         }
         starts.push(acc);
         let pad = 8.0;
-        let total_w = acc as f32 * zoom + pad * 2.0;
         let avail_h = ui.available_height().max(80.0);
         let follow = self.follow && playing;
-        egui::ScrollArea::horizontal()
+        let (lanes, song_pos) = self.with(|s| (s.song.automation.clone(), s.engine.song_pos));
+        let show_auto = self.show_auto;
+        let n_lanes = if show_auto { lanes.len() } else { 0 };
+        let lanes_h = n_lanes as f32 * (LANE_H + 4.0) + if n_lanes > 0 { 4.0 } else { 0.0 };
+        let clip_h = (avail_h - 14.0 - lanes_h).max(70.0);
+        // mouse wheel: scroll horizontally; Ctrl+wheel zooms around the pointer
+        let hover_x = ui
+            .input(|i| i.pointer.hover_pos())
+            .filter(|p| self.arr_area.contains(*p))
+            .map(|p| p.x);
+        if let Some(px) = hover_x {
+            let ev = ui.input(|i| i.events.clone());
+            let lines = input::wheel_lines(&ev);
+            if lines != 0.0 {
+                let ctrl = ui.input(|i| i.modifiers.command);
+                if ctrl {
+                    let n = input::take_notches(&mut self.wheel_arr, lines);
+                    if n != 0 {
+                        let z0 = zoom;
+                        self.arr_zoom(1.15f32.powi(n));
+                        let z1 = self.with(|s| s.song.arranger_zoom);
+                        let rel = px - self.arr_area.left();
+                        let off = ((self.arr_scroll + rel - pad) * z1 / z0 + pad - rel).max(0.0);
+                        self.arr_scroll_set = Some(off);
+                    }
+                } else {
+                    // smooth: pixels follow the wheel directly (40 px per line)
+                    let off = (self.arr_scroll - lines * 40.0).max(0.0);
+                    self.arr_scroll_set = Some(off);
+                }
+            }
+        }
+        let zoom = self.with(|s| s.song.arranger_zoom);
+        let total_w = acc as f32 * zoom + pad * 2.0;
+        let mut lane_ops: Vec<LaneOp> = vec![];
+        let mut sa = egui::ScrollArea::both()
             .id_salt("arranger_scroll")
             .auto_shrink([false, false])
-            .show(ui, |ui| {
-                let w = total_w.max(ui.available_width());
-                let (rect, bg) =
-                    ui.allocate_exact_size(egui::vec2(w, avail_h - 14.0), Sense::click());
-                if bg.clicked() || bg.secondary_clicked() {
-                    self.arr_focus = true;
-                }
-                let painter = ui.painter_at(rect);
-                theme::crt(&painter, rect);
-                let ruler_h = 16.0;
-                let lane = Rect::from_min_max(
-                    Pos2::new(rect.left(), rect.top() + ruler_h + 4.0),
-                    Pos2::new(rect.right(), rect.bottom() - 6.0),
+            .scroll_source(egui::containers::scroll_area::ScrollSource {
+                mouse_wheel: false,
+                ..Default::default()
+            });
+        if let Some(off) = self.arr_scroll_set.take() {
+            sa = sa.horizontal_scroll_offset(off);
+        }
+        let out = sa.show(ui, |ui| {
+            let w = total_w.max(ui.available_width());
+            let (rect, bg) = ui.allocate_exact_size(egui::vec2(w, clip_h), Sense::click());
+            if bg.clicked() || bg.secondary_clicked() {
+                self.arr_focus = true;
+            }
+            let painter = ui.painter_at(rect);
+            theme::crt(&painter, rect);
+            let ruler_h = 16.0;
+            let lane = Rect::from_min_max(
+                Pos2::new(rect.left(), rect.top() + ruler_h + 4.0),
+                Pos2::new(rect.right(), rect.bottom() - 6.0),
+            );
+            let xof = |rows: usize| rect.left() + pad + rows as f32 * zoom;
+            // ruler: a tick every 16 rows, labels every 64
+            let step = if zoom < 1.0 { 64 } else { 16 };
+            let mut r = 0;
+            while r <= acc {
+                let x = xof(r);
+                let major = r % 64 == 0;
+                painter.vline(
+                    x,
+                    rect.top() + if major { 2.0 } else { 9.0 }..=rect.top() + ruler_h,
+                    Stroke::new(1.0, th().ink2.gamma_multiply(0.6)),
                 );
-                let xof = |rows: usize| rect.left() + pad + rows as f32 * zoom;
-                // ruler: a tick every 16 rows, labels every 64
-                let step = if zoom < 1.0 { 64 } else { 16 };
-                let mut r = 0;
-                while r <= acc {
-                    let x = xof(r);
-                    let major = r % 64 == 0;
-                    painter.vline(
-                        x,
-                        rect.top() + if major { 2.0 } else { 9.0 }..=rect.top() + ruler_h,
-                        Stroke::new(1.0, th().ink2.gamma_multiply(0.6)),
+                if major && zoom * 64.0 > 28.0 {
+                    painter.text(
+                        Pos2::new(x + 3.0, rect.top() + 1.0),
+                        egui::Align2::LEFT_TOP,
+                        format!("{}", r / 16 + 1),
+                        FontId::monospace(10.0),
+                        th().ink2,
                     );
-                    if major && zoom * 64.0 > 28.0 {
-                        painter.text(
-                            Pos2::new(x + 3.0, rect.top() + 1.0),
-                            egui::Align2::LEFT_TOP,
-                            format!("{}", r / 16 + 1),
-                            FontId::monospace(10.0),
-                            th().ink2,
-                        );
-                    }
-                    r += step;
                 }
-                let pointer = ui.input(|i| i.pointer.interact_pos());
-                let mods = ui.input(|i| i.modifiers);
-                let selected = self.arr_sel_list();
-                let mut menu_act: Option<input::ArrAction> = None;
-                let released = ui.input(|i| i.pointer.any_released());
-                for (i, &b) in order.iter().enumerate() {
-                    let cr = Rect::from_min_max(
-                        Pos2::new(xof(starts[i]) + 1.0, lane.top()),
-                        Pos2::new(xof(starts[i + 1]) - 1.0, lane.bottom()),
-                    );
-                    let resp =
-                        ui.interact(cr, ui.scope_id().with(("clip", i)), Sense::click_and_drag());
-                    let col = hex(CLIP_COLOURS[b % CLIP_COLOURS.len()]);
-                    let col = if resp.hovered() {
-                        col.gamma_multiply(1.15)
-                    } else {
-                        col
-                    };
-                    let is_sel = selected.contains(&i);
-                    let col = if is_sel { col.gamma_multiply(1.3) } else { col };
-                    painter.rect_filled(cr, 6, col);
-                    if let Some((fi, t0)) = &self.arr_flash {
-                        let age = ui.input(|inp| inp.time) - t0;
-                        if fi.contains(&i) && age < 0.8 {
-                            painter.rect_filled(
-                                cr,
-                                6,
-                                Color32::from_white_alpha((90.0 * (1.0 - age / 0.8)) as u8),
-                            );
-                            ui.ctx().request_repaint();
-                        }
-                    }
-                    if is_sel {
-                        // inner shadow, then a thick light outline
-                        painter.rect_stroke(
-                            cr.shrink(3.0),
-                            4,
-                            Stroke::new(2.0, Color32::from_black_alpha(90)),
-                            egui::StrokeKind::Inside,
-                        );
-                        painter.rect_stroke(
+                r += step;
+            }
+            let pointer = ui.input(|i| i.pointer.interact_pos());
+            let mods = ui.input(|i| i.modifiers);
+            let selected = self.arr_sel_list();
+            let mut menu_act: Option<input::ArrAction> = None;
+            let released = ui.input(|i| i.pointer.any_released());
+            for (i, &b) in order.iter().enumerate() {
+                let cr = Rect::from_min_max(
+                    Pos2::new(xof(starts[i]) + 1.0, lane.top()),
+                    Pos2::new(xof(starts[i + 1]) - 1.0, lane.bottom()),
+                );
+                let resp =
+                    ui.interact(cr, ui.scope_id().with(("clip", i)), Sense::click_and_drag());
+                let col = hex(CLIP_COLOURS[b % CLIP_COLOURS.len()]);
+                let col = if resp.hovered() {
+                    col.gamma_multiply(1.15)
+                } else {
+                    col
+                };
+                let is_sel = selected.contains(&i);
+                let col = if is_sel { col.gamma_multiply(1.3) } else { col };
+                painter.rect_filled(cr, 6, col);
+                if let Some((fi, t0)) = &self.arr_flash {
+                    let age = ui.input(|inp| inp.time) - t0;
+                    if fi.contains(&i) && age < 0.8 {
+                        painter.rect_filled(
                             cr,
                             6,
-                            Stroke::new(3.0, th().selection_outline),
-                            egui::StrokeKind::Inside,
+                            Color32::from_white_alpha((90.0 * (1.0 - age / 0.8)) as u8),
+                        );
+                        ui.ctx().request_repaint();
+                    }
+                }
+                if is_sel {
+                    // inner shadow, then a thick light outline
+                    painter.rect_stroke(
+                        cr.shrink(3.0),
+                        4,
+                        Stroke::new(2.0, Color32::from_black_alpha(90)),
+                        egui::StrokeKind::Inside,
+                    );
+                    painter.rect_stroke(
+                        cr,
+                        6,
+                        Stroke::new(3.0, th().selection_outline),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+                // mini pattern preview: note ticks per channel
+                if let Some((name, rows, ticks)) = blocks.get(b) {
+                    let body = Rect::from_min_max(
+                        Pos2::new(cr.left() + 4.0, cr.top() + 20.0),
+                        Pos2::new(cr.right() - 4.0, cr.bottom() - 4.0),
+                    );
+                    let lh = (body.height() / channels as f32).max(1.0);
+                    let tick = Color32::from_white_alpha(110);
+                    for &(r, c) in ticks {
+                        let x = body.left() + r as f32 / *rows as f32 * body.width();
+                        let y = body.top() + c as f32 * lh + lh * 0.5;
+                        painter.hline(
+                            x..=x + (zoom * 0.8).max(1.0),
+                            y,
+                            Stroke::new((lh * 0.5).clamp(1.0, 3.0), tick),
                         );
                     }
-                    // mini pattern preview: note ticks per channel
-                    if let Some((name, rows, ticks)) = blocks.get(b) {
-                        let body = Rect::from_min_max(
-                            Pos2::new(cr.left() + 4.0, cr.top() + 20.0),
-                            Pos2::new(cr.right() - 4.0, cr.bottom() - 4.0),
-                        );
-                        let lh = (body.height() / channels as f32).max(1.0);
-                        let tick = Color32::from_white_alpha(110);
-                        for &(r, c) in ticks {
-                            let x = body.left() + r as f32 / *rows as f32 * body.width();
-                            let y = body.top() + c as f32 * lh + lh * 0.5;
-                            painter.hline(
-                                x..=x + (zoom * 0.8).max(1.0),
-                                y,
-                                Stroke::new((lh * 0.5).clamp(1.0, 3.0), tick),
-                            );
+                    let tp = ui.painter_at(cr.shrink(2.0));
+                    tp.text(
+                        cr.left_top() + egui::vec2(6.0, 3.0),
+                        egui::Align2::LEFT_TOP,
+                        format!("{b:02} {name}"),
+                        FontId::proportional(12.0),
+                        Color32::WHITE,
+                    );
+                }
+                if resp.clicked() {
+                    self.arr_focus = true;
+                    if mods.shift {
+                        let a = self.arr_sel.min(order.len() - 1);
+                        self.arr_multi = (a.min(i)..=a.max(i)).collect();
+                    } else if mods.command {
+                        if !self.arr_multi.remove(&i) {
+                            self.arr_multi.insert(i);
+                            self.arr_sel = i;
                         }
-                        let tp = ui.painter_at(cr.shrink(2.0));
-                        tp.text(
-                            cr.left_top() + egui::vec2(6.0, 3.0),
-                            egui::Align2::LEFT_TOP,
-                            format!("{b:02} {name}"),
-                            FontId::proportional(12.0),
-                            Color32::WHITE,
-                        );
+                    } else {
+                        self.arr_select([i], i);
+                        self.row = 0;
                     }
-                    if resp.clicked() {
-                        self.arr_focus = true;
-                        if mods.shift {
-                            let a = self.arr_sel.min(order.len() - 1);
-                            self.arr_multi = (a.min(i)..=a.max(i)).collect();
-                        } else if mods.command {
-                            if !self.arr_multi.remove(&i) {
-                                self.arr_multi.insert(i);
-                                self.arr_sel = i;
-                            }
-                        } else {
-                            self.arr_select([i], i);
-                            self.row = 0;
-                        }
-                        self.pattern = b;
-                        self.sel = None;
-                    }
-                    if resp.secondary_clicked() {
-                        self.arr_focus = true;
-                        if !selected.contains(&i) {
-                            self.arr_select([i], i);
-                        }
-                    }
-                    let resp = resp.on_hover_text(format!(
-                        "#{} · block {:02} · {} rows",
-                        i + 1,
-                        b,
-                        blocks.get(b).map(|x| x.1).unwrap_or(0)
-                    ));
-                    resp.context_menu(|ui| {
-                        use input::ArrAction as A;
-                        for (t, a) in [
-                            ("Cut            Ctrl+X", A::Cut),
-                            ("Copy           Ctrl+C", A::Copy),
-                            ("Paste          Ctrl+V", A::Paste),
-                            ("Paste as new   Ctrl+Shift+V", A::PasteUnique),
-                            ("Duplicate      Ctrl+D", A::Duplicate),
-                            ("Delete         Del", A::Delete),
-                            ("Insert block   Ins", A::Insert),
-                        ] {
-                            if ui.button(egui::RichText::new(t).monospace()).clicked() {
-                                menu_act = Some(a);
-                                ui.close();
-                            }
-                        }
-                    });
-                    if resp.double_clicked() {
-                        self.view = View::Pattern;
-                    }
-                    if resp.drag_started() {
-                        self.arr_focus = true;
-                        self.arr_drag = Some(i);
+                    self.pattern = b;
+                    self.sel = None;
+                }
+                if resp.secondary_clicked() {
+                    self.arr_focus = true;
+                    if !selected.contains(&i) {
                         self.arr_select([i], i);
                     }
                 }
-                if let Some(a) = menu_act {
-                    self.arranger_action(a, &ui.ctx().clone());
-                }
-                // drag to reorder: insertion marker + drop
-                if let (Some(from), Some(p)) = (self.arr_drag, pointer) {
-                    let to = (0..order.len())
-                        .find(|&i| p.x < (xof(starts[i]) + xof(starts[i + 1])) * 0.5)
-                        .unwrap_or(order.len());
-                    let x = xof(starts[to]);
-                    painter.vline(x, lane.y_range(), Stroke::new(3.0, th().accent));
-                    if released {
-                        self.arr_drag = None;
-                        self.arr_move(from, to);
+                let resp = resp.on_hover_text(format!(
+                    "#{} · block {:02} · {} rows",
+                    i + 1,
+                    b,
+                    blocks.get(b).map(|x| x.1).unwrap_or(0)
+                ));
+                resp.context_menu(|ui| {
+                    use input::ArrAction as A;
+                    for (t, a) in [
+                        ("Cut            Ctrl+X", A::Cut),
+                        ("Copy           Ctrl+C", A::Copy),
+                        ("Paste          Ctrl+V", A::Paste),
+                        ("Paste as new   Ctrl+Shift+V", A::PasteUnique),
+                        ("Duplicate      Ctrl+D", A::Duplicate),
+                        ("Delete         Del", A::Delete),
+                        ("Insert block   Ins", A::Insert),
+                    ] {
+                        if ui.button(egui::RichText::new(t).monospace()).clicked() {
+                            menu_act = Some(a);
+                            ui.close();
+                        }
                     }
-                } else if released {
+                });
+                if resp.double_clicked() {
+                    self.view = View::Pattern;
+                }
+                if resp.drag_started() {
+                    self.arr_focus = true;
+                    self.arr_drag = Some(i);
+                    self.arr_select([i], i);
+                }
+            }
+            if let Some(a) = menu_act {
+                self.arranger_action(a, &ui.ctx().clone());
+            }
+            // drag to reorder: insertion marker + drop
+            if let (Some(from), Some(p)) = (self.arr_drag, pointer) {
+                let to = (0..order.len())
+                    .find(|&i| p.x < (xof(starts[i]) + xof(starts[i + 1])) * 0.5)
+                    .unwrap_or(order.len());
+                let x = xof(starts[to]);
+                painter.vline(x, lane.y_range(), Stroke::new(3.0, th().accent));
+                if released {
                     self.arr_drag = None;
+                    self.arr_move(from, to);
                 }
-                // playhead
-                if playing {
-                    let idx = if loop_pat {
-                        if order.get(self.arr_sel) == Some(&ppat) {
-                            Some(self.arr_sel)
-                        } else {
-                            order.iter().position(|&b| b == ppat)
-                        }
+            } else if released {
+                self.arr_drag = None;
+            }
+            // playhead
+            if playing {
+                let idx = if loop_pat {
+                    if order.get(self.arr_sel) == Some(&ppat) {
+                        Some(self.arr_sel)
                     } else {
-                        Some(opos.min(order.len() - 1))
-                    };
-                    if let Some(i) = idx {
-                        let x = xof(starts[i] + prow);
-                        painter.vline(x, rect.y_range(), Stroke::new(2.0, th().play));
-                        if follow {
-                            ui.scroll_to_rect(
-                                Rect::from_center_size(
-                                    Pos2::new(x, rect.center().y),
-                                    egui::vec2(zoom * 64.0, 10.0),
-                                ),
-                                None,
-                            );
-                        }
+                        order.iter().position(|&b| b == ppat)
+                    }
+                } else {
+                    Some(opos.min(order.len() - 1))
+                };
+                if let Some(i) = idx {
+                    let x = xof(starts[i] + prow);
+                    painter.vline(x, rect.y_range(), Stroke::new(2.0, th().play));
+                    if follow {
+                        ui.scroll_to_rect(
+                            Rect::from_center_size(
+                                Pos2::new(x, rect.center().y),
+                                egui::vec2(zoom * 64.0, 10.0),
+                            ),
+                            None,
+                        );
                     }
                 }
+            }
+            // ------------------------------------------------ automation lanes
+            if show_auto && n_lanes > 0 {
+                let (lrect, _) = ui.allocate_exact_size(egui::vec2(w, lanes_h), Sense::hover());
+                let shift = ui.input(|i| i.modifiers.shift);
+                let clip_x = ui.clip_rect().x_range();
+                let to_x = |pos: f32| rect.left() + pad + pos * zoom;
+                let to_pos = |x: f32| ((x - rect.left() - pad) / zoom).max(0.0);
+                for (k, lane) in lanes.iter().enumerate() {
+                    let lr = Rect::from_min_size(
+                        Pos2::new(lrect.left(), lrect.top() + 4.0 + k as f32 * (LANE_H + 4.0)),
+                        egui::vec2(w, LANE_H),
+                    );
+                    let body = lr.shrink2(egui::vec2(0.0, 6.0));
+                    let to_y = |n: f32| body.bottom() - n.clamp(0.0, 1.0) * body.height();
+                    let to_n = |y: f32| ((body.bottom() - y) / body.height()).clamp(0.0, 1.0);
+                    let p = ui.painter_at(lr);
+                    p.rect_filled(lr, 6, th().crt_bot);
+                    for f in [0.25, 0.5, 0.75] {
+                        p.hline(lr.x_range(), to_y(f), Stroke::new(1.0, th().crt_grid));
+                    }
+                    let mut r = 0;
+                    while r <= acc {
+                        p.vline(
+                            to_x(r as f32),
+                            lr.y_range(),
+                            Stroke::new(1.0, th().crt_grid),
+                        );
+                        r += 16;
+                    }
+                    let target = crate::automation::Target::parse(&lane.target);
+                    let col = hex(LANE_COLOURS[k % LANE_COLOURS.len()]);
+                    // curve, sampled every 2 px across the visible range
+                    let (x0, x1) = (clip_x.min.max(lr.left()), clip_x.max.min(lr.right()));
+                    let mut pts = vec![];
+                    let mut x = x0;
+                    while x <= x1 {
+                        if let Some(n) = crate::automation::value_at(&lane.points, to_pos(x)) {
+                            pts.push(Pos2::new(x, to_y(n)));
+                        }
+                        x += 2.0;
+                    }
+                    if pts.len() > 1 {
+                        // soft glow, then the line itself (muted, not neon)
+                        for (wd, a) in [(7.0, 0.07), (4.0, 0.16)] {
+                            p.add(egui::Shape::line(
+                                pts.clone(),
+                                Stroke::new(wd, col.gamma_multiply(a)),
+                            ));
+                        }
+                        p.add(egui::Shape::line(
+                            pts,
+                            Stroke::new(1.8, col.gamma_multiply(0.9)),
+                        ));
+                    }
+                    for (i, pt) in lane.points.iter().enumerate() {
+                        let c = Pos2::new(to_x(pt.pos), to_y(pt.value));
+                        let sel = self.auto_sel == Some((k, i));
+                        p.circle_filled(c, if sel { 5.0 } else { 3.5 }, col);
+                        if sel {
+                            p.circle_stroke(c, 7.0, Stroke::new(1.5, th().selection_outline));
+                        }
+                    }
+                    // playhead
+                    if playing {
+                        p.vline(to_x(song_pos), lr.y_range(), Stroke::new(1.5, th().play));
+                    }
+                    let resp =
+                        ui.interact(lr, ui.scope_id().with(("lane", k)), Sense::click_and_drag());
+                    let hit = |pp: Pos2| {
+                        lane.points.iter().position(|pt| {
+                            Pos2::new(to_x(pt.pos), to_y(pt.value)).distance(pp) < 8.0
+                        })
+                    };
+                    // label: name and value (at the playhead, or under the mouse)
+                    let readout = if let Some(hp) = resp.hover_pos() {
+                        let pos = to_pos(hp.x);
+                        format!(
+                            "line {:.0} · {}",
+                            pos,
+                            target.map(|t| t.format(to_n(hp.y))).unwrap_or_default()
+                        )
+                    } else {
+                        let pos = if playing { song_pos } else { 0.0 };
+                        crate::automation::value_at(&lane.points, pos)
+                            .and_then(|n| target.map(|t| t.format(n)))
+                            .unwrap_or_default()
+                    };
+                    let lp = Pos2::new(x0 + 8.0, lr.top() + 4.0);
+                    p.text(
+                        lp,
+                        egui::Align2::LEFT_TOP,
+                        format!(
+                            "{}{}   {}",
+                            if self.auto_lane == k { "> " } else { "" },
+                            lane.label,
+                            readout
+                        ),
+                        FontId::proportional(11.5),
+                        col.gamma_multiply(1.1),
+                    );
+                    if resp.clicked() || resp.drag_started() || resp.secondary_clicked() {
+                        self.auto_lane = k;
+                        self.arr_focus = true;
+                    }
+                    let snap = |pos: f32| if shift { pos } else { pos.round() };
+                    if resp.clicked() {
+                        if let Some(pp) = resp.interact_pointer_pos() {
+                            if let Some(i) = hit(pp) {
+                                self.auto_sel = Some((k, i));
+                            } else {
+                                lane_ops.push(LaneOp::Add(k, snap(to_pos(pp.x)), to_n(pp.y)));
+                            }
+                        }
+                    }
+                    if resp.secondary_clicked() {
+                        if let Some(i) = resp.interact_pointer_pos().and_then(hit) {
+                            lane_ops.push(LaneOp::Delete(k, i));
+                        }
+                    }
+                    if resp.drag_started() {
+                        let o = ui.input(|i| i.pointer.press_origin());
+                        if let Some(i) = o.and_then(hit) {
+                            self.auto_drag = Some((k, i));
+                            self.auto_sel = Some((k, i));
+                            lane_ops.push(LaneOp::Snapshot);
+                        } else if self.auto_pencil {
+                            self.auto_pencil_lane = Some(k);
+                            lane_ops.push(LaneOp::Snapshot);
+                        }
+                    }
+                    if resp.dragged() {
+                        if let Some(pp) = resp.interact_pointer_pos() {
+                            if let Some((dk, i)) = self.auto_drag {
+                                if dk == k {
+                                    lane_ops.push(LaneOp::Move(
+                                        k,
+                                        i,
+                                        snap(to_pos(pp.x)),
+                                        to_n(pp.y),
+                                    ));
+                                }
+                            } else if self.auto_pencil_lane == Some(k) {
+                                lane_ops.push(LaneOp::Pencil(k, to_pos(pp.x).round(), to_n(pp.y)));
+                            }
+                        }
+                    }
+                    if resp.drag_stopped() {
+                        self.auto_drag = None;
+                        self.auto_pencil_lane = None;
+                    }
+                }
+            }
+        });
+        self.arr_scroll = out.state.clamped_offset().x;
+        self.arr_area = out.inner_rect;
+        self.apply_lane_ops(lane_ops);
+    }
+
+    fn apply_lane_ops(&mut self, ops: Vec<LaneOp>) {
+        use crate::automation::Point;
+        let shape = self.auto_shape;
+        for op in ops {
+            match op {
+                LaneOp::Snapshot => self.snapshot(),
+                LaneOp::Add(k, pos, value) => {
+                    self.snapshot();
+                    let idx = self.with(|s| {
+                        let lane = &mut s.song.automation[k];
+                        lane.points.push(Point { pos, value, shape });
+                        lane.sort();
+                        lane.points
+                            .iter()
+                            .position(|p| p.pos == pos && p.value == value)
+                    });
+                    self.auto_sel = idx.map(|i| (k, i));
+                    self.status =
+                        "Added automation point (drag to move, right-click to delete)".into();
+                }
+                LaneOp::Delete(k, i) => {
+                    self.snapshot();
+                    self.with(|s| {
+                        if i < s.song.automation[k].points.len() {
+                            s.song.automation[k].points.remove(i);
+                        }
+                    });
+                    self.auto_sel = None;
+                    self.status = "Deleted automation point".into();
+                }
+                LaneOp::Move(k, i, pos, value) => {
+                    self.with(|s| {
+                        let pts = &mut s.song.automation[k].points;
+                        if i < pts.len() {
+                            let lo = if i > 0 { pts[i - 1].pos } else { 0.0 };
+                            let hi = pts.get(i + 1).map(|p| p.pos).unwrap_or(f32::MAX);
+                            pts[i].pos = pos.clamp(lo, hi);
+                            pts[i].value = value;
+                        }
+                    });
+                }
+                LaneOp::Pencil(k, pos, value) => {
+                    self.with(|s| {
+                        let lane = &mut s.song.automation[k];
+                        if let Some(p) = lane.points.iter_mut().find(|p| (p.pos - pos).abs() < 0.5)
+                        {
+                            p.value = value;
+                        } else {
+                            lane.points.push(Point { pos, value, shape });
+                            lane.sort();
+                        }
+                    });
+                }
+            }
+            self.dirty = true;
+        }
+    }
+
+    fn add_lane(&mut self, t: crate::automation::Target) {
+        use crate::automation::{Lane, Target};
+        let label = self.with(|s| {
+            let iname = |i: usize| {
+                s.song
+                    .instruments
+                    .get(i)
+                    .map(|x| x.name.clone())
+                    .unwrap_or_default()
+            };
+            let cname = |c: usize| s.song.channel_names.get(c).cloned().unwrap_or_default();
+            match t {
+                Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) | Target::Level(i) => {
+                    format!("{} - {}", iname(i), t.param_name())
+                }
+                Target::ChanVolume(c) | Target::ChanPan(c) => {
+                    format!("Ch {} {} - {}", c + 1, cname(c), t.param_name())
+                }
+                _ => t.param_name().to_string(),
+            }
+        });
+        self.snapshot();
+        let n = self.with(|s| {
+            // start flat at the current value
+            let cur = match t {
+                Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) => {
+                    match s.song.instruments.get(i).map(|x| &x.kind) {
+                        Some(InstrumentKind::Synth(p)) => t.to_norm(match t {
+                            Target::Cutoff(_) => p.cutoff,
+                            Target::Resonance(_) => p.resonance,
+                            _ => p.drive,
+                        }),
+                        _ => 0.5,
+                    }
+                }
+                Target::Level(_) => t.to_norm(1.0),
+                Target::ChanVolume(c) => t.to_norm(s.song.mixer.channels[c].volume),
+                Target::ChanPan(c) => t.to_norm(s.song.mixer.channels[c].pan),
+                Target::Master => t.to_norm(s.song.mixer.master),
+                Target::Tempo => t.to_norm(s.song.bpm),
+            };
+            let mut lane = Lane::new(t, label.clone());
+            lane.points.push(crate::automation::Point {
+                pos: 0.0,
+                value: cur,
+                shape: crate::automation::Shape::Linear,
             });
+            s.song.automation.push(lane);
+            s.song.automation.len() - 1
+        });
+        self.auto_lane = n;
+        self.show_auto = true;
+        self.status = format!("Added lane '{label}' (click to add points, Pencil to draw)");
+    }
+
+    fn automation_bar(&mut self, ui: &mut egui::Ui) {
+        use crate::automation::{Shape, Target};
+        let (ninst, synths, nch, nl) = self.with(|s| {
+            (
+                s.song.instruments.len(),
+                s.song
+                    .instruments
+                    .iter()
+                    .map(|i| (i.name.clone(), matches!(i.kind, InstrumentKind::Synth(_))))
+                    .collect::<Vec<_>>(),
+                s.song.channels,
+                s.song.automation.len(),
+            )
+        });
+        let _ = ninst;
+        ui.horizontal_wrapped(|ui| {
+            ui.checkbox(
+                &mut self.show_auto,
+                egui::RichText::new("Automation").strong(),
+            );
+            if !self.show_auto {
+                return;
+            }
+            let mut add = None;
+            ui.menu_button("+ Lane", |ui| {
+                ui.set_max_height(320.0);
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (i, (n, synth)) in synths.iter().enumerate() {
+                        let mut ts = vec![Target::Level(i)];
+                        if *synth {
+                            ts = vec![
+                                Target::Cutoff(i),
+                                Target::Resonance(i),
+                                Target::Drive(i),
+                                Target::Level(i),
+                            ];
+                        }
+                        for t in ts {
+                            if ui
+                                .button(format!("{:02X} {n} - {}", i + 1, t.param_name()))
+                                .clicked()
+                            {
+                                add = Some(t);
+                                ui.close();
+                            }
+                        }
+                    }
+                    ui.separator();
+                    for c in 0..nch {
+                        for t in [Target::ChanVolume(c), Target::ChanPan(c)] {
+                            if ui
+                                .button(format!("Mixer ch {} - {}", c + 1, t.param_name()))
+                                .clicked()
+                            {
+                                add = Some(t);
+                                ui.close();
+                            }
+                        }
+                    }
+                    for t in [Target::Master, Target::Tempo] {
+                        if ui.button(t.param_name()).clicked() {
+                            add = Some(t);
+                            ui.close();
+                        }
+                    }
+                });
+            });
+            if let Some(t) = add {
+                self.add_lane(t);
+            }
+            ui.separator();
+            ui.selectable_value(&mut self.auto_pencil, false, "Select")
+                .on_hover_text("click = add point, drag point = move, right-click = delete");
+            ui.selectable_value(&mut self.auto_pencil, true, "Pencil")
+                .on_hover_text("drag on a lane to draw (one point per line)");
+            ui.label("Shape");
+            let mut shape = self
+                .auto_sel
+                .and_then(|(k, i)| {
+                    self.with(|s| {
+                        s.song
+                            .automation
+                            .get(k)
+                            .and_then(|l| l.points.get(i))
+                            .map(|p| p.shape)
+                    })
+                })
+                .unwrap_or(self.auto_shape);
+            let before = shape;
+            egui::ComboBox::from_id_salt("auto_shape")
+                .selected_text(shape.name())
+                .width(70.0)
+                .show_ui(ui, |ui| {
+                    for sh in Shape::ALL {
+                        ui.selectable_value(&mut shape, sh, sh.name());
+                    }
+                })
+                .response
+                .on_hover_text("segment shape after the selected point / for new points");
+            if shape != before {
+                self.auto_shape = shape;
+                if let Some((k, i)) = self.auto_sel {
+                    self.snapshot();
+                    self.with(|s| {
+                        if let Some(p) = s
+                            .song
+                            .automation
+                            .get_mut(k)
+                            .and_then(|l| l.points.get_mut(i))
+                        {
+                            p.shape = shape;
+                        }
+                    });
+                }
+            }
+            if nl > 0 {
+                let k = self.auto_lane.min(nl - 1);
+                let (mut en, label) = self.with(|s| {
+                    (
+                        s.song.automation[k].enabled,
+                        s.song.automation[k].label.clone(),
+                    )
+                });
+                ui.separator();
+                ui.label(
+                    egui::RichText::new(format!("Lane: {label}"))
+                        .small()
+                        .color(th().ink2),
+                );
+                if ui.checkbox(&mut en, "on").changed() {
+                    self.with(|s| s.song.automation[k].enabled = en);
+                    self.dirty = true;
+                }
+                if ui.small_button("Delete lane").clicked() {
+                    self.snapshot();
+                    self.with(|s| {
+                        s.song.automation.remove(k);
+                    });
+                    self.auto_sel = None;
+                    self.status = format!("Deleted lane '{label}'");
+                }
+            }
+        });
     }
 
     // ---------------------------------------------------------------- mixer
@@ -2637,7 +3151,12 @@ impl eframe::App for App {
                     Rect::from_min_max(Pos2::new(inner.left() + 4.0, inner.top()), inner.max);
                 match self.view {
                     View::Pattern if self.dock_arranger => {
-                        let h = (inner.height() * 0.3).clamp(120.0, 190.0);
+                        let nl = self.with(|s| s.song.automation.len());
+                        let h = if self.show_auto && nl > 0 {
+                            (inner.height() * 0.5).clamp(190.0, 120.0 + nl as f32 * 68.0 + 60.0)
+                        } else {
+                            (inner.height() * 0.3).clamp(120.0, 190.0)
+                        };
                         let top = Rect::from_min_max(
                             inner.min,
                             Pos2::new(inner.right(), inner.bottom() - h - 6.0),

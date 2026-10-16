@@ -46,12 +46,30 @@ fn voice(
     synth: &mut SynthVoice,
     pos: &mut f64,
     sr: f32,
+    ov: &AutoState,
 ) -> (f32, bool) {
     let Some(inst) = song.instruments.get(instr) else {
         return (0.0, false);
     };
+    let lvl = ov.level.get(instr).copied().unwrap_or(1.0);
+    let (v, alive) = voice_raw(song, inst, instr, freq, synth, pos, sr, ov);
+    (v * lvl, alive)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn voice_raw(
+    _song: &Song,
+    inst: &Instrument,
+    instr: usize,
+    freq: f32,
+    synth: &mut SynthVoice,
+    pos: &mut f64,
+    sr: f32,
+    ov: &AutoState,
+) -> (f32, bool) {
     match &inst.kind {
         InstrumentKind::Synth(p) => {
+            let p = ov.patches.get(instr).and_then(|o| o.as_ref()).unwrap_or(p);
             let v = synth.render(p, freq, sr);
             (v, !synth.amp.done())
         }
@@ -113,6 +131,21 @@ impl Chan {
     }
 }
 
+/// Automation overrides computed by the engine (never touches the song).
+#[derive(Default)]
+pub struct AutoState {
+    /// per-instrument patch copies with automated params (None = not automated)
+    patches: Vec<Option<crate::synth::Patch>>,
+    /// per-instrument amp level multiplier
+    level: Vec<f32>,
+    /// smoothed current normalised value per lane (NaN = not yet set)
+    vals: Vec<f32>,
+    chan_vol: [Option<f32>; MAX_CHANNELS],
+    chan_pan: [Option<f32>; MAX_CHANNELS],
+    master: Option<f32>,
+    countdown: u32,
+}
+
 pub struct Engine {
     pub sr: f32,
     pub playing: bool,
@@ -134,6 +167,9 @@ pub struct Engine {
     pub chan_peak: [f32; MAX_CHANNELS],
     /// rows played since start (tests / diagnostics)
     pub rows_played: u64,
+    auto: AutoState,
+    /// current song position in lines (for the UI playhead of lanes)
+    pub song_pos: f32,
 }
 
 impl Engine {
@@ -155,6 +191,8 @@ impl Engine {
             peak_lr: [0.0; 2],
             chan_peak: [0.0; MAX_CHANNELS],
             rows_played: 0,
+            auto: AutoState::default(),
+            song_pos: 0.0,
         }
     }
 
@@ -333,6 +371,123 @@ impl Engine {
         }
     }
 
+    /// mixer gains per channel (L, R) and the master gain, with automation
+    fn mix_targets(&self, song: &Song) -> ([(f32, f32); MAX_CHANNELS], f32) {
+        let nch = song.channels.min(MAX_CHANNELS);
+        let mut tgt = [(0.0f32, 0.0f32); MAX_CHANNELS];
+        for (i, t) in tgt.iter_mut().enumerate().take(nch) {
+            let m = song.mixer.channels.get(i).copied().unwrap_or_default();
+            let vol = self.auto.chan_vol[i].unwrap_or(m.volume);
+            let pan = self.auto.chan_pan[i].unwrap_or(m.pan);
+            let g = if song.mixer.audible(i) { vol } else { 0.0 };
+            // constant power pan, normalised so centre = 1.0 per side
+            let a = (pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+            *t = (
+                g * a.cos() * std::f32::consts::SQRT_2,
+                g * a.sin() * std::f32::consts::SQRT_2,
+            );
+        }
+        (tgt, self.auto.master.unwrap_or(song.mixer.master))
+    }
+
+    /// Song position in lines (fractional, includes the tick phase).
+    fn calc_song_pos(&self, song: &Song) -> f32 {
+        let idx = if self.loop_pattern {
+            song.order.iter().position(|&b| b == self.pattern)
+        } else {
+            Some(self.order_pos)
+        };
+        let start: usize = idx
+            .map(|i| {
+                song.order[..i.min(song.order.len())]
+                    .iter()
+                    .map(|&b| song.patterns.get(b).map(|p| p.rows).unwrap_or(ROWS))
+                    .sum()
+            })
+            .unwrap_or(0);
+        let tl = self.tick_len().max(1.0);
+        let tick_frac = (1.0 - self.samples_to_tick / tl).clamp(0.0, 1.0);
+        start as f32 + self.row as f32 + (self.tick as f32 + tick_frac as f32) / self.speed as f32
+    }
+
+    /// Evaluate all lanes at the current position and update the overrides.
+    fn eval_auto(&mut self, song: &Song) {
+        use crate::automation::{value_at, Target};
+        let a = &mut self.auto;
+        a.chan_vol = [None; MAX_CHANNELS];
+        a.chan_pan = [None; MAX_CHANNELS];
+        a.master = None;
+        let ni = song.instruments.len();
+        if a.level.len() != ni {
+            a.level.resize(ni, 1.0);
+            a.patches.resize(ni, None);
+        }
+        a.level.iter_mut().for_each(|l| *l = 1.0);
+        if !self.playing || song.automation.is_empty() {
+            a.patches.iter_mut().for_each(|p| *p = None);
+            a.vals.clear();
+            return;
+        }
+        let pos = self.calc_song_pos(song);
+        self.song_pos = pos;
+        let a = &mut self.auto;
+        if a.vals.len() != song.automation.len() {
+            a.vals = vec![f32::NAN; song.automation.len()];
+        }
+        let mut used = [false; 256];
+        for (k, lane) in song.automation.iter().enumerate() {
+            if !lane.enabled {
+                continue;
+            }
+            let (Some(t), Some(n)) = (Target::parse(&lane.target), value_at(&lane.points, pos))
+            else {
+                continue;
+            };
+            // smoothing: ~1.5 ms time constant at 32-frame steps
+            let v = &mut a.vals[k];
+            *v = if v.is_nan() { n } else { *v + (n - *v) * 0.5 };
+            let real = t.to_real(*v);
+            match t {
+                Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) => {
+                    let Some(InstrumentKind::Synth(src)) = song.instruments.get(i).map(|x| &x.kind)
+                    else {
+                        continue;
+                    };
+                    let slot = &mut a.patches[i];
+                    if i < used.len() && !used[i] {
+                        // refresh from the song (keeps live UI edits), no realloc after the first
+                        match slot {
+                            Some(p) => p.clone_from(src),
+                            None => *slot = Some(src.clone()),
+                        }
+                        used[i] = true;
+                    }
+                    let p = slot.as_mut().unwrap();
+                    match t {
+                        Target::Cutoff(_) => p.cutoff = real,
+                        Target::Resonance(_) => p.resonance = real,
+                        _ => p.drive = real,
+                    }
+                }
+                Target::Level(i) => {
+                    if let Some(l) = a.level.get_mut(i) {
+                        *l = real;
+                    }
+                }
+                Target::ChanVolume(c) if c < MAX_CHANNELS => a.chan_vol[c] = Some(real),
+                Target::ChanPan(c) if c < MAX_CHANNELS => a.chan_pan[c] = Some(real),
+                Target::Master => a.master = Some(real),
+                Target::Tempo => self.bpm = real.clamp(20.0, 400.0),
+                _ => {}
+            }
+        }
+        for (i, p) in self.auto.patches.iter_mut().enumerate() {
+            if i >= used.len() || !used[i] {
+                *p = None;
+            }
+        }
+    }
+
     /// Render interleaved stereo.
     pub fn render(&mut self, song: &Song, out: &mut [f32]) {
         let mut peak = self.peak * 0.97;
@@ -341,22 +496,17 @@ impl Engine {
         for p in &mut cpk {
             *p *= 0.97;
         }
-        // mixer targets (computed once per block)
-        let nch = song.channels.min(MAX_CHANNELS);
-        let mut tgt = [(0.0f32, 0.0f32); MAX_CHANNELS];
-        for (i, t) in tgt.iter_mut().enumerate().take(nch) {
-            let m = song.mixer.channels.get(i).copied().unwrap_or_default();
-            let g = if song.mixer.audible(i) { m.volume } else { 0.0 };
-            // constant power pan, normalised so centre = 1.0 per side
-            let a = (m.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
-            *t = (
-                g * a.cos() * std::f32::consts::SQRT_2,
-                g * a.sin() * std::f32::consts::SQRT_2,
-            );
-        }
-        let master = song.mixer.master;
+        self.eval_auto(song);
+        let (mut tgt, mut master) = self.mix_targets(song);
         let k = 1.0 - (-1.0 / (0.005 * self.sr)).exp();
         for frame in out.chunks_mut(2) {
+            // automation is evaluated every 32 frames (sub-block), values smoothed
+            if self.auto.countdown == 0 {
+                self.auto.countdown = 32;
+                self.eval_auto(song);
+                (tgt, master) = self.mix_targets(song);
+            }
+            self.auto.countdown -= 1;
             if self.playing {
                 self.samples_to_tick -= 1.0;
                 if self.samples_to_tick <= 0.0 {
@@ -377,13 +527,29 @@ impl Engine {
             {
                 let mut s = 0.0;
                 if c.active {
-                    let (v, alive) = voice(song, c.instr, c.freq, &mut c.synth, &mut c.pos, sr);
+                    let (v, alive) = voice(
+                        song,
+                        c.instr,
+                        c.freq,
+                        &mut c.synth,
+                        &mut c.pos,
+                        sr,
+                        &self.auto,
+                    );
                     c.active = alive;
                     s += v * c.vol;
                 }
                 if c.tail.gain > 0.0 {
                     let t = &mut c.tail;
-                    let (v, alive) = voice(song, t.instr, t.freq, &mut t.synth, &mut t.pos, sr);
+                    let (v, alive) = voice(
+                        song,
+                        t.instr,
+                        t.freq,
+                        &mut t.synth,
+                        &mut t.pos,
+                        sr,
+                        &self.auto,
+                    );
                     s += v * t.vol * t.gain;
                     t.gain = if alive { (t.gain - step).max(0.0) } else { 0.0 };
                 }
@@ -470,6 +636,31 @@ mod tests {
         let r2 = rows_in(&mut e, &song, 2.0);
         assert!(e.playing);
         assert!((r2 as f64 - 2.0 * r1 as f64).abs() <= 3.0, "{r1} {r2}");
+    }
+
+    #[test]
+    fn automation_applies_in_render() {
+        use crate::automation::{Lane, Point, Shape, Target};
+        let mut song = crate::fileio::demo_song();
+        let plain = {
+            let mut s = song.clone();
+            s.automation.clear();
+            render_song(&s, 22050)
+        };
+        let auto = render_song(&song, 22050);
+        let diff: f32 = plain.iter().zip(&auto).map(|(a, b)| (a - b).abs()).sum();
+        assert!(diff > 1.0, "demo lanes must change the sound ({diff})");
+        // master volume lane at 0 => silence after the smoothing settles
+        let mut l = Lane::new(Target::Master, "m".into());
+        l.points.push(Point {
+            pos: 0.0,
+            value: 0.0,
+            shape: Shape::Linear,
+        });
+        song.automation = vec![l];
+        let out = render_song(&song, 22050);
+        let peak = out[2000..44100].iter().fold(0.0f32, |m, x| m.max(x.abs()));
+        assert!(peak < 1e-3, "{peak}");
     }
 
     #[test]

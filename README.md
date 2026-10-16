@@ -64,6 +64,7 @@ chipwave --render demo out.wav
   F9 / F10                       mute / solo channel
   Ctrl+Tab, Ctrl+1 / 2 / 3       views: Pattern / Arranger / Mixer
   Ctrl+D / Ctrl+Shift+D          arranger: duplicate clip / as new block (also when docked)
+  Mouse wheel                    pattern: 1 row per notch (Shift = 16); arranger: scroll, Ctrl = zoom
   Ctrl+Shift+K                   debug: show the last 10 input events in the status bar
   Arranger (click to focus, light outline + ARRANGER tag): click / Shift+click / Ctrl+click select,
     Ctrl+X / C / V cut / copy / paste after selection (Ctrl+Shift+V = as new blocks),

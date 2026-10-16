@@ -226,6 +226,35 @@ pub fn describe(e: &Event) -> Option<String> {
     })
 }
 
+/// Vertical wheel movement in *lines* from one frame's events.
+/// Windows mice send line deltas (1 per notch); touchpads and some mice send
+/// pixel deltas (smooth scrolling), converted at 40 px per line.
+/// Positive = wheel up / content moves down.
+pub fn wheel_lines(events: &[Event]) -> f32 {
+    use eframe::egui::MouseWheelUnit as U;
+    let mut lines = 0.0;
+    for e in events {
+        if let Event::MouseWheel { unit, delta, .. } = e {
+            // Shift+wheel can arrive as horizontal on some systems
+            let d = if delta.y != 0.0 { delta.y } else { delta.x };
+            lines += match unit {
+                U::Line => d,
+                U::Point => d / 40.0,
+                U::Page => d * 16.0,
+            };
+        }
+    }
+    lines
+}
+
+/// Accumulate fractional wheel lines and return whole notches.
+pub fn take_notches(acc: &mut f32, lines: f32) -> i32 {
+    *acc += lines;
+    let n = acc.trunc();
+    *acc -= n;
+    n as i32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,6 +393,35 @@ mod tests {
         assert_eq!(arranger_shortcut(&key(Key::A, CTRL), false), None);
         // Ctrl+C never comes through here (handled as a clipboard action)
         assert_eq!(arranger_shortcut(&key(Key::C, CTRL), true), None);
+    }
+
+    fn wheel(unit: eframe::egui::MouseWheelUnit, y: f32) -> Event {
+        Event::MouseWheel {
+            unit,
+            delta: eframe::egui::vec2(0.0, y),
+            phase: eframe::egui::TouchPhase::Move,
+            source: eframe::egui::MouseWheelSource::Unknown,
+            modifiers: Modifiers::NONE,
+        }
+    }
+
+    #[test]
+    fn wheel_line_and_pixel_deltas() {
+        use eframe::egui::MouseWheelUnit as U;
+        // a Windows mouse notch: one line
+        let mut acc = 0.0;
+        assert_eq!(
+            take_notches(&mut acc, wheel_lines(&[wheel(U::Line, -1.0)])),
+            -1
+        );
+        // smooth touchpad: many small pixel deltas add up to whole lines
+        let mut n = 0;
+        for _ in 0..10 {
+            n += take_notches(&mut acc, wheel_lines(&[wheel(U::Point, 8.0)]));
+        }
+        assert_eq!(n, 2); // 80 px = 2 lines
+        assert_eq!(wheel_lines(&[wheel(U::Page, 1.0)]), 16.0);
+        assert_eq!(wheel_lines(&[Event::Copy]), 0.0);
     }
 
     #[test]

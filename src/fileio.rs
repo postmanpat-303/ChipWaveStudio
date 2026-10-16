@@ -199,6 +199,12 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
                 .as_bytes(),
         )
         .map_err(|e| e.to_string())?;
+        for (i, lane) in song.automation.iter().enumerate() {
+            z.start_file(format!("automation/{i:02}.toml"), defl)
+                .map_err(e)?;
+            z.write_all(toml::to_string(lane).map_err(|e| e.to_string())?.as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
         z.start_file("arranger.toml", defl).map_err(e)?;
         z.write_all(
             toml::to_string(&ArrangerFile {
@@ -274,6 +280,23 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
         .into_iter()
         .filter(|&o| o < patterns.len())
         .collect();
+    let mut automation = vec![];
+    for i in 0..256 {
+        let Ok(b) = read_entry(&mut z, &format!("automation/{i:02}.toml")) else {
+            break;
+        };
+        if let Ok(mut lane) =
+            toml::from_str::<crate::automation::Lane>(&String::from_utf8_lossy(&b))
+        {
+            lane.points.truncate(100_000);
+            for p in &mut lane.points {
+                p.value = p.value.clamp(0.0, 1.0);
+                p.pos = p.pos.max(0.0);
+            }
+            lane.sort();
+            automation.push(lane);
+        }
+    }
     let mut names = sf.channel_names;
     names.resize(channels, "Ch".into());
     Ok(Song {
@@ -286,6 +309,7 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
         patterns,
         order: if order.is_empty() { vec![0] } else { order },
         instruments,
+        automation,
         mixer: read_entry(&mut z, "mixer.toml")
             .ok()
             .and_then(|b| toml::from_str::<Mixer>(&String::from_utf8_lossy(&b)).ok())
@@ -436,7 +460,62 @@ pub fn demo_song() -> Song {
         song.patterns.push(Pattern::new("Block 00", ROWS, channels));
     }
     song.order = vec![0; 2];
+    song.automation = demo_lanes(&v);
     song
+}
+
+/// The demo's two lanes. Lane 1 targets the delay return's feedback, but there
+/// is no delay yet, so it is mapped to the bass filter resonance instead.
+fn demo_lanes(v: &toml::Value) -> Vec<crate::automation::Lane> {
+    use crate::automation::{Lane, Point, Shape, Target};
+    let mut out = vec![];
+    let Some(arr) = v.get("automation").and_then(|a| a.as_array()) else {
+        return out;
+    };
+    for a in arr {
+        let id = a.get("target").and_then(|x| x.as_str()).unwrap_or("");
+        let mut label = a
+            .get("label")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string();
+        let target = match Target::parse(id) {
+            Some(t) => t,
+            None if id.contains("feedback") => {
+                label = "Bass - Resonance (stands in for delay feedback)".into();
+                Target::Resonance(1)
+            }
+            None => continue,
+        };
+        let shape = match a.get("curve").and_then(|x| x.as_str()) {
+            Some("step") => Shape::Step,
+            Some("bezier") | Some("smooth") => Shape::Smooth,
+            _ => Shape::Linear,
+        };
+        let mut lane = Lane::new(target, label);
+        for p in a
+            .get("points")
+            .and_then(|x| x.as_array())
+            .into_iter()
+            .flatten()
+        {
+            let pos = p.get("pos").and_then(|x| x.as_integer()).unwrap_or(0) as f32;
+            let num = |k: &str| {
+                p.get(k)
+                    .and_then(|x| x.as_float().or(x.as_integer().map(|i| i as f64)))
+                    .map(|f| f as f32)
+            };
+            let value = if let Some(hz) = num("value_hz") {
+                target.to_norm(hz)
+            } else {
+                num("value").unwrap_or(0.0).clamp(0.0, 1.0)
+            };
+            lane.points.push(Point { pos, value, shape });
+        }
+        lane.sort();
+        out.push(lane);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -463,5 +542,23 @@ mod tests {
         let l = load_cwt(&dir).unwrap();
         assert_eq!(l.patterns[0].cells, s.patterns[0].cells);
         assert_eq!(l.instruments.len(), s.instruments.len());
+    }
+
+    #[test]
+    fn automation_demo_lanes_and_save_load() {
+        use crate::automation::{Shape, Target};
+        let s = demo_song();
+        assert_eq!(s.automation.len(), 2);
+        let c = &s.automation[0];
+        assert_eq!(Target::parse(&c.target), Some(Target::Cutoff(1)));
+        let t = Target::Cutoff(1);
+        assert!((t.to_real(c.points[0].value) - 180.0).abs() < 0.5);
+        assert!((t.to_real(c.points[2].value) - 2400.0).abs() < 2.0);
+        assert_eq!(c.points[0].shape, Shape::Smooth);
+        assert_eq!(s.automation[1].points[1].shape, Shape::Step);
+        let f = std::env::temp_dir().join("chipwave_auto_test.cwt");
+        save_cwt(&s, &f).unwrap();
+        let l = load_cwt(&f).unwrap();
+        assert_eq!(l.automation, s.automation);
     }
 }

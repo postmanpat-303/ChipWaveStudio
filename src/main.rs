@@ -3,6 +3,7 @@
 
 mod app;
 mod audio;
+mod automation;
 mod engine;
 mod fileio;
 mod input;
@@ -33,7 +34,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
     );
     let tmp = std::env::temp_dir().join("chipwave_selftest.cwt");
     let rt = fileio::save_cwt(&song, &tmp).and_then(|_| fileio::load_cwt(&tmp));
-    let rt_ok = matches!(&rt, Ok(s) if s.patterns[0].cells == song.patterns[0].cells && s.mixer == song.mixer && s.order == song.order);
+    let rt_ok = matches!(&rt, Ok(s) if s.patterns[0].cells == song.patterns[0].cells && s.mixer == song.mixer && s.automation == song.automation && s.order == song.order);
     report.push_str(&format!(
         "  .cwt round-trip: {}\n",
         if rt_ok { "ok" } else { "FAILED" }
@@ -64,7 +65,22 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         r2,
         if tempo_ok { "ok" } else { "FAILED" }
     ));
-    let ok = peak > 0.05 && rms > 0.005 && !nan && wrote.is_ok() && rt_ok && tempo_ok;
+    // automation lanes must change the render (bass cutoff sweep + resonance)
+    let auto_ok = {
+        let mut s2 = song.clone();
+        s2.automation.clear();
+        let plain = engine::render_song(&s2, 22050);
+        let with = engine::render_song(&song, 22050);
+        let d: f32 = plain.iter().zip(&with).map(|(a, b)| (a - b).abs()).sum();
+        report.push_str(&format!(
+            "  automation: {} lanes, render difference {:.1} ({})\n",
+            song.automation.len(),
+            d,
+            if d > 1.0 { "ok" } else { "FAILED" }
+        ));
+        d > 1.0
+    };
+    let ok = peak > 0.05 && rms > 0.005 && !nan && wrote.is_ok() && rt_ok && tempo_ok && auto_ok;
     report.push_str(if ok {
         "RESULT: PASS\n"
     } else {
