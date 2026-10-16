@@ -17,7 +17,7 @@ Other export routes stay as they are: **MOD/MMD** module export ([OCTAMED_SPEC.m
 - **Tail:** *Cut*, *Let ring* (until output stays below −90 dBFS for 200 ms, max 30 s), or *Fade out* over N seconds (linear or equal-power), optionally only on the last loop.
 - **Normalise:** off, peak (target e.g. −0.3 dBFS), or loudness (EBU R128 integrated LUFS target, e.g. −14 LUFS, with a true-peak ceiling). Stems use one shared gain so their mix stays correct.
 - **Paula mode:** export with or without the Amiga output emulation.
-- **File naming template:** `{song}-{section}-{track}.{ext}`, with an output folder (by default the song's folder, or `Documents\GrokPrograms`-style user setting).
+- **File naming template:** `{song}-{section}-{track}.{ext}`, with an output folder: by default the platform music folder plus `ChipWave` (`%USERPROFILE%\Music\ChipWave` on Windows, `$XDG_MUSIC_DIR/ChipWave`, usually `~/Music/ChipWave`, on Linux, found with `dirs::audio_dir()`), or next to the song file, or any folder the user picks (remembered).
 
 ## 3. WAV options
 - Bit depth: **16-bit int**, **24-bit int**, **32-bit float**.
