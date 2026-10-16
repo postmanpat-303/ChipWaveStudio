@@ -15,7 +15,7 @@ struct Song {
     blocks: Vec<Block>,              // patterns: lines, tracks, name
     sequences: Vec<PlaySeq>,         // == MMD2 playing sequences
     sections: Vec<SeqId>,            // == MMD2 section list (order of play)
-    arranger: ArrangerMeta,          // ChipWave-only, ignored by MMD export
+    arranger: ArrangerMeta,          // ChipWave-only, saved in .cwt, ignored by MMD export
 }
 
 struct PlaySeq {
@@ -83,7 +83,7 @@ Keyboard-only users can do all of it: arrows move the selection clip-by-clip, `[
 - MMD2/MMD3: each section-list entry becomes a section band; its playing sequence's block numbers become clips in order. Sequences referenced several times appear several times (same `SeqId`, so editing one updates all, shown with a link icon).
 - MMD0/MMD1: the single play sequence becomes one sequence named "Main", one section.
 - MOD: the order list becomes "Main". Consecutive identical entries collapse into one clip with `repeat` (display only; reversible).
-- Colours, lanes and markers don't exist in MMD, so they're stored only in the native `.cwt` file.
+- Colours, lanes and markers don't exist in MMD, so they're stored only in the native `.cwt` file (`arranger.toml`, see [FILE_FORMAT.md](FILE_FORMAT.md)).
 
 **Export**
 - `repeat = N` is flattened to N consecutive identical block numbers.
@@ -93,7 +93,7 @@ Keyboard-only users can do all of it: arrows move the selection clip-by-clip, `[
 
 ## 5. Later: variation lanes (phase 3, optional)
 
-A second lane lets you lay an alternative block under a clip (e.g. drum fill) and choose per playthrough which one plays. Because MMD has no notion of this, it stays in the native format and is flattened on export. Listed here so the data model leaves room for it; not planned for the first arranger.
+A second lane lets you lay an alternative block under a clip (e.g. drum fill) and choose per playthrough which one plays. Because MMD has no notion of this, it stays in the `.cwt` format and is flattened on export. Listed here so the data model leaves room for it; not planned for the first arranger.
 
 ## 6. Rendering in egui
 

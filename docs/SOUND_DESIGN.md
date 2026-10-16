@@ -162,12 +162,13 @@ Up to 8 slots, reorderable by drag, each with bypass and dry/wet.
 - **Render** button: plays the patch at a chosen note (default C-3), velocity and length (or "until silent", with tail detection) and writes the result into a sample instrument slot.
 - Options: 8-bit or 16-bit, sample rate (Paula periods like 8363 Hz/16726 Hz, or 44.1 kHz), mono/stereo, normalise, auto loop-point finder for sustaining sounds, render across a key range (multi-sample).
 - **Keep live:** the sample remembers the source patch (`source_patch` link + a hash of its parameters). If the patch is edited, the sample shows a "stale" badge and re-renders in one click, or automatically if "auto-render" is on.
+- The patch link is saved in `.cwt` (`instruments/NN.toml` `[source]`). Audio export to WAV/MP3 is covered in [EXPORT.md](EXPORT.md).
 - Rendered samples export to MOD/MMD normally; live patches can't be stored in MOD, so export **auto-renders** them (with a warning).
 - OctaMED's own synth/hybrid instruments (waveform + volume/pitch command lists) load from MMD into a dedicated *OctaMED Synth* instrument type (see OCTAMED_SPEC.md), separate from this patch engine, so files round-trip exactly.
 
 ## 8. Patch / preset format
 
-Human-readable **TOML** (AI and diff friendly), one file per patch, `.cwpatch`. Stored inside the song file and in a user preset library (`~/.config/chipwave/patches/` on Linux, `%APPDATA%\ChipWave\patches\` on Windows).
+Human-readable **TOML** (AI and diff friendly), one file per patch, `.cwpatch`. Stored inside the song's `.cwt` file (`patches/`, see [FILE_FORMAT.md](FILE_FORMAT.md)) and in a user preset library (`~/.config/chipwave/patches/` on Linux, `%APPDATA%\ChipWave\patches\` on Windows).
 
 ```toml
 format = "chipwave-patch"

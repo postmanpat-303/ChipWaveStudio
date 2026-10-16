@@ -161,7 +161,7 @@ Synth & hybrid instruments with Vol/WF sequence language + synth editor; multi-o
 ### Phase 3
 Scripting in place of ARexx (Rhai or Lua — matching BigWave plugin design), MIDI recording/sync, multi-modules, XM/IT import, VST/CLAP hosting (optional), theming incl. classic Amiga palette, stem export.
 ### File formats priority
-1. MMD0–3 load (S1 doc + port logic from libxmp/OpenMPT loaders — mind licences: libxmp is MIT [verify], OpenMPT BSD-3).  2. MOD load/save.  3. XM load/export.  4. Native format (serde/RON or binary).
+1. MMD0–3 load (S1 doc + port logic from libxmp/OpenMPT loaders — mind licences: libxmp is MIT [verify], OpenMPT BSD-3).  2. MOD load/save.  3. XM load/export.  4. Native format: `.cwt` (see [FILE_FORMAT.md](FILE_FORMAT.md)).
 ### Rust crates (verified on crates.io 16 Oct 2026)
 | Crate | Version | Use |
 |---|---|---|
