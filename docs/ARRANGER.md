@@ -108,3 +108,6 @@ A second lane lets you lay an alternative block under a clip (e.g. drum fill) an
 - The MVP needs some way to order blocks to prove sequence playback and MMD round-trips. A plain list editor (like OctaMED's) is a few hours of work and directly mirrors the file format.
 - The arranger is a richer *view* over exactly that data. Building it right after the MVP means the data model and playback are proven first, and the arranger can't introduce format bugs.
 - It's high-impact for how the app feels, so it shouldn't wait for phase 2.
+
+## 8. Auto arrange
+Fill-to-length with roles, style templates, a seeded generator and non-destructive variations: see [AUTO_ARRANGE.md](AUTO_ARRANGE.md).

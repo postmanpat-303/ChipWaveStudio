@@ -74,6 +74,20 @@ Del liked variant A. Variant **A2** adds soft gradients to it: [`mockups/variant
 - **Readability:** yellow (`#FFD400`) is used only on dark display surfaces. On light panels, values use blue `#1F5FD1` or orange `#FF7A00`. (The A/A2 mockups still show the Out value in yellow on grey; that will be fixed in the implementation.)
 - **egui:** egui has no gradient fill for rects, so gradients are drawn as a `Mesh` with per-vertex colours (top two vertices light, bottom two dark). That's cheap and stays crisp at any scale. Rounded or cut corners use a tessellated path with vertex colours interpolated by y.
 
+### Corner radius (modern rounded look)
+Del asked for a more modern touch, so all surfaces get rounded corners. Values are in logical points and scale with `pixels_per_point`, like everything else ([UI_SCALING.md](UI_SCALING.md)).
+| Element | Radius |
+|---|---|
+| Windows / dialogs / top-level panels | 10 |
+| Cartridges | 8 (the spine is clipped to the same radius) |
+| Buttons, pills, toggles, search fields | fully rounded (height ÷ 2); square tool buttons 6 |
+| Status badges and format tags | pill-shaped (height ÷ 2) |
+| CRT displays (inset) | 6, with the inset bevel following the curve |
+| List row highlights, arranger blocks | 6 |
+| Knob wells | circles; slider thumbs 4 |
+- Data marks (curve handles, LEDs, pixel-grid sweeps) stay square on purpose; that's part of the Wave Cartridge identity.
+- **egui:** set `Visuals.window_corner_radius`, `widgets.*.corner_radius` and `menu_corner_radius` via `CornerRadius::same(n)` (the type was called `Rounding` before egui 0.31). Painter rects take a `CornerRadius` directly. Gradient meshes with rounded corners use the tessellated-path approach above.
+
 ## 4. Component spec (for egui)
 **Cartridge**
 - Body `panel`, 1.5 px `edge` outline, square corners except a 14 px 45° cut at top-left.
