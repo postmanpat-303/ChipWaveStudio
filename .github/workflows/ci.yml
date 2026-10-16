@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create releases on tags
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Detect Rust project
+        id: detect
+        shell: bash
+        run: |
+          if [ -f Cargo.toml ]; then echo "rust=true" >> "$GITHUB_OUTPUT"; else echo "rust=false" >> "$GITHUB_OUTPUT"; echo "No Cargo.toml yet - skipping Rust steps (docs-only repo)."; fi
+
+      - name: Install Linux build dependencies
+        if: steps.detect.outputs.rust == 'true' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev xvfb
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.detect.outputs.rust == 'true'
+        with:
+          components: rustfmt, clippy
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache cargo
+        if: steps.detect.outputs.rust == 'true'
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Lint and test
+        if: steps.detect.outputs.rust == 'true'
+        shell: bash
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
+
+      - name: Build release
+        if: steps.detect.outputs.rust == 'true'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            cargo build --release --target aarch64-apple-darwin
+            cargo build --release --target x86_64-apple-darwin
+            mkdir -p target/release
+            lipo -create -output target/release/chipwave \
+              target/aarch64-apple-darwin/release/chipwave \
+              target/x86_64-apple-darwin/release/chipwave
+          else
+            cargo build --release
+          fi
+
+      - name: Headless smoke test
+        if: steps.detect.outputs.rust == 'true'
+        shell: bash
+        run: |
+          BIN=target/release/chipwave
+          [ "$RUNNER_OS" = "Windows" ] && BIN=target/release/chipwave.exe
+          if [ ! -f tests/songs/smoke.cwt ]; then echo "No smoke song yet - skipping."; exit 0; fi
+          "$BIN" --version
+          "$BIN" --self-test
+          "$BIN" --render tests/songs/smoke.cwt --out smoke.wav --deterministic
+          cargo test --test golden -- --nocapture
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a "$BIN" --screenshot screenshot-linux.png --exit-after 5
+          else
+            "$BIN" --screenshot "screenshot-$RUNNER_OS.png" --exit-after 5
+          fi
+
+      - name: Upload screenshots and smoke output
+        if: steps.detect.outputs.rust == 'true' && always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-${{ matrix.os }}
+          path: |
+            screenshot-*.png
+            smoke.wav
+          if-no-files-found: ignore
+
+      - name: Package
+        if: steps.detect.outputs.rust == 'true' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          cargo install cargo-packager --locked
+          cargo packager --release
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            # TODO: sign the .app before cargo-packager builds the .dmg (packager hook). Ad-hoc signature until a paid Apple Developer account exists (docs/PACKAGING.md)
+            find target -name "*.app" -maxdepth 4 -exec codesign --force --deep -s - {} \;
+          fi
+
+      - name: Draft GitHub release
+        if: steps.detect.outputs.rust == 'true' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          files: |
+            target/release/packager/*

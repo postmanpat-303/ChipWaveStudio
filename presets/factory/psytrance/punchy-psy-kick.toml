@@ -1,0 +1,81 @@
+format = "chipwave-patch"
+version = 1
+name = "Punchy Psy Kick"
+author = "ChipWave factory"
+tags = ["psytrance", "kick", "drums"]
+# Sine with fast pitch drop (mod env -> pitch), click from noise burst, short tail so the bass can roll.
+
+[osc1]
+wave = "sine"
+octave = -1
+phase = "reset"
+start_phase = 90
+level = 1.0
+
+[noise]
+type = "white"
+level = 0.25
+
+[filter1]
+model = "svf"
+mode = "lp"
+cutoff_hz = 6000.0
+resonance = 0.0
+key_track = 0.0
+
+[env.amp]
+attack_ms = 0
+hold_ms = 40
+decay_ms = 210
+sustain = 0.0
+release_ms = 10
+curve = "exp"
+
+[env.filter]
+attack_ms = 0
+decay_ms = 6
+sustain = 0.0
+release_ms = 0
+
+[env.mod]
+attack_ms = 0
+decay_ms = 45
+sustain = 0.0
+release_ms = 0
+curve = "exp"
+
+[voice]
+mode = "mono"
+retrigger = true
+
+[[mod]]
+source = "env.mod"
+target = "osc1.pitch"
+amount = 0.6
+note = "~ +36 semitones at hit, falling"
+
+[[mod]]
+source = "env.filter"
+target = "noise.level"
+amount = 1.0
+
+[[fx]]
+type = "distortion"
+mode = "tube"
+drive = 0.3
+mix = 0.6
+
+[[fx]]
+type = "eq"
+low_gain_db = 2
+low_hz = 60
+mid_gain_db = -4
+mid_hz = 300
+high_gain_db = 1
+
+[[fx]]
+type = "compressor"
+threshold_db = -8
+ratio = 6.0
+attack_ms = 5
+release_ms = 80

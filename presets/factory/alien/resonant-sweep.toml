@@ -1,0 +1,66 @@
+format = "chipwave-patch"
+version = 1
+name = "Resonant HP/LP Sweep"
+author = "ChipWave factory"
+tags = ["alien", "pad", "sweep"]
+# Two filters in series: HP sweeping up while LP sweeps down (opposite LFO phase), screaming resonance at the crossover.
+
+[osc1]
+wave = "saw"
+unison = { voices = 4, detune = 18.0, spread = 0.7 }
+level = 0.6
+
+[osc2]
+wave = "square"
+pulse_width = 0.2
+octave = -1
+level = 0.4
+
+[filter1]
+model = "sallen_key"
+mode = "hp2"
+cutoff_hz = 300.0
+resonance = 0.75
+character = "dirty"
+
+[filter2]
+model = "ladder"
+mode = "lp24"
+cutoff_hz = 3000.0
+resonance = 0.6
+routing = "serial"
+
+[env.amp]
+attack_ms = 600
+decay_ms = 0
+sustain = 1.0
+release_ms = 1500
+
+[[lfo]]
+id = "lfo1"
+shape = "sine"
+rate = "2 bars"
+
+[[mod]]
+source = "lfo1"
+target = "filter1.cutoff"
+amount = 0.6
+
+[[mod]]
+source = "lfo1"
+target = "filter2.cutoff"
+amount = -0.6
+
+[[fx]]
+type = "phaser"
+stages = 6
+rate_hz = 0.2
+depth = 0.5
+feedback = 0.4
+mix = 0.3
+
+[[fx]]
+type = "reverb"
+size = 0.85
+decay_s = 5.0
+mix = 0.35

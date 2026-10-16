@@ -1,0 +1,49 @@
+format = "chipwave-patch"
+version = 1
+name = "Downlifter"
+author = "ChipWave factory"
+tags = ["psytrance", "fx", "downlifter"]
+# Reverse of the riser: LP closes and pitch falls over 2 bars.
+
+[osc1]
+wave = "saw"
+unison = { voices = 3, detune = 15.0, spread = 0.6 }
+level = 0.5
+
+[noise]
+type = "pink"
+level = 0.6
+
+[filter1]
+model = "ladder"
+mode = "lp12"
+cutoff_hz = 12000.0
+resonance = 0.3
+
+[env.amp]
+attack_ms = 0
+decay_ms = "2 bars"
+sustain = 0.0
+release_ms = 200
+
+[env.mod]
+attack_ms = 0
+decay_ms = "2 bars"
+sustain = 0.0
+curve = "log"
+
+[[mod]]
+source = "env.mod"
+target = "filter1.cutoff"
+amount = 0.9
+
+[[mod]]
+source = "env.mod"
+target = "osc1.pitch"
+amount = 0.5
+
+[[fx]]
+type = "reverb"
+size = 0.9
+decay_s = 6.0
+mix = 0.45

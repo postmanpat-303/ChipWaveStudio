@@ -1,0 +1,63 @@
+format = "chipwave-patch"
+version = 1
+name = "Sci-Fi Zap"
+author = "ChipWave factory"
+tags = ["alien", "fx", "zap"]
+# FM laser with upward pitch flick then drop; random pan per note.
+
+[osc1]
+wave = "sine"
+octave = 1
+fm_amount = 0.6
+level = 0.7
+
+[osc2]
+wave = "sine"
+semi = 19
+level = 0.0
+
+[filter1]
+model = "svf"
+mode = "lp"
+cutoff_hz = 9000.0
+resonance = 0.3
+
+[env.amp]
+attack_ms = 0
+decay_ms = 220
+sustain = 0.0
+release_ms = 40
+
+[env.mod]
+attack_ms = 15
+decay_ms = 150
+sustain = 0.0
+curve = "exp"
+
+[[mod]]
+source = "env.mod"
+target = "osc1.pitch"
+amount = -0.7
+
+[[mod]]
+source = "env.mod"
+target = "osc1.fm_amount"
+amount = 0.4
+
+[[mod]]
+source = "random_per_note"
+target = "pan"
+amount = 0.6
+
+[[fx]]
+type = "delay"
+time = "1/16"
+feedback = 0.6
+ping_pong = true
+mix = 0.35
+
+[[fx]]
+type = "reverb"
+size = 0.6
+decay_s = 2.0
+mix = 0.25

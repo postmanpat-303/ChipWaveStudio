@@ -1,0 +1,77 @@
+format = "chipwave-patch"
+version = 1
+name = "Shimmer Cloud"
+author = "ChipWave factory"
+tags = ["alien", "pad", "shimmer"]
+# 'Granular-ish' without a granular engine: random-per-voice wavetable position + fast smoothed-random pitch micro-jitter, chorus, long reverb. A true granular osc is a later idea.
+
+[osc1]
+wave = "wavetable"
+table = "builtin:glass"
+position = 0.4
+unison = { voices = 8, detune = 10.0, spread = 1.0 }
+level = 0.6
+
+[osc2]
+wave = "sine"
+octave = 1
+level = 0.25
+
+[filter1]
+model = "svf"
+mode = "hp"
+cutoff_hz = 250.0
+resonance = 0.1
+
+[env.amp]
+attack_ms = 1200
+decay_ms = 0
+sustain = 1.0
+release_ms = 4000
+
+[[lfo]]
+id = "lfo1"
+shape = "smooth_random"
+rate_hz = 9.0
+mode = "per_voice"
+
+[[lfo]]
+id = "lfo2"
+shape = "triangle"
+rate = "4 bars"
+
+[[mod]]
+source = "lfo1"
+target = "osc1.fine"
+amount = 0.05
+
+[[mod]]
+source = "random_per_note"
+target = "osc1.wt_position"
+amount = 0.5
+
+[[mod]]
+source = "lfo2"
+target = "osc1.wt_position"
+amount = 0.3
+
+[[fx]]
+type = "chorus"
+rate_hz = 0.4
+depth = 0.7
+voices = 4
+mix = 0.5
+
+[[fx]]
+type = "delay"
+time = "1/4"
+feedback = 0.55
+ping_pong = true
+mix = 0.3
+
+[[fx]]
+type = "reverb"
+size = 1.0
+decay_s = 9.0
+damping = 0.3
+mix = 0.55

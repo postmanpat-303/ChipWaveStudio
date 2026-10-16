@@ -1,0 +1,56 @@
+format = "chipwave-patch"
+version = 1
+name = "Noise Riser 8 bars"
+author = "ChipWave factory"
+tags = ["psytrance", "fx", "riser"]
+# White noise through HP sweeping up over 8 bars (mod env synced), plus pitch-rising saw. Hold a note for 8 bars.
+
+[osc1]
+wave = "saw"
+level = 0.3
+
+[noise]
+type = "white"
+level = 0.8
+
+[filter1]
+model = "svf"
+mode = "hp"
+cutoff_hz = 150.0
+resonance = 0.45
+
+[env.amp]
+attack_ms = "8 bars"
+sustain = 1.0
+release_ms = 50
+
+[env.mod]
+attack_ms = "8 bars"
+sustain = 1.0
+release_ms = 0
+curve = "exp"
+
+[[mod]]
+source = "env.mod"
+target = "filter1.cutoff"
+amount = 0.9
+
+[[mod]]
+source = "env.mod"
+target = "osc1.pitch"
+amount = 0.5
+note = "+24 semitones over the riser"
+
+[[fx]]
+type = "phaser"
+stages = 8
+rate = "1/4"
+depth = 0.6
+feedback = 0.5
+mix = 0.4
+
+[[fx]]
+type = "reverb"
+size = 0.9
+decay_s = 5.0
+mix = 0.4

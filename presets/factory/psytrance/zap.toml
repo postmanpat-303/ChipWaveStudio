@@ -1,0 +1,48 @@
+format = "chipwave-patch"
+version = 1
+name = "Psy Zap"
+author = "ChipWave factory"
+tags = ["psytrance", "fx", "zap"]
+# Very fast pitch-dropping square, laser zap for offbeat ear candy.
+
+[osc1]
+wave = "square"
+pulse_width = 0.5
+octave = 2
+level = 0.8
+
+[filter1]
+model = "svf"
+mode = "bp"
+cutoff_hz = 3000.0
+resonance = 0.6
+key_track = 1.0
+
+[env.amp]
+attack_ms = 0
+decay_ms = 120
+sustain = 0.0
+release_ms = 20
+
+[env.mod]
+attack_ms = 0
+decay_ms = 80
+sustain = 0.0
+curve = "exp"
+
+[[mod]]
+source = "env.mod"
+target = "osc1.pitch"
+amount = 0.8
+
+[[mod]]
+source = "random_per_note"
+target = "filter1.cutoff"
+amount = 0.3
+
+[[fx]]
+type = "delay"
+time = "1/16"
+feedback = 0.5
+ping_pong = true
+mix = 0.3

@@ -1,0 +1,69 @@
+format = "chipwave-patch"
+version = 1
+name = "Flutter Warble"
+author = "ChipWave factory"
+tags = ["alien", "lead", "lfo"]
+# Triangle lead with fast S&H on pitch and smoothed random on cutoff: unstable 'alien voice' warble.
+
+[osc1]
+wave = "triangle"
+level = 0.7
+
+[osc2]
+wave = "amiga:sine32"
+semi = 7
+level = 0.35
+
+[filter1]
+model = "svf"
+mode = "lp"
+cutoff_hz = 2200.0
+resonance = 0.5
+key_track = 0.5
+
+[env.amp]
+attack_ms = 20
+decay_ms = 300
+sustain = 0.8
+release_ms = 400
+
+[macros]
+macro1 = "Flutter speed"
+
+[[lfo]]
+id = "lfo1"
+shape = "sample_hold"
+rate_hz = 14.0
+
+[[lfo]]
+id = "lfo2"
+shape = "smooth_random"
+rate_hz = 3.0
+
+[[mod]]
+source = "lfo1"
+target = "osc1.pitch"
+amount = 0.06
+note = "~±1 semitone flutter"
+
+[[mod]]
+source = "lfo2"
+target = "filter1.cutoff"
+amount = 0.4
+
+[[mod]]
+source = "macro1"
+target = "lfo1.rate"
+amount = 0.8
+
+[[fx]]
+type = "chorus"
+rate_hz = 1.2
+depth = 0.6
+mix = 0.4
+
+[[fx]]
+type = "delay"
+time = "1/8"
+feedback = 0.4
+mix = 0.25

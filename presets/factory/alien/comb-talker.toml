@@ -1,0 +1,69 @@
+format = "chipwave-patch"
+version = 1
+name = "Comb Talker"
+author = "ChipWave factory"
+tags = ["alien", "comb", "formant"]
+# Comb filter whose delay is tracked and modulated gives metallic 'talking' tone. Formant/vowel model (phase 2) swaps in when available: set filter1.model = "formant".
+
+[osc1]
+wave = "saw"
+level = 0.7
+
+[noise]
+type = "pink"
+level = 0.15
+
+[filter1]
+model = "comb"
+mode = "positive"
+cutoff_hz = 440.0
+resonance = 0.85
+damping = 0.4
+key_track = 1.0
+
+[filter2]
+model = "svf"
+mode = "bp"
+cutoff_hz = 1100.0
+resonance = 0.5
+routing = "serial"
+
+[env.amp]
+attack_ms = 10
+decay_ms = 200
+sustain = 0.7
+release_ms = 200
+
+[[lfo]]
+id = "lfo1"
+shape = "tracker_table"
+rate = "1/16"
+table = [0, 40, 10, 70, 25, 90, 5, 55]
+
+[[lfo]]
+id = "lfo2"
+shape = "triangle"
+rate_hz = 0.7
+
+[[mod]]
+source = "lfo1"
+target = "filter2.cutoff"
+amount = 0.7
+note = "'vowel' steps"
+
+[[mod]]
+source = "lfo2"
+target = "filter1.cutoff"
+amount = 0.15
+
+[[fx]]
+type = "distortion"
+mode = "soft"
+drive = 0.25
+mix = 0.5
+
+[[fx]]
+type = "delay"
+time = "3/16"
+feedback = 0.35
+mix = 0.2

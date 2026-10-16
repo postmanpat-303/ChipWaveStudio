@@ -1,0 +1,63 @@
+format = "chipwave-patch"
+version = 1
+name = "Psy Pluck"
+author = "ChipWave factory"
+tags = ["psytrance", "pluck"]
+# Short resonant pluck for 1/16 sequences; macro1 = length.
+
+[osc1]
+wave = "square"
+pulse_width = 0.3
+level = 0.7
+
+[osc2]
+wave = "saw"
+semi = 12
+fine = 7
+level = 0.4
+
+[filter1]
+model = "sallen_key"
+mode = "lp2"
+cutoff_hz = 900.0
+resonance = 0.55
+key_track = 0.6
+env_amount = 0.7
+
+[env.amp]
+attack_ms = 0
+decay_ms = 160
+sustain = 0.0
+release_ms = 60
+
+[env.filter]
+attack_ms = 0
+decay_ms = 110
+sustain = 0.0
+release_ms = 40
+curve = "exp"
+
+[macros]
+macro1 = "Length"
+
+[[mod]]
+source = "macro1"
+target = "env.filter.decay"
+amount = 0.5
+
+[[mod]]
+source = "macro1"
+target = "env.amp.decay"
+amount = 0.5
+
+[[fx]]
+type = "delay"
+time = "3/16"
+feedback = 0.45
+mix = 0.3
+
+[[fx]]
+type = "reverb"
+size = 0.5
+decay_s = 1.8
+mix = 0.15

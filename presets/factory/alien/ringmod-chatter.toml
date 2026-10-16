@@ -1,0 +1,61 @@
+format = "chipwave-patch"
+version = 1
+name = "Ring-Mod Chatter"
+author = "ChipWave factory"
+tags = ["alien", "fm", "ring"]
+# Osc2 at non-harmonic ratio, ring-mod + FM driven by S&H gives robotic chatter.
+
+[osc1]
+wave = "sine"
+level = 0.6
+fm_amount = 0.35
+ring_mix = 0.6
+
+[osc2]
+wave = "square"
+semi = 11
+fine = 37
+level = 0.5
+
+[filter1]
+model = "svf"
+mode = "bp"
+cutoff_hz = 1800.0
+resonance = 0.4
+key_track = 0.6
+
+[env.amp]
+attack_ms = 2
+decay_ms = 150
+sustain = 0.5
+release_ms = 150
+loop = true
+note = "looping env = rhythmic chatter"
+
+[[lfo]]
+id = "lfo1"
+shape = "sample_hold"
+rate = "1/32"
+
+[[mod]]
+source = "lfo1"
+target = "osc1.fm_amount"
+amount = 0.5
+
+[[mod]]
+source = "lfo1"
+target = "osc2.semi"
+amount = 0.2
+
+[[fx]]
+type = "bitcrush"
+bits = 8
+rate_reduce = 2
+mix = 0.4
+
+[[fx]]
+type = "delay"
+time = "1/16"
+feedback = 0.5
+ping_pong = true
+mix = 0.3

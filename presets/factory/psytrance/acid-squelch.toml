@@ -1,0 +1,71 @@
+format = "chipwave-patch"
+version = 1
+name = "Acid Squelch"
+author = "ChipWave factory"
+tags = ["psytrance", "acid", "lead"]
+# 303-style: diode LP, high resonance, accent (velocity > 100) boosts env + res, slide via glide on overlapping notes (03 porta also works).
+
+[osc1]
+wave = "saw"
+level = 0.9
+
+[filter1]
+model = "diode"
+mode = "lp24"
+cutoff_hz = 520.0
+resonance = 0.82
+drive = 0.45
+character = "dirty"
+key_track = 0.3
+env_amount = 0.6
+
+[env.amp]
+attack_ms = 1
+decay_ms = 300
+sustain = 0.7
+release_ms = 30
+
+[env.filter]
+attack_ms = 0
+decay_ms = 180
+sustain = 0.0
+release_ms = 40
+curve = "exp"
+
+[voice]
+mode = "mono"
+glide_ms = 60
+legato = true
+
+[macros]
+macro1 = "Squelch"
+
+[[mod]]
+source = "velocity"
+target = "filter1.env_amount"
+amount = 0.4
+note = "accent"
+
+[[mod]]
+source = "velocity"
+target = "filter1.resonance"
+amount = 0.1
+
+[[mod]]
+source = "macro1"
+target = "filter1.cutoff"
+amount = 0.8
+
+[[fx]]
+type = "distortion"
+mode = "foldback"
+drive = 0.35
+mix = 0.5
+
+[[fx]]
+type = "delay"
+time = "3/16"
+feedback = 0.4
+ping_pong = true
+hp_hz = 300
+mix = 0.22

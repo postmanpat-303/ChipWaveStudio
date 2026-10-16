@@ -1,0 +1,172 @@
+# Pattern Editor: the core screen
+
+Del: *"the pattern editor is the main part, definitely want arrow keys to move around. use standard keys that are widely used."*
+
+![Pattern editor mockup](mockups/pattern_editor.png) (SVG: [`mockups/pattern_editor.svg`](mockups/pattern_editor.svg)). The mockup shows the effect autocomplete open on channel 1.
+
+The defaults follow the conventions most trackers share (FastTracker 2, ProTracker, OpenMPT, Renoise), plus normal desktop shortcuts, so anyone who has used a tracker or a text editor feels at home. Everything can be remapped (§9).
+
+## 1. Layout
+- **Rows** run down the screen, **channels** across. Row numbers are in hex by default (decimal is an option), with a highlight every 4 rows (beat) and every 16 (bar). Both values are configurable.
+- Each channel has **columns**: `Note` (C-4, `---` empty, `===`/`^^^` note-off), `Instr` (01–FF), `Vol` (00–40, or `..`), and 1–8 **effect columns** (`cmd` 2 hex + `arg` 2 hex). Cursor **sub-columns** step through the digits.
+- **Channel header:** name, colour, **S**olo and **M**ute buttons, a mini level meter, and a collapse arrow that shrinks a channel to the note column only.
+- **Follow playback:** the playing row stays centred (`Scroll Lock` or the toolbar toggle). With follow off, a play marker moves and the cursor stays put.
+- **Edit step:** after a note is entered the cursor moves down *step* rows (0–16, default 1).
+
+## 2. Colours and readability (A2 rules)
+On the dark CRT display: notes white `#FFFFFF`, instrument green `#7CFF9B`, volume cyan `#22E3FF`, effects yellow `#FFD400`, empty cells dim blue `#4F6FA0`, beat rows `#24477F`. The cursor is a yellow outline and the current row a blue bar. Yellow appears only on the dark display. Every colour pair meets WCAG AA (4.5:1) against `#0A1F45`, and a high-contrast theme and a colour-blind palette (effects in orange, instruments in light blue) are included.
+
+## 3. Scaling
+Uses [UI_SCALING.md](UI_SCALING.md). The font is monospace (bundled **JetBrains Mono** or **DejaVu Sans Mono**; both are open licences, to be confirmed at bundling). Font size scales with `pixels_per_point` and `Ctrl + mouse wheel` changes pattern zoom only. Channels that don't fit scroll horizontally, and the cursor channel is always kept visible.
+
+## 4. Keymap (defaults)
+macOS uses **Cmd** wherever Windows/Linux use **Ctrl**, and **Option** for **Alt**. Mac laptops lack Insert/Home/End/PgUp/PgDn, so `Fn+↑/↓/←/→` (PgUp/PgDn/Home/End) and `Cmd+I` / `Cmd+⌫` (insert/delete row) also work.
+
+### Navigation
+| Action | Win / Linux | macOS |
+|---|---|---|
+| Row up / down | `↑` / `↓` | same |
+| Column / sub-column left / right | `←` / `→` (wraps into the next channel) | same |
+| Next / previous channel | `Tab` / `Shift+Tab` | same |
+| Up / down 16 rows (configurable) | `PgUp` / `PgDn` | `Fn+↑` / `Fn+↓` |
+| First / last row of block | `Home` / `End` (first press goes to row start / channel first column) | `Fn+←` / `Fn+→` |
+| Song start / end (first / last block) | `Ctrl+Home` / `Ctrl+End` | `Cmd+Fn+←/→` |
+| Previous / next block | `Ctrl+←` / `Ctrl+→`, or numpad `-`/`+` in sequence view | `Cmd+←/→` |
+| Jump to row by beat | `Ctrl+1`…`Ctrl+4` (rows 0, ¼, ½, ¾) | `Cmd+1…4` |
+
+### Note entry (FT2 / OpenMPT two-row piano)
+```
+ S D   G H J   2 3   5 6 7        upper row = black keys
+Z X C V B N M , Q W E R T Y U I    Z = C (base octave), Q = C (base octave + 1)
+```
+| Action | Key |
+|---|---|
+| Notes | `Z S X D C V G B H N J M` = C … B (base octave); `Q 2 W 3 E R 5 T 6 Y 7 U I 9 O 0 P` = next octave up |
+| Note off | `1` (FT2 style) or `` ` `` / `=` (OpenMPT) |
+| Base octave down / up | numpad `/` / `*`, or `F1`–`F8` = octave 1–8 |
+| Octave −/+ (alt) | numpad `-` / `+` when the cursor is in a note column |
+| Hex digits | `0–9 A–F` in instrument/volume/effect columns |
+| Clear cell | `Delete` (current cell, cursor stays) |
+| Delete and pull up | `Backspace` deletes the row above the cursor in this channel and pulls the rest up (FT2 style) |
+| Insert row (channel) | `Insert` pushes down; `Shift+Insert` inserts across all channels |
+| Delete row (channel) | `Shift+Backspace` or `Shift+Delete`; with Ctrl it applies to all channels |
+| Edit step −/+ | `Ctrl+[` / `Ctrl+]` |
+| Edit mode on/off | `Esc` (Space too when "Space = edit" is chosen) |
+| Record from MIDI keyboard | in edit mode, MIDI notes are entered with velocity → volume ([MIDI_VST.md](MIDI_VST.md)) |
+
+### Playback
+| Action | Key |
+|---|---|
+| Play / stop song | `Space` |
+| Play block (loop) | `Enter` (at block start); `Shift+Enter` = play song from this row |
+| Play from cursor row | `Ctrl+Enter` (OpenMPT-like) |
+| Play row (audition) | `4` on numpad or `Alt+↓` plays this row and moves down |
+| Stop | `Space` while playing, or `F8` |
+| Follow playback | `Scroll Lock` / `Ctrl+F` |
+
+### Editing and selection
+| Action | Win / Linux | macOS |
+|---|---|---|
+| Select | `Shift+arrows` / `Shift+PgUp/PgDn/Home/End`, mouse drag | same |
+| Select channel / block | `Ctrl+A` once = channel, twice = whole block | `Cmd+A` |
+| Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | `Cmd+C/X/V` |
+| Mix-paste (only into empty cells) | `Ctrl+Shift+V` | `Cmd+Shift+V` |
+| Undo / redo | `Ctrl+Z` / `Ctrl+Y` (also `Ctrl+Shift+Z`) | `Cmd+Z` / `Cmd+Shift+Z` |
+| Transpose selection ±1 semitone | `Ctrl++` / `Ctrl+-` | `Cmd++/-` |
+| Transpose ±1 octave | `Ctrl+Shift++` / `Ctrl+Shift+-` | `Cmd+Shift++/-` |
+| Interpolate (volume or effect arg, first→last row) | `Ctrl+I` | `Cmd+Shift+I` (since `Cmd+I` is insert row on Mac) |
+| Humanise (random ±volume / micro-delay) | `Ctrl+H` | `Cmd+Option+H` (Cmd+H hides the app) |
+| Set instrument of selection to current | `Ctrl+R` | `Cmd+R` |
+| Mute / solo channel | `F9` / `F10`, or `Ctrl+M` / `Ctrl+Shift+M` | `Cmd+M` is minimise on Mac, so `Option+M` / `Option+Shift+M` |
+| Effect autocomplete | `Ctrl+Space` | `Cmd+Option+Space` (Ctrl+Space is input source on Mac) |
+
+### File and app
+| Action | Win / Linux | macOS |
+|---|---|---|
+| New / Open / Save / Save as | `Ctrl+N` / `Ctrl+O` / `Ctrl+S` / `Ctrl+Shift+S` | `Cmd+…` |
+| Export WAV/MP3 | `Ctrl+E` | `Cmd+E` |
+| Quit | `Ctrl+Q` (Alt+F4 on Windows) | `Cmd+Q` |
+| Command palette | `Ctrl+Shift+P` | `Cmd+Shift+P` |
+| Switch screen: pattern / arranger / sound / samples | `F2` / `F3` / `F4` / `F5` | `Fn+F…` or `Cmd+1…4` (set in prefs) |
+
+## 5. Effect commands
+Effect columns accept classic OctaMED/ProTracker commands (page 1, binary-compatible with MMD) plus ChipWave extended commands (§6). Main OctaMED commands, from [OCTAMED_SPEC.md §5](OCTAMED_SPEC.md):
+
+| Cmd | Name | Arg |
+|---|---|---|
+| 00 | Arpeggio | x, y semitones |
+| 01 / 02 | Slide up / down | speed |
+| 03 | Portamento to note | speed |
+| 04 | Vibrato (OctaMED depth ×2) | speed, depth |
+| 05 / 06 | Porta + vol slide / vibrato + vol slide | slide |
+| 07 | Tremolo | speed, depth |
+| 08 | Hold & decay | decay, hold |
+| 09 | Secondary tempo (ticks/line) | 01–20 |
+| 0B | Position jump | position |
+| 0C | Set volume | 00–40 (or hex mode) |
+| 0D / 0A | Volume slide | up, down |
+| 0F | Tempo / misc (00 break, 01–F0 tempo, F1 play twice, F2 delay ½ line, F3 play ×3, F8/F9 filter off/on, FE end, FF note off) | — |
+| 11 / 12 | Fine slide up / down | amount |
+| 15 | Finetune | F8–07 |
+| 16 | Loop | count |
+| 18 | Cut note at tick | tick |
+| 19 | Sample offset | ×256 |
+| 1A / 1B | Fine volume up / down | amount |
+| 1D | Pattern break to line | line |
+| 1E | Repeat row | count |
+| 1F | Note delay / retrigger | delay, retrig |
+| 2E | Set pan (SoundStudio) | pan |
+
+## 6. Context-aware effect autocomplete
+Typing hex codes is fast for experts but hard to learn. ChipWave adds a dropdown that **knows what's on this channel**.
+
+**Opening:** `Ctrl+Space` in an effect column, or simply start typing a **letter** that isn't a hex-only context (e.g. `cut`, `rev`, `delay`). An "Effect list" item is also on the right-click menu. Typing hex digits keeps working as before and never opens the list, so experts are unaffected.
+
+**What it lists** (in this order, grouped and tagged):
+1. **SYNTH:** the current instrument's patch parameters, e.g. filter 1 cutoff/resonance/drive, osc PWM, wavetable position, LFO rate, the 4 macros.
+2. **FX:** every device in that patch's FX chain, e.g. *Delay · time*, *Reverb · mix* ([SOUND_DESIGN.md §6](SOUND_DESIGN.md)).
+3. **CLAP / VST3 / LV2:** automatable parameters of plugins on this channel, from the host's parameter list ([PLUGIN_MANAGER.md](PLUGIN_MANAGER.md)). Plugins with hundreds of parameters show favourites and recently used ones first.
+4. **CMD:** the standard tracker commands from §5, with plain-English names.
+
+"Current instrument" means the instrument on the nearest note above the cursor in this channel, or the selected instrument if there is none.
+
+**Each row shows:** a tag, a **human name**, its **current value** (in real units: Hz, %, ms, synced note values), its **range**, and the **code it inserts**.
+
+**Using it:** typing filters it (fuzzy: "fc" matches *Filter cutoff*), `↑↓` moves, `Enter` or `Tab` inserts the command, and the cursor jumps to the argument digits. `Esc` closes it. Hovering or moving over an item **previews** it live on the playing sound (a temporary parameter offset, released on close). After inserting, a small value slider appears over the argument; drag it or type hex.
+
+**How the codes are stored (honest about compatibility):** classic commands go in page-1 effect columns and stay MMD-compatible. Parameter commands are **ChipWave extended commands** on a second command page, like MMD2's multiple command pages, so they never clash with OctaMED's 00–FF space.
+| Shown as | Meaning | Arg |
+|---|---|---|
+| `Fcxx` / `Frxx` / `Fdxx` | Filter 1 cutoff / resonance / drive (`F2..` for filter 2) | 00–FF mapped across the parameter's range (cutoff in pitch, so it's musical) |
+| `Mnxx` | Macro n (1–4) | 00–FF |
+| `Dnxx` | FX chain device n main parameter (sub-parameter is picked in the dropdown and stored with it) | 00–FF |
+| `Pn ppxx` | Plugin slot n, parameter index pp, value xx | 00–FF normalised; plugins with more than 256 parameters use a parameter-map table saved in the song |
+The two letters are display mnemonics. Internally each is `(target id, value)`, resolved through the song's per-channel target table, so renaming or moving a device doesn't break patterns. MMD export bakes extended commands into automation where possible and lists the ones it had to drop.
+
+## 7. Advanced edits
+- **Interpolate:** linear (default) or curved, on volume or effect arguments; it keeps the command code from the first row.
+- **Humanise:** volume ±n and/or 1–3 tick note delay (`1F`) with a seed, so it can be undone or rerolled.
+- **Transpose:** skips drum channels marked "no transpose" and clamps to the sample range, with a status message.
+- **Chord entry:** with `Shift` held, notes spread across the next channels (OctaMED "spread" mode).
+
+## 8. Mute / solo
+Mute affects playback and export (with an export option "ignore mutes"). Solo is exclusive; `Ctrl+click` adds to the solo set. The state is saved in `.cwt` but not in MMD.
+
+## 9. Remappable keymap
+`~/.config/chipwave/keymap.toml` (`%APPDATA%\ChipWave\keymap.toml` on Windows, `~/Library/Application Support/ChipWave/keymap.toml` on macOS). Only overrides are stored; defaults are built in. Presets: *ChipWave* (default), *FastTracker 2*, *ProTracker*, *OpenMPT*, *OctaMED*.
+```toml
+preset = "chipwave"
+[pattern]
+"Ctrl+Plus"   = "transpose_semitone_up"
+"Ctrl+Minus"  = "transpose_semitone_down"
+"PageUp"      = { action = "cursor_up", rows = 16 }
+"F9"          = "channel_mute"
+[notes]
+layout = "ft2"          # or "piano_qwertz", "azerty"
+base_octave = 4
+note_off = ["1", "Equal"]
+```
+Keys are matched by **physical position** for note entry (so QWERTZ/AZERTY layouts still get the piano shape) and by **logical key** for shortcuts like Ctrl+Z. A key-conflict checker and a "press a key to assign" dialog come with the preferences screen.
+
+## 10. Rust notes
+Use egui `InputState` key events plus `egui::Key` physical scancodes (via `RawInput`/winit `PhysicalKey`) for note entry. The grid is drawn with one painter call per visible cell run (no widgets per cell), and only visible rows are laid out, so 3 200-line blocks scroll smoothly.

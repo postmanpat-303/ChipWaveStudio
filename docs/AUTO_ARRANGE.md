@@ -20,6 +20,7 @@ A template is a small TOML grammar plus a default energy curve, user-editable in
 | Pop | I V C V C B C C O | 4–8 bar intro, 16-bar verse/chorus | Key change before final chorus, drum fill, thin verse 2 |
 | Chiptune demo-scene | I V C V′ C′ B F C+ O | 8-bar units | Arpeggio variants, echo via tracker effects, octave shift, fast fills |
 | Club build/drop | I Bd(build) C(drop) Bk V Bd C O | 16/32 bars | Filter sweep, density increase into the drop, mute kick in the breakdown |
+| Psytrance (145) | I(32) V Bd F C(drop) V Bd F C O(32) | 16-bar units, 7:00 default | Filter sweeps, mute kick in the breakdown, risers into drops, echo. Full template in [STARTER_SOUNDS.md](STARTER_SOUNDS.md) |
 | Ambient | I V B V′ O, long repeats | 16–32 bars | Density reduce, slow filter, ritardando outro |
 
 ```toml
@@ -105,7 +106,7 @@ Variation intensity scales with the **Variation %** knob. Transforms are chosen 
 - Keys: `G` generate, `R` reroll, `L` lock, `Enter` accept, `Esc` / `Ctrl+Z` undo.
 
 ## 7. Fun & fast
-- **Quick-start templates:** File → New from template (Chiptune, Pop, Club, Ambient, Amiga MOD 4-channel). Each comes with a tempo, instrument slots filled from the bundled sample pack, a drum block and an empty tagged Verse/Chorus.
+- **Quick-start templates:** File → New from template (Chiptune, Pop, Club, **Psytrance 145**, Ambient, Amiga MOD 4-channel). Each comes with a tempo, instrument slots filled from the bundled sample pack, a drum block and an empty tagged Verse/Chorus.
 - **First track in 5 minutes:** a skippable onboarding overlay. (1) Pick a template. (2) Type a melody in the Chorus block (keyboard as piano, step highlighted). (3) Press 🎲 for a bass line from the chord guess. (4) Fill to length 2:30. (5) Export. Progress dots, no account, never pops up again once dismissed.
 - **Randomise patch:** 🎲 on the sound designer randomises within musical limits (cutoff 200 Hz–8 kHz, envelope sane, levels capped) and keeps a history so you can step back.
 - **Happy-accident dice:** in any block, randomly applies one transform from §4 to the selection (also seeded and undoable), e.g. "inverted chords on ch 2".

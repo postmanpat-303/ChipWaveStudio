@@ -1,0 +1,71 @@
+format = "chipwave-patch"
+version = 1
+name = "Supersaw Lead"
+author = "ChipWave factory"
+tags = ["psytrance", "lead", "supersaw"]
+# 7-voice supersaw, bright LP, light glide.
+
+[osc1]
+wave = "saw"
+unison = { voices = 7, detune = 28.0, spread = 0.9, blend = 0.7 }
+level = 0.75
+
+[osc2]
+wave = "saw"
+octave = 1
+level = 0.25
+
+[filter1]
+model = "svf"
+mode = "lp"
+cutoff_hz = 7500.0
+resonance = 0.15
+key_track = 0.5
+env_amount = 0.2
+
+[env.amp]
+attack_ms = 5
+decay_ms = 400
+sustain = 0.8
+release_ms = 250
+
+[env.filter]
+attack_ms = 0
+decay_ms = 600
+sustain = 0.4
+release_ms = 200
+
+[voice]
+mode = "poly"
+voices = 8
+glide_ms = 25
+
+[[lfo]]
+id = "lfo1"
+shape = "sine"
+rate_hz = 5.5
+fade_in_ms = 300
+
+[[mod]]
+source = "lfo1"
+target = "osc1.fine"
+amount = 0.08
+note = "delayed vibrato"
+
+[[mod]]
+source = "modwheel"
+target = "lfo1.depth"
+amount = 1.0
+
+[[fx]]
+type = "delay"
+time = "1/8"
+feedback = 0.35
+ping_pong = true
+mix = 0.25
+
+[[fx]]
+type = "reverb"
+size = 0.6
+decay_s = 2.5
+mix = 0.22

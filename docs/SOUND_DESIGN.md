@@ -258,3 +258,6 @@ Why not MVP: the MVP must prove the tracker core (timing, sample playback, MMD l
 10. A. Huovilainen, "Non-linear digital implementation of the Moog ladder filter", DAFx 2004.
 11. V. Välimäki, A. Huovilainen, "Antialiasing oscillators in subtractive synthesis", IEEE Signal Processing Magazine, 2007 (PolyBLEP family).
 12. R. Bristow-Johnson, "Audio EQ Cookbook" (W3C note).
+
+## Factory presets
+The psytrance and alien starter pack, with concrete parameter values, is in [STARTER_SOUNDS.md](STARTER_SOUNDS.md).

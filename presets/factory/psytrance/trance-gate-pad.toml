@@ -1,0 +1,74 @@
+format = "chipwave-patch"
+version = 1
+name = "Trance Gate Pad"
+author = "ChipWave factory"
+tags = ["psytrance", "pad", "gate"]
+# Wide detuned pad chopped in 1/16 by a square LFO on amp level.
+
+[osc1]
+wave = "saw"
+unison = { voices = 6, detune = 22.0, spread = 0.8 }
+level = 0.6
+
+[osc2]
+wave = "square"
+octave = 1
+pulse_width = 0.35
+level = 0.3
+
+[filter1]
+model = "svf"
+mode = "lp"
+cutoff_hz = 2800.0
+resonance = 0.2
+key_track = 0.4
+
+[env.amp]
+attack_ms = 350
+decay_ms = 500
+sustain = 0.85
+release_ms = 900
+
+[macros]
+macro1 = "Gate depth"
+
+[[lfo]]
+id = "lfo1"
+shape = "square"
+rate = "1/16"
+phase = 0
+mode = "global"
+
+[[lfo]]
+id = "lfo2"
+shape = "sine"
+rate = "2 bars"
+
+[[mod]]
+source = "lfo1"
+target = "amp.level"
+amount = -0.9
+note = "gate depth = macro1"
+
+[[mod]]
+source = "lfo2"
+target = "filter1.cutoff"
+amount = 0.25
+
+[[mod]]
+source = "macro1"
+target = "mod1.amount"
+amount = 1.0
+
+[[fx]]
+type = "chorus"
+rate_hz = 0.3
+depth = 0.4
+mix = 0.3
+
+[[fx]]
+type = "reverb"
+size = 0.8
+decay_s = 4.0
+damping = 0.5
+mix = 0.3

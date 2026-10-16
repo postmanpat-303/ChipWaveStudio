@@ -1,0 +1,45 @@
+format = "chipwave-patch"
+version = 1
+name = "Noise Sweep 1 bar"
+author = "ChipWave factory"
+tags = ["psytrance", "fx", "sweep"]
+# Band-passed noise sweeping by synced triangle LFO; use as transition wash.
+
+[noise]
+type = "white"
+level = 0.9
+
+[filter1]
+model = "svf"
+mode = "bp"
+cutoff_hz = 1200.0
+resonance = 0.7
+
+[env.amp]
+attack_ms = 40
+decay_ms = 0
+sustain = 1.0
+release_ms = 400
+
+[[lfo]]
+id = "lfo1"
+shape = "triangle"
+rate = "1 bar"
+phase = 270
+
+[[mod]]
+source = "lfo1"
+target = "filter1.cutoff"
+amount = 0.85
+
+[[fx]]
+type = "chorus"
+rate_hz = 0.5
+depth = 0.5
+mix = 0.3
+
+[[fx]]
+type = "reverb"
+size = 0.7
+decay_s = 3.0
+mix = 0.3
