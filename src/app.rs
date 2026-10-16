@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod fxview;
+mod sampleview;
+mod topbar;
 
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect
 const SUBCOLS: usize = 9;
@@ -21,6 +23,7 @@ enum View {
     Arranger,
     Mixer,
     Fx,
+    Sample,
 }
 
 /// muted clip palette for the arranger (block id -> colour)
@@ -78,6 +81,13 @@ pub struct App {
     arr_sel: usize,
     arr_drag: Option<usize>,
     fx_drag: Option<usize>,
+    recent: Vec<String>,
+    session: Option<crate::recovery::Session>,
+    last_autosave: std::time::Instant,
+    last_heartbeat: std::time::Instant,
+    /// crashed sessions found at start (recovery dialog)
+    orphans: Vec<crate::recovery::Orphan>,
+    smp: sampleview::SampleEd,
     /// clip to highlight briefly after duplicate/insert, with start time
     arr_flash: Option<(Vec<usize>, f64)>,
     /// selected song-order entries (multi-select); arr_sel is the anchor
@@ -113,6 +123,7 @@ pub struct App {
     themed: bool,
     theme: theme::Theme,
     show_help: bool,
+    show_about: bool,
     /// key events taken from egui before it can use them for focus navigation
     pending: Vec<egui::Event>,
 }
@@ -126,6 +137,22 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         song,
         engine: Engine::new(48000.0),
     }));
+    // crash recovery: find sessions left behind, then start our own
+    let rroot = crate::recovery::root();
+    let orphans = rroot
+        .as_deref()
+        .map(|r| crate::recovery::find_orphans(r, None))
+        .unwrap_or_default();
+    let session = rroot.as_deref().and_then(|r| {
+        let t = shared
+            .lock()
+            .map(|s| s.song.title.clone())
+            .unwrap_or_default();
+        crate::recovery::Session::start(r, &t, open.as_deref())
+    });
+    if let Some(sess) = &session {
+        install_panic_hook(shared.clone(), sess.dir.clone());
+    }
     let (audio, audio_err) = match audio::start(shared.clone(), crate::settings::load().buffer) {
         Ok(a) => (Some(a), None),
         Err(e) => (None, Some(e)),
@@ -164,6 +191,12 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         arr_sel: 0,
         arr_drag: None,
         fx_drag: None,
+        recent: crate::settings::load().recent,
+        session,
+        last_autosave: std::time::Instant::now(),
+        last_heartbeat: std::time::Instant::now(),
+        orphans,
+        smp: Default::default(),
         arr_flash: None,
         arr_multi: Default::default(),
         arr_clip: vec![],
@@ -191,6 +224,7 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         themed: false,
         theme: crate::settings::load().theme(),
         show_help: false,
+        show_about: false,
         pending: vec![],
     };
     let set = crate::settings::load();
@@ -218,6 +252,20 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
     };
     eframe::run_native("ChipWave Tracker", opts, Box::new(|_cc| Ok(Box::new(app))))
         .map_err(|e| e.to_string())
+}
+
+/// On panic: try one emergency snapshot of the song, then the default hook.
+fn install_panic_hook(shared: SharedRef, dir: PathBuf) {
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let song = match shared.try_lock() {
+            Ok(g) => Some(g.song.clone()),
+            Err(std::sync::TryLockError::Poisoned(p)) => Some(p.into_inner().song.clone()),
+            Err(_) => None,
+        };
+        crate::recovery::emergency(&dir, song.as_ref(), &info.to_string());
+        prev(info);
+    }));
 }
 
 fn note_key(k: Key) -> Option<i32> {
@@ -417,14 +465,95 @@ impl App {
             });
         }
         let path = self.path.clone().unwrap();
-        let r = self.with(|s| fileio::save_cwt(&s.song, &path));
+        let r = self.with(|s| crate::recovery::atomic_save(&s.song, &path, true));
         self.status = match r {
             Ok(()) => {
                 self.dirty = false;
+                self.add_recent(&path);
                 format!("Saved {}", path.display())
             }
-            Err(e) => format!("Save failed: {e}"),
+            Err(e) => format!("Save failed: {e} (old file kept; try Save As)"),
         };
+    }
+
+    fn add_block(&mut self) {
+        let ch = self.with(|s| s.song.channels);
+        let n = self.with(|s| {
+            s.song.patterns.push(Pattern::new(
+                &format!("Block {:02}", s.song.patterns.len()),
+                ROWS,
+                ch,
+            ));
+            s.song.order.push(s.song.patterns.len() - 1);
+            s.song.patterns.len() - 1
+        });
+        self.pattern = n;
+        self.row = 0;
+        self.dirty = true;
+        self.status = format!("Added block {n:02}");
+    }
+
+    fn set_channels(&mut self, ch: usize) {
+        let ch = ch.clamp(1, MAX_CHANNELS);
+        self.with(|s| {
+            s.song.channels = ch;
+            s.song.channel_names.resize(ch, "Ch".into());
+            for p in &mut s.song.patterns {
+                for r in &mut p.cells {
+                    r.resize(ch, Cell::default());
+                }
+            }
+        });
+        if self.ch >= ch {
+            self.ch = ch - 1;
+        }
+        self.dirty = true;
+    }
+
+    fn add_recent(&mut self, p: &std::path::Path) {
+        let full = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let mut txt = full.display().to_string();
+        if let Some(t) = txt.strip_prefix(r"\\?\") {
+            txt = t.to_string();
+        }
+        crate::settings::push_recent(&mut self.recent, &txt);
+        self.save_settings();
+        let title = self.with(|s| s.song.title.clone());
+        if let Some(sess) = &self.session {
+            sess.write_info(&title, Some(p));
+        }
+    }
+
+    /// open a .cwt by path (File > Recent, drag and drop)
+    fn open_path(&mut self, p: PathBuf) {
+        match fileio::load_cwt(&p) {
+            Ok(song) => {
+                self.with(|s| {
+                    s.engine.stop();
+                    s.song = song;
+                });
+                self.path = Some(p.clone());
+                self.reset_cursor();
+                self.add_recent(&p);
+                self.status = format!("Opened {}", p.display());
+            }
+            Err(e) => self.status = format!("Open failed: {e}"),
+        }
+    }
+
+    /// periodic autosave + session heartbeat (called every frame, cheap)
+    fn tick_safety(&mut self) {
+        let Some(sess) = &self.session else { return };
+        if self.last_heartbeat.elapsed() >= crate::recovery::HEARTBEAT_EVERY {
+            self.last_heartbeat = std::time::Instant::now();
+            sess.heartbeat();
+        }
+        if self.dirty && self.last_autosave.elapsed() >= crate::recovery::AUTOSAVE_EVERY {
+            self.last_autosave = std::time::Instant::now();
+            let song = self.with(|s| s.song.clone());
+            sess.autosave(song);
+            self.status = "Autosaved (recovery copy)".into();
+        }
     }
 
     fn open(&mut self) {
@@ -434,18 +563,7 @@ impl App {
         else {
             return;
         };
-        match fileio::load_cwt(&p) {
-            Ok(song) => {
-                self.with(|s| {
-                    s.engine.stop();
-                    s.song = song;
-                });
-                self.path = Some(p.clone());
-                self.reset_cursor();
-                self.status = format!("Opened {}", p.display());
-            }
-            Err(e) => self.status = format!("Open failed: {e}"),
-        }
+        self.open_path(p);
     }
 
     fn reset_cursor(&mut self) {
@@ -640,7 +758,8 @@ impl App {
                         View::Pattern => View::Arranger,
                         View::Arranger => View::Mixer,
                         View::Mixer => View::Fx,
-                        View::Fx => View::Pattern,
+                        View::Fx => View::Sample,
+                        View::Sample => View::Pattern,
                     }
                 }
                 Key::Num1 if cmd => {
@@ -650,6 +769,7 @@ impl App {
                 Key::Num2 if cmd => self.view = View::Arranger,
                 Key::Num3 if cmd => self.view = View::Mixer,
                 Key::Num4 if cmd => self.view = View::Fx,
+                Key::Num5 if cmd => self.view = View::Sample,
                 Key::A if cmd => {
                     let last = self.rows() - 1;
                     let chsel = Some(((0, self.ch), (last, self.ch)));
@@ -659,7 +779,7 @@ impl App {
                         chsel
                     };
                 }
-                Key::ArrowUp | Key::ArrowDown if self.view == View::Fx => {
+                Key::ArrowUp | Key::ArrowDown if matches!(self.view, View::Fx | View::Sample) => {
                     let n = self.with(|s| s.song.instruments.len()).max(1) as i32;
                     let d = if key == Key::ArrowUp { -1 } else { 1 };
                     self.instr = ((self.instr as i32 - 1 + d).rem_euclid(n) + 1) as u8;
@@ -702,6 +822,7 @@ impl App {
                     };
                     self.col = 0;
                 }
+                Key::Space if self.view == View::Sample && !m.shift => self.sample_preview_toggle(),
                 Key::Space => self.play(if m.shift { 0 } else { 1 }),
                 Key::Enter => self.play(if cmd || m.shift { 2 } else { 3 }),
                 Key::Plus | Key::Equals if cmd => self.set_zoom(self.zoom + 0.25),
@@ -711,9 +832,11 @@ impl App {
                     self.edit = !self.edit;
                     self.status = format!("Edit mode {}", if self.edit { "on" } else { "off" });
                 }
-                Key::Z if cmd && m.shift => self.undo(true),
-                Key::Z if cmd => self.undo(false),
-                Key::Y if cmd => self.undo(true),
+                Key::Z if cmd && m.shift => self.do_undo(true),
+                Key::Z if cmd => self.do_undo(false),
+                Key::Y if cmd => self.do_undo(true),
+                Key::Q if cmd => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                Key::F12 => self.show_help = !self.show_help,
                 Key::S if cmd => self.save(m.shift),
                 Key::O if cmd => self.open(),
                 Key::E if cmd => self.export_wav(),
@@ -875,6 +998,7 @@ impl App {
             buffer: self.buffer,
             maximized: self.win_max,
             window: self.win_rect,
+            recent: self.recent.clone(),
         });
     }
 
@@ -1034,190 +1158,6 @@ impl App {
         if !insert && self.row > 0 {
             self.row -= 1;
         }
-    }
-
-    fn toolbar(&mut self, ui: &mut egui::Ui) {
-        let hdr_text = if th().light { Color32::WHITE } else { th().ink };
-        ui.horizontal_wrapped(|ui| {
-            ui.add_space(8.0);
-            // Scale stays first so it is always reachable, whatever the zoom.
-            ui.label(egui::RichText::new("Scale").color(hdr_text));
-            if ui.small_button("-").on_hover_text("Ctrl+-").clicked() {
-                self.set_zoom(self.zoom - 0.25);
-            }
-            if ui
-                .small_button(format!("{:.0} %", self.zoom * 100.0))
-                .on_hover_text("Ctrl+0 = 100 %")
-                .clicked()
-            {
-                self.set_zoom(1.0);
-            }
-            if ui
-                .small_button("+")
-                .on_hover_text(format!(
-                    "Ctrl+=  (max {:.0} % at this window size)",
-                    self.max_zoom * 100.0
-                ))
-                .clicked()
-            {
-                self.set_zoom(self.zoom + 0.25);
-            }
-            ui.separator();
-            ui.label(
-                egui::RichText::new("ChipWave")
-                    .size(20.0)
-                    .strong()
-                    .color(hdr_text),
-            );
-            let title = self.with(|s| s.song.title.clone());
-            ui.label(
-                egui::RichText::new(format!("· {}{}", title, if self.dirty { " *" } else { "" }))
-                    .color(hdr_text),
-            );
-            ui.add_space(12.0);
-            if ui.button("New").clicked() {
-                ui.ctx().input_mut(|i| {
-                    i.events.push(egui::Event::Key {
-                        key: Key::N,
-                        physical_key: None,
-                        pressed: true,
-                        repeat: false,
-                        modifiers: egui::Modifiers::COMMAND,
-                    })
-                });
-            }
-            if ui.button("Open").clicked() {
-                self.open();
-            }
-            if ui.button("Save").clicked() {
-                self.save(false);
-            }
-            if ui.button("Export WAV").clicked() {
-                self.export_wav();
-            }
-            ui.separator();
-            let playing = self.with(|s| s.engine.playing);
-            if ui
-                .button(if playing { "Stop" } else { "Play song" })
-                .clicked()
-            {
-                self.play(0);
-            }
-            if ui.button("Play block").clicked() {
-                self.play(1);
-            }
-            ui.separator();
-            let (mut bpm, mut speed) = self.with(|s| (s.song.bpm, s.song.speed));
-            ui.label(egui::RichText::new("BPM").color(hdr_text));
-            let c1 = ui
-                .add(
-                    egui::DragValue::new(&mut bpm)
-                        .range(30.0..=300.0)
-                        .speed(0.5),
-                )
-                .changed();
-            ui.label(egui::RichText::new("Speed").color(hdr_text));
-            let c2 = ui
-                .add(egui::DragValue::new(&mut speed).range(1..=32))
-                .changed();
-            if c1 || c2 {
-                // applies immediately, also while playing (no restart)
-                self.with(|s| {
-                    s.song.bpm = bpm;
-                    s.song.speed = speed;
-                    s.engine.set_tempo(bpm, speed);
-                });
-                self.dirty = true;
-            }
-            ui.label(egui::RichText::new("Oct").color(hdr_text));
-            if ui
-                .button(" - ")
-                .on_hover_text("octave down (numpad -)")
-                .clicked()
-            {
-                self.set_octave(self.octave as i32 - 1);
-            }
-            ui.label(
-                egui::RichText::new(format!("{}", self.octave))
-                    .monospace()
-                    .strong()
-                    .size(16.0)
-                    .color(th().value),
-            );
-            if ui
-                .button(" + ")
-                .on_hover_text("octave up (numpad +)")
-                .clicked()
-            {
-                self.set_octave(self.octave as i32 + 1);
-            }
-            ui.label(egui::RichText::new("Step").color(hdr_text));
-            ui.add(egui::DragValue::new(&mut self.step).range(0..=16));
-            ui.checkbox(
-                &mut self.follow,
-                egui::RichText::new("Follow").color(hdr_text),
-            );
-            ui.separator();
-            for (v, label) in [
-                (View::Pattern, "Pattern"),
-                (View::Arranger, "Arranger"),
-                (View::Mixer, "Mixer"),
-                (View::Fx, "FX"),
-            ] {
-                ui.selectable_value(&mut self.view, v, label)
-                    .on_hover_text("Ctrl+Tab cycles views, Ctrl+1/2/3/4");
-            }
-            ui.checkbox(
-                &mut self.dock_arranger,
-                egui::RichText::new("Dock arranger").color(hdr_text),
-            )
-            .on_hover_text("show the arranger below the pattern editor");
-            ui.separator();
-            ui.label(egui::RichText::new("Theme").color(hdr_text));
-            let mut t = self.theme;
-            egui::ComboBox::from_id_salt("theme")
-                .selected_text(t.name)
-                .show_ui(ui, |ui| {
-                    for opt in theme::THEMES {
-                        ui.selectable_value(&mut t, opt, opt.name);
-                    }
-                });
-            if t != self.theme {
-                self.theme = t;
-                theme::apply(ui.ctx(), t);
-                self.save_settings();
-            }
-            ui.label(egui::RichText::new("Buffer").color(hdr_text));
-            let mut b = self.buffer;
-            egui::ComboBox::from_id_salt("buffer")
-                .selected_text(if b == 0 {
-                    "Auto".to_string()
-                } else {
-                    b.to_string()
-                })
-                .width(64.0)
-                .show_ui(ui, |ui| {
-                    for opt in audio::BUFFER_CHOICES {
-                        ui.selectable_value(
-                            &mut b,
-                            opt,
-                            if opt == 0 {
-                                "Auto".to_string()
-                            } else {
-                                format!("{opt}")
-                            },
-                        );
-                    }
-                });
-            if b != self.buffer {
-                self.buffer = b;
-                self.save_settings();
-                self.restart_audio();
-            }
-            if ui.button("? Keys").clicked() {
-                self.show_help = !self.show_help;
-            }
-        });
     }
 
     fn side_panel(&mut self, ui: &mut egui::Ui) {
@@ -1449,20 +1389,12 @@ impl App {
             if ui.button(">").clicked() && self.pattern + 1 < npat {
                 self.pattern += 1;
             }
-            if ui.button("+ New block").clicked() {
-                let ch = channels;
-                let n = self.with(|s| {
-                    s.song.patterns.push(Pattern::new(
-                        &format!("Block {:02}", s.song.patterns.len()),
-                        ROWS,
-                        ch,
-                    ));
-                    s.song.order.push(s.song.patterns.len() - 1);
-                    s.song.patterns.len() - 1
-                });
-                self.pattern = n;
-                self.row = 0;
-                self.dirty = true;
+            if ui
+                .button("+ New block")
+                .on_hover_text("add an empty block at the end of the order")
+                .clicked()
+            {
+                self.add_block();
             }
             ui.separator();
             let order = self.with(|s| s.song.order.clone());
@@ -1501,25 +1433,8 @@ impl App {
                 .add(egui::DragValue::new(&mut ch).range(1..=MAX_CHANNELS))
                 .changed()
             {
-                self.with(|s| {
-                    s.song.channels = ch;
-                    s.song.channel_names.resize(ch, "Ch".into());
-                    for p in &mut s.song.patterns {
-                        for r in &mut p.cells {
-                            r.resize(ch, Cell::default());
-                        }
-                    }
-                });
-                if self.ch >= ch {
-                    self.ch = ch - 1;
-                }
-                self.dirty = true;
+                self.set_channels(ch);
             }
-            ui.label(
-                egui::RichText::new(if self.edit { "EDIT" } else { "edit off (Esc)" })
-                    .color(if self.edit { th().brick } else { th().ink2 })
-                    .strong(),
-            );
         });
 
         let avail = ui.available_rect_before_wrap();
@@ -3184,7 +3099,7 @@ impl App {
                     ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Alt +/- (Shift = octave)", "transpose selection or channel"), ("F9 / F10", "mute / solo channel"),
                     ("Numpad - / +", "base octave down / up"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
                     ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Delete (with selection)", "clear selection"),
-                    ("Ctrl+Tab, Ctrl+1/2/3/4", "views: pattern / arranger / mixer / FX"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"),
+                    ("Ctrl+Tab, Ctrl+1..5", "views: pattern / arranger / mixer / FX / sample"), ("F12", "this key list"), ("Ctrl+Q", "quit"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"),
                     ("Arranger (click it to focus)", "click / Shift+click / Ctrl+click select; Ctrl+X/C/V cut/copy/paste after selection; Ctrl+Shift+V paste as new blocks; Del; Ctrl+A; right-click menu"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
                     ("Arranger: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
                     ("Ctrl+N / O / S / Shift+S", "new / open / save / save as (.cwt)"), ("Ctrl+E", "export WAV"),
@@ -3197,6 +3112,13 @@ impl App {
 }
 
 impl eframe::App for App {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // clean exit: the recovery folder of this session is not needed
+        if let Some(s) = &self.session {
+            s.close();
+        }
+    }
+
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         // While no text field is being edited, the pattern editor owns the keyboard:
         // take key events away from egui (so Tab/arrows don't move widget focus).
@@ -3296,29 +3218,31 @@ impl eframe::App for App {
                 .map(|e| e.eq_ignore_ascii_case("cwt"))
                 .unwrap_or(false)
             {
-                if let Ok(song) = fileio::load_cwt(&p) {
-                    self.with(|s| {
-                        s.engine.stop();
-                        s.song = song;
-                    });
-                    self.path = Some(p);
-                    self.reset_cursor();
-                }
+                self.open_path(p);
             } else {
                 self.import_sample(p);
             }
         }
         self.handle_keys(&ctx);
+        self.tick_safety();
 
         let full = ui.max_rect();
         theme::gradient(ui.painter(), full, th().bg_top, th().bg_bot);
 
+        egui::Panel::top("menubar")
+            .resizable(false)
+            .frame(
+                egui::Frame::NONE
+                    .fill(th().hdr_top)
+                    .inner_margin(egui::Margin::symmetric(0, 3)),
+            )
+            .show(ui, |ui| self.menu_bar(ui));
         egui::Panel::top("toolbar")
             .resizable(false)
             .frame(
                 egui::Frame::NONE
                     .fill(th().hdr_bot)
-                    .inner_margin(egui::Margin::symmetric(0, 6)),
+                    .inner_margin(egui::Margin::symmetric(0, 5)),
             )
             .show(ui, |ui| self.toolbar(ui));
         egui::Panel::bottom("status").exact_size(26.0).frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(12, 4))).show(ui, |ui| {
@@ -3335,10 +3259,6 @@ impl eframe::App for App {
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let (peak, len) = self.with(|s| (s.engine.peak, s.song.length_seconds()));
-                    if let Some(a) = &self.audio {
-                        let u = a.stats.underruns.load(std::sync::atomic::Ordering::Relaxed);
-                        ui.label(egui::RichText::new(format!("  latency {:.0} ms · underruns {}", a.latency_ms(), u)).color(if u > 0 { th().brick } else { Color32::WHITE }).monospace());
-                    }
                     ui.label(egui::RichText::new(format!("Instr {:02X} · Oct {} · Step {} · length {}:{:04.1} · peak {:.0} %", self.instr, self.octave, self.step, (len / 60.0) as u32, len % 60.0, peak * 100.0)).color(Color32::WHITE).monospace());
                 });
             });
@@ -3419,11 +3339,17 @@ impl eframe::App for App {
                             self.fx_view(ui)
                         });
                     }
+                    View::Sample => {
+                        ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                            self.sample_view(ui)
+                        });
+                    }
                 }
             });
         if self.show_help {
             self.help(&ctx);
         }
+        self.dialogs(&ctx);
         if self.with(|s| s.engine.playing || s.engine.peak > 0.001) {
             ctx.request_repaint();
         }

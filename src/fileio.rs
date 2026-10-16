@@ -278,6 +278,9 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
                 }
             }
         }
+        if let InstrumentKind::Sample { data, lp, .. } = &mut inst.kind {
+            lp.fix(data.len());
+        }
     }
     let order: Vec<usize> = sf
         .order
@@ -383,6 +386,7 @@ pub fn import_wav(path: &Path) -> Result<Instrument, String> {
             rate,
             data,
             base_note: parse_note("C-4").unwrap(),
+            lp: Default::default(),
         },
     })
 }
@@ -626,5 +630,68 @@ mod tests {
         }
         assert!(s.instruments.iter().filter(|i| !i.fx.is_empty()).count() >= 3);
         assert_eq!(l.mixer.returns, s.mixer.returns);
+    }
+
+    #[test]
+    fn sample_loop_and_edits_saved_in_cwt() {
+        use crate::sample::{LoopMode, SampleLoop};
+        let mut s = demo_song();
+        // a decaying plucked tone with a loop in the sustain part
+        let data: Vec<f32> = (0..22050)
+            .map(|i| {
+                let t = i as f32 / 22050.0;
+                ((t * 220.0 * std::f32::consts::TAU).sin() * 0.7
+                    + (t * 663.0 * std::f32::consts::TAU).sin() * 0.2)
+                    * (-t * 2.5).exp()
+            })
+            .collect();
+        s.instruments.push(Instrument {
+            name: "Pluck sample".into(),
+            volume: 1.0,
+            transpose: 0,
+            fx: vec![],
+            kind: InstrumentKind::Sample {
+                file: String::new(),
+                rate: 22050,
+                data,
+                base_note: parse_note("A-3").unwrap(),
+                lp: SampleLoop {
+                    mode: LoopMode::PingPong,
+                    start: 6000,
+                    end: 15000,
+                    finetune: -12,
+                },
+            },
+        });
+        let f = std::env::temp_dir().join("chipwave_sample_test.cwt");
+        save_cwt(&s, &f).unwrap();
+        let l = load_cwt(&f).unwrap();
+        let (
+            InstrumentKind::Sample {
+                data: a,
+                lp: la,
+                base_note: ba,
+                ..
+            },
+            InstrumentKind::Sample {
+                data: b,
+                lp: lb,
+                base_note: bb,
+                ..
+            },
+        ) = (
+            &l.instruments.last().unwrap().kind,
+            &s.instruments.last().unwrap().kind,
+        )
+        else {
+            panic!()
+        };
+        assert_eq!(a, b);
+        assert_eq!(la, lb);
+        assert_eq!(ba, bb);
+        // handy for screenshots: CHIPWAVE_SAMPLE_DEMO=<path> writes this song
+        if let Some(p) = std::env::var_os("CHIPWAVE_SAMPLE_DEMO") {
+            save_cwt(&s, std::path::Path::new(&p)).unwrap();
+        }
     }
 }

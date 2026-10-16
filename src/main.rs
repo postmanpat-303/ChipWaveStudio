@@ -10,6 +10,8 @@ mod fx;
 mod input;
 mod model;
 mod presets;
+mod recovery;
+mod sample;
 mod settings;
 mod synth;
 mod theme;

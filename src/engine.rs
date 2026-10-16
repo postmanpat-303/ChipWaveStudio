@@ -77,15 +77,16 @@ fn voice_raw(
             data,
             rate,
             base_note,
+            lp,
             ..
         } => {
-            let idx = *pos as usize;
-            if idx + 1 >= data.len() {
+            // `pos` is monotonic; the loop maps it into the data
+            let Some(p) = crate::sample::read_pos(*pos, data.len(), lp) else {
                 return (0.0, false);
-            }
-            let fr = (*pos - idx as f64) as f32;
-            let v = data[idx] * (1.0 - fr) + data[idx + 1] * fr;
-            *pos += (freq / note_freq(*base_note)) as f64 * *rate as f64 / sr as f64;
+            };
+            let v = crate::sample::read(data, p, lp);
+            let ft = 2f32.powf(lp.finetune as f32 / 1200.0);
+            *pos += (freq * ft / note_freq(*base_note)) as f64 * *rate as f64 / sr as f64;
             let g = synth.amp.next(&SAMPLE_ENV, 1.0 / sr);
             (v * g, !synth.amp.done())
         }
@@ -276,6 +277,29 @@ impl Engine {
     }
 
     /// Preview a note on a channel (keyboard jamming in the editor).
+    /// (instrument, read position in frames) of a sounding sample voice on `ch`
+    pub fn sample_playhead(&self, song: &Song, ch: usize) -> Option<(usize, f64)> {
+        let c = self.chans.get(ch)?;
+        if !c.active {
+            return None;
+        }
+        match &song.instruments.get(c.instr)?.kind {
+            InstrumentKind::Sample { data, lp, .. } => {
+                crate::sample::read_pos(c.pos, data.len(), lp).map(|p| (c.instr, p))
+            }
+            _ => None,
+        }
+    }
+
+    /// stop the voice on `ch` (with the usual declick fade)
+    pub fn release(&mut self, ch: usize) {
+        if let Some(c) = self.chans.get_mut(ch) {
+            if c.active {
+                c.fade_to_tail();
+            }
+        }
+    }
+
     pub fn preview(&mut self, song: &Song, ch: usize, note: u8, instr: u8) {
         if ch >= self.chans.len() {
             return;
@@ -829,5 +853,53 @@ mod tests {
         let n = b.len().min(c.len());
         let md = (0..n).map(|k| (b[k] - c[k]).abs()).fold(0.0f32, f32::max);
         assert!(md < 1e-3, "{md}");
+    }
+
+    #[test]
+    fn sample_loop_playback_honoured() {
+        use crate::sample::{LoopMode, SampleLoop};
+        let mk = |mode| {
+            let mut song = Song::empty();
+            song.channels = 1;
+            song.patterns = vec![Pattern::new("b", ROWS, 1)];
+            song.instruments = vec![Instrument {
+                name: "s".into(),
+                volume: 1.0,
+                transpose: 0,
+                fx: vec![],
+                kind: InstrumentKind::Sample {
+                    file: String::new(),
+                    rate: 8000,
+                    data: (0..800).map(|i| ((i as f32) * 0.3).sin() * 0.8).collect(),
+                    base_note: 48,
+                    lp: SampleLoop {
+                        mode,
+                        start: 200,
+                        end: 600,
+                        finetune: 0,
+                    },
+                },
+            }];
+            song
+        };
+        let run = |song: &Song| {
+            let mut e = Engine::new(8000.0);
+            e.preview(song, 0, 48, 1);
+            let mut buf = vec![0.0f32; 2 * 8000];
+            e.render(song, &mut buf);
+            (buf, e.sample_playhead(song, 0))
+        };
+        // without a loop the 0.1 s sample is over after 1 s
+        let (b, ph) = run(&mk(LoopMode::Off));
+        assert!(ph.is_none());
+        assert!(b[2 * 4000..].iter().all(|x| x.abs() < 1e-6));
+        for m in [LoopMode::Forward, LoopMode::PingPong] {
+            let (b, ph) = run(&mk(m));
+            let (_, p) = ph.expect("still sounding");
+            assert!((200.0..=600.0).contains(&p), "{m:?} {p}");
+            let tail = b[2 * 6000..].iter().fold(0.0f32, |a, x| a.max(x.abs()));
+            assert!(tail > 0.1, "{m:?} keeps playing: {tail}");
+            assert!(b.iter().all(|x| x.is_finite()));
+        }
     }
 }

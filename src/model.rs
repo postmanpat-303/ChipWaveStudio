@@ -53,6 +53,9 @@ pub enum InstrumentKind {
         #[serde(skip)]
         data: Vec<f32>,
         base_note: u8,
+        /// loop mode / points / finetune
+        #[serde(default)]
+        lp: crate::sample::SampleLoop,
     },
 }
 

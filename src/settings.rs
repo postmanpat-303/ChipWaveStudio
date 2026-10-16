@@ -15,6 +15,9 @@ pub struct Settings {
     /// last normal window position and inner size [x, y, w, h] (when not maximised)
     #[serde(default)]
     pub window: Option<[f32; 4]>,
+    /// recent songs, newest first (max 20)
+    #[serde(default)]
+    pub recent: Vec<String>,
 }
 
 fn yes() -> bool {
@@ -29,6 +32,7 @@ impl Default for Settings {
             buffer: 0,
             maximized: true,
             window: None,
+            recent: vec![],
         }
     }
 }
@@ -41,6 +45,18 @@ impl Settings {
             .find(|t| t.name == self.theme)
             .unwrap_or(crate::theme::DARK)
     }
+}
+
+/// the per-OS config folder (settings, recent files, recovery/)
+pub fn config_dir() -> Option<PathBuf> {
+    path().and_then(|p| p.parent().map(|d| d.to_path_buf()))
+}
+
+/// Put `p` at the top of the recent list (deduplicated, max 20).
+pub fn push_recent(list: &mut Vec<String>, p: &str) {
+    list.retain(|x| x != p);
+    list.insert(0, p.to_string());
+    list.truncate(20);
 }
 
 fn path() -> Option<PathBuf> {

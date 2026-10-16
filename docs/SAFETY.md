@@ -1,5 +1,7 @@
 # Safety: autosave, crash recovery, recent files
 
+> **Implemented in 0.1.9:** atomic saves with `.bak`, autosave every 2 min (only when there are unsaved changes, last 3 kept) to `<config>/recovery/<session>/` (`%APPDATA%\ChipWave\recovery` on Windows), session heartbeat, emergency `panic.cwt` + `crash.txt` from a panic hook, a recovery dialog on the next start (Recover / Discard / Later), and File > Recent (last 20, missing files greyed). Not yet: the edit journal, pinned recents, unsaved-change prompts, and the Preferences > Safety page.
+
 ChipWave should never lose Del's work. This covers saving, recovering after a crash, the recent-files list and unsaved-change prompts. File-level integrity (checksums, safe loading) is in [FILE_FORMAT.md §3–4](FILE_FORMAT.md). Plugin crashes are isolated in a separate process ([MIDI_VST.md](MIDI_VST.md), [PLUGIN_MANAGER.md](PLUGIN_MANAGER.md)), so a bad plugin can't crash the app; you just see "plugin stopped, song kept playing".
 
 **Config / data folders** (from the `directories` crate's conventions):
