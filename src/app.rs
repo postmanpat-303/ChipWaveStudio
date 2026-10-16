@@ -70,6 +70,8 @@ pub struct App {
     key_log: Option<std::collections::VecDeque<String>>,
     zoom: f32,
     buffer: u32,
+    win_max: bool,
+    win_rect: Option<[f32; 4]>,
     max_zoom: f32,
     zoom_checked: bool,
     themed: bool,
@@ -133,6 +135,8 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         key_log: None,
         zoom: crate::settings::load().zoom,
         buffer: crate::settings::load().buffer,
+        win_max: crate::settings::load().maximized,
+        win_rect: crate::settings::load().window,
         max_zoom: 3.0,
         zoom_checked: false,
         themed: false,
@@ -140,10 +144,19 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         show_help: false,
         pending: vec![],
     };
+    let set = crate::settings::load();
+    let mut vb = egui::ViewportBuilder::default().with_inner_size([1360.0, 800.0]);
+    if set.maximized {
+        vb = vb.with_maximized(true);
+    } else if let Some([x, y, w, h]) = set.window {
+        vb = vb.with_inner_size([w.max(800.0), h.max(500.0)]);
+        if x > -200.0 && y > -50.0 {
+            vb = vb.with_position([x, y]);
+        }
+    }
     let opts = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
+        viewport: vb
             .with_title("ChipWave Tracker")
-            .with_inner_size([1360.0, 800.0])
             .with_min_inner_size([800.0, 500.0])
             .with_drag_and_drop(true)
             .with_icon(std::sync::Arc::new(
@@ -788,6 +801,8 @@ impl App {
             zoom: self.zoom,
             theme: self.theme.name.to_string(),
             buffer: self.buffer,
+            maximized: self.win_max,
+            window: self.win_rect,
         });
     }
 
@@ -2504,6 +2519,33 @@ impl eframe::App for App {
         }
         if (ctx.zoom_factor() - self.zoom).abs() > 0.001 {
             ctx.set_zoom_factor(self.zoom);
+        }
+        // remember window state (saved only when it changes)
+        let (maxed, outer, inner) = ctx.input(|i| {
+            let v = i.viewport();
+            (v.maximized, v.outer_rect, v.inner_rect)
+        });
+        // ignore the first second: the OS may report un-maximised before it applies
+        let settled = ctx.input(|i| i.time) > 1.5;
+        if let (Some(m), true) = (maxed, settled) {
+            let mut changed = m != self.win_max;
+            self.win_max = m;
+            if !m {
+                if let (Some(o), Some(r)) = (outer, inner) {
+                    let new = [o.left(), o.top(), r.width(), r.height()];
+                    let differs = self
+                        .win_rect
+                        .map(|w| w.iter().zip(new).any(|(a, b)| (a - b).abs() > 1.0))
+                        .unwrap_or(true);
+                    if differs && !ctx.input(|i| i.pointer.any_down()) {
+                        self.win_rect = Some(new);
+                        changed = true;
+                    }
+                }
+            }
+            if changed {
+                self.save_settings();
+            }
         }
         let dropped: Vec<PathBuf> = ctx.input(|i| {
             i.raw

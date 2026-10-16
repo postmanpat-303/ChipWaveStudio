@@ -9,6 +9,16 @@ pub struct Settings {
     /// device buffer request in frames, 0 = Auto
     #[serde(default)]
     pub buffer: u32,
+    /// start maximised (default on first run)
+    #[serde(default = "yes")]
+    pub maximized: bool,
+    /// last normal window position and inner size [x, y, w, h] (when not maximised)
+    #[serde(default)]
+    pub window: Option<[f32; 4]>,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -17,6 +27,8 @@ impl Default for Settings {
             zoom: 1.0,
             theme: crate::theme::DARK.name.into(),
             buffer: 0,
+            maximized: true,
+            window: None,
         }
     }
 }
