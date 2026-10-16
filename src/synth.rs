@@ -121,11 +121,8 @@ impl Env {
     pub fn next(&mut self, e: &Adsr, dt: f32) -> f32 {
         match self.stage {
             Stage::Attack => {
-                if e.a <= 0.0005 {
-                    self.level = 1.0;
-                } else {
-                    self.level += dt / e.a;
-                }
+                // at least 1.5 ms attack so note starts never click
+                self.level += dt / e.a.max(0.0015);
                 if self.level >= 1.0 {
                     self.level = 1.0;
                     self.stage = Stage::Decay;
@@ -133,11 +130,7 @@ impl Env {
             }
             Stage::Decay => {
                 // exponential approach to sustain
-                let k = if e.d <= 0.0005 {
-                    1.0
-                } else {
-                    1.0 - (-dt * 5.0 / e.d).exp()
-                };
+                let k = 1.0 - (-dt * 5.0 / e.d.max(0.005)).exp();
                 self.level += (e.s - self.level) * k;
                 if (self.level - e.s).abs() < 1e-4 {
                     self.level = e.s;
@@ -151,11 +144,8 @@ impl Env {
                 }
             }
             Stage::Release => {
-                let k = if e.r <= 0.0005 {
-                    1.0
-                } else {
-                    1.0 - (-dt * 5.0 / e.r).exp()
-                };
+                // at least ~5 ms release ramp (declick on note-off / stop)
+                let k = 1.0 - (-dt * 5.0 / e.r.max(0.008)).exp();
                 self.level -= self.level * k;
                 if self.level < 1e-4 {
                     self.level = 0.0;

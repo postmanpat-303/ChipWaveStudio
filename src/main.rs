@@ -7,6 +7,7 @@ mod engine;
 mod fileio;
 mod model;
 mod presets;
+mod settings;
 mod synth;
 mod theme;
 
@@ -58,6 +59,46 @@ fn attach_console() {
     }
 }
 
+/// Real-time audio test: play the demo block for `secs` seconds and report underruns.
+fn play_test(secs: u64) -> i32 {
+    use std::sync::atomic::Ordering;
+    let shared = std::sync::Arc::new(std::sync::Mutex::new(audio::Shared {
+        song: fileio::demo_song(),
+        engine: engine::Engine::new(48000.0),
+    }));
+    let a = match audio::start(shared.clone(), settings::load().buffer) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("play-test: no audio: {e}");
+            return 2;
+        }
+    };
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    {
+        let mut s = shared.lock().unwrap();
+        let audio::Shared { song, engine } = &mut *s;
+        engine.start(song, 0, 0, true, 0);
+    }
+    std::thread::sleep(std::time::Duration::from_secs(secs));
+    let u = a.stats.underruns.load(Ordering::Relaxed);
+    let msg = format!(
+        "play-test: device '{}' {} Hz, buffer {}, callback {} frames, latency {:.1} ms, underruns {}\n",
+        a.device_name,
+        a.sample_rate,
+        a.buffer,
+        a.stats.callback_frames.load(Ordering::Relaxed),
+        a.latency_ms(),
+        u
+    );
+    print!("{msg}");
+    let _ = std::fs::write(std::env::temp_dir().join("chipwave_playtest.txt"), &msg);
+    if u == 0 {
+        0
+    } else {
+        3
+    }
+}
+
 fn main() {
     #[cfg(windows)]
     if std::env::args().len() > 1 {
@@ -99,6 +140,10 @@ fn main() {
             }
         }
         return;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--play-test") {
+        let secs: u64 = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(10);
+        std::process::exit(play_test(secs));
     }
     let open = args
         .get(1)

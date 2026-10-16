@@ -22,9 +22,72 @@ struct Chan {
     slide: f32,
     vol_slide: f32,
     muted: bool,
+    /// smoothed mute gain (declick)
+    mute_gain: f32,
+    /// previous voice fading out over ~5 ms after a retrigger (declick)
+    tail: Tail,
+}
+
+#[derive(Clone)]
+struct Tail {
+    instr: usize,
+    freq: f32,
+    vol: f32,
+    synth: SynthVoice,
+    pos: f64,
+    gain: f32,
+}
+
+/// Render one voice sample; returns (sample, still_active).
+fn voice(
+    song: &Song,
+    instr: usize,
+    freq: f32,
+    synth: &mut SynthVoice,
+    pos: &mut f64,
+    sr: f32,
+) -> (f32, bool) {
+    let Some(inst) = song.instruments.get(instr) else {
+        return (0.0, false);
+    };
+    match &inst.kind {
+        InstrumentKind::Synth(p) => {
+            let v = synth.render(p, freq, sr);
+            (v, !synth.amp.done())
+        }
+        InstrumentKind::Sample {
+            data,
+            rate,
+            base_note,
+            ..
+        } => {
+            let idx = *pos as usize;
+            if idx + 1 >= data.len() {
+                return (0.0, false);
+            }
+            let fr = (*pos - idx as f64) as f32;
+            let v = data[idx] * (1.0 - fr) + data[idx + 1] * fr;
+            *pos += (freq / note_freq(*base_note)) as f64 * *rate as f64 / sr as f64;
+            let g = synth.amp.next(&SAMPLE_ENV, 1.0 / sr);
+            (v * g, !synth.amp.done())
+        }
+    }
 }
 
 impl Chan {
+    /// Move the sounding voice into the tail slot so it fades out (no click).
+    fn fade_to_tail(&mut self) {
+        self.tail = Tail {
+            instr: self.instr,
+            freq: self.freq,
+            vol: self.vol,
+            synth: self.synth.clone(),
+            pos: self.pos,
+            gain: 1.0,
+        };
+        self.active = false;
+    }
+
     fn new() -> Self {
         Self {
             instr: usize::MAX,
@@ -37,6 +100,15 @@ impl Chan {
             slide: 0.0,
             vol_slide: 0.0,
             muted: false,
+            mute_gain: 1.0,
+            tail: Tail {
+                instr: usize::MAX,
+                freq: 0.0,
+                vol: 0.0,
+                synth: SynthVoice::new(),
+                pos: 0.0,
+                gain: 0.0,
+            },
         }
     }
 }
@@ -106,7 +178,9 @@ impl Engine {
         self.bpm = song.bpm;
         self.song_ended = false;
         for c in &mut self.chans {
-            c.active = false;
+            if c.active {
+                c.fade_to_tail();
+            }
         }
         self.process_row(song);
     }
@@ -146,6 +220,9 @@ impl Engine {
             c.synth.amp.release();
             c.synth.fenv.release();
         } else if cell.note > 0 && c.instr != usize::MAX {
+            if c.active {
+                c.fade_to_tail();
+            }
             c.note = cell.note;
             c.freq = note_freq(cell.note);
             c.synth = SynthVoice::new();
@@ -239,52 +316,36 @@ impl Engine {
             }
             let mut l = 0.0;
             let mut r = 0.0;
+            let sr = self.sr;
+            // 5 ms ramps for tails and mute changes
+            let step = 1.0 / (0.005 * sr);
             for (i, c) in self
                 .chans
                 .iter_mut()
                 .enumerate()
                 .take(song.channels.min(MAX_CHANNELS))
             {
-                if !c.active || c.instr >= song.instruments.len() {
-                    continue;
+                let mut s = 0.0;
+                if c.active {
+                    let (v, alive) = voice(song, c.instr, c.freq, &mut c.synth, &mut c.pos, sr);
+                    c.active = alive;
+                    s += v * c.vol;
                 }
-                let inst = &song.instruments[c.instr];
-                let s = match &inst.kind {
-                    InstrumentKind::Synth(p) => {
-                        let v = c.synth.render(p, c.freq, self.sr);
-                        if c.synth.amp.done() {
-                            c.active = false;
-                        }
-                        v
-                    }
-                    InstrumentKind::Sample {
-                        data,
-                        rate,
-                        base_note,
-                        ..
-                    } => {
-                        let idx = c.pos as usize;
-                        if idx + 1 >= data.len() {
-                            c.active = false;
-                            0.0
-                        } else {
-                            let fr = (c.pos - idx as f64) as f32;
-                            let v = data[idx] * (1.0 - fr) + data[idx + 1] * fr;
-                            let ratio = (c.freq / note_freq(*base_note)) as f64 * *rate as f64
-                                / self.sr as f64;
-                            c.pos += ratio;
-                            let g = c.synth.amp.next(&SAMPLE_ENV, 1.0 / self.sr);
-                            if c.synth.amp.done() {
-                                c.active = false;
-                            }
-                            v * g
-                        }
-                    }
-                };
-                if c.muted {
-                    continue;
+                if c.tail.gain > 0.0 {
+                    let t = &mut c.tail;
+                    let (v, alive) = voice(song, t.instr, t.freq, &mut t.synth, &mut t.pos, sr);
+                    s += v * t.vol * t.gain;
+                    t.gain = if alive { (t.gain - step).max(0.0) } else { 0.0 };
                 }
-                let s = s * c.vol;
+                let target = if c.muted { 0.0 } else { 1.0 };
+                if c.mute_gain != target {
+                    c.mute_gain = if target > c.mute_gain {
+                        (c.mute_gain + step).min(1.0)
+                    } else {
+                        (c.mute_gain - step).max(0.0)
+                    };
+                }
+                let s = s * c.mute_gain;
                 // simple fixed pan: alternate channels slightly
                 let pan = if song.channels > 1 {
                     (i % 2) as f32 * 0.3 - 0.15

@@ -57,11 +57,12 @@ Z X C V B N M , Q W E R T Y U I    Z = C (base octave), Q = C (base octave + 1)
 ### Playback
 | Action | Key |
 |---|---|
-| Play / stop song | `Space` |
-| Play block (loop) | `Enter` (at block start); `Shift+Enter` = play song from this row |
-| Play from cursor row | `Ctrl+Enter` (OpenMPT-like) |
+| Play / stop **current block** (loop) | `Space` |
+| Play / stop song | `Shift+Space` |
+| Restart block from the top | `Enter` |
+| Play from cursor row | `Ctrl+Enter` or `Shift+Enter` (OpenMPT-like) |
 | Play row (audition) | `4` on numpad or `Alt+↓` plays this row and moves down |
-| Stop | `Space` while playing, or `F8` |
+| Stop | `Space` / `Shift+Space` while playing, or `F8` |
 | Follow playback | `Scroll Lock` / `Ctrl+F` |
 
 ### Editing and selection
@@ -72,12 +73,13 @@ Z X C V B N M , Q W E R T Y U I    Z = C (base octave), Q = C (base octave + 1)
 | Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | `Cmd+C/X/V` |
 | Mix-paste (only into empty cells) | `Ctrl+Shift+V` | `Cmd+Shift+V` |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (also `Ctrl+Shift+Z`) | `Cmd+Z` / `Cmd+Shift+Z` |
-| Transpose selection ±1 semitone | `Ctrl++` / `Ctrl+-` | `Cmd++/-` |
-| Transpose ±1 octave | `Ctrl+Shift++` / `Ctrl+Shift+-` | `Cmd+Shift++/-` |
+| Transpose selection ±1 semitone | `Alt+=` / `Alt+-` | `Option+=/-` |
+| Transpose ±1 octave | `Alt+Shift+=` / `Alt+Shift+-` | `Option+Shift+=/-` |
 | Interpolate (volume or effect arg, first→last row) | `Ctrl+I` | `Cmd+Shift+I` (since `Cmd+I` is insert row on Mac) |
 | Humanise (random ±volume / micro-delay) | `Ctrl+H` | `Cmd+Option+H` (Cmd+H hides the app) |
 | Set instrument of selection to current | `Ctrl+R` | `Cmd+R` |
 | Mute / solo channel | `F9` / `F10`, or `Ctrl+M` / `Ctrl+Shift+M` | `Cmd+M` is minimise on Mac, so `Option+M` / `Option+Shift+M` |
+| UI scale up / down / 100 % | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` (clamped so the UI fits the window) | `Cmd+=/-/0` |
 | Effect autocomplete | `Ctrl+Space` | `Cmd+Option+Space` (Ctrl+Space is input source on Mac) |
 
 ### File and app
@@ -170,3 +172,5 @@ Keys are matched by **physical position** for note entry (so QWERTZ/AZERTY layou
 
 ## 10. Rust notes
 Use egui `InputState` key events plus `egui::Key` physical scancodes (via `RawInput`/winit `PhysicalKey`) for note entry. The grid is drawn with one painter call per visible cell run (no widgets per cell), and only visible rows are laid out, so 3 200-line blocks scroll smoothly.
+
+**Changed in 0.1.2 (Del's testing):** Space now plays/stops the current block, because that's what you want while editing. Song playback moved to Shift+Space (Ctrl+Space is kept for the effect dropdown). Ctrl+=/−/0 now control the UI scale, so transpose moved to Alt+=/−.

@@ -14,9 +14,7 @@ const SUBCOLS: usize = 9;
 
 pub struct App {
     shared: SharedRef,
-    #[allow(dead_code)] // keeps the stream alive
     audio: Option<audio::Audio>,
-    #[allow(dead_code)]
     audio_err: Option<String>,
     row: usize,
     ch: usize,
@@ -34,6 +32,9 @@ pub struct App {
     dirty: bool,
     mutes: Vec<bool>,
     zoom: f32,
+    buffer: u32,
+    max_zoom: f32,
+    zoom_checked: bool,
     themed: bool,
     theme: theme::Theme,
     show_help: bool,
@@ -50,7 +51,7 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         song,
         engine: Engine::new(48000.0),
     }));
-    let (audio, audio_err) = match audio::start(shared.clone()) {
+    let (audio, audio_err) = match audio::start(shared.clone(), crate::settings::load().buffer) {
         Ok(a) => (Some(a), None),
         Err(e) => (None, Some(e)),
     };
@@ -81,9 +82,12 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         status,
         dirty: false,
         mutes: vec![false; MAX_CHANNELS],
-        zoom: 1.0,
+        zoom: crate::settings::load().zoom,
+        buffer: crate::settings::load().buffer,
+        max_zoom: 3.0,
+        zoom_checked: false,
         themed: false,
-        theme: theme::DARK,
+        theme: crate::settings::load().theme(),
         show_help: false,
         pending: vec![],
     };
@@ -236,15 +240,15 @@ impl App {
         let (pattern, row, mutes) = (self.pattern, self.row, self.mutes.clone());
         self.with(|s| {
             let Shared { song, engine } = s;
-            if engine.playing && mode == 0 {
+            if engine.playing && mode <= 1 {
                 engine.stop();
                 return;
             }
             engine.set_mutes(&mutes);
             match mode {
-                0 => engine.start(song, 0, 0, false, 0),        // song
-                1 => engine.start(song, 0, 0, true, pattern),   // block loop
-                _ => engine.start(song, 0, row, true, pattern), // from row
+                0 => engine.start(song, 0, 0, false, 0),          // song
+                1 | 3 => engine.start(song, 0, 0, true, pattern), // block loop
+                _ => engine.start(song, 0, row, true, pattern),   // from row
             }
         });
     }
@@ -396,8 +400,11 @@ impl App {
                     };
                     self.col = 0;
                 }
-                Key::Space => self.play(0),
-                Key::Enter => self.play(if cmd || m.shift { 2 } else { 1 }),
+                Key::Space => self.play(if m.shift { 0 } else { 1 }),
+                Key::Enter => self.play(if cmd || m.shift { 2 } else { 3 }),
+                Key::Plus | Key::Equals if cmd => self.set_zoom(self.zoom + 0.25),
+                Key::Minus if cmd => self.set_zoom(self.zoom - 0.25),
+                Key::Num0 if cmd => self.set_zoom(1.0),
                 Key::Escape => {
                     self.edit = !self.edit;
                     self.status = format!("Edit mode {}", if self.edit { "on" } else { "off" });
@@ -423,8 +430,8 @@ impl App {
                     self.reset_cursor();
                     self.status = "New song (instruments kept)".into();
                 }
-                Key::Plus | Key::Equals if cmd => self.transpose(if m.shift { 12 } else { 1 }),
-                Key::Minus if cmd => self.transpose(if m.shift { -12 } else { -1 }),
+                Key::Plus | Key::Equals if m.alt => self.transpose(if m.shift { 12 } else { 1 }),
+                Key::Minus if m.alt => self.transpose(if m.shift { -12 } else { -1 }),
                 Key::F1 | Key::F2 | Key::F3 | Key::F4 | Key::F5 | Key::F6 | Key::F7 | Key::F8 => {
                     self.octave = [
                         Key::F1,
@@ -527,6 +534,45 @@ impl App {
         }
     }
 
+    fn set_zoom(&mut self, z: f32) {
+        let z = (z * 4.0).round() / 4.0;
+        self.zoom = z.clamp(0.5, self.max_zoom.max(0.5));
+        if z > self.max_zoom + 0.001 {
+            self.status = format!(
+                "Scale limited to {:.0} % so everything fits the window",
+                self.zoom * 100.0
+            );
+        }
+        self.save_settings();
+    }
+
+    fn restart_audio(&mut self) {
+        self.audio = None; // stops the old stream + engine thread
+        match audio::start(self.shared.clone(), self.buffer) {
+            Ok(a) => {
+                self.status = format!(
+                    "Audio: {} @ {} Hz, buffer {}",
+                    a.device_name, a.sample_rate, a.buffer
+                );
+                self.audio = Some(a);
+                self.audio_err = None;
+            }
+            Err(e) => {
+                self.status = format!("Audio restart failed: {e}");
+                self.audio_err = Some(e);
+            }
+        }
+        self.sync_mutes();
+    }
+
+    fn save_settings(&self) {
+        crate::settings::save(&crate::settings::Settings {
+            zoom: self.zoom,
+            theme: self.theme.name.to_string(),
+            buffer: self.buffer,
+        });
+    }
+
     fn sync_mutes(&mut self) {
         let m = self.mutes.clone();
         self.with(|s| s.engine.set_mutes(&m));
@@ -574,10 +620,31 @@ impl App {
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         let hdr_text = if th().light { Color32::WHITE } else { th().ink };
-        let r = ui.max_rect();
-        theme::gradient(ui.painter(), r, th().hdr_top, th().hdr_bot);
-        ui.horizontal_centered(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.add_space(8.0);
+            // Scale stays first so it is always reachable, whatever the zoom.
+            ui.label(egui::RichText::new("Scale").color(hdr_text));
+            if ui.small_button("-").on_hover_text("Ctrl+-").clicked() {
+                self.set_zoom(self.zoom - 0.25);
+            }
+            if ui
+                .small_button(format!("{:.0} %", self.zoom * 100.0))
+                .on_hover_text("Ctrl+0 = 100 %")
+                .clicked()
+            {
+                self.set_zoom(1.0);
+            }
+            if ui
+                .small_button("+")
+                .on_hover_text(format!(
+                    "Ctrl+=  (max {:.0} % at this window size)",
+                    self.max_zoom * 100.0
+                ))
+                .clicked()
+            {
+                self.set_zoom(self.zoom + 0.25);
+            }
+            ui.separator();
             ui.label(
                 egui::RichText::new("ChipWave")
                     .size(20.0)
@@ -651,15 +718,6 @@ impl App {
                 egui::RichText::new("Follow").color(hdr_text),
             );
             ui.separator();
-            ui.label(egui::RichText::new("Scale").color(hdr_text));
-            egui::ComboBox::from_id_salt("zoom")
-                .selected_text(format!("{:.0} %", self.zoom * 100.0))
-                .width(70.0)
-                .show_ui(ui, |ui| {
-                    for z in [0.75f32, 1.0, 1.25, 1.5, 1.75, 2.0] {
-                        ui.selectable_value(&mut self.zoom, z, format!("{:.0} %", z * 100.0));
-                    }
-                });
             ui.label(egui::RichText::new("Theme").color(hdr_text));
             let mut t = self.theme;
             egui::ComboBox::from_id_salt("theme")
@@ -672,6 +730,34 @@ impl App {
             if t != self.theme {
                 self.theme = t;
                 theme::apply(ui.ctx(), t);
+                self.save_settings();
+            }
+            ui.label(egui::RichText::new("Buffer").color(hdr_text));
+            let mut b = self.buffer;
+            egui::ComboBox::from_id_salt("buffer")
+                .selected_text(if b == 0 {
+                    "Auto".to_string()
+                } else {
+                    b.to_string()
+                })
+                .width(64.0)
+                .show_ui(ui, |ui| {
+                    for opt in audio::BUFFER_CHOICES {
+                        ui.selectable_value(
+                            &mut b,
+                            opt,
+                            if opt == 0 {
+                                "Auto".to_string()
+                            } else {
+                                format!("{opt}")
+                            },
+                        );
+                    }
+                });
+            if b != self.buffer {
+                self.buffer = b;
+                self.save_settings();
+                self.restart_audio();
             }
             if ui.button("? Keys").clicked() {
                 self.show_help = !self.show_help;
@@ -680,7 +766,6 @@ impl App {
     }
 
     fn side_panel(&mut self, ui: &mut egui::Ui) {
-        theme::cartridge(ui.painter(), ui.max_rect(), th().slate);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             ui.add_space(14.0);
@@ -873,7 +958,7 @@ impl App {
             self.row = play_row;
         }
         let Some(pat) = song_snapshot else { return };
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(egui::RichText::new("Block").strong());
             if ui.button("<").clicked() && self.pattern > 0 {
                 self.pattern -= 1;
@@ -1163,8 +1248,8 @@ impl App {
                     ("Z S X D C V G B H N J M", "notes C..B (base octave)"), ("Q 2 W 3 E R 5 T 6 Y 7 U I 9 O 0 P", "notes, octave +1"),
                     ("1", "note off"), ("F1 - F8", "base octave 1-8"), ("0-9 A-F", "hex in instr/vol/effect columns"),
                     ("Delete", "clear field"), ("Backspace / Insert", "pull up / push down rows"),
-                    ("Space", "play / stop song"), ("Enter / Ctrl+Enter", "play block / from row"), ("Esc", "edit mode on/off"),
-                    ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Ctrl +/- (Shift = octave)", "transpose channel"), ("F9 / F10", "mute / solo channel"),
+                    ("Space", "play / stop current block (loop)"), ("Shift+Space", "play / stop song"), ("Enter / Ctrl+Enter", "restart block / play from row"), ("Ctrl+= / Ctrl+- / Ctrl+0", "UI scale up / down / 100 %"), ("Esc", "edit mode on/off"),
+                    ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Alt +/- (Shift = octave)", "transpose channel"), ("F9 / F10", "mute / solo channel"),
                     ("Ctrl+N / O / S / Shift+S", "new / open / save / save as (.cwt)"), ("Ctrl+E", "export WAV"),
                 ] { ui.label(egui::RichText::new(k).monospace().color(th().value)); ui.label(v); ui.end_row(); }
             });
@@ -1204,6 +1289,19 @@ impl eframe::App for App {
             ctx.options_mut(|o| o.zoom_with_keyboard = false);
             self.themed = true;
         }
+        // Largest scale at which the UI still fits (needs ~1000 x 560 points).
+        let win = ui.max_rect().size() * ctx.zoom_factor();
+        self.max_zoom = (win.x / 1000.0).min(win.y / 560.0).clamp(0.5, 3.0);
+        if !self.zoom_checked && win.x > 100.0 {
+            self.zoom_checked = true;
+            if self.zoom > self.max_zoom {
+                self.zoom = 1.0f32.min(self.max_zoom);
+                self.status = "Saved scale did not fit this window; reset to 100 %".into();
+            }
+        }
+        if self.zoom > self.max_zoom + 0.001 {
+            self.zoom = self.max_zoom;
+        }
         if (ctx.zoom_factor() - self.zoom).abs() > 0.001 {
             ctx.set_zoom_factor(self.zoom);
         }
@@ -1238,14 +1336,22 @@ impl eframe::App for App {
         theme::gradient(ui.painter(), full, th().bg_top, th().bg_bot);
 
         egui::Panel::top("toolbar")
-            .exact_size(44.0)
-            .frame(egui::Frame::NONE)
+            .resizable(false)
+            .frame(
+                egui::Frame::NONE
+                    .fill(th().hdr_bot)
+                    .inner_margin(egui::Margin::symmetric(0, 6)),
+            )
             .show(ui, |ui| self.toolbar(ui));
         egui::Panel::bottom("status").exact_size(26.0).frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(12, 4))).show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(&self.status).color(Color32::WHITE));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let (peak, len) = self.with(|s| (s.engine.peak, s.song.length_seconds()));
+                    if let Some(a) = &self.audio {
+                        let u = a.stats.underruns.load(std::sync::atomic::Ordering::Relaxed);
+                        ui.label(egui::RichText::new(format!("  latency {:.0} ms · underruns {}", a.latency_ms(), u)).color(if u > 0 { th().brick } else { Color32::WHITE }).monospace());
+                    }
                     ui.label(egui::RichText::new(format!("Instr {:02X} · Oct {} · Step {} · length {}:{:04.1} · peak {:.0} %", self.instr, self.octave, self.step, (len / 60.0) as u32, len % 60.0, peak * 100.0)).color(Color32::WHITE).monospace());
                 });
             });
@@ -1259,7 +1365,12 @@ impl eframe::App for App {
                 top: 6,
                 bottom: 6,
             }))
-            .show(ui, |ui| self.side_panel(ui));
+            .show(ui, |ui| {
+                theme::cartridge(ui.painter(), ui.max_rect(), th().slate);
+                egui::ScrollArea::vertical()
+                    .id_salt("side_scroll")
+                    .show(ui, |ui| self.side_panel(ui));
+            });
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.inner_margin(egui::Margin {
                 left: 4,
