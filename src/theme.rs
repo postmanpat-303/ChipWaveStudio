@@ -39,6 +39,10 @@ pub struct Theme {
     /// selection fill / accent (focus, selection, active)
     pub sel: Color32,
     pub accent: Color32,
+    /// keyboard-focus ring of a panel (must contrast with clips and the accent)
+    pub focus_ring: Color32,
+    /// outline of selected clips / items
+    pub selection_outline: Color32,
 }
 
 /// Default: modern dark grey with thin muted-green borders.
@@ -71,6 +75,8 @@ pub const DARK: Theme = Theme {
     play: hex(0xE08A3C),
     sel: hex(0x2E4A37),
     accent: hex(0x5CC07A),
+    focus_ring: hex(0xE6E9ED),
+    selection_outline: hex(0xFFFFFF),
 };
 
 /// Optional "Amiga" theme: Workbench Gradient (A2) with the muted palette.
@@ -103,6 +109,8 @@ pub const AMIGA: Theme = Theme {
     play: hex(0xFF7A00),
     sel: hex(0xC9D9F5),
     accent: hex(0x1F5FD1),
+    focus_ring: hex(0xFF9F1C),
+    selection_outline: hex(0xFFE08A),
 };
 
 pub const THEMES: [Theme; 2] = [DARK, AMIGA];

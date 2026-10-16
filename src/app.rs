@@ -22,7 +22,8 @@ enum View {
 
 /// muted clip palette for the arranger (block id -> colour)
 const CLIP_COLOURS: [u32; 8] = [
-    0x3F7A55, 0x516D96, 0x8A6D3B, 0x7A4E5C, 0x4E7A7A, 0x6B5E8A, 0x7A6A4E, 0x5A7A3F,
+    // no greens: the theme accent is green, so clips must never look "selected"
+    0x516D96, 0x8A6D3B, 0x7A4E5C, 0x5E6B7A, 0x6B5E8A, 0x7A6A4E, 0x8A5A4E, 0x4E6A86,
 ];
 
 type Undo = (Vec<Pattern>, Vec<usize>);
@@ -219,6 +220,20 @@ fn hex_key(k: Key) -> Option<u8> {
         F => 15,
         _ => return None,
     })
+}
+
+/// keyboard-focus ring: 2 px light outline with a soft outer glow
+fn focus_ring(p: &egui::Painter, r: Rect) {
+    let c = th().focus_ring;
+    for (w, a) in [(7.0, 0.10), (4.0, 0.22)] {
+        p.rect_stroke(
+            r,
+            8,
+            Stroke::new(w, c.gamma_multiply(a)),
+            egui::StrokeKind::Outside,
+        );
+    }
+    p.rect_stroke(r, 8, Stroke::new(2.0, c), egui::StrokeKind::Outside);
 }
 
 impl App {
@@ -1629,12 +1644,7 @@ impl App {
             self.arr_focus = false;
         }
         if self.view == View::Pattern && self.dock_arranger && !self.arr_focus {
-            painter.rect_stroke(
-                avail.shrink(1.0),
-                6,
-                Stroke::new(1.5, th().accent),
-                egui::StrokeKind::Inside,
-            );
+            focus_ring(&ui.painter_at(avail.expand(6.0)), avail.expand(2.0));
         }
         if resp.drag_started() {
             if let Some(o) = ui.input(|i| i.pointer.press_origin()) {
@@ -1957,15 +1967,22 @@ impl App {
         let channels = self.with(|s| s.song.channels).max(1);
         self.arr_sel = self.arr_sel.min(order.len() - 1);
         if self.arr_focused() {
-            ui.painter().rect_stroke(
-                ui.max_rect().expand(3.0),
-                8,
-                Stroke::new(2.0, th().accent),
-                egui::StrokeKind::Outside,
-            );
+            focus_ring(ui.painter(), ui.max_rect().expand(3.0));
         }
         ui.horizontal_wrapped(|ui| {
-            ui.label(egui::RichText::new("Arranger").strong());
+            if self.arr_focused() {
+                ui.label(
+                    egui::RichText::new(" ARRANGER ")
+                        .strong()
+                        .monospace()
+                        .color(Color32::from_rgb(0x1A, 0x1C, 0x1F))
+                        .background_color(th().focus_ring),
+                )
+                .on_hover_text("keyboard focus: Ctrl+X/C/V, Del, arrows act on clips");
+            } else {
+                ui.label(egui::RichText::new("Arranger").strong().color(th().ink2))
+                    .on_hover_text("click to give the arranger keyboard focus");
+            }
             ui.label(egui::RichText::new("zoom").color(th().ink2));
             if ui.small_button("-").clicked() {
                 self.arr_zoom(0.8);
@@ -2085,6 +2102,8 @@ impl App {
                     } else {
                         col
                     };
+                    let is_sel = selected.contains(&i);
+                    let col = if is_sel { col.gamma_multiply(1.3) } else { col };
                     painter.rect_filled(cr, 6, col);
                     if let Some((fi, t0)) = &self.arr_flash {
                         let age = ui.input(|inp| inp.time) - t0;
@@ -2097,11 +2116,18 @@ impl App {
                             ui.ctx().request_repaint();
                         }
                     }
-                    if selected.contains(&i) {
+                    if is_sel {
+                        // inner shadow, then a thick light outline
+                        painter.rect_stroke(
+                            cr.shrink(3.0),
+                            4,
+                            Stroke::new(2.0, Color32::from_black_alpha(90)),
+                            egui::StrokeKind::Inside,
+                        );
                         painter.rect_stroke(
                             cr,
                             6,
-                            Stroke::new(2.0, th().accent),
+                            Stroke::new(3.0, th().selection_outline),
                             egui::StrokeKind::Inside,
                         );
                     }
