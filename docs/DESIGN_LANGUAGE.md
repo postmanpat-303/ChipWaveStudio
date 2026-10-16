@@ -100,6 +100,8 @@ All of it is drawn with `egui::Painter` as vectors, so no assets are needed. The
 - Sound designer: [`mockups/sound_designer.png`](mockups/sound_designer.png) / `.svg`
 - FX chain: [`mockups/fx_chain.png`](mockups/fx_chain.png) / `.svg`
 - Arranger: [`mockups/arranger.png`](mockups/arranger.png) / `.svg`
+- Instrument list + browser: [`mockups/samples.png`](mockups/samples.png) / `.svg`
+- MIDI + plugins: [`mockups/midi_plugins.png`](mockups/midi_plugins.png) / `.svg`
 - Variants: `mockups/variants/sound_designer_A_workbench_modern.*`, `mockups/variants/sound_designer_B_wave_neon.*`
 
 ![Sound designer](mockups/sound_designer.png)

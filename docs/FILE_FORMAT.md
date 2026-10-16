@@ -23,6 +23,8 @@ song.cwt (zip)
 │   ├── 01.wav                  embedded sample (mono/stereo, 8/16-bit or float)
 │   ├── 02.toml                 synth instrument → points at a patch
 │   └── 03.toml                 OctaMED synth/hybrid (wave tables + vol/wf sequences)
+├── plugins/
+│   └── 07.toml + 07.bin        CLAP/VST3 plugin id/version + saved state (MIDI_VST.md)
 ├── patches/
 │   └── acid-paula-bass.cwpatch same TOML as standalone presets (SOUND_DESIGN.md §8)
 ├── export.toml                 remembered export settings (EXPORT.md)

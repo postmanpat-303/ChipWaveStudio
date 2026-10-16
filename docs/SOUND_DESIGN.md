@@ -76,7 +76,7 @@ Two filter slots, serial or parallel, each with **Cutoff** (20 Hz–20 kHz, set 
 
 - **Envelopes:** 3 per patch (Amp, Filter, Mod). ADSR + Hold + Delay, curve per segment (exp/lin/log), velocity sensitivity, loop mode for rhythmic effects. Times 0 ms–20 s, or synced to tracker ticks.
 - **LFOs:** 3 per patch. Sine, triangle, saw up/down, square, S&H, smoothed random, and "tracker table" (step values like an OctaMED synth waveform list). Rate in Hz or synced (1/64 to 8 bars, in rows/ticks too), fade-in, phase, per-voice or global.
-- **Other sources:** velocity, note (key), aftertouch/mod wheel (MIDI, phase 2), random-per-note, and **tracker command lanes**: a new effect command (e.g. `Mx yy`) sets a macro so a pattern can sweep a cutoff, just like classic filter commands.
+- **Other sources:** velocity, note (key), aftertouch/mod wheel (MIDI, see [MIDI_VST.md](MIDI_VST.md)), random-per-note, and **tracker command lanes**: a new effect command (e.g. `Mx yy`) sets a macro so a pattern can sweep a cutoff, just like classic filter commands.
 - **4 Macros:** big knobs that can drive many targets, used by presets and by tracker commands.
 - **Mod matrix:** up to 16 slots, `source → target × amount (bipolar)`, optional *via* (scale by another source). Every knob is a target, including FX parameters.
 
