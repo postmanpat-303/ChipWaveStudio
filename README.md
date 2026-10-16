@@ -63,6 +63,8 @@ chipwave --render demo out.wav
   Ctrl+= / Ctrl+- / Ctrl+0       UI scale up / down / 100 %
   F9 / F10                       mute / solo channel
   Ctrl+Tab, Ctrl+1 / 2 / 3       views: Pattern / Arranger / Mixer
+  Ctrl+D / Ctrl+Shift+D          arranger: duplicate clip / as new block (also when docked)
+  Ctrl+Shift+K                   debug: show the last 10 input events in the status bar
   Arranger: Left/Right, Del, Ins, Ctrl+D (Shift = unique copy), +/-  zoom
   Ctrl+N / Ctrl+O / Ctrl+S       new / open / save .cwt   (Ctrl+Shift+S = save as)
   Ctrl+E                         export WAV

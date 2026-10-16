@@ -2,6 +2,7 @@
 use crate::audio::{self, Shared, SharedRef};
 use crate::engine::{self, Engine};
 use crate::fileio;
+use crate::input;
 use crate::model::*;
 use crate::synth::{FilterMode, Wave};
 use crate::theme::{self, hex, th};
@@ -54,6 +55,10 @@ pub struct App {
     dock_arranger: bool,
     arr_sel: usize,
     arr_drag: Option<usize>,
+    /// clip to highlight briefly after duplicate/insert, with start time
+    arr_flash: Option<(usize, f64)>,
+    /// debug key log (Ctrl+Shift+K): last 10 input events
+    key_log: Option<std::collections::VecDeque<String>>,
     zoom: f32,
     buffer: u32,
     max_zoom: f32,
@@ -111,6 +116,8 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         dock_arranger: true,
         arr_sel: 0,
         arr_drag: None,
+        arr_flash: None,
+        key_log: None,
         zoom: crate::settings::load().zoom,
         buffer: crate::settings::load().buffer,
         max_zoom: 3.0,
@@ -384,27 +391,51 @@ impl App {
         }
     }
 
-    fn handle_keys(&mut self, _ctx: &egui::Context) {
+    fn handle_keys(&mut self, ctx: &egui::Context) {
         let events = std::mem::take(&mut self.pending);
         let channels = self.with(|s| s.song.channels);
-        let has_key = |k: Key| {
-            events.iter().any(|e| {
-                matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. }
-                    if *key == k && modifiers.command)
-            })
-        };
-        let (kc, kx, kv) = (has_key(Key::C), has_key(Key::X), has_key(Key::V));
-        for ev in &events {
-            match ev {
-                egui::Event::Copy if !kc => self.copy(false),
-                egui::Event::Cut if !kx => self.copy(true),
-                egui::Event::Paste(_) if !kv => self.paste(),
-                _ => {}
+        for a in input::clipboard_actions(&events) {
+            match a {
+                input::ClipAction::Copy => self.copy(false, ctx),
+                input::ClipAction::Cut => self.copy(true, ctx),
+                input::ClipAction::Paste(t) => self.paste(t),
             }
         }
+        let arr_visible =
+            self.view == View::Arranger || (self.view == View::Pattern && self.dock_arranger);
         for ev in events {
-            if self.view == View::Arranger && self.arranger_key(&ev) {
+            if input::is_clipboard_key(&ev) {
                 continue;
+            }
+            if arr_visible {
+                if let Some(a) = input::arranger_shortcut(&ev, self.view == View::Arranger) {
+                    self.arranger_action(a, ctx);
+                    continue;
+                }
+            }
+            if let egui::Event::Key {
+                key: Key::K,
+                pressed: true,
+                modifiers: m,
+                ..
+            } = &ev
+            {
+                if m.command && m.shift {
+                    self.key_log = if self.key_log.is_some() {
+                        None
+                    } else {
+                        Some(std::collections::VecDeque::new())
+                    };
+                    self.status = format!(
+                        "Key log {}",
+                        if self.key_log.is_some() {
+                            "on (Ctrl+Shift+K = off)"
+                        } else {
+                            "off"
+                        }
+                    );
+                    continue;
+                }
             }
             let egui::Event::Key {
                 key,
@@ -482,9 +513,6 @@ impl App {
                         chsel
                     };
                 }
-                Key::C if cmd => self.copy(false),
-                Key::X if cmd => self.copy(true),
-                Key::V if cmd => self.paste(),
                 Key::ArrowUp => self.move_row(-1),
                 Key::ArrowDown => self.move_row(1),
                 Key::PageUp => self.move_row(-16),
@@ -733,7 +761,7 @@ impl App {
         true
     }
 
-    fn copy(&mut self, cut: bool) {
+    fn copy(&mut self, cut: bool, ctx: &egui::Context) {
         let rect = self
             .sel_rect()
             .unwrap_or((self.row, self.row, self.ch, self.ch));
@@ -745,6 +773,9 @@ impl App {
                 .map(|r| r[c0..=c1].to_vec())
                 .collect()
         });
+        // mirror to the system clipboard; this also makes egui deliver
+        // Event::Paste on Ctrl+V (it sends nothing when the clipboard is empty)
+        ctx.copy_text(input::clip_to_text(&self.clip));
         if cut {
             if self.sel.is_none() {
                 self.sel = Some(((r0, c0), (r1, c1)));
@@ -762,8 +793,16 @@ impl App {
         );
     }
 
-    fn paste(&mut self) {
-        if self.clip.is_empty() || !self.edit {
+    fn paste(&mut self, text: Option<String>) {
+        if let Some(c) = text.as_deref().and_then(input::clip_from_text) {
+            self.clip = c;
+        }
+        if self.clip.is_empty() {
+            self.status = "Nothing to paste (copy cells with Ctrl+C first)".into();
+            return;
+        }
+        if !self.edit {
+            self.status = "Edit mode is off (Esc) - paste ignored".into();
             return;
         }
         self.snapshot();
@@ -1620,11 +1659,17 @@ impl App {
             song.order.insert(sel + 1, b);
             sel + 1
         });
-        self.status = if unique {
-            "Duplicated as a new block copy".into()
-        } else {
-            "Duplicated clip (same block)".into()
-        };
+        let b = self.with(|s| s.song.order[self.arr_sel]);
+        self.status = format!(
+            "{} -> song position #{} (block {:02})",
+            if unique {
+                "Duplicated as a new block copy"
+            } else {
+                "Duplicated clip (same block)"
+            },
+            self.arr_sel + 1,
+            b
+        );
     }
 
     fn arr_delete(&mut self) {
@@ -1656,33 +1701,26 @@ impl App {
         self.with(|s| s.song.arranger_zoom = (s.song.arranger_zoom * f).clamp(0.25, 16.0));
     }
 
-    /// keys handled by the full-size arranger view; returns true if consumed
-    fn arranger_key(&mut self, ev: &egui::Event) -> bool {
-        let egui::Event::Key {
-            key,
-            pressed: true,
-            modifiers: m,
-            ..
-        } = ev
-        else {
-            return false;
-        };
+    fn arranger_action(&mut self, a: input::ArrAction, ctx: &egui::Context) {
+        use input::ArrAction::*;
         let len = self.with(|s| s.song.order.len());
-        match key {
-            Key::ArrowLeft => self.arr_sel = self.arr_sel.saturating_sub(1),
-            Key::ArrowRight => self.arr_sel = (self.arr_sel + 1).min(len - 1),
-            Key::Delete | Key::Backspace => self.arr_delete(),
-            Key::Insert => self.arr_insert(),
-            Key::D if m.command => self.arr_duplicate(m.shift),
-            Key::Plus | Key::Equals if !m.command => self.arr_zoom(1.25),
-            Key::Minus if !m.command => self.arr_zoom(0.8),
-            _ => return false,
+        match a {
+            Prev => self.arr_sel = self.arr_sel.saturating_sub(1),
+            Next => self.arr_sel = (self.arr_sel + 1).min(len - 1),
+            Delete => self.arr_delete(),
+            Insert => self.arr_insert(),
+            Duplicate => self.arr_duplicate(false),
+            DuplicateUnique => self.arr_duplicate(true),
+            ZoomIn => self.arr_zoom(1.25),
+            ZoomOut => self.arr_zoom(0.8),
         }
-        if matches!(key, Key::ArrowLeft | Key::ArrowRight) {
+        if matches!(a, Prev | Next) {
             self.pattern = self.with(|s| s.song.order[self.arr_sel]);
             self.row = 0;
         }
-        true
+        if matches!(a, Duplicate | DuplicateUnique | Insert) {
+            self.arr_flash = Some((self.arr_sel, ctx.input(|i| i.time)));
+        }
     }
 
     #[allow(clippy::type_complexity)]
@@ -1728,17 +1766,17 @@ impl App {
             }
             ui.separator();
             if ui.button("Insert block").on_hover_text("Ins").clicked() {
-                self.arr_insert();
+                self.arranger_action(input::ArrAction::Insert, &ui.ctx().clone());
             }
             if ui.button("Duplicate").on_hover_text("Ctrl+D").clicked() {
-                self.arr_duplicate(false);
+                self.arranger_action(input::ArrAction::Duplicate, &ui.ctx().clone());
             }
             if ui
                 .button("Copy as new")
                 .on_hover_text("Ctrl+Shift+D: unique copy of the block")
                 .clicked()
             {
-                self.arr_duplicate(true);
+                self.arranger_action(input::ArrAction::DuplicateUnique, &ui.ctx().clone());
             }
             if ui.button("Delete").on_hover_text("Del").clicked() {
                 self.arr_delete();
@@ -1818,6 +1856,17 @@ impl App {
                         col
                     };
                     painter.rect_filled(cr, 6, col);
+                    if let Some((fi, t0)) = self.arr_flash {
+                        let age = ui.input(|inp| inp.time) - t0;
+                        if fi == i && age < 0.8 {
+                            painter.rect_filled(
+                                cr,
+                                6,
+                                Color32::from_white_alpha((90.0 * (1.0 - age / 0.8)) as u8),
+                            );
+                            ui.ctx().request_repaint();
+                        }
+                    }
                     if i == self.arr_sel {
                         painter.rect_stroke(
                             cr,
@@ -2090,7 +2139,7 @@ impl App {
                     ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Alt +/- (Shift = octave)", "transpose selection or channel"), ("F9 / F10", "mute / solo channel"),
                     ("Numpad - / +", "base octave down / up"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
                     ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Delete (with selection)", "clear selection"),
-                    ("Ctrl+Tab, Ctrl+1/2/3", "views: pattern / arranger / mixer"),
+                    ("Ctrl+Tab, Ctrl+1/2/3", "views: pattern / arranger / mixer"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
                     ("Arranger: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
                     ("Ctrl+N / O / S / Shift+S", "new / open / save / save as (.cwt)"), ("Ctrl+E", "export WAV"),
                 ] { ui.label(egui::RichText::new(k).monospace().color(th().value)); ui.label(v); ui.end_row(); }
@@ -2105,6 +2154,16 @@ impl eframe::App for App {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         // While no text field is being edited, the pattern editor owns the keyboard:
         // take key events away from egui (so Tab/arrows don't move widget focus).
+        if let Some(log) = &mut self.key_log {
+            for e in &raw.events {
+                if let Some(d) = input::describe(e) {
+                    log.push_back(d);
+                    while log.len() > 10 {
+                        log.pop_front();
+                    }
+                }
+            }
+        }
         if ctx.egui_wants_keyboard_input() {
             return;
         }
@@ -2190,7 +2249,16 @@ impl eframe::App for App {
             .show(ui, |ui| self.toolbar(ui));
         egui::Panel::bottom("status").exact_size(26.0).frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(12, 4))).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(&self.status).color(Color32::WHITE));
+                if let Some(log) = &self.key_log {
+                    let v: Vec<&str> = log.iter().map(|s| s.as_str()).collect();
+                    ui.label(
+                        egui::RichText::new(format!("keys: {}", v.join("  ")))
+                            .monospace()
+                            .color(th().fx),
+                    );
+                } else {
+                    ui.label(egui::RichText::new(&self.status).color(Color32::WHITE));
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let (peak, len) = self.with(|s| (s.engine.peak, s.song.length_seconds()));
                     if let Some(a) = &self.audio {

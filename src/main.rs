@@ -5,6 +5,7 @@ mod app;
 mod audio;
 mod engine;
 mod fileio;
+mod input;
 mod model;
 mod presets;
 mod settings;
