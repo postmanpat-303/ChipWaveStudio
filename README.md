@@ -33,3 +33,5 @@ See [docs/PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md) for the core pattern editor
 ## Licence
 
 ChipWave Tracker is free software, licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-or-later).
+
+**Next step:** coding the first runnable version, **Windows x86_64 first** (cross-compiled on Linux, tested under Wine). See [docs/PACKAGING.md §0](docs/PACKAGING.md).

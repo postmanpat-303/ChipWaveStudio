@@ -23,6 +23,12 @@ Tool versions below were checked live on 16 Oct 2026 (crates.io / GitHub release
 
 **Plan:** use `cargo-packager` for Windows, macOS, AppImage and .deb (one `[package.metadata.packager]` section in Cargo.toml). Flatpak and the Arch PKGBUILD are hand-written files, which is what those ecosystems expect.
 
+## 0. Priority: Windows first (Del's request)
+The **first runnable version targets Windows 11 x86_64**, built on the Linux box and tested under Wine before Del runs it on his PC (`C:\Users\DMAN\Documents\GrokPrograms`).
+- **Cross-compile:** `x86_64-pc-windows-gnu` with mingw-w64. That's the route already proven with the Strobe .exe. Or `x86_64-pc-windows-msvc` via **cargo-xwin** (0.23.1, MIT, checked 16 Oct 2026), which downloads the MSVC CRT/SDK. Before using it, the Microsoft licence terms for those downloads need accepting and checking. Start with GNU; switch to MSVC if a dependency needs it (e.g. ASIO or VST3 hosting quirks).
+- **Box test:** `wine chipwave.exe --self-test` and `--render` (null audio backend). A short GUI run under Wine on the box desktop takes a screenshot. Wine's audio (WASAPI via PulseAudio) is good enough for a smoke test; the real check is on Del's PC.
+- **Deliverable:** portable zip first; the installer comes later. Linux (CachyOS) builds come next, then macOS via CI.
+
 ## 1. Windows 11
 - **Installer:** NSIS `.exe` setup from cargo-packager (per-user install with no admin needed, Start menu shortcut and icon, `.cwt` file association, uninstaller). An MSI (WiX) is offered as well for people who prefer it.
 - **Portable zip:** `ChipWave-x.y.z-windows-x64-portable.zip` with `chipwave.exe` and a `portable.txt` marker. With the marker present, settings live next to the exe instead of `%APPDATA%`.
