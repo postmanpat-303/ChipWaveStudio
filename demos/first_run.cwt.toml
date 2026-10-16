@@ -1,0 +1,143 @@
+# ChipWave first-run demo (single-file text form of a .cwt song; see docs/FIRST_RUN.md)
+format = "chipwave-song-text"
+format_version = 1
+
+[song]
+title = "First Run - Psy Groove"
+bpm = 145
+lines_per_beat = 4
+speed = 6
+tracks = 4
+
+[[instrument]]
+slot = 1
+name = "Punchy Psy Kick"
+patch = "factory:psytrance/punchy-psy-kick"
+[[instrument]]
+slot = 2
+name = "Rolling Offbeat Bass"
+patch = "factory:psytrance/rolling-offbeat-bass"
+[[instrument]]
+slot = 3
+name = "Closed Hat"
+sample = "factory:drums/hat-closed.wav"
+[[instrument]]
+slot = 4
+name = "Open Hat"
+sample = "factory:drums/hat-open.wav"
+
+[[mixer.channel]]
+name = "Kick"
+volume_db = -1.5
+[[mixer.channel]]
+name = "Hats"
+volume_db = -8.0
+pan = 0.15
+[[mixer.channel]]
+name = "Bass"
+volume_db = -3.0
+send_delay = 0.25
+[[mixer.channel]]
+name = "Spare"
+volume_db = -6.0
+
+[mixer.return_a]
+type = "delay"
+time = "3/16"
+feedback = 0.2
+mix = 1.0
+
+[[block]]
+id = 0
+name = "Groove"
+lines = 16
+role = "verse"
+# row | ch1 kick | ch2 hats | ch3 bass | ch4
+rows = """
+00 | C-3 01 .... | --- .. .... | --- .. .... | --- .. ....
+01 | --- .. .... | --- .. .... | E-1 02 .... | --- .. ....
+02 | --- .. .... | C-5 03 0C20 | E-1 02 .... | --- .. ....
+03 | --- .. .... | --- .. .... | E-1 02 .... | --- .. ....
+04 | C-3 01 .... | --- .. .... | --- .. .... | --- .. ....
+05 | --- .. .... | --- .. .... | E-1 02 .... | --- .. ....
+06 | --- .. .... | C-5 03 0C20 | E-1 02 .... | --- .. ....
+07 | --- .. .... | --- .. .... | E-1 02 .... | --- .. ....
+08 | C-3 01 .... | --- .. .... | --- .. .... | --- .. ....
+09 | --- .. .... | --- .. .... | E-1 02 .... | --- .. ....
+0A | --- .. .... | C-5 03 0C20 | E-1 02 .... | --- .. ....
+0B | --- .. .... | --- .. .... | E-1 02 .... | --- .. ....
+0C | C-3 01 .... | --- .. .... | --- .. .... | --- .. ....
+0D | --- .. .... | --- .. .... | E-1 02 .... | --- .. ....
+0E | --- .. .... | C-5 04 0C28 | E-1 02 .... | --- .. ....
+0F | --- .. .... | --- .. .... | E-1 02 .... | --- .. ....
+"""
+
+[sequence]
+sections = [{ block = 0, repeat = 8 }]
+
+# Automation lanes (docs/AUTOMATION.md); positions in lines (16 lines = 1 bar)
+[[automation]]
+target = "instrument.2.filter1.cutoff"
+label = "Bass - Filter cutoff"
+unit = "Hz"
+curve = "bezier"
+points = [
+  { pos = 0,   value_hz = 180.0 },
+  { pos = 64,  value_hz = 600.0,  handle_out = [24, 0.1] },
+  { pos = 128, value_hz = 2400.0, handle_in = [-24, -0.05] },
+]
+
+[[automation]]
+target = "mixer.return_a.feedback"
+label = "Delay feedback"
+unit = "%"
+curve = "step"
+points = [
+  { pos = 0,  value = 0.20 },
+  { pos = 48, value = 0.45 },
+  { pos = 96, value = 0.65 },
+]
+
+# Guided auto-input script (FIRST_RUN.md section 1)
+[[script]]
+step = 1
+action = "type_notes"
+channel = 1
+rows = [0, 4, 8, 12]
+cell = "C-3 01"
+say = "This is the pattern editor. Rows go down, channels go across. That's a kick on every beat."
+[[script]]
+step = 2
+action = "type_notes"
+channel = 2
+rows = [2, 6, 10, 14]
+cell = "C-5 03 0C20"
+say = "Off-beat hats give the psy bounce."
+[[script]]
+step = 3
+action = "type_notes"
+channel = 3
+rows = [1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15]
+cell = "E-1 02"
+say = "The rolling bass fills the three 16ths between kicks."
+[[script]]
+step = 4
+action = "play"
+highlight = "key:Space"
+say = "Press Space any time to play or stop."
+[[script]]
+step = 5
+action = "draw_automation"
+lane = 0
+screen = "arranger"
+say = "Automation lanes move knobs over time. Watch the bass open up."
+[[script]]
+step = 6
+action = "draw_automation"
+lane = 1
+say = "Delay feedback climbs, so echoes build into the next section."
+[[script]]
+step = 7
+action = "hand_over"
+highlight = ["key:ArrowKeys", "key:Z"]
+say = "Your turn: move with the arrow keys and press Z...M to play notes. Ctrl+Z undoes anything."

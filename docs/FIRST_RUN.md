@@ -1,0 +1,29 @@
+# First run: the demo that plays itself
+
+On first launch ChipWave opens a **demo song that builds itself**. Notes and automation are typed in front of you, then it plays, with a guided overlay explaining each step. The goal: sound in the first 10 seconds, a working psy groove in about a minute, and the confidence to change it. It ties into the "first track in 5 minutes" onboarding in [AUTO_ARRANGE.md §7](AUTO_ARRANGE.md).
+
+Demo file: [`demos/first_run.cwt.toml`](../demos/first_run.cwt.toml). It's a single-file text form of a `.cwt` song ([FILE_FORMAT.md](FILE_FORMAT.md)) that the app loads directly and can save as a normal `.cwt`.
+
+The hat samples (`factory:drums/hat-*.wav`) are placeholders for a small CC0 factory drum kit that still needs to be made or sourced.
+
+## 1. What gets auto-entered (about 60 s, skippable)
+| Step | What happens on screen | Overlay text |
+|---|---|---|
+| 1 | Pattern editor opens; the cursor moves to channel 1 and types `C-3 01` on rows 00, 04, 08, 0C (Punchy Psy Kick) | "This is the pattern editor. Rows go down, channels go across. That's a kick on every beat." |
+| 2 | Channel 2: closed hat on rows 02, 06, 0A, 0E; open hat on 0E | "Off-beat hats give the psy bounce." |
+| 3 | Channel 3: Rolling Offbeat Bass `E-1 02` on rows 01-03, 05-07, 09-0B, 0D-0F | "The rolling bass fills the three 16ths between kicks." |
+| 4 | Play starts (Space is highlighted) | "Press Space any time to play or stop." |
+| 5 | The arranger opens; an automation lane **Bass · Filter cutoff** draws a bezier sweep from 180 Hz to 2.4 kHz over 8 bars | "Automation lanes move knobs over time. Watch the bass open up." |
+| 6 | A second lane, **Delay feedback** (return A, which the bass sends to), draws steps 20 % → 45 % → 65 % | "Delay feedback climbs, so echoes build into the next section." |
+| 7 | Overlay: "Your turn". Arrow keys are highlighted and a single note is suggested | "Move with the arrow keys and press Z…M to play notes. Ctrl+Z undoes anything." |
+
+The overlay is anchored to real UI elements, so it moves with scaling. It has *Next*, *Back*, *Skip demo* and *Never show again*, and the arrow keys and Enter drive it too. It's typed at "watchable" speed (about 8 cells per second); hold `Shift` to speed it up.
+
+## 2. Rules
+- It never overwrites anything: the demo opens as "Untitled demo" and only prompts on close if you changed it ([SAFETY.md](SAFETY.md)).
+- It doesn't need audio to be set up. If no device is found, the overlay first shows the Audio settings card ([SETTINGS.md](SETTINGS.md)).
+- It's replayable from Help → Replay first-run demo.
+- The script is data: `[[script]]` steps in the demo file. More guided demos (chiptune, alien) can be added without code.
+
+## 3. Implementation notes
+The script runner feeds the normal edit commands (same as keyboard input and undo) on a UI timer, so the demo exercises real code paths. CI also runs it headless as a smoke test (`--self-test` includes "run first-run script and render 8 bars", [PACKAGING.md §5](PACKAGING.md)).

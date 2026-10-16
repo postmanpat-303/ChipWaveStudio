@@ -1,0 +1,48 @@
+# Automation
+
+![Automation mockup](mockups/automation.png) (SVG: [`mockups/automation.svg`](mockups/automation.svg))
+
+Automation lanes sit **under the arranger blocks** ([ARRANGER.md](ARRANGER.md)), drawn as glowing curves on dark CRT-style lanes: the "visually cool" part. Curve colours are functional (one saturated colour per lane), while block colours stay muted ([DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md)).
+
+## 1. Lanes
+- **Any parameter** can have a lane:
+  - synth patch parameters and macros
+  - FX devices
+  - mixer faders, pans and sends
+  - CLAP/VST3/LV2 plugin parameters
+  - tempo
+- **Adding a lane:** "＋ Add lane…" (searchable, using the same list as the effect autocomplete in [PATTERN_EDITOR.md §6](PATTERN_EDITOR.md)), right-click a knob → "Automate", or just move a knob while recording.
+- **Lane header:** name, current value in real units, the matching effect command (e.g. `cmd Fcxx`), the curve type, and **R** (read) / **W** (write) toggles. Lanes can be collapsed, reordered, coloured and grouped per channel.
+- **Song or block scope:**
+  - **Song lanes** run across the arranger timeline (the default).
+  - **Block lanes** belong to a block and repeat wherever that block is played, which is good for per-pattern wobbles.
+  - Both are shown, with block lanes drawn inside the block's span.
+
+## 2. Drawing
+| Tool | Behaviour |
+|---|---|
+| **Pencil** | Freehand; points are thinned (Ramer–Douglas–Peucker) so the curve stays light. |
+| **Bezier** | Click to add points. Each segment is a cubic with draggable handles; Alt-drag the segment bends it. |
+| **Step** | Values hold until the next point (good for tracker-style changes). |
+| **Ramp** | Straight line between points; Shift constrains to 0/45/90°. |
+| **LFO stamp** | Drag a range and pick shape (sine, tri, saw, square, S&H, random), rate (synced 1/64–8 bars), depth and phase. It writes points that stay editable, or a live "LFO segment" kept as a parameter set until flattened. |
+| Select / move | Box-select points, drag, scale vertically (Ctrl-drag) or time-stretch. Copy/paste between lanes with unit conversion. |
+
+Snapping uses the arranger grid (1/16 by default), with Shift to bypass. Hovering a point shows a readout in real units ("bar 18 · 1.2 kHz").
+
+## 3. Recording
+- **Record knobs:** arm with "● Record knobs" (or `Ctrl+R` in the arranger). While playing, moving any on-screen knob or a **MIDI-learned** controller ([MIDI_VST.md](MIDI_VST.md)) writes points.
+- **Modes:** *Touch* (writes while held, then returns to the existing curve), *Latch* (keeps the last value until stop), *Overwrite*.
+- Recorded data is thinned on stop. Undo removes the whole pass in one step.
+- **Plugins:** parameter changes coming from plugin GUIs (CLAP param events, VST3 `performEdit`, LV2 port events) are recorded the same way.
+
+## 4. Link with tracker effect commands
+Tracker commands and lanes are two views of the same idea:
+- **Commands win locally:** an effect command like `Fc80` in the pattern sets the value at that row, overriding the lane until the lane's next point. This is documented and shown as a small marker on the lane.
+- **Convert lane → commands:** writes the curve into the block's effect column at the chosen resolution (each row, or only on changes). Useful for MMD export and for people who prefer the pattern view.
+- **Convert commands → lane:** reads a column of `Fcxx`/`D1xx`/`Pn ppxx` commands into a lane.
+- MMD export bakes lanes into commands where the target maps to an OctaMED command (volume `0C`, tempo `0F`, etc.). Other lanes are dropped, with a warning list.
+
+## 5. Engine
+- Lanes are evaluated per sub-block (32–64 samples, as in [SOUND_DESIGN.md §9](SOUND_DESIGN.md)). Bezier segments are pre-tessellated into a lookup with linear interpolation, and parameter values are smoothed.
+- Lanes are stored in `.cwt` as `automation/*.toml`: points `(song_pos_lines, value_normalised, curve_kind, handles)` plus a target id resolved through the song's target table, so moving or renaming a device keeps its automation.

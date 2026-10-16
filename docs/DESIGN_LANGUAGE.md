@@ -74,6 +74,22 @@ Del liked variant A. Variant **A2** adds soft gradients to it: [`mockups/variant
 - **Readability:** yellow (`#FFD400`) is used only on dark display surfaces. On light panels, values use blue `#1F5FD1` or orange `#FF7A00`. (The A/A2 mockups still show the Out value in yellow on grey; that will be fixed in the implementation.)
 - **egui:** egui has no gradient fill for rects, so gradients are drawn as a `Mesh` with per-vertex colours (top two vertices light, bottom two dark). That's cheap and stays crisp at any scale. Rounded or cut corners use a tessellated path with vertex colours interpolated by y.
 
+### Muted palette ("not too cartoonish")
+Del's rule: the UI must not look cartoonish. **Surfaces and labels are desaturated; full saturation is reserved for functional data.**
+| Role | Muted colour | Used for |
+|---|---|---|
+| Slate blue | `#516D96` | spines, Verse blocks, CLAP tag, "New" badge, active toggle pills |
+| Sage green | `#4E7D5B` | Verified badge, on-toggles |
+| Brick red | `#9C4F4B` | Failed badge, mute-on, Build/Fill blocks |
+| Plum | `#6B5C82` | Blocked badge, Bridge/Pad, LV2 tag |
+| Ochre | `#946B3E` | Chorus/Drop blocks, VST3 tag, FX tag |
+| Teal grey | `#4F7D78` | Intro blocks |
+| Graphite | `#4A525E` | Outro, CMD tag, neutral |
+- **Saturated colours are for data only:** curves and meters (cyan `#22E3FF`, green `#7CFF9B`, magenta `#FF7AD0`, yellow `#FFD400` on dark displays), the cursor, the play position (`#FF7A00`), and values on light panels (blue `#1F5FD1`, or green `#2F6B3F` for status text).
+- Badges are white text on the muted fill, which keeps contrast ≥ 4.5:1.
+- No more than one saturated accent per control. No emoji-like icons as decoration; icons are monochrome glyphs.
+- The plugin manager, auto arrange and pattern editor mockups were re-rendered with this palette. Mockup sources are in [`mockups/src/`](mockups/src/).
+
 ### Corner radius (modern rounded look)
 Del asked for a more modern touch, so all surfaces get rounded corners. Values are in logical points and scale with `pixels_per_point`, like everything else ([UI_SCALING.md](UI_SCALING.md)).
 | Element | Radius |

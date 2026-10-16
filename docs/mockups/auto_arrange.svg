@@ -13,7 +13,7 @@
 <clipPath id="c1"><rect x="12" y="56" width="330" height="330" rx="8"/></clipPath>
 <rect x="12" y="56" width="330" height="330" rx="8" fill="url(#cart)" stroke="#3E4652" stroke-width="1"/>
 <rect x="13.5" y="57.5" width="327" height="327" rx="7" fill="none" stroke="#fff" stroke-opacity="0.7" stroke-width="1.5"/>
-<rect x="12" y="56" width="6" height="330" fill="#1F5FD1" clip-path="url(#c1)"/>
+<rect x="12" y="56" width="6" height="330" fill="#516D96" clip-path="url(#c1)"/>
 <text x="28" y="78" font-size="14" font-weight="bold" fill="#1B2330">Fill settings</text>
 <text x="28" y="109" font-size="12.5" font-weight="bold" fill="#3E4652">Target length</text>
 <rect x="140" y="92" width="188" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/><text x="152" y="110" font-size="12.5" font-weight="bold" fill="#1F5FD1">3:30</text>
@@ -28,15 +28,15 @@
 <text x="28" y="289" font-size="12.5" font-weight="bold" fill="#3E4652">Variation</text>
 <rect x="140" y="272" width="188" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/><text x="152" y="290" font-size="12.5" font-weight="bold" fill="#1F5FD1">62 %</text>
 <text x="28" y="330" font-size="12.5" font-weight="bold" fill="#3E4652">Your tagged blocks</text>
-<rect x="28" y="342" width="49" height="22" rx="11" fill="#1E7F74"/><text x="52.5" y="357" font-size="11.5" font-weight="bold" fill="#fff" text-anchor="middle">Intro</text>
-<rect x="81" y="342" width="49" height="22" rx="11" fill="#1F5FD1"/><text x="105.5" y="357" font-size="11.5" font-weight="bold" fill="#fff" text-anchor="middle">Verse</text>
-<rect x="134" y="342" width="56" height="22" rx="11" fill="#B85500"/><text x="162.0" y="357" font-size="11.5" font-weight="bold" fill="#fff" text-anchor="middle">Chorus</text>
-<rect x="194" y="342" width="56" height="22" rx="11" fill="#5B2A86"/><text x="222.0" y="357" font-size="11.5" font-weight="bold" fill="#fff" text-anchor="middle">Bridge</text>
-<rect x="254" y="342" width="49" height="22" rx="11" fill="#3E4652"/><text x="278.5" y="357" font-size="11.5" font-weight="bold" fill="#fff" text-anchor="middle">Outro</text>
+<rect x="28" y="342" width="49" height="22" rx="11" fill="#4F7D78"/><text x="52.5" y="357" font-size="11.5" font-weight="bold" fill="#fff" text-anchor="middle">Intro</text>
+<rect x="81" y="342" width="49" height="22" rx="11" fill="#516D96"/><text x="105.5" y="357" font-size="11.5" font-weight="bold" fill="#fff" text-anchor="middle">Verse</text>
+<rect x="134" y="342" width="56" height="22" rx="11" fill="#946B3E"/><text x="162.0" y="357" font-size="11.5" font-weight="bold" fill="#fff" text-anchor="middle">Chorus</text>
+<rect x="194" y="342" width="56" height="22" rx="11" fill="#6B5C82"/><text x="222.0" y="357" font-size="11.5" font-weight="bold" fill="#fff" text-anchor="middle">Bridge</text>
+<rect x="254" y="342" width="49" height="22" rx="11" fill="#4A525E"/><text x="278.5" y="357" font-size="11.5" font-weight="bold" fill="#fff" text-anchor="middle">Outro</text>
 <clipPath id="c2"><rect x="354" y="56" width="914" height="330" rx="8"/></clipPath>
 <rect x="354" y="56" width="914" height="330" rx="8" fill="url(#cart)" stroke="#3E4652" stroke-width="1"/>
 <rect x="355.5" y="57.5" width="911" height="327" rx="7" fill="none" stroke="#fff" stroke-opacity="0.7" stroke-width="1.5"/>
-<rect x="354" y="56" width="6" height="330" fill="#1F5FD1" clip-path="url(#c2)"/>
+<rect x="354" y="56" width="6" height="330" fill="#516D96" clip-path="url(#c2)"/>
 <text x="370" y="78" font-size="14" font-weight="bold" fill="#1B2330">Energy curve (drag points) · variations</text>
 <rect x="372" y="88" width="878" height="170" rx="6" fill="url(#crt)" stroke="#3E4652"/>
 <line x1="372" y1="88" x2="372" y2="258" stroke="#24477F"/>
@@ -68,21 +68,21 @@
 <rect x="1035" y="90" width="10" height="10" rx="2" fill="#FFD400"/>
 <rect x="1145" y="135" width="10" height="10" rx="2" fill="#FFD400"/>
 <text x="384" y="106" font-size="12" fill="#FFD400" font-weight="bold">Energy</text><text x="905" y="102" font-size="12" fill="#FFD400">key +2 →</text>
-<rect x="372" y="270" width="99.2" height="26" rx="13" fill="#1F5FD1" stroke="#3E4652"/><text x="421.6" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Transpose</text>
-<rect x="479.2" y="270" width="164.0" height="26" rx="13" fill="#1F5FD1" stroke="#3E4652"/><text x="561.2" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Drum fill last bar</text>
-<rect x="651.2" y="270" width="128.0" height="26" rx="13" fill="#1F5FD1" stroke="#3E4652"/><text x="715.2" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Thin channels</text>
-<rect x="787.2" y="270" width="142.4" height="26" rx="13" fill="#1F5FD1" stroke="#3E4652"/><text x="858.4000000000001" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Arp / inversion</text>
+<rect x="372" y="270" width="99.2" height="26" rx="13" fill="#516D96" stroke="#3E4652"/><text x="421.6" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Transpose</text>
+<rect x="479.2" y="270" width="164.0" height="26" rx="13" fill="#516D96" stroke="#3E4652"/><text x="561.2" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Drum fill last bar</text>
+<rect x="651.2" y="270" width="128.0" height="26" rx="13" fill="#516D96" stroke="#3E4652"/><text x="715.2" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Thin channels</text>
+<rect x="787.2" y="270" width="142.4" height="26" rx="13" fill="#516D96" stroke="#3E4652"/><text x="858.4000000000001" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Arp / inversion</text>
 <rect x="937.6" y="270" width="70.4" height="26" rx="13" fill="url(#pill)" stroke="#3E4652"/><text x="972.8000000000001" y="288" font-size="12" font-weight="bold" fill="#1B2330" text-anchor="middle">☐ Swing</text>
-<rect x="1016.0" y="270" width="99.2" height="26" rx="13" fill="#1F5FD1" stroke="#3E4652"/><text x="1065.6" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Density ±</text>
-<rect x="1123.2" y="270" width="120.8" height="26" rx="13" fill="#1F5FD1" stroke="#3E4652"/><text x="1183.6000000000001" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Filter sweep</text>
-<rect x="372" y="304" width="106.4" height="26" rx="13" fill="#1F5FD1" stroke="#3E4652"/><text x="425.2" y="322" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Echo (8xx)</text>
+<rect x="1016.0" y="270" width="99.2" height="26" rx="13" fill="#516D96" stroke="#3E4652"/><text x="1065.6" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Density ±</text>
+<rect x="1123.2" y="270" width="120.8" height="26" rx="13" fill="#516D96" stroke="#3E4652"/><text x="1183.6000000000001" y="288" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Filter sweep</text>
+<rect x="372" y="304" width="106.4" height="26" rx="13" fill="#516D96" stroke="#3E4652"/><text x="425.2" y="322" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Echo (8xx)</text>
 <rect x="486.4" y="304" width="171.20000000000002" height="26" rx="13" fill="url(#pill)" stroke="#3E4652"/><text x="572.0" y="322" font-size="12" font-weight="bold" fill="#1B2330" text-anchor="middle">☐ Call &amp; response</text>
-<rect x="665.6" y="304" width="106.4" height="26" rx="13" fill="#1F5FD1" stroke="#3E4652"/><text x="718.8000000000001" y="322" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Key change</text>
-<rect x="780.0" y="304" width="106.4" height="26" rx="13" fill="#1F5FD1" stroke="#3E4652"/><text x="833.2" y="322" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Outro fade</text>
+<rect x="665.6" y="304" width="106.4" height="26" rx="13" fill="#516D96" stroke="#3E4652"/><text x="718.8000000000001" y="322" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Key change</text>
+<rect x="780.0" y="304" width="106.4" height="26" rx="13" fill="#516D96" stroke="#3E4652"/><text x="833.2" y="322" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Outro fade</text>
 <clipPath id="c3"><rect x="12" y="398" width="1256" height="300" rx="8"/></clipPath>
 <rect x="12" y="398" width="1256" height="300" rx="8" fill="url(#cart)" stroke="#3E4652" stroke-width="1"/>
 <rect x="13.5" y="399.5" width="1253" height="297" rx="7" fill="none" stroke="#fff" stroke-opacity="0.7" stroke-width="1.5"/>
-<rect x="12" y="398" width="6" height="300" fill="#1F5FD1" clip-path="url(#c3)"/>
+<rect x="12" y="398" width="6" height="300" fill="#516D96" clip-path="url(#c3)"/>
 <text x="28" y="420" font-size="14" font-weight="bold" fill="#1B2330">Arranger — preview (ghost blocks = proposed)</text>
 <rect x="28" y="430" width="1224" height="22" rx="6" fill="url(#crt)"/>
 <text x="34" y="446" font-size="11.5" fill="#FFD400" font-family="DejaVu Sans Mono, monospace">0:00</text>
@@ -93,25 +93,25 @@
 <text x="874" y="446" font-size="11.5" fill="#FFD400" font-family="DejaVu Sans Mono, monospace">2:30</text>
 <text x="1042" y="446" font-size="11.5" fill="#FFD400" font-family="DejaVu Sans Mono, monospace">3:00</text>
 <text x="1210" y="446" font-size="11.5" fill="#FFD400" font-family="DejaVu Sans Mono, monospace">3:30</text>
-<rect x="28" y="466" width="75.68852459016394" height="70" rx="6" fill="#1E7F74" stroke="#1B2330"/>
+<rect x="28" y="466" width="75.68852459016394" height="70" rx="6" fill="#4F7D78" stroke="#1B2330"/>
 <text x="36" y="490" font-size="12.5" font-weight="bold" fill="#fff">Intro</text><text x="36" y="508" font-size="11" fill="#fff">8 bars</text>
-<rect x="106.68852459016394" y="466" width="154.37704918032787" height="70" rx="6" fill="#1F5FD1" stroke="#1B2330"/>
+<rect x="106.68852459016394" y="466" width="154.37704918032787" height="70" rx="6" fill="#516D96" stroke="#1B2330"/>
 <text x="114.68852459016394" y="490" font-size="12.5" font-weight="bold" fill="#fff">Verse</text><text x="114.68852459016394" y="508" font-size="11" fill="#fff">16 bars</text>
-<rect x="264.0655737704918" y="466" width="154.37704918032787" height="70" rx="6" fill="#B85500" stroke="#1B2330"/>
+<rect x="264.0655737704918" y="466" width="154.37704918032787" height="70" rx="6" fill="#946B3E" stroke="#1B2330"/>
 <text x="272.0655737704918" y="490" font-size="12.5" font-weight="bold" fill="#fff">Chorus</text><text x="272.0655737704918" y="508" font-size="11" fill="#fff">16 bars</text>
-<rect x="421.44262295081967" y="466" width="154.37704918032787" height="70" rx="6" fill="#1F5FD1" fill-opacity="0.35" stroke="#1F5FD1" stroke-width="2" stroke-dasharray="6 3"/>
+<rect x="421.44262295081967" y="466" width="154.37704918032787" height="70" rx="6" fill="#516D96" fill-opacity="0.35" stroke="#516D96" stroke-width="2" stroke-dasharray="6 3"/>
 <text x="429.44262295081967" y="490" font-size="12.5" font-weight="bold" fill="#1B2330">Verse′</text><text x="429.44262295081967" y="508" font-size="11" fill="#1B2330">16 bars · derived</text>
-<rect x="578.8196721311475" y="466" width="154.37704918032787" height="70" rx="6" fill="#B85500" fill-opacity="0.35" stroke="#B85500" stroke-width="2" stroke-dasharray="6 3"/>
+<rect x="578.8196721311475" y="466" width="154.37704918032787" height="70" rx="6" fill="#946B3E" fill-opacity="0.35" stroke="#946B3E" stroke-width="2" stroke-dasharray="6 3"/>
 <text x="586.8196721311475" y="490" font-size="12.5" font-weight="bold" fill="#1B2330">Chorus′</text><text x="586.8196721311475" y="508" font-size="11" fill="#1B2330">16 bars · derived</text>
-<rect x="736.1967213114754" y="466" width="75.68852459016394" height="70" rx="6" fill="#5B2A86" stroke="#1B2330"/>
+<rect x="736.1967213114754" y="466" width="75.68852459016394" height="70" rx="6" fill="#6B5C82" stroke="#1B2330"/>
 <text x="744.1967213114754" y="490" font-size="12.5" font-weight="bold" fill="#fff">Bridge 🔒</text><text x="744.1967213114754" y="508" font-size="11" fill="#fff">8 bars</text>
-<rect x="814.8852459016393" y="466" width="36.34426229508197" height="70" rx="6" fill="#C62828" fill-opacity="0.35" stroke="#C62828" stroke-width="2" stroke-dasharray="6 3"/>
+<rect x="814.8852459016393" y="466" width="36.34426229508197" height="70" rx="6" fill="#9C4F4B" fill-opacity="0.35" stroke="#9C4F4B" stroke-width="2" stroke-dasharray="6 3"/>
 <text x="822.8852459016393" y="490" font-size="12.5" font-weight="bold" fill="#1B2330">Fill</text>
-<rect x="854.2295081967213" y="466" width="154.37704918032787" height="70" rx="6" fill="#B85500" fill-opacity="0.35" stroke="#B85500" stroke-width="2" stroke-dasharray="6 3"/>
+<rect x="854.2295081967213" y="466" width="154.37704918032787" height="70" rx="6" fill="#946B3E" fill-opacity="0.35" stroke="#946B3E" stroke-width="2" stroke-dasharray="6 3"/>
 <text x="862.2295081967213" y="490" font-size="12.5" font-weight="bold" fill="#1B2330">Chorus +2</text><text x="862.2295081967213" y="508" font-size="11" fill="#1B2330">16 bars · derived</text>
-<rect x="1011.6065573770492" y="466" width="134.70491803278688" height="70" rx="6" fill="#B85500" fill-opacity="0.35" stroke="#B85500" stroke-width="2" stroke-dasharray="6 3"/>
+<rect x="1011.6065573770492" y="466" width="134.70491803278688" height="70" rx="6" fill="#946B3E" fill-opacity="0.35" stroke="#946B3E" stroke-width="2" stroke-dasharray="6 3"/>
 <text x="1019.6065573770492" y="490" font-size="12.5" font-weight="bold" fill="#1B2330">Chorus +2′</text><text x="1019.6065573770492" y="508" font-size="11" fill="#1B2330">14 bars · derived</text>
-<rect x="1149.311475409836" y="466" width="75.68852459016394" height="70" rx="6" fill="#3E4652" fill-opacity="0.35" stroke="#3E4652" stroke-width="2" stroke-dasharray="6 3"/>
+<rect x="1149.311475409836" y="466" width="75.68852459016394" height="70" rx="6" fill="#4A525E" fill-opacity="0.35" stroke="#4A525E" stroke-width="2" stroke-dasharray="6 3"/>
 <text x="1157.311475409836" y="490" font-size="12.5" font-weight="bold" fill="#1B2330">Outro fade</text><text x="1157.311475409836" y="508" font-size="11" fill="#1B2330">8 bars · derived</text>
 <line x1="300" y1="460" x2="300" y2="545" stroke="#C62828" stroke-width="2"/>
 <text x="28" y="566" font-size="12.5" fill="#1B2330">Selected: <tspan font-weight="bold" fill="#1F5FD1">Chorus′</tspan> = Chorus + drum fill bar 16 + filter sweep 400→2.4 kHz + echo on ch 3</text>

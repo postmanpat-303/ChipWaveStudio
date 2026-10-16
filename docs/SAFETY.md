@@ -50,4 +50,5 @@ The portable Windows build keeps everything next to the exe ([PACKAGING.md](PACK
 - **Optional persistence** (off by default): saves the undo stack in the `.cwt` as `undo/history.bin`, so undo works after reopening a song. It's off by default because it grows files and could reveal deleted material if you share the song. "Clear history" and "Save without history" are available.
 
 ## 7. Settings
+See [SETTINGS.md §2.6](SETTINGS.md).
 In **Preferences → Safety**: autosave interval, number of backups and backup location, journal on/off, persistent undo, recovery cleanup age, and "Open recovery folder".
