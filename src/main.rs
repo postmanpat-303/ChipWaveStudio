@@ -1,6 +1,9 @@
 // ChipWave Tracker - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+/// Display version (Cargo: 0.2.2+fix.1; 0.2.3 is reserved for MIDI).
+pub const VERSION: &str = "0.2.2.1";
+
 mod app;
 mod arrange;
 mod audio;
@@ -37,7 +40,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
     let secs = data.len() as f32 / 2.0 / 44100.0;
     let mut report = format!(
         "ChipWave {} self-test\n  demo: {} ({} instruments, {} patterns)\n  rendered {:.2} s, peak {:.3}, rms {:.4}, nan {}\n  wav: {} ({:?})\n",
-        env!("CARGO_PKG_VERSION"), song.title, song.instruments.len(), song.patterns.len(), secs, peak, rms, nan, out.display(), wrote
+        crate::VERSION, song.title, song.instruments.len(), song.patterns.len(), secs, peak, rms, nan, out.display(), wrote
     );
     let tmp = std::env::temp_dir().join("chipwave_selftest.cwt");
     let rt = fileio::save_cwt(&song, &tmp).and_then(|_| fileio::load_cwt(&tmp));
@@ -192,7 +195,7 @@ fn play_test(secs: u64) -> i32 {
     };
     std::thread::sleep(std::time::Duration::from_millis(300));
     {
-        let mut s = shared.lock().unwrap();
+        let mut s = audio::lock(&shared);
         let audio::Shared { song, engine, .. } = &mut *s;
         engine.start(song, 0, 0, true, 0);
     }
@@ -223,7 +226,7 @@ fn main() {
     }
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version") {
-        println!("ChipWave Tracker {}", env!("CARGO_PKG_VERSION"));
+        println!("ChipWave Tracker {}", crate::VERSION);
         return;
     }
     if let Some(i) = args.iter().position(|a| a == "--self-test") {

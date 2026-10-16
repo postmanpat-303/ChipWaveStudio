@@ -58,7 +58,7 @@ pub fn cell_from_text(t: &str) -> Cell {
         }
     }
     if let Some(f) = fx {
-        if f.len() == 4 && !f.starts_with('.') {
+        if f.len() == 4 && f.is_ascii() && !f.starts_with('.') {
             c.fx = hex2(&f[0..2]).unwrap_or(0);
             c.fxp = hex2(&f[2..4]).unwrap_or(0);
         }
@@ -130,10 +130,16 @@ struct SongFile {
     info: SongInfo,
 }
 
+/// Write a .cwt straight to `path` and flush it to disk. No temp file or
+/// backups here: `recovery::atomic_save` owns the tmp + rename + .bak scheme.
 pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
-    let tmp = path.with_extension("cwt.tmp");
+    if song.patterns.len() > MAX_BLOCKS || song.automation.len() > MAX_LANES {
+        return Err(format!(
+            "too many blocks or lanes (max {MAX_BLOCKS} blocks, {MAX_LANES} lanes)"
+        ));
+    }
     {
-        let f = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
+        let f = std::fs::File::create(path).map_err(|e| e.to_string())?;
         let mut z = zip::ZipWriter::new(f);
         let stored = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Stored);
@@ -144,7 +150,7 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
         z.write_all(b"application/x-chipwave-song")
             .map_err(|e| e.to_string())?;
         z.start_file("manifest.toml", defl).map_err(e)?;
-        z.write_all(format!("format = \"chipwave-song\"\nformat_version = 1\nmin_reader_version = 1\napp = \"ChipWave Tracker {}\"\n", env!("CARGO_PKG_VERSION")).as_bytes()).map_err(|e| e.to_string())?;
+        z.write_all(format!("format = \"chipwave-song\"\nformat_version = 1\nmin_reader_version = 1\napp = \"ChipWave Tracker {}\"\n", crate::VERSION).as_bytes()).map_err(|e| e.to_string())?;
         let mut instruments = song.instruments.clone();
         for (i, inst) in instruments.iter_mut().enumerate() {
             if let InstrumentKind::Sample {
@@ -223,12 +229,11 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
             .as_bytes(),
         )
         .map_err(|e| e.to_string())?;
-        z.finish().map_err(e)?;
+        let f = z.finish().map_err(e)?;
+        // flush through the writable handle (FlushFileBuffers needs write access on Windows)
+        f.sync_all().map_err(|e| e.to_string())?;
     }
-    if path.exists() {
-        let _ = std::fs::rename(path, path.with_extension("cwt.bak"));
-    }
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+    Ok(())
 }
 
 fn read_entry(z: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<Vec<u8>, String> {
@@ -243,7 +248,18 @@ fn read_entry(z: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<Vec<
     Ok(v)
 }
 
+/// Most blocks / automation lanes a song may have (save and load agree).
+pub const MAX_BLOCKS: usize = 10_000;
+pub const MAX_LANES: usize = 4096;
+
 pub fn load_cwt(path: &Path) -> Result<Song, String> {
+    load_cwt_warn(path).map(|(s, _)| s)
+}
+
+/// Load a song; the second value lists parts that could not be loaded
+/// (shown to the user instead of silently dropping data).
+pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
+    let mut warnings: Vec<String> = Vec::new();
     let f = std::fs::File::open(path).map_err(|e| e.to_string())?;
     let mut z = zip::ZipArchive::new(f).map_err(|e| e.to_string())?;
     if z.len() > 10_000 {
@@ -253,8 +269,16 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
         .map_err(|e| e.to_string())?;
     let channels = sf.channels.clamp(1, MAX_CHANNELS);
     let mut patterns = Vec::new();
-    for i in 0..1000 {
+    for i in 0..=MAX_BLOCKS {
         let name = format!("blocks/{:03}.toml", i);
+        if i == MAX_BLOCKS {
+            if read_entry(&mut z, &name).is_ok() {
+                warnings.push(format!(
+                    "more than {MAX_BLOCKS} blocks: the rest were skipped"
+                ));
+            }
+            break;
+        }
         let Ok(b) = read_entry(&mut z, &name) else {
             break;
         };
@@ -283,11 +307,17 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
             file, data, rate, ..
         } = &mut inst.kind
         {
-            if let Ok(bytes) = read_entry(&mut z, &format!("instruments/{}", file)) {
-                if let Ok((d, r)) = decode_wav(std::io::Cursor::new(bytes)) {
+            match read_entry(&mut z, &format!("instruments/{}", file))
+                .and_then(|b| decode_wav(std::io::Cursor::new(b)))
+            {
+                Ok((d, r)) => {
                     *data = d;
                     *rate = r;
                 }
+                Err(e) => warnings.push(format!(
+                    "sample \"{}\" could not be loaded ({e})",
+                    inst.name
+                )),
             }
         }
         if let InstrumentKind::Sample { data, lp, .. } = &mut inst.kind {
@@ -300,13 +330,21 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
         .filter(|&o| o < patterns.len())
         .collect();
     let mut automation = vec![];
-    for i in 0..256 {
+    for i in 0..=MAX_LANES {
         let Ok(b) = read_entry(&mut z, &format!("automation/{i:02}.toml")) else {
             break;
         };
-        if let Ok(mut lane) =
-            toml::from_str::<crate::automation::Lane>(&String::from_utf8_lossy(&b))
-        {
+        if i == MAX_LANES {
+            warnings.push(format!(
+                "more than {MAX_LANES} automation lanes: the rest were skipped"
+            ));
+            break;
+        }
+        let parsed = toml::from_str::<crate::automation::Lane>(&String::from_utf8_lossy(&b));
+        if parsed.is_err() {
+            warnings.push(format!("automation lane {} could not be read", i + 1));
+        }
+        if let Ok(mut lane) = parsed {
             lane.points.truncate(100_000);
             for p in &mut lane.points {
                 p.value = p.value.clamp(0.0, 1.0);
@@ -322,7 +360,7 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
         title: sf.title,
         bpm: sf.bpm.clamp(20.0, 400.0),
         speed: sf.speed.clamp(1, 32),
-        lines_per_beat: sf.lines_per_beat.max(1),
+        lines_per_beat: sf.lines_per_beat.clamp(1, 32),
         channels,
         channel_names: names,
         patterns,
@@ -353,7 +391,7 @@ pub fn load_cwt(path: &Path) -> Result<Song, String> {
             }
         }
     }
-    Ok(song)
+    Ok((song, warnings))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -369,7 +407,7 @@ pub fn decode_wav<R: std::io::Read>(r: R) -> Result<(Vec<f32>, u32), String> {
     let raw: Vec<f32> = match spec.sample_format {
         hound::SampleFormat::Float => rd.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect(),
         hound::SampleFormat::Int => {
-            let scale = 1.0 / (1u64 << (spec.bits_per_sample - 1)) as f32;
+            let scale = 1.0 / (1u64 << (spec.bits_per_sample.clamp(1, 32) - 1)) as f32;
             rd.samples::<i32>()
                 .map(|s| s.unwrap_or(0) as f32 * scale)
                 .collect()
@@ -583,6 +621,32 @@ fn demo_lanes(v: &toml::Value, bass_dly: usize) -> Vec<crate::automation::Lane> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// arbitrary (non-ASCII, garbage) text must never panic the parsers
+    #[test]
+    fn cell_parsers_fuzz_no_panic() {
+        let alphabet: Vec<char> = "0123456789ABCDEFabcdef.-#=^| \t\nCHIPWAVEéß€😀ÿ\u{0}\u{301}"
+            .chars()
+            .collect();
+        let mut seed = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for _ in 0..20_000 {
+            let len = (next() % 24) as usize;
+            let s: String = (0..len)
+                .map(|_| alphabet[(next() % alphabet.len() as u64) as usize])
+                .collect();
+            let _ = cell_from_text(&s);
+            let _ = rows_from_text(&s, 4, 8);
+            let _ = crate::input::clip_from_text(&format!("{}\n{s}", crate::input::CLIP_HEADER));
+        }
+        // the case found in review: 4 bytes, char boundary inside a multibyte char
+        let _ = cell_from_text("C-3 01 40 aé1");
+    }
+
     #[test]
     fn cell_text_roundtrip() {
         let c = Cell {
@@ -706,5 +770,74 @@ mod tests {
         if let Some(p) = std::env::var_os("CHIPWAVE_SAMPLE_DEMO") {
             save_cwt(&s, std::path::Path::new(&p)).unwrap();
         }
+    }
+
+    #[test]
+    fn corrupt_files_error_not_panic() {
+        let dir = std::env::temp_dir().join(format!("chipwave_corrupt_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let good = dir.join("good.cwt");
+        save_cwt(&demo_song(), &good).unwrap();
+        let bytes = std::fs::read(&good).unwrap();
+        let bad = dir.join("bad.cwt");
+        // truncations and byte flips: must return Ok or Err, never panic
+        for cut in [0, 10, 100, bytes.len() / 2, bytes.len() - 1] {
+            std::fs::write(&bad, &bytes[..cut]).unwrap();
+            let _ = load_cwt_warn(&bad);
+        }
+        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
+        for _ in 0..200 {
+            let mut b = bytes.clone();
+            for _ in 0..8 {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                let i = (seed as usize) % b.len();
+                b[i] ^= (seed >> 32) as u8 | 1;
+            }
+            std::fs::write(&bad, &b).unwrap();
+            let _ = load_cwt_warn(&bad);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn broken_sample_gives_load_warning() {
+        let dir = std::env::temp_dir().join(format!("chipwave_warn_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("w.cwt");
+        let mut s = demo_song();
+        s.instruments.push(Instrument {
+            name: "Broken".into(),
+            volume: 1.0,
+            transpose: 0,
+            fx: vec![],
+            kind: InstrumentKind::Sample {
+                file: String::new(),
+                data: vec![0.1; 100],
+                rate: 44100,
+                base_note: 48,
+                lp: Default::default(),
+            },
+        });
+        save_cwt(&s, &f).unwrap();
+        // rewrite the zip without the sample entry
+        let src = std::fs::File::open(&f).unwrap();
+        let mut za = zip::ZipArchive::new(src).unwrap();
+        let out = dir.join("w2.cwt");
+        let mut zw = zip::ZipWriter::new(std::fs::File::create(&out).unwrap());
+        for i in 0..za.len() {
+            let e = za.by_index(i).unwrap();
+            if e.name().unwrap().starts_with("instruments/") {
+                continue;
+            }
+            zw.raw_copy_file(e).unwrap();
+        }
+        zw.finish().unwrap();
+        let (l, w) = load_cwt_warn(&out).unwrap();
+        assert_eq!(l.instruments.len(), s.instruments.len());
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(w[0].contains("Broken"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -644,11 +644,8 @@ impl App {
                 .collapsible(false)
                 .show(ctx, |ui| {
                     ui.label(
-                        egui::RichText::new(format!(
-                            "ChipWave Tracker {}",
-                            env!("CARGO_PKG_VERSION")
-                        ))
-                        .strong(),
+                        egui::RichText::new(format!("ChipWave Tracker {}", crate::VERSION))
+                            .strong(),
                     );
                     ui.label("A tracker for chip and psytrance sounds.");
                     ui.label("GPL-3.0-or-later");

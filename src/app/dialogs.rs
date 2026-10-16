@@ -9,7 +9,7 @@ type Job = (Arc<export::Progress>, Receiver<Result<String, String>>);
 pub(super) struct ExportDlg {
     pub opts: Opts,
     pub path: String,
-    job: Option<Job>,
+    pub job: Option<Job>,
     result: Option<Result<String, String>>,
 }
 
@@ -64,8 +64,7 @@ impl App {
     fn answer(&mut self, c: Choice, ctx: &egui::Context) {
         let Some(p) = self.prompt.take() else { return };
         let saved = if c == Choice::Save {
-            self.save(false);
-            !self.dirty
+            self.save_and_wait()
         } else {
             false
         };
@@ -115,7 +114,7 @@ impl App {
         }
     }
 
-    fn start_export(&mut self) {
+    pub(super) fn start_export(&mut self) {
         let song = self.with(|s| s.song.clone());
         let Some(d) = &mut self.export_dlg else {
             return;

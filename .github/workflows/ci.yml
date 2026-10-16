@@ -57,6 +57,12 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace
 
+      - name: Licences and advisories (cargo deny)
+        if: steps.detect.outputs.rust == 'true' && runner.os == 'Linux'
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
       - name: Build release
         if: steps.detect.outputs.rust == 'true'
         shell: bash

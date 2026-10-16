@@ -109,9 +109,19 @@ pub enum Target {
 
 impl Target {
     pub fn parse(s: &str) -> Option<Target> {
-        let p: Vec<&str> = s.split('.').collect();
+        // no allocation: split into a fixed array (targets have <= 6 parts)
+        let mut parts = [""; 8];
+        let mut n = 0;
+        for x in s.split('.') {
+            if n == parts.len() {
+                return None;
+            }
+            parts[n] = x;
+            n += 1;
+        }
+        let p = &parts[..n];
         let num = |x: &str| x.parse::<usize>().ok().filter(|n| *n >= 1).map(|n| n - 1);
-        match p.as_slice() {
+        match p {
             ["tempo"] => Some(Target::Tempo),
             ["mixer", "master"] | ["mixer", "master", "volume"] => Some(Target::Master),
             ["mixer", "ch", n, "volume"] => num(n).map(Target::ChanVolume),

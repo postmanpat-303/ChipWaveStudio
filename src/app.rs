@@ -1,6 +1,6 @@
 //! The egui application: toolbar, instrument panel, pattern editor.
 use crate::audio::{self, Shared, SharedRef};
-use crate::engine::{self, Engine};
+use crate::engine::Engine;
 use crate::fileio;
 use crate::input;
 use crate::model::*;
@@ -88,6 +88,11 @@ pub struct App {
     recent: Vec<String>,
     session: Option<crate::recovery::Session>,
     last_autosave: std::time::Instant,
+    /// background save in flight: target path + result channel
+    save_job: Option<(PathBuf, std::sync::mpsc::Receiver<Result<(), String>>)>,
+    save_was_dirty: bool,
+    /// problems found while opening a song (shown in a window until dismissed)
+    load_warnings: Vec<String>,
     last_heartbeat: std::time::Instant,
     /// crashed sessions found at start (recovery dialog)
     orphans: Vec<crate::recovery::Orphan>,
@@ -221,6 +226,9 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         recent: crate::settings::load().recent,
         session,
         last_autosave: std::time::Instant::now(),
+        save_job: None,
+        save_was_dirty: false,
+        load_warnings: Vec::new(),
         last_heartbeat: std::time::Instant::now(),
         orphans,
         smp: Default::default(),
@@ -407,7 +415,7 @@ fn focus_ring(p: &egui::Painter, r: Rect) {
 
 impl App {
     fn with<R>(&self, f: impl FnOnce(&mut Shared) -> R) -> R {
-        let mut s = self.shared.lock().unwrap();
+        let mut s = audio::lock(&self.shared);
         f(&mut s)
     }
 
@@ -437,7 +445,7 @@ impl App {
         };
         if let Some(p) = from.pop() {
             let cur = {
-                let mut s = self.shared.lock().unwrap();
+                let mut s = audio::lock(&self.shared);
                 (
                     std::mem::replace(&mut s.song.patterns, p.0),
                     std::mem::replace(&mut s.song.order, p.1),
@@ -515,6 +523,15 @@ impl App {
     }
 
     fn save(&mut self, as_new: bool) {
+        self.save_inner(as_new, false);
+    }
+
+    /// save and block until done (used by "Save" in the quit/new prompt)
+    pub(super) fn save_and_wait(&mut self) -> bool {
+        self.save_inner(false, true)
+    }
+
+    fn save_inner(&mut self, as_new: bool, wait: bool) -> bool {
         if as_new || self.path.is_none() {
             let mut d = rfd::FileDialog::new()
                 .add_filter("ChipWave song", &["cwt"])
@@ -526,7 +543,7 @@ impl App {
                 d = d.set_directory(&self.extra.song_dir);
             }
             let Some(p) = d.save_file() else {
-                return;
+                return false;
             };
             self.path = Some(if p.extension().is_none() {
                 p.with_extension("cwt")
@@ -534,17 +551,96 @@ impl App {
                 p
             });
         }
-        let path = self.path.clone().unwrap();
-        let nb = self.extra.backups.min(10);
-        let r = self.with(|s| crate::recovery::atomic_save(&s.song, &path, nb));
-        self.status = match r {
-            Ok(()) => {
-                self.dirty = false;
-                self.add_recent(&path);
-                format!("Saved {}", path.display())
-            }
-            Err(e) => format!("Save failed: {e} (old file kept; try Save As)"),
+        let Some(path) = self.path.clone() else {
+            return false;
         };
+        self.start_save(path, wait)
+    }
+
+    /// Save a snapshot of the song on a worker thread (the audio lock is only
+    /// held for the clone). `wait` blocks the UI (not the audio) until done and
+    /// returns whether the save succeeded.
+    fn start_save(&mut self, path: PathBuf, wait: bool) -> bool {
+        if let Some(job) = self.save_job.take() {
+            // finish the previous save first so saves never overlap
+            let r = job
+                .1
+                .recv()
+                .unwrap_or_else(|_| Err("save thread died".into()));
+            self.finish_save(job.0, r);
+        }
+        let nb = self.extra.backups.min(10);
+        let song = self.with(|s| s.song.clone());
+        let (tx, rx) = std::sync::mpsc::channel();
+        let p2 = path.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(crate::recovery::atomic_save(&song, &p2, nb));
+        });
+        // edits made while saving mark the song dirty again
+        let was_dirty = self.dirty;
+        self.dirty = false;
+        self.save_was_dirty = was_dirty;
+        self.status = format!("Saving {}…", path.display());
+        if wait {
+            let r = rx.recv().unwrap_or_else(|_| Err("save thread died".into()));
+            self.finish_save(path, r)
+        } else {
+            self.save_job = Some((path, rx));
+            false
+        }
+    }
+
+    fn load_warnings_window(&mut self, ctx: &egui::Context) {
+        if self.load_warnings.is_empty() {
+            return;
+        }
+        let mut ok = false;
+        egui::Window::new("Song opened with warnings")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.label("Some parts of this song could not be loaded:");
+                for w in &self.load_warnings {
+                    ui.label(format!("• {w}"));
+                }
+                ui.add_space(6.0);
+                ui.label("Saving now would drop them. Use Save As to keep the original file.");
+                ok = ui.button("OK").clicked();
+            });
+        if ok || ctx.input(|i| i.key_pressed(Key::Enter) || i.key_pressed(Key::Escape)) {
+            self.load_warnings.clear();
+        }
+    }
+
+    /// poll the background save (called every frame)
+    fn poll_save(&mut self) {
+        let Some((_, rx)) = &self.save_job else {
+            return;
+        };
+        let r = match rx.try_recv() {
+            Ok(r) => r,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(_) => Err("save thread died".into()),
+        };
+        if let Some((path, _)) = self.save_job.take() {
+            self.finish_save(path, r);
+        }
+    }
+
+    fn finish_save(&mut self, path: PathBuf, r: Result<(), String>) -> bool {
+        match r {
+            Ok(()) => {
+                self.add_recent(&path);
+                self.status = format!("Saved {}", path.display());
+                true
+            }
+            Err(e) => {
+                self.dirty |= self.save_was_dirty;
+                self.status = format!("Save failed: {e} (old file kept; try Save As)");
+                false
+            }
+        }
     }
 
     fn new_song(&mut self) {
@@ -613,8 +709,8 @@ impl App {
 
     /// open a .cwt by path (File > Recent, drag and drop)
     fn open_path(&mut self, p: PathBuf) {
-        match fileio::load_cwt(&p) {
-            Ok(song) => {
+        match fileio::load_cwt_warn(&p) {
+            Ok((song, warnings)) => {
                 self.with(|s| {
                     s.engine.stop();
                     s.song = song;
@@ -622,7 +718,12 @@ impl App {
                 self.path = Some(p.clone());
                 self.reset_cursor();
                 self.add_recent(&p);
-                self.status = format!("Opened {}", p.display());
+                self.status = if warnings.is_empty() {
+                    format!("Opened {}", p.display())
+                } else {
+                    format!("Opened {} with {} warning(s)", p.display(), warnings.len())
+                };
+                self.load_warnings = warnings;
             }
             Err(e) => self.status = format!("Open failed: {e}"),
         }
@@ -637,10 +738,12 @@ impl App {
         }
         let every = std::time::Duration::from_secs(self.extra.autosave_mins as u64 * 60);
         if self.extra.autosave_mins > 0 && self.dirty && self.last_autosave.elapsed() >= every {
-            self.last_autosave = std::time::Instant::now();
             let song = self.with(|s| s.song.clone());
-            sess.autosave(song);
-            self.status = "Autosaved (recovery copy)".into();
+            // a still-running autosave means we simply try again next frame
+            if sess.autosave(song) {
+                self.last_autosave = std::time::Instant::now();
+                self.status = "Autosaved (recovery copy)".into();
+            }
         }
     }
 
@@ -668,7 +771,12 @@ impl App {
         self.dirty = false;
     }
 
+    /// Quick WAV export: pick a file, then render on the export worker thread
+    /// (the export dialog shows progress and can cancel).
     fn export_wav(&mut self) {
+        if self.export_dlg.as_ref().is_some_and(|d| d.job.is_some()) {
+            return;
+        }
         let Some(p) = rfd::FileDialog::new()
             .add_filter("WAV audio", &["wav"])
             .set_file_name("chipwave-export.wav")
@@ -676,16 +784,13 @@ impl App {
         else {
             return;
         };
-        let song = self.with(|s| s.song.clone());
-        let data = engine::render_song(&song, 44100);
-        self.status = match engine::write_wav(&p, &data, 44100) {
-            Ok(()) => format!(
-                "Exported {:.1} s to {}",
-                data.len() as f32 / 88200.0,
-                p.display()
-            ),
-            Err(e) => format!("Export failed: {e}"),
-        };
+        self.export_dlg = None;
+        self.open_export();
+        if let Some(d) = &mut self.export_dlg {
+            d.opts.format = crate::export::Format::Wav;
+            d.path = p.display().to_string();
+        }
+        self.start_export();
     }
 
     fn import_sample(&mut self, path: PathBuf) {
@@ -1331,136 +1436,150 @@ impl App {
         // patch editor for the selected synth instrument
         let idx = self.instr as usize;
         let mut changed = false;
-        let shared = self.shared.clone();
-        let mut s = shared.lock().unwrap();
-        if let Some(inst) = s.song.instruments.get_mut(idx.wrapping_sub(1)) {
-            ui.horizontal(|ui| {
-                ui.add_space(14.0);
-                ui.label(egui::RichText::new(format!("Sound · {}", inst.name)).strong());
-            });
-            ui.horizontal(|ui| {
-                ui.add_space(14.0);
-                ui.label("Volume");
-                changed |= ui
-                    .add(egui::Slider::new(&mut inst.volume, 0.0..=1.0))
-                    .changed();
-            });
-            ui.horizontal(|ui| {
-                ui.add_space(14.0);
-                ui.label("Transpose");
-                for (txt, d) in [("-12", -12), (" - ", -1)] {
-                    if ui.button(txt).clicked() {
-                        inst.transpose = (inst.transpose as i32 + d).clamp(-48, 48) as i8;
-                        changed = true;
-                    }
+        let Some((name, mut volume, mut transpose, mut patch)) = self.with(|s| {
+            s.song.instruments.get(idx.wrapping_sub(1)).map(|i| {
+                let patch = match &i.kind {
+                    InstrumentKind::Synth(p) => Some(p.clone()),
+                    _ => None,
+                };
+                (i.name.clone(), i.volume, i.transpose, patch)
+            })
+        }) else {
+            return;
+        };
+        // edit a copy without holding the audio lock, commit only on change
+        ui.horizontal(|ui| {
+            ui.add_space(14.0);
+            ui.label(egui::RichText::new(format!("Sound · {}", name)).strong());
+        });
+        ui.horizontal(|ui| {
+            ui.add_space(14.0);
+            ui.label("Volume");
+            changed |= ui.add(egui::Slider::new(&mut volume, 0.0..=1.0)).changed();
+        });
+        ui.horizontal(|ui| {
+            ui.add_space(14.0);
+            ui.label("Transpose");
+            for (txt, d) in [("-12", -12), (" - ", -1)] {
+                if ui.button(txt).clicked() {
+                    transpose = (transpose as i32 + d).clamp(-48, 48) as i8;
+                    changed = true;
                 }
-                ui.label(
-                    egui::RichText::new(format!("{:+} st", inst.transpose))
-                        .monospace()
-                        .color(th().value),
-                );
-                for (txt, d) in [(" + ", 1), ("+12", 12)] {
-                    if ui.button(txt).clicked() {
-                        inst.transpose = (inst.transpose as i32 + d).clamp(-48, 48) as i8;
-                        changed = true;
-                    }
-                }
-            });
-            if let InstrumentKind::Synth(p) = &mut inst.kind {
-                egui::Grid::new("patch")
-                    .num_columns(2)
-                    .spacing([8.0, 4.0])
-                    .show(ui, |ui| {
-                        ui.label("   Osc");
-                        egui::ComboBox::from_id_salt("wave")
-                            .selected_text(format!("{:?}", p.osc1))
-                            .show_ui(ui, |ui| {
-                                for w in [
-                                    Wave::Saw,
-                                    Wave::Square,
-                                    Wave::Pulse,
-                                    Wave::Triangle,
-                                    Wave::Sine,
-                                ] {
-                                    changed |= ui
-                                        .selectable_value(&mut p.osc1, w, format!("{w:?}"))
-                                        .changed();
-                                }
-                            });
-                        ui.end_row();
-                        ui.label("   Octave");
-                        changed |= ui.add(egui::Slider::new(&mut p.osc1_oct, -3..=3)).changed();
-                        ui.end_row();
-                        ui.label("   Pulse width");
-                        changed |= ui
-                            .add(egui::Slider::new(&mut p.pulse_width, 0.05..=0.95))
-                            .changed();
-                        ui.end_row();
-                        ui.label("   Unison");
-                        changed |= ui.add(egui::Slider::new(&mut p.unison, 1..=8)).changed();
-                        ui.end_row();
-                        ui.label("   Detune ct");
-                        changed |= ui
-                            .add(egui::Slider::new(&mut p.detune_cents, 0.0..=50.0))
-                            .changed();
-                        ui.end_row();
-                        ui.label("   Filter");
-                        egui::ComboBox::from_id_salt("fmode")
-                            .selected_text(format!("{:?}", p.filter))
-                            .show_ui(ui, |ui| {
-                                for m in [FilterMode::Lp, FilterMode::Hp, FilterMode::Bp] {
-                                    changed |= ui
-                                        .selectable_value(&mut p.filter, m, format!("{m:?}"))
-                                        .changed();
-                                }
-                            });
-                        ui.end_row();
-                        ui.label("   Cutoff Hz");
-                        changed |= ui
-                            .add(egui::Slider::new(&mut p.cutoff, 20.0..=18000.0).logarithmic(true))
-                            .changed();
-                        ui.end_row();
-                        ui.label("   Resonance");
-                        changed |= ui
-                            .add(egui::Slider::new(&mut p.resonance, 0.0..=0.98))
-                            .changed();
-                        ui.end_row();
-                        ui.label("   Env amount");
-                        changed |= ui
-                            .add(egui::Slider::new(&mut p.env_amount, -1.0..=1.0))
-                            .changed();
-                        ui.end_row();
-                        ui.label("   Attack s");
-                        changed |= ui
-                            .add(egui::Slider::new(&mut p.amp.a, 0.0..=2.0).logarithmic(true))
-                            .changed();
-                        ui.end_row();
-                        ui.label("   Decay s");
-                        changed |= ui
-                            .add(egui::Slider::new(&mut p.amp.d, 0.001..=3.0).logarithmic(true))
-                            .changed();
-                        ui.end_row();
-                        ui.label("   Sustain");
-                        changed |= ui.add(egui::Slider::new(&mut p.amp.s, 0.0..=1.0)).changed();
-                        ui.end_row();
-                        ui.label("   Release s");
-                        changed |= ui
-                            .add(egui::Slider::new(&mut p.amp.r, 0.001..=4.0).logarithmic(true))
-                            .changed();
-                        ui.end_row();
-                        ui.label("   Filter decay");
-                        changed |= ui
-                            .add(egui::Slider::new(&mut p.fenv.d, 0.001..=3.0).logarithmic(true))
-                            .changed();
-                        ui.end_row();
-                        ui.label("   Drive");
-                        changed |= ui.add(egui::Slider::new(&mut p.drive, 0.0..=1.0)).changed();
-                        ui.end_row();
-                    });
             }
+            ui.label(
+                egui::RichText::new(format!("{:+} st", transpose))
+                    .monospace()
+                    .color(th().value),
+            );
+            for (txt, d) in [(" + ", 1), ("+12", 12)] {
+                if ui.button(txt).clicked() {
+                    transpose = (transpose as i32 + d).clamp(-48, 48) as i8;
+                    changed = true;
+                }
+            }
+        });
+        if let Some(p) = &mut patch {
+            egui::Grid::new("patch")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label("   Osc");
+                    egui::ComboBox::from_id_salt("wave")
+                        .selected_text(format!("{:?}", p.osc1))
+                        .show_ui(ui, |ui| {
+                            for w in [
+                                Wave::Saw,
+                                Wave::Square,
+                                Wave::Pulse,
+                                Wave::Triangle,
+                                Wave::Sine,
+                            ] {
+                                changed |= ui
+                                    .selectable_value(&mut p.osc1, w, format!("{w:?}"))
+                                    .changed();
+                            }
+                        });
+                    ui.end_row();
+                    ui.label("   Octave");
+                    changed |= ui.add(egui::Slider::new(&mut p.osc1_oct, -3..=3)).changed();
+                    ui.end_row();
+                    ui.label("   Pulse width");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.pulse_width, 0.05..=0.95))
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Unison");
+                    changed |= ui.add(egui::Slider::new(&mut p.unison, 1..=8)).changed();
+                    ui.end_row();
+                    ui.label("   Detune ct");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.detune_cents, 0.0..=50.0))
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Filter");
+                    egui::ComboBox::from_id_salt("fmode")
+                        .selected_text(format!("{:?}", p.filter))
+                        .show_ui(ui, |ui| {
+                            for m in [FilterMode::Lp, FilterMode::Hp, FilterMode::Bp] {
+                                changed |= ui
+                                    .selectable_value(&mut p.filter, m, format!("{m:?}"))
+                                    .changed();
+                            }
+                        });
+                    ui.end_row();
+                    ui.label("   Cutoff Hz");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.cutoff, 20.0..=18000.0).logarithmic(true))
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Resonance");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.resonance, 0.0..=0.98))
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Env amount");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.env_amount, -1.0..=1.0))
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Attack s");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.amp.a, 0.0..=2.0).logarithmic(true))
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Decay s");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.amp.d, 0.001..=3.0).logarithmic(true))
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Sustain");
+                    changed |= ui.add(egui::Slider::new(&mut p.amp.s, 0.0..=1.0)).changed();
+                    ui.end_row();
+                    ui.label("   Release s");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.amp.r, 0.001..=4.0).logarithmic(true))
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Filter decay");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.fenv.d, 0.001..=3.0).logarithmic(true))
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Drive");
+                    changed |= ui.add(egui::Slider::new(&mut p.drive, 0.0..=1.0)).changed();
+                    ui.end_row();
+                });
         }
-        drop(s);
         if changed {
+            self.with(|s| {
+                if let Some(inst) = s.song.instruments.get_mut(idx.wrapping_sub(1)) {
+                    inst.volume = volume;
+                    inst.transpose = transpose;
+                    if let (Some(p), InstrumentKind::Synth(dst)) = (patch, &mut inst.kind) {
+                        *dst = p;
+                    }
+                }
+            });
             self.dirty = true;
         }
     }
@@ -3330,8 +3449,14 @@ impl App {
 
 impl eframe::App for App {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // let a background save finish before the process ends
+        if let Some((path, rx)) = self.save_job.take() {
+            let r = rx.recv().unwrap_or_else(|_| Err("save thread died".into()));
+            self.finish_save(path, r);
+        }
         // clean exit: the recovery folder of this session is not needed
         if let Some(s) = &self.session {
+            s.wait_idle(std::time::Duration::from_secs(10));
             if crate::prompt::may_delete_recovery(self.dirty, self.discarded) {
                 s.close();
             } else {
@@ -3380,6 +3505,12 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.poll_save();
+        self.load_warnings_window(ui.ctx());
+        if self.save_job.is_some() {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(50));
+        }
         let ctx = ui.ctx().clone();
         if !self.themed {
             theme::apply(&ctx, theme::with_accent(self.theme, &self.extra.accent));

@@ -51,6 +51,57 @@ pub struct Patch {
     pub gain: f32,
 }
 
+impl Patch {
+    /// Copy every sound parameter but not the name (allocation-free, used on
+    /// the audio path). Exhaustive destructure: a new field must be added here.
+    pub fn copy_sound_from(&mut self, o: &Patch) {
+        let Patch {
+            name: _,
+            osc1,
+            osc1_oct,
+            osc1_level,
+            pulse_width,
+            unison,
+            detune_cents,
+            osc2,
+            sub_level,
+            noise_level,
+            filter,
+            cutoff,
+            resonance,
+            key_track,
+            env_amount,
+            amp,
+            fenv,
+            pitch_env,
+            drive,
+            gain,
+        } = o;
+        *self = Patch {
+            name: std::mem::take(&mut self.name),
+            osc1: *osc1,
+            osc1_oct: *osc1_oct,
+            osc1_level: *osc1_level,
+            pulse_width: *pulse_width,
+            unison: *unison,
+            detune_cents: *detune_cents,
+            osc2: *osc2,
+            sub_level: *sub_level,
+            noise_level: *noise_level,
+            filter: *filter,
+            cutoff: *cutoff,
+            resonance: *resonance,
+            key_track: *key_track,
+            env_amount: *env_amount,
+            amp: *amp,
+            fenv: *fenv,
+            pitch_env: *pitch_env,
+            drive: *drive,
+            gain: *gain,
+        };
+    }
+}
+
 impl Default for Patch {
     fn default() -> Self {
         Self {

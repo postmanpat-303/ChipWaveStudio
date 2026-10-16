@@ -37,12 +37,16 @@ pub struct SessionInfo {
 /// Save atomically: write `<path>.tmp`, fsync, keep the old file as `.bak`, rename.
 pub fn atomic_save(song: &Song, path: &Path, backups: u32) -> Result<(), String> {
     let tmp = path.with_extension("cwt.tmp");
-    crate::fileio::save_cwt(song, &tmp)?;
-    if let Ok(f) = std::fs::File::open(&tmp) {
-        let _ = f.sync_all();
+    // save_cwt flushes to disk through its own writable handle
+    if let Err(e) = crate::fileio::save_cwt(song, &tmp) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
     }
     // sanity: the temp file must load back before it replaces anything
-    crate::fileio::load_cwt(&tmp).map_err(|e| format!("verify failed: {e}"))?;
+    if let Err(e) = crate::fileio::load_cwt(&tmp) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("verify failed: {e}"));
+    }
     if backups > 0 && path.exists() {
         // song.cwt.bak (newest), song.cwt.bak2 ... bakN
         let bak = |i: u32| {
@@ -66,6 +70,8 @@ pub fn atomic_save(song: &Song, path: &Path, backups: u32) -> Result<(), String>
 
 pub struct Session {
     pub dir: PathBuf,
+    /// an autosave is running (autosaves never overlap)
+    busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Session {
@@ -73,7 +79,10 @@ impl Session {
         let id = format!("{}-{}", now(), std::process::id());
         let dir = root.join(id);
         std::fs::create_dir_all(&dir).ok()?;
-        let s = Session { dir };
+        let s = Session {
+            dir,
+            busy: Default::default(),
+        };
         s.write_info(title, song_path);
         s.heartbeat();
         Some(s)
@@ -82,7 +91,7 @@ impl Session {
         let info = SessionInfo {
             pid: std::process::id(),
             started: now(),
-            version: env!("CARGO_PKG_VERSION").into(),
+            version: crate::VERSION.into(),
             title: title.into(),
             song_path: song_path.map(|p| p.display().to_string()),
         };
@@ -103,11 +112,26 @@ impl Session {
         atomic_save(song, &a, 0)
     }
     /// Autosave on a background thread with a snapshot of the song.
-    pub fn autosave(&self, song: Song) {
+    /// Returns false (and does nothing) while a previous autosave still runs.
+    pub fn autosave(&self, song: Song) -> bool {
+        use std::sync::atomic::Ordering;
+        if self.busy.swap(true, Ordering::AcqRel) {
+            return false;
+        }
         let dir = self.dir.clone();
+        let busy = self.busy.clone();
         std::thread::spawn(move || {
             let _ = Session::autosave_blocking(&dir, &song);
+            busy.store(false, Ordering::Release);
         });
+        true
+    }
+    /// wait (up to `max`) for a running autosave to finish
+    pub fn wait_idle(&self, max: std::time::Duration) {
+        let t0 = std::time::Instant::now();
+        while self.busy.load(std::sync::atomic::Ordering::Acquire) && t0.elapsed() < max {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
     /// clean exit: nothing to recover
     pub fn close(&self) {
@@ -120,7 +144,7 @@ pub fn emergency(dir: &Path, song: Option<&Song>, msg: &str) {
     let _ = std::fs::create_dir_all(dir);
     let mut txt = format!(
         "ChipWave {} crashed\n{}\n\n{}\n",
-        env!("CARGO_PKG_VERSION"),
+        crate::VERSION,
         msg,
         std::backtrace::Backtrace::force_capture()
     );
@@ -277,6 +301,38 @@ mod tests {
                 .bpm
                 != 99.0
         );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn atomic_save_leaves_no_stray_files() {
+        let root = tmp_root("d");
+        let p = root.join("song.cwt");
+        let song = crate::fileio::demo_song();
+        atomic_save(&song, &p, 1).unwrap();
+        atomic_save(&song, &p, 1).unwrap();
+        let mut names: Vec<String> = std::fs::read_dir(&root)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(names, ["song.cwt", "song.cwt.bak"]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn autosaves_never_overlap() {
+        let root = tmp_root("e");
+        let s = Session::start(&root, "t", None).unwrap();
+        let song = crate::fileio::demo_song();
+        assert!(s.autosave(song.clone()));
+        // second request while the first still runs is refused
+        let second = s.autosave(song.clone());
+        s.wait_idle(std::time::Duration::from_secs(20));
+        assert!(!s.busy.load(std::sync::atomic::Ordering::Acquire));
+        assert!(s.autosave(song) || second);
+        s.wait_idle(std::time::Duration::from_secs(20));
+        assert!(crate::fileio::load_cwt(&s.dir.join("autosave.cwt")).is_ok());
         let _ = std::fs::remove_dir_all(&root);
     }
 }

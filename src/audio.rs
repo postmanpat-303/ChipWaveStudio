@@ -16,6 +16,15 @@ pub struct Shared {
 
 pub type SharedRef = Arc<Mutex<Shared>>;
 
+/// Lock the shared state, recovering from a poisoned mutex (a panic in one
+/// thread must not take the UI or the audio thread down with it).
+pub fn lock(s: &SharedRef) -> std::sync::MutexGuard<'_, Shared> {
+    s.lock().unwrap_or_else(|p| {
+        s.clear_poison();
+        p.into_inner()
+    })
+}
+
 /// Requested device buffer: 0 = Auto (device default), otherwise frames.
 pub const BUFFER_CHOICES: [u32; 5] = [0, 256, 512, 1024, 2048];
 
@@ -141,11 +150,9 @@ pub fn start_with(
         }
     }
     {
-        let mut s = shared.lock().unwrap();
-        let was_playing = s.engine.playing;
+        let mut s = lock(&shared);
+        // a device change restarts the engine (playback stops)
         s.engine = Engine::new(sample_rate as f32);
-        s.engine.playing = false;
-        let _ = was_playing;
     }
     let stats = Arc::new(Stats::default());
     // start with ~2x the device buffer, at least 1024 frames (~21 ms @ 48k)
@@ -162,26 +169,25 @@ pub fn start_with(
         std::thread::Builder::new()
             .name("chipwave-engine".into())
             .spawn(move || {
-                realtime_thread();
+                let _timer = realtime_thread();
                 let mut buf = vec![0.0f32; CHUNK * 2];
                 // prefill with silence so playback starts on a full buffer
                 let pre = stats.target_frames.load(Ordering::Relaxed) * 2;
                 for _ in 0..pre.min(prod.slots()) {
                     let _ = prod.push(0.0);
                 }
+                let mut logged_underruns = 0u32;
                 while !stop.load(Ordering::Relaxed) {
+                    // underruns are counted in the callback, reported here (no I/O there)
+                    let u = stats.underruns.load(Ordering::Relaxed);
+                    if u != logged_underruns {
+                        logged_underruns = u;
+                        eprintln!("audio underrun ({u} total): growing latency");
+                    }
                     let target = stats.target_frames.load(Ordering::Relaxed) * 2;
                     let filled = RING_FRAMES * 2 - prod.slots();
                     if filled + CHUNK * 2 <= target {
-                        {
-                            let mut s = shared.lock().unwrap();
-                            let Shared {
-                                song,
-                                engine,
-                                preview,
-                            } = &mut *s;
-                            engine.render(preview.as_ref().unwrap_or(song), &mut buf);
-                        }
+                        render_chunk(&shared, &mut buf, sample_rate as f32);
                         if let Ok(chunk) = prod.write_chunk_uninit(buf.len()) {
                             chunk.fill_from_iter(buf.iter().copied());
                         }
@@ -227,7 +233,6 @@ pub fn start_with(
             // the first callbacks happen while the stream is still starting up
             if callbacks > 3 {
                 st.underruns.fetch_add(1, Ordering::Relaxed);
-                eprintln!("audio underrun: growing latency");
             }
             let t = st.target_frames.load(Ordering::Relaxed);
             let grow = (t + n_frames.max(256)).min(RING_FRAMES - CHUNK * 2);
@@ -270,11 +275,47 @@ pub fn start_with(
     })
 }
 
+/// Render one chunk under the lock. A panic inside the engine must not kill
+/// the audio thread: output silence, reset the engine and keep going.
+pub(crate) fn render_chunk(shared: &SharedRef, buf: &mut [f32], sr: f32) {
+    let mut s = lock(shared);
+    let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Shared {
+            song,
+            engine,
+            preview,
+        } = &mut *s;
+        engine.render(preview.as_ref().unwrap_or(song), buf);
+    }))
+    .is_ok();
+    if !ok {
+        buf.fill(0.0);
+        s.engine = Engine::new(sr);
+    }
+}
+
 /// Make the engine thread wake up on time: 1 ms timer resolution and a
 /// high thread priority on Windows (the default 15.6 ms sleep granularity
 /// plus UI load caused underruns).
+/// Restores the timer resolution when the engine thread ends.
+pub(crate) struct TimerGuard;
+
 #[cfg(windows)]
-fn realtime_thread() {
+impl Drop for TimerGuard {
+    fn drop(&mut self) {
+        #[link(name = "winmm")]
+        extern "system" {
+            fn timeEndPeriod(ms: u32) -> u32;
+        }
+        // SAFETY: plain Win32 call, paired with timeBeginPeriod(1) below
+        unsafe {
+            timeEndPeriod(1);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn realtime_thread() -> TimerGuard {
     #[link(name = "winmm")]
     extern "system" {
         fn timeBeginPeriod(ms: u32) -> u32;
@@ -283,12 +324,44 @@ fn realtime_thread() {
         fn GetCurrentThread() -> isize;
         fn SetThreadPriority(h: isize, prio: i32) -> i32;
     }
+    // SAFETY: plain Win32 calls on the current thread
     unsafe {
         timeBeginPeriod(1);
-        // THREAD_PRIORITY_TIME_CRITICAL
-        SetThreadPriority(GetCurrentThread(), 15);
+        // THREAD_PRIORITY_HIGHEST (TIME_CRITICAL risks priority inversion on
+        // the mutex shared with the UI)
+        SetThreadPriority(GetCurrentThread(), 2);
     }
+    TimerGuard
 }
 
 #[cfg(not(windows))]
-fn realtime_thread() {}
+fn realtime_thread() -> TimerGuard {
+    TimerGuard
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poisoned_lock_recovers() {
+        let shared: SharedRef = Arc::new(Mutex::new(Shared {
+            song: crate::fileio::demo_song(),
+            engine: Engine::new(48000.0),
+            preview: None,
+        }));
+        let s2 = shared.clone();
+        let _ = std::thread::spawn(move || {
+            let _g = s2.lock().unwrap();
+            panic!("boom");
+        })
+        .join();
+        assert!(shared.is_poisoned());
+        let g = lock(&shared);
+        assert!(!g.song.patterns.is_empty());
+        drop(g);
+        let mut buf = vec![1.0f32; 64];
+        render_chunk(&shared, &mut buf, 48000.0);
+        assert!(buf.iter().all(|x| x.is_finite()));
+    }
+}

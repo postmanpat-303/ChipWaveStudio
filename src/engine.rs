@@ -151,6 +151,9 @@ pub struct AutoState {
     /// automated return-bus params (bus, param, value)
     ret: Vec<(usize, usize, f32)>,
     send: [[Option<f32>; 2]; MAX_CHANNELS],
+    /// parsed lane targets: (target string it was parsed from, result).
+    /// Re-parsed only when a lane's target text changes.
+    targets: Vec<(String, Option<crate::automation::Target>)>,
 }
 
 const FX_OVER_CAP: usize = 64;
@@ -488,12 +491,21 @@ impl Engine {
             a.vals = vec![f32::NAN; song.automation.len()];
         }
         let mut used = [false; 256];
+        if a.targets.len() != song.automation.len() {
+            a.targets
+                .resize(song.automation.len(), (String::new(), None));
+            a.targets.iter_mut().for_each(|c| c.0.clear());
+        }
         for (k, lane) in song.automation.iter().enumerate() {
             if !lane.enabled {
                 continue;
             }
-            let (Some(t), Some(n)) = (Target::parse(&lane.target), value_at(&lane.points, pos))
-            else {
+            let cache = &mut a.targets[k];
+            if cache.0 != lane.target {
+                cache.0.clone_from(&lane.target);
+                cache.1 = Target::parse(&lane.target);
+            }
+            let (Some(t), Some(n)) = (cache.1, value_at(&lane.points, pos)) else {
                 continue;
             };
             // smoothing: ~1.5 ms time constant at 32-frame steps
@@ -510,7 +522,7 @@ impl Engine {
                     if i < used.len() && !used[i] {
                         // refresh from the song (keeps live UI edits), no realloc after the first
                         match slot {
-                            Some(p) => p.clone_from(src),
+                            Some(p) => p.copy_sound_from(src),
                             None => *slot = Some(src.clone()),
                         }
                         used[i] = true;
@@ -778,9 +790,80 @@ pub fn write_wav(path: &std::path::Path, data: &[f32], sr: u32) -> Result<(), St
     w.finalize().map_err(|e| e.to_string())
 }
 
+/// Test-only allocator that counts allocations made on the current thread
+/// while counting is switched on (proves `render` is allocation-free).
+#[cfg(test)]
+pub(crate) mod alloc_count {
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
+
+    thread_local! {
+        static ON: Cell<bool> = const { Cell::new(false) };
+        static COUNT: Cell<usize> = const { Cell::new(0) };
+    }
+    pub struct Counting;
+    unsafe impl GlobalAlloc for Counting {
+        unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+            let _ = ON.try_with(|on| {
+                if on.get() {
+                    COUNT.with(|c| c.set(c.get() + 1));
+                }
+            });
+            // SAFETY: forwards to the system allocator with the same layout
+            unsafe { System.alloc(l) }
+        }
+        unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            // SAFETY: p was allocated by System with this layout
+            unsafe { System.dealloc(p, l) }
+        }
+        unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
+            let _ = ON.try_with(|on| {
+                if on.get() {
+                    COUNT.with(|c| c.set(c.get() + 1));
+                }
+            });
+            // SAFETY: same contract as GlobalAlloc::realloc
+            unsafe { System.realloc(p, l, n) }
+        }
+    }
+    #[global_allocator]
+    static A: Counting = Counting;
+
+    /// run `f` and return how many allocations it made on this thread
+    pub fn count(f: impl FnOnce()) -> usize {
+        COUNT.with(|c| c.set(0));
+        ON.with(|o| o.set(true));
+        f();
+        ON.with(|o| o.set(false));
+        COUNT.with(|c| c.get())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn render_is_allocation_free_after_warmup() {
+        let song = crate::fileio::demo_song();
+        assert!(
+            !song.automation.is_empty(),
+            "demo should exercise automation"
+        );
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 512];
+        // warm-up: FX buffers and patch copies are built on first use
+        for _ in 0..400 {
+            e.render(&song, &mut buf);
+        }
+        let n = alloc_count::count(|| {
+            for _ in 0..2000 {
+                e.render(&song, &mut buf);
+            }
+        });
+        assert_eq!(n, 0, "engine.render allocated {n} times");
+    }
 
     fn rows_in(e: &mut Engine, song: &Song, secs: f32) -> u64 {
         let before = e.rows_played;
