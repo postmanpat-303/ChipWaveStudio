@@ -27,3 +27,7 @@ See [docs/OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md) for the full OctaMED feature bl
 ![Sound designer mockup](docs/mockups/sound_designer.png)
 ![FX chain mockup](docs/mockups/fx_chain.png)
 ![Arranger mockup](docs/mockups/arranger.png)
+
+## Licence
+
+ChipWave Tracker is free software, licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-or-later).
