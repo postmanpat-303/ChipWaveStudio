@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" font-family="DejaVu Sans, sans-serif">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9AA5B4"/><stop offset="1" stop-color="#6F7A8A"/></linearGradient>
+<linearGradient id="cart" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DFE4EA"/><stop offset="1" stop-color="#AEB6C1"/></linearGradient>
+<linearGradient id="pill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EEF1F4"/><stop offset="1" stop-color="#C6CCD4"/></linearGradient>
+<linearGradient id="hdr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3F7FE6"/><stop offset="1" stop-color="#1747A8"/></linearGradient>
+<linearGradient id="crt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#173A72"/><stop offset="1" stop-color="#0A1F45"/></linearGradient>
+</defs>
+<rect width="1280" height="760" fill="url(#bg)"/>
+<rect width="1280" height="44" fill="url(#hdr)"/><rect y="44" width="1280" height="1" fill="#0D2F75"/>
+<text x="18" y="29" font-size="19" font-weight="bold" fill="#fff">ChipWave · Plugin Manager</text>
+<text x="1262" y="29" font-size="13" fill="#fff" text-anchor="end">142 found · 131 verified · 4 failed · 2 blocked · 5 new</text>
+<rect x="12" y="56" width="1256" height="48" fill="url(#cart)" stroke="#3E4652" stroke-width="1"/>
+<path d="M13 103 V57 H1267" stroke="#fff" stroke-width="2" fill="none"/>
+<rect x="12" y="56" width="6" height="48" fill="#1F5FD1"/>
+<text x="28" y="78" font-size="14" font-weight="bold" fill="#1B2330"></text>
+<rect x="26" y="67" width="110" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/>
+<text x="81.0" y="85" font-size="12.5" text-anchor="middle" fill="#1F5FD1" font-weight="bold">⟳ Rescan all</text>
+<rect x="146" y="67" width="120" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/>
+<text x="206.0" y="85" font-size="12.5" text-anchor="middle" fill="#1B2330" font-weight="bold">＋ Add folder…</text>
+<rect x="276" y="67" width="130" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/>
+<text x="341.0" y="85" font-size="12.5" text-anchor="middle" fill="#B85500" font-weight="bold">Retry failed (4)</text>
+<rect x="416" y="67" width="112" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/>
+<text x="472.0" y="85" font-size="12.5" text-anchor="middle" fill="#1B2330" font-weight="bold">Format: All ▾</text>
+<rect x="538" y="67" width="100" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/>
+<text x="588.0" y="85" font-size="12.5" text-anchor="middle" fill="#1B2330" font-weight="bold">Show: All ▾</text>
+<rect x="648" y="67" width="112" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/>
+<text x="704.0" y="85" font-size="12.5" text-anchor="middle" fill="#1B2330" font-weight="bold">★ Favourites</text>
+<rect x="760" y="67" width="300" height="26" fill="url(#crt)" stroke="#3E4652"/><text x="772" y="85" font-size="12.5" fill="#9FC3FF">🔍 search plugins, vendors…</text>
+<text x="1252" y="85" font-size="12" text-anchor="end" fill="#1F5FD1" font-weight="bold">Drop .clap / .vst3 / .lv2 here</text>
+<rect x="12" y="114" width="840" height="600" fill="url(#cart)" stroke="#3E4652" stroke-width="1"/>
+<path d="M13 713 V115 H851" stroke="#fff" stroke-width="2" fill="none"/>
+<rect x="12" y="114" width="6" height="600" fill="#1F5FD1"/>
+<text x="28" y="136" font-size="14" font-weight="bold" fill="#1B2330">Plugins</text>
+<text x="40" y="160" font-size="12" font-weight="bold" fill="#3E4652"></text>
+<text x="70" y="160" font-size="12" font-weight="bold" fill="#3E4652">Name</text>
+<text x="270" y="160" font-size="12" font-weight="bold" fill="#3E4652">Vendor</text>
+<text x="400" y="160" font-size="12" font-weight="bold" fill="#3E4652">Format</text>
+<text x="470" y="160" font-size="12" font-weight="bold" fill="#3E4652">Type</text>
+<text x="550" y="160" font-size="12" font-weight="bold" fill="#3E4652">Status</text>
+<text x="710" y="160" font-size="12" font-weight="bold" fill="#3E4652">On</text>
+<rect x="24" y="168" width="816" height="1" fill="#7D8794"/>
+<text x="40" y="200" font-size="15" fill="#B85500">★</text>
+<text x="70" y="200" font-size="13" font-weight="bold" fill="#1B2330">Surge XT</text>
+<text x="270" y="200" font-size="12.5" fill="#2C3644">Surge Synth Team</text>
+<rect x="400" y="186" width="48" height="19" rx="3" fill="#1F5FD1"/><text x="424" y="199" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">CLAP</text>
+<text x="470" y="200" font-size="12.5" fill="#2C3644">Instrument</text>
+<rect x="550" y="184" width="118" height="23" rx="11" fill="#1E8E3E"/><text x="609" y="200" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Verified</text>
+<rect x="710" y="186" width="40" height="20" rx="10" fill="#1E8E3E"/><circle cx="740" cy="196" r="8" fill="#fff"/>
+<rect x="24" y="216" width="816" height="38" fill="#000" opacity="0.04"/>
+<text x="40" y="240" font-size="15" fill="#B85500">★</text>
+<text x="70" y="240" font-size="13" font-weight="bold" fill="#1B2330">Vital</text>
+<text x="270" y="240" font-size="12.5" fill="#2C3644">Matt Tytel</text>
+<rect x="400" y="226" width="48" height="19" rx="3" fill="#B85500"/><text x="424" y="239" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">VST3</text>
+<text x="470" y="240" font-size="12.5" fill="#2C3644">Instrument</text>
+<rect x="550" y="224" width="118" height="23" rx="11" fill="#1E8E3E"/><text x="609" y="240" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Verified</text>
+<rect x="710" y="226" width="40" height="20" rx="10" fill="#1E8E3E"/><circle cx="740" cy="236" r="8" fill="#fff"/>
+<text x="40" y="280" font-size="15" fill="#7D8794">☆</text>
+<text x="70" y="280" font-size="13" font-weight="bold" fill="#1B2330">Dragonfly Room Reverb</text>
+<text x="270" y="280" font-size="12.5" fill="#2C3644">Michael Willis</text>
+<rect x="400" y="266" width="48" height="19" rx="3" fill="#1E7F74"/><text x="424" y="279" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">LV2</text>
+<text x="470" y="280" font-size="12.5" fill="#2C3644">Effect</text>
+<rect x="550" y="264" width="118" height="23" rx="11" fill="#1E8E3E"/><text x="609" y="280" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Verified</text>
+<rect x="710" y="266" width="40" height="20" rx="10" fill="#1E8E3E"/><circle cx="740" cy="276" r="8" fill="#fff"/>
+<rect x="24" y="296" width="816" height="38" fill="#000" opacity="0.04"/>
+<text x="40" y="320" font-size="15" fill="#7D8794">☆</text>
+<text x="70" y="320" font-size="13" font-weight="bold" fill="#1B2330">ChowTapeModel</text>
+<text x="270" y="320" font-size="12.5" fill="#2C3644">Chowdhury DSP</text>
+<rect x="400" y="306" width="48" height="19" rx="3" fill="#1F5FD1"/><text x="424" y="319" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">CLAP</text>
+<text x="470" y="320" font-size="12.5" fill="#2C3644">Effect</text>
+<rect x="550" y="304" width="118" height="23" rx="11" fill="#1E8E3E"/><text x="609" y="320" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Verified</text>
+<rect x="710" y="306" width="40" height="20" rx="10" fill="#7D8794"/><circle cx="720" cy="316" r="8" fill="#fff"/>
+<text x="40" y="360" font-size="15" fill="#B85500">★</text>
+<text x="70" y="360" font-size="13" font-weight="bold" fill="#1B2330">Airwindows Consolidated</text>
+<text x="270" y="360" font-size="12.5" fill="#2C3644">Airwindows</text>
+<rect x="400" y="346" width="48" height="19" rx="3" fill="#1F5FD1"/><text x="424" y="359" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">CLAP</text>
+<text x="470" y="360" font-size="12.5" fill="#2C3644">Effect</text>
+<rect x="550" y="344" width="118" height="23" rx="11" fill="#1E8E3E"/><text x="609" y="360" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Verified</text>
+<rect x="710" y="346" width="40" height="20" rx="10" fill="#1E8E3E"/><circle cx="740" cy="356" r="8" fill="#fff"/>
+<rect x="24" y="376" width="816" height="38" fill="#000" opacity="0.04"/>
+<text x="40" y="400" font-size="15" fill="#7D8794">☆</text>
+<text x="70" y="400" font-size="13" font-weight="bold" fill="#1B2330">x42 EQ</text>
+<text x="270" y="400" font-size="12.5" fill="#2C3644">x42</text>
+<rect x="400" y="386" width="48" height="19" rx="3" fill="#1E7F74"/><text x="424" y="399" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">LV2</text>
+<text x="470" y="400" font-size="12.5" fill="#2C3644">Effect</text>
+<rect x="550" y="384" width="118" height="23" rx="11" fill="#1E8E3E"/><text x="609" y="400" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✔ Verified</text>
+<rect x="710" y="386" width="40" height="20" rx="10" fill="#1E8E3E"/><circle cx="740" cy="396" r="8" fill="#fff"/>
+<rect x="24" y="416" width="816" height="38" fill="#C9D9F5" stroke="#1F5FD1"/>
+<text x="40" y="440" font-size="15" fill="#7D8794">☆</text>
+<text x="70" y="440" font-size="13" font-weight="bold" fill="#1B2330">OldSynth</text>
+<text x="270" y="440" font-size="12.5" fill="#2C3644">Unknown</text>
+<rect x="400" y="426" width="48" height="19" rx="3" fill="#B85500"/><text x="424" y="439" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">VST3</text>
+<text x="470" y="440" font-size="12.5" fill="#2C3644">Instrument</text>
+<rect x="550" y="424" width="118" height="23" rx="11" fill="#C62828"/><text x="609" y="440" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✖ Failed</text>
+<rect x="710" y="426" width="40" height="20" rx="10" fill="#C6CCD4" stroke="#7D8794" stroke-dasharray="3 2"/><circle cx="720" cy="436" r="8" fill="#EEF1F4"/>
+<rect x="24" y="456" width="816" height="38" fill="#000" opacity="0.04"/>
+<text x="40" y="480" font-size="15" fill="#7D8794">☆</text>
+<text x="70" y="480" font-size="13" font-weight="bold" fill="#1B2330">Noisy Dist</text>
+<text x="270" y="480" font-size="12.5" fill="#2C3644">Free DSP</text>
+<rect x="400" y="466" width="48" height="19" rx="3" fill="#1E7F74"/><text x="424" y="479" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">LV2</text>
+<text x="470" y="480" font-size="12.5" fill="#2C3644">Effect</text>
+<rect x="550" y="464" width="118" height="23" rx="11" fill="#C62828"/><text x="609" y="480" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">✖ Failed</text>
+<rect x="710" y="466" width="40" height="20" rx="10" fill="#C6CCD4" stroke="#7D8794" stroke-dasharray="3 2"/><circle cx="720" cy="476" r="8" fill="#EEF1F4"/>
+<text x="40" y="520" font-size="15" fill="#7D8794">☆</text>
+<text x="70" y="520" font-size="13" font-weight="bold" fill="#1B2330">CrackedThing</text>
+<text x="270" y="520" font-size="12.5" fill="#2C3644">?</text>
+<rect x="400" y="506" width="48" height="19" rx="3" fill="#B85500"/><text x="424" y="519" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">VST3</text>
+<text x="470" y="520" font-size="12.5" fill="#2C3644">Effect</text>
+<rect x="550" y="504" width="118" height="23" rx="11" fill="#5B2A86"/><text x="609" y="520" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">⛔ Blocked</text>
+<rect x="710" y="506" width="40" height="20" rx="10" fill="#C6CCD4" stroke="#7D8794" stroke-dasharray="3 2"/><circle cx="720" cy="516" r="8" fill="#EEF1F4"/>
+<rect x="24" y="536" width="816" height="38" fill="#000" opacity="0.04"/>
+<text x="40" y="560" font-size="15" fill="#7D8794">☆</text>
+<text x="70" y="560" font-size="13" font-weight="bold" fill="#1B2330">Odin 2</text>
+<text x="270" y="560" font-size="12.5" fill="#2C3644">TheWaveWarden</text>
+<rect x="400" y="546" width="48" height="19" rx="3" fill="#1F5FD1"/><text x="424" y="559" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">CLAP</text>
+<text x="470" y="560" font-size="12.5" fill="#2C3644">Instrument</text>
+<rect x="550" y="544" width="118" height="23" rx="11" fill="#1F5FD1"/><text x="609" y="560" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">● New</text>
+<rect x="710" y="546" width="40" height="20" rx="10" fill="#C6CCD4" stroke="#7D8794" stroke-dasharray="3 2"/><circle cx="720" cy="556" r="8" fill="#EEF1F4"/>
+<text x="40" y="600" font-size="15" fill="#7D8794">☆</text>
+<text x="70" y="600" font-size="13" font-weight="bold" fill="#1B2330">Geonkick</text>
+<text x="270" y="600" font-size="12.5" fill="#2C3644">Iurie Nistor</text>
+<rect x="400" y="586" width="48" height="19" rx="3" fill="#1E7F74"/><text x="424" y="599" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">LV2</text>
+<text x="470" y="600" font-size="12.5" fill="#2C3644">Instrument</text>
+<rect x="550" y="584" width="118" height="23" rx="11" fill="#B85500"/><text x="609" y="600" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">◌ Scanning…</text>
+<rect x="710" y="586" width="40" height="20" rx="10" fill="#C6CCD4" stroke="#7D8794" stroke-dasharray="3 2"/><circle cx="720" cy="596" r="8" fill="#EEF1F4"/>
+<rect x="24" y="616" width="816" height="38" fill="#000" opacity="0.04"/>
+<text x="40" y="640" font-size="15" fill="#7D8794">☆</text>
+<text x="70" y="640" font-size="13" font-weight="bold" fill="#1B2330">Cardinal</text>
+<text x="270" y="640" font-size="12.5" fill="#2C3644">DISTRHO</text>
+<rect x="400" y="626" width="48" height="19" rx="3" fill="#B85500"/><text x="424" y="639" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">VST3</text>
+<text x="470" y="640" font-size="12.5" fill="#2C3644">Instrument</text>
+<rect x="550" y="624" width="118" height="23" rx="11" fill="#1F5FD1"/><text x="609" y="640" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle">● New</text>
+<rect x="710" y="626" width="40" height="20" rx="10" fill="#C6CCD4" stroke="#7D8794" stroke-dasharray="3 2"/><circle cx="720" cy="636" r="8" fill="#EEF1F4"/>
+<text x="40" y="700" font-size="12" fill="#2C3644">Toggle = one click. Only Verified plugins can be switched on; others show why.</text>
+<rect x="864" y="114" width="404" height="600" fill="url(#cart)" stroke="#3E4652" stroke-width="1"/>
+<path d="M865 713 V115 H1267" stroke="#fff" stroke-width="2" fill="none"/>
+<rect x="864" y="114" width="6" height="600" fill="#C62828"/>
+<text x="880" y="136" font-size="14" font-weight="bold" fill="#1B2330">Details · OldSynth</text>
+<rect x="880" y="148" width="372" height="150" fill="url(#crt)" stroke="#3E4652"/>
+<text x="894" y="172" font-size="12.5" font-family="DejaVu Sans Mono, monospace" fill="#9FC3FF">Verification scan (sandboxed)</text>
+<text x="894" y="194" font-size="12.5" font-family="DejaVu Sans Mono, monospace" fill="#7CFF9B">✔ Load bundle               12 ms</text>
+<text x="894" y="216" font-size="12.5" font-family="DejaVu Sans Mono, monospace" fill="#7CFF9B">✔ Instantiate @48 kHz/512   40 ms</text>
+<text x="894" y="238" font-size="12.5" font-family="DejaVu Sans Mono, monospace" fill="#7CFF9B">✔ Activate                   3 ms</text>
+<text x="894" y="260" font-size="12.5" font-family="DejaVu Sans Mono, monospace" fill="#FF8A80">✖ Process 1 s silence  → NaN out</text>
+<text x="894" y="282" font-size="12.5" font-family="DejaVu Sans Mono, monospace" fill="#9FC3FF">– Deactivate / unload    skipped</text>
+<text x="880" y="326" font-size="12.5" font-weight="bold" fill="#3E4652">Reason</text><text x="975" y="326" font-size="12.5" fill="#C62828">Output contained NaN on block 3</text>
+<text x="880" y="350" font-size="12.5" font-weight="bold" fill="#3E4652">Path</text><text x="975" y="350" font-size="12.5" fill="#1F5FD1">~/.vst3/OldSynth.vst3</text>
+<text x="880" y="374" font-size="12.5" font-weight="bold" fill="#3E4652">Cache key</text><text x="975" y="374" font-size="12.5" fill="#1F5FD1">path + mtime + BLAKE3</text>
+<text x="880" y="398" font-size="12.5" font-weight="bold" fill="#3E4652">Scanned</text><text x="975" y="398" font-size="12.5" fill="#1F5FD1">16 Oct 2026, 13:58</text>
+<text x="880" y="422" font-size="12.5" font-weight="bold" fill="#3E4652">Scanner</text><text x="975" y="422" font-size="12.5" fill="#1F5FD1">chipwave-scan v1 (child process)</text>
+<rect x="880" y="456" width="84" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/>
+<text x="922.0" y="474" font-size="12.5" text-anchor="middle" fill="#1F5FD1" font-weight="bold">↻ Retry</text>
+<rect x="970" y="456" width="84" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/>
+<text x="1012.0" y="474" font-size="12.5" text-anchor="middle" fill="#5B2A86" font-weight="bold">⛔ Block</text>
+<rect x="1060" y="456" width="84" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/>
+<text x="1102.0" y="474" font-size="12.5" text-anchor="middle" fill="#1B2330" font-weight="bold">Show log</text>
+<rect x="1150" y="456" width="96" height="26" rx="13" fill="url(#pill)" stroke="#7D8794"/>
+<text x="1198.0" y="474" font-size="12.5" text-anchor="middle" fill="#1B2330" font-weight="bold">Open folder</text>
+<text x="880" y="514" font-size="13" font-weight="bold" fill="#1B2330">Scan folders</text>
+<rect x="880" y="526" width="372" height="26" fill="url(#pill)" stroke="#7D8794"/><text x="892" y="544" font-size="12.5" fill="#1E8E3E" font-weight="bold">✔</text><text x="914" y="544" font-size="12.5" fill="#1B2330">~/.clap   /usr/lib/clap</text>
+<rect x="880" y="558" width="372" height="26" fill="url(#pill)" stroke="#7D8794"/><text x="892" y="576" font-size="12.5" fill="#1E8E3E" font-weight="bold">✔</text><text x="914" y="576" font-size="12.5" fill="#1B2330">~/.vst3   /usr/lib/vst3</text>
+<rect x="880" y="590" width="372" height="26" fill="url(#pill)" stroke="#7D8794"/><text x="892" y="608" font-size="12.5" fill="#1E8E3E" font-weight="bold">✔</text><text x="914" y="608" font-size="12.5" fill="#1B2330">~/.lv2   /usr/lib/lv2</text>
+<rect x="880" y="622" width="372" height="26" fill="url(#pill)" stroke="#7D8794"/><text x="892" y="640" font-size="12.5" fill="#1E8E3E" font-weight="bold">＋</text><text x="914" y="640" font-size="12.5" fill="#1B2330">~/Music/MyPlugins  (custom)</text>
+<text x="880" y="700" font-size="12" fill="#2C3644">Timeout 10 s per plugin · crash never stops ChipWave</text>
+<text x="640.0" y="748" font-size="12" text-anchor="middle" fill="#fff">Mockup · Workbench Gradient (A2) · GPL-3 ChipWave</text>
+</svg>

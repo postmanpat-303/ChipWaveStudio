@@ -76,3 +76,6 @@ Use `nih-plug` (or `clack` plugin side) to ship **ChipWave as a CLAP/VST3 instru
 - **Phase 1.5:** MIDI input (keyboard entry, record, velocity, thru, MIDI learn).
 - **Phase 2:** MIDI output instruments + clock sync; CLAP then VST3 hosting with scanner, sandbox, GUIs, automation commands, latency compensation, state in `.cwt`.
 - **Phase 3:** ChipWave as a CLAP/VST3 plugin.
+
+## 9. Plugin manager
+Scanning, sandboxed verification, status badges, one-click enable and LV2 support are designed in [PLUGIN_MANAGER.md](PLUGIN_MANAGER.md).
