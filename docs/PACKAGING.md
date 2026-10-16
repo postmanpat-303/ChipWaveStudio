@@ -29,6 +29,12 @@ The **first runnable version targets Windows 11 x86_64**, built on the Linux box
 - **Box test:** `wine chipwave.exe --self-test` and `--render` (null audio backend). A short GUI run under Wine on the box desktop takes a screenshot. Wine's audio (WASAPI via PulseAudio) is good enough for a smoke test; the real check is on Del's PC.
 - **Deliverable:** portable zip first; the installer comes later. Linux (CachyOS) builds come next, then macOS via CI.
 
+## Icon
+The approved app icon is in [`assets/icon/`](../assets/icon/): PNGs at 32, 64, 128, 256, 512 and 1024 px, plus `chipwave_tracker.ico`.
+- **Windows:** `build.rs` embeds `chipwave_tracker.ico` into the exe with `embed-resource` (mingw `windres` when cross-compiling, `rc.exe` on MSVC), so Explorer, the taskbar and Start-menu shortcuts show it. The window icon at runtime comes from the 256 px PNG (`ViewportBuilder::with_icon`).
+- **Linux:** install the PNGs as `share/icons/hicolor/<size>x<size>/apps/io.github.postmanpat_303.ChipWave.png` (Flatpak: `/app/share/icons/hicolor/...`, name matching the app id). AppImage: put `chipwave.png` (256 px) at the AppDir root next to the `.desktop` file, which says `Icon=chipwave`. AUR: same hicolor paths under `/usr/share/icons`.
+- **macOS:** `.app` needs `ChipWave.icns`. Build it from the PNGs on the macOS CI runner: make `ChipWave.iconset/` with `icon_16x16.png … icon_512x512@2x.png` (the 1024 px PNG is 512@2x), then run `iconutil -c icns ChipWave.iconset`. Point `Info.plist` `CFBundleIconFile` at it, or let cargo-packager/cargo-bundle do it from the PNG list.
+
 ## 1. Windows 11
 - **Installer:** NSIS `.exe` setup from cargo-packager (per-user install with no admin needed, Start menu shortcut and icon, `.cwt` file association, uninstaller). An MSI (WiX) is offered as well for people who prefer it.
 - **Portable zip:** `ChipWave-x.y.z-windows-x64-portable.zip` with `chipwave.exe` and a `portable.txt` marker. With the marker present, settings live next to the exe instead of `%APPDATA%`.

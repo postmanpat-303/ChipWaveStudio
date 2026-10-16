@@ -92,7 +92,13 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
             .with_title("ChipWave Tracker")
             .with_inner_size([1360.0, 800.0])
             .with_min_inner_size([800.0, 500.0])
-            .with_drag_and_drop(true),
+            .with_drag_and_drop(true)
+            .with_icon(std::sync::Arc::new(
+                eframe::icon_data::from_png_bytes(include_bytes!(
+                    "../assets/icon/chipwave_tracker_256.png"
+                ))
+                .unwrap_or_default(),
+            )),
         ..Default::default()
     };
     eframe::run_native("ChipWave Tracker", opts, Box::new(|_cc| Ok(Box::new(app))))

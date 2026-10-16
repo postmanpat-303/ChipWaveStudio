@@ -1,5 +1,7 @@
 # ChipWave Tracker
 
+<p align="center"><img src="assets/icon/chipwave_tracker_256.png" width="128" alt="ChipWave Tracker icon"></p>
+
 A modern music tracker inspired by **OctaMED** and the Commodore **Amiga**, sister project to [BigWave Radio](https://github.com/postmanpat-303/BigWaveRadio).
 
 **Status:** planning. No code yet.
@@ -41,4 +43,4 @@ cargo build --release --target x86_64-pc-windows-gnu   # Windows exe from Linux 
 chipwave --self-test [out.wav]          # headless: renders the demo, checks it is not silent
 chipwave --render demo out.wav
 ```
-v0.1.0 has the pattern editor (keys per [docs/PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md)), tracker playback, a simple synth with factory psytrance presets, WAV sample import, `.cwt` save/load, WAV export, the first-run demo song, and Dark (default) / Amiga themes. Windows build: `dist/ChipWave-0.1.0-windows-x64.zip` on the Releases page once tagged; screenshot: [dist/screenshot.png](dist/screenshot.png).
+v0.1.0 has the pattern editor (keys per [docs/PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md)), tracker playback, a simple synth with factory psytrance presets, WAV sample import, `.cwt` save/load, WAV export, the first-run demo song, and Dark (default) / Amiga themes. Windows build: `ChipWave-0.1.1-windows-x64.zip` on the [Releases page](https://github.com/postmanpat-303/ChipWaveTracker/releases); screenshot: [dist/screenshot.png](dist/screenshot.png).
