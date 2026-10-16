@@ -22,7 +22,7 @@ A modern music tracker inspired by **OctaMED** and the Commodore **Amiga**, sist
 3. **Phase 2:** OctaMED synth and hybrid sounds, more filter models and FX, wavetables, full mod matrix, sample editor, MIDI, MOD/XM export, Amiga-mode retro look
 4. **Phase 3:** Rhai scripting/plugins, XM/IT import, arranger variation lanes
 
-See [docs/OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md) for the full OctaMED feature blueprint, [docs/SOUND_DESIGN.md](docs/SOUND_DESIGN.md) for the synth and effects, [docs/ARRANGER.md](docs/ARRANGER.md) for the timeline, [docs/EXPORT.md](docs/EXPORT.md) for WAV/MP3 export, [docs/FILE_FORMAT.md](docs/FILE_FORMAT.md) for the `.cwt` song format, and [docs/UI_SCALING.md](docs/UI_SCALING.md) for screen scaling and layouts.
+See [docs/OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md) for the full OctaMED feature blueprint, [docs/SOUND_DESIGN.md](docs/SOUND_DESIGN.md) for the synth and effects, [docs/ARRANGER.md](docs/ARRANGER.md) for the timeline, [docs/EXPORT.md](docs/EXPORT.md) for WAV/MP3 export, [docs/FILE_FORMAT.md](docs/FILE_FORMAT.md) for the `.cwt` song format, and [docs/UI_SCALING.md](docs/UI_SCALING.md) for screen scaling and layouts, and [docs/DESIGN_LANGUAGE.md](docs/DESIGN_LANGUAGE.md) for ChipWave's "Wave Cartridge" visual identity.
 
 ![Sound designer mockup](docs/mockups/sound_designer.png)
 ![FX chain mockup](docs/mockups/fx_chain.png)

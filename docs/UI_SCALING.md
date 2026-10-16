@@ -75,7 +75,7 @@ Layout presets: each breakpoint class (§4) has a default tile tree. The user ca
 - Per-song UI state (scroll positions, zoom, which instrument is open) is saved in the `.cwt` file's settings instead, not in `layout.toml`.
 
 ## 8. Themes and accessibility
-- **Default dark theme:** the palette in [SOUND_DESIGN.md §5](SOUND_DESIGN.md), used everywhere.
+- **Default dark theme:** the Wave/Neon palette in [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md), used everywhere.
 - **High-contrast theme:** pure black background, white text, thicker (2 px) outlines and focus rings, larger value arcs. It's turned on automatically when Windows' high-contrast mode is on (where we can detect it), and is always available in Settings.
 - **Colour-blind-safe accents:** an alternative accent set based on the Okabe–Ito palette (blue `#0072B2`, orange `#E69F00`, sky `#56B4E9`, bluish green `#009E73`, yellow `#F0E442`, vermillion `#D55E00`, reddish purple `#CC79A7`). Modulation sources and clip colours never rely on colour alone: each modulation source also has a shape marker (envelope ▲, LFO ●, macro ■) on its arcs, and clips show the block number.
 - Keyboard focus is always visible; every control can be reached from the keyboard; tooltips show values; text never goes below 9 pt at any scale; animations (follow-scroll, meter falloff) respect a "reduce motion" option.
@@ -83,7 +83,7 @@ Layout presets: each breakpoint class (§4) has a default tile tree. The user ca
 
 ## 9. Optional "Amiga mode" look
 A retro skin that makes ChipWave look like an Amiga Workbench 1.3 tracker:
-- **Palette:** Workbench-style blue/white/black/orange (our own hex values, not taken from any assets).
+- **Palette:** the "Workbench Modern" skin from [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md) (our own hex values, not taken from any assets).
 - **Pixel font:** an 8×8 bitmap font drawn at **integer multiples only** (×1, ×2, ×3, ×4: the largest that fits the chosen size), **nearest-neighbour** filtering, positions snapped to whole pixels. Non-integer UI scales round down to the nearest integer for this font, and the extra space becomes padding.
 - **Font licence:** the original Amiga **Topaz** font belongs to the Amiga ROM (copyright now held by Cloanto/Amiga Corporation) and **must not be bundled**. Fan "Topaz-like" fonts often have unclear licences, so we avoid them too. Options, in order of preference:
   1. **Our own 8×8 font**, designed in the Topaz *spirit* and released CC0 inside the repo (about 96 glyphs, a day's work; the font file can be written as a simple PNG grid or a text bitmap file).
