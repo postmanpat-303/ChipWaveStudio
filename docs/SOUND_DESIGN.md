@@ -6,7 +6,7 @@ ChipWave lets you build your own sounds *inside* the tracker and play them as or
 
 The filter section is inspired by Bitwig Studio's filters and its modulation workflow (sources at the bottom). We copy ideas, not code or assets.
 
-![Filter panel mockup](mockups/filter_panel.svg)
+![Sound designer device strip mockup](mockups/sound_designer.svg)
 
 ## 1. Signal flow
 
@@ -89,18 +89,57 @@ Bitwig's Unified Modulation System works like this: click a modulator's routing 
 4. Each knob shows a **coloured arc** outside its value ring for each mod source (colour = source), plus a moving dot for the live modulated value.
 5. Right-click an arc → edit amount, bypass, remove. Alt-drag edits base value.
 
-## 5. UI: the filter panel
+## 5. UI: the device strip
 
-Mockup: [`mockups/filter_panel.svg`](mockups/filter_panel.svg).
+**Visual reference:** Del supplied a screenshot of Bitwig Studio's Sampler device ([`reference/del-visual-reference-bitwig-sampler.png`](reference/del-visual-reference-bitwig-sampler.png)). We follow its *style* (layout rhythm, colour roles, knob shape), drawn with our own egui code. No Bitwig artwork, icons or fonts are copied.
 
-- **Live response curve** at the top of each filter slot: log-frequency x-axis (20 Hz–20 kHz), dB y-axis, computed from the model's analytic magnitude response (for nonlinear models, the linearised response). Repaints every frame.
-- **Drag handle** on the curve: horizontal drag = cutoff, vertical = resonance, mouse wheel = drive, double-click = reset. Shift for fine control.
-- **Modulation ghost:** a translucent band shows the cutoff range the active modulators sweep; a thin line traces the live position of the currently playing voice.
-- **Spectrum overlay** (optional): FFT of the signal entering the filter, drawn faintly behind the curve.
-- **Model / mode** dropdowns and a slope selector beside the curve; knobs below (Cutoff, Reso, Drive, Key, Env) with mod arcs.
-- Dark egui theme; each modulator family has its own colour (envelopes orange, LFOs blue, macros green) used for both the routing button and the arcs.
+![Sound designer mockup](mockups/sound_designer.svg)
+![FX chain mockup](mockups/fx_chain.svg)
 
-Note: the draggable curve is our own design choice. We did not find an official Bitwig document describing a draggable response curve in Filter+, so we don't claim one.
+### Layout: one horizontal strip per patch, left to right
+1. **Title rail** (26 px): vertical patch name, power/bypass dot, preset/browse icons.
+2. **Mode tabs column:** oscillator source list (Saw, Square, Amiga, Wavetable, Sample, Noise). The active tab is in accent blue, the others dimmed. Bottom toggle picks OSC 1 / OSC 2.
+3. **Oscillator / sample display** (largest panel): a header row of value readouts (source name in blue, unison and level values in teal/blue), an inset display showing the single-cycle wave or sample in light grey, **yellow** draggable start/loop/phase markers with flag tabs, and an **orange** line overlaid showing the live modulation (e.g. PWM or wavetable position over time). A footer row holds yellow numeric readouts (PW, WT position) and sync/FM values. Below it sit two small panels: a "◂ Analog ▸" character selector with Crunch/Tape-style knobs, and pitch (Oct, Detune, Retrig).
+4. **Filter panel:** model / mode / character dropdowns in the header; an inset **draggable response curve** (blue line with soft blue fill, yellow handle at the peak: drag left/right for cutoff and up/down for resonance, wheel for drive); an orange translucent band showing the modulation sweep and a dashed orange line for the live cutoff. Underneath: one large cutoff knob with a Hz readout, plus **small vertical sliders** for Res, Drive and Key tracking.
+5. **Envelope / modulator panel:** an envelope selector (Amp ▾ / Filter / Env 3), a mini envelope graph in orange, a row of small A H D S R knobs, velocity/curve readouts in teal, then compact LFO and macro rows. Each modulator has its routing button (green ring when it's armed).
+6. **Right column:** buttons with coloured top strips, **Note** (blue: note/voice settings), **Render** (red: render-to-sample), **FX (n)** (teal: opens the FX strip), then an output panel with pan, width and a large **Out** knob.
+7. **FX strip** (opens beneath, same style): one panel per effect with a coloured top strip matching its category, an enable dot, a mode readout in teal, three to six knobs, drag to reorder.
+
+### Colour palette (egui `Color32`)
+| Role | Hex | Use |
+|---|---|---|
+| `window_bg` | `#202123` | behind everything |
+| `device_frame` | `#3B3D40` | the strip's outer rounded frame |
+| `panel` | `#2A2B2D` | section panels (corner radius 6) |
+| `inset` | `#1A1B1C` | waveform / curve displays (radius 3) |
+| `knob_body` | `#3E4044` | knob fill, 1.5 px `#151617` outline |
+| `track` | `#4A4C50` | unfilled knob arc / slider track |
+| `label` | `#C9CBCE` | section headers, knob labels |
+| `dim` | `#85888D` | inactive tabs, hints |
+| `accent_blue` | `#3FA9F5` | active tab, primary values, LFOs, filter curve |
+| `accent_teal` | `#2FC6B0` | secondary values (modes, %), FX button |
+| `accent_orange` | `#F5891F` | value arcs, envelopes, modulation overlay |
+| `accent_yellow` | `#F2D23C` | markers, draggable handles, numeric readouts on displays |
+| `accent_green` | `#4FD18B` | enabled / routing armed |
+| `accent_red` | `#E5484D` | Render button strip, clipping |
+
+Modulation colours: envelopes orange, LFOs blue, macros green, tracker-command lanes yellow. Every arc and overlay uses its source's colour.
+
+### Knob style
+- A 270° sweep starting at 135° (bottom-left) and ending bottom-right.
+- **Body:** a filled circle (`knob_body`), radius 11 px (small: ADSR, pan), 15 px (standard) or 20 px (hero: cutoff, Out).
+- **Pointer:** a 2 px light line from 30 % to 85 % of the radius, round caps.
+- **Value arc:** 3 px, radius + 4, drawn over a full `track` arc. Unipolar knobs fill from the start; bipolar ones (pan, octave, mod amounts) fill from 12 o'clock.
+- **Modulation arcs:** 2 px at radius + 8 (+4 for each extra source), from the base value to base + amount, in the source's colour. A small dot shows the live modulated value.
+- **Label** below in `label` at 11 px. The value appears in a tooltip while dragging, and in teal in place of the label for 1 s afterwards.
+- **Interaction:** vertical drag (Shift = fine), double-click resets, wheel nudges, right-click opens the menu (modulation, MIDI learn, reset). In routing mode, dragging sets the mod amount and Alt-drag sets the base value.
+- **Vertical slider:** 18 × 62 px dark slot, coloured fill from the bottom, 5 px light cap.
+
+Implementation: custom `egui::Widget`s drawn with `Painter` (`circle_filled`, an arc path via `PathShape`, `rect_filled`). The theme lives in one `Theme` struct so a light or "Workbench" skin can come later. Font: egui's default (or bundle Inter, OFL-licensed), 11–12 px, headers semi-bold.
+
+### Bitwig-inspired behaviour (sourced)
+- **Modulation routing:** described in §4, with sources [6]–[8].
+- **The draggable response curve is our own design.** We didn't find official Bitwig documentation describing one in Filter+, so we don't claim it.
 
 ## 6. Effects chain (per patch)
 

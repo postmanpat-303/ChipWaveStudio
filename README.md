@@ -22,5 +22,6 @@ A modern music tracker inspired by **OctaMED** and the Commodore **Amiga**, sist
 
 See [docs/OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md) for the full OctaMED feature blueprint, [docs/SOUND_DESIGN.md](docs/SOUND_DESIGN.md) for the synth and effects, and [docs/ARRANGER.md](docs/ARRANGER.md) for the timeline.
 
-![Filter panel mockup](docs/mockups/filter_panel.png)
+![Sound designer mockup](docs/mockups/sound_designer.png)
+![FX chain mockup](docs/mockups/fx_chain.png)
 ![Arranger mockup](docs/mockups/arranger.png)
