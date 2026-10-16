@@ -11,6 +11,54 @@ use crate::model::Cell;
 use eframe::egui::{Event, Key};
 
 pub const CLIP_HEADER: &str = "ChipWave cells v1";
+/// arranger clipboard (song-order entries); distinct so the two never mix
+pub const ARR_HEADER: &str = "ChipWave song-order v1";
+
+pub fn arr_clip_to_text(blocks: &[usize]) -> String {
+    let ids: Vec<String> = blocks.iter().map(|b| b.to_string()).collect();
+    format!("{ARR_HEADER}\n{}\n", ids.join(" "))
+}
+
+pub fn arr_clip_from_text(t: &str) -> Option<Vec<usize>> {
+    let mut lines = t.lines();
+    if lines.next()?.trim() != ARR_HEADER {
+        return None;
+    }
+    let v: Vec<usize> = lines
+        .flat_map(|l| l.split_whitespace())
+        .filter_map(|x| x.parse().ok())
+        .collect();
+    if v.is_empty() {
+        None
+    } else {
+        Some(v)
+    }
+}
+
+/// Where a clipboard action goes, given which view has keyboard focus.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Routed {
+    Pattern(ClipAction),
+    Arranger(ArrAction, Option<String>),
+}
+
+pub fn route_clip(a: ClipAction, arranger_focus: bool, shift: bool) -> Routed {
+    if !arranger_focus {
+        return Routed::Pattern(a);
+    }
+    match a {
+        ClipAction::Copy => Routed::Arranger(ArrAction::Copy, None),
+        ClipAction::Cut => Routed::Arranger(ArrAction::Cut, None),
+        ClipAction::Paste(t) => Routed::Arranger(
+            if shift {
+                ArrAction::PasteUnique
+            } else {
+                ArrAction::Paste
+            },
+            t,
+        ),
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ClipAction {
@@ -105,12 +153,19 @@ pub enum ArrAction {
     Next,
     ZoomIn,
     ZoomOut,
+    ExtendPrev,
+    ExtendNext,
+    SelectAll,
+    Cut,
+    Copy,
+    Paste,
+    PasteUnique,
 }
 
 /// Arranger shortcuts. Ctrl+D / Ctrl+Shift+D work whenever the arranger is
-/// visible (docked or full); the others only in the full arranger view,
-/// where they don't clash with the pattern editor.
-pub fn arranger_shortcut(e: &Event, full_view: bool) -> Option<ArrAction> {
+/// visible (docked or full); the others only while the arranger has keyboard
+/// focus (clicked, or the full arranger view).
+pub fn arranger_shortcut(e: &Event, focused: bool) -> Option<ArrAction> {
     let Event::Key {
         key,
         pressed: true,
@@ -127,10 +182,15 @@ pub fn arranger_shortcut(e: &Event, full_view: bool) -> Option<ArrAction> {
             ArrAction::Duplicate
         });
     }
-    if !full_view || m.command || m.alt {
+    if !focused || m.alt {
         return None;
     }
+    if m.command {
+        return (*key == Key::A).then_some(ArrAction::SelectAll);
+    }
     Some(match key {
+        Key::ArrowLeft if m.shift => ArrAction::ExtendPrev,
+        Key::ArrowRight if m.shift => ArrAction::ExtendNext,
         Key::ArrowLeft => ArrAction::Prev,
         Key::ArrowRight => ArrAction::Next,
         Key::Delete | Key::Backspace => ArrAction::Delete,
@@ -250,6 +310,60 @@ mod tests {
             arranger_shortcut(&key(Key::ArrowLeft, Modifiers::NONE), true),
             Some(ArrAction::Prev)
         );
+    }
+
+    #[test]
+    fn clipboard_routes_to_focused_view() {
+        assert_eq!(
+            route_clip(ClipAction::Copy, false, false),
+            Routed::Pattern(ClipAction::Copy)
+        );
+        assert_eq!(
+            route_clip(ClipAction::Cut, true, false),
+            Routed::Arranger(ArrAction::Cut, None)
+        );
+        let t = arr_clip_to_text(&[0, 2]);
+        assert_eq!(
+            route_clip(ClipAction::Paste(Some(t.clone())), true, false),
+            Routed::Arranger(ArrAction::Paste, Some(t.clone()))
+        );
+        assert_eq!(
+            route_clip(ClipAction::Paste(None), true, true),
+            Routed::Arranger(ArrAction::PasteUnique, None)
+        );
+        // Windows-style events, end to end
+        let acts = clipboard_actions(&[Event::Copy, Event::Paste(t)]);
+        let r: Vec<Routed> = acts
+            .into_iter()
+            .map(|a| route_clip(a, true, false))
+            .collect();
+        assert!(matches!(r[0], Routed::Arranger(ArrAction::Copy, None)));
+        assert!(matches!(r[1], Routed::Arranger(ArrAction::Paste, Some(_))));
+    }
+
+    #[test]
+    fn clipboards_do_not_mix() {
+        let a = arr_clip_to_text(&[3, 1, 1]);
+        assert_eq!(arr_clip_from_text(&a), Some(vec![3, 1, 1]));
+        assert_eq!(clip_from_text(&a), None);
+        let p = clip_to_text(&[vec![Cell::default()]]);
+        assert_eq!(arr_clip_from_text(&p), None);
+    }
+
+    #[test]
+    fn arranger_keys_need_focus() {
+        let del = key(Key::Delete, Modifiers::NONE);
+        assert_eq!(arranger_shortcut(&del, false), None);
+        assert_eq!(arranger_shortcut(&del, true), Some(ArrAction::Delete));
+        let sr = key(Key::ArrowRight, Modifiers::SHIFT);
+        assert_eq!(arranger_shortcut(&sr, true), Some(ArrAction::ExtendNext));
+        assert_eq!(
+            arranger_shortcut(&key(Key::A, CTRL), true),
+            Some(ArrAction::SelectAll)
+        );
+        assert_eq!(arranger_shortcut(&key(Key::A, CTRL), false), None);
+        // Ctrl+C never comes through here (handled as a clipboard action)
+        assert_eq!(arranger_shortcut(&key(Key::C, CTRL), true), None);
     }
 
     #[test]
