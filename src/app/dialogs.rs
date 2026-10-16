@@ -267,7 +267,10 @@ impl App {
                     ui.add(egui::TextEdit::singleline(&mut info.year).desired_width(80.0));
                     ui.end_row();
                     ui.label("Comment");
-                    ui.add(egui::TextEdit::multiline(&mut info.comment).desired_rows(3).desired_width(260.0));
+                    // fixed-height box: long comments scroll instead of growing the window
+                    egui::ScrollArea::vertical().id_salt("info_comment").max_height(64.0).show(ui, |ui| {
+                        ui.add(egui::TextEdit::multiline(&mut info.comment).desired_rows(3).desired_width(260.0));
+                    });
                     ui.end_row();
                 });
                 ui.label(egui::RichText::new("Saved in the song; used for MP3 tags (the comment gets \"Made with ChipWave\").").small().color(th().ink2));
@@ -321,6 +324,7 @@ impl App {
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
+                ui.set_width(640.0);
                 ui.add_enabled_ui(!running, |ui| {
                     egui::Grid::new("exp")
                         .num_columns(2)
@@ -341,56 +345,67 @@ impl App {
                                 }
                             });
                             ui.end_row();
-                            if d.opts.format == Format::Mp3 {
-                                ui.label("MP3 mode");
-                                ui.vertical(|ui| {
-                                    ui.horizontal(|ui| {
-                                        let vbr = matches!(d.opts.mp3, Mp3Mode::Vbr(_));
-                                        if ui
-                                            .selectable_label(vbr, "VBR")
-                                            .on_hover_text(
-                                                "variable bitrate, best quality per size",
-                                            )
-                                            .clicked()
-                                            && !vbr
-                                        {
-                                            d.opts.mp3 = Mp3Mode::Vbr(2);
+                            {
+                                let is_mp3 = d.opts.format == Format::Mp3;
+                                ui.add_enabled(is_mp3, egui::Label::new("MP3 mode"));
+                                ui.add_enabled_ui(is_mp3, |ui| {
+                                    ui.vertical(|ui| {
+                                        ui.set_min_height(48.0);
+                                        ui.horizontal(|ui| {
+                                            let vbr = matches!(d.opts.mp3, Mp3Mode::Vbr(_));
+                                            if ui
+                                                .selectable_label(vbr, "VBR")
+                                                .on_hover_text(
+                                                    "variable bitrate, best quality per size",
+                                                )
+                                                .clicked()
+                                                && !vbr
+                                            {
+                                                d.opts.mp3 = Mp3Mode::Vbr(2);
+                                            }
+                                            if ui
+                                                .selectable_label(!vbr, "CBR")
+                                                .on_hover_text("constant bitrate")
+                                                .clicked()
+                                                && vbr
+                                            {
+                                                d.opts.mp3 = Mp3Mode::Cbr(320);
+                                            }
+                                        });
+                                        match &mut d.opts.mp3 {
+                                            Mp3Mode::Cbr(k) => {
+                                                ui.horizontal(|ui| {
+                                                    for b in [128u16, 192, 256, 320] {
+                                                        ui.selectable_value(
+                                                            k,
+                                                            b,
+                                                            format!("{b} kbps"),
+                                                        );
+                                                    }
+                                                });
+                                            }
+                                            Mp3Mode::Vbr(q) => {
+                                                ui.horizontal(|ui| {
+                                                    ui.add(egui::Slider::new(q, 0..=9).prefix("V"));
+                                                    let kb = [
+                                                        245, 225, 190, 175, 165, 130, 115, 100, 85,
+                                                        65,
+                                                    ]
+                                                        [(*q).min(9) as usize];
+                                                    ui.label(
+                                                        egui::RichText::new(format!(
+                                                            "≈ {kb} kbps · V0 best"
+                                                        ))
+                                                        .small()
+                                                        .color(th().ink2),
+                                                    );
+                                                });
+                                            }
                                         }
-                                        if ui
-                                            .selectable_label(!vbr, "CBR")
-                                            .on_hover_text("constant bitrate")
-                                            .clicked()
-                                            && vbr
-                                        {
-                                            d.opts.mp3 = Mp3Mode::Cbr(320);
-                                        }
-                                    });
-                                    match &mut d.opts.mp3 {
-                                        Mp3Mode::Cbr(k) => {
-                                            ui.horizontal(|ui| {
-                                                for b in [128u16, 192, 256, 320] {
-                                                    ui.selectable_value(k, b, format!("{b} kbps"));
-                                                }
-                                            });
-                                        }
-                                        Mp3Mode::Vbr(q) => {
-                                            ui.horizontal(|ui| {
-                                                ui.add(egui::Slider::new(q, 0..=9).prefix("V"));
-                                                let kb = [
-                                                    245, 225, 190, 175, 165, 130, 115, 100, 85, 65,
-                                                ]
-                                                    [(*q).min(9) as usize];
-                                                ui.label(
-                                                    egui::RichText::new(format!(
-                                                        "≈ {kb} kbps · V0 best"
-                                                    ))
-                                                    .small()
-                                                    .color(th().ink2),
-                                                );
-                                            });
-                                        }
-                                    }
-                                });
+                                    })
+                                })
+                                .response
+                                .on_disabled_hover_text("MP3 only: switch Format to MP3");
                                 ui.end_row();
                             }
                             ui.label("Sample rate");
@@ -433,20 +448,26 @@ impl App {
                                 "extra time after the end for releases, delay and reverb",
                             );
                             ui.end_row();
-                            ui.label("Tags");
-                            ui.horizontal(|ui| {
-                                let a = if info.artist.is_empty() {
-                                    "no artist".to_string()
-                                } else {
-                                    info.artist.clone()
-                                };
-                                ui.label(
-                                    egui::RichText::new(format!("{title} · {a}")).color(th().value),
-                                );
-                                if ui.small_button("Edit song info…").clicked() {
-                                    edit_info = true;
-                                }
-                            });
+                            let is_mp3 = d.opts.format == Format::Mp3;
+                            ui.add_enabled(is_mp3, egui::Label::new("Tags"));
+                            ui.add_enabled_ui(is_mp3, |ui| {
+                                ui.horizontal(|ui| {
+                                    let a = if info.artist.is_empty() {
+                                        "no artist".to_string()
+                                    } else {
+                                        info.artist.clone()
+                                    };
+                                    ui.label(
+                                        egui::RichText::new(format!("{title} · {a}"))
+                                            .color(th().value),
+                                    );
+                                    if ui.small_button("Edit song info…").clicked() {
+                                        edit_info = true;
+                                    }
+                                })
+                            })
+                            .response
+                            .on_disabled_hover_text("ID3 tags are written to MP3 only");
                             ui.end_row();
                             ui.label("Save to");
                             ui.horizontal(|ui| {
@@ -461,27 +482,38 @@ impl App {
                         });
                 });
                 ui.add_space(6.0);
-                if let Some((p, _)) = &d.job {
-                    let f = p.get();
-                    ui.add(
-                        egui::ProgressBar::new(f)
-                            .show_percentage()
-                            .text(if f < 0.8 {
-                                format!("Rendering… {:.0} %", f * 100.0)
-                            } else {
-                                format!("Encoding… {:.0} %", f * 100.0)
-                            }),
-                    );
-                }
-                match &d.result {
-                    Some(Ok(m)) => {
-                        ui.label(egui::RichText::new(m).color(th().accent));
-                    }
-                    Some(Err(e)) => {
-                        ui.label(egui::RichText::new(e).color(th().brick));
-                    }
-                    None => {}
-                }
+                let slot = ui.available_width();
+                ui.allocate_ui_with_layout(
+                    egui::vec2(slot, 44.0),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        ui.set_min_size(egui::vec2(slot, 44.0));
+                        if let Some((p, _)) = &d.job {
+                            let f = p.get();
+                            ui.add(
+                                egui::ProgressBar::new(f)
+                                    .show_percentage()
+                                    .text(if f < 0.8 {
+                                        format!("Rendering… {:.0} %", f * 100.0)
+                                    } else {
+                                        format!("Encoding… {:.0} %", f * 100.0)
+                                    }),
+                            );
+                        }
+                        match &d.result {
+                            Some(Ok(m)) => {
+                                ui.label(egui::RichText::new(m).color(th().accent));
+                            }
+                            Some(Err(e)) => {
+                                ui.label(egui::RichText::new(e).color(th().brick));
+                            }
+                            None if d.job.is_none() => {
+                                ui.label(egui::RichText::new("Ready").color(th().ink2));
+                            }
+                            None => {}
+                        }
+                    },
+                );
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     if running {

@@ -405,7 +405,10 @@ impl App {
                 self.bind_msg = "All keys reset to defaults".into();
             }
         });
-        if !self.bind_msg.is_empty() {
+        // message row is always reserved so the table never shifts
+        if self.bind_msg.is_empty() {
+            ui.label(" ");
+        } else {
             let warn = self.bind_msg.contains("already used");
             ui.label(egui::RichText::new(&self.bind_msg).color(if warn {
                 th().brick

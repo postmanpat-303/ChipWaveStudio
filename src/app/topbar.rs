@@ -663,35 +663,44 @@ impl App {
             .show(ctx, |ui| {
                 ui.label("ChipWave did not close cleanly last time. These copies were found:");
                 ui.add_space(6.0);
-                egui::Grid::new("orph")
-                    .striped(true)
-                    .spacing([12.0, 6.0])
+                // fixed list area: discarding a row must not resize the window
+                ui.set_width(620.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("orph_scroll")
+                    .max_height(180.0)
                     .show(ui, |ui| {
-                        for (i, o) in self.orphans.iter().enumerate() {
-                            let ago = o.modified.elapsed().map(|d| d.as_secs()).unwrap_or(0);
-                            let when = if ago < 3600 {
-                                format!("{} min ago", ago / 60)
-                            } else if ago < 86400 {
-                                format!("{} h ago", ago / 3600)
-                            } else {
-                                format!("{} days ago", ago / 86400)
-                            };
-                            let title = if o.info.title.is_empty() {
-                                "Untitled"
-                            } else {
-                                &o.info.title
-                            };
-                            ui.label(egui::RichText::new(title).strong());
-                            ui.label(when);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{}{}",
-                                    o.source,
-                                    if o.crashed { " · crashed" } else { "" }
-                                ))
-                                .color(th().ink2),
-                            );
-                            if ui
+                        ui.set_min_height(180.0);
+                        ui.set_min_width(600.0);
+                        egui::Grid::new("orph")
+                            .striped(true)
+                            .spacing([12.0, 6.0])
+                            .show(ui, |ui| {
+                                for (i, o) in self.orphans.iter().enumerate() {
+                                    let ago =
+                                        o.modified.elapsed().map(|d| d.as_secs()).unwrap_or(0);
+                                    let when = if ago < 3600 {
+                                        format!("{} min ago", ago / 60)
+                                    } else if ago < 86400 {
+                                        format!("{} h ago", ago / 3600)
+                                    } else {
+                                        format!("{} days ago", ago / 86400)
+                                    };
+                                    let title = if o.info.title.is_empty() {
+                                        "Untitled"
+                                    } else {
+                                        &o.info.title
+                                    };
+                                    ui.label(egui::RichText::new(title).strong());
+                                    ui.label(when);
+                                    ui.label(
+                                        egui::RichText::new(format!(
+                                            "{}{}",
+                                            o.source,
+                                            if o.crashed { " · crashed" } else { "" }
+                                        ))
+                                        .color(th().ink2),
+                                    );
+                                    if ui
                                 .button("Recover")
                                 .on_hover_text(
                                     "open as Untitled (recovered); the original file is untouched",
@@ -700,15 +709,16 @@ impl App {
                             {
                                 act = Some((i, true));
                             }
-                            if ui
-                                .button("Discard")
-                                .on_hover_text("delete this recovery copy")
-                                .clicked()
-                            {
-                                act = Some((i, false));
-                            }
-                            ui.end_row();
-                        }
+                                    if ui
+                                        .button("Discard")
+                                        .on_hover_text("delete this recovery copy")
+                                        .clicked()
+                                    {
+                                        act = Some((i, false));
+                                    }
+                                    ui.end_row();
+                                }
+                            });
                     });
                 ui.add_space(6.0);
                 if ui
