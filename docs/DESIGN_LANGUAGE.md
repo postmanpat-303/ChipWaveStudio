@@ -60,6 +60,20 @@ ChipWave keeps the *functions* Del liked in Bitwig (horizontal device strips, a 
 
 **Workbench Modern palette** (Amiga-mode skin): bg `#8E98A6`, panel `#C3C9D1`, display `#0F2B5B`, grid `#1D3F78`, text `#101418`, accents blue `#1F5FD1`, orange `#FF7A00`, yellow `#FFD400`, white; 2-px white/grey bevels.
 
+
+### Workbench Gradient (A2) refinement
+Del liked variant A. Variant **A2** adds soft gradients to it: [`mockups/variants/sound_designer_A2_workbench_gradient.png`](mockups/variants/sound_designer_A2_workbench_gradient.png). Rules:
+- **Direction:** gradients are always **vertical**, light at the top and slightly darker at the bottom (light from above, like Workbench bevels). There are no diagonal or radial gradients and no glow, which keeps it flat-modern and unlike DAW-style dark panels.
+- **Background:** `#9AA5B4` to `#6F7A8A`.
+- **Cartridge body:** `#DFE4EA` to `#AEB6C1`. A cartridge is at most about 20 % darker at the bottom, so text contrast stays above WCAG AA everywhere.
+- **Pills and knob wells:** `#EEF1F4` to `#C6CCD4`.
+- **Header band:** Workbench blue, `#3F7FE6` to `#1747A8`, with a 1 px `#0D2F75` line underneath.
+- **CRT displays:** `#173A72` to `#0A1F45`, with grid lines in `#24477F`.
+- **Bevels:** 2 px gradient strokes. The highlight runs `#FFFFFF` to `#C9D0D8` (top-left edges) and the shadow `#7D8794` to `#3E4652` (bottom-right). They're reversed for inset elements such as displays and fader slots.
+- **Spines, accents, LEDs and text** stay flat solid colours. Gradients are for surfaces only, never for data such as curves, LEDs or values, so information reads instantly.
+- **Readability:** yellow (`#FFD400`) is used only on dark display surfaces. On light panels, values use blue `#1F5FD1` or orange `#FF7A00`. (The A/A2 mockups still show the Out value in yellow on grey; that will be fixed in the implementation.)
+- **egui:** egui has no gradient fill for rects, so gradients are drawn as a `Mesh` with per-vertex colours (top two vertices light, bottom two dark). That's cheap and stays crisp at any scale. Rounded or cut corners use a tessellated path with vertex colours interpolated by y.
+
 ## 4. Component spec (for egui)
 **Cartridge**
 - Body `panel`, 1.5 px `edge` outline, square corners except a 14 px 45° cut at top-left.
@@ -102,7 +116,7 @@ All of it is drawn with `egui::Painter` as vectors, so no assets are needed. The
 - Arranger: [`mockups/arranger.png`](mockups/arranger.png) / `.svg`
 - Instrument list + browser: [`mockups/samples.png`](mockups/samples.png) / `.svg`
 - MIDI + plugins: [`mockups/midi_plugins.png`](mockups/midi_plugins.png) / `.svg`
-- Variants: `mockups/variants/sound_designer_A_workbench_modern.*`, `mockups/variants/sound_designer_B_wave_neon.*`
+- Variants: `mockups/variants/sound_designer_A_workbench_modern.*`, `mockups/variants/sound_designer_A2_workbench_gradient.*`, `mockups/variants/sound_designer_B_wave_neon.*`
 
 ![Sound designer](mockups/sound_designer.png)
 ![FX chain](mockups/fx_chain.png)
