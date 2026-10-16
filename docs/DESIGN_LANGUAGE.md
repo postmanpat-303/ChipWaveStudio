@@ -151,3 +151,37 @@ All of it is drawn with `egui::Painter` as vectors, so no assets are needed. The
 ![Sound designer](mockups/sound_designer.png)
 ![FX chain](mockups/fx_chain.png)
 ![Arranger](mockups/arranger.png)
+
+## Themes
+
+Del's direction (Oct 2026): the Amiga look is an option, not the default.
+
+| Theme | Status | Notes |
+|---|---|---|
+| **Dark Circuit** | **Proposed default** | Modern dark grey gradient panels, a thin muted green outer border and glow, and green focus/selection. Mockups: [pattern editor](mockups/variants/pattern_editor_dark_green.png), [sound designer](mockups/variants/sound_designer_dark_green.png) |
+| **Amiga (Workbench Gradient, A2)** | Optional | Light grey gradients with a Workbench-blue header. [Mockup](mockups/variants/sound_designer_A2_workbench_gradient.png) |
+| Workbench Modern (A) | Optional / legacy | Flat Amiga variant |
+| Wave/Neon (B) | Optional | The original cartridge look |
+
+Every theme uses the same layout, corner radii and functional colours (meters, curves, play position). Only the tokens below change. The Dark Circuit mockups are made from the A2 SVGs with `mockups/src/theme_dark_circuit.py` (a token-mapping recolour), which is also a cheap way to preview any theme.
+
+### Theme tokens
+
+| Token | Dark Circuit | Amiga (A2) |
+|---|---|---|
+| `bg` (window gradient) | `#24272B` → `#17191C` | `#9AA5B4` → `#6F7A8A` |
+| `header` band | `#2A2D31` → `#1F2124`, 1 px `#4CAF6A` rule | `#3F7FE6` → `#1747A8` |
+| `panel` / cartridge gradient | `#33373C` → `#26292D` (slightly lighter than bg) | `#DFE4EA` → `#AEB6C1` |
+| `pill` / button gradient | `#3A3F45` → `#2C3035` | `#EEF1F4` → `#C6CCD4` |
+| `display` (pattern grid, scopes) | `#1A1C1F` → `#121416` | `#173A72` → `#0A1F45` |
+| `border` (outer window and panels) | `#4CAF6A` at 1 px, plus a 3 px glow at 35 % on the window edge | `#3E4652` |
+| `accent` (focus, selection, active) | `#5CC07A` | `#1F5FD1` |
+| `selection_fill` | `#2E4A37` | `#C9D9F5` |
+| `beat_row` highlight | `#2B3A30` | `#24477F` @ 55 % |
+| `text` | `#D4D8DD` | `#1B2330` |
+| `text_dim` | `#AEB4BC` / `#7E8790` | `#2C3644` |
+| `value` (numbers) | `#E8C35A` amber / `#5CC07A` green | `#FFD400` / `#1F5FD1` |
+| `warn` / record | `#D9605A` | `#C62828` |
+| `spine` (module) | `#3F7A55` (and the shared amber/orange spines) | `#516D96` |
+
+The green is muted on purpose (around `#4CAF6A`, never neon), so the look stays grown-up and not cartoonish. Bright colours are kept for meters, curves and the play position.
