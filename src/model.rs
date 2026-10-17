@@ -175,6 +175,9 @@ pub struct ChanMix {
     /// post-fader sends to return A (delay) and B (reverb), 0..=1
     #[serde(default)]
     pub send: [f32; 2],
+    /// sidechain ducking depth 0..=1, keyed by notes on `Mixer::duck_key`
+    #[serde(default)]
+    pub duck: f32,
 }
 
 impl Default for ChanMix {
@@ -185,6 +188,7 @@ impl Default for ChanMix {
             mute: false,
             solo: false,
             send: [0.0; 2],
+            duck: 0.0,
         }
     }
 }
@@ -196,6 +200,16 @@ pub struct Mixer {
     /// send/return buses: A = delay, B = reverb
     #[serde(default = "default_returns")]
     pub returns: Vec<Return>,
+    /// sidechain key channel (0-based): its notes duck channels with `duck` > 0
+    #[serde(default)]
+    pub duck_key: usize,
+    /// ducking recovery time in seconds
+    #[serde(default = "default_duck_release")]
+    pub duck_release: f32,
+}
+
+pub fn default_duck_release() -> f32 {
+    0.2
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -231,6 +245,8 @@ impl Default for Mixer {
             channels: vec![ChanMix::default(); MAX_CHANNELS],
             master: 1.0,
             returns: default_returns(),
+            duck_key: 0,
+            duck_release: default_duck_release(),
         }
     }
 }

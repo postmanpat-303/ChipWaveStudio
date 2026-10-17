@@ -45,6 +45,40 @@ impl App {
             std::cell::RefCell::new(Vec::<(egui::Response, crate::automation::Target)>::new());
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Mixer").strong());
+            ui.separator();
+            ui.label("Sidechain key")
+                .on_hover_text("notes on this channel duck every channel whose Duck is above 0 %");
+            egui::ComboBox::from_id_salt("duck_key")
+                .width(110.0)
+                .selected_text(format!(
+                    "{} {}",
+                    mix.duck_key + 1,
+                    names.get(mix.duck_key).cloned().unwrap_or_default()
+                ))
+                .show_ui(ui, |ui| {
+                    for k in 0..nch.min(MAX_CHANNELS) {
+                        ui.selectable_value(
+                            &mut mix.duck_key,
+                            k,
+                            format!("{} {}", k + 1, names.get(k).cloned().unwrap_or_default()),
+                        );
+                    }
+                });
+            let mut ms = mix.duck_release * 1000.0;
+            if ui
+                .add(
+                    egui::DragValue::new(&mut ms)
+                        .range(20.0..=1000.0)
+                        .speed(2.0)
+                        .prefix("release ")
+                        .suffix(" ms"),
+                )
+                .on_hover_text("how long a ducked channel takes to come back")
+                .changed()
+            {
+                mix.duck_release = ms / 1000.0;
+            }
+            ui.separator();
             ui.label(
                 egui::RichText::new(
                     "fader 0 dB = double-click · pan C = double-click · M mute · S solo (F9 / F10)",
@@ -117,6 +151,8 @@ impl App {
                         let mut vol = c.volume;
                         let (mut pan, mut mute, mut solo) = (c.pan, c.mute, c.solo);
                         let mut send = c.send;
+                        let mut duck = c.duck;
+                        let is_key = mix.duck_key == ch;
                         strip(
                             ui,
                             format!("{} {}", ch + 1, names.get(ch).cloned().unwrap_or_default()),
@@ -179,9 +215,38 @@ impl App {
                                             .push((r, crate::automation::Target::Send(ch, b)));
                                     });
                                 }
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        egui::RichText::new("Duck")
+                                            .small()
+                                            .monospace()
+                                            .color(th().ink2),
+                                    );
+                                    let mut pct = duck * 100.0;
+                                    let r = ui
+                                        .add_enabled(
+                                            !is_key,
+                                            egui::DragValue::new(&mut pct)
+                                                .range(0.0..=100.0)
+                                                .speed(0.5)
+                                                .suffix(" %"),
+                                        )
+                                        .on_hover_text(
+                                            "sidechain ducking: how far this channel dips on each \
+                                             note of the key channel (the 'pump'); double-click = 0",
+                                        )
+                                        .on_disabled_hover_text("this is the sidechain key channel");
+                                    if r.changed() {
+                                        duck = pct / 100.0;
+                                    }
+                                    if r.double_clicked() {
+                                        duck = 0.0;
+                                    }
+                                });
                             },
                         );
                         let c = &mut mix.channels[ch];
+                        c.duck = duck;
                         c.send = send;
                         c.volume = vol;
                         c.pan = pan;

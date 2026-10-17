@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0a84ff" alt="Windows | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.3.1-00d0ff" alt="Version 0.2.3.1">
+  <img src="https://img.shields.io/badge/version-0.2.3.2-00d0ff" alt="Version 0.2.3.2">
   <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases"><img src="https://img.shields.io/badge/release-v0.2.2.4-7c4dff" alt="Latest tagged release v0.2.2.4"></a>
 </p>
 
@@ -18,7 +18,7 @@
 
 **ChipWave Tracker** is a modern music tracker inspired by **OctaMED** and the Commodore **Amiga**. It keeps the fast, keyboard-driven workflow of the classic tracker (blocks, sections and sequences) and adds the things a modern studio expects: built-in sound design, a visual arranger, a mixer with automation, WAV/MP3 export and clean scaling on any screen. It's written in Rust with egui and cpal for Windows 11 and Linux.
 
-**Status:** in active development, currently **v0.2.3.1** (`Cargo.toml` 0.2.3+fix.1). It's playable today with the pattern editor, playback, synth presets, sample import, arranger, mixer, automation, `.cwt` save/load, WAV/MP3 export, settings, Fill to length auto arrange and MIDI keyboard input (play, record, MIDI learn: [docs/MIDI.md](docs/MIDI.md)). The latest tagged release is v0.2.3.
+**Status:** in active development, currently **v0.2.3.2** (`Cargo.toml` 0.2.3+fix.2). It's playable today with the pattern editor, playback, synth presets, sample import, arranger, mixer, automation, `.cwt` save/load, WAV/MP3 export, settings, Fill to length auto arrange and MIDI keyboard input (play, record, MIDI learn: [docs/MIDI.md](docs/MIDI.md)). The latest tagged release is v0.2.3.
 
 ## Feature highlights
 
@@ -144,6 +144,8 @@ Effects: 01/02 slide, 09 speed, 0C volume, 0D volume slide, 0F tempo (0F00 = bre
 ## Changelog highlights
 
 v0.2.3.1 adds toolbar **Chord** (chord spread) and **Rec live / Rec step** toggles next to the MIDI light; instrument right-click menu: **Add effect**, **Copy effects**, **Paste effects** (replace / append) and **Open in FX view** (all undoable); mixer double-click reset (fader to 0 dB, pan to centre) now works; Help > About shows the credit and a "Buy me a coffee" link; a new demo song "Night Signal" (psytrance, F# minor, 1:41, full arrangement with automation; File > New from demo song or Help > Load demo song; preview: `dist/demo-0.2.3.1.mp3`).
+
+v0.2.3.2 replaces the demo with **"Lumen Drift"** (uplifting trance, A minor, 140 BPM, 2:26), written and iterated against an objective analysis of a reference trance track (style only; `scripts/style_analyze.py`, `scripts/style_compare.py`; preview: `dist/demo-0.2.3.2.mp3`, comparison: `dist/demo-0.2.3.2-compare.png`). New engine features: **sidechain ducking** (mixer Sidechain key + release, per-channel Duck %), **stereo unison width** and a **synth LFO** (free or tempo-synced, to cutoff / amp gate / pitch).
 
 v0.2.3 adds MIDI keyboard input: Settings > MIDI (device, all devices, auto-connect and hot-plug, channel filter, velocity curve, MIDI octave), live play of the current instrument with velocity, sustain pedal and pitch bend, recording into the pattern (step or live while playing, chord spread, one undo step per note), simple MIDI learn (right-click a fader / knob) and a toolbar MIDI light. `ChipWave.exe --midi-list` / `--midi-monitor` check a keyboard from the command line. See [docs/MIDI.md](docs/MIDI.md).
 

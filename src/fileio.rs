@@ -465,6 +465,90 @@ fn apply_fx_params(d: &mut crate::fx::Device, t: &toml::Value) {
     }
 }
 
+fn wave_of(s: &str) -> Option<crate::synth::Wave> {
+    use crate::synth::Wave;
+    Some(match s.to_ascii_lowercase().as_str() {
+        "saw" => Wave::Saw,
+        "square" => Wave::Square,
+        "pulse" => Wave::Pulse,
+        "triangle" | "tri" => Wave::Triangle,
+        "sine" => Wave::Sine,
+        _ => return None,
+    })
+}
+
+/// optional synth parameter overrides on a text-song instrument
+fn patch_overrides(p: &mut crate::synth::Patch, t: &toml::Value) {
+    let r = |k: &str| t.get(k).and_then(num_of);
+    let set = |k: &str, f: &mut f32| {
+        if let Some(v) = r(k) {
+            *f = v;
+        }
+    };
+    set("cutoff", &mut p.cutoff);
+    set("resonance", &mut p.resonance);
+    set("env_amount", &mut p.env_amount);
+    set("key_track", &mut p.key_track);
+    set("attack", &mut p.amp.a);
+    set("decay", &mut p.amp.d);
+    set("sustain", &mut p.amp.s);
+    set("release", &mut p.amp.r);
+    set("filter_attack", &mut p.fenv.a);
+    set("filter_decay", &mut p.fenv.d);
+    set("filter_sustain", &mut p.fenv.s);
+    set("detune", &mut p.detune_cents);
+    set("width", &mut p.width);
+    set("drive", &mut p.drive);
+    set("gain", &mut p.gain);
+    set("osc1_level", &mut p.osc1_level);
+    set("sub", &mut p.sub_level);
+    set("noise", &mut p.noise_level);
+    set("pulse_width", &mut p.pulse_width);
+    if let Some(v) = r("unison") {
+        p.unison = (v as u32).clamp(1, 8);
+    }
+    if let Some(v) = r("octave") {
+        p.osc1_oct = v as i32;
+    }
+    if let Some(w) = t.get("wave").and_then(|x| x.as_str()).and_then(wave_of) {
+        p.osc1 = w;
+    }
+    if let Some(o) = t.get("osc2") {
+        if o.as_bool() == Some(false) {
+            p.osc2 = None;
+        } else {
+            let w = o.get("wave").and_then(|x| x.as_str()).and_then(wave_of);
+            let semi = o.get("semi").and_then(num_of).unwrap_or(0.0) as i32;
+            let lvl = o.get("level").and_then(num_of).unwrap_or(0.5);
+            p.osc2 = Some((w.unwrap_or(crate::synth::Wave::Saw), semi, lvl));
+        }
+    }
+    if let Some(pe) = t.get("pitch_env").and_then(|x| x.as_array()) {
+        if let (Some(a), Some(b)) = (pe.first().and_then(num_of), pe.get(1).and_then(num_of)) {
+            p.pitch_env = (a, b);
+        }
+    }
+    if let Some(l) = t.get("lfo") {
+        let n = |k: &str| l.get(k).and_then(num_of);
+        if let Some(w) = l.get("shape").and_then(|x| x.as_str()).and_then(wave_of) {
+            p.lfo.shape = w;
+        }
+        p.lfo.rate = n("rate").unwrap_or(p.lfo.rate);
+        p.lfo.sync = n("sync").unwrap_or(p.lfo.sync);
+        p.lfo.cutoff = n("cutoff").unwrap_or(p.lfo.cutoff);
+        p.lfo.amp = n("amp").unwrap_or(p.lfo.amp);
+        p.lfo.pitch = n("pitch").unwrap_or(p.lfo.pitch);
+    }
+    if let Some(f) = t.get("filter").and_then(|x| x.as_str()) {
+        use crate::synth::FilterMode;
+        p.filter = match f.to_ascii_lowercase().as_str() {
+            "hp" => FilterMode::Hp,
+            "bp" => FilterMode::Bp,
+            _ => FilterMode::Lp,
+        };
+    }
+}
+
 /// block role by name ("drop" = Chorus, "build" = Bridge)
 fn role_of(r: &str) -> Option<crate::arrange::Role> {
     use crate::arrange::{Role, ROLES};
@@ -519,19 +603,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
         };
         let mut patch = patch.ok_or_else(|| format!("instrument {name}: unknown patch {src:?}"))?;
         patch.name = name.into();
-        // optional synth overrides
-        if let Some(c) = real(i, "cutoff") {
-            patch.cutoff = c;
-        }
-        if let Some(c) = real(i, "resonance") {
-            patch.resonance = c;
-        }
-        if let Some(c) = real(i, "env_amount") {
-            patch.env_amount = c;
-        }
-        if let Some(c) = real(i, "release") {
-            patch.amp.r = c;
-        }
+        patch_overrides(&mut patch, i);
         if i.get("factory_fx").and_then(|x| x.as_bool()) == Some(false) {
             fx.clear();
         }
@@ -581,10 +653,17 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
             real(c, "send_a").unwrap_or(0.0).clamp(0.0, 1.0),
             real(c, "send_b").unwrap_or(0.0).clamp(0.0, 1.0),
         ];
+        m.duck = real(c, "duck").unwrap_or(0.0).clamp(0.0, 1.0);
     }
     if let Some(m) = mix {
         if let Some(db) = real(m, "master_db") {
             song.mixer.master = gain(db);
+        }
+        if let Some(k) = m.get("duck_key").and_then(|x| x.as_integer()) {
+            song.mixer.duck_key = (k.max(1) as usize - 1).min(channels - 1);
+        }
+        if let Some(ms) = real(m, "duck_release_ms") {
+            song.mixer.duck_release = (ms / 1000.0).clamp(0.02, 1.0);
         }
         for (k, key) in ["return_a", "return_b"].iter().enumerate() {
             if let (Some(r), Some(ret)) = (m.get(*key), song.mixer.returns.get_mut(k)) {
@@ -746,8 +825,8 @@ mod tests {
         use crate::arrange::Role;
         let s = demo_song();
         let secs = s.length_seconds();
-        assert!((90.0..=120.0).contains(&secs), "{secs} s");
-        assert_eq!((s.bpm, s.channels), (145.0, 8));
+        assert!((120.0..=150.0).contains(&secs), "{secs} s");
+        assert_eq!((s.bpm, s.channels), (140.0, 8));
         assert!(s.patterns.iter().all(|p| p.role.is_some()));
         for r in [
             Role::Intro,
@@ -771,9 +850,13 @@ mod tests {
                 assert!(c.instr as usize <= s.instruments.len());
             }
         }
-        assert!(s.instruments.len() >= 12);
-        assert_eq!(s.instruments[0].name, "Punchy Psy Kick");
-        assert_eq!(s.instruments[1].name, "Rolling Offbeat Bass");
+        assert!(s.instruments.len() >= 11);
+        assert_eq!(s.instruments[0].name, "Trance Kick");
+        assert_eq!(s.instruments[1].name, "Gallop Bass");
+        // sidechain: the kick (channel 1) keys the ducking of bass, arp and pads
+        assert_eq!(s.mixer.duck_key, 0);
+        assert!(s.mixer.channels[0].duck == 0.0);
+        assert!(s.mixer.channels[1].duck > 0.3 && s.mixer.channels[5].duck > 0.9);
     }
 
     #[test]
@@ -781,31 +864,27 @@ mod tests {
         use crate::automation::{Shape, Target};
         let s = demo_song();
         assert!(s.automation.len() >= 6, "{}", s.automation.len());
-        // lane 1: bass filter cutoff, real Hz values, smooth
+        // lane 1: pad filter cutoff, real Hz values, smooth
         let c = &s.automation[0];
-        assert_eq!(Target::parse(&c.target), Some(Target::Cutoff(1)));
-        assert!((Target::Cutoff(1).to_real(c.points[0].value) - 150.0).abs() < 0.5);
+        assert_eq!(Target::parse(&c.target), Some(Target::Cutoff(6)));
+        assert!((Target::Cutoff(6).to_real(c.points[0].value) - 350.0).abs() < 0.5);
         assert_eq!(c.points[0].shape, Shape::Smooth);
-        // acid cutoff opens in the build (rising sweep) and steps back for the drop
-        let acid = s
+        // arp cutoff opens through the pre-break (rising sweep into the drop)
+        let arp = s
             .automation
             .iter()
-            .find(|l| Target::parse(&l.target) == Some(Target::Cutoff(4)))
-            .expect("acid cutoff lane");
+            .find(|l| Target::parse(&l.target) == Some(Target::Cutoff(5)))
+            .expect("arp cutoff lane");
         let hz = |pos: f32| {
-            Target::Cutoff(4).to_real(crate::automation::value_at(&acid.points, pos).unwrap())
+            Target::Cutoff(5).to_real(crate::automation::value_at(&arp.points, pos).unwrap())
         };
-        assert!(hz(4.0 * 64.0 + 62.0) > 2.0 * hz(4.0 * 64.0));
-        // named FX params resolve: flutter's filter LFO rate, the delay return feedback
-        let lfo = s
-            .automation
-            .iter()
-            .find(|l| l.label.contains("LFO"))
-            .expect("flutter LFO lane");
-        let Some(Target::Fx(7, d, _)) = Target::parse(&lfo.target) else {
-            panic!("{}", lfo.target)
+        assert!(hz(2.0 * 64.0 + 62.0) > 2.0 * hz(2.0 * 64.0));
+        // the pad breathes with a tempo-synced LFO and is spread in stereo
+        let InstrumentKind::Synth(pad) = &s.instruments[6].kind else {
+            panic!("pad is a synth")
         };
-        assert_eq!(s.instruments[7].fx[d].kind, crate::fx::FxKind::Filter);
+        assert!(pad.lfo.active() && pad.lfo.sync > 0.0 && pad.width > 0.9);
+        assert_eq!(s.instruments[6].fx[0].kind, crate::fx::FxKind::Filter);
         let fb = s
             .automation
             .iter()

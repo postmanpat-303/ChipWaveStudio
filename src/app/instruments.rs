@@ -270,6 +270,74 @@ impl App {
                     changed |= r.changed();
                     learn.push((r, crate::automation::Target::Drive(idx.wrapping_sub(1))));
                     ui.end_row();
+                    ui.label("   Stereo width");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.width, 0.0..=1.0))
+                        .on_hover_text("spreads the unison voices left/right (needs Unison > 1)")
+                        .changed();
+                    ui.end_row();
+                    ui.label("   LFO");
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt("lfo_shape")
+                            .width(70.0)
+                            .selected_text(format!("{:?}", p.lfo.shape))
+                            .show_ui(ui, |ui| {
+                                for w in [Wave::Sine, Wave::Triangle, Wave::Square, Wave::Saw] {
+                                    changed |= ui
+                                        .selectable_value(&mut p.lfo.shape, w, format!("{w:?}"))
+                                        .changed();
+                                }
+                            });
+                        const SYNC: [(f32, &str); 7] = [
+                            (0.0, "free Hz"),
+                            (0.25, "1/16"),
+                            (0.5, "1/8"),
+                            (1.0, "1/4"),
+                            (2.0, "1/2"),
+                            (4.0, "1 bar"),
+                            (8.0, "2 bars"),
+                        ];
+                        let cur = SYNC
+                            .iter()
+                            .find(|s| s.0 == p.lfo.sync)
+                            .map(|s| s.1)
+                            .unwrap_or("sync");
+                        egui::ComboBox::from_id_salt("lfo_sync")
+                            .width(70.0)
+                            .selected_text(cur)
+                            .show_ui(ui, |ui| {
+                                for (v, n) in SYNC {
+                                    changed |= ui.selectable_value(&mut p.lfo.sync, v, n).changed();
+                                }
+                            });
+                        if p.lfo.sync == 0.0 {
+                            changed |= ui
+                                .add(
+                                    egui::DragValue::new(&mut p.lfo.rate)
+                                        .range(0.01..=30.0)
+                                        .speed(0.05)
+                                        .suffix(" Hz"),
+                                )
+                                .changed();
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("   LFO > cutoff");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.lfo.cutoff, -4.0..=4.0).suffix(" oct"))
+                        .changed();
+                    ui.end_row();
+                    ui.label("   LFO > amp");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.lfo.amp, 0.0..=1.0))
+                        .on_hover_text("1 with a Square LFO synced to 1/16 = trance gate")
+                        .changed();
+                    ui.end_row();
+                    ui.label("   LFO > pitch");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.lfo.pitch, 0.0..=12.0).suffix(" st"))
+                        .changed();
+                    ui.end_row();
                 });
         }
         if changed {

@@ -937,3 +937,47 @@ fn file_new_from_demo_and_help_load_demo_song() {
     click_label(&mut h, "Don");
     assert_eq!(song(&mut h, |s| s.title.clone()), demo.title);
 }
+
+#[test]
+fn mixer_duck_amount_drags_and_undoes() {
+    let mut h = harness();
+    mixer(&mut h);
+    // the demo's bass ducks 55 % under the kick (the sidechain key, channel 1)
+    assert_eq!(song(&mut h, |s| s.mixer.duck_key), 0);
+    exact(&h, "1 Kick");
+    let r = exact(&h, "55.0 %");
+    drag(&mut h, r.center(), r.center() + egui::vec2(30.0, 0.0));
+    let d = song(&mut h, |s| s.mixer.channels[1].duck);
+    assert!(d > 0.6, "dragged up: {d}");
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.mixer.channels[1].duck), 0.55);
+    // the release time is shown in the header
+    assert!(
+        h.query_all_by(|n| n.value().is_some_and(|v| v.starts_with("release 300")))
+            .next()
+            .is_some(),
+        "release 300 ms"
+    );
+}
+
+#[test]
+fn instrument_lfo_sync_and_shape_are_editable_and_undoable() {
+    let mut h = harness();
+    h.state_mut().instr = 2;
+    frames(&mut h, 2);
+    let lfo = |h: &mut Harness<'static, App>| {
+        song(h, |s| match &s.instruments[1].kind {
+            crate::model::InstrumentKind::Synth(p) => p.lfo,
+            _ => panic!("02 is a synth"),
+        })
+    };
+    assert_eq!(lfo(&mut h).sync, 0.0);
+    click_exact(&mut h, "free Hz");
+    click_exact(&mut h, "1/16");
+    assert_eq!(lfo(&mut h).sync, 0.25, "tempo-synced to 1/16");
+    click_exact(&mut h, "Sine");
+    click_exact(&mut h, "Square");
+    assert_eq!(lfo(&mut h).shape, crate::synth::Wave::Square);
+    ctrl_z(&mut h);
+    assert_eq!(lfo(&mut h).shape, crate::synth::Wave::Sine);
+}

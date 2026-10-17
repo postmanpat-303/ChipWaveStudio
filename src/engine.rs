@@ -39,6 +39,21 @@ struct Tail {
 }
 
 /// Render one voice sample; returns (sample, still_active).
+/// sidechain envelope 0..1 at `t` seconds after the key note (1 = fully ducked)
+fn duck_env(t: f32, release: f32) -> f32 {
+    const ATTACK: f32 = 0.002;
+    const HOLD: f32 = 0.012;
+    if t < ATTACK {
+        t / ATTACK
+    } else if t < HOLD {
+        1.0
+    } else {
+        let x = ((t - HOLD) / release.max(0.02)).min(1.0);
+        (1.0 - x) * (1.0 - x)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn voice(
     song: &Song,
     instr: usize,
@@ -47,13 +62,14 @@ fn voice(
     pos: &mut f64,
     sr: f32,
     ov: &AutoState,
-) -> (f32, bool) {
+    bpm: f32,
+) -> ((f32, f32), bool) {
     let Some(inst) = song.instruments.get(instr) else {
-        return (0.0, false);
+        return ((0.0, 0.0), false);
     };
     let lvl = ov.level.get(instr).copied().unwrap_or(1.0);
-    let (v, alive) = voice_raw(song, inst, instr, freq, synth, pos, sr, ov);
-    (v * lvl, alive)
+    let ((l, r), alive) = voice_raw(song, inst, instr, freq, synth, pos, sr, ov, bpm);
+    ((l * lvl, r * lvl), alive)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -66,11 +82,12 @@ fn voice_raw(
     pos: &mut f64,
     sr: f32,
     ov: &AutoState,
-) -> (f32, bool) {
+    bpm: f32,
+) -> ((f32, f32), bool) {
     match &inst.kind {
         InstrumentKind::Synth(p) => {
             let p = ov.patches.get(instr).and_then(|o| o.as_ref()).unwrap_or(p);
-            let v = synth.render(p, freq, sr);
+            let v = synth.render_st(p, freq, sr, bpm);
             (v, !synth.amp.done())
         }
         InstrumentKind::Sample {
@@ -82,13 +99,13 @@ fn voice_raw(
         } => {
             // `pos` is monotonic; the loop maps it into the data
             let Some(p) = crate::sample::read_pos(*pos, data.len(), lp) else {
-                return (0.0, false);
+                return ((0.0, 0.0), false);
             };
             let v = crate::sample::read(data, p, lp);
             let ft = 2f32.powf(lp.finetune as f32 / 1200.0);
             *pos += (freq * ft / note_freq(*base_note)) as f64 * *rate as f64 / sr as f64;
             let g = synth.amp.next(&SAMPLE_ENV, 1.0 / sr);
-            (v * g, !synth.amp.done())
+            ((v * g, v * g), !synth.amp.done())
         }
     }
 }
@@ -232,6 +249,8 @@ pub struct Engine {
     samples_to_tick: f64,
     speed: u32,
     bpm: f32,
+    /// seconds since the last note on the sidechain key channel
+    duck_t: f32,
     chans: Vec<Chan>,
     pub song_ended: bool,
     pub peak: f32,
@@ -269,6 +288,7 @@ impl Engine {
             samples_to_tick: 0.0,
             speed: 6,
             bpm: 125.0,
+            duck_t: 1e9,
             chans: (0..MAX_CHANNELS).map(|_| Chan::new()).collect(),
             song_ended: false,
             peak: 0.0,
@@ -550,6 +570,9 @@ impl Engine {
     }
 
     fn trigger(&mut self, song: &Song, ch: usize, cell: &Cell) {
+        if ch == song.mixer.duck_key && cell.note > 0 && cell.note != NOTE_OFF {
+            self.duck_t = 0.0;
+        }
         let c = &mut self.chans[ch];
         if cell.instr > 0 && (cell.instr as usize) <= song.instruments.len() {
             c.instr = cell.instr as usize - 1;
@@ -928,14 +951,18 @@ impl Engine {
             let mut bus = [[0.0f32; 2]; 2];
             let ctx = crate::fx::Ctx { bpm: self.bpm };
             let sr = self.sr;
+            let bpm = self.bpm;
+            // sidechain pump: 2 ms dip, 10 ms hold, quadratic recovery
+            self.duck_t += 1.0 / sr;
+            let duck_env = duck_env(self.duck_t, song.mixer.duck_release);
             // 5 ms ramps for tails and mute changes
             let step = 1.0 / (0.005 * sr);
             // live MIDI voices -> live FX chain -> cursor channel (post fader)
             let (live_l, live_r) = if live_on || !self.live.chain.states.is_empty() {
                 let lv = &mut self.live;
-                let mut s = 0.0;
+                let (mut s, mut s_r) = (0.0, 0.0);
                 for v in lv.v.iter_mut().filter(|v| v.active) {
-                    let (x, alive) = voice(
+                    let ((x, xr), alive) = voice(
                         song,
                         v.instr,
                         v.freq * lv.bend,
@@ -943,14 +970,16 @@ impl Engine {
                         &mut v.pos,
                         sr,
                         &self.auto,
+                        bpm,
                     );
                     v.active = alive;
                     s += x * v.vol;
+                    s_r += xr * v.vol;
                 }
                 let (fl, fr) = if lv.chain.states.is_empty() {
-                    (s, s)
+                    (s, s_r)
                 } else {
-                    lv.chain.process(s, s, &ctx)
+                    lv.chain.process(s, s_r, &ctx)
                 };
                 (fl * live_gain.0, fr * live_gain.1)
             } else {
@@ -963,9 +992,9 @@ impl Engine {
                 .enumerate()
                 .take(song.channels.min(MAX_CHANNELS))
             {
-                let mut s = 0.0;
+                let (mut s, mut s_r) = (0.0, 0.0);
                 if c.active {
-                    let (v, alive) = voice(
+                    let ((v, vr), alive) = voice(
                         song,
                         c.instr,
                         c.freq,
@@ -973,13 +1002,15 @@ impl Engine {
                         &mut c.pos,
                         sr,
                         &self.auto,
+                        bpm,
                     );
                     c.active = alive;
                     s += v * c.vol;
+                    s_r += vr * c.vol;
                 }
                 if c.tail.gain > 0.0 {
                     let t = &mut c.tail;
-                    let (v, alive) = voice(
+                    let ((v, vr), alive) = voice(
                         song,
                         t.instr,
                         t.freq,
@@ -987,20 +1018,24 @@ impl Engine {
                         &mut t.pos,
                         sr,
                         &self.auto,
+                        bpm,
                     );
                     s += v * t.vol * t.gain;
+                    s_r += vr * t.vol * t.gain;
                     t.gain = if alive { (t.gain - step).max(0.0) } else { 0.0 };
                 }
                 let (tl, tr) = tgt[i];
                 c.gl += (tl - c.gl) * k;
                 c.gr += (tr - c.gr) * k;
-                // insert chain: mono voice in, stereo out
+                // insert chain: stereo voice in, stereo out
                 let (fl, fr) = if chain.states.is_empty() {
-                    (s, s)
+                    (s, s_r)
                 } else {
-                    chain.process(s, s, &ctx)
+                    chain.process(s, s_r, &ctx)
                 };
-                let (mut sl, mut sr2) = (fl * c.gl, fr * c.gr);
+                let duck = song.mixer.channels.get(i).map(|m| m.duck).unwrap_or(0.0);
+                let dg = 1.0 - duck.clamp(0.0, 1.0) * duck_env;
+                let (mut sl, mut sr2) = (fl * c.gl * dg, fr * c.gr * dg);
                 if i == live_ch {
                     sl += live_l;
                     sr2 += live_r;
@@ -1356,6 +1391,72 @@ mod tests {
         song.instruments[0].volume = 1.0;
         song.mixer.master = 0.1;
         song
+    }
+
+    /// sidechain: a channel with `duck` dips right after each note on the key
+    /// channel and recovers within the release time; duck 0 = untouched
+    #[test]
+    fn sidechain_ducking_pumps_after_key_notes() {
+        let render = |duck: f32| {
+            let mut song = live_song();
+            song.bpm = 120.0;
+            song.speed = 6;
+            let p = crate::synth::Patch {
+                amp: crate::synth::Adsr {
+                    a: 0.0,
+                    d: 0.1,
+                    s: 1.0,
+                    r: 0.05,
+                },
+                ..Default::default()
+            };
+            song.instruments[1].kind = InstrumentKind::Synth(p);
+            song.instruments[1].fx.clear();
+            let pat = &mut song.patterns[0];
+            for row in pat.cells.iter_mut() {
+                row.iter_mut().for_each(|c| *c = Cell::default());
+            }
+            // key channel 1: a note every beat (silent instrument 3 is fine:
+            // only the trigger matters); channel 2: one long pad note
+            for r in (0..64).step_by(4) {
+                pat.cells[r][0] = Cell {
+                    note: 49,
+                    instr: 1,
+                    ..Default::default()
+                };
+            }
+            pat.cells[0][1] = Cell {
+                note: 49,
+                instr: 2,
+                ..Default::default()
+            };
+            song.order = vec![0];
+            song.mixer.channels[0].mute = true;
+            song.mixer.channels[1].duck = duck;
+            song.mixer.duck_key = 0;
+            song.mixer.duck_release = 0.2;
+            let mut e = Engine::new(48000.0);
+            e.start(&song, 0, 0, false, 0);
+            let mut out = vec![0.0f32; 48000 * 2];
+            for c in out.chunks_mut(1024) {
+                e.render(&song, c);
+            }
+            out
+        };
+        let dry = render(0.0);
+        let wet = render(0.8);
+        // beat 2 starts at 0.5 s; window 3..11 ms after it vs 400..480 ms after
+        let w = |o: &[f32], a: f32, b: f32| rms(&o[(a * 96000.0) as usize..(b * 96000.0) as usize]);
+        // deepest 4 ms window around the beat (the row may land a tick late)
+        let dip = (0..20)
+            .map(|k| {
+                let a = 0.495 + k as f32 * 0.004;
+                w(&wet, a, a + 0.004) / w(&dry, a, a + 0.004)
+            })
+            .fold(1.0f32, f32::min);
+        let back = w(&wet, 0.9, 0.98) / w(&dry, 0.9, 0.98);
+        assert!(dip < 0.3, "ducked to {dip}");
+        assert!(back > 0.97, "recovered to {back}");
     }
 
     fn rms(b: &[f32]) -> f32 {

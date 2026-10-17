@@ -1,4 +1,4 @@
-ChipWave Tracker 0.2.3.1 - Windows x64
+ChipWave Tracker 0.2.3.2 - Windows x64
 ==============================================================
 GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
@@ -7,7 +7,7 @@ Run: double-click ChipWave.exe (no install needed; single self-contained exe).
 Windows SmartScreen may warn because the exe is not code-signed:
 "More info" -> "Run anyway".
 
-It opens the first-run demo (psy kick, hats, rolling bass at 145 BPM).
+It opens the first-run demo "Lumen Drift" (uplifting trance, A minor, 140 BPM).
 Press SPACE to play / stop the current block (Shift+Space = whole song).
 
 Keys (press "? Keys" in the toolbar for the full list)
@@ -75,11 +75,15 @@ Effects: 01/02 slide up/down, 09 speed, 0C set volume, 0D volume slide,
 Instruments: the left panel lists the factory psytrance/alien synth sounds;
 select one to edit oscillator, filter (LP/HP/BP, cutoff, resonance), envelope.
 Import WAV samples with "Import WAV..." or drag .wav files onto the window.
-Demo song "Night Signal" (psytrance, F# minor, 145 BPM): opens on first run;
+Demo song "Lumen Drift" (trance, A minor, 140 BPM, 2:26): opens on first run;
 load it any time with File > New from demo song or Help > Load demo song.
+Synth: "Stereo width" spreads unison voices; LFO (shape, free Hz or synced
+1/16..2 bars) to cutoff, amp (trance gate) and pitch.
 Right-click an instrument: Add effect, Copy effects, Paste effects (replace or
 append), Open in FX view, Duplicate, Delete. Ctrl+Z undoes each.
 Mixer: double-click a fader = 0 dB, double-click pan = centre.
+  Sidechain: pick the "Sidechain key" channel (e.g. the kick) and a release;
+  each channel's "Duck" % sets how far it pumps under the key notes.
 Audio: "Buffer" in the toolbar (Auto/256/512/1024/2048). The status bar
 shows latency and an underrun counter; latency grows automatically on dropouts.
 BPM / Speed changes apply instantly, also while playing.

@@ -175,7 +175,7 @@ pub fn hat(open: bool) -> Patch {
 }
 
 /// Built-in synthetic percussion / FX (no sample files needed):
-/// "hat-closed", "hat-open", "clap", "riser".
+/// "hat-closed", "hat-open", "clap", "riser", "trance-kick", "init".
 pub fn builtin(name: &str) -> Option<Patch> {
     Some(match name {
         "hat-closed" => hat(false),
@@ -194,6 +194,29 @@ pub fn builtin(name: &str) -> Option<Patch> {
                 r: 0.05,
             },
             gain: 0.7,
+            ..Default::default()
+        },
+        // plain init patch (text songs override its parameters)
+        "init" => Patch::default(),
+        // synthesized trance kick: sine body with a fast pitch drop (the
+        // first few ms are the click), a little drive for punch
+        "trance-kick" => Patch {
+            name: "Trance Kick".into(),
+            osc1: crate::synth::Wave::Sine,
+            osc1_oct: -1,
+            osc1_level: 1.0,
+            filter: FilterMode::Lp,
+            cutoff: 9000.0,
+            resonance: 0.0,
+            amp: Adsr {
+                a: 0.0,
+                d: 0.32,
+                s: 0.0,
+                r: 0.02,
+            },
+            pitch_env: (44.0, 0.016),
+            drive: 0.35,
+            gain: 1.0,
             ..Default::default()
         },
         "riser" => Patch {

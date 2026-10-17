@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
 """Generate demos/first_run.cwt.toml, the first-run demo song.
 
-"Night Signal": psytrance in F# minor, 145 BPM, about 1:40. Blocks have
-arrangement roles (intro, verse, build, drop, breakdown, outro) so Fill to
-length works on it. Run: python3 scripts/make_demo.py > demos/first_run.cwt.toml
+"Lumen Drift": uplifting trance in A minor, 140 BPM, about 2:24. Galloping
+sidechained bass, off-beat 16th hats and arp, pumping supersaw pads, a long
+breakdown, a riser + snare-roll build and a big second drop with a lead.
+Blocks carry arrangement roles so Fill to length works on it.
+
+  python3 scripts/make_demo.py > demos/first_run.cwt.toml
+  DEMO_SOLO=2,5 python3 scripts/make_demo.py > /tmp/x.toml   (debug: only these channels)
 """
+import os
 
-CH = 8
-ROWS = 64
-KICK, BASS, HAT, CLAP, ACID, LEAD, PAD, FX = range(8)
-# instrument slots (keep 01 kick / 02 bass: tests and docs refer to them)
-I_KICK, I_BASS, I_CHAT, I_OHAT, I_ACID, I_PLUCK, I_SAW, I_FLUT, I_PAD, I_ZAP, I_CLAP, I_RISE = range(1, 13)
+CH, ROWS = 8, 64
+KICK, BASS, HAT, CLAP, ARP, PADA, PADB, FX = range(8)
+I_KICK, I_BASS, I_CHAT, I_OHAT, I_CLAP, I_ARP, I_PAD, I_LEAD, I_PLUCK, I_RISE, I_CRASH = range(1, 12)
 
-# chords per bar (F# minor: i - VI - VII - i)
-DROP_CHORDS = [("F#", "A-", "C#"), ("D-", "F#", "A-"), ("E-", "G#", "B-"), ("F#", "A-", "C#")]
+# A minor: i - VI - III - VII (Am F C G); pad voices whose +7 osc2 stays in key
+PROG = ["Am", "F", "C", "G"]
+PAD_VOICES = {"Am": ("A-4", "C-5"), "F": ("F-4", "A-4"), "C": ("C-5", "E-5"), "G": ("G-4", "D-5"),
+              "Em": ("E-4", "G-4"), "Dm": ("D-4", "F-4")}
+ARP_NOTES = {  # 8 notes on the off 16ths of a bar
+    "Am": ["E-5", "A-4", "C-5", "E-5", "A-5", "E-5", "C-5", "A-4"],
+    "F": ["C-5", "F-4", "A-4", "C-5", "F-5", "C-5", "A-4", "F-4"],
+    "C": ["E-5", "G-4", "C-5", "E-5", "G-5", "E-5", "C-5", "G-4"],
+    "G": ["D-5", "G-4", "B-4", "D-5", "G-5", "D-5", "B-4", "G-4"],
+}
+BASS_ROOT = {"Am": "A-2", "F": "F-2", "C": "C-3", "G": "G-2", "Em": "E-2", "Dm": "D-2"}
 
 
 class Block:
@@ -25,13 +37,11 @@ class Block:
         self.cells[row][ch] = (note, ins, vol, fx)
 
     def text(self):
-        import os
-        solo = os.environ.get("DEMO_SOLO")  # debug: keep only these channels, e.g. "1,2"
-        if solo:
-            keep = {int(c) - 1 for c in solo.split(",")}
-            self.cells = [[c if k in keep else None for k, c in enumerate(row)] for row in self.cells]
+        solo = os.environ.get("DEMO_SOLO")
+        keep = {int(c) - 1 for c in solo.split(",")} if solo else set(range(CH))
         out = []
         for r, row in enumerate(self.cells):
+            row = [c if k in keep else None for k, c in enumerate(row)]
             if all(c is None for c in row):
                 continue
             parts = []
@@ -40,352 +50,382 @@ class Block:
                     parts.append("--- .. .. ....")
                 else:
                     n, i, v, f = c
-                    parts.append(
-                        f"{n} {('%02X' % i) if i else '..'} {('%02X' % v) if v is not None else '..'} {f or '....'}"
-                    )
+                    parts.append(f"{n} {('%02X' % i) if i else '..'} {('%02X' % v) if v is not None else '..'} {f or '....'}")
             out.append("%02X | " % r + " | ".join(parts))
         return "\n".join(out)
 
 
-def kick(b, bars=range(4), note="A-2"):
+def kick(b, bars=range(4), vol=None):
     for bar in bars:
         for beat in range(4):
-            b.put(bar * 16 + beat * 4, KICK, note, I_KICK)
+            b.put(bar * 16 + beat * 4, KICK, "A-2", I_KICK, vol)
 
 
-def bass(b, bars=range(4), pop=True):
-    """rolling offbeat bass: kick-bass-bass-bass, octave pop at the end of bar 4"""
+def bass(b, prog=PROG, bars=range(4), vol=0x38):
+    """galloping bass: kick | bass on the 2nd 16th | rest | bass on the 4th 16th"""
+    for bar in bars:
+        root = BASS_ROOT[prog[bar]]
+        for beat in range(4):
+            r = bar * 16 + beat * 4
+            b.put(r + 1, BASS, root, I_BASS, vol)
+            b.put(r + 3, BASS, root, I_BASS, vol - 4)
+
+
+def hats(b, bars=range(4), open_hat=False, soft=False):
     for bar in bars:
         for beat in range(4):
-            for s in (1, 2, 3):
-                r = bar * 16 + beat * 4 + s
-                n = "F#2"
-                if pop and bar == 3 and beat == 3 and s == 2:
-                    n = "F#3"
-                b.put(r, BASS, n, I_BASS)
-
-
-def hats(b, bars=range(4), busy=True):
-    for bar in bars:
-        for r16 in range(16):
-            r = bar * 16 + r16
-            s = r16 % 4
-            if s == 2:
-                if busy:
-                    b.put(r, HAT, "C-5", I_OHAT, 0x2C)
-                else:
-                    b.put(r, HAT, "C-5", I_CHAT, 0x30)
-            elif busy and s in (1, 3):
-                b.put(r, HAT, "C-5", I_CHAT, 0x1C if s == 1 else 0x24)
+            r = bar * 16 + beat * 4
+            b.put(r + 1, HAT, "C-5", I_CHAT, 0x1C if soft else 0x24)
+            if open_hat:
+                b.put(r + 2, HAT, "C-5", I_OHAT, 0x22 if soft else 0x2A)
+            b.put(r + 3, HAT, "C-5", I_CHAT, 0x24 if soft else 0x30)
 
 
 def claps(b, bars=range(4)):
     for bar in bars:
         for beat in (1, 3):
-            b.put(bar * 16 + beat * 4, CLAP, "C-4", I_CLAP, 0x36)
+            b.put(bar * 16 + beat * 4, CLAP, "C-4", I_CLAP, 0x38)
 
 
-ACID_RIFF = ["F#3", "===", "F#3", "A-3", "F#3", "C#4", "===", "F#3",
-             "E-3", "F#3", "===", "A-3", "F#3", "===", "B-3", "C#4"]
-ACID_TURN = ["F#3", "===", "F#3", "A-3", "F#3", "C#4", "===", "F#3",
-             "E-3", "F#3", "A-3", "C#4", "E-4", "C#4", "B-3", "A-3"]
-
-
-def acid(b, bars=range(4), vol=0x34):
+def arp(b, prog=PROG, bars=range(4), vol=0x30, octave_up=False):
     for bar in bars:
-        riff = ACID_TURN if bar == 3 else ACID_RIFF
-        for s, n in enumerate(riff):
-            r = bar * 16 + s
-            if n == "===":
-                b.put(r, ACID, n)
-            else:
-                accent = s in (0, 5, 11)
-                b.put(r, ACID, n, I_ACID, vol if accent else vol - 0x0C)
+        notes = ARP_NOTES[prog[bar]]
+        for k, n in enumerate(notes):
+            if octave_up and k % 4 == 3:
+                n = n[:2] + str(int(n[2]) + 1)
+            b.put(bar * 16 + 2 * k + 1, ARP, n, I_ARP, vol if k % 2 else vol - 6)
 
 
-def pluck_arp(b, chords=DROP_CHORDS, bars=range(4), vol=0x30):
-    """3/16 gallop of chord tones, an octave up"""
-    steps = [0, 3, 6, 8, 11, 14]
+def pads(b, prog=PROG, bars=range(4), vol=0x30, inst=I_PAD):
     for bar in bars:
-        root, third, fifth = chords[bar]
-        tones = [root + "4", fifth + "4", root + "5", third + "5", fifth + "4", third + "4"]
-        for s, n in zip(steps, tones):
-            b.put(bar * 16 + s, LEAD, n, I_PLUCK, vol)
+        a, c = PAD_VOICES[prog[bar]]
+        b.put(bar * 16, PADA, a, inst, vol)
+        b.put(bar * 16, PADB, c, inst, vol - 4)
 
 
-LEAD_MELODY = [  # (row in block, note, length is implicit until the next)
-    (0, "C#5"), (4, "A-4"), (6, "B-4"), (8, "C#5"), (12, "E-5"), (14, "C#5"),
-    (16, "D-5"), (22, "C#5"), (24, "A-4"), (28, "F#4"),
-    (32, "B-4"), (36, "G#4"), (38, "B-4"), (40, "E-5"), (46, "D-5"),
-    (48, "C#5"), (54, "B-4"), (56, "A-4"), (60, "F#4"), (63, "==="),
-]
+def roll(b, start_bar, bars=1, top=0x40):
+    """snare/clap roll: 8ths then 16ths, rising"""
+    rows = list(range(start_bar * 16, (start_bar + bars) * 16))
+    for k, r in enumerate(rows):
+        frac = k / max(1, len(rows) - 1)
+        if frac < 0.5 and r % 2:
+            continue
+        b.put(r, CLAP, "C-4", I_CLAP, int(0x14 + (top - 0x14) * frac))
 
 
-def lead(b, vol=0x30):
-    for r, n in LEAD_MELODY:
+def fill(b):
+    """last beat of the block: 16th clap fill"""
+    for k, r in enumerate(range(60, 64)):
+        b.put(r, CLAP, "C-4", I_CLAP, 0x28 + 6 * k)
+
+
+LEAD_A = [(0, "E-5"), (6, "D-5"), (8, "C-5"), (12, "D-5"),
+          (16, "C-5"), (22, "A-4"), (24, "C-5"), (28, "F-5"),
+          (32, "G-5"), (38, "E-5"), (40, "C-5"), (44, "E-5"),
+          (48, "D-5"), (56, "B-4"), (60, "D-5"), (62, "===")]
+LEAD_B = LEAD_A[:12] + [(48, "D-5"), (52, "G-5"), (56, "E-5"), (62, "===")]
+
+
+def lead(b, phrase, vol=0x34):
+    for r, n in phrase:
         if n == "===":
-            b.put(r, LEAD, n)
+            b.put(r, FX, n)
         else:
-            b.put(r, LEAD, n, I_SAW, vol)
+            b.put(r, FX, n, I_LEAD, vol)
 
 
-def pad_line(b, notes=("C#4", "D-4", "E-4", "C#4"), vol=0x2C):
-    for bar, n in enumerate(notes):
-        b.put(bar * 16, PAD, n, I_PAD, vol)
-
-
-def zaps(b):
-    b.put(22, FX, "F#3", I_ZAP, 0x26)
-    b.put(30, FX, "C#4", I_ZAP, 0x20)
-    b.put(54, FX, "A-3", I_ZAP, 0x26)
-    b.put(59, FX, "F#3", I_ZAP, 0x1E)
-
-
-def clap_fill(b, start=60):
-    for k, r in enumerate(range(start, 64)):
-        b.put(r, CLAP, "C-4", I_CLAP, 0x24 + 6 * k)
-
-
-# ---------------------------------------------------------------- blocks
 blocks = []
-
+# 0 intro: kick, bass, hats; pads under a closed filter (automation opens it)
 intro = Block("Intro", "intro")
-kick(intro)
-hats(intro, busy=False)
-intro.put(0, PAD, "A-3", I_PAD, 0x24)
-intro.put(32, PAD, "C#4", I_PAD, 0x24)
-for r, n in [(8, "F#5"), (14, "C#5"), (40, "E-5"), (46, "C#5"), (56, "A-4")]:
-    intro.put(r, FX, n, I_FLUT, 0x20)
-intro.put(62, FX, "===")
+kick(intro, vol=0x26)
+bass(intro, vol=0x24)
+hats(intro, soft=True)
+pads(intro, vol=0x26)
 blocks.append(intro)
 
+# 1 pre-break: no kick; pads, filtered arp, riser and a roll into the drop
+pre = Block("Rise", "build")
+pads(pre)
+arp(pre, vol=0x2A)
+pre.put(0, FX, "A-4", I_RISE, 0x40)
+pre.put(63, FX, "===")
+roll(pre, 3)
+blocks.append(pre)
+
+
+def drop_block(name, fill_end=False, octave_up=False, with_lead=None, crash=True):
+    d = Block(name, "drop")
+    kick(d)
+    bass(d)
+    hats(d)
+    claps(d, bars=range(3) if fill_end else range(4))
+    if fill_end:
+        d.put(52, CLAP, "C-4", I_CLAP, 0x38)
+        fill(d)
+    arp(d, octave_up=octave_up)
+    pads(d)
+    if crash:
+        d.put(0, CLAP, "C-5", I_CRASH, 0x30)  # crash on the downbeat (clap channel)
+    if with_lead:
+        lead(d, with_lead)
+    return d
+
+
+blocks.append(drop_block("Drop A"))                                  # 2
+blocks.append(drop_block("Drop B", fill_end=True, octave_up=True, crash=False))  # 3
+
+# 4 groove: drums and bass only (a breather)
 groove = Block("Groove", "verse")
-groove.put(0, PAD, "===")  # the intro pad releases: the groove is drums, bass and acid
-groove.put(0, FX, "===")
 kick(groove)
 bass(groove)
 hats(groove)
 claps(groove)
-acid(groove, vol=0x30)
+groove.put(0, ARP, "===")
 blocks.append(groove)
 
-build = Block("Build", "build")
-kick(build, bars=range(3))
-bass(build, bars=range(3), pop=False)
-hats(build, bars=range(2))
-for bar in range(4):  # snare roll: quarters, 8ths, 16ths, rising
-    step = {0: 8, 1: 4, 2: 2, 3: 1}[bar]
-    for s in range(0, 16, step):
-        r = bar * 16 + s
-        if r < 62:
-            b_vol = 0x14 + int(0x2A * r / 62)
-            build.put(r, CLAP, "C-4", I_CLAP, b_vol)
-acid(build, bars=range(3), vol=0x2C)
-build.put(0, FX, "F#4", I_RISE, 0x40)
-build.put(63, FX, "===")
-build.put(48, PAD, "C#4", I_PAD, 0x28)
-blocks.append(build)
-
-drop = Block("Drop", "drop")
-kick(drop)
-bass(drop)
-hats(drop)
-claps(drop)
-acid(drop)
-pluck_arp(drop)
-pad_line(drop)
-zaps(drop)
-blocks.append(drop)
-
-dropb = Block("Drop B", "drop")
-kick(dropb)
-bass(dropb)
-hats(dropb)
-claps(dropb, bars=range(3))
-dropb.put(48, CLAP, "C-4", I_CLAP, 0x36)
-dropb.put(52, CLAP, "C-4", I_CLAP, 0x36)
-clap_fill(dropb, 56)
-acid(dropb)
-lead(dropb)
-pad_line(dropb)
-dropb.put(22, FX, "F#3", I_ZAP, 0x24)
-blocks.append(dropb)
-
+# 5 breakdown: no drums; pads (VI - VII - i - i) and a slow pluck melody
 brk = Block("Breakdown", "breakdown")
-chords = [("D-4", "F#4", "A-4"), ("E-4", "G#4", "B-4"), ("F#4", "A-4", "C#5"), ("F#4", "A-4", "C#5")]
-for bar, (a, b_, c) in enumerate(chords):
-    if bar == 3:
-        continue  # bar 4 holds bar 3's chord
-    brk.put(bar * 16, HAT, a, I_PAD, 0x22)
-    brk.put(bar * 16, CLAP, b_, I_PAD, 0x22)
-    brk.put(bar * 16, PAD, c, I_PAD, 0x26)
-pluck_arp(brk, chords=[("D-", "F#", "A-"), ("E-", "G#", "B-"), ("F#", "A-", "C#"), ("F#", "A-", "C#")], vol=0x2C)
-for r, n in [(0, "F#5"), (10, "E-5"), (16, "C#5"), (28, "B-4"), (32, "C#5"), (40, "E-5"), (44, "F#5"), (56, "C#5")]:
-    brk.put(r, FX, n, I_FLUT, 0x24)
+BRK = ["F", "G", "Am", "Am"]
+pads(brk, prog=BRK, vol=0x40)
+for r, n in [(0, "A-4"), (16, "B-4"), (24, "D-5"), (32, "C-5"), (48, "E-5"), (56, "C-5"), (60, "B-4")]:
+    brk.put(r, ARP, n, I_PLUCK, 0x40)
+    brk.put(r, FX, n[:2] + str(int(n[2]) - 1), I_LEAD, 0x3C)
+brk.put(0, BASS, "===")
 brk.put(63, FX, "===")
 blocks.append(brk)
 
-drop2 = Block("Drop 2", "drop")
-kick(drop2)
-bass(drop2)
-hats(drop2)
-claps(drop2)
-acid(drop2, vol=0x38)
-lead(drop2, vol=0x32)
-pad_line(drop2)
-zaps(drop2)
-blocks.append(drop2)
+# 6 breakdown 2: the melody climbs, the lead doubles it an octave up
+brk2 = Block("Breakdown 2", "breakdown")
+pads(brk2, prog=BRK, vol=0x40)
+for r, n in [(0, "C-5"), (8, "A-4"), (16, "D-5"), (24, "G-5"), (32, "E-5"), (40, "C-5"), (48, "E-5"), (56, "A-5")]:
+    brk2.put(r, ARP, n, I_PLUCK, 0x40)
+    brk2.put(r, FX, n, I_LEAD, 0x38)
+brk2.put(63, FX, "===")
+blocks.append(brk2)
 
+# 7 build: arp back (filter rising), riser, accelerating roll, kick drops out
+build = Block("Build", "build")
+pads(build, prog=BRK, vol=0x30)
+arp(build, prog=["F", "G", "Am", "Am"], vol=0x2C)
+kick(build, bars=range(2))
+build.put(0, FX, "A-4", I_RISE, 0x40)
+build.put(63, FX, "===")
+roll(build, 2, bars=2)
+blocks.append(build)
+
+blocks.append(drop_block("Drop 2", with_lead=LEAD_A))                 # 8
+blocks.append(drop_block("Drop 2B", fill_end=True, octave_up=True, with_lead=LEAD_B, crash=False))  # 9
+
+# 10 outro: kick, bass, hats, arp (filter closing)
 outro = Block("Outro", "outro")
-kick(outro)
-bass(outro)
-hats(outro)
-claps(outro, bars=range(2))
-acid(outro, bars=range(3), vol=0x2C)
-outro.put(0, PAD, "A-3", I_PAD, 0x22)
-outro.put(32, PAD, "C#4", I_PAD, 0x20)
+kick(outro, vol=0x2C)
+bass(outro, vol=0x2A)
+hats(outro, open_hat=False)
+arp(outro, vol=0x28)
+outro.put(0, FX, "===")
 blocks.append(outro)
 
+# 11 outro end: pads and a last arp phrase, no drums
 end = Block("Outro end", "outro")
-kick(end, bars=range(3))
-end.put(48, KICK, "A-2", I_KICK)
-hats(end, bars=range(2), busy=False)
-for r, n in [(0, "F#5"), (12, "C#5"), (24, "A-4"), (40, "F#4")]:
-    end.put(r, FX, n, I_FLUT, 0x1E)
-end.put(0, PAD, "F#3", I_PAD, 0x20)
-end.put(56, PAD, "===")
-end.put(60, FX, "===")
+pads(end, prog=["Am", "F", "Am", "Am"], vol=0x3C)
+arp(end, prog=["Am", "F"], bars=range(2), vol=0x24)
+end.put(48, PADA, "===")
+end.put(48, PADB, "===")
+end.put(0, BASS, "===")
 blocks.append(end)
 
-ORDER = [0, 0, 1, 1, 2, 3, 4, 5, 5, 2, 6, 6, 4, 7, 8]
+ORDER = [0, 0, 1, 2, 3, 2, 3, 2, 3, 4, 5, 5, 6, 7, 8, 9, 8, 9, 3, 10, 11]
 start = {}
 for i, b in enumerate(ORDER):
     start.setdefault(b, []).append(i * ROWS)
-B = lambda idx, k=0: start[idx][k]  # noqa: E731 (song line where block idx is played the k-th time)
 
-# ---------------------------------------------------------------- output
-print('''# ChipWave first-run demo "Night Signal" (generated by scripts/make_demo.py; edit that, not this)
-# Psytrance in F# minor, 145 BPM. Single-file text form of a .cwt song (docs/FIRST_RUN.md).
+
+def at(block, k=0):
+    return start[block][k]
+
+
+print('''# ChipWave first-run demo "Lumen Drift" (generated by scripts/make_demo.py; edit that, not this)
+# Uplifting trance in A minor, 140 BPM. Single-file text form of a .cwt song (docs/FIRST_RUN.md).
 format = "chipwave-song-text"
 format_version = 2
 
 [song]
-title = "Night Signal (demo)"
-bpm = 145
+title = "Lumen Drift (demo)"
+bpm = 140
 lines_per_beat = 4
 speed = 6
 tracks = 8
 
-# instruments: factory presets + built-in percussion; fx = extra devices after the preset's own
+# patch = factory preset or built-in; the other keys override synth parameters
 [[instrument]]
 slot = 1
-name = "Punchy Psy Kick"
-patch = "factory:psytrance/punchy-psy-kick"
+name = "Trance Kick"
+patch = "builtin:trance-kick"
+drive = 0.0
+cutoff = 2500.0
+pitch_env = [36.0, 0.010]
 [[instrument]]
 slot = 2
-name = "Rolling Offbeat Bass"
-patch = "factory:psytrance/rolling-offbeat-bass"
+name = "Gallop Bass"
+patch = "builtin:init"
+wave = "saw"
+octave = -1
+sub = 0.25
+unison = 2
+detune = 6.0
+cutoff = 300.0
+resonance = 0.25
+env_amount = 0.45
+filter_decay = 0.12
+attack = 0.001
+decay = 0.16
+sustain = 0.35
+release = 0.03
+drive = 0.25
+gain = 0.9
 [[instrument]]
 slot = 3
 name = "Closed Hat"
 patch = "builtin:hat-closed"
+gain = 1.0
+decay = 0.06
+cutoff = 5500.0
+fx = [{ kind = "Filter", mode = 0.0, cutoff = 11000.0, resonance = 0.0 }]
 [[instrument]]
 slot = 4
 name = "Open Hat"
 patch = "builtin:hat-open"
+fx = [{ kind = "Filter", mode = 0.0, cutoff = 11000.0, resonance = 0.0 }]
 [[instrument]]
 slot = 5
-name = "Acid Squelch"
-patch = "factory:psytrance/acid-squelch"
-cutoff = 420.0
-[[instrument]]
-slot = 6
-name = "Psy Pluck"
-patch = "factory:psytrance/psy-pluck"
-[[instrument]]
-slot = 7
-name = "Supersaw Lead"
-patch = "factory:psytrance/supersaw-lead"
-fx = [{ kind = "Chorus", rate = 0.4, depth = 3.0, mix = 0.35 }]
-[[instrument]]
-slot = 8
-name = "Flutter Warble"
-patch = "factory:alien/flutter-warble"
-fx = [{ kind = "Filter", mode = 2, cutoff = 1800.0, resonance = 0.6, lfo_rate = 3.0, lfo_depth = 1.6, mix = 0.8 }]
-[[instrument]]
-slot = 9
-name = "Trance Gate Pad"
-patch = "factory:psytrance/trance-gate-pad"
-[[instrument]]
-slot = 10
-name = "Zap"
-patch = "factory:psytrance/zap"
-[[instrument]]
-slot = 11
 name = "Clap"
 patch = "builtin:clap"
-fx = [{ kind = "Reverb", size = 0.35, damping = 0.6, mix = 0.18 }]
+cutoff = 2200.0
+fx = [{ kind = "Reverb", size = 0.45, damping = 0.5, mix = 0.22 }]
 [[instrument]]
-slot = 12
+slot = 6
+name = "Offbeat Arp"
+patch = "builtin:init"
+wave = "saw"
+unison = 3
+detune = 14.0
+width = 0.6
+osc2 = { wave = "square", semi = 12, level = 0.25 }
+cutoff = 2000.0
+resonance = 0.3
+env_amount = 0.4
+filter_decay = 0.09
+attack = 0.001
+decay = 0.13
+sustain = 0.0
+release = 0.08
+gain = 0.75
+fx = [{ kind = "Filter", mode = 1.0, cutoff = 280.0, resonance = 0.1 }]
+[[instrument]]
+slot = 7
+name = "Supersaw Pad"
+patch = "builtin:init"
+wave = "saw"
+unison = 7
+detune = 24.0
+width = 1.0
+osc2 = { wave = "saw", semi = 7, level = 0.45 }
+cutoff = 3200.0
+resonance = 0.12
+attack = 0.25
+decay = 0.6
+sustain = 0.85
+release = 1.1
+gain = 0.6
+lfo = { shape = "sine", sync = 8.0, cutoff = 0.6 }
+fx = [{ kind = "Filter", mode = 1.0, cutoff = 320.0, resonance = 0.1 }, { kind = "Chorus", rate = 0.3, depth = 3.0, mix = 0.3 }]
+[[instrument]]
+slot = 8
+name = "Supersaw Lead"
+patch = "factory:psytrance/supersaw-lead"
+width = 0.8
+lfo = { shape = "sine", rate = 5.5, pitch = 0.12 }
+[[instrument]]
+slot = 9
+name = "Breakdown Pluck"
+patch = "factory:psytrance/psy-pluck"
+release = 0.4
+[[instrument]]
+slot = 10
 name = "Noise Riser"
 patch = "builtin:riser"
-fx = [{ kind = "Bitcrusher", bits = 10.0, rate = 16000.0, mix = 0.25 }]
+fx = [{ kind = "Reverb", size = 0.6, damping = 0.4, mix = 0.3 }]
+[[instrument]]
+slot = 11
+name = "Crash"
+patch = "builtin:hat-open"
+decay = 1.4
+release = 0.8
+cutoff = 4500.0
 
 [mixer]
-master_db = 6.0
+master_db = 5.0
+duck_key = 1
+duck_release_ms = 300
 
 [[mixer.channel]]
 name = "Kick"
-volume_db = 4.5
+volume_db = 4.0
 [[mixer.channel]]
 name = "Bass"
-volume_db = 1.5
+volume_db = 0.0
+duck = 0.55
 [[mixer.channel]]
 name = "Hats"
-volume_db = -2.5
-pan = 0.15
-send_b = 0.12
+volume_db = 5.0
+pan = 0.25
+send_b = 0.2
 [[mixer.channel]]
 name = "Clap"
 volume_db = -3.0
-pan = -0.05
-send_b = 0.2
+send_b = 0.15
 [[mixer.channel]]
-name = "Acid"
-volume_db = -3.5
-pan = -0.2
-send_a = 0.22
-[[mixer.channel]]
-name = "Lead"
-volume_db = -3.0
-pan = 0.2
-send_a = 0.2
-send_b = 0.2
-[[mixer.channel]]
-name = "Pad"
+name = "Arp"
 volume_db = -6.0
-send_b = 0.35
+pan = -0.15
+send_a = 0.25
+send_b = 0.25
+duck = 0.75
 [[mixer.channel]]
-name = "FX"
-volume_db = -5.0
-pan = -0.1
+name = "Pad 1"
+volume_db = -9.0
+pan = -0.5
+send_b = 0.35
+duck = 1.0
+[[mixer.channel]]
+name = "Pad 2"
+volume_db = -9.0
+pan = 0.5
+send_b = 0.35
+duck = 1.0
+[[mixer.channel]]
+name = "Lead / FX"
+volume_db = -3.0
 send_a = 0.3
 send_b = 0.3
+duck = 0.8
 
 [mixer.return_a]
 sync = 3.0
-feedback = 0.3
-hp = 300.0
-lp = 5000.0
+feedback = 0.35
+hp = 350.0
+lp = 6000.0
 mix = 1.0
 [mixer.return_b]
-size = 0.75
-damping = 0.5
+size = 0.88
+damping = 0.45
+predelay = 25.0
+width = 1.0
 mix = 1.0
 ''')
 for i, b in enumerate(blocks):
     print(f'[[block]]\nid = {i}\nname = "{b.name}"\nlines = {ROWS}\nrole = "{b.role}"')
-    print("# row | kick | bass | hats | clap | acid | lead | pad | fx")
+    print("# row | kick | bass | hats | clap | arp | pad 1 | pad 2 | lead/fx")
     print('rows = """\n' + b.text() + '\n"""\n')
 
 secs = []
@@ -400,30 +440,25 @@ print("[sequence]\nsections = [" + ", ".join(f"{{ block = {b}, repeat = {n} }}" 
 def lane(target, label, pts, curve="smooth"):
     print(f'[[automation]]\ntarget = "{target}"\nlabel = "{label}"\ncurve = "{curve}"\npoints = [')
     for p in pts:
-        pos, val = p[0], p[1]
         sh = f', shape = "{p[2]}"' if len(p) > 2 else ""
-        print(f"  {{ pos = {pos}, value = {val}{sh} }},")
+        print(f"  {{ pos = {p[0]}, value = {p[1]}{sh} }},")
     print("]\n")
 
 
 print("# Automation: positions in lines from the song start (64 lines = one block = 4 bars)")
-bd1, bd2 = B(2, 0), B(2, 1)
-dr1, br1, d2 = B(3), B(5), B(6)
-o1, o2 = B(7), B(8)
-db2 = B(4, 1)
+pre, d1, grv, brk0, bld, d2, out, end_ = at(1), at(2), at(4), at(5), at(7), at(8), at(10), at(11)
+total = len(ORDER) * ROWS
+lane("instrument.7.cutoff", "Pad - Filter cutoff", [
+    (0, 350), (pre, 1800), (d1, 3200), (grv, 3200), (brk0, 1500), (bld, 2200), (bld + 63, 5000, "step"),
+    (d2, 3600), (out, 3600), (end_, 1200), (total, 500)])
+lane("instrument.6.cutoff", "Arp - Filter cutoff", [
+    (0, 500), (pre, 500), (pre + 62, 2600, "step"), (d1, 1100), (d1 + 128, 2200), (d1 + 256, 1400), (d1 + 384, 2800),
+    (grv, 1200), (bld, 400), (bld + 62, 3600, "step"), (d2, 1800), (d2 + 128, 3000), (out, 2400), (end_, 900), (total, 400)])
 lane("instrument.2.cutoff", "Bass - Filter cutoff", [
-    (0, 150), (B(1), 150), (bd1 + 60, 260), (dr1, 190, "linear"), (bd2, 160), (bd2 + 60, 280), (d2, 190), (o1, 190), (o2 + 64, 130)])
-lane("instrument.5.cutoff", "Acid - Filter cutoff", [
-    (0, 300), (B(1), 300), (bd1, 900), (bd1 + 62, 3200, "step"), (dr1, 1200), (dr1 + 32, 2400), (dr1 + 64, 1300),
-    (dr1 + 96, 2800), (br1, 500, "step"), (bd2, 500), (bd2 + 62, 4200, "step"), (d2, 1500), (d2 + 32, 3000),
-    (d2 + 64, 1500), (d2 + 96, 3400), (db2, 1600), (db2 + 32, 2600), (o1, 1800), (o1 + 64, 380)])
-lane("instrument.6.cutoff", "Pluck - Filter cutoff", [
-    (0, 900), (br1, 260), (bd2, 1800), (bd2 + 64, 900)])
-lane("instrument.12.level", "Riser - Level", [
-    (0, 0.0), (bd1, 0.15), (bd1 + 63, 1.1, "step"), (bd1 + 64, 0.0), (bd2, 0.15), (bd2 + 63, 1.1, "step"), (bd2 + 64, 0.0)], curve="linear")
-lane("instrument.12.cutoff", "Riser - Filter sweep", [
-    (0, 400), (bd1, 400), (bd1 + 63, 9000, "step"), (bd1 + 64, 400), (bd2, 400), (bd2 + 63, 9000, "step"), (bd2 + 64, 400)])
-lane("instrument.8.fx.3.lfo_rate", "Flutter - Alien LFO rate", [
-    (0, 1.5), (B(1), 7.0), (br1, 1.2), (bd2, 9.0), (o2, 2.0), (o2 + 64, 7.0)])
+    (0, 180), (pre, 260), (d1, 260), (grv, 320), (d2, 300), (out, 260), (total, 180)])
+lane("instrument.10.level", "Riser - Level", [
+    (0, 0.0), (pre, 0.1), (pre + 63, 1.2, "step"), (pre + 64, 0.0), (bld, 0.1), (bld + 63, 1.2, "step"), (bld + 64, 0.0)], curve="linear")
+lane("instrument.10.cutoff", "Riser - Filter sweep", [
+    (0, 300), (pre, 300), (pre + 63, 12000, "step"), (pre + 64, 300), (bld, 300), (bld + 63, 12000, "step"), (bld + 64, 300)])
 lane("mixer.return_a.feedback", "Delay feedback", [
-    (0, 0.3), (br1, 0.3), (bd2, 0.6, "step"), (d2, 0.3), (o2, 0.3), (o2 + 64, 0.6)], curve="linear")
+    (0, 0.3), (grv, 0.3), (grv + 60, 0.6, "step"), (brk0, 0.4), (d2, 0.3), (end_, 0.3), (total, 0.55)], curve="linear")

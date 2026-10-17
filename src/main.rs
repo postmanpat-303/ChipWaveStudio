@@ -2,7 +2,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 /// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.1";
+pub const VERSION: &str = "0.2.3.2";
 
 mod app;
 mod arrange;

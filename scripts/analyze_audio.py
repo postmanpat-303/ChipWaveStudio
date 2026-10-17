@@ -39,7 +39,7 @@ def lufs(x, sr):
 
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    bs = 64 * 60 / 145 / 4  # one 64-row block at 145 BPM
+    bs = 64 * 60 / 140 / 4  # one 64-row block at 140 BPM
     if "--block-secs" in sys.argv:
         bs = float(sys.argv[sys.argv.index("--block-secs") + 1])
     sr, d = wavfile.read(args[0])
