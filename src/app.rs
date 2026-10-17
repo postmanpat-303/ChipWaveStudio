@@ -166,6 +166,8 @@ pub struct App {
     instr_delete: Option<(u8, String, usize)>,
     /// MIDI keyboard input (app/midiview.rs)
     midi: midiview::MidiUi,
+    /// instrument FX chain clipboard (Copy / Paste effects)
+    fx_clip: Option<Vec<crate::fx::Device>>,
 }
 
 pub fn run(open: Option<PathBuf>) -> Result<(), String> {
@@ -383,6 +385,7 @@ impl App {
             mouse_since_commit: false,
             instr_delete: None,
             midi,
+            fx_clip: None,
         };
         let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
         app.midi_apply(connect);

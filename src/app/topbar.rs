@@ -198,6 +198,9 @@ pub(super) const VIEWS: [(View, &str, &str); 5] = [
     (View::Sample, "Sample", "sample editor (Ctrl+5)"),
 ];
 
+/// donation link on Help > About (opens in the system browser)
+pub(super) const DONATE_URL: &str = "https://paypal.me/derekh100";
+
 impl App {
     pub(super) fn synth_key(&mut self, ctx: &egui::Context, key: Key, modifiers: egui::Modifiers) {
         self.pending.push(egui::Event::Key {
@@ -677,6 +680,46 @@ impl App {
                             a.device_name, a.sample_rate
                         ));
                 }
+                // MIDI quick toggles (laid out right to left: shown as light, Chord, Rec)
+                let m = &mut self.extra.midi;
+                let rec_txt = if m.live_record { "Rec live" } else { "Rec step" };
+                let armed = self.edit;
+                let rec_col = if armed { t.brick } else { hdr_dim() };
+                let mut toggled = false;
+                if ui
+                    .selectable_label(
+                        false,
+                        egui::RichText::new(rec_txt).small().color(rec_col),
+                    )
+                    .on_hover_text(format!(
+                        "MIDI record mode: {}\nclick to switch live / step\n(records only when edit mode is on: {})",
+                        if m.live_record {
+                            "LIVE - while the song plays, notes go to the playing row"
+                        } else {
+                            "STEP - notes always go to the cursor, which moves by Step"
+                        },
+                        if armed { "on" } else { "off" }
+                    ))
+                    .clicked()
+                {
+                    m.live_record = !m.live_record;
+                    toggled = true;
+                }
+                if ui
+                    .selectable_label(m.chord_spread, egui::RichText::new("Chord").small())
+                    .on_hover_text(format!(
+                        "MIDI chord spread: {}\nwhen on, the notes of a chord go into the cursor channel and the channels to its right",
+                        if m.chord_spread { "on" } else { "off" }
+                    ))
+                    .clicked()
+                {
+                    m.chord_spread = !m.chord_spread;
+                    toggled = true;
+                }
+                if toggled {
+                    self.save_settings();
+                    self.midi_apply(false);
+                }
                 // MIDI activity light
                 let connected = !self.midi.hub.connected().is_empty();
                 let (r, resp) = ui.allocate_exact_size(egui::vec2(46.0, 18.0), Sense::click());
@@ -721,7 +764,12 @@ impl App {
                             .strong(),
                     );
                     ui.label("A tracker for chip and psytrance sounds.");
+                    ui.label("Created by Derek Heasley");
                     ui.label("GPL-3.0-or-later");
+                    ui.add_space(8.0);
+                    ui.label("To keep the software going I need Coffee :)");
+                    ui.hyperlink_to("Buy me a coffee", DONATE_URL)
+                        .on_hover_text(DONATE_URL);
                 });
             self.show_about = open;
         }

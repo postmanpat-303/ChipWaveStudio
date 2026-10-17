@@ -1,4 +1,4 @@
-ChipWave Tracker 0.2.3 - Windows x64
+ChipWave Tracker 0.2.3.1 - Windows x64
 ==============================================================
 GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
@@ -63,6 +63,8 @@ MIDI keyboard (0.2.3, details in docs/MIDI.md on GitHub)
   Record: edit mode on (Esc) + Pattern view = note + instrument + velocity (volume column)
     at the cursor, cursor moves by Step. While the song plays: written at the playing row.
     Option: chords spread over the next channels. Ctrl+Z removes the last note.
+  Toolbar (left of the MIDI light): "Chord" = chord spread on/off,
+    "Rec live" / "Rec step" = record mode while playing (red when edit mode is on).
   MIDI learn: right-click a fader / pan / send / instrument Volume, Cutoff, Resonance,
     Drive / BPM > "MIDI learn", then move a knob or the mod wheel.
   Check a keyboard from cmd:  ChipWave.exe --midi-list   and   ChipWave.exe --midi-monitor 15
@@ -73,6 +75,9 @@ Effects: 01/02 slide up/down, 09 speed, 0C set volume, 0D volume slide,
 Instruments: the left panel lists the factory psytrance/alien synth sounds;
 select one to edit oscillator, filter (LP/HP/BP, cutoff, resonance), envelope.
 Import WAV samples with "Import WAV..." or drag .wav files onto the window.
+Right-click an instrument: Add effect, Copy effects, Paste effects (replace or
+append), Open in FX view, Duplicate, Delete. Ctrl+Z undoes each.
+Mixer: double-click a fader = 0 dB, double-click pan = centre.
 Audio: "Buffer" in the toolbar (Auto/256/512/1024/2048). The status bar
 shows latency and an underrun counter; latency grows automatically on dropouts.
 BPM / Speed changes apply instantly, also while playing.
@@ -89,3 +94,7 @@ Command line:
   ChipWave.exe --self-test [out.wav]   render the demo, check it is not silent
   ChipWave.exe --render demo out.wav   render the demo (or a .cwt) to WAV
   ChipWave.exe --version
+
+Created by Derek Heasley.
+To keep the software going I need Coffee :)
+Buy me a coffee: https://paypal.me/derekh100   (also in Help > About)

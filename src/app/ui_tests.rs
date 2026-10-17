@@ -697,3 +697,218 @@ fn midi_light_opens_the_midi_settings_card() {
         .velocity
         .load(std::sync::atomic::Ordering::Relaxed));
 }
+
+// ---- 0.2.3.1: toolbar MIDI toggles, instrument FX menu, mixer resets ----
+
+/// rect of the widget whose label (or text, for plain labels) is exactly `text`
+fn exact(h: &Harness<'static, App>, text: &str) -> Rect {
+    h.query_all_by(|n| n.label().as_deref() == Some(text) || n.value().as_deref() == Some(text))
+        .next()
+        .unwrap_or_else(|| panic!("no widget labelled exactly {text:?}"))
+        .rect()
+}
+
+fn click_exact(h: &mut Harness<'static, App>, text: &str) {
+    let r = exact(h, text);
+    click_at(h, r.center());
+}
+
+#[test]
+fn toolbar_chord_spread_and_rec_mode_toggles() {
+    let mut h = midi_harness();
+    assert!(!h.state().extra.midi.chord_spread);
+    // the toolbar Chord toggle switches chord spread on...
+    click_exact(&mut h, "Chord");
+    assert!(h.state().extra.midi.chord_spread);
+    // ...and a chord now spreads over channels 2, 3
+    for k in [60, 64] {
+        h.state().midi.hub.inject(&[0x90, k, 100]);
+    }
+    frames(&mut h, 2);
+    let notes: Vec<u8> = (1..3).map(|c| cell(&mut h, 0, 4, c).note).collect();
+    assert_eq!(notes, [49, 53]);
+    for k in [60, 64] {
+        h.state().midi.hub.inject(&[0x80, k, 0]);
+    }
+    frames(&mut h, 2);
+    // and off again
+    click_exact(&mut h, "Chord");
+    assert!(!h.state().extra.midi.chord_spread);
+    // the Rec indicator shows and switches live / step record mode
+    let live0 = h.state().extra.midi.live_record;
+    let (a, b) = if live0 {
+        ("Rec live", "Rec step")
+    } else {
+        ("Rec step", "Rec live")
+    };
+    click_exact(&mut h, a);
+    assert_eq!(h.state().extra.midi.live_record, !live0);
+    exact(&h, b);
+    click_exact(&mut h, b);
+    assert_eq!(h.state().extra.midi.live_record, live0);
+    exact(&h, a);
+}
+
+fn fx_of(h: &mut Harness<'static, App>, slot: usize) -> Vec<crate::fx::Device> {
+    song(h, |s| s.instruments[slot - 1].fx.clone())
+}
+
+fn instr_menu(h: &mut Harness<'static, App>, slot: usize) {
+    let r = labelled(h, &format!("{slot:02X}  "));
+    click_with(h, r.center(), egui::PointerButton::Secondary);
+}
+
+#[test]
+fn instrument_menu_add_effect_is_undoable() {
+    let mut h = harness();
+    let before = fx_of(&mut h, 2);
+    instr_menu(&mut h, 2);
+    click_exact(&mut h, "Add effect");
+    // every FX device is listed
+    for k in crate::fx::FxKind::ALL {
+        exact(&h, k.name());
+    }
+    click_exact(&mut h, "Bitcrusher");
+    let after = fx_of(&mut h, 2);
+    assert_eq!(after.len(), before.len() + 1);
+    assert_eq!(after.last().unwrap().kind, crate::fx::FxKind::Bitcrusher);
+    assert_eq!(&after[..before.len()], &before[..], "added at the end");
+    ctrl_z(&mut h);
+    assert_eq!(fx_of(&mut h, 2), before, "undo removes it");
+}
+
+#[test]
+fn instrument_menu_copy_paste_effects_and_open_in_fx_view() {
+    let mut h = harness();
+    // give 02 a known chain of two devices
+    for k in ["Delay", "Drive"] {
+        instr_menu(&mut h, 2);
+        click_exact(&mut h, "Add effect");
+        click_exact(&mut h, k);
+    }
+    let src = fx_of(&mut h, 2);
+    assert!(src.len() >= 2);
+    let one0 = fx_of(&mut h, 1);
+    let three0 = fx_of(&mut h, 3);
+    // paste is disabled until something is copied
+    instr_menu(&mut h, 3);
+    click_exact(&mut h, "Paste effects");
+    assert_eq!(fx_of(&mut h, 3), three0, "nothing copied yet");
+    h.input_mut().events.push(egui::Event::Key {
+        key: Key::Escape,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: Default::default(),
+    });
+    frames(&mut h, 3);
+    // copy from 02
+    instr_menu(&mut h, 2);
+    click_exact(&mut h, "Copy effects");
+    // paste (replace) into 03
+    instr_menu(&mut h, 3);
+    click_exact(&mut h, "Paste effects");
+    assert_eq!(fx_of(&mut h, 3), src, "replaced");
+    // paste (append) onto 01
+    instr_menu(&mut h, 1);
+    click_exact(&mut h, "Paste effects (append)");
+    let mut want = one0.clone();
+    want.extend(src.iter().cloned());
+    assert_eq!(fx_of(&mut h, 1), want, "appended");
+    // each paste is one undo step
+    ctrl_z(&mut h);
+    assert_eq!(fx_of(&mut h, 1), one0);
+    assert_eq!(fx_of(&mut h, 3), src);
+    ctrl_z(&mut h);
+    assert_eq!(fx_of(&mut h, 3), three0);
+    // Open in FX view selects the instrument and switches view
+    instr_menu(&mut h, 3);
+    click_exact(&mut h, "Open in FX view");
+    assert_eq!(h.state().view, View::Fx);
+    assert_eq!(h.state().instr, 3);
+}
+
+/// two quick clicks at one spot (frames 50 ms apart: the harness's default
+/// 250 ms step is too slow for egui to count a double-click)
+fn double_click(h: &mut Harness<'static, App>, p: Pos2) {
+    h.input_mut().events.push(egui::Event::PointerMoved(p));
+    frame(h);
+    let mut t = h.ctx.input(|i| i.time);
+    for _ in 0..2 {
+        for pressed in [true, false] {
+            t += 0.05;
+            h.input_mut().time = Some(t);
+            h.input_mut().events.push(egui::Event::PointerButton {
+                pos: p,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Default::default(),
+            });
+            frame(h);
+        }
+    }
+    // back to the harness clock (RawInput keeps an explicit time)
+    h.input_mut().time = None;
+    frames(h, 3);
+}
+
+#[test]
+fn mixer_double_click_resets_fader_and_pan() {
+    let mut h = harness();
+    mixer(&mut h);
+    let (fader, pan) = strip(&h, 0);
+    // move both away from their defaults
+    drag(
+        &mut h,
+        fader.center(),
+        fader.center() + egui::vec2(0.0, 50.0),
+    );
+    drag(&mut h, pan.center(), pan.center() + egui::vec2(30.0, 0.0));
+    let m = song(&mut h, |s| s.mixer.channels[0]);
+    assert!(
+        m.volume != 1.0 && m.pan > 0.2,
+        "moved: {} {}",
+        m.volume,
+        m.pan
+    );
+    // double-click near the ends, so a plain click would not land on the default
+    double_click(&mut h, fader.center_bottom() - egui::vec2(0.0, 8.0));
+    assert_eq!(song(&mut h, |s| s.mixer.channels[0].volume), 1.0, "0 dB");
+    double_click(&mut h, pan.right_center() - egui::vec2(6.0, 0.0));
+    assert_eq!(song(&mut h, |s| s.mixer.channels[0].pan), 0.0, "centre");
+    // the reset is undoable
+    ctrl_z(&mut h);
+    assert!(song(&mut h, |s| s.mixer.channels[0].pan) != 0.0);
+}
+
+#[test]
+fn help_about_shows_credit_and_coffee_link() {
+    let mut h = harness();
+    click_exact(&mut h, "Help");
+    click_exact(&mut h, "About ChipWave");
+    assert!(h.state().show_about);
+    exact(&h, "Created by Derek Heasley");
+    exact(&h, "To keep the software going I need Coffee :)");
+    // clicking the link asks the platform to open the PayPal page
+    let r = exact(&h, "Buy me a coffee");
+    h.input_mut()
+        .events
+        .push(egui::Event::PointerMoved(r.center()));
+    frame(&mut h);
+    let mut opened = vec![];
+    for pressed in [true, false] {
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos: r.center(),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        });
+        frame(&mut h);
+        for c in &h.output().platform_output.commands {
+            if let egui::OutputCommand::OpenUrl(u) = c {
+                opened.push(u.url.clone());
+            }
+        }
+    }
+    assert_eq!(opened, ["https://paypal.me/derekh100"]);
+}

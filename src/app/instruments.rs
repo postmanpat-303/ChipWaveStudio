@@ -40,6 +40,43 @@ impl App {
                             self.instr = slot;
                         }
                         r.context_menu(|ui| {
+                            ui.menu_button("Add effect", |ui| {
+                                for k in crate::fx::FxKind::ALL {
+                                    if ui.button(k.name()).clicked() {
+                                        self.add_effect(slot, k);
+                                        ui.close();
+                                    }
+                                }
+                            });
+                            if ui.button("Copy effects").clicked() {
+                                self.copy_effects(slot);
+                                ui.close();
+                            }
+                            let has_clip = self.fx_clip.is_some();
+                            if ui
+                                .add_enabled(has_clip, egui::Button::new("Paste effects"))
+                                .on_hover_text(
+                                    "replace this instrument's FX chain with the copied one",
+                                )
+                                .clicked()
+                            {
+                                self.paste_effects(slot, false);
+                                ui.close();
+                            }
+                            if ui
+                                .add_enabled(has_clip, egui::Button::new("Paste effects (append)"))
+                                .on_hover_text("add the copied devices after this instrument's own")
+                                .clicked()
+                            {
+                                self.paste_effects(slot, true);
+                                ui.close();
+                            }
+                            if ui.button("Open in FX view").clicked() {
+                                self.instr = slot;
+                                self.view = View::Fx;
+                                ui.close();
+                            }
+                            ui.separator();
                             if ui.button("Duplicate instrument").clicked() {
                                 self.duplicate_instrument(slot);
                                 ui.close();
@@ -248,7 +285,64 @@ impl App {
     }
 }
 
+/// devices per instrument chain (same limit as the FX view)
+const MAX_DEVICES: usize = 16;
+
 impl App {
+    /// Add a default `kind` device at the end of instrument `slot`'s chain.
+    pub(super) fn add_effect(&mut self, slot: u8, kind: crate::fx::FxKind) {
+        let idx = (slot as usize).wrapping_sub(1);
+        self.snapshot();
+        let r = self.with(|s| {
+            let i = s.song.instruments.get_mut(idx)?;
+            if i.fx.len() >= MAX_DEVICES {
+                return Some(false);
+            }
+            i.fx.push(crate::fx::Device::new(kind));
+            Some(true)
+        });
+        self.status = match r {
+            Some(true) => format!("Added {} to instrument {slot:02X}", kind.name()),
+            Some(false) => format!("Instrument {slot:02X}: chain is full ({MAX_DEVICES} devices)"),
+            None => "No such instrument".into(),
+        };
+    }
+
+    pub(super) fn copy_effects(&mut self, slot: u8) {
+        let idx = (slot as usize).wrapping_sub(1);
+        if let Some(fx) = self.with(|s| s.song.instruments.get(idx).map(|i| i.fx.clone())) {
+            self.status = format!("Copied {} effect(s) from instrument {slot:02X}", fx.len());
+            self.fx_clip = Some(fx);
+        }
+    }
+
+    /// Paste the copied chain: replace, or append (up to the device limit).
+    pub(super) fn paste_effects(&mut self, slot: u8, append: bool) {
+        let Some(clip) = self.fx_clip.clone() else {
+            self.status = "Nothing copied: right-click an instrument > Copy effects".into();
+            return;
+        };
+        let idx = (slot as usize).wrapping_sub(1);
+        self.snapshot();
+        let n = self.with(|s| {
+            let i = s.song.instruments.get_mut(idx)?;
+            if !append {
+                i.fx.clear();
+            }
+            let room = MAX_DEVICES.saturating_sub(i.fx.len());
+            let n = clip.len().min(room);
+            i.fx.extend(clip.into_iter().take(n));
+            Some(n)
+        });
+        if let Some(n) = n {
+            self.status = format!(
+                "{} {n} effect(s) {} instrument {slot:02X}",
+                if append { "Appended" } else { "Pasted" },
+                if append { "to" } else { "into" }
+            );
+        }
+    }
+
     /// Delete (with a confirmation when notes use it)
     pub(super) fn request_delete_instrument(&mut self, slot: u8) {
         let (exists, name, uses) = self.with(|s| {

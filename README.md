@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0a84ff" alt="Windows | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.3-00d0ff" alt="Version 0.2.3">
+  <img src="https://img.shields.io/badge/version-0.2.3.1-00d0ff" alt="Version 0.2.3.1">
   <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases"><img src="https://img.shields.io/badge/release-v0.2.2.4-7c4dff" alt="Latest tagged release v0.2.2.4"></a>
 </p>
 
@@ -18,7 +18,7 @@
 
 **ChipWave Tracker** is a modern music tracker inspired by **OctaMED** and the Commodore **Amiga**. It keeps the fast, keyboard-driven workflow of the classic tracker (blocks, sections and sequences) and adds the things a modern studio expects: built-in sound design, a visual arranger, a mixer with automation, WAV/MP3 export and clean scaling on any screen. It's written in Rust with egui and cpal for Windows 11 and Linux.
 
-**Status:** in active development, currently **v0.2.3** (`Cargo.toml` 0.2.3). It's playable today with the pattern editor, playback, synth presets, sample import, arranger, mixer, automation, `.cwt` save/load, WAV/MP3 export, settings, Fill to length auto arrange and MIDI keyboard input (play, record, MIDI learn: [docs/MIDI.md](docs/MIDI.md)). The latest tagged release is v0.2.2.4.
+**Status:** in active development, currently **v0.2.3.1** (`Cargo.toml` 0.2.3+fix.1). It's playable today with the pattern editor, playback, synth presets, sample import, arranger, mixer, automation, `.cwt` save/load, WAV/MP3 export, settings, Fill to length auto arrange and MIDI keyboard input (play, record, MIDI learn: [docs/MIDI.md](docs/MIDI.md)). The latest tagged release is v0.2.3.
 
 ## Feature highlights
 
@@ -143,11 +143,17 @@ Effects: 01/02 slide, 09 speed, 0C volume, 0D volume slide, 0F tempo (0F00 = bre
 
 ## Changelog highlights
 
+v0.2.3.1 adds toolbar **Chord** (chord spread) and **Rec live / Rec step** toggles next to the MIDI light; instrument right-click menu: **Add effect**, **Copy effects**, **Paste effects** (replace / append) and **Open in FX view** (all undoable); mixer double-click reset (fader to 0 dB, pan to centre) now works; Help > About shows the credit and a "Buy me a coffee" link.
+
 v0.2.3 adds MIDI keyboard input: Settings > MIDI (device, all devices, auto-connect and hot-plug, channel filter, velocity curve, MIDI octave), live play of the current instrument with velocity, sustain pedal and pitch bend, recording into the pattern (step or live while playing, chord spread, one undo step per note), simple MIDI learn (right-click a fader / knob) and a toolbar MIDI light. `ChipWave.exe --midi-list` / `--midi-monitor` check a keyboard from the command line. See [docs/MIDI.md](docs/MIDI.md).
 
 v0.1.3 adds a basic arranger (song order as clips: drag to reorder, duplicate, insert, delete, click to open, playhead, zoom, dockable), a basic mixer (fader, pan, mute/solo, peak meters, master; saved in `.cwt` as `mixer.toml`), selection + copy/paste, octave buttons and per-instrument transpose. Screenshots: [arranger](dist/screenshot-0.1.3-arranger.png), [mixer](dist/screenshot-0.1.3-mixer.png), [pattern + selection](dist/screenshot-0.1.3-pattern-selection.png).
 
 v0.1.0 has the pattern editor (keys per [docs/PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md)), tracker playback, a simple synth with factory psytrance presets, WAV sample import, `.cwt` save/load, WAV export, the first-run demo song, and Dark Circuit (default) / Amiga themes. Windows build: `ChipWave-0.1.1-windows-x64.zip` on the [Releases page](https://github.com/postmanpat-303/ChipWaveTracker/releases); screenshot: [dist/screenshot.png](dist/screenshot.png).
+
+## Credits
+
+Created by **Derek Heasley**. To keep the software going I need Coffee :) [Buy me a coffee](https://paypal.me/derekh100)
 
 ## Licence
 

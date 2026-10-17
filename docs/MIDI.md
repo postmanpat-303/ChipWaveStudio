@@ -1,4 +1,4 @@
-# MIDI keyboard input (0.2.3)
+# MIDI keyboard input (0.2.3, toolbar toggles 0.2.3.1)
 
 ChipWave 0.2.3 plays and records from a MIDI keyboard. Windows is the main target (WinMM through [midir](https://crates.io/crates/midir), MIT licence). Linux (ALSA) and macOS (CoreMIDI) use the same code.
 
@@ -51,6 +51,7 @@ Recording needs **edit mode** (Esc) and the **Pattern** view. Each note writes:
 
 **Step record** (song stopped, or live record switched off):
 - The note goes at the cursor, and the cursor moves down by **Step**. With Step 0 it stays put.
+- **Toolbar shortcuts (0.2.3.1):** next to the MIDI light, **Chord** switches chord spread on/off and **Rec live / Rec step** switches the record mode (it turns red when edit mode is on, i.e. MIDI notes will be recorded). Hover them for a tooltip.
 - **Chord spread** on: the notes of a chord go into adjacent channels on the same row, and the cursor moves once all the keys are released.
 
 **Live record** (song playing and live record on):

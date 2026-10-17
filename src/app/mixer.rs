@@ -82,12 +82,16 @@ impl App {
                                         ui.horizontal(|ui| {
                                             ui.spacing_mut().slider_width = fader_h;
                                             ui.add_space(8.0);
-                                            let r = ui.add(
-                                                egui::Slider::new(vol, 0.0..=2.0)
-                                                    .vertical()
-                                                    .trailing_fill(true)
-                                                    .show_value(false),
-                                            );
+                                            // sliders only sense drags: add clicks
+                                            // so double-click resets work
+                                            let r = ui
+                                                .add(
+                                                    egui::Slider::new(vol, 0.0..=2.0)
+                                                        .vertical()
+                                                        .trailing_fill(true)
+                                                        .show_value(false),
+                                                )
+                                                .interact(Sense::click());
                                             if r.double_clicked() {
                                                 *vol = 1.0;
                                             }
@@ -123,7 +127,8 @@ impl App {
                             &mut |ui| {
                                 ui.spacing_mut().slider_width = 76.0;
                                 let r = ui
-                                    .add(egui::Slider::new(&mut pan, -1.0..=1.0).show_value(false));
+                                    .add(egui::Slider::new(&mut pan, -1.0..=1.0).show_value(false))
+                                    .interact(Sense::click());
                                 if r.double_clicked() {
                                     pan = 0.0;
                                 }
@@ -159,6 +164,7 @@ impl App {
                                                 egui::Slider::new(&mut send[b], 0.0..=1.0)
                                                     .show_value(false),
                                             )
+                                            .interact(Sense::click())
                                             .on_hover_text(format!(
                                                 "send {} ({}): {:.0} %",
                                                 nm,
