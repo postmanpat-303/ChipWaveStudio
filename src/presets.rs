@@ -174,6 +174,48 @@ pub fn hat(open: bool) -> Patch {
     }
 }
 
+/// Built-in synthetic percussion / FX (no sample files needed):
+/// "hat-closed", "hat-open", "clap", "riser".
+pub fn builtin(name: &str) -> Option<Patch> {
+    Some(match name {
+        "hat-closed" => hat(false),
+        "hat-open" => hat(true),
+        "clap" => Patch {
+            name: "Clap".into(),
+            osc1_level: 0.0,
+            noise_level: 1.0,
+            filter: FilterMode::Bp,
+            cutoff: 1400.0,
+            resonance: 0.35,
+            amp: Adsr {
+                a: 0.0,
+                d: 0.16,
+                s: 0.0,
+                r: 0.05,
+            },
+            gain: 0.7,
+            ..Default::default()
+        },
+        "riser" => Patch {
+            name: "Noise Riser".into(),
+            osc1_level: 0.0,
+            noise_level: 0.8,
+            filter: FilterMode::Bp,
+            cutoff: 600.0,
+            resonance: 0.55,
+            amp: Adsr {
+                a: 2.5,
+                d: 0.5,
+                s: 1.0,
+                r: 0.6,
+            },
+            gain: 0.6,
+            ..Default::default()
+        },
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

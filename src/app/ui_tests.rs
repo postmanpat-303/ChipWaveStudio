@@ -912,3 +912,28 @@ fn help_about_shows_credit_and_coffee_link() {
     }
     assert_eq!(opened, ["https://paypal.me/derekh100"]);
 }
+
+#[test]
+fn file_new_from_demo_and_help_load_demo_song() {
+    let mut h = harness();
+    // start from an empty song, then File > New from demo song
+    h.state_mut().with(|s| s.song = Song::empty());
+    frames(&mut h, 2); // the change is noticed (dirty); pretend it was saved
+    h.state_mut().dirty = false;
+    frames(&mut h, 2);
+    click_exact(&mut h, "File");
+    click_label(&mut h, "New from demo");
+    let demo = fileio::demo_song();
+    assert_eq!(song(&mut h, |s| s.title.clone()), demo.title);
+    assert_eq!(song(&mut h, |s| s.order.clone()), demo.order);
+    assert!(!h.state().dirty);
+    // an edited song asks first; Help > Load demo song, then Don't save
+    h.state_mut().with(|s| s.song.title = "mine".into());
+    h.state_mut().dirty = true;
+    click_exact(&mut h, "Help");
+    click_exact(&mut h, "Load demo song");
+    assert!(h.state().prompt.is_some(), "unsaved prompt");
+    assert_eq!(song(&mut h, |s| s.title.clone()), "mine");
+    click_label(&mut h, "Don");
+    assert_eq!(song(&mut h, |s| s.title.clone()), demo.title);
+}

@@ -1589,6 +1589,28 @@ mod tests {
         }
     }
 
+    /// Fill to length works on the shipped demo (its blocks carry roles)
+    #[test]
+    fn fill_to_length_on_the_demo() {
+        let mut s = crate::fileio::demo_song();
+        let st = Style::factory(0);
+        let pr = generate(
+            &s,
+            &Params {
+                style: &st,
+                target_bars: 96,
+                energy: &st.energy,
+                variation: 0.5,
+                seed: 7,
+                locks: vec![],
+            },
+        )
+        .unwrap();
+        assert_eq!(pr.rows, 96 * rows_per_bar(&s));
+        apply(&mut s, &pr, 7);
+        assert!(s.length_seconds() > 150.0);
+    }
+
     #[test]
     fn accepted_result_renders_for_export() {
         let mut s = crate::fileio::demo_song();

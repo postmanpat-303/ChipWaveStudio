@@ -168,6 +168,8 @@ pub struct App {
     midi: midiview::MidiUi,
     /// instrument FX chain clipboard (Copy / Paste effects)
     fx_clip: Option<Vec<crate::fx::Device>>,
+    /// instrument the list last scrolled to
+    instr_shown: u8,
 }
 
 pub fn run(open: Option<PathBuf>) -> Result<(), String> {
@@ -386,6 +388,7 @@ impl App {
             instr_delete: None,
             midi,
             fx_clip: None,
+            instr_shown: 0,
         };
         let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
         app.midi_apply(connect);

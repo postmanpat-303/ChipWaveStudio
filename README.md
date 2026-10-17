@@ -143,7 +143,7 @@ Effects: 01/02 slide, 09 speed, 0C volume, 0D volume slide, 0F tempo (0F00 = bre
 
 ## Changelog highlights
 
-v0.2.3.1 adds toolbar **Chord** (chord spread) and **Rec live / Rec step** toggles next to the MIDI light; instrument right-click menu: **Add effect**, **Copy effects**, **Paste effects** (replace / append) and **Open in FX view** (all undoable); mixer double-click reset (fader to 0 dB, pan to centre) now works; Help > About shows the credit and a "Buy me a coffee" link.
+v0.2.3.1 adds toolbar **Chord** (chord spread) and **Rec live / Rec step** toggles next to the MIDI light; instrument right-click menu: **Add effect**, **Copy effects**, **Paste effects** (replace / append) and **Open in FX view** (all undoable); mixer double-click reset (fader to 0 dB, pan to centre) now works; Help > About shows the credit and a "Buy me a coffee" link; a new demo song "Night Signal" (psytrance, F# minor, 1:41, full arrangement with automation; File > New from demo song or Help > Load demo song; preview: `dist/demo-0.2.3.1.mp3`).
 
 v0.2.3 adds MIDI keyboard input: Settings > MIDI (device, all devices, auto-connect and hot-plug, channel filter, velocity curve, MIDI octave), live play of the current instrument with velocity, sustain pedal and pitch bend, recording into the pattern (step or live while playing, chord spread, one undo step per note), simple MIDI learn (right-click a fader / knob) and a toolbar MIDI light. `ChipWave.exe --midi-list` / `--midi-monitor` check a keyboard from the command line. See [docs/MIDI.md](docs/MIDI.md).
 

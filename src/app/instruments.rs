@@ -39,6 +39,11 @@ impl App {
                         if r.clicked() {
                             self.instr = slot;
                         }
+                        // a newly selected instrument (duplicate, Up/Down, MIDI...) scrolls into view
+                        if self.instr == slot && self.instr_shown != slot {
+                            r.scroll_to_me(None);
+                            self.instr_shown = slot;
+                        }
                         r.context_menu(|ui| {
                             ui.menu_button("Add effect", |ui| {
                                 for k in crate::fx::FxKind::ALL {

@@ -338,22 +338,37 @@ fn main() {
     }
     if let Some(i) = args.iter().position(|a| a == "--render") {
         let (Some(inp), Some(out)) = (args.get(i + 1), args.get(i + 2)) else {
-            eprintln!("usage: chipwave --render <song.cwt|demo> <out.wav>");
+            eprintln!("usage: chipwave --render <song.cwt|demo> <out.wav|out.mp3>");
             std::process::exit(2);
         };
         let song = if inp == "demo" {
             Ok(fileio::demo_song())
+        } else if inp.ends_with(".toml") {
+            // single-file text song (demos/*.cwt.toml)
+            std::fs::read_to_string(inp)
+                .map_err(|e| e.to_string())
+                .and_then(|t| fileio::song_from_text(&t))
         } else {
             fileio::load_cwt(std::path::Path::new(inp))
         };
+        // same path as File > Export (limiter on, 2 s tail); .mp3 = LAME V2
+        let opts = export::Opts {
+            format: if out.to_ascii_lowercase().ends_with(".mp3") {
+                export::Format::Mp3
+            } else {
+                export::Format::Wav
+            },
+            ..Default::default()
+        };
         match song.and_then(|s| {
-            engine::write_wav(
+            export::export(
+                &s,
+                &opts,
                 std::path::Path::new(out),
-                &engine::render_song(&s, 44100),
-                44100,
+                &export::Progress::default(),
             )
         }) {
-            Ok(()) => println!("wrote {out}"),
+            Ok(msg) => println!("{msg}"),
             Err(e) => {
                 eprintln!("render failed: {e}");
                 std::process::exit(1);

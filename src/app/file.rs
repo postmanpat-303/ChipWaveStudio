@@ -188,6 +188,20 @@ impl App {
     }
 
     /// open a .cwt by path (File > Recent, drag and drop)
+    /// replace the song with the built-in demo (unsaved, no file path)
+    pub(super) fn load_demo(&mut self) {
+        let song = fileio::demo_song();
+        let title = song.title.clone();
+        self.with(|s| {
+            s.engine.stop();
+            s.song = song;
+        });
+        self.path = None;
+        self.reset_cursor();
+        self.dirty = false;
+        self.status = format!("Loaded the demo song \"{title}\" (Save As to keep your changes)");
+    }
+
     pub(super) fn open_path(&mut self, p: PathBuf) {
         match fileio::load_cwt_warn(&p) {
             Ok((song, warnings)) => {

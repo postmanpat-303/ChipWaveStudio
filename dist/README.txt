@@ -75,6 +75,8 @@ Effects: 01/02 slide up/down, 09 speed, 0C set volume, 0D volume slide,
 Instruments: the left panel lists the factory psytrance/alien synth sounds;
 select one to edit oscillator, filter (LP/HP/BP, cutoff, resonance), envelope.
 Import WAV samples with "Import WAV..." or drag .wav files onto the window.
+Demo song "Night Signal" (psytrance, F# minor, 145 BPM): opens on first run;
+load it any time with File > New from demo song or Help > Load demo song.
 Right-click an instrument: Add effect, Copy effects, Paste effects (replace or
 append), Open in FX view, Duplicate, Delete. Ctrl+Z undoes each.
 Mixer: double-click a fader = 0 dB, double-click pan = centre.
@@ -92,7 +94,7 @@ Theme: "Dark Circuit (default)" or "Amiga (Workbench Gradient)" in the toolbar.
 
 Command line:
   ChipWave.exe --self-test [out.wav]   render the demo, check it is not silent
-  ChipWave.exe --render demo out.wav   render the demo (or a .cwt) to WAV
+  ChipWave.exe --render demo out.wav   render the demo (or a .cwt) to WAV (or .mp3)
   ChipWave.exe --version
 
 Created by Derek Heasley.

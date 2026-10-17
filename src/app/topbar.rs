@@ -240,6 +240,9 @@ impl App {
                 if item(ui, "Open…", "Ctrl+O") {
                     self.request(crate::prompt::Pending::Open, &ctx);
                 }
+                if item(ui, "New from demo song", "") {
+                    self.request(crate::prompt::Pending::Demo, &ctx);
+                }
                 ui.menu_button("Recent", |ui| self.recent_menu(ui));
                 ui.separator();
                 if item(ui, "Save", "Ctrl+S") {
@@ -458,6 +461,9 @@ impl App {
             ui.menu_button("Help", |ui| {
                 if item(ui, "Keys", "F12") {
                     self.show_help = !self.show_help;
+                }
+                if ui.button("Load demo song").clicked() {
+                    self.request(crate::prompt::Pending::Demo, &ctx);
                 }
                 if ui.button("About ChipWave").clicked() {
                     self.show_about = true;
