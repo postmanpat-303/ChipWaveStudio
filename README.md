@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0a84ff" alt="Windows | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.3.3-00d0ff" alt="Version 0.2.3.3">
+  <img src="https://img.shields.io/badge/version-0.2.3.4-00d0ff" alt="Version 0.2.3.4">
   <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases"><img src="https://img.shields.io/badge/release-v0.2.2.4-7c4dff" alt="Latest tagged release v0.2.2.4"></a>
 </p>
 
@@ -18,7 +18,7 @@
 
 **ChipWave Tracker** is a modern music tracker inspired by **OctaMED** and the Commodore **Amiga**. It keeps the fast, keyboard-driven workflow of the classic tracker (blocks, sections and sequences) and adds the things a modern studio expects: built-in sound design, a visual arranger, a mixer with automation, WAV/MP3 export and clean scaling on any screen. It's written in Rust with egui and cpal for Windows 11 and Linux.
 
-**Status:** in active development, currently **v0.2.3.3** (`Cargo.toml` 0.2.3+fix.3). It's playable today with the pattern editor, playback, synth presets, sample import, arranger, mixer, automation, `.cwt` save/load, WAV/MP3 export, settings, Fill to length auto arrange and MIDI keyboard input (play, record, MIDI learn: [docs/MIDI.md](docs/MIDI.md)). The latest tagged release is v0.2.3.
+**Status:** in active development, currently **v0.2.3.4** (`Cargo.toml` 0.2.3+fix.4). It's playable today with the pattern editor, playback, synth presets, sample import, arranger, mixer, automation, `.cwt` save/load, WAV/MP3 export, settings, Fill to length auto arrange and MIDI keyboard input (play, record, MIDI learn: [docs/MIDI.md](docs/MIDI.md)). The latest tagged release is v0.2.3.
 
 ## Feature highlights
 
@@ -142,6 +142,8 @@ chipwave --render demo out.wav
 Effects: 01/02 slide, 08 note decay (xx × 10 ms, e.g. short/long hats), 09 speed, 0C volume, 0D volume slide, 0F tempo (0F00 = break). BPM/speed changes (toolbar or 09/0F) apply instantly while playing.
 
 ## Changelog highlights
+
+v0.2.3.4 changes the demo hi-hat to a classic trance **offbeat hat**: one crisp, slightly open hit (about 80 ms) exactly on the "and" between kicks, four per bar, on the grid; no other hat-channel hits (preview: `dist/demo-0.2.3.4.mp3`).
 
 v0.2.3.3 reworks the **hi-hats** of "Lumen Drift" after a hats-focused analysis of two reference tracks (style only; `scripts/hat_analyze.py`, `scripts/hat_compare.py`; preview: `dist/demo-0.2.3.3.mp3`, per-16th hat comparison: `dist/demo-0.2.3.3-hats.png`). Synth: an **808-style metallic source** (six square oscillators, "Metal (808)"), stereo noise (width now applies to noise), a fresh noise burst per note instead of the same one every hit, **Velocity > cutoff** (softer notes are darker) and a **Start delay** (0–50 ms, for laid-back percussion). New effect **08xx** = per-note decay (xx × 10 ms); a new note on the same channel still chokes the previous one, so an open hat is cut by the next closed hat. New built-in **shaker** sound. Engine fix: the first row after starting playback came one tick (about 18 ms at 140 BPM) early; rows are now sample-accurate (test `rows_trigger_sample_accurately_on_the_grid`). Help > About now links to Buy me a coffee and PayPal.
 

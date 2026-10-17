@@ -862,27 +862,24 @@ mod tests {
         assert_eq!(s.mixer.duck_key, 0);
         assert!(s.mixer.channels[0].duck == 0.0);
         assert!(s.mixer.channels[1].duck > 0.3 && s.mixer.channels[5].duck > 0.9);
-        // hats (channel 3): on the "e" and "a" 16ths only, accented (several
-        // volumes, not one flat velocity), per-note decay (effect 08), laid back
+        // hats (channel 3): classic offbeat hat only, one hit on the "and" of
+        // every beat (rows 2, 6, 10, 14 of each bar), in every block; on the grid
+        for p in &s.patterns {
+            for (i, r) in p.cells.iter().enumerate() {
+                let c = &r[2];
+                if c.note > 0 && c.note != crate::model::NOTE_OFF {
+                    assert_eq!(i % 4, 2, "{}: hat-channel note on row {i}", p.name);
+                    assert_eq!((c.instr, c.fx, c.fxp), (3, 0x08, 0x14), "{}", p.name);
+                }
+            }
+        }
         let drop = s.patterns.iter().find(|p| p.name == "Drop A").unwrap();
-        let hats: Vec<(usize, &Cell)> = drop
-            .cells
-            .iter()
-            .enumerate()
-            .filter(|(_, r)| r[2].note > 0 && r[2].instr == 3)
-            .map(|(i, r)| (i, &r[2]))
-            .collect();
-        assert_eq!(hats.len(), 32, "8 per bar");
-        assert!(hats.iter().all(|(i, _)| i % 4 == 1 || i % 4 == 3));
-        assert!(hats.iter().all(|(_, c)| c.fx == 0x08 && c.fxp > 0));
-        let mut vols: Vec<u8> = hats.iter().map(|(_, c)| c.vol).collect();
-        vols.sort();
-        vols.dedup();
-        assert!(vols.len() >= 4, "{vols:?}");
+        let hats = drop.cells.iter().filter(|r| r[2].note > 0).count();
+        assert_eq!(hats, 16, "4 per bar");
         let InstrumentKind::Synth(hat) = &s.instruments[2].kind else {
             panic!("hat is a synth")
         };
-        assert!(hat.metal > 0.0 && hat.width > 0.0 && hat.start_delay > 0.0);
+        assert!(hat.metal > 0.0 && hat.start_delay == 0.0);
     }
 
     #[test]

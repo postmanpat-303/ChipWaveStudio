@@ -13,7 +13,6 @@ import os
 
 CH, ROWS = 8, 64
 KICK, BASS, HAT, CLAP, ARP, PADA, PADB, FX = range(8)
-TOP = HAT  # shaker/build layer shares the hat channel (8-channel limit; no collisions)
 I_KICK, I_BASS, I_CHAT, I_SHAKER, I_CLAP, I_ARP, I_PAD, I_LEAD, I_PLUCK, I_RISE, I_CRASH = range(1, 12)
 
 # A minor: i - VI - III - VII (Am F C G); pad voices whose +7 osc2 stays in key
@@ -81,40 +80,18 @@ def jitter(v, amt=2):
     return max(1, min(0x40, v + (_rng[0] >> 16) % (2 * amt + 1) - amt))
 
 
-# per-note decay (effect 08, xx * 10 ms) like the references: the "e" of beats
-# 1 and 3 rings longest, the "e" of 2 and 4 is tight, the "a" in between
-HAT_E13, HAT_E24, HAT_A = "0816", "080D", "080E"
+# offbeat hat: one crisp, slightly open hit on the "and" of every beat (exactly
+# halfway between kicks), on the grid; per-note decay 08 14 = 200 ms envelope
+# (about 90 ms to -20 dB), consistent accent with a small velocity variation
+HAT_OFF = "0814"
 
 
-def hats(b, bars=range(4), soft=False, open_hat=False):
-    """closed hats on the 2nd and 4th 16th of each beat ("e" and "a"), accent on
-    the "e"; `open_hat` = an open hat on the "a" of beat 4 (choked by the next hit)"""
+def hats(b, bars=range(4), soft=False):
+    """classic trance offbeat hat: rows 2, 6, 10, 14 of each bar, nothing else"""
     for bar in bars:
         for beat in range(4):
-            r = bar * 16 + beat * 4
-            e = 0x2A if soft else 0x38
-            a = 0x22 if soft else 0x2E
-            b.put(r + 1, HAT, "C-5", I_CHAT, jitter(e), HAT_E13 if beat % 2 == 0 else HAT_E24)
-            if open_hat and beat == 3:
-                b.put(r + 3, HAT, "C-5", I_CHAT, jitter(a + 4), "0828")
-            else:
-                b.put(r + 3, HAT, "C-5", I_CHAT, jitter(a), HAT_A)
-
-
-def shaker(b, bars=range(4), vol=0x14):
-    """16th texture layer: soft shaker on the "and" (8th off-beat) of every beat,
-    on the hat channel between the "e" and "a" hats (their tails are done by then)"""
-    for bar in bars:
-        for beat in range(4):
-            b.put(bar * 16 + beat * 4 + 2, TOP, "C-5", I_SHAKER, jitter(vol, 3))
-
-
-def hat_build(b, start_bar, bars=2):
-    """closed hat 16ths fading in over the last bars of a build (hat channel is
-    otherwise empty in build blocks)"""
-    rows = list(range(start_bar * 16, (start_bar + bars) * 16))
-    for k, r in enumerate(rows):
-        b.put(r, HAT, "C-5", I_CHAT, int(0x0C + 0x24 * k / len(rows)), "080A")
+            vol = 0x2C if soft else 0x3A
+            b.put(bar * 16 + beat * 4 + 2, HAT, "C-5", I_CHAT, jitter(vol), HAT_OFF)
 
 
 def claps(b, bars=range(4)):
@@ -186,17 +163,14 @@ arp(pre, vol=0x2A)
 pre.put(0, FX, "A-4", I_RISE, 0x40)
 pre.put(63, FX, "===")
 roll(pre, 3)
-hat_build(pre, 3, bars=1)
 blocks.append(pre)
 
 
-def drop_block(name, fill_end=False, octave_up=False, with_lead=None, crash=True, top=False):
+def drop_block(name, fill_end=False, octave_up=False, with_lead=None, crash=True):
     d = Block(name, "drop")
     kick(d)
     bass(d)
-    hats(d, open_hat=top)
-    if top:
-        shaker(d)
+    hats(d)
     claps(d, bars=range(3) if fill_end else range(4))
     if fill_end:
         d.put(52, CLAP, "C-4", I_CLAP, 0x38)
@@ -250,11 +224,10 @@ kick(build, bars=range(2))
 build.put(0, FX, "A-4", I_RISE, 0x40)
 build.put(63, FX, "===")
 roll(build, 2, bars=2)
-hat_build(build, 2, bars=2)
 blocks.append(build)
 
-blocks.append(drop_block("Drop 2", with_lead=LEAD_A, top=True))                 # 8
-blocks.append(drop_block("Drop 2B", fill_end=True, octave_up=True, with_lead=LEAD_B, crash=False, top=True))  # 9
+blocks.append(drop_block("Drop 2", with_lead=LEAD_A))                 # 8
+blocks.append(drop_block("Drop 2B", fill_end=True, octave_up=True, with_lead=LEAD_B, crash=False))  # 9
 
 # 10 outro: kick, bass, hats, arp (filter closing)
 outro = Block("Outro", "outro")
@@ -325,9 +298,8 @@ drive = 0.25
 gain = 0.9
 [[instrument]]
 slot = 3
-name = "Metal Hat"
+name = "Offbeat Hat"
 patch = "builtin:hat-closed"
-start_delay_ms = 15
 cutoff = 3500.0
 resonance = 0.2
 metal = 0.45

@@ -1,4 +1,4 @@
-ChipWave Tracker 0.2.3.3 - Windows x64
+ChipWave Tracker 0.2.3.4 - Windows x64
 ==============================================================
 GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
@@ -80,6 +80,7 @@ Demo song "Lumen Drift" (trance, A minor, 140 BPM, 2:26): opens on first run;
 load it any time with File > New from demo song or Help > Load demo song.
 Synth: "Stereo width" spreads unison voices (and noise); LFO (shape, free Hz or
 synced 1/16..2 bars) to cutoff, amp (trance gate) and pitch.
+0.2.3.4: demo hi-hat is a classic offbeat hat (one hit between kicks).
 0.2.3.3: reworked hi-hats in the demo; "Metal (808)" metallic hat source,
 "Velocity > cutoff" (soft notes darker), "Start delay" (laid-back percussion),
 new "shaker" sound, effect 08xx = note decay (short/long hats). A new note on
