@@ -40,6 +40,9 @@ impl App {
             )
         });
         let before = mix.clone();
+        // (response, target) of controls that get a MIDI learn menu
+        let learn =
+            std::cell::RefCell::new(Vec::<(egui::Response, crate::automation::Target)>::new());
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Mixer").strong());
             ui.label(
@@ -62,6 +65,7 @@ impl App {
                          spine: Color32,
                          vol: &mut f32,
                          levels: &[f32],
+                         target: Option<crate::automation::Target>,
                          extra: &mut dyn FnMut(&mut egui::Ui)| {
                             egui::Frame::new()
                                 .fill(th().cart_top)
@@ -86,6 +90,9 @@ impl App {
                                             );
                                             if r.double_clicked() {
                                                 *vol = 1.0;
+                                            }
+                                            if let Some(t) = target {
+                                                learn.borrow_mut().push((r, t));
                                             }
                                             for l in levels {
                                                 Self::meter(ui, *l, fader_h);
@@ -112,6 +119,7 @@ impl App {
                             th().slate,
                             &mut vol,
                             &[cpk[ch]],
+                            Some(crate::automation::Target::ChanVolume(ch)),
                             &mut |ui| {
                                 ui.spacing_mut().slider_width = 76.0;
                                 let r = ui
@@ -119,6 +127,9 @@ impl App {
                                 if r.double_clicked() {
                                     pan = 0.0;
                                 }
+                                learn
+                                    .borrow_mut()
+                                    .push((r, crate::automation::Target::ChanPan(ch)));
                                 let pt = if pan.abs() < 0.01 {
                                     "C".to_string()
                                 } else if pan < 0.0 {
@@ -157,6 +168,9 @@ impl App {
                                         if r.double_clicked() {
                                             send[b] = 0.0;
                                         }
+                                        learn
+                                            .borrow_mut()
+                                            .push((r, crate::automation::Target::Send(ch, b)));
                                     });
                                 }
                             },
@@ -179,6 +193,7 @@ impl App {
                             fxview::strip_fill(dev.kind, dev.enabled),
                             &mut lvl,
                             &[],
+                            None,
                             &mut |ui| {
                                 ui.spacing_mut().slider_width = 76.0;
                                 let keys: &[&str] = if b == 0 {
@@ -220,6 +235,7 @@ impl App {
                         th().accent,
                         &mut master,
                         &plr,
+                        Some(crate::automation::Target::Master),
                         &mut |ui| {
                             ui.label(egui::RichText::new("soft limiter").small().color(th().ink2));
                         },
@@ -230,6 +246,9 @@ impl App {
         if mix != before {
             self.with(|s| s.song.mixer = mix);
             self.dirty = true;
+        }
+        for (r, t) in learn.into_inner() {
+            self.learn_menu(&r, t);
         }
     }
 }

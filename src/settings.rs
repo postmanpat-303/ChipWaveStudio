@@ -46,6 +46,9 @@ pub struct Extra {
     /// last export folder
     #[serde(default)]
     pub export_dir: String,
+    /// MIDI keyboard input (0.2.3)
+    #[serde(default)]
+    pub midi: crate::midi::MidiSettings,
 }
 
 fn two() -> u32 {
@@ -65,6 +68,7 @@ impl Default for Extra {
             backups: 1,
             song_dir: String::new(),
             export_dir: String::new(),
+            midi: Default::default(),
         }
     }
 }
@@ -110,6 +114,10 @@ pub fn push_recent(list: &mut Vec<String>, p: &str) {
 }
 
 fn path() -> Option<PathBuf> {
+    // unit / UI tests never read or write the real settings
+    if cfg!(test) {
+        return None;
+    }
     let base = if cfg!(windows) {
         std::env::var_os("APPDATA").map(|p| PathBuf::from(p).join("ChipWave"))
     } else if cfg!(target_os = "macos") {
@@ -149,5 +157,28 @@ pub fn save(s: &Settings) {
         if std::fs::write(&tmp, t).is_ok() {
             let _ = std::fs::rename(&tmp, &p);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn midi_settings_roundtrip() {
+        let mut s = Settings::default();
+        s.extra.midi.device = "Keystation 49".into();
+        s.extra.midi.curve = crate::midi::Curve::Soft;
+        s.extra.midi.octave = -1;
+        s.extra.midi.learn = vec![
+            (1, "instrument.2.cutoff".into()),
+            (7, "mixer.ch.1.volume".into()),
+        ];
+        let txt = toml::to_string(&s).unwrap();
+        let back: Settings = toml::from_str(&txt).unwrap();
+        assert_eq!(back.extra, s.extra);
+        // old settings files without [midi] still load
+        let old: Settings = toml::from_str("zoom = 1.0\ntheme = \"Dark\"\n").unwrap();
+        assert_eq!(old.extra.midi, crate::midi::MidiSettings::default());
     }
 }

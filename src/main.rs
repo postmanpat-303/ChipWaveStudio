@@ -1,8 +1,8 @@
 // ChipWave Tracker - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-/// Display version (Cargo: 0.2.2+fix.4; 0.2.3 is reserved for MIDI).
-pub const VERSION: &str = "0.2.2.4";
+/// Display version (Cargo: 0.2.3).
+pub const VERSION: &str = "0.2.3";
 
 mod app;
 mod arrange;
@@ -14,6 +14,7 @@ mod fileio;
 mod fx;
 mod input;
 mod keymap;
+mod midi;
 mod model;
 mod presets;
 mod prompt;
@@ -144,7 +145,40 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         ok
     };
+    // MIDI: raw bytes -> hub -> lock-free queue -> engine live voices
+    let midi_ok = {
+        let (hub, rx) = midi::Hub::new();
+        hub.cfg.instr.store(1, std::sync::atomic::Ordering::Relaxed);
+        let mut e = engine::Engine::new(48000.0);
+        e.set_live_input(Some(rx));
+        for k in [60u8, 64, 67] {
+            hub.inject(&[0x90, k, 100]);
+        }
+        hub.inject(&[0xE0, 0x00, 0x60]); // bend up
+        let mut buf = vec![0.0f32; 4096];
+        e.render(&song, &mut buf);
+        let voices = e.live_voices();
+        let lvl = buf.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+        for k in [60u8, 64, 67] {
+            hub.inject(&[0x80, k, 0]);
+        }
+        for _ in 0..100 {
+            e.render(&song, &mut buf);
+        }
+        let ok = voices == 3 && lvl > 0.001 && e.live_voices() == 0;
+        let ports = match midi::list_ports() {
+            Ok(p) => format!("{} input(s)", p.len()),
+            Err(e) => format!("inputs not available ({e})"),
+        };
+        report.push_str(&format!(
+            "  midi live play: {voices} voices, peak {lvl:.3}, released {} ({}); {ports}\n",
+            e.live_voices() == 0,
+            if ok { "ok" } else { "FAILED" }
+        ));
+        ok
+    };
     let ok = fill_ok
+        && midi_ok
         && peak > 0.05
         && rms > 0.005
         && !nan
@@ -219,6 +253,72 @@ fn play_test(secs: u64) -> i32 {
     }
 }
 
+/// `--midi-list`: print the MIDI input devices (for checking a keyboard)
+fn midi_list() -> i32 {
+    match midi::list_ports() {
+        Ok(p) if p.is_empty() => {
+            println!("MIDI inputs: none found (plug the keyboard in, then run again)");
+            0
+        }
+        Ok(p) => {
+            println!("MIDI inputs ({}):", p.len());
+            for (i, n) in p.iter().enumerate() {
+                println!("  {}: {n}", i + 1);
+            }
+            0
+        }
+        Err(e) => {
+            println!("MIDI: cannot list inputs: {e}");
+            2
+        }
+    }
+}
+
+/// `--midi-monitor [secs]`: connect to every input and print what arrives
+fn midi_monitor(secs: u64) -> i32 {
+    let (mut hub, mut audio) = midi::Hub::new();
+    hub.connect("*");
+    if let Some(e) = &hub.error {
+        println!("MIDI: {e}");
+    }
+    let names = hub.connected().join(", ");
+    if names.is_empty() {
+        println!("MIDI monitor: no inputs connected");
+        return 2;
+    }
+    println!("MIDI monitor: listening to {names} for {secs} s (play some keys)...");
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    let mut n = 0;
+    while std::time::Instant::now() < end {
+        while let Ok(e) = hub.ui_rx.pop() {
+            n += 1;
+            match e {
+                midi::UiEv::On { key, note, vel, .. } => {
+                    println!(
+                        "  note on  key {key:3} = {} velocity {:.0} %",
+                        model::note_name(note),
+                        vel * 100.0
+                    )
+                }
+                midi::UiEv::Off { key } => println!("  note off key {key:3}"),
+                midi::UiEv::Cc { cc, val } => println!("  CC {cc:3} = {val}"),
+            }
+        }
+        while let Ok(e) = audio.pop() {
+            match e {
+                midi::LiveEv::Sustain(on) => {
+                    println!("  sustain pedal {}", if on { "down" } else { "up" })
+                }
+                midi::LiveEv::Bend(s) => println!("  pitch bend {s:+.2} semitones"),
+                _ => {}
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    println!("MIDI monitor: {n} note/CC message(s)");
+    0
+}
+
 fn main() {
     #[cfg(windows)]
     if std::env::args().len() > 1 {
@@ -260,6 +360,13 @@ fn main() {
             }
         }
         return;
+    }
+    if args.iter().any(|a| a == "--midi-list") {
+        std::process::exit(midi_list());
+    }
+    if let Some(i) = args.iter().position(|a| a == "--midi-monitor") {
+        let secs: u64 = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(15);
+        std::process::exit(midi_monitor(secs));
     }
     if let Some(i) = args.iter().position(|a| a == "--play-test") {
         let secs: u64 = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(10);

@@ -574,17 +574,19 @@ impl App {
                     self.with(|s| s.engine.stop());
                 }
             });
+            let mut tempo_r = None;
             group(ui, "TEMPO", |ui| {
                 let (mut bpm, mut speed) = self.with(|s| (s.song.bpm, s.song.speed));
                 ui.label(egui::RichText::new("BPM").color(hdr_text()));
-                let c1 = ui
+                let r = ui
                     .add(
                         egui::DragValue::new(&mut bpm)
                             .range(30.0..=300.0)
                             .speed(0.5),
                     )
-                    .on_hover_text("tempo in beats per minute (drag or type)")
-                    .changed();
+                    .on_hover_text("tempo in beats per minute (drag or type)");
+                let c1 = r.changed();
+                tempo_r = Some(r);
                 ui.label(egui::RichText::new("Speed").color(hdr_text()));
                 let c2 = ui
                     .add(egui::DragValue::new(&mut speed).range(1..=32))
@@ -594,6 +596,9 @@ impl App {
                     self.set_tempo(bpm, speed);
                 }
             });
+            if let Some(r) = tempo_r {
+                self.learn_menu(&r, crate::automation::Target::Tempo);
+            }
             group(ui, "OCTAVE", |ui| {
                 if ui
                     .button(" − ")
@@ -651,23 +656,55 @@ impl App {
                     self.arr_focus = false;
                 }
             });
-            if let Some(a) = &self.audio {
-                let u = a.stats.underruns.load(std::sync::atomic::Ordering::Relaxed);
-                let txt = format!("{:.0} ms · {} underruns", a.latency_ms(), u);
-                let col = match (u > 0, t.light) {
-                    (true, true) => Color32::from_rgb(255, 200, 160),
-                    (true, false) => t.brick,
-                    _ => hdr_dim(),
-                };
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add_space(10.0);
+            let (lit, midi_tip) = self.midi_light(ui.input(|i| i.time));
+            if lit {
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(160));
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.add_space(10.0);
+                if let Some(a) = &self.audio {
+                    let u = a.stats.underruns.load(std::sync::atomic::Ordering::Relaxed);
+                    let txt = format!("{:.0} ms · {} underruns", a.latency_ms(), u);
+                    let col = match (u > 0, t.light) {
+                        (true, true) => Color32::from_rgb(255, 200, 160),
+                        (true, false) => t.brick,
+                        _ => hdr_dim(),
+                    };
                     ui.label(egui::RichText::new(txt).small().monospace().color(col))
                         .on_hover_text(format!(
                             "audio: {} @ {} Hz, latency and buffer underruns",
                             a.device_name, a.sample_rate
                         ));
-                });
-            }
+                }
+                // MIDI activity light
+                let connected = !self.midi.hub.connected().is_empty();
+                let (r, resp) = ui.allocate_exact_size(egui::vec2(46.0, 18.0), Sense::click());
+                let dot = r.left_center() + egui::vec2(7.0, 0.0);
+                let col = if lit {
+                    hex(0x6FE08A)
+                } else if connected {
+                    hex(0x2F6B3E)
+                } else {
+                    hdr_dim().gamma_multiply(0.5)
+                };
+                ui.painter().circle_filled(dot, 5.0, col);
+                ui.painter().text(
+                    dot + egui::vec2(9.0, 0.0),
+                    egui::Align2::LEFT_CENTER,
+                    "MIDI",
+                    FontId::proportional(11.0),
+                    hdr_dim(),
+                );
+                if resp
+                    .on_hover_text(format!("{midi_tip}\nclick: MIDI settings"))
+                    .clicked()
+                {
+                    self.view = View::Settings;
+                    self.set_card = 4;
+                    self.set_open = Some(4);
+                }
+            });
         });
     }
 

@@ -1,4 +1,4 @@
-ChipWave Tracker 0.2.2.4 - Windows x64
+ChipWave Tracker 0.2.3 - Windows x64
 ==============================================================
 GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
@@ -55,6 +55,17 @@ Keys (press "? Keys" in the toolbar for the full list)
                                  Up/Down variation, Left/Right section, Enter accept, Esc discard
   Unsaved prompt                 Enter = save, N = don't save, Esc = cancel
   (starts maximised; the last window size/position is remembered)
+
+MIDI keyboard (0.2.3, details in docs/MIDI.md on GitHub)
+  Settings > MIDI (or click the MIDI light, top right): pick your keyboard or "All devices";
+    it reconnects when plugged back in. Channel filter, velocity on/off + curve, MIDI octave.
+  Play: the keyboard plays the selected instrument (velocity, sustain pedal, pitch bend).
+  Record: edit mode on (Esc) + Pattern view = note + instrument + velocity (volume column)
+    at the cursor, cursor moves by Step. While the song plays: written at the playing row.
+    Option: chords spread over the next channels. Ctrl+Z removes the last note.
+  MIDI learn: right-click a fader / pan / send / instrument Volume, Cutoff, Resonance,
+    Drive / BPM > "MIDI learn", then move a knob or the mod wheel.
+  Check a keyboard from cmd:  ChipWave.exe --midi-list   and   ChipWave.exe --midi-monitor 15
 
 Effects: 01/02 slide up/down, 09 speed, 0C set volume, 0D volume slide,
 0F tempo (0F00 = pattern break).

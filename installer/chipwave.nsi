@@ -28,7 +28,10 @@ RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 BrandingText "${APPNAME} ${VERSION}"
 
-VIProductVersion "${VERSION}"
+!ifndef VIVERSION
+  !define VIVERSION "${VERSION}"
+!endif
+VIProductVersion "${VIVERSION}"
 VIAddVersionKey "ProductName" "${APPNAME}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "FileVersion" "${VERSION}"

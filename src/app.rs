@@ -19,6 +19,7 @@ mod fxview;
 mod instruments;
 mod keys;
 mod lanes;
+mod midiview;
 mod mixer;
 mod pattern;
 mod sampleview;
@@ -163,6 +164,8 @@ pub struct App {
     mouse_since_commit: bool,
     /// delete-instrument confirmation: (slot, name, notes using it)
     instr_delete: Option<(u8, String, usize)>,
+    /// MIDI keyboard input (app/midiview.rs)
+    midi: midiview::MidiUi,
 }
 
 pub fn run(open: Option<PathBuf>) -> Result<(), String> {
@@ -298,7 +301,9 @@ impl App {
         orphans: Vec<crate::recovery::Orphan>,
     ) -> App {
         let hist = undo::History::new(&audio::lock(&shared).song);
-        App {
+        let (midi, live_rx) = midiview::MidiUi::new();
+        audio::lock(&shared).engine.set_live_input(Some(live_rx));
+        let mut app = App {
             shared,
             audio,
             audio_err,
@@ -377,7 +382,11 @@ impl App {
             deferred_keys: vec![],
             mouse_since_commit: false,
             instr_delete: None,
-        }
+            midi,
+        };
+        let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
+        app.midi_apply(connect);
+        app
     }
 }
 
@@ -542,6 +551,9 @@ impl App {
                     ("Arranger (click it to focus)", "click / Shift+click / Ctrl+click select; Ctrl+X/C/V cut/copy/paste after selection; Ctrl+Shift+V paste as new blocks; Del; Ctrl+A; right-click menu"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
                     ("Arranger: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
                     ("Ctrl+N / O / S / Shift+S", "new / open / save / save as (.cwt)"), ("Ctrl+E", "export WAV"),
+                    ("MIDI keyboard", "plays the current instrument (velocity, sustain pedal, pitch bend); Settings > MIDI picks the device"),
+                    ("MIDI + edit mode", "records the note at the cursor (instrument + velocity), moves by Step; while playing: at the playing row"),
+                    ("Right-click a fader / knob", "MIDI learn: then move a knob or the mod wheel"),
                 ] { ui.label(egui::RichText::new(k).monospace().color(th().value)); ui.label(v); ui.end_row(); }
             });
             ui.label("Effects: 01/02 slide, 09 speed, 0C volume, 0D vol slide, 0F tempo (0F00 = break)");
@@ -709,6 +721,7 @@ impl eframe::App for App {
                 self.import_sample(p);
             }
         }
+        self.midi_frame(&ctx);
         self.handle_keys(&ctx);
         self.tick_safety();
         self.tick_derived();

@@ -1,6 +1,6 @@
 # Settings
 
-**Status:** 0.2.0 implements the Audio, Look, Keys (remap + keymap.toml) and Files & Safety cards. MIDI and Plugins are placeholder cards for now.
+**Status:** 0.2.0 implements the Audio, Look, Keys (remap + keymap.toml) and Files & Safety cards. 0.2.3 adds the MIDI card ([MIDI.md](MIDI.md)). Plugins is a placeholder card for now.
 
 ![Settings mockup](mockups/settings.png) (SVG: [`mockups/settings.svg`](mockups/settings.svg))
 

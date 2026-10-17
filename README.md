@@ -6,8 +6,8 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0a84ff" alt="Windows | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.2.2-00d0ff" alt="Version 0.2.2.2">
-  <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases"><img src="https://img.shields.io/badge/release-v0.1.1-7c4dff" alt="Latest tagged release v0.1.1"></a>
+  <img src="https://img.shields.io/badge/version-0.2.3-00d0ff" alt="Version 0.2.3">
+  <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases"><img src="https://img.shields.io/badge/release-v0.2.2.4-7c4dff" alt="Latest tagged release v0.2.2.4"></a>
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
 
 **ChipWave Tracker** is a modern music tracker inspired by **OctaMED** and the Commodore **Amiga**. It keeps the fast, keyboard-driven workflow of the classic tracker (blocks, sections and sequences) and adds the things a modern studio expects: built-in sound design, a visual arranger, a mixer with automation, WAV/MP3 export and clean scaling on any screen. It's written in Rust with egui and cpal for Windows 11 and Linux.
 
-**Status:** in active development, currently **v0.2.2.2** (`Cargo.toml` 0.2.2+fix.2). It's playable today with the pattern editor, playback, synth presets, sample import, arranger, mixer, automation, `.cwt` save/load, WAV/MP3 export, settings and Fill to length auto arrange. The latest tagged release is v0.1.1.
+**Status:** in active development, currently **v0.2.3** (`Cargo.toml` 0.2.3). It's playable today with the pattern editor, playback, synth presets, sample import, arranger, mixer, automation, `.cwt` save/load, WAV/MP3 export, settings, Fill to length auto arrange and MIDI keyboard input (play, record, MIDI learn: [docs/MIDI.md](docs/MIDI.md)). The latest tagged release is v0.2.2.4.
 
 ## Feature highlights
 
@@ -74,7 +74,8 @@
 - [FILE_FORMAT.md](docs/FILE_FORMAT.md) — the `.cwt` song format
 - [UI_SCALING.md](docs/UI_SCALING.md) — screen scaling and layouts
 - [SAMPLES.md](docs/SAMPLES.md) — the instrument list and importer
-- [MIDI_VST.md](docs/MIDI_VST.md) — MIDI and plugins
+- [MIDI.md](docs/MIDI.md) — MIDI keyboard input: play, record, velocity, sustain, MIDI learn (0.2.3)
+- [MIDI_VST.md](docs/MIDI_VST.md) — MIDI and plugins (plan)
 - [PLUGIN_MANAGER.md](docs/PLUGIN_MANAGER.md) — the plugin manager (scan, verify, activate)
 - [DESIGN_LANGUAGE.md](docs/DESIGN_LANGUAGE.md) — ChipWave's "Wave Cartridge" visual identity
 
@@ -141,6 +142,8 @@ chipwave --render demo out.wav
 Effects: 01/02 slide, 09 speed, 0C volume, 0D volume slide, 0F tempo (0F00 = break). BPM/speed changes (toolbar or 09/0F) apply instantly while playing.
 
 ## Changelog highlights
+
+v0.2.3 adds MIDI keyboard input: Settings > MIDI (device, all devices, auto-connect and hot-plug, channel filter, velocity curve, MIDI octave), live play of the current instrument with velocity, sustain pedal and pitch bend, recording into the pattern (step or live while playing, chord spread, one undo step per note), simple MIDI learn (right-click a fader / knob) and a toolbar MIDI light. `ChipWave.exe --midi-list` / `--midi-monitor` check a keyboard from the command line. See [docs/MIDI.md](docs/MIDI.md).
 
 v0.1.3 adds a basic arranger (song order as clips: drag to reorder, duplicate, insert, delete, click to open, playhead, zoom, dockable), a basic mixer (fader, pan, mute/solo, peak meters, master; saved in `.cwt` as `mixer.toml`), selection + copy/paste, octave buttons and per-instrument transpose. Screenshots: [arranger](dist/screenshot-0.1.3-arranger.png), [mixer](dist/screenshot-0.1.3-mixer.png), [pattern + selection](dist/screenshot-0.1.3-pattern-selection.png).
 

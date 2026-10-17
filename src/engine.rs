@@ -132,6 +132,68 @@ impl Chan {
     }
 }
 
+/// voices for live MIDI play (separate from the pattern channels)
+pub const LIVE_VOICES: usize = 12;
+
+#[derive(Clone)]
+struct LiveVoice {
+    key: u8,
+    instr: usize,
+    freq: f32,
+    vol: f32,
+    synth: SynthVoice,
+    pos: f64,
+    active: bool,
+    /// key still held down
+    down: bool,
+    /// key released while the sustain pedal was down
+    held_by_pedal: bool,
+    age: u32,
+}
+
+/// Live MIDI input: a small polyphonic voice pool that plays through the
+/// current instrument's FX chain and the cursor channel's fader, pan and
+/// sends (not its mute, so jamming on a muted channel is still heard).
+struct Live {
+    rx: Option<rtrb::Consumer<crate::midi::LiveEv>>,
+    v: Vec<LiveVoice>,
+    chain: crate::fx::ChainState,
+    /// instrument whose FX chain the bus uses (latest note), usize::MAX = none
+    owner: usize,
+    ch: usize,
+    sustain: bool,
+    /// pitch bend as a frequency ratio
+    bend: f32,
+    age: u32,
+}
+
+impl Live {
+    fn new() -> Self {
+        let v = LiveVoice {
+            key: 0,
+            instr: usize::MAX,
+            freq: 0.0,
+            vol: 0.0,
+            synth: SynthVoice::new(),
+            pos: 0.0,
+            active: false,
+            down: false,
+            held_by_pedal: false,
+            age: 0,
+        };
+        Self {
+            rx: None,
+            v: vec![v; LIVE_VOICES],
+            chain: Default::default(),
+            owner: usize::MAX,
+            ch: 0,
+            sustain: false,
+            bend: 1.0,
+            age: 0,
+        }
+    }
+}
+
 /// Automation overrides computed by the engine (never touches the song).
 #[derive(Default)]
 pub struct AutoState {
@@ -191,6 +253,7 @@ pub struct Engine {
     /// frames of 440 Hz test tone left (settings > audio)
     pub test_tone: u32,
     tone_ph: f32,
+    live: Live,
 }
 
 impl Engine {
@@ -223,7 +286,124 @@ impl Engine {
             sends: [[0.0; 2]; MAX_CHANNELS],
             test_tone: 0,
             tone_ph: 0.0,
+            live: Live::new(),
         }
+    }
+
+    /// Connect the live MIDI queue (drained at the start of every render).
+    pub fn set_live_input(&mut self, rx: Option<rtrb::Consumer<crate::midi::LiveEv>>) {
+        self.live.rx = rx;
+    }
+
+    /// Take the queue out (kept when the engine is replaced, e.g. device change).
+    pub fn take_live_input(&mut self) -> Option<rtrb::Consumer<crate::midi::LiveEv>> {
+        self.live.rx.take()
+    }
+
+    /// number of sounding live (MIDI) voices
+    pub fn live_voices(&self) -> usize {
+        self.live.v.iter().filter(|v| v.active).count()
+    }
+
+    /// Apply one live MIDI event (allocation-free).
+    pub fn live_event(&mut self, song: &Song, ev: crate::midi::LiveEv) {
+        use crate::midi::LiveEv;
+        let lv = &mut self.live;
+        match ev {
+            LiveEv::On {
+                key,
+                note,
+                vel,
+                instr,
+                ch,
+            } => {
+                let i = (instr as usize).wrapping_sub(1);
+                let Some(inst) = song.instruments.get(i) else {
+                    return;
+                };
+                lv.age = lv.age.wrapping_add(1);
+                // same key again: retrigger its voice; else a free voice; else
+                // steal the oldest released voice, else the oldest one
+                let slot =
+                    lv.v.iter()
+                        .position(|v| v.active && v.key == key)
+                        .or_else(|| lv.v.iter().position(|v| !v.active))
+                        .or_else(|| {
+                            let oldest = |only_released: bool| {
+                                lv.v.iter()
+                                    .enumerate()
+                                    .filter(|(_, v)| !only_released || !v.down)
+                                    .min_by_key(|(_, v)| v.age)
+                                    .map(|(k, _)| k)
+                            };
+                            oldest(true).or_else(|| oldest(false))
+                        })
+                        .unwrap_or(0);
+                let n = (note as i32 + inst.transpose as i32).clamp(1, 127) as u8;
+                let v = &mut lv.v[slot];
+                *v = LiveVoice {
+                    key,
+                    instr: i,
+                    freq: note_freq(n),
+                    vol: inst.volume * vel,
+                    synth: SynthVoice::new(),
+                    pos: 0.0,
+                    active: true,
+                    down: true,
+                    held_by_pedal: false,
+                    age: lv.age,
+                };
+                lv.owner = i;
+                lv.ch = ch as usize;
+            }
+            LiveEv::Off { key } => {
+                for v in
+                    lv.v.iter_mut()
+                        .filter(|v| v.active && v.down && v.key == key)
+                {
+                    v.down = false;
+                    if lv.sustain {
+                        v.held_by_pedal = true;
+                    } else {
+                        v.synth.amp.release();
+                        v.synth.fenv.release();
+                    }
+                }
+            }
+            LiveEv::Sustain(on) => {
+                lv.sustain = on;
+                if !on {
+                    for v in lv.v.iter_mut().filter(|v| v.held_by_pedal) {
+                        v.held_by_pedal = false;
+                        v.synth.amp.release();
+                        v.synth.fenv.release();
+                    }
+                }
+            }
+            LiveEv::Bend(semi) => lv.bend = 2f32.powf(semi.clamp(-24.0, 24.0) / 12.0),
+            LiveEv::AllOff => {
+                lv.sustain = false;
+                lv.bend = 1.0;
+                for v in lv.v.iter_mut() {
+                    v.down = false;
+                    v.held_by_pedal = false;
+                    v.synth.amp.release();
+                    v.synth.fenv.release();
+                }
+            }
+        }
+    }
+
+    /// Position inside the current row, 0..1 (live recording quantise).
+    pub fn row_phase(&self) -> f32 {
+        let tl = self.tick_len().max(1.0);
+        let tick_frac = (1.0 - self.samples_to_tick / tl).clamp(0.0, 1.0);
+        ((self.tick as f32 + tick_frac as f32) / self.speed.max(1) as f32).clamp(0.0, 1.0)
+    }
+
+    /// length of one row in seconds at the running tempo
+    pub fn row_secs(&self) -> f32 {
+        (self.tick_len() * self.speed as f64 / self.sr as f64) as f32
     }
 
     pub fn bpm(&self) -> f32 {
@@ -257,6 +437,19 @@ impl Engine {
         for ch in &mut self.chains {
             ch.remap(f);
         }
+        for v in &mut self.live.v {
+            match f(v.instr) {
+                Some(i) => v.instr = i,
+                None => {
+                    v.instr = usize::MAX;
+                    v.active = false;
+                }
+            }
+        }
+        if self.live.owner != usize::MAX {
+            self.live.owner = f(self.live.owner).unwrap_or(usize::MAX);
+        }
+        self.live.chain.remap(f);
         self.auto.fx.clear();
         self.auto.countdown = 0;
     }
@@ -628,6 +821,23 @@ impl Engine {
                 });
             }
         }
+        let lv = &mut self.live;
+        if lv.owner != usize::MAX {
+            let owner = lv.owner;
+            let devs: &[crate::fx::Device] = song
+                .instruments
+                .get(owner)
+                .map(|x| x.fx.as_slice())
+                .unwrap_or(&[]);
+            lv.chain.sync(devs, owner, sr);
+            for (d, (st, dev)) in lv.chain.states.iter_mut().zip(devs).enumerate() {
+                st.set_targets(dev, |p| {
+                    a.fx.iter()
+                        .find(|o| o.0 == owner && o.1 == d && o.2 == p)
+                        .map(|o| o.3)
+                });
+            }
+        }
         for (b, ch) in self.rets.iter_mut().enumerate() {
             let Some(ret) = song.mixer.returns.get(b) else {
                 ch.sync(&[], b, sr);
@@ -661,6 +871,30 @@ impl Engine {
 
     /// Render interleaved stereo.
     pub fn render(&mut self, song: &Song, out: &mut [f32]) {
+        // live MIDI events (lock-free queue, filled by the MIDI thread)
+        if let Some(mut rx) = self.live.rx.take() {
+            while let Ok(ev) = rx.pop() {
+                self.live_event(song, ev);
+            }
+            self.live.rx = Some(rx);
+        }
+        let live_on = self.live.v.iter().any(|v| v.active);
+        let nch = song.channels.clamp(1, MAX_CHANNELS);
+        let live_ch = self.live.ch.min(nch - 1);
+        let live_gain = {
+            // fader + pan of the cursor channel, ignoring mute/solo
+            let m = song
+                .mixer
+                .channels
+                .get(live_ch)
+                .copied()
+                .unwrap_or_default();
+            let a = (m.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+            (
+                m.volume * a.cos() * std::f32::consts::SQRT_2,
+                m.volume * a.sin() * std::f32::consts::SQRT_2,
+            )
+        };
         let mut peak = self.peak * 0.97;
         let mut plr = [self.peak_lr[0] * 0.97, self.peak_lr[1] * 0.97];
         let mut cpk = self.chan_peak;
@@ -696,6 +930,32 @@ impl Engine {
             let sr = self.sr;
             // 5 ms ramps for tails and mute changes
             let step = 1.0 / (0.005 * sr);
+            // live MIDI voices -> live FX chain -> cursor channel (post fader)
+            let (live_l, live_r) = if live_on || !self.live.chain.states.is_empty() {
+                let lv = &mut self.live;
+                let mut s = 0.0;
+                for v in lv.v.iter_mut().filter(|v| v.active) {
+                    let (x, alive) = voice(
+                        song,
+                        v.instr,
+                        v.freq * lv.bend,
+                        &mut v.synth,
+                        &mut v.pos,
+                        sr,
+                        &self.auto,
+                    );
+                    v.active = alive;
+                    s += x * v.vol;
+                }
+                let (fl, fr) = if lv.chain.states.is_empty() {
+                    (s, s)
+                } else {
+                    lv.chain.process(s, s, &ctx)
+                };
+                (fl * live_gain.0, fr * live_gain.1)
+            } else {
+                (0.0, 0.0)
+            };
             for (i, (c, chain)) in self
                 .chans
                 .iter_mut()
@@ -740,7 +1000,11 @@ impl Engine {
                 } else {
                     chain.process(s, s, &ctx)
                 };
-                let (sl, sr2) = (fl * c.gl, fr * c.gr);
+                let (mut sl, mut sr2) = (fl * c.gl, fr * c.gr);
+                if i == live_ch {
+                    sl += live_l;
+                    sr2 += live_r;
+                }
                 let snd = &mut self.sends[i];
                 for b in 0..2 {
                     snd[b] += (stgt[i][b] - snd[b]) * k;
@@ -1061,5 +1325,162 @@ mod tests {
             assert!(tail > 0.1, "{m:?} keeps playing: {tail}");
             assert!(b.iter().all(|x| x.is_finite()));
         }
+    }
+
+    fn on(key: u8, vel: f32, instr: u8) -> crate::midi::LiveEv {
+        crate::midi::LiveEv::On {
+            key,
+            note: crate::midi::tracker_note(key, 0).unwrap(),
+            vel,
+            instr,
+            ch: 0,
+        }
+    }
+
+    /// demo song with a sustaining synth in slot 01 and a quiet master
+    /// (no limiter saturation)
+    fn live_song() -> Song {
+        let mut song = crate::fileio::demo_song();
+        song.automation.clear();
+        let p = crate::synth::Patch {
+            amp: crate::synth::Adsr {
+                a: 0.001,
+                d: 0.1,
+                s: 0.8,
+                r: 0.05,
+            },
+            ..Default::default()
+        };
+        song.instruments[0].kind = InstrumentKind::Synth(p);
+        song.instruments[0].fx.clear();
+        song.instruments[0].volume = 1.0;
+        song.mixer.master = 0.1;
+        song
+    }
+
+    fn rms(b: &[f32]) -> f32 {
+        (b.iter().map(|x| x * x).sum::<f32>() / b.len() as f32).sqrt()
+    }
+
+    /// polyphony, note-off, sustain pedal, pitch bend and voice stealing
+    #[test]
+    fn live_midi_voices() {
+        use crate::midi::LiveEv;
+        let song = live_song();
+        let mut e = Engine::new(48000.0);
+        let mut buf = vec![0.0f32; 1024];
+        // a 3-note chord: three voices
+        for k in [60, 64, 67] {
+            e.live_event(&song, on(k, 0.8, 1));
+        }
+        assert_eq!(e.live_voices(), 3);
+        e.render(&song, &mut buf);
+        assert!(rms(&buf) > 0.001, "chord sounds");
+        // the same key again retriggers, no extra voice
+        e.live_event(&song, on(60, 0.8, 1));
+        assert_eq!(e.live_voices(), 3);
+        // note-off releases (voice ends after the release)
+        for k in [60, 64, 67] {
+            e.live_event(&song, LiveEv::Off { key: k });
+        }
+        for _ in 0..400 {
+            e.render(&song, &mut buf);
+        }
+        assert_eq!(e.live_voices(), 0, "released voices end");
+        // sustain pedal keeps a released note until the pedal goes up
+        e.live_event(&song, LiveEv::Sustain(true));
+        e.live_event(&song, on(62, 1.0, 1));
+        e.live_event(&song, LiveEv::Off { key: 62 });
+        for _ in 0..400 {
+            e.render(&song, &mut buf);
+        }
+        assert_eq!(e.live_voices(), 1, "held by the pedal");
+        e.live_event(&song, LiveEv::Sustain(false));
+        for _ in 0..400 {
+            e.render(&song, &mut buf);
+        }
+        assert_eq!(e.live_voices(), 0, "pedal up releases");
+        // pitch bend scales the frequency
+        e.live_event(&song, LiveEv::Bend(12.0));
+        assert!((e.live.bend - 2.0).abs() < 1e-4);
+        e.live_event(&song, LiveEv::AllOff);
+        assert_eq!(e.live.bend, 1.0);
+        // more keys than voices: the oldest is stolen, never more voices
+        for k in 0..(LIVE_VOICES as u8 + 4) {
+            e.live_event(&song, on(40 + k, 0.5, 1));
+        }
+        assert_eq!(e.live_voices(), LIVE_VOICES);
+        assert!(!e.live.v.iter().any(|v| v.key == 40), "oldest stolen");
+        // a bad instrument slot is ignored
+        e.live_event(&song, LiveEv::AllOff);
+        for _ in 0..400 {
+            e.render(&song, &mut buf);
+        }
+        e.live_event(&song, on(60, 1.0, 200));
+        assert_eq!(e.live_voices(), 0);
+        assert!(buf.iter().all(|x| x.is_finite()));
+    }
+
+    /// velocity scales the level; the live bus follows the cursor channel's
+    /// fader but not its mute
+    #[test]
+    fn live_velocity_and_channel_fader() {
+        let mut song = live_song();
+        let level = |song: &Song, vel: f32| {
+            let mut e = Engine::new(48000.0);
+            let mut buf = vec![0.0f32; 4096];
+            e.live_event(song, on(60, vel, 1));
+            e.render(song, &mut buf);
+            rms(&buf)
+        };
+        let loud = level(&song, 1.0);
+        let soft = level(&song, 0.25);
+        assert!((soft / loud - 0.25).abs() < 0.05, "{soft} vs {loud}");
+        song.mixer.channels[0].mute = true;
+        assert!(
+            (level(&song, 1.0) - loud).abs() < loud * 0.05,
+            "mute ignored"
+        );
+        song.mixer.channels[0].volume = 0.0;
+        assert!(level(&song, 1.0) < 1e-6, "fader applies");
+    }
+
+    /// MIDI events through the lock-free queue while the song plays: render
+    /// stays allocation-free (after the live FX chain is built once)
+    #[test]
+    fn live_midi_through_queue_does_not_allocate() {
+        use crate::fx::{Device, FxKind};
+        use crate::midi::LiveEv;
+        let mut song = crate::fileio::demo_song();
+        song.automation.clear();
+        song.instruments[0].fx = vec![Device::new(FxKind::Delay)];
+        let (mut prod, cons) = rtrb::RingBuffer::new(256);
+        let mut e = Engine::new(48000.0);
+        e.set_live_input(Some(cons));
+        e.start(&song, 0, 0, true, 0);
+        let mut buf = vec![0.0f32; 512];
+        // warm-up: one note builds the live FX chain
+        prod.push(on(60, 1.0, 1)).unwrap();
+        prod.push(LiveEv::Off { key: 60 }).unwrap();
+        for _ in 0..200 {
+            e.render(&song, &mut buf);
+        }
+        let n = alloc_count::count(|| {
+            for k in 0..600u32 {
+                let key = 48 + (k % 24) as u8;
+                let _ = prod.push(on(key, 0.7, 1));
+                let _ = prod.push(LiveEv::Bend((k % 5) as f32 * 0.1));
+                let _ = prod.push(LiveEv::Sustain(k % 7 == 0));
+                if k % 2 == 1 {
+                    let _ = prod.push(LiveEv::Off { key });
+                }
+                e.render(&song, &mut buf);
+            }
+        });
+        assert_eq!(n, 0, "live MIDI allocated {n} times");
+        assert!(buf.iter().all(|x| x.is_finite()));
+        // the queue survives an engine swap (device change)
+        let rx = e.take_live_input();
+        assert!(rx.is_some());
     }
 }

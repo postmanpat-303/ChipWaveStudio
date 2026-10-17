@@ -97,13 +97,7 @@ impl App {
                 ],
                 (self.extra.autosave_mins == 0).then(|| "autosave is off".to_string()),
             ),
-            4 => (
-                vec![
-                    "not available yet".into(),
-                    "planned: inputs, clock, learn".into(),
-                ],
-                None,
-            ),
+            4 => self.midi_summary(),
             _ => (
                 vec![
                     "not available yet".into(),
@@ -142,7 +136,7 @@ impl App {
                         let (lines, warn) = self.card_summary(i);
                         let focused = self.set_card == i;
                         let open = self.set_open == Some(i);
-                        let placeholder = i >= 4;
+                        let placeholder = i >= 5;
                         let edge = if warn.is_some() {
                             t.brick
                         } else if focused {
@@ -191,8 +185,9 @@ impl App {
                     1 => self.look_details(ui),
                     2 => self.keys_details(ui),
                     3 => self.files_details(ui),
+                    4 => self.midi_details(ui),
                     _ => {
-                        ui.label("Not available yet. MIDI input/clock and the plugin host are planned (docs/MIDI_VST.md, docs/PLUGIN_MANAGER.md).");
+                        ui.label("Not available yet. The plugin host is planned (docs/PLUGIN_MANAGER.md).");
                     }
                 }
             }

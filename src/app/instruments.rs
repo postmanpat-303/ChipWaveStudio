@@ -101,6 +101,7 @@ impl App {
         }) else {
             return;
         };
+        let mut learn: Vec<(egui::Response, crate::automation::Target)> = vec![];
         // edit a copy without holding the audio lock, commit only on change
         ui.horizontal(|ui| {
             ui.add_space(14.0);
@@ -109,7 +110,9 @@ impl App {
         ui.horizontal(|ui| {
             ui.add_space(14.0);
             ui.label("Volume");
-            changed |= ui.add(egui::Slider::new(&mut volume, 0.0..=1.0)).changed();
+            let r = ui.add(egui::Slider::new(&mut volume, 0.0..=1.0));
+            changed |= r.changed();
+            learn.push((r, crate::automation::Target::Level(idx.wrapping_sub(1))));
         });
         ui.horizontal(|ui| {
             ui.add_space(14.0);
@@ -182,14 +185,15 @@ impl App {
                         });
                     ui.end_row();
                     ui.label("   Cutoff Hz");
-                    changed |= ui
-                        .add(egui::Slider::new(&mut p.cutoff, 20.0..=18000.0).logarithmic(true))
-                        .changed();
+                    let r =
+                        ui.add(egui::Slider::new(&mut p.cutoff, 20.0..=18000.0).logarithmic(true));
+                    changed |= r.changed();
+                    learn.push((r, crate::automation::Target::Cutoff(idx.wrapping_sub(1))));
                     ui.end_row();
                     ui.label("   Resonance");
-                    changed |= ui
-                        .add(egui::Slider::new(&mut p.resonance, 0.0..=0.98))
-                        .changed();
+                    let r = ui.add(egui::Slider::new(&mut p.resonance, 0.0..=0.98));
+                    changed |= r.changed();
+                    learn.push((r, crate::automation::Target::Resonance(idx.wrapping_sub(1))));
                     ui.end_row();
                     ui.label("   Env amount");
                     changed |= ui
@@ -220,7 +224,9 @@ impl App {
                         .changed();
                     ui.end_row();
                     ui.label("   Drive");
-                    changed |= ui.add(egui::Slider::new(&mut p.drive, 0.0..=1.0)).changed();
+                    let r = ui.add(egui::Slider::new(&mut p.drive, 0.0..=1.0));
+                    changed |= r.changed();
+                    learn.push((r, crate::automation::Target::Drive(idx.wrapping_sub(1))));
                     ui.end_row();
                 });
         }
@@ -235,6 +241,9 @@ impl App {
                 }
             });
             self.dirty = true;
+        }
+        for (r, tg) in learn {
+            self.learn_menu(&r, tg);
         }
     }
 }

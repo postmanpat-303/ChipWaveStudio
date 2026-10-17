@@ -17,8 +17,9 @@ rm -f "dist/ChipWave-$VER-windows-x64.zip"
 (cd dist/pkg && zip -9 -q "../ChipWave-$VER-windows-x64.zip" ChipWave.exe README.txt LICENSE.txt THIRD_PARTY_LICENSES.txt)
 echo "dist/ChipWave-$VER-windows-x64.zip"
 if command -v makensis >/dev/null; then
-  # NSIS VIProductVersion needs four numbers
-  (cd installer && makensis -V2 -DVERSION="$VER" -DPKGDIR=../dist/pkg \
+  # NSIS VIProductVersion needs four numbers (0.2.3 -> 0.2.3.0)
+  VI=$(echo "$VER" | awk -F. '{printf "%d.%d.%d.%d", $1, $2, $3, $4}')
+  (cd installer && makensis -V2 -DVERSION="$VER" -DVIVERSION="$VI" -DPKGDIR=../dist/pkg \
     -DOUTFILE="../dist/ChipWave-$VER-setup-x64.exe" chipwave.nsi)
   echo "dist/ChipWave-$VER-setup-x64.exe"
 fi

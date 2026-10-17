@@ -151,8 +151,11 @@ pub fn start_with(
     }
     {
         let mut s = lock(&shared);
-        // a device change restarts the engine (playback stops)
+        // a device change restarts the engine (playback stops); the live
+        // MIDI queue stays connected
+        let rx = s.engine.take_live_input();
         s.engine = Engine::new(sample_rate as f32);
+        s.engine.set_live_input(rx);
     }
     let stats = Arc::new(Stats::default());
     // start with ~2x the device buffer, at least 1024 frames (~21 ms @ 48k)
@@ -290,7 +293,9 @@ pub(crate) fn render_chunk(shared: &SharedRef, buf: &mut [f32], sr: f32) {
     .is_ok();
     if !ok {
         buf.fill(0.0);
+        let rx = s.engine.take_live_input();
         s.engine = Engine::new(sr);
+        s.engine.set_live_input(rx);
     }
 }
 
