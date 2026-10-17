@@ -35,12 +35,41 @@ impl App {
                             if *is_sample { "  (sample)" } else { "" }
                         ))
                         .monospace();
-                        if ui.selectable_label(self.instr == slot, txt).clicked() {
+                        let r = ui.selectable_label(self.instr == slot, txt);
+                        if r.clicked() {
                             self.instr = slot;
                         }
+                        r.context_menu(|ui| {
+                            if ui.button("Duplicate instrument").clicked() {
+                                self.duplicate_instrument(slot);
+                                ui.close();
+                            }
+                            if ui.button("Delete instrument…").clicked() {
+                                self.request_delete_instrument(slot);
+                                ui.close();
+                            }
+                        });
                     });
                 }
             });
+        let has = (self.instr as usize).wrapping_sub(1) < names.len();
+        ui.horizontal(|ui| {
+            ui.add_space(14.0);
+            if ui
+                .add_enabled(has, egui::Button::new("Duplicate").small())
+                .on_hover_text("Duplicate the selected instrument (with its FX chain); also right-click an instrument or use Edit menu")
+                .clicked()
+            {
+                self.duplicate_instrument(self.instr);
+            }
+            if ui
+                .add_enabled(has, egui::Button::new("Delete…").small())
+                .on_hover_text("Delete the selected instrument; its notes are removed and later instruments move up one slot (Ctrl+Z undoes)")
+                .clicked()
+            {
+                self.request_delete_instrument(self.instr);
+            }
+        });
         ui.horizontal(|ui| {
             ui.add_space(14.0);
             if ui.button("Import WAV…").clicked() {
@@ -206,6 +235,107 @@ impl App {
                 }
             });
             self.dirty = true;
+        }
+    }
+}
+
+impl App {
+    /// Delete (with a confirmation when notes use it)
+    pub(super) fn request_delete_instrument(&mut self, slot: u8) {
+        let (exists, name, uses) = self.with(|s| {
+            let i = (slot as usize).wrapping_sub(1);
+            match s.song.instruments.get(i) {
+                Some(x) => (true, x.name.clone(), s.song.instrument_uses(slot)),
+                None => (false, String::new(), 0),
+            }
+        });
+        if !exists {
+            self.status = "No instrument selected".into();
+        } else if uses > 0 {
+            self.instr_delete = Some((slot, name, uses));
+        } else {
+            self.delete_instrument_now(slot);
+        }
+    }
+
+    pub(super) fn delete_instrument_now(&mut self, slot: u8) {
+        let idx = (slot as usize).wrapping_sub(1);
+        self.snapshot();
+        let res = self.with(|s| {
+            let x = s.song.instruments.get(idx)?.name.clone();
+            let n = s.song.delete_instrument(idx);
+            s.engine.remap_instruments(&|i| match i.cmp(&idx) {
+                std::cmp::Ordering::Less => Some(i),
+                std::cmp::Ordering::Equal => None,
+                std::cmp::Ordering::Greater => Some(i - 1),
+            });
+            Some((x, n, s.song.instruments.len()))
+        });
+        let Some((name, n, len)) = res else {
+            return;
+        };
+        if self.instr > slot || (self.instr == slot && slot as usize > len) {
+            self.instr -= 1;
+        }
+        self.instr = self.instr.clamp(1, len.clamp(1, 255) as u8);
+        self.dirty = true;
+        self.status = format!(
+            "Deleted instrument {slot:02X} {name}{} (Ctrl+Z undoes)",
+            if n > 0 {
+                format!(", {n} note(s) removed")
+            } else {
+                String::new()
+            }
+        );
+    }
+
+    pub(super) fn duplicate_instrument(&mut self, slot: u8) {
+        let idx = (slot as usize).wrapping_sub(1);
+        self.snapshot();
+        match self.with(|s| s.song.duplicate_instrument(idx)) {
+            Some(n) => {
+                self.instr = (n + 1) as u8;
+                self.status = format!("Duplicated instrument {slot:02X} to {:02X}", n + 1);
+            }
+            None => {
+                self.status =
+                    "Cannot duplicate: no instrument selected or all 255 slots used".into()
+            }
+        }
+    }
+
+    /// confirmation for deleting an instrument that notes use
+    pub(super) fn instr_delete_dialog(&mut self, ctx: &egui::Context) {
+        let Some((slot, name, uses)) = self.instr_delete.clone() else {
+            return;
+        };
+        let (mut yes, mut no) = (false, false);
+        egui::Window::new("Delete instrument?")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.label(format!(
+                    "Instrument {slot:02X} \"{name}\" is used by {uses} note(s)."
+                ));
+                ui.label("Deleting it removes those notes; later instruments move up one slot.");
+                ui.label("You can undo this with Ctrl+Z.");
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    yes = ui
+                        .button(format!("Delete and remove {uses} note(s)"))
+                        .clicked();
+                    no = ui.button("Cancel").clicked();
+                });
+            });
+        if ctx.input(|i| i.key_pressed(Key::Escape)) {
+            no = true;
+        }
+        if yes {
+            self.instr_delete = None;
+            self.delete_instrument_now(slot);
+        } else if no {
+            self.instr_delete = None;
         }
     }
 }

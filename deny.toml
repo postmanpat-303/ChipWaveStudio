@@ -1,6 +1,8 @@
 # cargo-deny: licence and advisory gate (run in CI: cargo deny check)
 [graph]
 all-features = false
+# dev-dependencies (the egui_kittest UI test harness) are not shipped
+exclude-dev = true
 
 [advisories]
 # RustSec database; vulnerabilities fail CI, unmaintained/unsound are reported

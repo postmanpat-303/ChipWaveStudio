@@ -115,6 +115,12 @@ pub fn is_clipboard_key(e: &Event) -> bool {
     cmd_key(e, Key::C) || cmd_key(e, Key::X) || cmd_key(e, Key::V)
 }
 
+/// Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z (song undo/redo, also while a text field
+/// has focus)
+pub fn is_undo_key(e: &Event) -> bool {
+    cmd_key(e, Key::Z) || cmd_key(e, Key::Y)
+}
+
 /// Text form for the system clipboard (also readable by people).
 pub fn clip_to_text(clip: &[Vec<Cell>]) -> String {
     let mut s = String::from(CLIP_HEADER);
@@ -290,6 +296,27 @@ mod tests {
         }
     }
     const CTRL: Modifiers = Modifiers::COMMAND;
+
+    #[test]
+    fn undo_keys() {
+        let k = |key, command, shift| Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers {
+                command,
+                ctrl: command,
+                shift,
+                ..Default::default()
+            },
+        };
+        assert!(is_undo_key(&k(Key::Z, true, false)));
+        assert!(is_undo_key(&k(Key::Z, true, true)));
+        assert!(is_undo_key(&k(Key::Y, true, false)));
+        assert!(!is_undo_key(&k(Key::Z, false, false)));
+        assert!(!is_undo_key(&k(Key::X, true, false)));
+    }
 
     #[test]
     fn windows_style_events_map_to_actions() {

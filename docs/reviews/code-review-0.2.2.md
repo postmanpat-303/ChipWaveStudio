@@ -121,3 +121,19 @@ Still open (next): M3/M4 undo redesign, app.rs split, FX state rebuild when a ch
 - **M3/M4 fixed:** new song-wide undo (`src/app/undo.rs`). History entries share unchanged blocks, instruments and lanes through `Arc`; sample PCM is copy-on-write (`model::SampleData`). Steps are detected by comparing the live song with the current entry at the end of each frame, so all edits are covered: notes, order, instruments and their FX chains, patch, mixer, tempo/LPB, channels, roles, lanes, fill-to-length accept (including tempo nudge). Slider drags commit on mouse release; parameter-only runs within 800 ms merge. `VecDeque` with O(1) eviction, capped at 1000 steps / ~256 MB. 13 unit tests.
 - **app.rs split** into `app/{file,keys,edit,instruments,pattern,arranger,lanes,mixer,undo}.rs`; `app.rs` now ~800 lines (struct, startup, frame loop).
 - **Instrument switch FX allocation fixed:** `ChainState` parks the previous instrument's chain and resets/reuses it (`FxState::reset`, zeroed in place, identical output to a fresh state, tested). A test proves alternating instruments with different FX chains renders with 0 allocations.
+
+## Status after 0.2.2.4
+
+- Undo misses reported on Windows (mixer pan/mute, tempo) fixed:
+  - quick mouse edits (fader, then pan, then M within 0.8 s) were coalesced
+    into one step because every mixer change had the same signature; now
+    each click/drag is its own step, keyboard runs merge only per field, and
+    on/off switches never merge;
+  - undo/redo of tempo/speed now also resyncs the engine's running tempo;
+  - Ctrl+Z/Y while a text field (e.g. a typed tempo) has focus is taken
+    from egui and runs the song undo after the field applies its value.
+- UI-level tests (`src/app/ui_tests.rs`, egui_kittest) drive the real App
+  with simulated mouse and keys.
+- Delete / Duplicate instrument (list buttons, right-click, Edit menu),
+  with note/lane remapping, engine voice/FX-chain remap and undo.
+

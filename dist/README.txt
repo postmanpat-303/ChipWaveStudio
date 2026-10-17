@@ -1,4 +1,4 @@
-ChipWave Tracker 0.2.2.3 - Windows x64
+ChipWave Tracker 0.2.2.4 - Windows x64
 ==============================================================
 GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
@@ -24,7 +24,8 @@ Keys (press "? Keys" in the toolbar for the full list)
   Space / Shift+Space            play/stop current block (loop) / play/stop song
   Enter / Ctrl+Enter             restart block / play from cursor row
   Esc                            edit mode on/off
-  Ctrl+Z / Ctrl+Y                undo / redo (notes, arranger, sounds, FX, mixer, tempo, channels; a slider drag = 1 step)
+  Ctrl+Z / Ctrl+Y                undo / redo (notes, arranger, sounds, FX, mixer, tempo, channels; each click or
+                                 drag = 1 step; also works while a value field is being typed into)
   Alt +/-  (Shift = octave)      transpose selection (or whole channel)
   Ctrl+= / Ctrl+- / Ctrl+0       UI scale up / down / 100 %
   F9 / F10                       mute / solo channel
@@ -37,6 +38,8 @@ Keys (press "? Keys" in the toolbar for the full list)
                                  collapse, drag name = reorder, right-click = menu
   Ctrl+D / Ctrl+Shift+D          arranger: duplicate clip / as new block (also when docked)
   Mouse wheel                    pattern: 1 row per notch (Shift = 16); arranger: scroll, Ctrl = zoom
+  Instrument list                Duplicate / Delete... buttons, right-click menu or Edit menu (asks
+                                 first when notes use it; Ctrl+Z undoes)
   Ctrl+Shift+K                   debug: show the last 10 input events in the status bar
   Arranger (click to focus, light outline + ARRANGER tag): click / Shift+click / Ctrl+click select,
     Ctrl+X / C / V cut / copy / paste after selection (Ctrl+Shift+V = as new blocks),

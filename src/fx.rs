@@ -1037,6 +1037,28 @@ impl ChainState {
         }
         self.owner = owner;
     }
+    /// Instruments were removed or inserted: follow the new indices so each
+    /// chain stays with its instrument (`None` = instrument gone).
+    pub fn remap(&mut self, f: &dyn Fn(usize) -> Option<usize>) {
+        if self.owner != usize::MAX {
+            match f(self.owner) {
+                Some(o) => self.owner = o,
+                None => {
+                    // the states cannot belong to anyone else: rebuild
+                    self.owner = usize::MAX;
+                    self.sig.clear();
+                    self.states.clear();
+                }
+            }
+        }
+        self.spare.retain_mut(|(o, _, _)| match f(*o) {
+            Some(n) => {
+                *o = n;
+                true
+            }
+            None => false,
+        });
+    }
     pub fn process(&mut self, mut l: f32, mut r: f32, ctx: &Ctx) -> (f32, f32) {
         for s in &mut self.states {
             (l, r) = s.process(l, r, ctx);
@@ -1048,6 +1070,34 @@ impl ChainState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chain_remap_follows_instrument_indices() {
+        let d = [Device::new(FxKind::Delay)];
+        let mut c = ChainState {
+            sig: vec![],
+            states: vec![],
+            owner: usize::MAX,
+            spare: vec![],
+        };
+        c.sync(&d, 3, 48000.0);
+        c.sync(&d, 5, 48000.0); // 3 goes to the spares
+                                // instrument 1 deleted: 3 -> 2, 5 -> 4
+        c.remap(&|i| {
+            if i == 1 {
+                None
+            } else {
+                Some(if i > 1 { i - 1 } else { i })
+            }
+        });
+        assert_eq!(c.owner, 4);
+        assert_eq!(c.spare[0].0, 2);
+        // the owner itself deleted: chain dropped, spares kept
+        c.remap(&|i| (i != 4).then_some(i));
+        assert_eq!(c.owner, usize::MAX);
+        assert!(c.states.is_empty());
+        assert_eq!(c.spare.len(), 1);
+    }
 
     #[test]
     fn reset_sounds_like_new() {

@@ -24,6 +24,8 @@ mod pattern;
 mod sampleview;
 mod settingsview;
 mod topbar;
+#[cfg(test)]
+mod ui_tests;
 mod undo;
 
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect
@@ -154,6 +156,13 @@ pub struct App {
     show_about: bool,
     /// key events taken from egui before it can use them for focus navigation
     pending: Vec<egui::Event>,
+    /// undo/redo keys pressed while a text field had focus: run next frame,
+    /// after the field has given up focus (and applied its value)
+    deferred_keys: Vec<egui::Event>,
+    /// a mouse press/release happened since the last undo commit
+    mouse_since_commit: bool,
+    /// delete-instrument confirmation: (slot, name, notes using it)
+    instr_delete: Option<(u8, String, usize)>,
 }
 
 pub fn run(open: Option<PathBuf>) -> Result<(), String> {
@@ -200,84 +209,7 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         (_, Some(e)) => format!("No audio ({e}). Editing and WAV export still work."),
         _ => String::new(),
     };
-    let hist = undo::History::new(&audio::lock(&shared).song);
-    let app = App {
-        shared,
-        audio,
-        audio_err,
-        row: 0,
-        ch: 0,
-        col: 0,
-        pattern: 0,
-        octave: 4,
-        step: 1,
-        edit: true,
-        follow: true,
-        instr: 1,
-        hist,
-        undo_hold: 0,
-        path: open,
-        status,
-        dirty: false,
-        sel: None,
-        drag_anchor: None,
-        clip: vec![],
-        view: View::Pattern,
-        dock_arranger: true,
-        arr_sel: 0,
-        arr_drag: None,
-        fx_drag: None,
-        recent: crate::settings::load().recent,
-        session,
-        last_autosave: std::time::Instant::now(),
-        save_job: None,
-        save_was_dirty: false,
-        load_warnings: Vec::new(),
-        last_heartbeat: std::time::Instant::now(),
-        orphans,
-        smp: Default::default(),
-        extra: crate::settings::load().extra,
-        keymap: crate::keymap::Keymap::load(),
-        set_card: 0,
-        set_open: Some(0),
-        rebinding: None,
-        bind_msg: String::new(),
-        export_dlg: None,
-        fill: None,
-        show_info: false,
-        prompt: None,
-        discarded: false,
-        allow_close: false,
-        arr_flash: None,
-        arr_multi: Default::default(),
-        arr_clip: vec![],
-        arr_focus: false,
-        mods: Default::default(),
-        key_log: None,
-        show_auto: true,
-        auto_pencil: false,
-        auto_shape: crate::automation::Shape::Linear,
-        auto_lane: 0,
-        auto_sel: None,
-        auto_drag: None,
-        auto_pencil_lane: None,
-        wheel_pat: 0.0,
-        wheel_arr: 0.0,
-        arr_scroll: 0.0,
-        arr_scroll_set: None,
-        arr_area: Rect::NOTHING,
-        zoom: crate::settings::load().zoom,
-        buffer: crate::settings::load().buffer,
-        win_max: crate::settings::load().maximized,
-        win_rect: crate::settings::load().window,
-        max_zoom: 3.0,
-        zoom_checked: false,
-        themed: false,
-        theme: crate::settings::load().theme(),
-        show_help: false,
-        show_about: false,
-        pending: vec![],
-    };
+    let app = App::new(shared, audio, audio_err, open, status, session, orphans);
     let set = crate::settings::load();
     let mut vb = egui::ViewportBuilder::default().with_inner_size([1360.0, 800.0]);
     if set.maximized {
@@ -354,6 +286,102 @@ fn focus_ring(p: &egui::Painter, r: Rect) {
 }
 
 impl App {
+    /// Build the app state (also used by the UI tests, without audio or a session).
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn new(
+        shared: SharedRef,
+        audio: Option<audio::Audio>,
+        audio_err: Option<String>,
+        open: Option<PathBuf>,
+        status: String,
+        session: Option<crate::recovery::Session>,
+        orphans: Vec<crate::recovery::Orphan>,
+    ) -> App {
+        let hist = undo::History::new(&audio::lock(&shared).song);
+        App {
+            shared,
+            audio,
+            audio_err,
+            row: 0,
+            ch: 0,
+            col: 0,
+            pattern: 0,
+            octave: 4,
+            step: 1,
+            edit: true,
+            follow: true,
+            instr: 1,
+            hist,
+            undo_hold: 0,
+            path: open,
+            status,
+            dirty: false,
+            sel: None,
+            drag_anchor: None,
+            clip: vec![],
+            view: View::Pattern,
+            dock_arranger: true,
+            arr_sel: 0,
+            arr_drag: None,
+            fx_drag: None,
+            recent: crate::settings::load().recent,
+            session,
+            last_autosave: std::time::Instant::now(),
+            save_job: None,
+            save_was_dirty: false,
+            load_warnings: Vec::new(),
+            last_heartbeat: std::time::Instant::now(),
+            orphans,
+            smp: Default::default(),
+            extra: crate::settings::load().extra,
+            keymap: crate::keymap::Keymap::load(),
+            set_card: 0,
+            set_open: Some(0),
+            rebinding: None,
+            bind_msg: String::new(),
+            export_dlg: None,
+            fill: None,
+            show_info: false,
+            prompt: None,
+            discarded: false,
+            allow_close: false,
+            arr_flash: None,
+            arr_multi: Default::default(),
+            arr_clip: vec![],
+            arr_focus: false,
+            mods: Default::default(),
+            key_log: None,
+            show_auto: true,
+            auto_pencil: false,
+            auto_shape: crate::automation::Shape::Linear,
+            auto_lane: 0,
+            auto_sel: None,
+            auto_drag: None,
+            auto_pencil_lane: None,
+            wheel_pat: 0.0,
+            wheel_arr: 0.0,
+            arr_scroll: 0.0,
+            arr_scroll_set: None,
+            arr_area: Rect::NOTHING,
+            zoom: crate::settings::load().zoom,
+            buffer: crate::settings::load().buffer,
+            win_max: crate::settings::load().maximized,
+            win_rect: crate::settings::load().window,
+            max_zoom: 3.0,
+            zoom_checked: false,
+            themed: false,
+            theme: crate::settings::load().theme(),
+            show_help: false,
+            show_about: false,
+            pending: vec![],
+            deferred_keys: vec![],
+            mouse_since_commit: false,
+            instr_delete: None,
+        }
+    }
+}
+
+impl App {
     fn with<R>(&self, f: impl FnOnce(&mut Shared) -> R) -> R {
         let mut s = audio::lock(&self.shared);
         f(&mut s)
@@ -375,10 +403,18 @@ impl App {
         if self.undo_hold > 0 || ctx.input(|i| i.pointer.any_down()) {
             return;
         }
+        // keyboard-driven changes may merge; any click/drag is its own step
+        let mouse = ctx.input(|i| {
+            i.pointer.any_released() || i.pointer.any_pressed() || i.pointer.any_click()
+        }) || self.mouse_since_commit;
         let shared = self.shared.clone();
         let s = audio::lock(&shared);
-        if self.hist.commit(&s.song, std::time::Instant::now()) {
+        if self.hist.commit(&s.song, std::time::Instant::now(), !mouse) {
             self.dirty = true;
+            self.mouse_since_commit = false;
+        } else if mouse {
+            // e.g. a click that changes the song one frame later
+            self.mouse_since_commit = true;
         }
     }
 
@@ -393,7 +429,21 @@ impl App {
         let done = {
             let shared = self.shared.clone();
             let mut s = audio::lock(&shared);
-            self.hist.step(&mut s.song, redo, std::time::Instant::now())
+            let before = (s.song.bpm, s.song.speed);
+            let old_instr = s.song.instruments.clone();
+            let done = self.hist.step(&mut s.song, redo, std::time::Instant::now());
+            // an instrument came back or went away: keep the playing voices
+            // and FX chains on their instruments
+            if let Some(f) = instrument_shift(&old_instr, &s.song.instruments) {
+                s.engine.remap_instruments(&f);
+            }
+            // the engine keeps its own running tempo (set_tempo / Fxx): follow
+            // a tempo or speed change that undo/redo brought back
+            if (s.song.bpm, s.song.speed) != before {
+                let (bpm, speed) = (s.song.bpm, s.song.speed);
+                s.engine.set_tempo(bpm, speed);
+            }
+            done
         };
         if done {
             self.dirty = true;
@@ -535,9 +585,36 @@ impl eframe::App for App {
             }
         }
 
-        if ctx.egui_wants_keyboard_input() {
+        // undo/redo held back from the previous frame (see below)
+        self.pending.append(&mut self.deferred_keys);
+
+        if ctx.text_edit_focused() {
+            // Typing in a text field (song title, a DragValue being typed into,
+            // ...): the field keeps its keys, except song undo/redo. Those
+            // close the field first and run next frame, after its value has
+            // been applied and recorded, so Ctrl+Z undoes it like any edit.
+            let before = raw.events.len();
+            let mut keep = Vec::with_capacity(before);
+            for e in raw.events.drain(..) {
+                if input::is_undo_key(&e) {
+                    self.deferred_keys.push(e);
+                } else {
+                    keep.push(e);
+                }
+            }
+            raw.events = keep;
+            if raw.events.len() != before {
+                ctx.memory_mut(|m| {
+                    if let Some(id) = m.focused() {
+                        m.surrender_focus(id)
+                    }
+                });
+                ctx.request_repaint();
+            }
             return;
         }
+        // Any other focused widget (a clicked DragValue in button mode, a
+        // keyboard-focused slider, ...) does not keep the keyboard.
         ctx.memory_mut(|m| {
             if let Some(id) = m.focused() {
                 m.surrender_focus(id)
@@ -560,6 +637,7 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll_save();
         self.load_warnings_window(ui.ctx());
+        self.instr_delete_dialog(ui.ctx());
         if self.save_job.is_some() {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(50));
@@ -781,4 +859,30 @@ impl eframe::App for App {
             ctx.request_repaint();
         }
     }
+}
+
+/// Index map after one instrument was inserted into or removed from `old`
+/// (None when the count did not change by exactly one).
+fn instrument_shift(
+    old: &[crate::model::Instrument],
+    new: &[crate::model::Instrument],
+) -> Option<impl Fn(usize) -> Option<usize>> {
+    if old.len().abs_diff(new.len()) != 1 {
+        return None;
+    }
+    let k = old
+        .iter()
+        .zip(new)
+        .position(|(a, b)| a != b)
+        .unwrap_or(old.len().min(new.len()));
+    let removed = new.len() < old.len();
+    Some(move |i: usize| {
+        if i < k {
+            Some(i)
+        } else if removed {
+            (i != k).then(|| i - 1)
+        } else {
+            Some(i + 1)
+        }
+    })
 }

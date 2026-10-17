@@ -230,6 +230,37 @@ impl Engine {
         self.bpm
     }
 
+    /// Instruments were removed/inserted in the song (delete, duplicate,
+    /// undo): map every voice, fading tail and FX chain to the instrument's
+    /// new index. Voices of a removed instrument stop.
+    pub fn remap_instruments(&mut self, f: &dyn Fn(usize) -> Option<usize>) {
+        for c in &mut self.chans {
+            if c.instr != usize::MAX {
+                match f(c.instr) {
+                    Some(i) => c.instr = i,
+                    None => {
+                        c.instr = usize::MAX;
+                        c.active = false;
+                    }
+                }
+            }
+            if c.tail.instr != usize::MAX {
+                match f(c.tail.instr) {
+                    Some(i) => c.tail.instr = i,
+                    None => {
+                        c.tail.instr = usize::MAX;
+                        c.tail.gain = 0.0;
+                    }
+                }
+            }
+        }
+        for ch in &mut self.chains {
+            ch.remap(f);
+        }
+        self.auto.fx.clear();
+        self.auto.countdown = 0;
+    }
+
     /// Change tempo/speed while playing: takes effect at the next tick
     /// (no restart, the current row position is kept).
     pub fn set_tempo(&mut self, bpm: f32, speed: u32) {

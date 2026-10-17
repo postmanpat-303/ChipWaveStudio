@@ -64,6 +64,52 @@ impl Meta {
     fn bytes(&self) -> usize {
         256 + self.order.len() * 8 + self.mixer.channels.len() * 32
     }
+    /// bit mask of the fields that differ from the live song (used so that
+    /// e.g. a tempo change never merges with a mute click)
+    fn diff_mask(&self, s: &Song) -> u64 {
+        let mut m = 0u64;
+        let mut set = |bit: u32, differs: bool| {
+            if differs {
+                m |= 1 << bit.min(63);
+            }
+        };
+        set(0, self.title != s.title);
+        set(1, self.bpm.to_bits() != s.bpm.to_bits());
+        set(2, self.speed != s.speed);
+        set(3, self.lines_per_beat != s.lines_per_beat);
+        set(
+            4,
+            self.channels != s.channels || self.channel_names != s.channel_names,
+        );
+        set(5, self.order != s.order);
+        set(6, self.info != s.info);
+        set(7, self.mixer.master.to_bits() != s.mixer.master.to_bits());
+        set(8, self.mixer.returns != s.mixer.returns);
+        set(9, self.mixer.channels.len() != s.mixer.channels.len());
+        for (c, (a, b)) in self
+            .mixer
+            .channels
+            .iter()
+            .zip(&s.mixer.channels)
+            .enumerate()
+        {
+            let base = 12 + c as u32 * 5;
+            set(base, a.volume.to_bits() != b.volume.to_bits());
+            set(base + 1, a.pan.to_bits() != b.pan.to_bits());
+            set(base + 2, a.send != b.send);
+            set(base + 3, a.mute != b.mute);
+            set(base + 4, a.solo != b.solo);
+        }
+        m
+    }
+    /// on/off switches (mute, solo, channel count, order...) are never merged
+    fn is_toggle(mask: u64) -> bool {
+        let mut t: u64 = (1 << 4) | (1 << 5) | (1 << 9);
+        for c in 0..crate::model::MAX_CHANNELS as u64 {
+            t |= 0b11000 << (12 + c * 5);
+        }
+        mask & t != 0
+    }
 }
 
 /// One point in the history.
@@ -80,7 +126,8 @@ pub struct State {
 /// What a commit changed (used to decide whether steps may be merged).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sig {
-    meta: bool,
+    /// changed song fields (see `Meta::diff_mask`)
+    meta: u64,
     patterns: bool,
     lanes: bool,
     /// changed instrument slots (same count before and after)
@@ -91,7 +138,7 @@ pub struct Sig {
 impl Sig {
     /// only "parameter" changes: knob/slider-like edits that may coalesce
     fn mergeable(&self) -> bool {
-        !self.patterns && !self.lanes && !self.instruments_resized
+        !self.patterns && !self.lanes && !self.instruments_resized && !Meta::is_toggle(self.meta)
     }
 }
 
@@ -184,7 +231,11 @@ impl State {
             Meta::of(song)
         };
         let sig = Sig {
-            meta: !meta_same,
+            meta: if meta_same {
+                0
+            } else {
+                self.meta.diff_mask(song)
+            },
             patterns: !pc.is_empty() || patterns.len() != self.patterns.len(),
             lanes: !lc.is_empty() || lanes.len() != self.lanes.len(),
             instruments_resized: instruments.len() != self.instruments.len(),
@@ -261,13 +312,16 @@ impl History {
     }
 
     /// Record the song if it changed since the last commit. Returns true when
-    /// it did. Parameter-only changes with the same signature within
-    /// `COALESCE` of the previous commit extend that step instead.
-    pub fn commit(&mut self, song: &Song, now: Instant) -> bool {
+    /// it did. With `may_merge` (keyboard-driven changes, e.g. holding a key on
+    /// a focused slider or typing in a field), parameter-only changes to the
+    /// same fields within `COALESCE` of the previous commit extend that step.
+    /// Mouse gestures pass `may_merge = false`: every click or drag is a step.
+    pub fn commit(&mut self, song: &Song, now: Instant, may_merge: bool) -> bool {
         let Some((next, sig)) = self.cur.next(song) else {
             return false;
         };
-        let merge = matches!(&self.last, Some((s, t)) if *s == sig && sig.mergeable()
+        let merge = may_merge
+            && matches!(&self.last, Some((s, t)) if *s == sig && sig.mergeable()
             && now.duration_since(*t) < COALESCE);
         let old = std::mem::replace(&mut self.cur, next);
         if merge {
@@ -285,7 +339,7 @@ impl History {
 
     /// Start a new step: commit pending changes and don't merge into them.
     pub fn boundary(&mut self, song: &Song, now: Instant) -> bool {
-        let c = self.commit(song, now);
+        let c = self.commit(song, now, false);
         self.last = None;
         c
     }
@@ -306,7 +360,7 @@ impl History {
 
     /// Undo (or redo) one step into `song`. Pending changes are committed first.
     pub fn step(&mut self, song: &mut Song, redo: bool, now: Instant) -> bool {
-        self.commit(song, now);
+        self.commit(song, now, false);
         self.last = None;
         let target = if redo {
             self.redo.pop()
@@ -345,10 +399,10 @@ mod tests {
         let mut s = song();
         let mut h = History::new(&s);
         let t = t0();
-        assert!(!h.commit(&s, t), "no change, no step");
+        assert!(!h.commit(&s, t, true), "no change, no step");
         let before = s.patterns[0].cells[3][1];
         s.patterns[0].cells[3][1].note = 50;
-        assert!(h.commit(&s, t));
+        assert!(h.commit(&s, t, true));
         assert!(h.step(&mut s, false, later(t, 10)));
         assert_eq!(s.patterns[0].cells[3][1], before);
         assert!(h.step(&mut s, true, later(t, 20)));
@@ -363,7 +417,7 @@ mod tests {
         let t = t0();
         for r in 0..5 {
             s.patterns[0].cells[r][0].note = 40 + r as u8;
-            h.commit(&s, later(t, r as u64));
+            h.commit(&s, later(t, r as u64), true);
         }
         assert_eq!(h.len(), 5, "pattern edits never coalesce");
     }
@@ -378,7 +432,7 @@ mod tests {
         let mut h = History::new(&s);
         let prev = h.cur.clone();
         s.patterns[7].cells[0][0].note = 30;
-        h.commit(&s, t0());
+        h.commit(&s, t0(), true);
         let shared = h
             .cur
             .patterns
@@ -402,7 +456,7 @@ mod tests {
         let mut h = History::new(&s);
         let prev = h.cur.clone();
         s.patterns.remove(3);
-        h.commit(&s, t0());
+        h.commit(&s, t0(), true);
         assert_eq!(h.cur.bytes, 0, "a delete stores nothing new");
         assert!(Arc::ptr_eq(&h.cur.patterns[5], &prev.patterns[6]));
         let mut s2 = s.clone();
@@ -419,7 +473,7 @@ mod tests {
         let orig = s.clone();
         let mut h = History::new(&s);
         s.instruments.remove(1);
-        h.commit(&s, t0());
+        h.commit(&s, t0(), true);
         assert_eq!(s.instruments[1].fx[0].kind, crate::fx::FxKind::Bitcrusher);
         h.step(&mut s, false, t0());
         assert_eq!(s.instruments, orig.instruments);
@@ -495,22 +549,37 @@ mod tests {
         let t = t0();
         for k in 0..20 {
             s.instruments[0].volume = k as f32 / 20.0;
-            h.commit(&s, later(t, k * 50));
+            h.commit(&s, later(t, k * 50), true);
         }
         assert_eq!(h.len(), 1, "one drag = one step");
         // a pause starts a new step
         s.instruments[0].volume = 0.9;
-        h.commit(&s, later(t, 5000));
+        h.commit(&s, later(t, 5000), true);
         assert_eq!(h.len(), 2);
+        // mouse gestures never merge
+        s.instruments[0].volume = 0.8;
+        h.commit(&s, later(t, 5005), false);
+        assert_eq!(h.len(), 3);
         // a different control starts a new step
         s.bpm += 1.0;
-        h.commit(&s, later(t, 5010));
-        assert_eq!(h.len(), 3);
+        h.commit(&s, later(t, 5010), true);
+        assert_eq!(h.len(), 4);
         // an explicit boundary prevents merging
         h.boundary(&s, later(t, 5020));
         s.bpm += 1.0;
-        h.commit(&s, later(t, 5030));
-        assert_eq!(h.len(), 4);
+        h.commit(&s, later(t, 5030), true);
+        assert_eq!(h.len(), 5);
+        // the same field by keyboard merges...
+        s.bpm += 1.0;
+        h.commit(&s, later(t, 5040), true);
+        assert_eq!(h.len(), 5);
+        // ...but a different song field (mute after tempo) never does
+        s.mixer.channels[0].mute ^= true;
+        h.commit(&s, later(t, 5050), true);
+        assert_eq!(h.len(), 6);
+        s.mixer.channels[1].mute ^= true;
+        h.commit(&s, later(t, 5060), true);
+        assert_eq!(h.len(), 7, "different channel = different step");
     }
 
     #[test]
@@ -582,7 +651,7 @@ mod tests {
         let mut h = History::new(&s);
         let n = s.instruments.len() - 1;
         s.instruments[n].volume = 0.5;
-        h.commit(&s, t0());
+        h.commit(&s, t0(), true);
         assert!(
             h.cur.bytes < 10_000,
             "volume change stored {} bytes",
@@ -608,7 +677,7 @@ mod tests {
         let t = t0();
         for k in 0..(MAX_STEPS + 50) {
             s.patterns[0].cells[k % 16][0].note = (k % 100) as u8 + 1;
-            h.commit(&s, t);
+            h.commit(&s, t, true);
         }
         assert_eq!(h.len(), MAX_STEPS);
         // memory cap: big sample edits

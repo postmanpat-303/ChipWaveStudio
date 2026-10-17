@@ -305,6 +305,87 @@ impl Song {
             .sum();
         rows as f64 * self.row_seconds()
     }
+
+    /// Cells in hand-written (non-derived) blocks that use instrument slot
+    /// `slot` (1-based): what a delete would remove.
+    pub fn instrument_uses(&self, slot: u8) -> usize {
+        self.patterns
+            .iter()
+            .filter(|p| p.derived.is_none())
+            .flat_map(|p| p.cells.iter().flatten())
+            .filter(|c| slot > 0 && c.instr == slot)
+            .count()
+    }
+
+    /// Remove instrument `idx` (0-based). Its notes are cleared (effect
+    /// columns stay), later slots move down by one in every block and
+    /// automation lane, and its own automation lanes go. The FX chain lives
+    /// in the instrument, so every other instrument keeps its own. Returns
+    /// the number of cells cleared (as `instrument_uses`).
+    pub fn delete_instrument(&mut self, idx: usize) -> usize {
+        if idx >= self.instruments.len() || idx > 254 {
+            return 0;
+        }
+        let used = self.instrument_uses(idx as u8 + 1);
+        self.instruments.remove(idx);
+        let slot = idx as u8 + 1;
+        let fix = |c: &mut Cell| {
+            if c.instr == slot {
+                c.instr = 0;
+                if c.note != NOTE_OFF {
+                    c.note = 0;
+                    c.vol = 0;
+                }
+            } else if c.instr > slot {
+                c.instr -= 1;
+            }
+        };
+        for p in &mut self.patterns {
+            p.cells.iter_mut().flatten().for_each(fix);
+            p.cache.iter_mut().flatten().for_each(fix);
+        }
+        self.automation
+            .retain_mut(|l| match lane_instrument(&l.target) {
+                Some(i) if i == idx => false,
+                Some(i) if i > idx => {
+                    l.target = with_lane_instrument(&l.target, i - 1);
+                    true
+                }
+                _ => true,
+            });
+        used
+    }
+
+    /// Append a copy of instrument `idx` (0-based, with its FX chain) and
+    /// return the new index. Nothing else changes; None if the 255 slots
+    /// are full.
+    pub fn duplicate_instrument(&mut self, idx: usize) -> Option<usize> {
+        if self.instruments.len() >= 255 {
+            return None;
+        }
+        let mut i = self.instruments.get(idx)?.clone();
+        i.name = format!("{} copy", i.name);
+        self.instruments.push(i);
+        Some(self.instruments.len() - 1)
+    }
+}
+
+/// 0-based instrument of an `instrument.N....` automation target
+fn lane_instrument(target: &str) -> Option<usize> {
+    let mut p = target.split('.');
+    if p.next()? != "instrument" {
+        return None;
+    }
+    p.next()?
+        .parse::<usize>()
+        .ok()
+        .filter(|n| *n >= 1)
+        .map(|n| n - 1)
+}
+
+fn with_lane_instrument(target: &str, idx: usize) -> String {
+    let rest = target.splitn(3, '.').nth(2).unwrap_or("");
+    format!("instrument.{}.{}", idx + 1, rest)
 }
 
 pub fn note_name(n: u8) -> String {
@@ -363,5 +444,66 @@ mod tests {
             assert_eq!(parse_note(&note_name(n)), Some(n));
         }
         assert!((note_freq(parse_note("A-4").unwrap()) - 440.0).abs() < 0.01);
+    }
+
+    fn inst(name: &str) -> Instrument {
+        Instrument {
+            name: name.into(),
+            volume: 1.0,
+            transpose: 0,
+            fx: vec![],
+            kind: InstrumentKind::Synth(Default::default()),
+        }
+    }
+
+    #[test]
+    fn delete_instrument_remaps_notes_lanes_and_keeps_fx() {
+        let mut s = Song::empty();
+        s.instruments = vec![inst("a"), inst("b"), inst("c")];
+        s.instruments[2]
+            .fx
+            .push(crate::fx::Device::new(crate::fx::FxKind::Delay));
+        let c = |note, instr| Cell {
+            note,
+            instr,
+            vol: 10,
+            fx: 0xF,
+            fxp: 0x80,
+        };
+        s.patterns[0].cells[0][0] = c(49, 2);
+        s.patterns[0].cells[1][0] = c(50, 3);
+        s.patterns[0].cells[2][0] = c(NOTE_OFF, 2);
+        s.patterns[0].cells[3][0] = c(51, 1);
+        let lane = |t: &str| crate::automation::Lane {
+            target: t.into(),
+            label: String::new(),
+            points: vec![],
+            enabled: true,
+        };
+        s.automation = vec![
+            lane("instrument.2.cutoff"),
+            lane("instrument.3.fx.1.mix"),
+            lane("mixer.ch.2.volume"),
+        ];
+        assert_eq!(s.instrument_uses(2), 2);
+        assert_eq!(s.delete_instrument(1), 2);
+        let names: Vec<_> = s.instruments.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, ["a", "c"]);
+        assert_eq!(s.instruments[1].fx.len(), 1, "c keeps its FX chain");
+        let cells = &s.patterns[0].cells;
+        assert_eq!(
+            (cells[0][0].note, cells[0][0].instr, cells[0][0].fx),
+            (0, 0, 0xF)
+        );
+        assert_eq!((cells[1][0].note, cells[1][0].instr), (50, 2));
+        assert_eq!((cells[2][0].note, cells[2][0].instr), (NOTE_OFF, 0));
+        assert_eq!((cells[3][0].note, cells[3][0].instr), (51, 1));
+        let t: Vec<_> = s.automation.iter().map(|l| l.target.as_str()).collect();
+        assert_eq!(t, ["instrument.2.fx.1.mix", "mixer.ch.2.volume"]);
+        // duplicate appends a copy with the chain
+        assert_eq!(s.duplicate_instrument(1), Some(2));
+        assert_eq!(s.instruments[2].name, "c copy");
+        assert_eq!(s.instruments[2].fx.len(), 1);
+        assert_eq!(s.delete_instrument(9), 0);
     }
 }

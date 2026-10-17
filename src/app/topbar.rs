@@ -291,6 +291,22 @@ impl App {
                     self.do_undo(true);
                 }
                 ui.separator();
+                let has_instr =
+                    self.with(|s| (self.instr as usize).wrapping_sub(1) < s.song.instruments.len());
+                if ui
+                    .add_enabled(has_instr, egui::Button::new("Duplicate instrument"))
+                    .clicked()
+                {
+                    self.duplicate_instrument(self.instr);
+                }
+                if ui
+                    .add_enabled(has_instr, egui::Button::new("Delete instrument…"))
+                    .on_hover_text("asks first when notes use it; Ctrl+Z undoes")
+                    .clicked()
+                {
+                    self.request_delete_instrument(self.instr);
+                }
+                ui.separator();
                 if item(ui, "Cut", "Ctrl+X") {
                     self.pending.push(egui::Event::Cut);
                 }
