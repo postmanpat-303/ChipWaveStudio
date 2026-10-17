@@ -24,6 +24,7 @@ mod pattern;
 mod sampleview;
 mod settingsview;
 mod topbar;
+mod undo;
 
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect
 const SUBCOLS: usize = 9;
@@ -43,14 +44,6 @@ const CLIP_COLOURS: [u32; 8] = [
     // no greens: the theme accent is green, so clips must never look "selected"
     0x516D96, 0x8A6D3B, 0x7A4E5C, 0x5E6B7A, 0x6B5E8A, 0x7A6A4E, 0x8A5A4E, 0x4E6A86,
 ];
-
-type Undo = (
-    Vec<Pattern>,
-    Vec<usize>,
-    Vec<crate::automation::Lane>,
-    Vec<Vec<crate::fx::Device>>,
-    Vec<crate::model::Return>,
-);
 
 const LANE_H: f32 = 64.0;
 /// automation curve colours: functional, saturated but muted
@@ -78,8 +71,10 @@ pub struct App {
     edit: bool,
     follow: bool,
     instr: u8,
-    undo: Vec<Undo>,
-    redo: Vec<Undo>,
+    /// song undo/redo history (see app/undo.rs)
+    hist: undo::History,
+    /// >0 while a compound action runs: inner snapshot() calls are ignored
+    undo_hold: u32,
     path: Option<PathBuf>,
     status: String,
     dirty: bool,
@@ -205,6 +200,7 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         (_, Some(e)) => format!("No audio ({e}). Editing and WAV export still work."),
         _ => String::new(),
     };
+    let hist = undo::History::new(&audio::lock(&shared).song);
     let app = App {
         shared,
         audio,
@@ -218,8 +214,8 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         edit: true,
         follow: true,
         instr: 1,
-        undo: vec![],
-        redo: vec![],
+        hist,
+        undo_hold: 0,
         path: open,
         status,
         dirty: false,
@@ -363,53 +359,65 @@ impl App {
         f(&mut s)
     }
 
+    /// Call before a discrete edit: commits pending changes so the edit becomes
+    /// its own undo step.
     fn snapshot(&mut self) {
-        let st = self.with(|s| {
-            (
-                s.song.patterns.clone(),
-                s.song.order.clone(),
-                s.song.automation.clone(),
-                s.song.instruments.iter().map(|i| i.fx.clone()).collect(),
-                s.song.mixer.returns.clone(),
-            )
-        });
-        self.undo.push(st);
-        if self.undo.len() > 500 {
-            self.undo.remove(0);
+        if self.undo_hold == 0 {
+            let shared = self.shared.clone();
+            let s = audio::lock(&shared);
+            self.hist.boundary(&s.song, std::time::Instant::now());
         }
-        self.redo.clear();
         self.dirty = true;
     }
 
-    fn undo(&mut self, redo: bool) {
-        let (from, to) = if redo {
-            (&mut self.redo, &mut self.undo)
-        } else {
-            (&mut self.undo, &mut self.redo)
-        };
-        if let Some(p) = from.pop() {
-            let cur = {
-                let mut s = audio::lock(&self.shared);
-                (
-                    std::mem::replace(&mut s.song.patterns, p.0),
-                    std::mem::replace(&mut s.song.order, p.1),
-                    std::mem::replace(&mut s.song.automation, p.2),
-                    s.song
-                        .instruments
-                        .iter_mut()
-                        .zip(p.3.into_iter().chain(std::iter::repeat_with(Vec::new)))
-                        .map(|(i, f)| std::mem::replace(&mut i.fx, f))
-                        .collect(),
-                    std::mem::replace(&mut s.song.mixer.returns, p.4),
-                )
-            };
-
-            to.push(cur);
-            self.status = if redo { "Redo".into() } else { "Undo".into() };
+    /// Record changes made this frame (slider drags wait for the mouse release).
+    fn undo_commit(&mut self, ctx: &egui::Context) {
+        if self.undo_hold > 0 || ctx.input(|i| i.pointer.any_down()) {
+            return;
         }
-        let n = self.with(|s| s.song.patterns.len());
-        self.pattern = self.pattern.min(n - 1);
-        self.row = self.row.min(self.rows() - 1);
+        let shared = self.shared.clone();
+        let s = audio::lock(&shared);
+        if self.hist.commit(&s.song, std::time::Instant::now()) {
+            self.dirty = true;
+        }
+    }
+
+    /// start over (new or opened song)
+    fn undo_reset(&mut self) {
+        let shared = self.shared.clone();
+        let s = audio::lock(&shared);
+        self.hist.reset(&s.song);
+    }
+
+    fn undo(&mut self, redo: bool) {
+        let done = {
+            let shared = self.shared.clone();
+            let mut s = audio::lock(&shared);
+            self.hist.step(&mut s.song, redo, std::time::Instant::now())
+        };
+        if done {
+            self.dirty = true;
+            self.status = if redo { "Redo".into() } else { "Undo".into() };
+        } else {
+            self.status = if redo {
+                "Nothing to redo".into()
+            } else {
+                "Nothing to undo".into()
+            };
+        }
+        let (n, ch, ni) = self.with(|s| {
+            (
+                s.song.patterns.len(),
+                s.song.channels,
+                s.song.instruments.len(),
+            )
+        });
+        self.pattern = self.pattern.min(n.saturating_sub(1));
+        self.row = self.row.min(self.rows().saturating_sub(1));
+        self.ch = self.ch.min(ch.saturating_sub(1));
+        self.instr = self.instr.min(ni.min(255) as u8);
+        self.arr_sel = self.arr_sel.min(self.order_len().saturating_sub(1));
+        self.arr_multi.clear();
         self.sel = None;
     }
 
@@ -767,6 +775,8 @@ impl eframe::App for App {
                 self.allow_close = true;
             }
         }
+        // record this frame's edits as an undo step (drags: on release)
+        self.undo_commit(ui.ctx());
         if self.with(|s| s.engine.playing || s.engine.peak > 0.001) {
             ctx.request_repaint();
         }

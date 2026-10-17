@@ -1,4 +1,4 @@
-ChipWave Tracker 0.2.2.2 - Windows x64
+ChipWave Tracker 0.2.2.3 - Windows x64
 ==============================================================
 GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
@@ -24,7 +24,7 @@ Keys (press "? Keys" in the toolbar for the full list)
   Space / Shift+Space            play/stop current block (loop) / play/stop song
   Enter / Ctrl+Enter             restart block / play from cursor row
   Esc                            edit mode on/off
-  Ctrl+Z / Ctrl+Y                undo / redo (edits, paste, arranger changes)
+  Ctrl+Z / Ctrl+Y                undo / redo (notes, arranger, sounds, FX, mixer, tempo, channels; a slider drag = 1 step)
   Alt +/-  (Shift = octave)      transpose selection (or whole channel)
   Ctrl+= / Ctrl+- / Ctrl+0       UI scale up / down / 100 %
   F9 / F10                       mute / solo channel

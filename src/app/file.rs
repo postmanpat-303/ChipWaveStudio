@@ -243,8 +243,7 @@ impl App {
         self.ch = 0;
         self.col = 0;
         self.pattern = 0;
-        self.undo.clear();
-        self.redo.clear();
+        self.undo_reset();
         self.sel = None;
         self.arr_sel = 0;
         self.arr_multi.clear();

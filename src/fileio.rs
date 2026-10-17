@@ -311,7 +311,7 @@ pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
                 .and_then(|b| decode_wav(std::io::Cursor::new(b)))
             {
                 Ok((d, r)) => {
-                    *data = d;
+                    *data = d.into();
                     *rate = r;
                 }
                 Err(e) => warnings.push(format!(
@@ -435,7 +435,7 @@ pub fn import_wav(path: &Path) -> Result<Instrument, String> {
         kind: InstrumentKind::Sample {
             file: String::new(),
             rate,
-            data,
+            data: data.into(),
             base_note: parse_note("C-4").unwrap(),
             lp: Default::default(),
         },
@@ -730,7 +730,7 @@ mod tests {
             kind: InstrumentKind::Sample {
                 file: String::new(),
                 rate: 22050,
-                data,
+                data: data.into(),
                 base_note: parse_note("A-3").unwrap(),
                 lp: SampleLoop {
                     mode: LoopMode::PingPong,
@@ -814,7 +814,7 @@ mod tests {
             fx: vec![],
             kind: InstrumentKind::Sample {
                 file: String::new(),
-                data: vec![0.1; 100],
+                data: vec![0.1; 100].into(),
                 rate: 44100,
                 base_note: 48,
                 lp: Default::default(),

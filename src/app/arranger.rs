@@ -84,12 +84,10 @@ impl App {
                 .push(Pattern::new(&format!("Block {n:02}"), ROWS, ch));
             n
         });
-        // the snapshot above already covers this; don't push a second one
-        let undo = self.undo.pop();
+        // the snapshot above already covers this: one undo step for both parts
+        self.undo_hold += 1;
         self.arr_insert_blocks(&[n], false, ctx);
-        if let (Some(u), Some(last)) = (undo, self.undo.last_mut()) {
-            *last = u;
-        }
+        self.undo_hold -= 1;
         self.status = format!("Inserted new empty block {n:02} at #{}", self.arr_sel + 1);
     }
 

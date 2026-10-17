@@ -25,7 +25,7 @@ impl Cell {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Pattern {
     pub name: String,
     pub rows: usize,
@@ -55,7 +55,53 @@ impl Pattern {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Sample PCM, shared copy-on-write: cloning a song (undo history, save and
+/// export snapshots) shares the buffer; the first write makes a private copy.
+#[derive(Clone, Debug, Default)]
+pub struct SampleData(std::sync::Arc<Vec<f32>>);
+
+impl SampleData {
+    pub fn new(v: Vec<f32>) -> Self {
+        Self(std::sync::Arc::new(v))
+    }
+    /// same buffer (no copy happened since the clone)
+    pub fn same(&self, o: &SampleData) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &o.0)
+    }
+}
+
+impl From<Vec<f32>> for SampleData {
+    fn from(v: Vec<f32>) -> Self {
+        Self::new(v)
+    }
+}
+
+impl FromIterator<f32> for SampleData {
+    fn from_iter<I: IntoIterator<Item = f32>>(it: I) -> Self {
+        Self::new(it.into_iter().collect())
+    }
+}
+
+impl std::ops::Deref for SampleData {
+    type Target = Vec<f32>;
+    fn deref(&self) -> &Vec<f32> {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for SampleData {
+    fn deref_mut(&mut self) -> &mut Vec<f32> {
+        std::sync::Arc::make_mut(&mut self.0)
+    }
+}
+
+impl PartialEq for SampleData {
+    fn eq(&self, o: &Self) -> bool {
+        self.same(o) || *self.0 == *o.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum InstrumentKind {
     Synth(Patch),
     /// mono f32 sample data at `rate`
@@ -63,7 +109,7 @@ pub enum InstrumentKind {
         file: String,
         rate: u32,
         #[serde(skip)]
-        data: Vec<f32>,
+        data: SampleData,
         base_note: u8,
         /// loop mode / points / finetune
         #[serde(default)]
@@ -71,7 +117,7 @@ pub enum InstrumentKind {
     },
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Instrument {
     pub name: String,
     pub volume: f32,

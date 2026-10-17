@@ -1,8 +1,8 @@
 // ChipWave Tracker - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-/// Display version (Cargo: 0.2.2+fix.2; 0.2.3 is reserved for MIDI).
-pub const VERSION: &str = "0.2.2.2";
+/// Display version (Cargo: 0.2.2+fix.3; 0.2.3 is reserved for MIDI).
+pub const VERSION: &str = "0.2.2.3";
 
 mod app;
 mod arrange;

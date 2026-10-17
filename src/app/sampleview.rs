@@ -12,7 +12,7 @@ enum Drag {
 
 struct SmpUndo {
     inst: usize,
-    data: Vec<f32>,
+    data: SampleData,
     lp: SampleLoop,
     base: u8,
 }

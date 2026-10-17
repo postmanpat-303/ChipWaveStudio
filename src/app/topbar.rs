@@ -264,10 +264,30 @@ impl App {
                 }
             });
             ui.menu_button("Edit", |ui| {
-                if item(ui, "Undo", "Ctrl+Z") {
+                // the sample editor has its own history
+                let main = self.view != View::Sample;
+                let info = format!(
+                    "{} undo step(s) kept, {:.1} MB",
+                    self.hist.len(),
+                    self.hist.bytes() as f64 / 1e6
+                );
+                if ui
+                    .add_enabled(
+                        !main || self.hist.can_undo(),
+                        egui::Button::new("Undo").shortcut_text("Ctrl+Z"),
+                    )
+                    .on_hover_text(&info)
+                    .clicked()
+                {
                     self.do_undo(false);
                 }
-                if item(ui, "Redo", "Ctrl+Y") {
+                if ui
+                    .add_enabled(
+                        !main || self.hist.can_redo(),
+                        egui::Button::new("Redo").shortcut_text("Ctrl+Y"),
+                    )
+                    .clicked()
+                {
                     self.do_undo(true);
                 }
                 ui.separator();

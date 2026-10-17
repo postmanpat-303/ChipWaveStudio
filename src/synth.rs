@@ -18,7 +18,7 @@ pub enum FilterMode {
     Bp,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Adsr {
     pub a: f32,
     pub d: f32,
@@ -26,7 +26,7 @@ pub struct Adsr {
     pub r: f32,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Patch {
     pub name: String,
     pub osc1: Wave,

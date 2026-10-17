@@ -723,6 +723,66 @@ impl FxState {
         s
     }
 
+    /// Make this state sound like `FxState::new(d, sr)` again without
+    /// allocating: buffers are zeroed in place (kind must match).
+    pub fn reset(&mut self, d: &Device) {
+        debug_assert_eq!(self.kind, d.kind);
+        match &mut self.dsp {
+            Dsp::Delay {
+                l,
+                r,
+                w,
+                d: dl,
+                lp,
+                hp,
+            } => {
+                l.fill(0.0);
+                r.fill(0.0);
+                *w = 0;
+                *dl = -1.0;
+                *lp = Default::default();
+                *hp = Default::default();
+            }
+            Dsp::Reverb {
+                pre,
+                pw,
+                combs,
+                aps,
+            } => {
+                pre.fill(0.0);
+                *pw = 0;
+                for c in combs.iter_mut().flatten() {
+                    c.buf.fill(0.0);
+                    c.i = 0;
+                    c.filt = 0.0;
+                }
+                for a in aps.iter_mut().flatten() {
+                    a.buf.fill(0.0);
+                    a.i = 0;
+                }
+            }
+            Dsp::Drive { tone } => *tone = Default::default(),
+            Dsp::Chorus { l, r, w, ph } => {
+                l.fill(0.0);
+                r.fill(0.0);
+                *w = 0;
+                *ph = 0.0;
+            }
+            Dsp::Filter { s, ph } => {
+                *s = Default::default();
+                *ph = 0.0;
+            }
+            Dsp::Crush { ph, hold } => {
+                *ph = 1.0;
+                *hold = [0.0; 2];
+            }
+            Dsp::Comp { env } => *env = 0.0,
+        }
+        self.on_gain = if d.enabled { 1.0 } else { 0.0 };
+        self.set_targets(d, |_| None);
+        self.cur = self.tgt;
+    }
+
     /// update parameter targets (with optional normalised overrides from automation)
     pub fn set_targets(&mut self, d: &Device, over: impl Fn(usize) -> Option<f32>) {
         self.on = d.enabled;
@@ -931,19 +991,51 @@ pub struct ChainState {
     sig: Vec<FxKind>,
     pub states: Vec<FxState>,
     pub owner: usize,
+    /// chains of instruments that played on this channel before, kept so a
+    /// mid-song instrument switch reuses their buffers instead of allocating
+    spare: Vec<(usize, Vec<FxKind>, Vec<FxState>)>,
+}
+
+/// spare chains kept per channel
+const SPARE_CHAINS: usize = 6;
+
+fn same_sig(sig: &[FxKind], devs: &[Device]) -> bool {
+    sig.len() == devs.len() && sig.iter().zip(devs).all(|(k, d)| *k == d.kind)
 }
 
 impl ChainState {
-    /// Rebuild only when the chain's structure changed (engine thread).
+    /// Bring the states in line with `devs` (engine thread). On an instrument
+    /// switch the previous chain is parked and a parked chain for the new owner
+    /// is reset and reused, so steady playback doesn't allocate. Only a chain
+    /// structure change (or an instrument's first use on this channel) builds.
     pub fn sync(&mut self, devs: &[Device], owner: usize, sr: f32) {
-        let same = self.owner == owner
-            && self.sig.len() == devs.len()
-            && self.sig.iter().zip(devs).all(|(k, d)| *k == d.kind);
-        if !same {
+        if self.owner == owner && same_sig(&self.sig, devs) {
+            return;
+        }
+        if self.owner != owner && !self.states.is_empty() {
+            if self.spare.len() >= SPARE_CHAINS {
+                self.spare.remove(0);
+            }
+            let sig = std::mem::take(&mut self.sig);
+            let states = std::mem::take(&mut self.states);
+            self.spare.push((self.owner, sig, states));
+        }
+        let hit = self
+            .spare
+            .iter()
+            .position(|(o, sig, _)| *o == owner && same_sig(sig, devs));
+        if let Some(i) = hit {
+            let (_, sig, mut states) = self.spare.swap_remove(i);
+            for (s, d) in states.iter_mut().zip(devs) {
+                s.reset(d);
+            }
+            self.sig = sig;
+            self.states = states;
+        } else {
             self.sig = devs.iter().map(|d| d.kind).collect();
             self.states = devs.iter().map(|d| FxState::new(d, sr)).collect();
-            self.owner = owner;
         }
+        self.owner = owner;
     }
     pub fn process(&mut self, mut l: f32, mut r: f32, ctx: &Ctx) -> (f32, f32) {
         for s in &mut self.states {
@@ -956,6 +1048,29 @@ impl ChainState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reset_sounds_like_new() {
+        for kind in FxKind::ALL {
+            let d = Device::new(kind);
+            let mut a = FxState::new(&d, 48000.0);
+            let ctx = Ctx { bpm: 140.0 };
+            for i in 0..20000 {
+                a.process((i as f32 * 0.37).sin(), (i as f32 * 0.21).cos(), &ctx);
+            }
+            a.reset(&d);
+            let mut b = FxState::new(&d, 48000.0);
+            for i in 0..5000 {
+                let x = ((i * 7919) % 101) as f32 / 50.0 - 1.0;
+                let (al, ar) = a.process(x, -x, &ctx);
+                let (bl, br) = b.process(x, -x, &ctx);
+                assert!(
+                    (al - bl).abs() < 1e-6 && (ar - br).abs() < 1e-6,
+                    "{kind:?} at {i}"
+                );
+            }
+        }
+    }
 
     fn noise(n: usize) -> Vec<f32> {
         let mut x = 12345u32;

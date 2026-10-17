@@ -843,6 +843,39 @@ pub(crate) mod alloc_count {
 mod tests {
     use super::*;
 
+    /// a channel that switches between instruments with different FX chains
+    /// mid-song reuses parked chains instead of allocating
+    #[test]
+    fn instrument_switch_does_not_allocate() {
+        use crate::fx::{Device, FxKind};
+        let mut song = crate::fileio::demo_song();
+        song.automation.clear();
+        song.instruments[0].fx = vec![Device::new(FxKind::Delay), Device::new(FxKind::Reverb)];
+        song.instruments[1].fx = vec![Device::new(FxKind::Chorus)];
+        let rows = song.patterns[0].rows;
+        for r in 0..rows {
+            let c = &mut song.patterns[0].cells[r][0];
+            *c = Cell {
+                note: 37 + (r % 12) as u8,
+                instr: 1 + (r % 2) as u8,
+                ..Default::default()
+            };
+        }
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, true, 0);
+        let mut buf = vec![0.0f32; 512];
+        for _ in 0..600 {
+            e.render(&song, &mut buf);
+        }
+        let n = alloc_count::count(|| {
+            for _ in 0..3000 {
+                e.render(&song, &mut buf);
+            }
+        });
+        assert_eq!(n, 0, "instrument switches allocated {n} times");
+        assert!(buf.iter().all(|x| x.is_finite()));
+    }
+
     #[test]
     fn render_is_allocation_free_after_warmup() {
         let song = crate::fileio::demo_song();
