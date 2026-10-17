@@ -466,6 +466,14 @@ impl App {
                 if ui.button("Load demo song").clicked() {
                     self.request(crate::prompt::Pending::Demo, &ctx);
                 }
+                if ui
+                    .button("Check for updates…")
+                    .on_hover_text("ask GitHub whether a newer ChipWave is out")
+                    .clicked()
+                {
+                    self.check_updates(true);
+                    ui.close();
+                }
                 if ui.button("About ChipWave").clicked() {
                     self.show_about = true;
                 }
@@ -473,6 +481,7 @@ impl App {
             // song title + unsaved marker on the right
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(10.0);
+                self.update_badge(ui);
                 let title = self.with(|s| s.song.title.clone());
                 let file = self
                     .path

@@ -1,4 +1,4 @@
-ChipWave Tracker 0.2.3.4 - Windows x64
+ChipWave Tracker 0.2.3.5 - Windows x64
 ==============================================================
 GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
@@ -102,11 +102,18 @@ Automation: lanes under the arranger (toggle "Automation", "+ Lane"): click = ad
 Mixer: per-channel fader, pan, mute/solo, meters; master fader. Saved in .cwt.
 Instrument panel: Transpose -12 / - / + / +12 per instrument.
 Theme: "Dark Circuit (default)" or "Amiga (Workbench Gradient)" in the toolbar.
+Updates (0.2.3.5): Help > Check for updates... asks GitHub for a newer version and
+  shows the release notes; "Download installer" opens the setup .exe in your browser
+  (nothing is downloaded or opened unless you click). Settings > Files & Safety >
+  "Check for updates at startup" (on by default, at most once a day): a small
+  "Update X available" badge appears in the menu bar. "Skip this version" stops
+  reminders for that version.
 
 Command line:
   ChipWave.exe --self-test [out.wav]   render the demo, check it is not silent
   ChipWave.exe --render demo out.wav   render the demo (or a .cwt) to WAV (or .mp3)
   ChipWave.exe --version
+  ChipWave.exe --check-updates        ask GitHub whether a newer version is out
 
 Created by Derek Heasley.
 To keep the software going I need Coffee :)

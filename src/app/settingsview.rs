@@ -502,6 +502,28 @@ impl App {
                     );
                 });
                 ui.end_row();
+                ui.label("Updates");
+                ui.horizontal(|ui| {
+                    changed |= ui
+                        .checkbox(&mut self.extra.update_check, "Check for updates at startup")
+                        .on_hover_text(
+                            "quietly asks GitHub at most once a day; a newer version shows as a small badge in the menu bar",
+                        )
+                        .changed();
+                    if ui.button("Check now").clicked() {
+                        self.check_updates(true);
+                    }
+                    if !self.extra.update_skip.is_empty()
+                        && ui
+                            .small_button(format!("Un-skip {}", self.extra.update_skip))
+                            .on_hover_text("remind me about the skipped version again")
+                            .clicked()
+                    {
+                        self.extra.update_skip.clear();
+                        changed = true;
+                    }
+                });
+                ui.end_row();
                 ui.label("Recovery folder");
                 ui.horizontal(|ui| {
                     let p = crate::recovery::root();

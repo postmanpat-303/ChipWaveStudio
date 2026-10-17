@@ -28,6 +28,7 @@ mod topbar;
 #[cfg(test)]
 mod ui_tests;
 mod undo;
+mod updates;
 
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect
 const SUBCOLS: usize = 9;
@@ -104,6 +105,8 @@ pub struct App {
     orphans: Vec<crate::recovery::Orphan>,
     smp: sampleview::SampleEd,
     extra: crate::settings::Extra,
+    /// update check state (Help > Check for updates…, startup check)
+    upd: updates::UpdateUi,
     keymap: crate::keymap::Keymap,
     /// settings screen: focused card, expanded card, key being rebound
     set_card: usize,
@@ -343,6 +346,7 @@ impl App {
             orphans,
             smp: Default::default(),
             extra: crate::settings::load().extra,
+            upd: Default::default(),
             keymap: crate::keymap::Keymap::load(),
             set_card: 0,
             set_open: Some(0),
@@ -560,6 +564,7 @@ impl App {
                     ("MIDI keyboard", "plays the current instrument (velocity, sustain pedal, pitch bend); Settings > MIDI picks the device"),
                     ("MIDI + edit mode", "records the note at the cursor (instrument + velocity), moves by Step; while playing: at the playing row"),
                     ("Right-click a fader / knob", "MIDI learn: then move a knob or the mod wheel"),
+                    ("Help > Check for updates…", "ask GitHub for a newer version (Settings > Files & Safety: check at startup)"),
                 ] { ui.label(egui::RichText::new(k).monospace().color(th().value)); ui.label(v); ui.end_row(); }
             });
             ui.label(
@@ -862,7 +867,9 @@ impl eframe::App for App {
         if self.show_help {
             self.help(&ctx);
         }
+        self.poll_updates(&ctx);
         self.dialogs(&ctx);
+        self.update_window(&ctx);
         self.modal_dialogs(&ctx);
         self.fill_dialog(&ctx);
         // window close button: ask first when there are unsaved changes

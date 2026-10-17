@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0a84ff" alt="Windows | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.3.4-00d0ff" alt="Version 0.2.3.4">
+  <img src="https://img.shields.io/badge/version-0.2.3.5-00d0ff" alt="Version 0.2.3.5">
   <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases"><img src="https://img.shields.io/badge/release-v0.2.2.4-7c4dff" alt="Latest tagged release v0.2.2.4"></a>
 </p>
 
@@ -18,7 +18,7 @@
 
 **ChipWave Tracker** is a modern music tracker inspired by **OctaMED** and the Commodore **Amiga**. It keeps the fast, keyboard-driven workflow of the classic tracker (blocks, sections and sequences) and adds the things a modern studio expects: built-in sound design, a visual arranger, a mixer with automation, WAV/MP3 export and clean scaling on any screen. It's written in Rust with egui and cpal for Windows 11 and Linux.
 
-**Status:** in active development, currently **v0.2.3.4** (`Cargo.toml` 0.2.3+fix.4). It's playable today with the pattern editor, playback, synth presets, sample import, arranger, mixer, automation, `.cwt` save/load, WAV/MP3 export, settings, Fill to length auto arrange and MIDI keyboard input (play, record, MIDI learn: [docs/MIDI.md](docs/MIDI.md)). The latest tagged release is v0.2.3.
+**Status:** in active development, currently **v0.2.3.5** (`Cargo.toml` 0.2.3+fix.5). It's playable today with the pattern editor, playback, synth presets, sample import, arranger, mixer, automation, `.cwt` save/load, WAV/MP3 export, settings, Fill to length auto arrange and MIDI keyboard input (play, record, MIDI learn: [docs/MIDI.md](docs/MIDI.md)). The latest tagged release is v0.2.3.
 
 ## Feature highlights
 
@@ -142,6 +142,8 @@ chipwave --render demo out.wav
 Effects: 01/02 slide, 08 note decay (xx × 10 ms, e.g. short/long hats), 09 speed, 0C volume, 0D volume slide, 0F tempo (0F00 = break). BPM/speed changes (toolbar or 09/0F) apply instantly while playing.
 
 ## Changelog highlights
+
+v0.2.3.5 adds an **update check**: Help > **Check for updates…** asks GitHub for the latest release (background thread, 5 s timeout) and shows "You have X, latest is Y" with the release notes and **Download installer** / **Open release page** / **Not now** / **Skip this version**; Settings > Files & Safety > "Check for updates at startup" (on by default, at most once a day, only a small menu-bar badge when a newer non-skipped version exists). `ChipWave.exe --check-updates` from the command line. See [docs/UPDATES.md](docs/UPDATES.md).
 
 v0.2.3.4 changes the demo hi-hat to a classic trance **offbeat hat**: one crisp, slightly open hit (about 80 ms) exactly on the "and" between kicks, four per bar, on the grid; no other hat-channel hits (preview: `dist/demo-0.2.3.4.mp3`).
 

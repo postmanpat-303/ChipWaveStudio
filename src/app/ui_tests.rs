@@ -1003,3 +1003,157 @@ fn instrument_lfo_sync_and_shape_are_editable_and_undoable() {
     ctrl_z(&mut h);
     assert_eq!(lfo(&mut h).shape, crate::synth::Wave::Sine);
 }
+
+// ---- 0.2.3.5: update check ----
+
+/// click the widget labelled `label`; the URLs the app asked the platform to open
+fn click_urls(h: &mut Harness<'static, App>, label: &str) -> Vec<String> {
+    let r = exact(h, label);
+    h.input_mut()
+        .events
+        .push(egui::Event::PointerMoved(r.center()));
+    frame(h);
+    let mut opened = vec![];
+    for pressed in [true, false] {
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos: r.center(),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        });
+        frame(h);
+        for c in &h.output().platform_output.commands {
+            if let egui::OutputCommand::OpenUrl(u) = c {
+                opened.push(u.url.clone());
+            }
+        }
+    }
+    frames(h, 2);
+    opened
+}
+
+fn sample_release() -> crate::update::Release {
+    crate::update::parse_release(crate::update::SAMPLE_JSON).unwrap()
+}
+
+/// Help > Check for updates…, then the mocked network answers `o`
+fn manual_check(h: &mut Harness<'static, App>, o: crate::update::Outcome) {
+    click_exact(h, "Help");
+    click_exact(h, "Check for updates…");
+    assert_eq!(h.state().upd.win, Some(updates::UpdWin::Checking));
+    exact(h, "Checking for updates…");
+    let tx = h.state().upd.test_tx.clone().expect("check started");
+    tx.send(o).unwrap();
+    frames(h, 3);
+}
+
+#[test]
+fn update_check_newer_version_dialog_opens_links_only_on_click() {
+    use crate::update::Outcome;
+    let mut h = harness();
+    manual_check(&mut h, Outcome::Newer(sample_release()));
+    exact(
+        &h,
+        &format!("You have {}, latest is 0.2.3.9", crate::VERSION),
+    );
+    exact(&h, "Update check in Help"); // release notes, markdown stripped
+    exact(&h, "What's new");
+    // nothing was opened just by showing the dialog; the installer opens on click
+    assert_eq!(
+        click_urls(&mut h, "Download installer"),
+        ["https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9/ChipWave-0.2.3.9-setup-x64.exe"]
+    );
+    assert_eq!(h.state().upd.win, None, "dialog closed");
+    manual_check(&mut h, Outcome::Newer(sample_release()));
+    assert_eq!(
+        click_urls(&mut h, "Open release page"),
+        ["https://github.com/postmanpat-303/ChipWaveTracker/releases/tag/v0.2.3.9"]
+    );
+    manual_check(&mut h, Outcome::Newer(sample_release()));
+    assert!(click_urls(&mut h, "Not now").is_empty());
+    assert_eq!(h.state().upd.win, None);
+    assert_eq!(h.state().extra.update_skip, "");
+    manual_check(&mut h, Outcome::Newer(sample_release()));
+    assert!(click_urls(&mut h, "Skip this version").is_empty());
+    assert_eq!(h.state().extra.update_skip, "0.2.3.9");
+    assert_eq!(h.state().upd.win, None);
+}
+
+#[test]
+fn update_check_up_to_date_and_failure_messages() {
+    use crate::update::Outcome;
+    let mut h = harness();
+    manual_check(&mut h, Outcome::Latest(crate::VERSION.into()));
+    exact(
+        &h,
+        &format!("You're on the latest version ({})", crate::VERSION),
+    );
+    click_exact(&mut h, "OK");
+    frames(&mut h, 2);
+    assert_eq!(h.state().upd.win, None);
+    manual_check(&mut h, Outcome::Failed("no connection (dns failed)".into()));
+    exact(&h, "Couldn't check for updates right now.");
+    // Try again starts a new check; Close dismisses without opening anything
+    click_exact(&mut h, "Try again");
+    frames(&mut h, 2);
+    assert_eq!(h.state().upd.win, Some(updates::UpdWin::Checking));
+    let tx = h.state().upd.test_tx.clone().unwrap();
+    tx.send(Outcome::Failed("timeout".into())).unwrap();
+    frames(&mut h, 3);
+    assert!(click_urls(&mut h, "Close").is_empty());
+    assert_eq!(h.state().upd.win, None);
+    // a vanished checker thread is a friendly failure, not a hang
+    click_exact(&mut h, "Help");
+    click_exact(&mut h, "Check for updates…");
+    h.state_mut().upd.test_tx = None; // drop the sender
+    frames(&mut h, 3);
+    assert!(matches!(
+        h.state().upd.win,
+        Some(updates::UpdWin::Failed(_))
+    ));
+}
+
+#[test]
+fn quiet_startup_check_shows_a_badge_and_respects_skip() {
+    use crate::update::Outcome;
+    assert!(
+        crate::settings::Extra::default().update_check,
+        "on by default"
+    );
+    let mut h = harness();
+    h.state_mut().check_updates(false);
+    let tx = h.state().upd.test_tx.clone().unwrap();
+    tx.send(Outcome::Newer(sample_release())).unwrap();
+    frames(&mut h, 3);
+    assert_eq!(h.state().upd.win, None, "quiet: no dialog");
+    assert!(h.state().upd.badge.is_some());
+    // clicking the menu-bar badge shows the details (still opens nothing)
+    assert!(click_urls(&mut h, "Update 0.2.3.9 available").is_empty());
+    assert!(matches!(h.state().upd.win, Some(updates::UpdWin::Newer(_))));
+    // up to date or failures stay silent
+    let mut h = harness();
+    for o in [
+        Outcome::Latest("0.2.3.4".into()),
+        Outcome::Failed("offline".into()),
+    ] {
+        h.state_mut().check_updates(false);
+        h.state().upd.test_tx.clone().unwrap().send(o).unwrap();
+        frames(&mut h, 3);
+        assert_eq!(
+            (h.state().upd.win.clone(), h.state().upd.badge.clone()),
+            (None, None)
+        );
+    }
+    // a skipped version gives no badge
+    h.state_mut().extra.update_skip = "0.2.3.9".into();
+    h.state_mut().check_updates(false);
+    h.state()
+        .upd
+        .test_tx
+        .clone()
+        .unwrap()
+        .send(Outcome::Newer(sample_release()))
+        .unwrap();
+    frames(&mut h, 3);
+    assert!(h.state().upd.badge.is_none());
+}

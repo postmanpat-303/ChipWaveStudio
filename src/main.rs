@@ -2,7 +2,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 /// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.4";
+pub const VERSION: &str = "0.2.3.5";
 
 mod app;
 mod arrange;
@@ -23,6 +23,7 @@ mod sample;
 mod settings;
 mod synth;
 mod theme;
+mod update;
 
 use std::path::PathBuf;
 
@@ -327,6 +328,28 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version") {
         println!("ChipWave Tracker {}", crate::VERSION);
+        return;
+    }
+    if args.iter().any(|a| a == "--check-updates") {
+        // same check as Help > Check for updates (5 s timeout); exit 0 = ran
+        println!("ChipWave Tracker {}: checking for updates…", crate::VERSION);
+        match update::evaluate(update::fetch_latest(), crate::VERSION) {
+            update::Outcome::Newer(r) => println!(
+                "  newer version {} available
+  release page: {}
+  installer:    {}",
+                r.version,
+                r.page,
+                r.download_url()
+            ),
+            update::Outcome::Latest(v) => {
+                println!("  you're on the latest version (latest published: {v})")
+            }
+            update::Outcome::Failed(e) => {
+                println!("  couldn't check for updates: {e}");
+                std::process::exit(2);
+            }
+        }
         return;
     }
     if let Some(i) = args.iter().position(|a| a == "--self-test") {

@@ -43,5 +43,7 @@ Scan folders, scan timeout, parallel scanners, rescan / retry failed, and a link
 ### 2.6 Files and Safety
 Default song folder, autosave interval, number of backups and backup location, journal, persistent undo, recovery folder and cleanup age, and the recent files list (clear, pin). All of these are explained in [SAFETY.md](SAFETY.md).
 
+**Updates (0.2.3.5):** "Check for updates at startup" (default on; quiet, at most once per 24 h, a menu-bar badge only when a newer non-skipped version exists), **Check now**, **Un-skip X**. See [UPDATES.md](UPDATES.md).
+
 ## 3. Storage
 `settings.toml` in the per-OS config folder ([SAFETY.md](SAFETY.md) lists the paths), saved atomically. Only non-default values are written, unknown keys are preserved, and a `settings_version` allows migrations. The portable Windows build stores it next to the exe.

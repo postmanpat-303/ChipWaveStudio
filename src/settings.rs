@@ -49,6 +49,15 @@ pub struct Extra {
     /// MIDI keyboard input (0.2.3)
     #[serde(default)]
     pub midi: crate::midi::MidiSettings,
+    /// quiet update check at startup, at most once per 24 h (0.2.3.5)
+    #[serde(default = "yes")]
+    pub update_check: bool,
+    /// Unix time of the last startup update check
+    #[serde(default)]
+    pub update_last: u64,
+    /// version the user chose to skip ("Skip this version"), "" = none
+    #[serde(default)]
+    pub update_skip: String,
 }
 
 fn two() -> u32 {
@@ -69,6 +78,9 @@ impl Default for Extra {
             song_dir: String::new(),
             export_dir: String::new(),
             midi: Default::default(),
+            update_check: true,
+            update_last: 0,
+            update_skip: String::new(),
         }
     }
 }
