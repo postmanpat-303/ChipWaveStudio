@@ -199,7 +199,8 @@ pub(super) const VIEWS: [(View, &str, &str); 5] = [
 ];
 
 /// donation link on Help > About (opens in the system browser)
-pub(super) const DONATE_URL: &str = "https://paypal.me/derekh100";
+pub(super) const DONATE_URL: &str = "https://buymeacoffee.com/postmanpat";
+pub(super) const PAYPAL_URL: &str = "https://paypal.me/derekh100";
 
 impl App {
     pub(super) fn synth_key(&mut self, ctx: &egui::Context, key: Key, modifiers: egui::Modifiers) {
@@ -774,8 +775,13 @@ impl App {
                     ui.label("GPL-3.0-or-later");
                     ui.add_space(8.0);
                     ui.label("To keep the software going I need Coffee :)");
-                    ui.hyperlink_to("Buy me a coffee", DONATE_URL)
-                        .on_hover_text(DONATE_URL);
+                    ui.horizontal(|ui| {
+                        ui.hyperlink_to("Buy me a coffee", DONATE_URL)
+                            .on_hover_text(DONATE_URL);
+                        ui.label("·");
+                        ui.hyperlink_to("PayPal", PAYPAL_URL)
+                            .on_hover_text(PAYPAL_URL);
+                    });
                 });
             self.show_about = open;
         }

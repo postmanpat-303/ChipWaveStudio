@@ -247,6 +247,8 @@ pub struct Engine {
     pub pattern: usize,
     tick: u32,
     samples_to_tick: f64,
+    /// per-trigger noise seed (LCG)
+    seed: u32,
     speed: u32,
     bpm: f32,
     /// seconds since the last note on the sidechain key channel
@@ -286,6 +288,7 @@ impl Engine {
             pattern: 0,
             tick: 0,
             samples_to_tick: 0.0,
+            seed: 0x2545_F491,
             speed: 6,
             bpm: 125.0,
             duck_t: 1e9,
@@ -509,9 +512,11 @@ impl Engine {
         self.row = row;
         self.rows_played = 0;
         self.tick = 0;
-        self.samples_to_tick = 0.0;
         self.speed = song.speed.max(1);
         self.bpm = song.bpm;
+        // the start row is processed now; the next tick is one full tick away
+        // (was 0: the first tick fired on sample 0, so row 1 came a tick early)
+        self.samples_to_tick = self.tick_len();
         self.song_ended = false;
         for c in &mut self.chans {
             if c.active {
@@ -592,13 +597,18 @@ impl Engine {
                 .map(|i| i.transpose)
                 .unwrap_or(0);
             c.freq = note_freq((cell.note as i32 + t as i32).clamp(1, 127) as u8);
-            c.synth = SynthVoice::new();
+            self.seed = self
+                .seed
+                .wrapping_mul(1_664_525)
+                .wrapping_add(1_013_904_223);
+            c.synth = SynthVoice::seeded(self.seed);
             c.pos = 0.0;
             c.active = true;
         }
         if cell.vol > 0 {
             c.vol = (cell.vol - 1) as f32 / 64.0;
         }
+        c.synth.vel = c.vol;
     }
 
     fn process_row(&mut self, song: &Song) {
@@ -620,7 +630,12 @@ impl Engine {
                 0x01 => c.slide = cell.fxp as f32,
                 0x02 => c.slide = -(cell.fxp as f32),
                 0x09 if cell.fxp > 0 => self.speed = cell.fxp as u32,
-                0x0C => c.vol = (cell.fxp.min(0x40)) as f32 / 64.0,
+                0x0C => {
+                    c.vol = (cell.fxp.min(0x40)) as f32 / 64.0;
+                    c.synth.vel = c.vol;
+                }
+                // 08xx: this note's amp decay = xx * 10 ms (hats: short / long)
+                0x08 if cell.fxp > 0 => c.synth.decay = cell.fxp as f32 * 0.01,
                 0x0D => c.vol_slide = (cell.fxp >> 4) as f32 - (cell.fxp & 15) as f32,
                 0x0F if cell.fxp == 0 => brk = true,
                 0x0F if cell.fxp <= 0xF0 => self.bpm = cell.fxp as f32,
@@ -940,11 +955,13 @@ impl Engine {
             }
             self.auto.countdown -= 1;
             if self.playing {
-                self.samples_to_tick -= 1.0;
+                // a tick lands on the first sample at or after its exact time
+                // (f64 accumulator: no drift, at most 1 sample of rounding)
                 if self.samples_to_tick <= 0.0 {
                     self.samples_to_tick += self.tick_len();
                     self.do_tick(song);
                 }
+                self.samples_to_tick -= 1.0;
             }
             let mut l = 0.0;
             let mut r = 0.0;
@@ -1395,6 +1412,115 @@ mod tests {
 
     /// sidechain: a channel with `duck` dips right after each note on the key
     /// channel and recovers within the release time; duck 0 = untouched
+    #[test]
+    fn effect_08_sets_note_decay_and_a_new_hat_chokes_the_open_one() {
+        // an open hat (long decay) on row 0, then a closed hit with 08 03 on row 4:
+        // the open hat's ring stops at row 4 (same channel = choke group) and the
+        // 08 note is gone within ~40 ms, while a plain note still rings
+        let render = |fx: u8| {
+            let mut song = live_song();
+            song.bpm = 120.0;
+            song.speed = 6;
+            song.instruments[1].kind = InstrumentKind::Synth(crate::presets::hat(true));
+            song.instruments[1].fx.clear();
+            let pat = &mut song.patterns[0];
+            for row in pat.cells.iter_mut() {
+                row.iter_mut().for_each(|c| *c = Cell::default());
+            }
+            for (r, f) in [(0usize, 0u8), (4, fx)] {
+                pat.cells[r][0] = Cell {
+                    note: 61,
+                    instr: 2,
+                    fx: if f > 0 { 0x08 } else { 0 },
+                    fxp: f,
+                    ..Default::default()
+                };
+            }
+            song.order = vec![0];
+            song.mixer.channels[0].send = [0.0; 2];
+            let mut e = Engine::new(48000.0);
+            e.start(&song, 0, 0, false, 0);
+            let mut out = vec![0.0f32; 48000 * 2];
+            for c in out.chunks_mut(512) {
+                e.render(&song, c);
+            }
+            out
+        };
+        // row 4 at 120 BPM = 0.5 s; window 60..110 ms after it
+        let w = |o: &[f32]| rms(&o[(0.56 * 96000.0) as usize..(0.61 * 96000.0) as usize]);
+        let plain = render(0);
+        let short = render(3);
+        assert!(
+            w(&short) < 0.1 * w(&plain),
+            "{} vs {}",
+            w(&short),
+            w(&plain)
+        );
+        // before row 4 both are the same open hat
+        let pre = |o: &[f32]| rms(&o[(0.3 * 96000.0) as usize..(0.45 * 96000.0) as usize]);
+        assert!((pre(&short) - pre(&plain)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn rows_trigger_sample_accurately_on_the_grid() {
+        // 140 BPM, speed 6 at 44.1 kHz: a row is exactly 4725 samples and a
+        // tick 787.5, so tick rounding must not drift or jitter the rows
+        let mut song = live_song();
+        song.bpm = 140.0;
+        song.speed = 6;
+        let p = crate::synth::Patch {
+            amp: crate::synth::Adsr {
+                a: 0.0,
+                d: 0.01,
+                s: 0.0,
+                r: 0.001,
+            },
+            ..Default::default()
+        };
+        song.instruments[1].kind = InstrumentKind::Synth(p);
+        song.instruments[1].fx.clear();
+        let pat = &mut song.patterns[0];
+        for row in pat.cells.iter_mut() {
+            row.iter_mut().for_each(|c| *c = Cell::default());
+        }
+        let rows = [0usize, 1, 3, 5, 6, 13, 30, 63];
+        for &r in &rows {
+            pat.cells[r][0] = Cell {
+                note: 49,
+                instr: 2,
+                ..Default::default()
+            };
+        }
+        song.order = vec![0];
+        song.mixer.channels[0].send = [0.0; 2];
+        let sr = 44100.0;
+        let mut e = Engine::new(sr);
+        e.start(&song, 0, 0, false, 0);
+        let n = 4725 * 64 + 2000;
+        let mut out = vec![0.0f32; n * 2];
+        for c in out.chunks_mut(512) {
+            e.render(&song, c);
+        }
+        let mono: Vec<f32> = out.chunks(2).map(|f| f[0].abs().max(f[1].abs())).collect();
+        let mut late = vec![];
+        for &r in &rows {
+            let at = r * 4725;
+            // silent just before the row, sounding a few samples after it
+            let before = mono[at.saturating_sub(300)..at]
+                .iter()
+                .fold(0.0f32, |m, x| m.max(*x));
+            let first = (at..at + 400).find(|&i| mono[i] > 1e-3).unwrap();
+            assert!(before < 1e-3, "row {r}: sound {before} before the row");
+            late.push(first - at);
+        }
+        // the same tiny offset (oscillator phase / gain ramp) on every row after
+        // the first: no drift, no tick jitter
+        assert!(late.iter().all(|&d| d <= 8), "{late:?}");
+        let rest = &late[1..];
+        let (lo, hi) = (rest.iter().min().unwrap(), rest.iter().max().unwrap());
+        assert!(hi - lo <= 1, "row onsets jitter: {late:?}");
+    }
+
     #[test]
     fn sidechain_ducking_pumps_after_key_notes() {
         let render = |duck: f32| {

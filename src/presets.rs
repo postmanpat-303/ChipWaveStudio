@@ -154,32 +154,56 @@ pub fn factory_fx(name: &str) -> Vec<crate::fx::Device> {
         .unwrap_or_default()
 }
 
-/// Synthetic hi-hat (factory drum samples are still to be made).
+/// Synthetic hi-hat (factory drum samples are still to be made): 808-style
+/// metallic squares + stereo noise through a high-pass, darker when soft.
+/// Closed and open differ only in decay; put both on one channel so a closed
+/// hit chokes the open one, and use effect 08 for per-note decay.
 pub fn hat(open: bool) -> Patch {
     Patch {
         name: if open { "Open Hat" } else { "Closed Hat" }.into(),
         osc1_level: 0.0,
-        noise_level: 0.9,
+        noise_level: 0.85,
+        metal: 0.35,
         filter: FilterMode::Hp,
-        cutoff: 7000.0,
-        resonance: 0.3,
+        cutoff: 5000.0,
+        resonance: 0.25,
         amp: Adsr {
             a: 0.0,
-            d: if open { 0.25 } else { 0.05 },
+            d: if open { 0.4 } else { 0.12 },
             s: 0.0,
             r: 0.03,
         },
-        gain: 0.5,
+        width: 0.6,
+        vel_cutoff: 1.0,
+        gain: 0.8,
         ..Default::default()
     }
 }
 
 /// Built-in synthetic percussion / FX (no sample files needed):
-/// "hat-closed", "hat-open", "clap", "riser", "trance-kick", "init".
+/// "hat-closed", "hat-open", "shaker", "clap", "riser", "trance-kick", "init".
 pub fn builtin(name: &str) -> Option<Patch> {
     Some(match name {
         "hat-closed" => hat(false),
         "hat-open" => hat(true),
+        "shaker" => Patch {
+            name: "Shaker".into(),
+            osc1_level: 0.0,
+            noise_level: 1.0,
+            filter: FilterMode::Bp,
+            cutoff: 8000.0,
+            resonance: 0.2,
+            amp: Adsr {
+                a: 0.008,
+                d: 0.07,
+                s: 0.0,
+                r: 0.03,
+            },
+            width: 1.0,
+            vel_cutoff: 0.5,
+            gain: 0.7,
+            ..Default::default()
+        },
         "clap" => Patch {
             name: "Clap".into(),
             osc1_level: 0.0,

@@ -889,28 +889,35 @@ fn help_about_shows_credit_and_coffee_link() {
     assert!(h.state().show_about);
     exact(&h, "Created by Derek Heasley");
     exact(&h, "To keep the software going I need Coffee :)");
-    // clicking the link asks the platform to open the PayPal page
-    let r = exact(&h, "Buy me a coffee");
-    h.input_mut()
-        .events
-        .push(egui::Event::PointerMoved(r.center()));
-    frame(&mut h);
-    let mut opened = vec![];
-    for pressed in [true, false] {
-        h.input_mut().events.push(egui::Event::PointerButton {
-            pos: r.center(),
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: Default::default(),
-        });
+    // each link asks the platform to open its page
+    let mut click_link = |label: &str| {
+        let r = exact(&h, label);
+        h.input_mut()
+            .events
+            .push(egui::Event::PointerMoved(r.center()));
         frame(&mut h);
-        for c in &h.output().platform_output.commands {
-            if let egui::OutputCommand::OpenUrl(u) = c {
-                opened.push(u.url.clone());
+        let mut opened = vec![];
+        for pressed in [true, false] {
+            h.input_mut().events.push(egui::Event::PointerButton {
+                pos: r.center(),
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Default::default(),
+            });
+            frame(&mut h);
+            for c in &h.output().platform_output.commands {
+                if let egui::OutputCommand::OpenUrl(u) = c {
+                    opened.push(u.url.clone());
+                }
             }
         }
-    }
-    assert_eq!(opened, ["https://paypal.me/derekh100"]);
+        opened
+    };
+    assert_eq!(
+        click_link("Buy me a coffee"),
+        ["https://buymeacoffee.com/postmanpat"]
+    );
+    assert_eq!(click_link("PayPal"), ["https://paypal.me/derekh100"]);
 }
 
 #[test]
@@ -972,6 +979,21 @@ fn instrument_lfo_sync_and_shape_are_editable_and_undoable() {
         })
     };
     assert_eq!(lfo(&mut h).sync, 0.0);
+    // the patch editor is taller than the test window: scroll it to the LFO row
+    let at = exact(&h, "free Hz").center() - egui::vec2(0.0, 300.0);
+    h.input_mut().events.push(egui::Event::PointerMoved(at));
+    frame(&mut h);
+    for _ in 0..4 {
+        h.input_mut().events.push(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -200.0),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+            modifiers: Default::default(),
+        });
+        frame(&mut h);
+    }
+    frames(&mut h, 10);
     click_exact(&mut h, "free Hz");
     click_exact(&mut h, "1/16");
     assert_eq!(lfo(&mut h).sync, 0.25, "tempo-synced to 1/16");

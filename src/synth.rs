@@ -88,6 +88,18 @@ pub struct Patch {
     pub width: f32,
     #[serde(default)]
     pub lfo: Lfo,
+    /// metallic source level: six detuned squares at 808 hi-hat ratios
+    /// (tuned so C-5 gives the classic 205/304/370/523/540/800 Hz set)
+    #[serde(default)]
+    pub metal: f32,
+    /// velocity -> brightness: cutoff octaves added at full velocity vs silence
+    /// (soft notes are darker), 0 = off
+    #[serde(default)]
+    pub vel_cutoff: f32,
+    /// start delay in seconds (0..0.05): plays the patch slightly behind the
+    /// grid, e.g. laid-back hats; sample-accurate
+    #[serde(default)]
+    pub start_delay: f32,
 }
 
 impl Patch {
@@ -117,6 +129,9 @@ impl Patch {
             gain,
             width,
             lfo,
+            metal,
+            vel_cutoff,
+            start_delay,
         } = o;
         *self = Patch {
             name: std::mem::take(&mut self.name),
@@ -141,6 +156,9 @@ impl Patch {
             gain: *gain,
             width: *width,
             lfo: *lfo,
+            metal: *metal,
+            vel_cutoff: *vel_cutoff,
+            start_delay: *start_delay,
         };
     }
 }
@@ -180,6 +198,9 @@ impl Default for Patch {
             gain: 0.8,
             width: 0.0,
             lfo: Lfo::default(),
+            metal: 0.0,
+            vel_cutoff: 0.0,
+            start_delay: 0.0,
         }
     }
 }
@@ -324,7 +345,26 @@ pub struct SynthVoice {
     pub filt_r: Svf,
     pub t: f32,
     pub noise: u32,
+    /// second noise generator for the right channel (stereo noise)
+    pub noise_r: u32,
     pub lfo_phase: f32,
+    pub metal_ph: [f32; 6],
+    /// note velocity 0..1 (for `vel_cutoff`)
+    pub vel: f32,
+    /// per-note amp decay override in seconds (effect 08), 0 = patch decay
+    pub decay: f32,
+    /// time waited so far for `start_delay`
+    pub waited: f32,
+}
+
+/// 808 hi-hat oscillator ratios (205.3, 304.4, 369.6, 522.7, 540, 800 Hz)
+const METAL: [f32; 6] = [1.0, 1.4827, 1.8003, 2.5461, 2.6303, 3.8967];
+
+fn xorshift(n: &mut u32) -> f32 {
+    *n ^= *n << 13;
+    *n ^= *n >> 17;
+    *n ^= *n << 5;
+    *n as f32 / u32::MAX as f32 * 2.0 - 1.0
 }
 
 impl SynthVoice {
@@ -339,13 +379,31 @@ impl SynthVoice {
             filt_r: Svf::default(),
             t: 0.0,
             noise: 0x1234_5678,
+            noise_r: 0x9E37_79B9,
             lfo_phase: 0.0,
+            metal_ph: [0.0; 6],
+            vel: 1.0,
+            decay: 0.0,
+            waited: 0.0,
         }
+    }
+
+    /// a fresh voice whose noise differs from the last hit (no "machine gun"
+    /// repetition of the exact same noise burst on every drum hit)
+    pub fn seeded(seed: u32) -> Self {
+        let mut v = Self::new();
+        v.noise = seed | 1;
+        v.noise_r = seed.rotate_left(16) ^ 0x9E37_79B9 | 1;
+        v
     }
 
     /// stereo render; `bpm` drives tempo-synced LFOs. Allocation-free.
     pub fn render_st(&mut self, p: &Patch, freq: f32, sr: f32, bpm: f32) -> (f32, f32) {
         let dt_s = 1.0 / sr;
+        if self.waited < p.start_delay {
+            self.waited += dt_s;
+            return (0.0, 0.0);
+        }
         // LFO (-1..1)
         let lv = if p.lfo.active() {
             let ph = self.lfo_phase;
@@ -379,7 +437,9 @@ impl SynthVoice {
         self.t += dt_s;
         let f = freq * 2f32.powf(p.osc1_oct as f32 + (pitch_semi + lv * p.lfo.pitch) / 12.0);
         let n = p.unison.clamp(1, 8) as usize;
-        let stereo = p.width > 0.0 && n > 1;
+        // stereo: spread unison voices, or decorrelated noise for drums
+        let st_noise = p.width > 0.0 && p.noise_level > 0.0;
+        let stereo = p.width > 0.0 && (n > 1 || st_noise);
         let (mut sl, mut sr_) = (0.0, 0.0);
         for i in 0..n {
             let spread = if n > 1 {
@@ -404,6 +464,7 @@ impl SynthVoice {
         sl *= norm;
         sr_ = if stereo { sr_ * norm } else { sl };
         let mut s = 0.0;
+        let mut s_r = 0.0;
         if let Some((w, semi, lvl)) = p.osc2 {
             let f2 = f * 2f32.powf(semi as f32 / 12.0);
             let dt = (f2 / sr).min(0.5);
@@ -414,19 +475,41 @@ impl SynthVoice {
             s += (self.sub_phase * std::f32::consts::TAU).sin() * p.sub_level;
             self.sub_phase = (self.sub_phase + f * 0.5 / sr) % 1.0;
         }
+        if p.metal > 0.0 {
+            let base = f * (205.3 / 523.25);
+            let mut m = 0.0;
+            for (ph, r) in self.metal_ph.iter_mut().zip(METAL) {
+                let dt = (base * r / sr).min(0.5);
+                m += osc(Wave::Square, *ph, dt, 0.5);
+                *ph = (*ph + dt) % 1.0;
+            }
+            s += m * (p.metal / 6.0);
+        }
+        s_r += s;
         if p.noise_level > 0.0 {
-            self.noise ^= self.noise << 13;
-            self.noise ^= self.noise >> 17;
-            self.noise ^= self.noise << 5;
-            s += (self.noise as f32 / u32::MAX as f32 * 2.0 - 1.0) * p.noise_level;
+            let nl = xorshift(&mut self.noise);
+            s += nl * p.noise_level;
+            if st_noise {
+                // partly independent right channel, equal power
+                let w = p.width.min(1.0) * 0.7;
+                let nr = xorshift(&mut self.noise_r);
+                let k = 1.0 / ((1.0 - w) * (1.0 - w) + w * w).sqrt();
+                s_r += ((1.0 - w) * nl + w * nr) * k * p.noise_level;
+            } else {
+                s_r += nl * p.noise_level;
+            }
         }
         let fe = self.fenv.next(&p.fenv, dt_s);
         let kt = (f / 261.63).powf(p.key_track);
-        let cutoff = p.cutoff * kt * 2f32.powf(p.env_amount * fe * 6.0 + lv * p.lfo.cutoff);
+        let cutoff = p.cutoff
+            * kt
+            * 2f32.powf(
+                p.env_amount * fe * 6.0 + lv * p.lfo.cutoff + p.vel_cutoff * (self.vel - 1.0),
+            );
         let mut yl = self.filt.process(sl + s, cutoff, p.resonance, sr, p.filter);
         let mut yr = if stereo {
             self.filt_r
-                .process(sr_ + s, cutoff, p.resonance, sr, p.filter)
+                .process(sr_ + s_r, cutoff, p.resonance, sr, p.filter)
         } else {
             yl
         };
@@ -437,7 +520,15 @@ impl SynthVoice {
         }
         // amp LFO: v = 1 -> full level, v = -1 -> 1 - depth
         let gate = 1.0 - p.lfo.amp.clamp(0.0, 1.0) * (1.0 - (lv + 1.0) * 0.5);
-        let g = self.amp.next(&p.amp, dt_s) * p.gain * gate;
+        let amp = if self.decay > 0.0 {
+            Adsr {
+                d: self.decay,
+                ..p.amp
+            }
+        } else {
+            p.amp
+        };
+        let g = self.amp.next(&amp, dt_s) * p.gain * gate;
         (yl * g, yr * g)
     }
 }
@@ -556,5 +647,147 @@ mod tests {
                 .sum::<f32>()
         };
         assert!(hf(&b) > 2.0 * hf(&a), "{} vs {}", hf(&b), hf(&a));
+    }
+
+    fn hat_patch() -> Patch {
+        Patch {
+            osc1_level: 0.0,
+            noise_level: 0.8,
+            metal: 0.6,
+            filter: FilterMode::Hp,
+            cutoff: 6000.0,
+            amp: Adsr {
+                a: 0.0,
+                d: 0.1,
+                s: 0.0,
+                r: 0.02,
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn metal_source_has_the_808_partials() {
+        // no noise, no filter: the 6 squares at C-5 (523.25 Hz) -> 205.3 Hz base
+        let p = Patch {
+            noise_level: 0.0,
+            filter: FilterMode::Lp,
+            cutoff: 18000.0,
+            amp: Adsr {
+                a: 0.0,
+                d: 1.0,
+                s: 1.0,
+                r: 0.1,
+            },
+            ..hat_patch()
+        };
+        let mut v = SynthVoice::new();
+        let o: Vec<f32> = (0..48000)
+            .map(|_| v.render_st(&p, 523.25, 48000.0, 120.0).0)
+            .collect();
+        // Goertzel-style correlation at a partial vs a frequency between partials
+        let mag = |hz: f32| {
+            let (mut re, mut im) = (0.0f64, 0.0f64);
+            for (i, x) in o.iter().enumerate() {
+                let w = std::f64::consts::TAU * hz as f64 * i as f64 / 48000.0;
+                re += *x as f64 * w.cos();
+                im += *x as f64 * w.sin();
+            }
+            (re * re + im * im).sqrt()
+        };
+        for hz in [205.3, 304.4, 540.0, 800.0] {
+            assert!(mag(hz) > 20.0 * mag(250.0), "{hz} Hz");
+        }
+    }
+
+    #[test]
+    fn noise_width_makes_hats_stereo_and_mono_stays_mono() {
+        let side = |p: &Patch| {
+            let o = run(p, 0.1, 120.0);
+            let (mut m, mut s) = (0.0f64, 0.0f64);
+            for (l, r) in &o {
+                m += ((l + r) as f64 / 2.0).powi(2);
+                s += ((l - r) as f64 / 2.0).powi(2);
+            }
+            10.0 * (s.max(1e-30) / m).log10()
+        };
+        assert!(side(&hat_patch()) < -100.0, "width 0 = mono");
+        let w = side(&Patch {
+            width: 1.0,
+            ..hat_patch()
+        });
+        assert!((-12.0..-2.0).contains(&w), "side/mid {w:.1} dB");
+    }
+
+    #[test]
+    fn seeded_voices_give_different_noise_bursts() {
+        let p = hat_patch();
+        let burst = |seed: u32| {
+            let mut v = SynthVoice::seeded(seed);
+            (0..2000)
+                .map(|_| v.render_st(&p, 523.25, 48000.0, 120.0).0)
+                .collect::<Vec<f32>>()
+        };
+        assert_ne!(burst(1), burst(2));
+        assert_eq!(burst(7), burst(7));
+    }
+
+    #[test]
+    fn soft_notes_are_darker_with_velocity_to_cutoff() {
+        let p = Patch {
+            filter: FilterMode::Lp,
+            cutoff: 8000.0,
+            vel_cutoff: 3.0,
+            metal: 0.0,
+            ..hat_patch()
+        };
+        let hf = |vel: f32| {
+            let mut v = SynthVoice::new();
+            v.vel = vel;
+            let o: Vec<f32> = (0..2400)
+                .map(|_| v.render_st(&p, 523.25, 48000.0, 120.0).0)
+                .collect();
+            let e: f32 = o.iter().map(|x| x * x).sum();
+            let d: f32 = o.windows(2).map(|w| (w[1] - w[0]).powi(2)).sum();
+            d / e // brightness: derivative energy per energy
+        };
+        assert!(hf(1.0) > 1.5 * hf(0.3), "{} vs {}", hf(1.0), hf(0.3));
+    }
+
+    #[test]
+    fn per_note_decay_override_shortens_the_note() {
+        let p = Patch {
+            amp: Adsr {
+                a: 0.0,
+                d: 0.5,
+                s: 0.0,
+                r: 0.02,
+            },
+            ..hat_patch()
+        };
+        let tail = |decay: f32| {
+            let mut v = SynthVoice::new();
+            v.decay = decay;
+            (0..4800)
+                .map(|_| v.render_st(&p, 523.25, 48000.0, 120.0).0)
+                .skip(3600)
+                .map(|x| x * x)
+                .sum::<f32>()
+        };
+        assert!(tail(0.03) < 0.01 * tail(0.0));
+    }
+
+    #[test]
+    fn start_delay_plays_the_note_late_by_exactly_that_time() {
+        let p = Patch {
+            start_delay: 0.02,
+            ..hat_patch()
+        };
+        let mut v = SynthVoice::new();
+        let o: Vec<f32> = (0..4800)
+            .map(|_| v.render_st(&p, 523.25, 48000.0, 120.0).0)
+            .collect();
+        let first = o.iter().position(|x| x.abs() > 1e-6).unwrap();
+        assert!((959..=962).contains(&first), "{first}");
     }
 }

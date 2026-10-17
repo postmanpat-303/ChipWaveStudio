@@ -273,8 +273,39 @@ impl App {
                     ui.label("   Stereo width");
                     changed |= ui
                         .add(egui::Slider::new(&mut p.width, 0.0..=1.0))
-                        .on_hover_text("spreads the unison voices left/right (needs Unison > 1)")
+                        .on_hover_text(
+                            "spreads the unison voices left/right (Unison > 1); \
+                             with Noise it makes the noise stereo (hats)",
+                        )
                         .changed();
+                    ui.end_row();
+                    ui.label("   Metal (808)");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.metal, 0.0..=1.0))
+                        .on_hover_text(
+                            "six square oscillators at 808 hi-hat ratios: the metallic \
+                             part of a hat or cymbal (mix with Noise, high-pass filter)",
+                        )
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Velocity > cutoff");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut p.vel_cutoff, 0.0..=4.0).suffix(" oct"))
+                        .on_hover_text("softer notes (volume column) get a darker filter")
+                        .changed();
+                    ui.end_row();
+                    ui.label("   Start delay");
+                    let mut ms = p.start_delay * 1000.0;
+                    if ui
+                        .add(egui::Slider::new(&mut ms, 0.0..=50.0).suffix(" ms"))
+                        .on_hover_text(
+                            "plays every note this much behind the grid (laid-back hats / groove)",
+                        )
+                        .changed()
+                    {
+                        p.start_delay = ms / 1000.0;
+                        changed = true;
+                    }
                     ui.end_row();
                     ui.label("   LFO");
                     ui.horizontal(|ui| {

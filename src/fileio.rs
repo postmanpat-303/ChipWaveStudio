@@ -503,6 +503,11 @@ fn patch_overrides(p: &mut crate::synth::Patch, t: &toml::Value) {
     set("osc1_level", &mut p.osc1_level);
     set("sub", &mut p.sub_level);
     set("noise", &mut p.noise_level);
+    set("metal", &mut p.metal);
+    set("vel_cutoff", &mut p.vel_cutoff);
+    if let Some(ms) = r("start_delay_ms") {
+        p.start_delay = (ms / 1000.0).clamp(0.0, 0.05);
+    }
     set("pulse_width", &mut p.pulse_width);
     if let Some(v) = r("unison") {
         p.unison = (v as u32).clamp(1, 8);
@@ -857,6 +862,27 @@ mod tests {
         assert_eq!(s.mixer.duck_key, 0);
         assert!(s.mixer.channels[0].duck == 0.0);
         assert!(s.mixer.channels[1].duck > 0.3 && s.mixer.channels[5].duck > 0.9);
+        // hats (channel 3): on the "e" and "a" 16ths only, accented (several
+        // volumes, not one flat velocity), per-note decay (effect 08), laid back
+        let drop = s.patterns.iter().find(|p| p.name == "Drop A").unwrap();
+        let hats: Vec<(usize, &Cell)> = drop
+            .cells
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r[2].note > 0 && r[2].instr == 3)
+            .map(|(i, r)| (i, &r[2]))
+            .collect();
+        assert_eq!(hats.len(), 32, "8 per bar");
+        assert!(hats.iter().all(|(i, _)| i % 4 == 1 || i % 4 == 3));
+        assert!(hats.iter().all(|(_, c)| c.fx == 0x08 && c.fxp > 0));
+        let mut vols: Vec<u8> = hats.iter().map(|(_, c)| c.vol).collect();
+        vols.sort();
+        vols.dedup();
+        assert!(vols.len() >= 4, "{vols:?}");
+        let InstrumentKind::Synth(hat) = &s.instruments[2].kind else {
+            panic!("hat is a synth")
+        };
+        assert!(hat.metal > 0.0 && hat.width > 0.0 && hat.start_delay > 0.0);
     }
 
     #[test]

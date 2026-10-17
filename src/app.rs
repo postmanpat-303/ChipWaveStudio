@@ -562,7 +562,9 @@ impl App {
                     ("Right-click a fader / knob", "MIDI learn: then move a knob or the mod wheel"),
                 ] { ui.label(egui::RichText::new(k).monospace().color(th().value)); ui.label(v); ui.end_row(); }
             });
-            ui.label("Effects: 01/02 slide, 09 speed, 0C volume, 0D vol slide, 0F tempo (0F00 = break)");
+            ui.label(
+                "Effects: 01/02 slide, 08 note decay (xx*10 ms), 09 speed, 0C volume, 0D vol slide, 0F tempo (0F00 = break)",
+            );
         });
         self.show_help = open;
     }

@@ -13,7 +13,8 @@ import os
 
 CH, ROWS = 8, 64
 KICK, BASS, HAT, CLAP, ARP, PADA, PADB, FX = range(8)
-I_KICK, I_BASS, I_CHAT, I_OHAT, I_CLAP, I_ARP, I_PAD, I_LEAD, I_PLUCK, I_RISE, I_CRASH = range(1, 12)
+TOP = HAT  # shaker/build layer shares the hat channel (8-channel limit; no collisions)
+I_KICK, I_BASS, I_CHAT, I_SHAKER, I_CLAP, I_ARP, I_PAD, I_LEAD, I_PLUCK, I_RISE, I_CRASH = range(1, 12)
 
 # A minor: i - VI - III - VII (Am F C G); pad voices whose +7 osc2 stays in key
 PROG = ["Am", "F", "C", "G"]
@@ -71,14 +72,49 @@ def bass(b, prog=PROG, bars=range(4), vol=0x38):
             b.put(r + 3, BASS, root, I_BASS, vol - 4)
 
 
-def hats(b, bars=range(4), open_hat=False, soft=False):
+_rng = [12345]
+
+
+def jitter(v, amt=2):
+    """small deterministic velocity variation (no robotic flat velocity)"""
+    _rng[0] = (_rng[0] * 1103515245 + 12345) & 0x7FFFFFFF
+    return max(1, min(0x40, v + (_rng[0] >> 16) % (2 * amt + 1) - amt))
+
+
+# per-note decay (effect 08, xx * 10 ms) like the references: the "e" of beats
+# 1 and 3 rings longest, the "e" of 2 and 4 is tight, the "a" in between
+HAT_E13, HAT_E24, HAT_A = "0816", "080D", "080E"
+
+
+def hats(b, bars=range(4), soft=False, open_hat=False):
+    """closed hats on the 2nd and 4th 16th of each beat ("e" and "a"), accent on
+    the "e"; `open_hat` = an open hat on the "a" of beat 4 (choked by the next hit)"""
     for bar in bars:
         for beat in range(4):
             r = bar * 16 + beat * 4
-            b.put(r + 1, HAT, "C-5", I_CHAT, 0x1C if soft else 0x24)
-            if open_hat:
-                b.put(r + 2, HAT, "C-5", I_OHAT, 0x22 if soft else 0x2A)
-            b.put(r + 3, HAT, "C-5", I_CHAT, 0x24 if soft else 0x30)
+            e = 0x2A if soft else 0x38
+            a = 0x22 if soft else 0x2E
+            b.put(r + 1, HAT, "C-5", I_CHAT, jitter(e), HAT_E13 if beat % 2 == 0 else HAT_E24)
+            if open_hat and beat == 3:
+                b.put(r + 3, HAT, "C-5", I_CHAT, jitter(a + 4), "0828")
+            else:
+                b.put(r + 3, HAT, "C-5", I_CHAT, jitter(a), HAT_A)
+
+
+def shaker(b, bars=range(4), vol=0x14):
+    """16th texture layer: soft shaker on the "and" (8th off-beat) of every beat,
+    on the hat channel between the "e" and "a" hats (their tails are done by then)"""
+    for bar in bars:
+        for beat in range(4):
+            b.put(bar * 16 + beat * 4 + 2, TOP, "C-5", I_SHAKER, jitter(vol, 3))
+
+
+def hat_build(b, start_bar, bars=2):
+    """closed hat 16ths fading in over the last bars of a build (hat channel is
+    otherwise empty in build blocks)"""
+    rows = list(range(start_bar * 16, (start_bar + bars) * 16))
+    for k, r in enumerate(rows):
+        b.put(r, HAT, "C-5", I_CHAT, int(0x0C + 0x24 * k / len(rows)), "080A")
 
 
 def claps(b, bars=range(4)):
@@ -150,14 +186,17 @@ arp(pre, vol=0x2A)
 pre.put(0, FX, "A-4", I_RISE, 0x40)
 pre.put(63, FX, "===")
 roll(pre, 3)
+hat_build(pre, 3, bars=1)
 blocks.append(pre)
 
 
-def drop_block(name, fill_end=False, octave_up=False, with_lead=None, crash=True):
+def drop_block(name, fill_end=False, octave_up=False, with_lead=None, crash=True, top=False):
     d = Block(name, "drop")
     kick(d)
     bass(d)
-    hats(d)
+    hats(d, open_hat=top)
+    if top:
+        shaker(d)
     claps(d, bars=range(3) if fill_end else range(4))
     if fill_end:
         d.put(52, CLAP, "C-4", I_CLAP, 0x38)
@@ -211,16 +250,17 @@ kick(build, bars=range(2))
 build.put(0, FX, "A-4", I_RISE, 0x40)
 build.put(63, FX, "===")
 roll(build, 2, bars=2)
+hat_build(build, 2, bars=2)
 blocks.append(build)
 
-blocks.append(drop_block("Drop 2", with_lead=LEAD_A))                 # 8
-blocks.append(drop_block("Drop 2B", fill_end=True, octave_up=True, with_lead=LEAD_B, crash=False))  # 9
+blocks.append(drop_block("Drop 2", with_lead=LEAD_A, top=True))                 # 8
+blocks.append(drop_block("Drop 2B", fill_end=True, octave_up=True, with_lead=LEAD_B, crash=False, top=True))  # 9
 
 # 10 outro: kick, bass, hats, arp (filter closing)
 outro = Block("Outro", "outro")
 kick(outro, vol=0x2C)
 bass(outro, vol=0x2A)
-hats(outro, open_hat=False)
+hats(outro, soft=True)
 arp(outro, vol=0x28)
 outro.put(0, FX, "===")
 blocks.append(outro)
@@ -285,17 +325,19 @@ drive = 0.25
 gain = 0.9
 [[instrument]]
 slot = 3
-name = "Closed Hat"
+name = "Metal Hat"
 patch = "builtin:hat-closed"
-gain = 1.0
-decay = 0.06
-cutoff = 5500.0
-fx = [{ kind = "Filter", mode = 0.0, cutoff = 11000.0, resonance = 0.0 }]
+start_delay_ms = 15
+cutoff = 3500.0
+resonance = 0.2
+metal = 0.45
+width = 0.8
+fx = [{ kind = "Filter", mode = 0.0, cutoff = 9500.0, resonance = 0.0 }]
 [[instrument]]
 slot = 4
-name = "Open Hat"
-patch = "builtin:hat-open"
-fx = [{ kind = "Filter", mode = 0.0, cutoff = 11000.0, resonance = 0.0 }]
+name = "Shaker"
+patch = "builtin:shaker"
+start_delay_ms = 18
 [[instrument]]
 slot = 5
 name = "Clap"
@@ -364,7 +406,7 @@ release = 0.8
 cutoff = 4500.0
 
 [mixer]
-master_db = 5.0
+master_db = 4.3
 duck_key = 1
 duck_release_ms = 300
 
@@ -377,9 +419,8 @@ volume_db = 0.0
 duck = 0.55
 [[mixer.channel]]
 name = "Hats"
-volume_db = 5.0
-pan = 0.25
-send_b = 0.2
+volume_db = 4.0
+send_b = 0.03
 [[mixer.channel]]
 name = "Clap"
 volume_db = -3.0

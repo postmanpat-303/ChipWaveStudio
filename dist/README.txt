@@ -1,4 +1,4 @@
-ChipWave Tracker 0.2.3.2 - Windows x64
+ChipWave Tracker 0.2.3.3 - Windows x64
 ==============================================================
 GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
@@ -69,7 +69,8 @@ MIDI keyboard (0.2.3, details in docs/MIDI.md on GitHub)
     Drive / BPM > "MIDI learn", then move a knob or the mod wheel.
   Check a keyboard from cmd:  ChipWave.exe --midi-list   and   ChipWave.exe --midi-monitor 15
 
-Effects: 01/02 slide up/down, 09 speed, 0C set volume, 0D volume slide,
+Effects: 01/02 slide up/down, 08 note decay (xx x 10 ms), 09 speed,
+0C set volume, 0D volume slide,
 0F tempo (0F00 = pattern break).
 
 Instruments: the left panel lists the factory psytrance/alien synth sounds;
@@ -77,8 +78,13 @@ select one to edit oscillator, filter (LP/HP/BP, cutoff, resonance), envelope.
 Import WAV samples with "Import WAV..." or drag .wav files onto the window.
 Demo song "Lumen Drift" (trance, A minor, 140 BPM, 2:26): opens on first run;
 load it any time with File > New from demo song or Help > Load demo song.
-Synth: "Stereo width" spreads unison voices; LFO (shape, free Hz or synced
-1/16..2 bars) to cutoff, amp (trance gate) and pitch.
+Synth: "Stereo width" spreads unison voices (and noise); LFO (shape, free Hz or
+synced 1/16..2 bars) to cutoff, amp (trance gate) and pitch.
+0.2.3.3: reworked hi-hats in the demo; "Metal (808)" metallic hat source,
+"Velocity > cutoff" (soft notes darker), "Start delay" (laid-back percussion),
+new "shaker" sound, effect 08xx = note decay (short/long hats). A new note on
+the same channel chokes the old one (open hat cut by the next closed hat).
+Rows now play sample-accurately (the first row after Play was 1 tick early).
 Right-click an instrument: Add effect, Copy effects, Paste effects (replace or
 append), Open in FX view, Duplicate, Delete. Ctrl+Z undoes each.
 Mixer: double-click a fader = 0 dB, double-click pan = centre.
@@ -103,4 +109,5 @@ Command line:
 
 Created by Derek Heasley.
 To keep the software going I need Coffee :)
-Buy me a coffee: https://paypal.me/derekh100   (also in Help > About)
+Buy me a coffee: https://buymeacoffee.com/postmanpat
+PayPal:          https://paypal.me/derekh100   (both also in Help > About)
