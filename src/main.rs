@@ -254,6 +254,66 @@ fn play_test(secs: u64) -> i32 {
     }
 }
 
+/// `--screenshot <out.png> [--view v] [--theme dark|amiga] [--size WxH]`
+/// (developer flag for the README screenshots; see src/app/shot.rs)
+fn screenshot(args: &[String], i: usize) -> i32 {
+    let flag = |name: &str| {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|k| args.get(k + 1))
+            .cloned()
+    };
+    let Some(out) = args.get(i + 1).filter(|a| !a.starts_with("--")) else {
+        eprintln!(
+            "usage: --screenshot <out.png> [--view {}] [--theme dark|amiga] [--size 1600x900]",
+            app::shot::VIEWS.join("|")
+        );
+        return 2;
+    };
+    let view = flag("--view").unwrap_or_else(|| "pattern".into());
+    if !app::shot::VIEWS.contains(&view.as_str()) {
+        eprintln!(
+            "unknown view {view}; one of {}",
+            app::shot::VIEWS.join(", ")
+        );
+        return 2;
+    }
+    let size = flag("--size")
+        .and_then(|s| {
+            let (w, h) = s.split_once('x')?;
+            Some([w.parse().ok()?, h.parse().ok()?])
+        })
+        .unwrap_or([1600.0, 900.0]);
+    let amiga = flag("--theme").is_some_and(|t| t.to_ascii_lowercase().starts_with('a'));
+    // isolated settings / recovery folder, so the user's own settings are untouched
+    let tmp = std::env::temp_dir().join(format!("chipwave-shot-{}", std::process::id()));
+    std::env::set_var("XDG_CONFIG_HOME", &tmp);
+    std::env::set_var("APPDATA", &tmp);
+    let mut st = settings::Settings {
+        theme: if amiga {
+            theme::AMIGA.name
+        } else {
+            theme::DARK.name
+        }
+        .into(),
+        maximized: false,
+        ..Default::default()
+    };
+    st.extra.update_check = false;
+    settings::save(&st);
+    let mut shot = app::shot::Shot::new(PathBuf::from(out), &view);
+    shot.hold = flag("--hold").and_then(|s| s.parse().ok());
+    let r = app::screenshot(shot, size);
+    let _ = std::fs::remove_dir_all(&tmp);
+    match r {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("screenshot failed: {e}");
+            1
+        }
+    }
+}
+
 /// `--midi-list`: print the MIDI input devices (for checking a keyboard)
 fn midi_list() -> i32 {
     match midi::list_ports() {
@@ -329,6 +389,9 @@ fn main() {
     if args.iter().any(|a| a == "--version") {
         println!("ChipWave Tracker {}", crate::VERSION);
         return;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--screenshot") {
+        std::process::exit(screenshot(&args, i));
     }
     if args.iter().any(|a| a == "--check-updates") {
         // same check as Help > Check for updates (5 s timeout); exit 0 = ran

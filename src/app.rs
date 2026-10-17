@@ -24,6 +24,7 @@ mod mixer;
 mod pattern;
 mod sampleview;
 mod settingsview;
+pub mod shot;
 mod topbar;
 #[cfg(test)]
 mod ui_tests;
@@ -107,6 +108,8 @@ pub struct App {
     extra: crate::settings::Extra,
     /// update check state (Help > Check for updates…, startup check)
     upd: updates::UpdateUi,
+    /// `--screenshot` capture plan (developer flag)
+    shot: Option<shot::Shot>,
     keymap: crate::keymap::Keymap,
     /// settings screen: focused card, expanded card, key being rebound
     set_card: usize,
@@ -176,6 +179,15 @@ pub struct App {
 }
 
 pub fn run(open: Option<PathBuf>) -> Result<(), String> {
+    run_with(open, None)
+}
+
+/// `--screenshot`: open the window at `size` (points), capture one view, exit
+pub fn screenshot(sh: shot::Shot, size: [f32; 2]) -> Result<(), String> {
+    run_with(None, Some((sh, size)))
+}
+
+fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Result<(), String> {
     let song = match &open {
         Some(p) => fileio::load_cwt(p)?,
         None => fileio::demo_song(),
@@ -189,9 +201,10 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
     let rroot = crate::recovery::root();
     let orphans = rroot
         .as_deref()
+        .filter(|_| shot.is_none())
         .map(|r| crate::recovery::find_orphans(r, None))
         .unwrap_or_default();
-    let session = rroot.as_deref().and_then(|r| {
+    let session = rroot.as_deref().filter(|_| shot.is_none()).and_then(|r| {
         let t = shared
             .lock()
             .map(|s| s.song.title.clone())
@@ -202,12 +215,18 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         install_panic_hook(shared.clone(), sess.dir.clone());
     }
     let st0 = crate::settings::load();
-    let (audio, audio_err) = match audio::start_with(
-        shared.clone(),
-        st0.buffer,
-        &st0.extra.device,
-        st0.extra.rate,
-    ) {
+    let started = if shot.is_some() {
+        // screenshots: no audio device; the UI advances the engine (shot.rs)
+        Err("audio off for this capture".to_string())
+    } else {
+        audio::start_with(
+            shared.clone(),
+            st0.buffer,
+            &st0.extra.device,
+            st0.extra.rate,
+        )
+    };
+    let (audio, audio_err) = match started {
         Ok(a) => (Some(a), None),
         Err(e) => (None, Some(e)),
     };
@@ -219,10 +238,18 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
         (_, Some(e)) => format!("No audio ({e}). Editing and WAV export still work."),
         _ => String::new(),
     };
-    let app = App::new(shared, audio, audio_err, open, status, session, orphans);
+    let status = if shot.is_some() {
+        "Lumen Drift demo loaded.".to_string()
+    } else {
+        status
+    };
+    let mut app = App::new(shared, audio, audio_err, open, status, session, orphans);
     let set = crate::settings::load();
     let mut vb = egui::ViewportBuilder::default().with_inner_size([1360.0, 800.0]);
-    if set.maximized {
+    if let Some((sh, size)) = shot {
+        app.shot = Some(sh);
+        vb = vb.with_inner_size(size).with_resizable(false);
+    } else if set.maximized {
         vb = vb.with_maximized(true);
     } else if let Some([x, y, w, h]) = set.window {
         vb = vb.with_inner_size([w.max(800.0), h.max(500.0)]);
@@ -347,6 +374,7 @@ impl App {
             smp: Default::default(),
             extra: crate::settings::load().extra,
             upd: Default::default(),
+            shot: None,
             keymap: crate::keymap::Keymap::load(),
             set_card: 0,
             set_open: Some(0),
@@ -597,6 +625,7 @@ impl eframe::App for App {
     }
 
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        self.shot_input(raw);
         // While no text field is being edited, the pattern editor owns the keyboard:
         // take key events away from egui (so Tab/arrows don't move widget focus).
         if let Some(log) = &mut self.key_log {
@@ -660,6 +689,7 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.shot_frame(ui.ctx());
         self.poll_save();
         self.load_warnings_window(ui.ctx());
         self.instr_delete_dialog(ui.ctx());

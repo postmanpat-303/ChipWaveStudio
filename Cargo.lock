@@ -592,6 +592,7 @@ dependencies = [
  "id3",
  "midir",
  "mp3lame-encoder",
+ "png",
  "rfd",
  "rtrb",
  "serde",
