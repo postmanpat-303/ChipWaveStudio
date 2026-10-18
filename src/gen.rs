@@ -2036,4 +2036,199 @@ mod features {
         }
         crate::fileio::save_cwt(s, std::path::Path::new(&out)).unwrap();
     }
+
+    fn off(s: &mut Song, b: usize, r: usize, ch: usize) {
+        s.patterns[b].cells[r][ch].note = crate::model::NOTE_OFF;
+    }
+
+    /// a whole-block chord on channels 4.. with note-offs at row `end`
+    fn chord(s: &mut Song, b: usize, r: usize, end: usize, ns: &[&str], ins: u8) {
+        for (k, n) in ns.iter().enumerate() {
+            put(s, b, r, 4 + k, n, ins, (0, 0));
+            if end < 32 {
+                off(s, b, end, 4 + k);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn features_02314_demo() {
+        let inp = std::env::var("CW_F2314_IN").expect("CW_F2314_IN");
+        let out = std::env::var("CW_F2314_OUT").expect("CW_F2314_OUT");
+        let mut s = crate::fileio::load_text_song(std::path::Path::new(&inp)).unwrap();
+        let s = &mut s;
+        let kit = gen(s, "Psy Kit", 0.85);
+        // 0 Fat Moog Bass: legato line, the overlaps glide
+        let fm = gen(s, "Fat Moog Bass", 1.0);
+        for (r, n) in [
+            (0, "E-2"),
+            (6, "E-2"),
+            (8, "G-2"),
+            (12, "A-2"),
+            (14, "B-2"),
+            (16, "E-2"),
+            (22, "D-3"),
+            (24, "B-2"),
+            (28, "G-2"),
+        ] {
+            put(s, 0, r, 3, n, fm, (0, 0));
+        }
+        off(s, 0, 4, 3);
+        off(s, 0, 31, 3);
+        // 1 Psy Rolling Bass with the kick: kick + three bass 16ths, E then F#
+        let pb = gen(s, "Psy Rolling Bass", 0.85);
+        for beat in 0..8 {
+            let r = beat * 4;
+            put(s, 1, r, 0, "C-4", kit, (0, 0));
+            let n = if beat >= 6 { "F#1" } else { "E-1" };
+            for k in 1..4 {
+                put(s, 1, r + k, 3, n, pb, (0, 0));
+            }
+        }
+        // 2 Warm Lead: E minor phrase with glide
+        let wl = gen(s, "Warm Lead", 0.95);
+        for (r, n) in [
+            (0, "E-4"),
+            (6, "G-4"),
+            (8, "B-4"),
+            (12, "A-4"),
+            (14, "G-4"),
+            (16, "F#4"),
+            (20, "E-4"),
+            (24, "D-4"),
+            (26, "E-4"),
+        ] {
+            put(s, 2, r, 4, n, wl, (0, 0));
+        }
+        off(s, 2, 31, 4);
+        // 3 Brass stabs
+        let br = gen(s, "Brass", 0.6);
+        for (r, end, ns) in [
+            (0, 6, ["E-3", "G-3", "B-3"]),
+            (8, 14, ["D-3", "F#3", "A-3"]),
+            (16, 30, ["C-3", "E-3", "G-3"]),
+        ] {
+            chord(s, 3, r, end, &ns, br);
+        }
+        // 4 Dark Pad: Em(add9) held
+        let dp = gen(s, "Dark Pad", 0.4);
+        chord(s, 4, 0, 28, &["E-3", "G-3", "B-3", "F#4"], dp);
+        // 5 Acid Squelch: 16ths with the cutoff macro (43 1y) climbing
+        let ac = gen(s, "Acid Squelch", 0.95);
+        let line = ["E-2", "E-2", "E-3", "E-2", "G-2", "E-2", "A#2", "E-2"];
+        for r in 0..32 {
+            if r % 8 == 7 {
+                continue;
+            }
+            put(s, 5, r, 4, line[r % 8], ac, (0x43, 0x14 + (r / 4) as u8));
+        }
+        off(s, 5, 31, 4);
+        // 6 E-Piano chords
+        let ep = gen(s, "E-Piano", 0.6);
+        chord(s, 6, 0, 14, &["E-3", "G-3", "B-3", "D-4"], ep);
+        chord(s, 6, 16, 30, &["C-3", "E-3", "G-3", "B-3"], ep);
+        // 7 Metallic Bell
+        let mb = gen(s, "Metallic Bell", 1.0);
+        for (r, n) in [(0, "E-4"), (8, "B-4"), (16, "G-4"), (24, "D-5")] {
+            put(s, 7, r, 4, n, mb, (0, 0));
+        }
+        // 8 Psy Zap Bass rolling
+        let zb = gen(s, "Psy Zap Bass", 0.6);
+        for beat in 0..8 {
+            put(s, 8, beat * 4, 0, "C-4", kit, (0, 0));
+            for k in 1..4 {
+                put(
+                    s,
+                    8,
+                    beat * 4 + k,
+                    3,
+                    if beat >= 6 { "F#2" } else { "E-2" },
+                    zb,
+                    (0, 0),
+                );
+            }
+        }
+        // 9 Growl
+        let gr = gen(s, "Growl", 0.7);
+        for (r, n) in [
+            (0, "E-2"),
+            (6, "E-2"),
+            (8, "G-2"),
+            (16, "E-2"),
+            (22, "A#1"),
+            (24, "B-1"),
+        ] {
+            put(s, 9, r, 3, n, gr, (0, 0));
+            off(s, 9, r + 5, 3);
+        }
+        // 10 Dark Pluck arpeggio
+        let pl = gen(s, "Dark Pluck", 0.9);
+        let arp = ["E-3", "B-3", "G-4", "B-3", "F#4", "B-3", "G-4", "D-4"];
+        for r in 0..32 {
+            if r % 2 == 0 {
+                put(s, 10, r, 4, arp[(r / 2) % 8], pl, (0, 0));
+            }
+        }
+        // 11-13 noise: riser; downlifter then impact; wind + vinyl
+        let ri = gen(s, "White Riser", 1.0);
+        let dl = gen(s, "Downlifter", 0.75);
+        let im = gen(s, "Impact", 0.85);
+        let wi = gen(s, "Wind", 0.9);
+        let vc = gen(s, "Vinyl Crackle", 0.7);
+        put(s, 11, 0, 7, "C-4", ri, (0, 0));
+        off(s, 11, 31, 7);
+        put(s, 12, 0, 7, "C-4", dl, (0, 0));
+        put(s, 12, 18, 6, "C-4", im, (0, 0));
+        put(s, 13, 0, 7, "C-4", wi, (0, 0));
+        put(s, 13, 0, 6, "C-4", vc, (0, 0));
+        off(s, 13, 28, 7);
+        off(s, 13, 28, 6);
+        // 14-17 the groove: dark, hypnotic, 140 BPM in E / F#.
+        // kick on the beat, the Psy Rolling Bass on the three 16ths after it,
+        // open hats on the offbeat only, a clap on 2 and 4 from block 15.
+        for b in 14..18 {
+            for beat in 0..8 {
+                let r = beat * 4;
+                put(s, b, r, 0, "C-4", kit, (0, 0));
+                put(s, b, r + 2, 1, "A#4", kit, (0, 0));
+                if b >= 15 && beat % 2 == 1 {
+                    put(s, b, r, 2, "D#4", kit, (0, 0));
+                }
+                let n = if (b == 15 || b == 17) && beat >= 6 {
+                    "F#1"
+                } else {
+                    "E-1"
+                };
+                for k in 1..4 {
+                    put(s, b, r + k, 3, n, pb, (0, 0));
+                }
+            }
+        }
+        // the bass filter opens a little each block (macro 1 = cutoff), 4300 resets
+        fxonly(s, 14, 1, 3, (0x43, 0x00));
+        fxonly(s, 16, 1, 3, (0x43, 0x13));
+        fxonly(s, 17, 1, 3, (0x43, 0x00));
+        // wind under it all, a dark pad from 15, a bell call, acid line in 16, riser into 17
+        put(s, 14, 0, 6, "C-4", wi, (0, 0));
+        off(s, 14, 31, 6);
+        chord(s, 15, 0, 31, &["E-3", "B-3"], dp);
+        put(s, 15, 14, 6, "B-4", mb, (0, 0));
+        for r in 0..32 {
+            if r % 4 == 2 || r % 8 == 7 {
+                continue;
+            }
+            put(s, 16, r, 4, line[r % 8], ac, (0x43, 0x12 + (r / 6) as u8));
+        }
+        off(s, 16, 31, 4);
+        put(s, 16, 0, 7, "C-4", ri, (0, 0));
+        off(s, 16, 31, 7);
+        put(s, 17, 0, 7, "C-4", im, (0, 0));
+        chord(s, 17, 0, 31, &["E-3", "G-3"], dp);
+        put(s, 17, 6, 6, "E-4", pl, (0, 0));
+        put(s, 17, 14, 6, "G-4", pl, (0, 0));
+        put(s, 17, 22, 6, "B-3", pl, (0, 0));
+        put(s, 17, 30, 6, "F#4", pl, (0, 0));
+        crate::fileio::save_cwt(s, std::path::Path::new(&out)).unwrap();
+    }
 }
