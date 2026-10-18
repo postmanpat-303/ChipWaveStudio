@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/tag/v0.2.3.14"><b>⬇ Download 0.2.3.14 for Windows</b></a> &nbsp;·&nbsp;
+  <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -186,7 +186,7 @@ The palettes, generated from the colour values in [`src/theme.rs`](src/theme.rs)
 ```
 <a id="download"></a>
 
-Get the **Windows** installer [`ChipWave-0.2.3.14-setup-x64.exe`](https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.14/ChipWave-0.2.3.14-setup-x64.exe) or the portable [`ChipWave-0.2.3.14-windows-x64.zip`](https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.14/ChipWave-0.2.3.14-windows-x64.zip) from the [0.2.3.14 release](https://github.com/postmanpat-303/ChipWaveTracker/releases/tag/v0.2.3.14) (always newest: [latest release](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest)). Already on 0.2.3.5 or later? **Help > Check for updates…** offers it. The exe isn't code-signed yet, so SmartScreen may warn: click “More info”, then “Run anyway”. The app opens with the demo song loaded: press **Space** to play.
+Get the **Windows** installer [`ChipWave-setup-x64.exe`](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-setup-x64.exe) or the portable [`ChipWave-windows-x64.zip`](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-windows-x64.zip) from the [latest release](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest) (these links always fetch the newest version; older versions are on the [releases page](https://github.com/postmanpat-303/ChipWaveTracker/releases)). Already on 0.2.3.5 or later? **Help > Check for updates…** offers it. The exe isn't code-signed yet, so SmartScreen may warn: click “More info”, then “Run anyway”. The app opens with the demo song loaded: press **Space** to play.
 
 On Linux, build it from source (below).
 
