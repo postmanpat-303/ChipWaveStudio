@@ -115,8 +115,10 @@ pub fn default_dirs() -> Vec<PathBuf> {
         }
     } else if cfg!(target_os = "macos") {
         v.push("/Library/Audio/Plug-Ins/CLAP".into());
+        v.push("/Library/Audio/Plug-Ins/VST3".into());
         if let Some(h) = env("HOME") {
             v.push(h.join("Library/Audio/Plug-Ins/CLAP"));
+            v.push(h.join("Library/Audio/Plug-Ins/VST3"));
         }
     } else {
         if let Some(h) = env("HOME") {
@@ -166,7 +168,8 @@ pub fn find_files(dirs: &[PathBuf]) -> Vec<(PathBuf, &'static str)> {
 }
 
 fn stamp(p: &Path) -> (u64, u64) {
-    let m = std::fs::metadata(p).ok();
+    // a bundle folder changes when its binary does
+    let m = std::fs::metadata(super::clap::binary_path(p)).ok();
     let mtime = m
         .as_ref()
         .and_then(|m| m.modified().ok())

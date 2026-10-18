@@ -98,6 +98,65 @@ fn cbuf(b: &[c_char]) -> String {
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
+/// The loadable binary of a plugin: the file itself, or inside a bundle
+/// folder (macOS `.clap` / `.vst3`: `Contents/MacOS/<CFBundleExecutable>`;
+/// VST3 on Windows / Linux: `Contents/<arch>/<name>.vst3|.so`).
+pub fn binary_path(path: &Path) -> PathBuf {
+    if !path.is_dir() {
+        return path.to_path_buf();
+    }
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let contents = path.join("Contents");
+    // macOS: Info.plist names the executable
+    let mac = contents.join("MacOS");
+    if mac.is_dir() {
+        let exe = std::fs::read_to_string(contents.join("Info.plist"))
+            .ok()
+            .and_then(|t| plist_string(&t, "CFBundleExecutable"));
+        for name in exe.iter().map(String::as_str).chain([stem.as_str()]) {
+            let p = mac.join(name);
+            if p.is_file() {
+                return p;
+            }
+        }
+        if let Some(p) = std::fs::read_dir(&mac)
+            .ok()
+            .and_then(|rd| rd.flatten().map(|e| e.path()).find(|p| p.is_file()))
+        {
+            return p;
+        }
+    }
+    let arch = if cfg!(windows) {
+        if cfg!(target_arch = "aarch64") {
+            "arm64-win"
+        } else {
+            "x86_64-win"
+        }
+    } else if cfg!(target_arch = "aarch64") {
+        "aarch64-linux"
+    } else {
+        "x86_64-linux"
+    };
+    let ext = if cfg!(windows) { "vst3" } else { "so" };
+    let p = contents.join(arch).join(format!("{stem}.{ext}"));
+    if p.is_file() {
+        return p;
+    }
+    path.to_path_buf()
+}
+
+/// `<key>K</key><string>V</string>` in an Info.plist (XML form)
+fn plist_string(t: &str, key: &str) -> Option<String> {
+    let at = t.find(&format!("<key>{key}</key>"))?;
+    let rest = &t[at..];
+    let a = rest.find("<string>")? + "<string>".len();
+    let b = rest[a..].find("</string>")?;
+    Some(rest[a..a + b].trim().to_string())
+}
+
 impl ClapLib {
     /// Load (or reuse) the binary at `path` and initialise its entry.
     pub fn load(path: &Path) -> Result<Arc<ClapLib>, String> {
@@ -105,7 +164,8 @@ impl ClapLib {
         if let Some(l) = map.get(path).and_then(|w| w.upgrade()) {
             return Ok(l);
         }
-        let lib = unsafe { libloading::Library::new(path) }.map_err(|e| format!("load: {e}"))?;
+        let lib = unsafe { libloading::Library::new(binary_path(path)) }
+            .map_err(|e| format!("load: {e}"))?;
         let entry = unsafe {
             let s: libloading::Symbol<*const clap_plugin_entry> = lib
                 .get(c"clap_entry")

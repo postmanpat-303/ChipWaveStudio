@@ -315,3 +315,27 @@ rows = """
         k => panic!("{k:?}"),
     }
 }
+
+#[test]
+fn bundle_folders_load_their_binary() {
+    // macOS-style bundle: Contents/MacOS/<CFBundleExecutable>
+    let d = std::env::temp_dir().join(format!("cw-bundle-{}", std::process::id()));
+    let b = d.join("Synth.clap");
+    std::fs::create_dir_all(b.join("Contents/MacOS")).unwrap();
+    std::fs::write(
+        b.join("Contents/Info.plist"),
+        "<plist><dict><key>CFBundleExecutable</key>\n<string>RealBin</string></dict></plist>",
+    )
+    .unwrap();
+    std::fs::copy(fixture(), b.join("Contents/MacOS/RealBin")).unwrap();
+    assert_eq!(clap::binary_path(&b), b.join("Contents/MacOS/RealBin"));
+    let r = scan::check_file(&b);
+    assert!(r.ok, "{}", r.message);
+    assert_eq!(r.plugins[0].desc.id, TEST_ID);
+    // found once by the scanner (the bundle, not its insides)
+    let found = scan::find_files(std::slice::from_ref(&d));
+    assert_eq!(found, vec![(b.clone(), "clap")]);
+    // a plain file is its own binary
+    assert_eq!(clap::binary_path(&fixture()), fixture());
+    let _ = std::fs::remove_dir_all(d);
+}
