@@ -105,7 +105,6 @@ pub trait Hosted: Send {
     /// the plugin changed its own state (editor edits) since the last call
     fn take_dirty(&self) -> bool;
     fn set_sample_rate(&mut self, sr: f32);
-    fn desc_name(&self) -> &str;
 }
 
 /// Create an instance for `p` at `sr`, with its saved state restored.

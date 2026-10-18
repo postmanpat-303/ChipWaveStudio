@@ -123,6 +123,7 @@ impl App {
     }
 
     pub(super) fn save_instrument_to_library(&mut self, slot: u8) {
+        self.capture_plugins();
         let Some(inst) = self.with(|s| {
             s.song
                 .instruments
@@ -149,6 +150,7 @@ impl App {
     }
 
     pub(super) fn export_instrument(&mut self, slot: u8) {
+        self.capture_plugins();
         let Some(inst) = self.with(|s| {
             s.song
                 .instruments

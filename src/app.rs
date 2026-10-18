@@ -25,6 +25,7 @@ mod library;
 mod midiview;
 mod mixer;
 mod pattern;
+mod pluginview;
 mod sampleview;
 mod settingsview;
 pub mod shot;
@@ -209,6 +210,8 @@ pub struct App {
     fx_clip: Option<Vec<crate::fx::Device>>,
     /// instrument the list last scrolled to
     instr_shown: u8,
+    /// plugin instruments: browser, scan, panel state (app/pluginview.rs)
+    plug: pluginview::PluginUi,
 }
 
 pub fn run(open: Option<PathBuf>) -> Result<(), String> {
@@ -476,6 +479,7 @@ impl App {
             midi,
             fx_clip: None,
             instr_shown: 0,
+            plug: Default::default(),
         };
         let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
         app.midi_apply(connect);
@@ -893,6 +897,7 @@ impl eframe::App for App {
         self.handle_keys(&ctx);
         self.tick_safety();
         self.tick_derived();
+        self.plugin_frame(&ctx);
 
         let full = ui.max_rect();
         theme::gradient(ui.painter(), full, th().bg_top, th().bg_bot);
@@ -1027,6 +1032,7 @@ impl eframe::App for App {
         self.update_window(&ctx);
         self.modal_dialogs(&ctx);
         self.fill_dialog(&ctx);
+        self.plugin_browser(&ctx);
         // window close button: ask first when there are unsaved changes
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
             if self.dirty {

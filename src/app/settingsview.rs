@@ -98,13 +98,7 @@ impl App {
                 (self.extra.autosave_mins == 0).then(|| "autosave is off".to_string()),
             ),
             4 => self.midi_summary(),
-            _ => (
-                vec![
-                    "not available yet".into(),
-                    "planned: VST3 / CLAP host".into(),
-                ],
-                None,
-            ),
+            _ => self.plugins_summary(),
         }
     }
 
@@ -124,74 +118,122 @@ impl App {
             });
         });
         ui.add_space(6.0);
-        egui::ScrollArea::vertical().id_salt("settings_scroll").show(ui, |ui| {
-            let w = ui.available_width();
-            let cols = ((w / 300.0) as usize).clamp(1, 3);
-            let cw = (w - (cols as f32 - 1.0) * 10.0) / cols as f32 - 2.0;
-            for row in 0..CARDS.len().div_ceil(cols) {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 10.0;
-                    #[allow(clippy::needless_range_loop)]
-                    for i in row * cols..((row + 1) * cols).min(CARDS.len()) {
-                        let (lines, warn) = self.card_summary(i);
-                        let focused = self.set_card == i;
-                        let open = self.set_open == Some(i);
-                        let placeholder = i >= 5;
-                        let edge = if warn.is_some() {
-                            t.brick
-                        } else if focused {
-                            t.focus_ring
-                        } else {
-                            t.ink2.gamma_multiply(0.4)
-                        };
-                        let r = egui::Frame::new()
-                            .fill(if open { t.cart_top.gamma_multiply(1.0) } else { t.cart_bot })
-                            .stroke(Stroke::new(if focused || open { 2.0 } else { 1.0 }, edge))
-                            .corner_radius(8)
-                            .inner_margin(10)
-                            .show(ui, |ui| {
-                                ui.set_width(cw - 20.0);
-                                ui.set_height(92.0);
-                                ui.vertical(|ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.label(egui::RichText::new(CARDS[i]).strong().size(15.0).color(if placeholder { t.ink2 } else { t.ink }));
-                                        ui.label(egui::RichText::new(if open { "[open]" } else { "details >" }).small().color(t.ink2));
+        egui::ScrollArea::vertical()
+            .id_salt("settings_scroll")
+            .show(ui, |ui| {
+                let w = ui.available_width();
+                let cols = ((w / 300.0) as usize).clamp(1, 3);
+                let cw = (w - (cols as f32 - 1.0) * 10.0) / cols as f32 - 2.0;
+                for row in 0..CARDS.len().div_ceil(cols) {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 10.0;
+                        #[allow(clippy::needless_range_loop)]
+                        for i in row * cols..((row + 1) * cols).min(CARDS.len()) {
+                            let (lines, warn) = self.card_summary(i);
+                            let focused = self.set_card == i;
+                            let open = self.set_open == Some(i);
+                            let placeholder = i >= CARDS.len();
+                            let edge = if warn.is_some() {
+                                t.brick
+                            } else if focused {
+                                t.focus_ring
+                            } else {
+                                t.ink2.gamma_multiply(0.4)
+                            };
+                            let r = egui::Frame::new()
+                                .fill(if open {
+                                    t.cart_top.gamma_multiply(1.0)
+                                } else {
+                                    t.cart_bot
+                                })
+                                .stroke(Stroke::new(if focused || open { 2.0 } else { 1.0 }, edge))
+                                .corner_radius(8)
+                                .inner_margin(10)
+                                .show(ui, |ui| {
+                                    ui.set_width(cw - 20.0);
+                                    ui.set_height(92.0);
+                                    ui.vertical(|ui| {
+                                        ui.horizontal(|ui| {
+                                            ui.label(
+                                                egui::RichText::new(CARDS[i])
+                                                    .strong()
+                                                    .size(15.0)
+                                                    .color(if placeholder {
+                                                        t.ink2
+                                                    } else {
+                                                        t.ink
+                                                    }),
+                                            );
+                                            ui.label(
+                                                egui::RichText::new(if open {
+                                                    "[open]"
+                                                } else {
+                                                    "details >"
+                                                })
+                                                .small()
+                                                .color(t.ink2),
+                                            );
+                                        });
+                                        for l in &lines {
+                                            ui.add(
+                                                egui::Label::new(
+                                                    egui::RichText::new(l)
+                                                        .color(if placeholder {
+                                                            t.ink2
+                                                        } else {
+                                                            t.value
+                                                        })
+                                                        .monospace(),
+                                                )
+                                                .truncate(),
+                                            );
+                                        }
+                                        match &warn {
+                                            Some(w) => ui.label(
+                                                egui::RichText::new(format!("! {w}"))
+                                                    .small()
+                                                    .color(t.brick),
+                                            ),
+                                            None => ui.label(
+                                                egui::RichText::new(if placeholder {
+                                                    "placeholder"
+                                                } else {
+                                                    "OK"
+                                                })
+                                                .small()
+                                                .color(t.ink2),
+                                            ),
+                                        };
                                     });
-                                    for l in &lines {
-                                        ui.add(egui::Label::new(egui::RichText::new(l).color(if placeholder { t.ink2 } else { t.value }).monospace()).truncate());
-                                    }
-                                    match &warn {
-                                        Some(w) => ui.label(egui::RichText::new(format!("! {w}")).small().color(t.brick)),
-                                        None => ui.label(egui::RichText::new(if placeholder { "placeholder" } else { "OK" }).small().color(t.ink2)),
-                                    };
-                                });
-                            })
-                            .response;
-                        let r = ui.interact(r.rect, ui.make_persistent_id(("card", i)), Sense::click());
-                        if r.clicked() {
-                            self.set_card = i;
-                            self.set_open = if open { None } else { Some(i) };
+                                })
+                                .response;
+                            let r = ui.interact(
+                                r.rect,
+                                ui.make_persistent_id(("card", i)),
+                                Sense::click(),
+                            );
+                            if r.clicked() {
+                                self.set_card = i;
+                                self.set_open = if open { None } else { Some(i) };
+                            }
                         }
-                    }
-                });
-                ui.add_space(10.0);
-            }
-            if let Some(i) = self.set_open {
-                ui.separator();
-                ui.label(egui::RichText::new(CARDS[i]).strong().size(16.0));
-                ui.add_space(4.0);
-                match i {
-                    0 => self.audio_details(ui),
-                    1 => self.look_details(ui),
-                    2 => self.keys_details(ui),
-                    3 => self.files_details(ui),
-                    4 => self.midi_details(ui),
-                    _ => {
-                        ui.label("Not available yet. The plugin host is planned (docs/PLUGIN_MANAGER.md).");
+                    });
+                    ui.add_space(10.0);
+                }
+                if let Some(i) = self.set_open {
+                    ui.separator();
+                    ui.label(egui::RichText::new(CARDS[i]).strong().size(16.0));
+                    ui.add_space(4.0);
+                    match i {
+                        0 => self.audio_details(ui),
+                        1 => self.look_details(ui),
+                        2 => self.keys_details(ui),
+                        3 => self.files_details(ui),
+                        4 => self.midi_details(ui),
+                        _ => self.plugin_settings(ui),
                     }
                 }
-            }
-        });
+            });
     }
 
     fn audio_details(&mut self, ui: &mut egui::Ui) {

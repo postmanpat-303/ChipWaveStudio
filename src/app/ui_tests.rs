@@ -2259,3 +2259,61 @@ fn engine_seek_keeps_tempo_and_switches_loop_to_song_for_other_blocks() {
     let rows = song.patterns[0].rows;
     assert_eq!((e.order_pos, e.row), (2, rows - 1), "clamped");
 }
+
+// ---- 0.2.3.16: plugin instruments ----
+
+fn has_text(h: &Harness<'static, App>, prefix: &str) -> bool {
+    h.query_all_by(|n| {
+        n.label().is_some_and(|l| l.starts_with(prefix))
+            || n.value().is_some_and(|v| v.starts_with(prefix))
+    })
+    .next()
+    .is_some()
+}
+
+#[test]
+fn plugin_instrument_loads_shows_its_panel_and_saves_its_state() {
+    let mut h = harness_with(crate::plugin::tests::plugin_song());
+    frames(&mut h, 3);
+    let loaded = h.state().with(|s| s.engine.plugins.slots.len());
+    assert_eq!(loaded, 1, "the song's plugin note loads one instance");
+    // macros default to the first parameters (Gain, Tone)
+    let m = h.state().with(|s| match &s.song.instruments[0].kind {
+        InstrumentKind::Plugin(p) => p.macros.clone(),
+        _ => vec![],
+    });
+    assert_eq!(&m[..2], &[1, 2]);
+    assert!(has_text(&h, "Configure…"));
+    assert!(has_text(&h, "Parameters (2)"));
+    assert!(has_text(&h, "   Gain [M1]"), "parameter sliders are listed");
+    // a parameter edit is copied into the song on save, without an undo step
+    let undo_len = h.state().hist.len();
+    h.state().with(|s| s.engine.plugins.set_param(0, 1, 0.9));
+    h.state_mut().plug.state_dirty = true;
+    h.state_mut().capture_plugins();
+    let st = h.state().with(|s| match &s.song.instruments[0].kind {
+        InstrumentKind::Plugin(p) => p.state.clone(),
+        _ => String::new(),
+    });
+    assert!(!st.is_empty());
+    let mut p = crate::plugin::tests::patch();
+    p.state = st;
+    let back = crate::plugin::instantiate(&p, 48000.0).unwrap();
+    assert_eq!(back.value(1), Some(0.9));
+    frames(&mut h, 2);
+    assert_eq!(
+        h.state().hist.len(),
+        undo_len,
+        "capturing state is not an undo step"
+    );
+}
+
+#[test]
+fn new_menu_opens_the_plugin_browser() {
+    let mut h = harness();
+    h.state_mut().plug.scan_msg = "x".into(); // no automatic scan in tests
+    h.state_mut().plug.browser = true;
+    frames(&mut h, 2);
+    assert!(has_text(&h, "Add plugin instrument"));
+    assert!(has_text(&h, "Rescan"));
+}

@@ -343,6 +343,14 @@ impl History {
         true
     }
 
+    /// Take the song as it is now into the current state without making an
+    /// undo step (plugin state copied into the song before a save).
+    pub fn absorb(&mut self, song: &Song) {
+        if let Some((next, _)) = self.cur.next(song) {
+            self.cur = next;
+        }
+    }
+
     /// Start a new step: commit pending changes and don't merge into them.
     pub fn boundary(&mut self, song: &Song, now: Instant) -> bool {
         let c = self.commit(song, now, false);

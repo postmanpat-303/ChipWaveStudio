@@ -116,6 +116,7 @@ impl App {
     }
 
     pub(super) fn start_export(&mut self) {
+        self.capture_plugins();
         let song = self.with(|s| s.song.clone());
         let Some(d) = &mut self.export_dlg else {
             return;

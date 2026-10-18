@@ -294,8 +294,8 @@ impl App {
         // patch editor for the selected synth instrument
         let idx = self.instr as usize;
         let mut changed = false;
-        let Some((name, mut volume, mut transpose, mut patch, mut voice, mut gen)) =
-            self.with(|s| {
+        let Some((name, mut volume, mut transpose, mut patch, mut voice, mut gen, plug)) = self
+            .with(|s| {
                 s.song.instruments.get(idx.wrapping_sub(1)).map(|i| {
                     let (patch, voice, gen) = match &i.kind {
                         InstrumentKind::Synth(p) => (Some(p.clone()), None, None),
@@ -303,7 +303,19 @@ impl App {
                         InstrumentKind::Gen(g) => (None, None, Some(g.clone())),
                         _ => (None, None, None),
                     };
-                    (i.name.clone(), i.volume, i.transpose, patch, voice, gen)
+                    let plug = match &i.kind {
+                        InstrumentKind::Plugin(p) => Some(p.clone()),
+                        _ => None,
+                    };
+                    (
+                        i.name.clone(),
+                        i.volume,
+                        i.transpose,
+                        patch,
+                        voice,
+                        gen,
+                        plug,
+                    )
                 })
             })
         else {
@@ -345,6 +357,9 @@ impl App {
                 }
             }
         });
+        if let Some(pp) = &plug {
+            self.plugin_panel(ui, idx.wrapping_sub(1), pp);
+        }
         if let Some(g) = &mut gen {
             let o = super::genview::gen_panel(ui, g, &mut self.gen_ui, idx.wrapping_sub(1));
             changed |= o.changed;

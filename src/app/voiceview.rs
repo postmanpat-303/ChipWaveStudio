@@ -624,6 +624,7 @@ impl App {
             ui.close();
         }
         self.new_generator_menu(ui);
+        self.new_plugin_menu_item(ui);
         ui.menu_button("Voice (glitch)", |ui| {
             ui.label(
                 egui::RichText::new("synthetic vowels: ahh eee ooh err")

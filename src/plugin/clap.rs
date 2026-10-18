@@ -959,8 +959,4 @@ impl Hosted for ClapInst {
             let _ = self.activate();
         }
     }
-
-    fn desc_name(&self) -> &str {
-        &self.desc.name
-    }
 }

@@ -154,8 +154,15 @@ pub fn start_with(
         // a device change restarts the engine (playback stops); the live
         // MIDI queue stays connected
         let rx = s.engine.take_live_input();
+        // plugin instances survive a device change (re-activated at the new rate)
+        let mut rack = std::mem::take(&mut s.engine.plugins);
+        rack.all_off();
+        if s.engine.sr != sample_rate as f32 {
+            rack.set_sample_rate(sample_rate as f32);
+        }
         s.engine = Engine::new(sample_rate as f32);
         s.engine.set_live_input(rx);
+        s.engine.plugins = rack;
     }
     let stats = Arc::new(Stats::default());
     // start with ~2x the device buffer, at least 1024 frames (~21 ms @ 48k)
@@ -294,8 +301,12 @@ pub(crate) fn render_chunk(shared: &SharedRef, buf: &mut [f32], sr: f32) {
     if !ok {
         buf.fill(0.0);
         let rx = s.engine.take_live_input();
+        // never destroy plugin instances on the audio thread: keep the rack
+        let mut rack = std::mem::take(&mut s.engine.plugins);
+        rack.all_off();
         s.engine = Engine::new(sr);
         s.engine.set_live_input(rx);
+        s.engine.plugins = rack;
     }
 }
 

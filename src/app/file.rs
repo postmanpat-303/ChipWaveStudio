@@ -50,6 +50,7 @@ impl App {
             self.finish_save(job.0, r);
         }
         let nb = self.extra.backups.min(10);
+        self.capture_plugins();
         let song = self.with(|s| s.song.clone());
         let (tx, rx) = std::sync::mpsc::channel();
         let p2 = path.clone();
@@ -233,12 +234,20 @@ impl App {
 
     /// periodic autosave + session heartbeat (called every frame, cheap)
     pub(super) fn tick_safety(&mut self) {
+        let every = std::time::Duration::from_secs(self.extra.autosave_mins as u64 * 60);
+        if self.session.is_some()
+            && self.extra.autosave_mins > 0
+            && self.dirty
+            && self.last_autosave.elapsed() >= every
+        {
+            // the recovery copy includes the plugins' current settings
+            self.capture_plugins();
+        }
         let Some(sess) = &self.session else { return };
         if self.last_heartbeat.elapsed() >= crate::recovery::HEARTBEAT_EVERY {
             self.last_heartbeat = std::time::Instant::now();
             sess.heartbeat();
         }
-        let every = std::time::Duration::from_secs(self.extra.autosave_mins as u64 * 60);
         if self.extra.autosave_mins > 0 && self.dirty && self.last_autosave.elapsed() >= every {
             let song = self.with(|s| s.song.clone());
             // a still-running autosave means we simply try again next frame

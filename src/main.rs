@@ -23,7 +23,6 @@ mod ladder;
 mod master;
 mod midi;
 mod model;
-#[allow(dead_code)] // TEMP: the app UI wiring lands in the next step
 mod plugin;
 mod presets;
 mod prompt;

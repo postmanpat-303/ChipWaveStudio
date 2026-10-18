@@ -24,6 +24,7 @@ pub fn supported(p: *const clap_plugin, g: *const clap_plugin_gui) -> bool {
 }
 
 pub struct Window {
+    #[cfg_attr(not(windows), allow(dead_code))]
     floating: bool,
     #[cfg(windows)]
     hwnd: isize,
