@@ -46,6 +46,10 @@ enum View {
 }
 
 /// muted clip palette for the arranger (block id -> colour)
+/// hover text of the Channels boxes (also how UI tests find them)
+pub(crate) const CHANNELS_TIP: &str =
+    "channels (tracks) in this song, 1-32; the pattern editor and mixer scroll when they don't fit";
+
 const CLIP_COLOURS: [u32; 8] = [
     // no greens: the theme accent is green, so clips must never look "selected"
     0x516D96, 0x8A6D3B, 0x7A4E5C, 0x5E6B7A, 0x6B5E8A, 0x7A6A4E, 0x8A5A4E, 0x4E6A86,
@@ -148,6 +152,13 @@ pub struct App {
     auto_pencil_lane: Option<usize>,
     /// wheel accumulators (fractional notches) for pattern / arranger
     wheel_pat: f32,
+    /// first channel shown in the pattern editor (horizontal scroll)
+    pub(crate) ch_view: usize,
+    /// the pattern editor's channel scroll bar (empty when all channels fit)
+    pub(crate) ch_bar: egui::Rect,
+    /// mixer strip scroll: pending offset from the bar, and the bar's rect
+    mix_scroll: Option<f32>,
+    pub(crate) mix_bar: egui::Rect,
     wheel_arr: f32,
     arr_scroll: f32,
     arr_scroll_set: Option<f32>,
@@ -184,12 +195,13 @@ pub fn run(open: Option<PathBuf>) -> Result<(), String> {
 }
 
 /// `--screenshot`: open the window at `size` (points), capture one view, exit
-pub fn screenshot(sh: shot::Shot, size: [f32; 2]) -> Result<(), String> {
-    run_with(None, Some((sh, size)))
+pub fn screenshot(sh: shot::Shot, size: [f32; 2], song: Option<PathBuf>) -> Result<(), String> {
+    run_with(song, Some((sh, size)))
 }
 
 fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Result<(), String> {
     let song = match &open {
+        Some(p) if p.to_string_lossy().ends_with(".toml") => fileio::load_text_song(p)?,
         Some(p) => fileio::load_cwt(p)?,
         None => fileio::demo_song(),
     };
@@ -401,6 +413,10 @@ impl App {
             auto_drag: None,
             auto_pencil_lane: None,
             wheel_pat: 0.0,
+            ch_view: 0,
+            ch_bar: egui::Rect::NOTHING,
+            mix_scroll: None,
+            mix_bar: egui::Rect::NOTHING,
             wheel_arr: 0.0,
             arr_scroll: 0.0,
             arr_scroll_set: None,
@@ -608,6 +624,10 @@ impl App {
                 "Filter / acid (synth + voice): 38xx cutoff (00 = instrument, 01 20 Hz .. 80 ~630 Hz .. FF 20 kHz) · \
                  39xx resonance (00 = instrument, 01-FF 0-100 %) · 3Axx / 3Bxx cutoff slide up / down xx/96 octave per tick · \
                  3Cxx glide to this note (00 off, 01 instrument time, 02-FF xx*5 ms) · 3Dxx accent (00 instrument amount, 01-40)",
+            );
+            ui.label(
+                "Channels: 1-32 per song (Channels box in the block bar or Song menu). Tab / Shift+Tab walk them; \
+                 the bar under the pattern and under the mixer strips shows which are in view - click or drag it to scroll.",
             );
             ui.label(
                 "Master: Mixer > Limiter & loudness (true-peak limiter, LUFS meter); exports use the same limiter.",

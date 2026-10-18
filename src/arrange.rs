@@ -96,13 +96,13 @@ pub enum VarOp {
     /// semitones, melodic channels only
     Transpose(i8),
     /// octave shift on the channels in the mask (melodic only)
-    Octave { mask: u8, oct: i8 },
+    Octave { mask: u32, oct: i8 },
     /// replace the last bar of a drum channel with a seeded roll
     DrumFill { ch: u8 },
     /// clear channels (note-off at row 0)
-    Mute(u8),
+    Mute(u32),
     /// drop notes on the masked channels, off-beats first; keep = fraction kept
-    Thin { mask: u8, keep: f32 },
+    Thin { mask: u32, keep: f32 },
     /// <1 removes weak-beat notes, >1 adds ghost repeats on empty even rows (melodic)
     Density(f32),
     /// key change (from the final chorus on), melodic only
@@ -148,8 +148,12 @@ pub struct Derived {
     pub seed: u64,
     /// drum channel mask (skipped by transpose/key change)
     #[serde(default)]
-    pub drums: u8,
+    pub drums: u32,
 }
+
+/// channels covered by the u32 channel masks (= MAX_CHANNELS)
+const MASK_CHANNELS: usize = 32;
+const _: () = assert!(crate::model::MAX_CHANNELS <= MASK_CHANNELS);
 
 // ------------------------------------------------------------------ rng
 
@@ -348,7 +352,7 @@ pub struct Proposal {
     pub bpm: Option<f32>,
     pub notes: Vec<String>,
     pub cost: f32,
-    pub drums: u8,
+    pub drums: u32,
 }
 
 impl Proposal {
@@ -380,7 +384,7 @@ pub fn bar_secs(song: &Song) -> f64 {
 }
 
 /// drum channels: those mostly playing instruments whose name looks like a drum
-pub fn drum_mask(song: &Song) -> u8 {
+pub fn drum_mask(song: &Song) -> u32 {
     let is_drum = |i: u8| {
         song.instruments
             .get((i as usize).wrapping_sub(1))
@@ -393,8 +397,8 @@ pub fn drum_mask(song: &Song) -> u8 {
                 .any(|k| n.contains(k))
             })
     };
-    let mut mask = 0u8;
-    for ch in 0..song.channels.min(8) {
+    let mut mask = 0u32;
+    for ch in 0..song.channels.min(MASK_CHANNELS) {
         let (mut d, mut all) = (0, 0);
         for p in &song.patterns {
             for r in &p.cells {
@@ -781,8 +785,8 @@ fn skip_untagged(style: &Style, from: Option<Role>, avail: &[Role]) -> Vec<(Role
 
 // ------------------------------------------------------------------ annealing
 
-fn melodic(song: &Song, drums: u8) -> Vec<u8> {
-    (0..song.channels.min(8) as u8)
+fn melodic(song: &Song, drums: u32) -> Vec<u8> {
+    (0..song.channels.min(MASK_CHANNELS) as u8)
         .filter(|c| drums & (1 << c) == 0)
         .collect()
 }
@@ -853,7 +857,9 @@ fn plan_cost(prop: &Proposal, p: &Params, energy_of: &BTreeMap<usize, f32>) -> f
 
 fn random_op(song: &Song, prop: &Proposal, i: usize, rng: &mut Rng) -> Option<VarOp> {
     let mel = melodic(song, prop.drums);
-    let drums: Vec<u8> = (0..8u8).filter(|c| prop.drums & (1 << c) != 0).collect();
+    let drums: Vec<u8> = (0..MASK_CHANNELS as u8)
+        .filter(|c| prop.drums & (1 << c) != 0)
+        .collect();
     let s = &prop.sections[i];
     let bars = (s.rows / prop.rows_per_bar).max(1);
     Some(match rng.below(8) {
@@ -868,9 +874,9 @@ fn random_op(song: &Song, prop: &Proposal, i: usize, rng: &mut Rng) -> Option<Va
         3 if prop.drums != 0 => VarOp::Mute(prop.drums),
         4 => {
             let m = if mel.is_empty() {
-                0xff
+                u32::MAX
             } else {
-                mel.iter().fold(0u8, |a, c| a | 1 << c)
+                mel.iter().fold(0u32, |a, c| a | 1 << c)
             };
             VarOp::Thin {
                 mask: m,
@@ -984,11 +990,11 @@ pub fn apply_ops(src: &Pattern, d: &Derived, rpb: usize) -> (usize, Vec<Vec<Cell
     let chans = cells.first().map(|r| r.len()).unwrap_or(0);
     let mut rng = Rng::new(d.seed);
     let is_note = |c: &Cell| c.note > 0 && c.note != NOTE_OFF;
-    let melodic = |ch: usize| d.drums & (1 << ch) == 0;
-    let shift = |cells: &mut Vec<Vec<Cell>>, s: i32, mask: u8| {
+    let melodic = |ch: usize| ch >= MASK_CHANNELS || d.drums & (1 << ch) == 0;
+    let shift = |cells: &mut Vec<Vec<Cell>>, s: i32, mask: u32| {
         for r in cells.iter_mut() {
             for (ch, c) in r.iter_mut().enumerate() {
-                if ch < 8 && mask & (1 << ch) != 0 && melodic(ch) && is_note(c) {
+                if ch < MASK_CHANNELS && mask & (1 << ch) != 0 && melodic(ch) && is_note(c) {
                     c.note = (c.note as i32 + s).clamp(1, 120) as u8;
                 }
             }
@@ -1000,12 +1006,12 @@ pub fn apply_ops(src: &Pattern, d: &Derived, rpb: usize) -> (usize, Vec<Vec<Cell
                 rows = (*n as usize).clamp(1, rows);
                 cells.truncate(rows);
             }
-            VarOp::Transpose(s) | VarOp::KeyChange(s) => shift(&mut cells, *s as i32, 0xff),
+            VarOp::Transpose(s) | VarOp::KeyChange(s) => shift(&mut cells, *s as i32, u32::MAX),
             VarOp::Octave { mask, oct } => shift(&mut cells, *oct as i32 * 12, *mask),
             VarOp::Mute(mask) => {
                 for (ri, r) in cells.iter_mut().enumerate() {
                     for (ch, c) in r.iter_mut().enumerate() {
-                        if ch < 8 && mask & (1 << ch) != 0 {
+                        if ch < MASK_CHANNELS && mask & (1 << ch) != 0 {
                             *c = Cell::default();
                             if ri == 0 {
                                 c.note = NOTE_OFF;
@@ -1018,7 +1024,7 @@ pub fn apply_ops(src: &Pattern, d: &Derived, rpb: usize) -> (usize, Vec<Vec<Cell
                 for (ri, r) in cells.iter_mut().enumerate() {
                     let strong = ri % (rpb / 4).max(1) == 0;
                     for (ch, c) in r.iter_mut().enumerate() {
-                        if ch < 8 && mask & (1 << ch) != 0 && is_note(c) {
+                        if ch < MASK_CHANNELS && mask & (1 << ch) != 0 && is_note(c) {
                             let p_drop = if strong {
                                 (1.0 - keep) * 0.3
                             } else {
@@ -1044,7 +1050,7 @@ pub fn apply_ops(src: &Pattern, d: &Derived, rpb: usize) -> (usize, Vec<Vec<Cell
                         }
                     }
                 } else {
-                    for ch in (0..chans).filter(|&c| c < 8 && melodic(c)) {
+                    for ch in (0..chans).filter(|&c| c < MASK_CHANNELS && melodic(c)) {
                         let mut last: Option<Cell> = None;
                         #[allow(clippy::needless_range_loop)]
                         for ri in 0..rows {
@@ -1693,5 +1699,53 @@ mod tests {
         if let Ok(p) = p {
             assert!(p.bpm.is_some() || !p.notes.is_empty());
         }
+    }
+
+    #[test]
+    fn channel_masks_cover_all_32_channels() {
+        let mut s = crate::fileio::demo_song();
+        let n0 = s.channels;
+        s.channels = 32;
+        for p in &mut s.patterns {
+            for r in &mut p.cells {
+                r.resize(32, Cell::default());
+                // a copy of channel 0 (kick) on channel 20, melodic ch 1 on 29
+                r[20] = r[0];
+                r[29] = r[1.min(n0 - 1)];
+            }
+        }
+        let m = drum_mask(&s);
+        assert!(m & 1 != 0 && m & (1 << 20) != 0, "{m:b}");
+        assert!(m & (1 << 29) == 0);
+        let src = &s.patterns[0];
+        let d = |ops| Derived {
+            source: 0,
+            ops,
+            seed: 1,
+            drums: m,
+        };
+        let row = (0..src.rows)
+            .find(|&r| src.cells[r][29].note > 0 && src.cells[r][29].note < 100)
+            .unwrap();
+        let (_, c) = apply_ops(
+            src,
+            &d(vec![VarOp::Octave {
+                mask: 1 << 29,
+                oct: 1,
+            }]),
+            16,
+        );
+        assert_eq!(c[row][29].note, src.cells[row][29].note + 12);
+        let (_, c) = apply_ops(src, &d(vec![VarOp::Transpose(2)]), 16);
+        assert_eq!(c[row][29].note, src.cells[row][29].note + 2);
+        let (_, c) = apply_ops(src, &d(vec![VarOp::Mute(1 << 20)]), 16);
+        assert_eq!(c[0][20].note, NOTE_OFF);
+        assert_eq!(c[0][0], src.cells[0][0]);
+        // old files: 8-bit masks still mean the same channels
+        let old: VarOp =
+            toml::from_str::<std::collections::BTreeMap<String, VarOp>>("x = { Mute = 3 }")
+                .unwrap()["x"]
+                .clone();
+        assert_eq!(old, VarOp::Mute(3));
     }
 }

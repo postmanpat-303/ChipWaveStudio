@@ -142,3 +142,9 @@ accent. Sound editor: Glide time + Legato, Accent amount + "at vol >=".
 Reverb has Low cut (default 200 Hz) and High cut; the fold drive no longer
 flips polarity.
 
+
+Up to 32 channels (0.2.3.8): each song sets its channel count (Channels box
+in the block bar or the Song menu, 1-32). The bar under the pattern grid and
+under the mixer strips shows which channels are in view; click or drag it to
+scroll (Tab / Shift+Tab move through the channels). Songs with more than 8
+channels open in older versions with only their first 8.

@@ -66,11 +66,12 @@ impl Meta {
     }
     /// bit mask of the fields that differ from the live song (used so that
     /// e.g. a tempo change never merges with a mute click)
-    fn diff_mask(&self, s: &Song) -> u64 {
-        let mut m = 0u64;
+    fn diff_mask(&self, s: &Song) -> Mask {
+        let mut m: Mask = [0; 4];
         let mut set = |bit: u32, differs: bool| {
             if differs {
-                m |= 1 << bit.min(63);
+                let b = bit.min(255);
+                m[(b / 64) as usize] |= 1 << (b % 64);
             }
         };
         set(0, self.title != s.title);
@@ -103,12 +104,14 @@ impl Meta {
         m
     }
     /// on/off switches (mute, solo, channel count, order...) are never merged
-    fn is_toggle(mask: u64) -> bool {
-        let mut t: u64 = (1 << 4) | (1 << 5) | (1 << 9);
-        for c in 0..crate::model::MAX_CHANNELS as u64 {
-            t |= 0b11000 << (12 + c * 5);
+    fn is_toggle(mask: Mask) -> bool {
+        let mut t: Mask = [(1 << 4) | (1 << 5) | (1 << 9), 0, 0, 0];
+        for c in 0..crate::model::MAX_CHANNELS {
+            for bit in [12 + c * 5 + 3, 12 + c * 5 + 4] {
+                t[bit / 64] |= 1 << (bit % 64);
+            }
         }
-        mask & t != 0
+        mask.iter().zip(&t).any(|(a, b)| a & b != 0)
     }
 }
 
@@ -123,11 +126,14 @@ pub struct State {
     bytes: usize,
 }
 
+/// 256-bit field mask: 12 song fields + 5 bits per mixer channel (32 max)
+type Mask = [u64; 4];
+
 /// What a commit changed (used to decide whether steps may be merged).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sig {
     /// changed song fields (see `Meta::diff_mask`)
-    meta: u64,
+    meta: Mask,
     patterns: bool,
     lanes: bool,
     /// changed instrument slots (same count before and after)
@@ -232,7 +238,7 @@ impl State {
         };
         let sig = Sig {
             meta: if meta_same {
-                0
+                [0; 4]
             } else {
                 self.meta.diff_mask(song)
             },
@@ -580,6 +586,29 @@ mod tests {
         s.mixer.channels[1].mute ^= true;
         h.commit(&s, later(t, 5060), true);
         assert_eq!(h.len(), 7, "different channel = different step");
+    }
+
+    #[test]
+    fn wide_songs_keep_per_channel_undo_steps() {
+        let mut s = song();
+        s.channels = crate::model::MAX_CHANNELS;
+        assert_eq!(s.mixer.channels.len(), 32);
+        let t = t0();
+        let mut h = History::new(&s);
+        let n = h.len();
+        s.mixer.channels[31].mute ^= true;
+        h.commit(&s, later(t, 10), true);
+        s.mixer.channels[31].mute ^= true;
+        h.commit(&s, later(t, 20), true);
+        assert_eq!(h.len(), n + 2, "mute toggles on ch 32 never merge");
+        s.mixer.channels[30].volume = 0.5;
+        h.commit(&s, later(t, 30), true);
+        s.mixer.channels[30].volume = 0.4;
+        h.commit(&s, later(t, 40), true);
+        assert_eq!(h.len(), n + 3, "same fader merges");
+        s.mixer.channels[31].volume = 0.4;
+        h.commit(&s, later(t, 50), true);
+        assert_eq!(h.len(), n + 4, "another channel's fader is a new step");
     }
 
     #[test]

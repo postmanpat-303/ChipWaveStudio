@@ -294,10 +294,13 @@ impl App {
                 });
         };
         ui.horizontal_top(|ui| {
-        egui::ScrollArea::horizontal()
+        let mut area = egui::ScrollArea::horizontal()
             .id_salt("mixer_scroll")
-            .max_width((ui.available_width() - master_w).max(200.0))
-            .show(ui, |ui| {
+            .max_width((ui.available_width() - master_w).max(200.0));
+        if let Some(x) = self.mix_scroll.take() {
+            area = area.horizontal_scroll_offset(x);
+        }
+        let scrolled = area.show(ui, |ui| {
                 ui.horizontal_top(|ui| {
                     for ch in 0..nch.min(MAX_CHANNELS) {
                         let c = &mut mix.channels[ch];
@@ -453,6 +456,51 @@ impl App {
                     }
                 });
             });
+        // our own bar under the strips (egui's floats in only on hover):
+        // shows which channels are in view; click or drag to scroll
+        let (inner, content, off) = (
+            scrolled.inner_rect,
+            scrolled.content_size.x,
+            scrolled.state.clamped_offset().x,
+        );
+        // right under the strips (the area itself reaches the panel bottom)
+        let bar_y = (inner.top() + scrolled.content_size.y + 8.0).min(inner.bottom() - 20.0);
+        self.mix_bar = egui::Rect::NOTHING;
+        if content > inner.width() + 1.0 {
+            let bar = egui::Rect::from_min_size(
+                egui::pos2(inner.left(), bar_y),
+                egui::vec2(inner.width(), 16.0),
+            );
+            self.mix_bar = bar;
+            let r = ui.interact(bar, ui.make_persistent_id("mixer_bar"), Sense::click_and_drag());
+            let w = bar.width();
+            if r.is_pointer_button_down_on() {
+                if let Some(p) = r.interact_pointer_pos() {
+                    let f = ((p.x - bar.left()) / w).clamp(0.0, 1.0);
+                    let x = (f * content - inner.width() / 2.0).clamp(0.0, content - inner.width());
+                    self.mix_scroll = Some(x);
+                    ui.ctx().request_repaint();
+                }
+            }
+            let p = ui.painter_at(bar);
+            p.rect_filled(bar, 4, th().crt_grid);
+            let thumb = egui::Rect::from_min_size(
+                egui::pos2(bar.left() + off / content * w, bar.top()),
+                egui::vec2(w * inner.width() / content, bar.height()),
+            );
+            p.rect_filled(thumb, 4, th().slate);
+            // strips are 108 px apart (92 + margins + spacing)
+            let per = (content / (nch + 2) as f32).max(1.0);
+            let a = (off / per).floor() as usize + 1;
+            let b = (((off + inner.width()) / per).floor() as usize).clamp(a, nch);
+            p.text(
+                bar.center(),
+                egui::Align2::CENTER_CENTER,
+                format!("channels {}–{} of {} · drag / Shift+wheel to scroll", a.min(nch), b, nch),
+                egui::FontId::proportional(11.0),
+                Color32::WHITE,
+            );
+        }
                     ui.add_space(8.0);
                     let mut master = mix.master;
                     strip(

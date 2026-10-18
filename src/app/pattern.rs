@@ -80,36 +80,81 @@ impl App {
             ui.label("Channels");
             if ui
                 .add(egui::DragValue::new(&mut ch).range(1..=MAX_CHANNELS))
+                .on_hover_text(super::CHANNELS_TIP)
                 .changed()
             {
                 self.set_channels(ch);
             }
         });
 
-        let avail = ui.available_rect_before_wrap();
+        let full = ui.available_rect_before_wrap();
+        let font = FontId::monospace(14.0);
+        let cw = ui.fonts_mut(|f| f.glyph_width(&font, '0'));
+        let chan_w = cw * 15.0 + 10.0; // "C-4 01 40 0C20" + gap
+        let x0_of = |r: Rect| r.left() + 10.0 + cw * 3.0 + 8.0;
+        // horizontal channel scroll: keep the cursor channel in view; a scroll
+        // bar appears under the grid when the channels don't all fit
+        let max_ch_vis = (((full.right() - x0_of(full)) / chan_w) as usize).max(1);
+        let scroll = channels > max_ch_vis;
+        let bar_h = if scroll { 16.0 } else { 0.0 };
+        let avail = Rect::from_min_max(full.min, Pos2::new(full.right(), full.bottom() - bar_h));
         let resp = ui.allocate_rect(avail, Sense::click_and_drag());
+        let max_first = channels.saturating_sub(max_ch_vis);
+        let mut first_ch = self.ch_view.min(max_first);
+        self.ch_bar = Rect::NOTHING;
+        if scroll {
+            let bar = Rect::from_min_max(Pos2::new(x0_of(full), avail.bottom() + 3.0), full.max);
+            let br = ui.allocate_rect(bar, Sense::click_and_drag());
+            self.ch_bar = bar;
+            if br.is_pointer_button_down_on() {
+                if let Some(p) = br.interact_pointer_pos() {
+                    let f = ((p.x - bar.left()) / bar.width()).clamp(0.0, 1.0);
+                    let want = (f * channels as f32 - max_ch_vis as f32 / 2.0).round();
+                    first_ch = (want.max(0.0) as usize).min(max_first);
+                    // the cursor follows the view
+                    self.ch = self.ch.clamp(first_ch, first_ch + max_ch_vis - 1);
+                }
+            }
+        }
+        if self.ch < first_ch {
+            first_ch = self.ch;
+        } else if self.ch >= first_ch + max_ch_vis {
+            first_ch = self.ch + 1 - max_ch_vis;
+        }
+        self.ch_view = first_ch;
+        if scroll {
+            let bar = Rect::from_min_max(Pos2::new(x0_of(full), avail.bottom() + 3.0), full.max);
+            let p = ui.painter_at(bar);
+            p.rect_filled(bar, 4, th().crt_grid);
+            let w = bar.width() / channels as f32;
+            let thumb = Rect::from_min_size(
+                Pos2::new(bar.left() + first_ch as f32 * w, bar.top()),
+                egui::vec2(w * max_ch_vis as f32, bar.height()),
+            );
+            p.rect_filled(thumb, 4, th().slate);
+            p.text(
+                bar.center(),
+                egui::Align2::CENTER_CENTER,
+                format!(
+                    "channels {}–{} of {}",
+                    first_ch + 1,
+                    (first_ch + max_ch_vis).min(channels),
+                    channels
+                ),
+                FontId::proportional(11.0),
+                Color32::WHITE,
+            );
+        }
         let sel = self.sel_rect();
         let painter = ui.painter_at(avail);
         theme::crt(&painter, avail);
-        let font = FontId::monospace(14.0);
-        let cw = ui.fonts_mut(|f| f.glyph_width(&font, '0'));
         let rh = 19.0;
-        let row_w = cw * 3.0;
-        let chan_w = cw * 15.0 + 10.0; // "C-4 01 40 0C20" + gap
-        let x0 = avail.left() + 10.0 + row_w + 8.0;
+        let x0 = x0_of(avail);
         let header_y = avail.top() + 6.0;
         let top = header_y + 26.0;
         let visible = (((avail.bottom() - top) / rh) as usize).max(1);
         let start = (self.row as isize - visible as isize / 2)
             .clamp(0, (pat.rows as isize - visible as isize).max(0)) as usize;
-
-        // horizontal scroll so the cursor channel is visible
-        let max_ch_vis = (((avail.right() - x0) / chan_w) as usize).max(1);
-        let first_ch = if self.ch >= max_ch_vis {
-            self.ch + 1 - max_ch_vis
-        } else {
-            0
-        };
 
         for (vi, ch) in (first_ch..channels).enumerate() {
             let x = x0 + vi as f32 * chan_w;

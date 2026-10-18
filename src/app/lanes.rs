@@ -242,31 +242,39 @@ impl App {
                         }
                     }
                     ui.separator();
-                    for c in 0..nch {
-                        for t in [Target::ChanVolume(c), Target::ChanPan(c)] {
-                            if ui
-                                .button(format!("Mixer ch {} - {}", c + 1, t.param_name()))
-                                .clicked()
-                            {
-                                add = Some(t);
-                                ui.close();
+                    // one submenu per channel; grouped by 8 when there are more
+                    let chan_menu = |ui: &mut egui::Ui, c: usize, add: &mut Option<Target>| {
+                        ui.menu_button(format!("Mixer ch {}", c + 1), |ui| {
+                            for t in [
+                                Target::ChanVolume(c),
+                                Target::ChanPan(c),
+                                Target::Send(c, 0),
+                                Target::Send(c, 1),
+                            ] {
+                                let name = match t {
+                                    Target::Send(_, 0) => "Send A",
+                                    Target::Send(..) => "Send B",
+                                    _ => t.param_name(),
+                                };
+                                if ui.button(name).clicked() {
+                                    *add = Some(t);
+                                    ui.close();
+                                }
                             }
+                        });
+                    };
+                    if nch <= 8 {
+                        for c in 0..nch {
+                            chan_menu(ui, c, &mut add);
                         }
-                    }
-                    for c in 0..nch {
-                        for r in 0..2 {
-                            let t = Target::Send(c, r);
-                            if ui
-                                .button(format!(
-                                    "Mixer ch {} - Send {}",
-                                    c + 1,
-                                    if r == 0 { "A" } else { "B" }
-                                ))
-                                .clicked()
-                            {
-                                add = Some(t);
-                                ui.close();
-                            }
+                    } else {
+                        for g in (0..nch).step_by(8) {
+                            let e = (g + 8).min(nch);
+                            ui.menu_button(format!("Mixer ch {}–{}", g + 1, e), |ui| {
+                                for c in g..e {
+                                    chan_menu(ui, c, &mut add);
+                                }
+                            });
                         }
                     }
                     for (r, k) in [crate::fx::FxKind::Delay, crate::fx::FxKind::Reverb]

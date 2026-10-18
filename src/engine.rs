@@ -562,6 +562,14 @@ impl Engine {
         self.song_ended = false;
         // integrated loudness and the true-peak hold measure from here
         self.meter.reset();
+        // silent channels take their mixer gain at once (a muted or quiet
+        // channel no longer blips during the 5 ms ramp from unity at start)
+        let (tgt, _) = self.mix_targets(song);
+        for (c, t) in self.chans.iter_mut().zip(tgt) {
+            if !c.active && c.tail.gain == 0.0 {
+                (c.gl, c.gr) = t;
+            }
+        }
         for c in &mut self.chans {
             if c.active {
                 c.fade_to_tail();
@@ -2438,5 +2446,82 @@ mod tests {
         song.mixer.limiter.gain_db = 0.0;
         let out = render_song(&song, 44100);
         assert!(out.iter().all(|x| x.abs() < 1.0));
+    }
+
+    /// widen a song to n channels (as the Channels box does)
+    fn widen(song: &mut Song, n: usize) {
+        song.channels = n;
+        song.channel_names.resize(n, "Ch".into());
+        for p in &mut song.patterns {
+            for r in &mut p.cells {
+                r.resize(n, Cell::default());
+            }
+        }
+    }
+
+    #[test]
+    fn thirty_two_channels_all_play_and_mix_independently() {
+        assert_eq!(MAX_CHANNELS, 32);
+        let mut song = acid_song(saw_patch());
+        widen(&mut song, MAX_CHANNELS);
+        song.patterns[0].cells[0][31] = note(37, 0, 0);
+        let a = rms(&render_secs(&song, 0.2));
+        assert!(a > 1e-3, "{a}");
+        song.mixer.channels[31].mute = true;
+        let b = rms(&render_secs(&song, 0.2));
+        assert!(b < a * 0.01, "mute ch 32: {b} vs {a}");
+        song.mixer.channels[31].mute = false;
+        song.patterns[0].cells[0][31] = Cell::default();
+        song.patterns[0].cells[0][19] = note(37, 0, 0);
+        song.mixer.channels[19].pan = -1.0;
+        let out = render_secs(&song, 0.2);
+        let (l, r): (Vec<f32>, Vec<f32>) = out.chunks(2).map(|f| (f[0], f[1])).unzip();
+        assert!(rms(&r) < rms(&l) * 0.1, "pan ch 20 left");
+        // solo on ch 30 silences ch 20
+        song.mixer.channels[29].solo = true;
+        assert!(rms(&render_secs(&song, 0.2)) < 1e-4);
+    }
+
+    #[test]
+    fn thirty_two_busy_channels_render_fast_and_allocation_free() {
+        let mut song = crate::fileio::demo_song();
+        let n0 = song.channels;
+        widen(&mut song, MAX_CHANNELS);
+        // the demo's tracks repeated over all 32 channels
+        for p in &mut song.patterns {
+            for r in &mut p.cells {
+                for c in n0..MAX_CHANNELS {
+                    r[c] = r[c % n0];
+                }
+            }
+        }
+        song.order.truncate(4);
+        let secs = 4.0;
+        let t = std::time::Instant::now();
+        let out = render_secs(&song, secs);
+        let el = t.elapsed().as_secs_f32();
+        eprintln!(
+            "32 channels: {secs} s rendered in {el:.2} s ({:.1}x realtime)",
+            secs / el
+        );
+        assert!(out.iter().all(|x| x.is_finite()));
+        if !cfg!(debug_assertions) {
+            assert!(el < secs * 0.5, "{el} s for {secs} s of 32 channels");
+        }
+        // (an insert chain's state is built the first time its instrument
+        // plays on a channel, so warm up one pass first, then replay)
+        let mut e = Engine::new(48000.0);
+        let mut buf = vec![0.0f32; 1024];
+        e.start(&song, 0, 0, false, 0);
+        for _ in 0..(secs * 48000.0 / 512.0) as usize {
+            e.render(&song, &mut buf);
+        }
+        e.start(&song, 0, 0, false, 0);
+        let n = alloc_count::count(|| {
+            for _ in 0..300 {
+                e.render(&song, &mut buf);
+            }
+        });
+        assert_eq!(n, 0, "allocations with 32 channels");
     }
 }

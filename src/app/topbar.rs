@@ -485,6 +485,7 @@ impl App {
                     ui.label("Channels");
                     if ui
                         .add(egui::DragValue::new(&mut ch).range(1..=MAX_CHANNELS))
+                        .on_hover_text(super::CHANNELS_TIP)
                         .changed()
                     {
                         self.set_channels(ch);

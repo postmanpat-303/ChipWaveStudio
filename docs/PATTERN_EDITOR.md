@@ -19,6 +19,8 @@ On the dark CRT display: notes white `#FFFFFF`, instrument green `#7CFF9B`, volu
 ## 3. Scaling
 Uses [UI_SCALING.md](UI_SCALING.md). The font is monospace (bundled **JetBrains Mono** or **DejaVu Sans Mono**; both are open licences, to be confirmed at bundling). Font size scales with `pixels_per_point` and `Ctrl + mouse wheel` changes pattern zoom only. Channels that don't fit scroll horizontally, and the cursor channel is always kept visible.
 
+**Up to 32 channels (0.2.3.8).** A song has 1–32 channels (the **Channels** box in the block bar or the Song menu; 8 was the limit before). When they don't all fit, a bar under the grid shows which are in view ("channels 9–16 of 32"); click or drag it to scroll, and the cursor moves into view. `Tab` / `Shift+Tab` and the arrow keys scroll the view along with the cursor.
+
 ## 4. Keymap (defaults)
 macOS uses **Cmd** wherever Windows/Linux use **Ctrl**, and **Option** for **Alt**. Mac laptops lack Insert/Home/End/PgUp/PgDn, so `Fn+↑/↓/←/→` (PgUp/PgDn/Home/End) and `Cmd+I` / `Cmd+⌫` (insert/delete row) also work.
 

@@ -74,6 +74,10 @@ All pictures on this page are real captures of the current build (no mockups). T
     <td width="34%" valign="top"><img src="docs/screenshots/dark-mixer-limiter.png" alt="Mixer with the Limiter and loudness panel"></td>
     <td width="66%" valign="top"><b>Master limiter &amp; loudness</b> <sub>(0.2.3.7)</sub>: the panel pinned to the right of the mixer, captured while the demo plays: a lookahead true-peak limiter (gain, ceiling −1 dBTP, release, gain-reduction bar, bypass = the old soft clipper) and momentary / short-term / integrated LUFS plus true peak (ITU-R BS.1770), with a loudness-target hint. Exports use the same limiter. Also new: pattern effects <code>38</code>–<code>3D</code> for per-row filter cutoff, resonance and cutoff slides, 303 glide (Legato + <code>3C</code>) and accent (<code>3D</code> or a velocity threshold); see <a href="docs/PATTERN_EDITOR.md">PATTERN_EDITOR.md</a> and <a href="docs/MIXER.md">MIXER.md</a>.</td>
   </tr>
+  <tr>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-32-channels.png" alt="Pattern editor with a 32-channel song"></td>
+    <td width="66%" valign="top"><b>Up to 32 channels</b> <sub>(0.2.3.8)</sub>: a 32-channel test song in the pattern editor (drums, bass, a four-channel interlocking arp, eight string voices, sixteen sparkle voices). The bar under the grid reads “channels 1–8 of 32”; click or drag it, or Tab through the channels. The mixer strips scroll the same way beside the pinned master.</td>
+  </tr>
 </table>
 
 **Also in the box**
@@ -81,6 +85,7 @@ All pictures on this page are real captures of the current build (no mockups). T
 | | |
 |---|---|
 | 🎹 **MIDI keyboard** | play the current instrument with velocity, sustain and pitch bend; record step or live into the pattern; chord spread; MIDI learn on faders and knobs |
+| 🎚️ **Up to 32 channels** | each song sets its own channel count (1–32); the pattern editor and mixer scroll with a bar showing which channels are in view |
 | 🎛️ **Effects column** | `01`/`02` slide, `08` note decay, `09` speed, `0C` volume, `0D` volume slide, `0F` tempo; Voice `30`–`37`; filter and acid `38`–`3D` (cutoff, resonance, cutoff slides, 303 glide, accent) |
 | 🧱 **Master limiter** | lookahead true-peak limiter on the master and in every export (ceiling −1 dBTP by default, gain, release, bypass), with a loudness meter: momentary, short-term and integrated LUFS plus true peak, and a loudness-target hint |
 | 🔊 **Samples** | import WAV (button or drag and drop), sample view with loop points and preview |

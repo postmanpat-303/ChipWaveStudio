@@ -5,7 +5,9 @@ use crate::synth::Patch;
 
 pub const NOTE_OFF: u8 = 255;
 pub const ROWS: usize = 64;
-pub const MAX_CHANNELS: usize = 8;
+/// channels (tracks) per song: each song sets its own count, 1..=MAX_CHANNELS
+/// (0.2.3.8 raised this from 8 to 32)
+pub const MAX_CHANNELS: usize = 32;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Cell {

@@ -1285,3 +1285,99 @@ fn instrument_glide_legato_and_accent_are_editable_and_undoable() {
     ctrl_z(&mut h);
     assert!(!patch(&mut h).legato, "undo legato");
 }
+
+#[test]
+fn thirty_two_channels_scroll_in_the_pattern_editor_and_mixer() {
+    let mut h = harness();
+    let n0 = song(&mut h, |s| s.channels);
+    let spin = rects(&h, Role::SpinButton, Some(super::CHANNELS_TIP))[0];
+    type_into(&mut h, spin, "32");
+    key(&mut h, Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(song(&mut h, |s| s.channels), 32, "typed channel count");
+    assert!(song(&mut h, |s| s
+        .patterns
+        .iter()
+        .all(|p| p.cells.iter().all(|r| r.len() == 32))));
+    // all 32 don't fit: a scroll bar appears; Tab walks the cursor to ch 32
+    frames(&mut h, 2);
+    let bar = h.state().ch_bar;
+    assert!(bar.width() > 50.0, "channel scroll bar shown");
+    for _ in 0..31 {
+        key(&mut h, Key::Tab, egui::Modifiers::NONE);
+    }
+    assert_eq!(h.state().ch, 31);
+    let v = h.state().ch_view;
+    assert!(v > 8, "view followed the cursor: first channel {v}");
+    // typing a note on channel 32 lands there
+    h.state_mut().edit = true;
+    h.state_mut().row = 0;
+    h.state_mut().col = 0;
+    frames(&mut h, 2);
+    key(&mut h, Key::Q, egui::Modifiers::NONE);
+    let c = song(&mut h, |s| s.patterns[h_pattern(s)].cells[0][31]);
+    assert!(c.note > 0, "note on ch 32: {c:?}");
+    // clicking the left end of the bar scrolls back; the cursor follows
+    click_at(&mut h, Pos2::new(bar.left() + 2.0, bar.center().y));
+    assert_eq!(h.state().ch_view, 0, "scrolled to channel 1");
+    assert!(h.state().ch < v, "cursor moved into view");
+    // mixer: 32 strips in a horizontal scroll area, master stays pinned
+    mixer(&mut h);
+    let faders = |h: &Harness<'static, App>| -> Vec<Rect> {
+        rects(h, Role::Slider, None)
+            .into_iter()
+            .filter(|r| r.height() > 100.0)
+            .collect()
+    };
+    let f = faders(&h);
+    assert!(f.len() >= 33, "32 channel faders + master: {}", f.len());
+    // the master strip comes after the scroll area
+    let master_x = f.last().unwrap().left();
+    assert!(master_x < 1700.0, "master on screen");
+    let first = f[0];
+    for _ in 0..20 {
+        h.input_mut()
+            .events
+            .push(egui::Event::PointerMoved(first.center()));
+        h.input_mut().events.push(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(-400.0, 0.0),
+            modifiers: Default::default(),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        frame(&mut h);
+    }
+    frames(&mut h, 5);
+    let f2 = faders(&h);
+    assert!(f2[0].left() < first.left() - 500.0, "strips scrolled");
+    let m2 = f2.last().unwrap().left();
+    assert!((m2 - master_x).abs() < 1.0, "master pinned");
+    // the bar under the strips: click its left end -> back to channel 1,
+    // its right end -> the last strips
+    let bar = h.state().mix_bar;
+    assert!(bar.width() > 100.0, "mixer channel bar shown");
+    click_at(&mut h, Pos2::new(bar.left() + 2.0, bar.center().y));
+    frames(&mut h, 3);
+    assert!(
+        (faders(&h)[0].left() - first.left()).abs() < 2.0,
+        "back at channel 1"
+    );
+    click_at(&mut h, Pos2::new(bar.right() - 2.0, bar.center().y));
+    frames(&mut h, 3);
+    let f3 = faders(&h);
+    let last_ch = f3[31];
+    assert!(
+        last_ch.right() <= bar.right() + 2.0 && last_ch.left() > bar.left(),
+        "channel 32 in view: {last_ch:?} bar {bar:?}"
+    );
+    // undo the channel count change: back to the old layout
+    h.state_mut().view = View::Pattern;
+    frames(&mut h, 2);
+    ctrl_z(&mut h);
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.channels), n0);
+}
+
+fn h_pattern(s: &Song) -> usize {
+    s.order.first().copied().unwrap_or(0)
+}

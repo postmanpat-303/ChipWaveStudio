@@ -1284,4 +1284,108 @@ shift = 0.9
         assert_eq!(v.register, crate::voice::Register::Demon);
         assert!(song_from_text(&t.replace("Demon Ahh", "Nope")).is_err());
     }
+
+    #[test]
+    fn thirty_two_channel_song_round_trips() {
+        let mut s = demo_song();
+        let n0 = s.channels;
+        s.channels = MAX_CHANNELS;
+        s.channel_names.resize(MAX_CHANNELS, "Ch".into());
+        s.channel_names[31] = "Last".into();
+        for p in &mut s.patterns {
+            for r in &mut p.cells {
+                r.resize(MAX_CHANNELS, Cell::default());
+            }
+        }
+        s.patterns[0].cells[5][31] = Cell {
+            note: 49,
+            instr: 2,
+            vol: 0x31,
+            fx: 0x38,
+            fxp: 0x80,
+        };
+        s.patterns[0].cells[6][17] = Cell {
+            note: 37,
+            instr: 1,
+            vol: 0,
+            fx: 0,
+            fxp: 0,
+        };
+        s.mixer.channels[31].volume = 0.25;
+        s.mixer.channels[31].pan = -0.5;
+        s.mixer.channels[20].mute = true;
+        s.mixer.duck_key = 30;
+        let dir = std::env::temp_dir().join(format!("chipwave_32ch_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("wide.cwt");
+        save_cwt(&s, &f).unwrap();
+        let (l, warn) = load_cwt_warn(&f).unwrap();
+        assert!(warn.is_empty(), "{warn:?}");
+        assert_eq!(l.channels, 32);
+        assert_eq!(l.channel_names[31], "Last");
+        assert_eq!(l.patterns[0].cells[5][31], s.patterns[0].cells[5][31]);
+        assert_eq!(l.patterns[0].cells[6][17], s.patterns[0].cells[6][17]);
+        assert_eq!(l.patterns[0].cells[0][..n0], s.patterns[0].cells[0][..n0]);
+        assert_eq!(l.mixer.channels[31].volume, 0.25);
+        assert_eq!(l.mixer.channels[31].pan, -0.5);
+        assert!(l.mixer.channels[20].mute);
+        assert_eq!(l.mixer.duck_key, 30);
+        // a channel count above the limit is clamped, not rejected
+        let mut big = s.clone();
+        big.channels = 40;
+        for p in &mut big.patterns {
+            for r in &mut p.cells {
+                r.resize(40, Cell::default());
+            }
+        }
+        save_cwt(&big, &f).unwrap();
+        let l = load_cwt(&f).unwrap();
+        assert_eq!(l.channels, MAX_CHANNELS);
+        assert!(l
+            .patterns
+            .iter()
+            .all(|p| p.cells.iter().all(|r| r.len() == MAX_CHANNELS)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn old_eight_channel_songs_keep_their_layout() {
+        let f = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/chipwave-0.2.3.6-song.cwt");
+        let s = load_cwt(&f).unwrap();
+        let demo = demo_song_n(1);
+        assert_eq!(s.channels, demo.channels);
+        assert!(s
+            .patterns
+            .iter()
+            .all(|p| p.cells.iter().all(|r| r.len() == s.channels)));
+        // the mixer has a strip for every possible channel; old ones unchanged
+        assert_eq!(s.mixer.channels.len(), MAX_CHANNELS);
+        assert_eq!(s.mixer.channels[..8], demo.mixer.channels[..8]);
+    }
+
+    #[test]
+    fn text_song_with_sixteen_tracks() {
+        let mut t = String::from("[song]\ntitle = \"wide\"\ntracks = 16\n[[instrument]]\nname = \"a\"\npatch = \"builtin:init\"\n[mixer]\n");
+        for k in 0..16 {
+            t += &format!(
+                "[[mixer.channel]]\nname = \"T{k}\"\npan = {}\n",
+                if k == 15 { -1.0 } else { 0.0 }
+            );
+        }
+        t += "[[block]]\nname = \"b\"\nlines = 16\nrows = \"\"\"\n00";
+        for k in 0..16 {
+            t += if k == 15 {
+                " | C-4 01 .. ...."
+            } else {
+                " | --- .. .. ...."
+            };
+        }
+        t += "\n\"\"\"\n";
+        let s = song_from_text(&t).unwrap();
+        assert_eq!(s.channels, 16);
+        assert_eq!(s.channel_names[15], "T15");
+        assert_eq!(s.mixer.channels[15].pan, -1.0);
+        assert_eq!(s.patterns[0].cells[0][15].note, 49);
+    }
 }

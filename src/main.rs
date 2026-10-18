@@ -2,7 +2,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 /// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.7";
+pub const VERSION: &str = "0.2.3.8";
 
 mod app;
 mod arrange;
@@ -267,7 +267,7 @@ fn screenshot(args: &[String], i: usize) -> i32 {
     };
     let Some(out) = args.get(i + 1).filter(|a| !a.starts_with("--")) else {
         eprintln!(
-            "usage: --screenshot <out.png> [--view {}] [--theme dark|amiga] [--size 1600x900]",
+            "usage: --screenshot <out.png> [--view {}] [--theme dark|amiga] [--size 1600x900] [--song file.cwt|file.cwt.toml]",
             app::shot::VIEWS.join("|")
         );
         return 2;
@@ -305,7 +305,7 @@ fn screenshot(args: &[String], i: usize) -> i32 {
     settings::save(&st);
     let mut shot = app::shot::Shot::new(PathBuf::from(out), &view);
     shot.hold = flag("--hold").and_then(|s| s.parse().ok());
-    let r = app::screenshot(shot, size);
+    let r = app::screenshot(shot, size, flag("--song").map(PathBuf::from));
     let _ = std::fs::remove_dir_all(&tmp);
     match r {
         Ok(()) => 0,
