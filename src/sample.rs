@@ -551,3 +551,143 @@ mod tests {
         );
     }
 }
+
+/// `scripts/make_features_02310.py` builds the 0.2.3.10 features demo with this
+#[cfg(test)]
+mod features {
+    use crate::model::{Cell, Instrument, InstrumentKind, Song};
+
+    fn note(s: &str) -> u8 {
+        let names = [
+            "C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-",
+        ];
+        let k = names.iter().position(|n| s.starts_with(n)).unwrap();
+        let o: u8 = s[2..].parse().unwrap();
+        o * 12 + k as u8 + 1
+    }
+
+    fn voice(s: &mut Song, preset: &str, vol: f32) -> u8 {
+        let p = crate::voice::preset(preset).unwrap();
+        let i = Instrument {
+            name: preset.into(),
+            volume: vol,
+            transpose: 0,
+            fx: vec![],
+            kind: InstrumentKind::Voice(p),
+        };
+        s.add_instrument(i).unwrap() as u8 + 1
+    }
+
+    fn put(s: &mut Song, b: usize, r: usize, ch: usize, n: &str, ins: u8, fx: u8, fxp: u8) {
+        s.patterns[b].cells[r][ch] = Cell {
+            note: match n {
+                "" => 0,
+                "off" => 255,
+                _ => note(n),
+            },
+            instr: ins,
+            vol: 0,
+            fx,
+            fxp,
+        };
+    }
+
+    #[test]
+    #[ignore]
+    fn features_02310_demo() {
+        let inp = std::env::var("CW_F2310_IN").expect("CW_F2310_IN");
+        let out = std::env::var("CW_F2310_OUT").expect("CW_F2310_OUT");
+        let mut s = crate::fileio::load_text_song(std::path::Path::new(&inp)).unwrap();
+        let talk = voice(&mut s, "Talk Ka-Ta", 0.9);
+        let throat = voice(&mut s, "Throat Speech", 0.9);
+        let demon = voice(&mut s, "Demon Words", 0.8);
+        let fac = crate::instfile::factory_entries();
+        let e = fac
+            .iter()
+            .find(|e| crate::instfile::matches(e, "rolling offbeat bass"))
+            .unwrap();
+        let mut b = crate::instfile::instantiate(e).unwrap();
+        b.volume = 0.6;
+        let bass = s.add_instrument(b).unwrap() as u8 + 1;
+
+        // block 0 "Talk": ka ta ka da on a riff, one word per note
+        let riff = ["A-3", "A-3", "C-4", "A-3", "G-3", "A-3", "E-4", "D-4"];
+        for (k, r) in (0..64).step_by(4).enumerate() {
+            put(&mut s, 0, r, 2, riff[k % 8], talk, 0, 0);
+        }
+        // block 1 "Throat": ma na ya sha in the tract model; the second half
+        // picks words with 3E (sha, ma, sha, na ...)
+        let pick = [3u8, 0, 3, 1, 3, 0, 2, 2];
+        for (k, r) in (0..64).step_by(4).enumerate() {
+            let (fx, fxp) = if r >= 32 { (0x3E, pick[k % 8]) } else { (0, 0) };
+            put(&mut s, 1, r, 2, riff[k % 8], throat, fx, fxp);
+        }
+        // block 2 "Demon": growled gha dum osh kar, long notes, re-spoken by 3E
+        for (r, n) in [(0, "A-2"), (8, "A-2"), (16, "C-3"), (24, "G-2")] {
+            put(&mut s, 2, r, 2, n, demon, 0, 0);
+            put(&mut s, 2, r + 32, 2, n, demon, 0, 0);
+            put(&mut s, 2, r + 36, 2, "", 0, 0x3E, 1);
+        }
+        for blk in 1..3 {
+            for r in (2..64).step_by(4) {
+                put(&mut s, blk, r, 3, "A-1", bass, 0, 0);
+            }
+        }
+        // blocks 3-4 "Break": a synthesised breakbeat, sliced at transients,
+        // slices to instruments + notes (as the sample editor's To notes)
+        let rate = 48000u32;
+        let data = super::demo_break(rate);
+        let cuts = super::transient_slices(&data, rate, 0.5, 50.0);
+        let bounds = super::slice_bounds(&cuts, data.len());
+        let row_s = 60.0 / s.bpm / s.lines_per_beat as f32;
+        let mut slots = vec![];
+        for (k, &(a, b)) in bounds.iter().enumerate() {
+            let i = Instrument {
+                name: format!("Break {:02}", k + 1),
+                volume: 0.9,
+                transpose: 0,
+                fx: vec![],
+                kind: InstrumentKind::Sample {
+                    file: String::new(),
+                    rate,
+                    data: super::extract(&data, a, b, rate).into(),
+                    base_note: 49,
+                    lp: Default::default(),
+                },
+            };
+            let slot = s.add_instrument(i).unwrap() as u8 + 1;
+            let row = (a as f32 / rate as f32 / row_s).round() as usize;
+            slots.push((row, slot));
+        }
+        eprintln!(
+            "{} slices at rows {:?}",
+            slots.len(),
+            slots.iter().map(|x| x.0).collect::<Vec<_>>()
+        );
+        // block 3: the loop as it was, twice
+        for &(row, slot) in &slots {
+            for rep in [0, 32] {
+                if row + rep < 64 {
+                    put(&mut s, 3, row + rep, 4, "C-4", slot, 0, 0);
+                }
+            }
+        }
+        // block 4: the same slices re-sequenced (kick / snare swapped about,
+        // a stuttered ending), Demon Words on top
+        let first_bar: Vec<u8> = slots.iter().filter(|x| x.0 < 16).map(|x| x.1).collect();
+        let order = [0usize, 0, 2, 1, 3, 1, 0, 2, 4, 1, 0, 3, 2, 2, 1, 1];
+        for rep in 0..4 {
+            for (k, &o) in order.iter().enumerate() {
+                if (k + rep) % 2 == 0 || rep == 3 {
+                    let r = rep * 16 + k;
+                    put(&mut s, 4, r, 4, "C-4", first_bar[o % first_bar.len()], 0, 0);
+                }
+            }
+        }
+        for (r, n) in [(0, "A-2"), (16, "C-3"), (32, "A-2"), (48, "G-2")] {
+            put(&mut s, 4, r, 2, n, demon, 0, 0);
+            put(&mut s, 4, r + 8, 2, "", 0, 0x3E, 3);
+        }
+        crate::fileio::save_cwt(&s, std::path::Path::new(&out)).unwrap();
+    }
+}
