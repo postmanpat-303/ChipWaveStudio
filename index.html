@@ -3,105 +3,365 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ChipWave Tracker – Free Music Tracker &amp; DAW for Windows and Linux</title>
-<meta name="description" content="ChipWave Tracker is a free, open-source music tracker and DAW for Windows and Linux, inspired by OctaMED and the Amiga. Built-in synth, visual arranger, mixer with sidechain ducking, MIDI input and WAV/MP3 export.">
-<meta name="keywords" content="ChipWave Tracker, free music DAW, free DAW, music tracker, OctaMED, Amiga tracker, chiptune, synthesizer, MIDI, music production, Windows, Linux, open source">
+<title>ChipWave Tracker – Free Music DAW &amp; Tracker for Windows, macOS and Linux</title>
+<meta name="description" content="ChipWave Tracker is a free, open-source music DAW and OctaMED-inspired tracker for Windows, macOS and Linux: synth, generators, Voice instrument, CLAP plugins, arranger, automation, limiter and WAV/MP3 export.">
+<meta name="keywords" content="ChipWave Tracker, free music DAW, free DAW, free DAW for Windows, free DAW for Mac, music tracker, OctaMED, Amiga tracker, chiptune, synthesizer, FM synth, drum synth, sfxr, CLAP plugins, MIDI, music production, Windows, macOS, Linux, open source">
 <link rel="canonical" href="https://postmanpat-303.github.io/ChipWaveTracker/">
-<meta name="theme-color" content="#409cff">
+<meta name="theme-color" content="#070b1c">
+<meta name="color-scheme" content="dark">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preload" as="image" href="assets/shots/instrument-editor.webp" imagesrcset="assets/shots/instrument-editor-800.webp 800w, assets/shots/instrument-editor.webp 1600w" imagesizes="(max-width:1120px) 100vw, 1072px">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="The Wave Family">
-<meta property="og:title" content="ChipWave Tracker – Free Music Tracker &amp; DAW for Windows and Linux">
-<meta property="og:description" content="ChipWave Tracker is a free, open-source music tracker and DAW for Windows and Linux, inspired by OctaMED and the Amiga. Built-in synth, visual arranger, mixer with sidechain ducking, MIDI input and WAV/MP3 export.">
+<meta property="og:title" content="ChipWave Tracker – Free Music DAW &amp; Tracker for Windows, macOS and Linux">
+<meta property="og:description" content="A free, open-source music DAW with a tracker heart, inspired by OctaMED and the Amiga. Synths, generators, a Voice instrument, CLAP plugins, arranger, automation and WAV/MP3 export.">
 <meta property="og:url" content="https://postmanpat-303.github.io/ChipWaveTracker/">
 <meta property="og:image" content="https://postmanpat-303.github.io/ChipWaveTracker/assets/og.png">
-<meta property="og:image:alt" content="ChipWave Tracker: free music tracker and DAW for Windows and Linux">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="ChipWave Tracker: free music DAW and tracker for Windows, macOS and Linux">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="ChipWave Tracker – Free Music Tracker &amp; DAW for Windows and Linux">
-<meta name="twitter:description" content="ChipWave Tracker is a free, open-source music tracker and DAW for Windows and Linux, inspired by OctaMED and the Amiga. Built-in synth, visual arranger, mixer with sidechain ducking, MIDI input and WAV/MP3 export.">
+<meta name="twitter:title" content="ChipWave Tracker – Free Music DAW &amp; Tracker for Windows, macOS and Linux">
+<meta name="twitter:description" content="A free, open-source music DAW with a tracker heart, inspired by OctaMED and the Amiga. Synths, generators, a Voice instrument, CLAP plugins, arranger, automation and WAV/MP3 export.">
 <meta name="twitter:image" content="https://postmanpat-303.github.io/ChipWaveTracker/assets/og.png">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "ChipWave Tracker", "description": "ChipWave Tracker is a free, open-source music tracker and DAW for Windows and Linux, inspired by OctaMED and the Amiga. Built-in synth, visual arranger, mixer with sidechain ducking, MIDI input and WAV/MP3 export.", "applicationCategory": "MultimediaApplication", "applicationSubCategory": "Music tracker / DAW", "operatingSystem": "Windows, Linux", "softwareVersion": "v0.2.3.5", "url": "https://postmanpat-303.github.io/ChipWaveTracker/", "downloadUrl": "https://github.com/postmanpat-303/ChipWaveTracker/releases/latest", "image": "https://postmanpat-303.github.io/ChipWaveTracker/assets/og.png", "screenshot": ["https://postmanpat-303.github.io/ChipWaveTracker/assets/dark-pattern.webp", "https://postmanpat-303.github.io/ChipWaveTracker/assets/dark-arranger.webp", "https://postmanpat-303.github.io/ChipWaveTracker/assets/dark-mixer.webp"], "license": "https://www.gnu.org/licenses/gpl-3.0.html", "isAccessibleForFree": true, "codeRepository": "https://github.com/postmanpat-303/ChipWaveTracker", "programmingLanguage": "Rust", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "author": {"@type": "Person", "name": "Derek Heasley", "url": "https://github.com/postmanpat-303"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[
+{"@type":"SoftwareApplication","name":"ChipWave Tracker","alternateName":"ChipWave","description":"ChipWave Tracker is a free, open-source music DAW and OctaMED-inspired tracker for Windows, macOS and Linux, with a built-in synth, macro-knob generators, a synthetic Voice instrument, CLAP plugin hosting, a visual arranger with automation, a mixer with sidechain ducking, a true-peak limiter with LUFS metering, MIDI input and WAV/MP3 export.","applicationCategory":"MultimediaApplication","applicationSubCategory":"Music tracker / DAW","operatingSystem":"Windows, macOS, Linux","softwareVersion":"0.2.3.16","url":"https://postmanpat-303.github.io/ChipWaveTracker/","downloadUrl":"https://github.com/postmanpat-303/ChipWaveTracker/releases/latest","installUrl":"https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-setup-x64.exe","image":"https://postmanpat-303.github.io/ChipWaveTracker/assets/og.png","screenshot":["https://postmanpat-303.github.io/ChipWaveTracker/assets/shots/instrument-editor.webp","https://postmanpat-303.github.io/ChipWaveTracker/assets/shots/full-height-pattern.webp","https://postmanpat-303.github.io/ChipWaveTracker/assets/shots/arranger-view.webp","https://postmanpat-303.github.io/ChipWaveTracker/assets/shots/mixer-limiter.webp"],"featureList":["OctaMED-style pattern editor with up to 32 channels","Visual arranger with automation lanes","Built-in synth with SVF and Moog ladder filters","Generators: Drum Synth, Analog, FM-4, Noise and Chip FX (sfxr)","Synthetic Voice instrument with words, Throat mode and Voice Transform","CLAP plugin instrument hosting","Mixer with sidechain ducking, true-peak limiter and LUFS meter","MIDI keyboard input and MIDI learn","WAV and MP3 export","Dark Circuit and Amiga Workbench themes"],"license":"https://www.gnu.org/licenses/gpl-3.0.html","isAccessibleForFree":true,"codeRepository":"https://github.com/postmanpat-303/ChipWaveTracker","programmingLanguage":"Rust","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"author":{"@type":"Person","name":"Derek Heasley","url":"https://github.com/postmanpat-303"}},
+{"@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Is ChipWave Tracker really free?","acceptedAnswer":{"@type":"Answer","text":"Yes. ChipWave Tracker is a free music DAW and tracker, released as free software under the GNU GPL v3. There is no account, trial or paid tier."}},
+{"@type":"Question","name":"Which systems does it run on?","acceptedAnswer":{"@type":"Answer","text":"64-bit Windows (installer or portable zip), macOS 11 or later as a universal app for Apple Silicon and Intel, and Linux by building from source with Rust."}},
+{"@type":"Question","name":"Can I use plugins?","acceptedAnswer":{"@type":"Answer","text":"Yes, CLAP instrument plugins such as Surge XT, with a crash-guarded scanner, parameter list, macros, automation and state saved in the song. VST3 hosting and plugin effects are planned but not in the app yet."}},
+{"@type":"Question","name":"Can it open MOD or MED files?","acceptedAnswer":{"@type":"Answer","text":"Not yet. MED and MOD loading are on the roadmap. ChipWave saves its own .cwt songs, a ZIP of TOML and WAV files you can inspect."}}
+]}]}</script>
 <style>
-:root{--bg:#07090f;--card:#0f141d;--line:#1e2633;--text:#e8edf5;--mute:#9aa6b8;--acc:#409cff;--acc2:#7c4dff;--accink:#06101f}
-*{box-sizing:border-box}html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Ubuntu,sans-serif}
-a{color:var(--acc)}img{max-width:100%;height:auto;display:block}
-.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
-header.nav{position:sticky;top:0;z-index:10;background:rgba(7,9,15,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-header.nav .wrap{display:flex;align-items:center;gap:14px;height:60px}
-header.nav img{width:34px;height:34px;border-radius:8px}header.nav b{font-size:18px}
-header.nav nav{margin-left:auto;display:flex;gap:18px;flex-wrap:wrap}header.nav nav a{color:var(--mute);text-decoration:none;font-size:15px}header.nav nav a:hover{color:var(--text)}
-.hero{padding:64px 0 40px;background:radial-gradient(900px 420px at 15% 0%,color-mix(in srgb,var(--acc) 22%,transparent),transparent 70%)}
-.hero .wrap{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center}
-.badge{display:inline-block;background:var(--acc);color:var(--accink);font-weight:800;border-radius:999px;padding:4px 14px;font-size:14px;letter-spacing:.04em}
-h1{font-size:clamp(32px,4.6vw,52px);line-height:1.1;margin:16px 0}
-h1 span{color:var(--acc)}
-.lead{font-size:19px;color:#cfd7e3;margin:0 0 22px}
-.btns{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:12px;font-weight:700;text-decoration:none;border:1px solid var(--line);color:var(--text);background:var(--card)}
-.btn.primary{background:var(--acc);color:var(--accink);border-color:transparent}
-.btn:hover{filter:brightness(1.12)}
-.small{color:var(--mute);font-size:14px}
-.shot{border-radius:14px;border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.5)}
-section{padding:48px 0;border-top:1px solid var(--line)}
-h2{font-size:clamp(26px,3vw,34px);margin:0 0 8px}h2+p{color:var(--mute);margin-top:0}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
-.f{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
-.f h3{margin:0 0 6px;font-size:17px}.f p{margin:0;color:#c3ccd9;font-size:15px}
-.gallery{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:24px}
-figure{margin:0}figcaption{color:var(--mute);font-size:14px;margin-top:6px}
-.dl{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
-.dl .f .btn{margin-top:10px;width:100%;justify-content:center}
-.video{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#000;cursor:pointer;max-width:880px;margin:24px auto 0}
-.video img{width:100%;height:100%;object-fit:cover;opacity:.85}
+:root{--bg:#070b1c;--bg2:#0d1430;--card:#111a3a;--card2:#0c1330;--line:#24336b;--txt:#e6f0ff;--mut:#a9b7dc;--cy:#22e3ff;--mg:#ff3fb4;--li:#b6ff3c;--ye:#ffd23f;--vi:#8b5cff;--grad:linear-gradient(90deg,var(--cy),var(--vi) 55%,var(--mg))}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{font:16px/1.6 Inter,"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--txt);overflow-x:hidden}
+a{color:var(--cy);text-decoration:none}a:hover{text-decoration:underline}
+img{max-width:100%;height:auto;display:block}
+code,kbd{font:0.9em ui-monospace,"Cascadia Mono",Consolas,monospace;background:#0a1028;border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+:focus-visible{outline:2px solid var(--ye);outline-offset:3px;border-radius:4px}
+.skip{position:absolute;left:-999px;top:8px;background:var(--ye);color:#000;padding:8px 14px;border-radius:8px;z-index:20}.skip:focus{left:8px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+nav{position:sticky;top:0;z-index:10;backdrop-filter:blur(12px);background:rgba(7,11,28,.8);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:20px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;color:var(--txt)}.brand:hover{text-decoration:none}
+.brand img{width:34px;height:34px;border-radius:9px}
+.brand span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+nav .links{margin-left:auto;display:flex;gap:22px;font-size:14px}
+nav .links a{color:var(--mut)}nav .links a:hover{color:var(--txt);text-decoration:none}
+@media (max-width:860px){nav .links a:not(.keep){display:none}}
+header.hero{position:relative;padding:88px 0 0;text-align:center;background:radial-gradient(ellipse at 50% 70%,rgba(139,92,255,.22),transparent 60%),radial-gradient(ellipse at 20% 0%,rgba(34,227,255,.12),transparent 50%),linear-gradient(180deg,var(--bg2),var(--bg));overflow:hidden}
+.hero-logo{width:128px;height:128px;border-radius:30px;margin:0 auto 26px;box-shadow:0 18px 60px rgba(34,227,255,.3),0 0 0 1px rgba(255,255,255,.06);animation:float 6s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-8px) rotate(-1.5deg)}}
+.eyebrow{display:inline-block;font:700 13px/1 ui-monospace,Consolas,monospace;letter-spacing:.14em;color:var(--li);border:1px solid rgba(182,255,60,.35);border-radius:999px;padding:7px 14px;margin-bottom:18px}
+h1{font-size:clamp(36px,6.4vw,72px);line-height:1.06;letter-spacing:-2px;font-weight:800}
+h1 small{display:block;font-size:.42em;letter-spacing:-.5px;color:var(--mut);font-weight:700;margin-bottom:10px}
+.g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{max-width:720px;margin:20px auto 0;color:var(--mut);font-size:clamp(17px,2.2vw,20px)}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:32px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:13px 24px;border-radius:999px;font-weight:700;border:1px solid var(--line);color:var(--txt);background:rgba(17,26,58,.7);transition:transform .15s,box-shadow .15s}
+.btn:hover{transform:translateY(-2px);text-decoration:none;border-color:var(--cy)}
+.btn.primary{background:var(--grad);border:0;color:#060a18;box-shadow:0 0 30px rgba(34,227,255,.35)}
+.btn.primary:hover{box-shadow:0 0 45px rgba(255,63,180,.45)}
+.meta{margin-top:14px;font-size:13px;color:var(--mut)}
+.hero-shot{margin:48px auto 0;max-width:1072px;border-radius:16px 16px 0 0;overflow:hidden;border:1px solid var(--line);border-bottom:0;box-shadow:0 -10px 80px rgba(34,227,255,.18)}
+.hero-shot img{aspect-ratio:16/9;width:100%}
+.scan{position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--grad);opacity:.7}
+section{padding:84px 0}
+h2{font-size:clamp(28px,4vw,42px);letter-spacing:-1px;line-height:1.15;text-align:center}
+.sub{text-align:center;color:var(--mut);max-width:680px;margin:12px auto 44px}
+.alt{background:linear-gradient(180deg,var(--bg),var(--bg2),var(--bg))}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.card{position:relative;background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:18px;padding:24px;transition:transform .2s,border-color .2s,box-shadow .2s}
+.card:hover{transform:translateY(-4px);border-color:var(--cy);box-shadow:0 10px 40px rgba(34,227,255,.14)}
+.card .ico{font-size:26px;width:52px;height:52px;display:grid;place-items:center;border-radius:14px;background:rgba(34,227,255,.1);margin-bottom:14px}
+.card:nth-child(4n+2) .ico{background:rgba(255,63,180,.12)}.card:nth-child(4n+3) .ico{background:rgba(182,255,60,.1)}.card:nth-child(4n) .ico{background:rgba(255,210,63,.1)}
+.card h3{font-size:19px;margin-bottom:6px}
+.card p{color:var(--mut);font-size:15px}
+.tag{position:absolute;top:18px;right:18px;font:700 11px/1 ui-monospace,Consolas,monospace;letter-spacing:.08em;color:#060a18;background:var(--li);padding:5px 8px;border-radius:6px}
+.also{margin-top:26px;text-align:center;color:var(--mut);font-size:15px}
+.split{display:grid;grid-template-columns:1fr 1.15fr;gap:48px;align-items:center}
+.split.rev{grid-template-columns:1.15fr 1fr}
+@media (max-width:900px){.split,.split.rev{grid-template-columns:1fr}.split.rev>:first-child{order:2}}
+.split h2,.split .sub{text-align:left;margin-left:0}
+.split .sub{margin-bottom:24px}
+.checks{list-style:none;display:grid;gap:12px}
+.checks li{padding-left:34px;position:relative;color:var(--mut)}
+.checks li b{color:var(--txt)}
+.checks li::before{content:"✓";position:absolute;left:0;top:2px;width:22px;height:22px;border-radius:50%;background:var(--grad);color:#060a18;font-size:13px;font-weight:800;display:grid;place-items:center}
+.frame{border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.55);background:#0a1028}
+.frame figcaption{padding:10px 14px;font-size:13px;color:var(--mut)}
+.video{display:block;position:relative;max-width:880px;margin:0 auto;aspect-ratio:16/9;border-radius:18px;overflow:hidden;border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.5);background:#000}
+.video img{width:100%;height:100%;object-fit:cover;transition:transform .3s}
+.video:hover img{transform:scale(1.02)}
 .video .play{position:absolute;inset:0;display:grid;place-items:center}
-.video .play i{width:86px;height:60px;border-radius:16px;background:var(--acc);display:grid;place-items:center;box-shadow:0 8px 30px rgba(0,0,0,.5)}
-.video .play i:after{content:"";border-left:24px solid var(--accink);border-top:15px solid transparent;border-bottom:15px solid transparent;margin-left:6px}
+.video .play i{width:88px;height:62px;border-radius:18px;background:var(--grad);display:grid;place-items:center;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.video .play i::after{content:"";border-left:24px solid #060a18;border-top:15px solid transparent;border-bottom:15px solid transparent;margin-left:6px}
 .video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.cta{text-align:center}
-footer{padding:30px 0 50px;color:var(--mute);font-size:14px;border-top:1px solid var(--line)}
-footer .wrap{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between}
-code{background:#151b26;border:1px solid var(--line);border-radius:6px;padding:1px 6px}
-pre{background:#0b1018;border:1px solid var(--line);border-radius:12px;padding:14px;overflow:auto;font-size:14px}
-@media(max-width:860px){.hero .wrap,.gallery,.dl{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}header.nav nav a.hide-sm{display:none}}
-@media(max-width:560px){.grid{grid-template-columns:1fr}header.nav nav a:not(.keep){display:none}header.nav b{white-space:nowrap}}
+.cap{text-align:center;color:var(--mut);margin-top:14px;font-size:15px}
+.shots figure{margin:0}
+.shot{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#0a1028;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.shot a{display:block}.shot img{aspect-ratio:16/9;width:100%;object-fit:cover;object-position:top}
+.shot figcaption{padding:12px 16px;font-size:14px;color:var(--mut)}.shot figcaption b{color:var(--txt)}
+.carousel{position:relative;margin-top:18px}
+.track{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 36px)/3);gap:18px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;scrollbar-width:none;padding-bottom:4px}
+.track::-webkit-scrollbar{display:none}
+.track .shot{scroll-snap-align:start}.track .shot:hover{border-color:var(--cy)}
+@media (max-width:900px){.track{grid-auto-columns:calc((100% - 18px)/2)}}
+@media (max-width:600px){.track{grid-auto-columns:86%}}
+.cbtn{position:absolute;top:calc(50% - 40px);transform:translateY(-50%);z-index:2;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:rgba(7,11,28,.9);color:var(--txt);font-size:24px;line-height:1;cursor:pointer;display:grid;place-items:center}
+.cbtn:hover{background:var(--cy);color:#060a18}.cbtn:disabled{opacity:0;pointer-events:none}
+.cbtn.prev{left:-14px}.cbtn.next{right:-14px}
+@media (max-width:600px){.cbtn{display:none}}
+.dots{display:flex;justify-content:center;gap:8px;margin-top:16px}
+.dots button{width:9px;height:9px;padding:0;border:0;border-radius:50%;background:var(--line);cursor:pointer;transition:background .2s,width .2s}
+.dots button[aria-current="true"]{background:var(--cy);width:24px;border-radius:5px}
+.amiga{background:linear-gradient(180deg,var(--bg),#101a3f 50%,var(--bg))}
+.wb{border-radius:6px;overflow:hidden;border:2px solid #fff;box-shadow:0 0 0 2px #1f5fd1,0 20px 60px rgba(0,0,0,.5);background:#9aa5b4}
+.wb .bar{background:linear-gradient(#3f7fe6,#1747a8);color:#fff;font:700 13px/1 ui-monospace,Consolas,monospace;padding:7px 10px;display:flex;justify-content:space-between}
+.wb img{width:100%;image-rendering:pixelated}
+.badge{display:inline-block;font:700 12px/1 ui-monospace,Consolas,monospace;letter-spacing:.1em;color:#1a1000;background:#ff7a00;border-radius:4px;padding:6px 9px;margin-bottom:14px}
+.dlbox{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.dlbox .card .btn{width:100%;margin-top:12px}
+.dlbox pre{margin-top:12px;background:#0a1028;border:1px solid var(--line);border-radius:12px;padding:12px;overflow:auto;font:12px/1.5 ui-monospace,Consolas,monospace;color:var(--txt)}
+.note{margin-top:22px;color:var(--mut);font-size:14px;text-align:center}
+.faq{max-width:820px;margin:0 auto;display:grid;gap:12px}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px 20px}
+.faq details[open]{border-color:var(--vi)}
+.faq summary{cursor:pointer;font-weight:700;padding:14px 0;list-style:none;display:flex;justify-content:space-between;gap:16px}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";color:var(--cy);font-size:22px;line-height:1}
+.faq details[open] summary::after{content:"–"}
+.faq p{color:var(--mut);padding:0 0 16px}
+.credits{columns:3 260px;column-gap:28px;list-style:none}
+.credits li{break-inside:avoid;padding:8px 0;border-bottom:1px solid rgba(36,51,107,.6);color:var(--mut);font-size:14px}
+.credits li a{font-weight:700}
+.credits li span{display:block;font-size:12.5px;opacity:.85}
+.support{display:flex;flex-wrap:wrap;gap:14px;justify-content:center}
+.coffee{background:linear-gradient(90deg,#ffd23f,#ff9a3c);color:#1a1000;border:0}
+.family{margin-top:28px;text-align:center;color:var(--mut);font-size:14px}
+footer{border-top:1px solid var(--line);padding:34px 0;color:var(--mut);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:center}
 </style>
 </head>
 <body>
-<header class="nav"><div class="wrap"><img src="assets/icon-256.png" alt="" width="34" height="34"><b>ChipWave Tracker</b>
-<nav><a href="#features">Features</a><a href="#screenshots" class="hide-sm">Screenshots</a><a href="#video" class="hide-sm">Video</a><a href="#download" class="keep">Download</a><a href="#community">Community</a><a href="https://github.com/postmanpat-303/ChipWaveTracker">GitHub</a></nav></div></header>
-<main>
-<div class="hero"><div class="wrap"><div>
-<span class="badge">100% FREE · OPEN SOURCE</span>
-<h1>ChipWave Tracker: a <span>free music DAW</span> and OctaMED-inspired tracker</h1>
-<p class="lead">The fast, keyboard-driven pattern workflow of the classic Amiga trackers, with a built-in synth, a visual arranger, a mixer with sidechain ducking, MIDI input and WAV/MP3 export. For Windows and Linux.</p>
-<div class="btns"><a class="btn primary" href="#download">⬇ Download free</a><a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker">★ View on GitHub</a></div>
-<p class="small">Free and open source (GPL-3.0) · written in Rust · early version in active development</p>
-</div><img src="assets/dark-pattern.webp" alt="The pattern editor in the Dark Circuit theme" width="1200" height="675" class="shot" fetchpriority="high"></div></div>
-<section id="features"><div class="wrap"><h2>A music tracker with a modern DAW inside</h2><p>Everything here is in the current release. The screenshots are real captures.</p><div class="grid"><div class="f"><h3>🎼 Pattern editor</h3><p>OctaMED-style blocks of 64 rows with note, instrument, volume and effect columns, the classic Z–M keyboard layout, transpose and undo.</p></div><div class="f"><h3>🎹 Built-in synth</h3><p>Oscillators with unison and detune, a filter with its own envelope, ADSR, drive, an 808-style metallic source and a tempo-syncable LFO.</p></div><div class="f"><h3>🧱 Visual arranger</h3><p>Your song as coloured clips with section badges, drag to reorder, plus automation lanes for filter sweeps, levels and delay.</p></div><div class="f"><h3>🎚️ Mixer with sidechain ducking</h3><p>Faders, pan, mute/solo, meters, delay and reverb sends, and sidechain ducking for that trance pump.</p></div><div class="f"><h3>🎛️ FX chain</h3><p>Filter, chorus/flanger, delay, reverb, drive, bitcrusher and compressor per instrument, with presets.</p></div><div class="f"><h3>🎹 MIDI keyboard</h3><p>Play with velocity, sustain and pitch bend, record step or live into the pattern, and MIDI-learn faders and knobs.</p></div><div class="f"><h3>📼 WAV & MP3 export</h3><p>Export the whole song, a block or an arranger selection, with ID3 tags.</p></div><div class="f"><h3>🪄 Fill to length</h3><p>Auto-arrange a song to a target length from a style, with an editable energy curve.</p></div><div class="f"><h3>🖥️ Amiga Workbench theme</h3><p>Switch from the Dark Circuit theme to a light Amiga Workbench look with blue headers and an orange cursor.</p></div></div><p class="small" style="margin-top:18px">Also included: WAV sample import with loop points, autosave, backups and crash recovery, an original 140 BPM demo song (“Lumen Drift”), UI scaling and an update check.</p></div></section>
-<section id="screenshots"><div class="wrap"><h2>Screenshots</h2><p>Real captures of the app, no mock-ups.</p><div class="gallery"><figure><img src="assets/dark-arranger.webp" alt="The visual arranger with automation lanes" width="1200" height="675" loading="lazy" class="shot"><figcaption>The visual arranger with automation lanes</figcaption></figure><figure><img src="assets/dark-mixer.webp" alt="The mixer with sidechain ducking and send buses" width="1200" height="675" loading="lazy" class="shot"><figcaption>The mixer with sidechain ducking and send buses</figcaption></figure><figure><img src="assets/dark-fx.webp" alt="The per-instrument FX chain" width="1200" height="675" loading="lazy" class="shot"><figcaption>The per-instrument FX chain</figcaption></figure><figure><img src="assets/amiga-pattern.webp" alt="The Amiga Workbench theme" width="1200" height="675" loading="lazy" class="shot"><figcaption>The Amiga Workbench theme</figcaption></figure><figure><img src="assets/dark-fill.webp" alt="Fill to length: auto-arrange a song from a style" width="1200" height="675" loading="lazy" class="shot"><figcaption>Fill to length: auto-arrange a song from a style</figcaption></figure></div></div></section>
-<section id="video"><div class="wrap"><h2>Watch the cicada film</h2><p>A cicada finds its rhythm, with a little nod to the Amiga days.</p>
-<div class="video" data-id="6VWhFZxexIc" data-title="ChipWave Tracker promo video" role="button" aria-label="Play the ChipWave Tracker promo video"><img src="https://i.ytimg.com/vi/6VWhFZxexIc/hqdefault.jpg" alt="ChipWave Tracker promo video" width="480" height="360" loading="lazy"><div class="play"><i></i></div></div>
-<p class="small" style="text-align:center">Or watch it <a href="https://youtu.be/6VWhFZxexIc">on YouTube</a> · more on <a href="https://www.youtube.com/@whatgoesaround1551">the channel</a></p></div></section>
-<section id="download"><div class="wrap"><h2>Download ChipWave Tracker free</h2><p>Latest release: <b data-ver>v0.2.3.5</b> · <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest">all files and checksums</a> · GPL-3.0 licence</p><div class="dl"><div class="f"><h3>🪟 Windows</h3><p>64-bit Windows 10 and later. Installer or portable zip. Opens with the demo song: press Space to play.</p><a class="btn primary" data-asset="setup-x64\.exe$" href="https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.5/ChipWave-0.2.3.5-setup-x64.exe">Installer (.exe)</a><a class="btn" data-asset="windows-x64\.zip$" href="https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.5/ChipWave-0.2.3.5-windows-x64.zip">Portable .zip</a></div><div class="f"><h3>🐧 Linux</h3><p>Build it from source with Rust. On Debian/Ubuntu you also need <code>libasound2-dev</code>.</p><pre>git clone https://github.com/postmanpat-303/ChipWaveTracker
+<a class="skip" href="#main">Skip to content</a>
+<nav aria-label="Main"><div class="wrap">
+  <a class="brand" href="#top"><img src="assets/icon-256.png" alt="" width="34" height="34"><b>Chip<span>Wave</span></b></a>
+  <div class="links"><a href="#features">Features</a><a href="#editor">Instrument editor</a><a href="#shots">Screenshots</a><a href="#amiga">Amiga</a><a href="#faq">FAQ</a><a class="keep" href="#download">Download</a><a class="keep" href="https://github.com/postmanpat-303/ChipWaveTracker">GitHub ↗</a></div>
+</div></nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <img class="hero-logo" src="assets/icon-256.png" alt="ChipWave Tracker logo: an engraved cicada on a branch sending out sound waves" width="128" height="128">
+    <span class="eyebrow">100% FREE · OPEN SOURCE · GPL-3</span>
+    <h1><small>ChipWave Tracker</small>A <span class="g">free music DAW</span><br>with a tracker heart.</h1>
+    <p class="lead">The fast, keyboard-driven pattern workflow of OctaMED and the Amiga, plus a built-in synth, macro-knob generators, a synthetic Voice instrument, CLAP plugins, a visual arranger with automation, a mixer with a true-peak limiter, and WAV/MP3 export. For Windows, macOS and Linux.</p>
+    <div class="cta">
+      <a class="btn primary" id="dl-win" href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-setup-x64.exe">⬇ Download for Windows</a>
+      <a class="btn" id="dl-mac" href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-macos-universal.dmg">⬇ Download for macOS</a>
+      <a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker">★ View on GitHub</a>
+    </div>
+    <p class="meta">Latest release <b data-ver>v0.2.3.16</b> · Windows 64-bit · macOS 11+ (Apple Silicon &amp; Intel) · Linux from source</p>
+    <figure class="hero-shot">
+      <img src="assets/shots/instrument-editor.webp" srcset="assets/shots/instrument-editor-800.webp 800w, assets/shots/instrument-editor.webp 1600w" sizes="(max-width:1120px) 100vw, 1072px" width="1600" height="900" alt="ChipWave Tracker main window: the pattern editor with eight channels on top, the instrument list on the left and the Analog generator open in the lower-panel instrument editor with Dice, Oscillators, Filter, Amp envelope and Voice cards" fetchpriority="high">
+    </figure>
+  </div>
+  <div class="scan" aria-hidden="true"></div>
+</header>
+
+<main id="main">
+<section id="video"><div class="wrap">
+  <h2>Watch the promo</h2>
+  <p class="sub">A cicada finds its rhythm, with a little nod to the Amiga days.</p>
+  <a class="video" href="https://youtu.be/6VWhFZxexIc" data-id="6VWhFZxexIc" rel="noopener" aria-label="Play the ChipWave Tracker promo video">
+    <picture><source srcset="assets/promo-thumb.webp" type="image/webp"><img src="assets/promo-thumb.jpg" alt="" width="960" height="540" loading="lazy" decoding="async"></picture>
+    <span class="play" aria-hidden="true"><i></i></span>
+  </a>
+  <p class="cap"><a href="https://youtu.be/6VWhFZxexIc" rel="noopener">▶ Watch on YouTube</a> · more demos on <a href="https://www.youtube.com/@whatgoesaround1551" rel="noopener">Derek's channel</a></p>
+</div></section>
+
+<section id="features" class="alt"><div class="wrap">
+  <h2>A music tracker with a modern DAW inside</h2>
+  <p class="sub">Everything here is in the app today. Written in Rust with egui and cpal, up to 32 channels per song.</p>
+  <div class="grid">
+    <div class="card"><div class="ico">🎼</div><h3>Pattern editor</h3><p>OctaMED-style blocks with note, instrument, volume and effect columns, the classic Z–M keys, selection, transpose and undo. Decimal or hex row numbers and adjustable block length.</p></div>
+    <div class="card"><div class="ico">🧱</div><h3>Arranger &amp; automation</h3><p>Your song as coloured clips with role badges, drag to reorder, click the ruler to move the play marker, plus automation lanes for filter sweeps, levels and delay feedback.</p></div>
+    <div class="card"><div class="ico">🎲</div><h3>Built-in generators</h3><p>Macro-knob instruments: Drum Synth and kits, Analog (Moog-style), FM-4, Noise and Chip FX (an sfxr port). Dice, Mutate, locks, 16-roll history and Bake to sample. 46 presets.</p></div>
+    <div class="card"><div class="ico">🎹</div><h3>Synth with Moog ladder</h3><p>Oscillators with unison and detune, SVF or Moog ladder filter (clean or vintage, 12/24 dB), ADSR, drive, 303 glide and accent, and a tempo-syncable LFO.</p></div>
+    <div class="card"><div class="ico">🗣️</div><h3>Voice instrument &amp; Voice FX</h3><p>Synthetic vowels, babble, stutter and spoken words, a Throat (vocal tract) mode, and Voice Transform: metallic resonance, digital distortion and heavy sub, also as FX devices for any instrument.</p></div>
+    <div class="card"><div class="ico">🔌</div><h3>CLAP plugin hosting</h3><p>Play CLAP instruments such as Surge XT: crash-guarded scanner, browser, native editor on Windows, parameter list, 8 macros, automation, state saved in the song.</p></div>
+    <div class="card"><div class="ico">🎚️</div><h3>Effects, limiter &amp; LUFS</h3><p>Per-instrument FX chain, a mixer with sends and sidechain ducking, a lookahead true-peak limiter and a LUFS meter (ITU-R BS.1770). Exports use the same limiter.</p></div>
+    <div class="card"><div class="ico">🎛️</div><span class="tag">NEW</span><h3>Lower-panel instrument editor</h3><p>Every instrument edited under the pattern with knobs on collapsible cards, four tabs, A/B compare and parameter search. <kbd>F11</kbd> gives the pattern the full height.</p></div>
+    <div class="card"><div class="ico">🎵</div><h3>Demo songs</h3><p>File &gt; Demo songs: “Lumen Drift” (trance), “Hollow Ritual” (dark psytrance) and “Velvet Mirrorball” (disco with Voice choir), all original. Press Space to play.</p></div>
+    <div class="card"><div class="ico">🖥️</div><h3>Themes, incl. Amiga</h3><p>Dark Circuit by default, or the light Amiga Workbench Gradient theme with classic blue headers and an orange cursor. UI scaling in 25 % steps.</p></div>
+    <div class="card"><div class="ico">⌨️</div><h3>MIDI keyboard</h3><p>Play with velocity, sustain and pitch bend, record step or live into the pattern, and MIDI-learn faders and knobs. Chord helper with scale lock.</p></div>
+    <div class="card"><div class="ico">📼</div><h3>WAV &amp; MP3 export</h3><p>Export the whole song, the current block or an arranger selection, with ID3 tags. Songs save as open <code>.cwt</code> files with autosave, backups and crash recovery.</p></div>
+  </div>
+  <p class="also">Also included: sample import with loop points, chop / slice, instrument library, Fill to length auto-arrange, remappable keys and an update check.</p>
+</div></section>
+
+<section id="editor"><div class="wrap split">
+  <div>
+    <span class="badge" style="background:var(--li)">NEW IN 0.2.3.19</span>
+    <h2>Sound design under the pattern</h2>
+    <p class="sub">The instrument editor lives in the lower panel, so long parameter lists don't push the tracker off screen. It works for every instrument: synth, sample, Voice, generators, Chip FX and CLAP plugins.</p>
+    <ul class="checks">
+      <li><b>Knob cards</b> side by side, collapsible, with small envelope, filter and wave pictures.</li>
+      <li><b>Four tabs</b>: Main, Modulation, FX and Advanced, plus presets and A/B compare.</li>
+      <li><b>Parameter search</b> with <kbd>Ctrl+F</kbd>. Drag a knob, <kbd>Ctrl</kbd>-drag for fine steps, double-click for the default, right-click to automate or MIDI-learn.</li>
+      <li><b>One panel, three jobs</b>: switch between Arranger, Instrument and Automation, and resize with the splitter. <kbd>Ctrl+I</kbd> jumps to the editor.</li>
+      <li><b>Full-height pattern</b>: <kbd>F11</kbd> hides the lower panel when you just want to write.</li>
+    </ul>
+  </div>
+  <figure class="frame"><img src="assets/shots/fx-tab.webp" width="1280" height="720" loading="lazy" decoding="async" alt="The lower-panel instrument editor on the FX tab for the Supersaw Pad: a Chain card, a Filter card set to high-pass and a Chorus/Flanger card, each with knobs"><figcaption>The FX tab: each device is a card of knobs.</figcaption></figure>
+</div></section>
+
+<section id="shots" class="shots alt"><div class="wrap">
+  <h2>See it in action</h2>
+  <p class="sub">Real screenshots of ChipWave Tracker, no mock-ups, playing the built-in demo songs.</p>
+  <figure class="shot">
+    <a href="assets/shots/full-height-pattern.webp"><img src="assets/shots/full-height-pattern.webp" width="1280" height="720" loading="lazy" decoding="async" alt="Full-height pattern view: the lower panel is hidden and the pattern editor fills the window with eight channels of notes and effect commands"></a>
+    <figcaption><b>Full-height pattern.</b> Press F11 and the tracker gets the whole window: notes, instruments, volumes and effect commands at a glance.</figcaption>
+  </figure>
+  <div class="carousel" role="region" aria-roledescription="carousel" aria-label="More ChipWave screenshots">
+    <button class="cbtn prev" type="button" aria-label="Previous screenshot">‹</button>
+    <div class="track" tabindex="0" aria-label="Screenshots, scroll sideways for more">
+      <figure class="shot" role="group" aria-roledescription="slide" aria-label="1 of 10"><a href="assets/shots/arranger-view.webp"><img src="assets/shots/arranger-view.webp" width="1280" height="720" loading="lazy" decoding="async" alt="The arranger: coloured song clips with Chorus, Verse, Breakdown and Bridge badges above automation lanes for filter cutoff, riser level and delay feedback"></a><figcaption><b>Arranger.</b> Clips, role badges and automation lanes.</figcaption></figure>
+      <figure class="shot" role="group" aria-roledescription="slide" aria-label="2 of 10"><a href="assets/shots/voice.webp"><img src="assets/shots/voice.webp" width="1280" height="720" loading="lazy" decoding="async" alt="The Voice instrument in the lower-panel editor"></a><figcaption><b>Voice.</b> Vowels, words and stutter, no samples.</figcaption></figure>
+      <figure class="shot" role="group" aria-roledescription="slide" aria-label="3 of 10"><a href="assets/shots/clap.webp"><img src="assets/shots/clap.webp" width="1280" height="720" loading="lazy" decoding="async" alt="A CLAP plugin instrument in the lower-panel editor"></a><figcaption><b>CLAP plugins.</b> Hosted instruments with macros.</figcaption></figure>
+      <figure class="shot" role="group" aria-roledescription="slide" aria-label="4 of 10"><a href="assets/shots/fm-modulation.webp"><img src="assets/shots/fm-modulation.webp" width="1280" height="720" loading="lazy" decoding="async" alt="The FM-4 generator on the Modulation tab"></a><figcaption><b>FM-4.</b> Four operators, eight DX21/TX81Z algorithms.</figcaption></figure>
+      <figure class="shot" role="group" aria-roledescription="slide" aria-label="5 of 10"><a href="assets/shots/drum-synth.webp"><img src="assets/shots/drum-synth.webp" width="1280" height="1024" loading="lazy" decoding="async" alt="The Drum Synth generator with eight macro knobs and a kit"></a><figcaption><b>Drum Synth.</b> Kicks to claps from eight macros, or a whole kit.</figcaption></figure>
+      <figure class="shot" role="group" aria-roledescription="slide" aria-label="6 of 10"><a href="assets/shots/chip-fx.webp"><img src="assets/shots/chip-fx.webp" width="1280" height="1024" loading="lazy" decoding="async" alt="The Chip FX generator with Pickup, Laser, Explosion, Power-up, Hit, Jump and Blip buttons"></a><figcaption><b>Chip FX.</b> Retro game sounds from an sfxr port.</figcaption></figure>
+      <figure class="shot" role="group" aria-roledescription="slide" aria-label="7 of 10"><a href="assets/shots/mixer-limiter.webp"><img src="assets/shots/mixer-limiter.webp" width="1280" height="720" loading="lazy" decoding="async" alt="The mixer with channel strips, the master limiter and the LUFS loudness panel"></a><figcaption><b>Mixer.</b> Sidechain ducking, limiter and LUFS.</figcaption></figure>
+      <figure class="shot" role="group" aria-roledescription="slide" aria-label="8 of 10"><a href="assets/shots/search.webp"><img src="assets/shots/search.webp" width="1280" height="720" loading="lazy" decoding="async" alt="Parameter search in the instrument editor"></a><figcaption><b>Parameter search.</b> Ctrl+F finds any knob.</figcaption></figure>
+      <figure class="shot" role="group" aria-roledescription="slide" aria-label="9 of 10"><a href="assets/shots/analog-amiga.webp"><img src="assets/shots/analog-amiga.webp" width="1280" height="720" loading="lazy" decoding="async" alt="ChipWave in the light Amiga Workbench Gradient theme with the Analog generator open"></a><figcaption><b>Amiga theme.</b> Workbench blue and an orange cursor.</figcaption></figure>
+      <figure class="shot" role="group" aria-roledescription="slide" aria-label="10 of 10"><a href="assets/shots/instrument-editor.webp"><img src="assets/shots/instrument-editor-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The Analog generator in the lower-panel instrument editor"></a><figcaption><b>Analog.</b> Three drifting oscillators and the vintage ladder.</figcaption></figure>
+    </div>
+    <button class="cbtn next" type="button" aria-label="Next screenshot">›</button>
+    <div class="dots" role="group" aria-label="Choose a screenshot"></div>
+  </div>
+</div></section>
+
+<section id="amiga" class="amiga"><div class="wrap split rev">
+  <figure class="wb"><div class="bar"><span>ChipWave Lite</span><span>0.1-m1</span></div><img src="assets/shots/amiga-lite.webp" width="690" height="540" loading="lazy" decoding="async" alt="ChipWave Lite 0.1-m1 playing a four-channel .mod file in a Workbench shell window under the AROS ROM"></figure>
+  <div>
+    <span class="badge">IN DEVELOPMENT</span>
+    <h2>ChipWave Lite for the Amiga</h2>
+    <p class="sub">A small native tracker for AmigaOS 3.x, built for the A500 (68000) and the A1200 (68020) from the same source. The first milestone, a <code>.mod</code> player, already runs under emulation.</p>
+    <ul class="checks">
+      <li><b>Four channels on Paula</b> with ProTracker-style replay.</li>
+      <li><b>OctaMED-style pattern editor</b> with the same Z–M keys as the PC version (planned for v0.1).</li>
+      <li><b>Swap songs with PC ChipWave</b> through ProTracker <code>.mod</code> files.</li>
+      <li><b>Workbench look</b>, shipped as a bootable <code>.adf</code> and an <code>.lha</code>, ready for WinUAE or real hardware.</li>
+    </ul>
+    <p class="cap" style="text-align:left"><a href="https://github.com/postmanpat-303/ChipWaveTracker/blob/main/docs/AMIGA_LITE_PLAN.md">Read the plan →</a></p>
+  </div>
+</div></section>
+
+<section id="download"><div class="wrap">
+  <h2>Download ChipWave Tracker free</h2>
+  <p class="sub">Latest release <b data-ver>v0.2.3.16</b>. These links always fetch the newest version. Already installed? <b>Help &gt; Check for updates…</b> offers it. <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest">All files and SHA256 checksums</a>.</p>
+  <div class="dlbox">
+    <div class="card"><div class="ico">🪟</div><h3>Windows</h3><p>64-bit installer, or a portable zip. Opens with a demo song: press Space to play.</p>
+      <a class="btn primary" href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-setup-x64.exe">Installer (.exe)</a>
+      <a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-windows-x64.zip">Portable (.zip)</a></div>
+    <div class="card"><div class="ico">💻</div><h3>macOS</h3><p>Universal app for Apple Silicon and Intel, macOS 11 or later.</p>
+      <a class="btn primary" href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-macos-universal.dmg">Disk image (.dmg)</a>
+      <a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-macos-universal.zip">App (.zip)</a></div>
+    <div class="card"><div class="ico">🐧</div><h3>Linux</h3><p>Build from source with Rust. On Debian/Ubuntu you also need <code>libasound2-dev</code>.</p>
+<pre>git clone https://github.com/postmanpat-303/ChipWaveTracker
 cd ChipWaveTracker
-cargo run --release</pre></div><div class="f"><h3>📖 Learn</h3><p>Keys, effects, the file format and more are in the README and docs.</p><a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker#keys">Key list</a><a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker/tree/main/docs">Documentation</a></div></div><p class="small">The Windows installer isn't code-signed yet, so if SmartScreen warns you, click “More info” then “Run anyway”.</p></div></section>
-<section id="community"><div class="wrap"><h2>Join the community</h2><p>ChipWave Tracker is built with its users. Ideas, questions, bug reports and show-and-tell are all welcome.</p>
-<div class="grid">
-<div class="f"><h3>💬 Discussions</h3><p>Share ideas, ask questions and show what you made.</p><a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker/discussions">Open Discussions</a></div>
-<div class="f"><h3>🐞 Feedback</h3><p>Found a bug or have a feature request? Open an issue.</p><a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker/issues/new">Open an issue</a></div>
-<div class="f"><h3>☕ Support it</h3><p>It's free and always will be. If you enjoy it, a coffee keeps it going.</p><a class="btn primary" href="https://buymeacoffee.com/postmanpat">Buy me a coffee</a> <a class="btn" href="https://paypal.me/derekh100">PayPal</a></div>
-</div></div></section>
-<section class="cta"><div class="wrap"><h2>Find your rhythm.</h2><p>ChipWave Tracker is a free music tracker and DAW for Windows and Linux.</p><div class="btns" style="justify-content:center"><a class="btn primary" href="#download">⬇ Download free</a></div>
-<p class="small">Part of the Wave family: <a href="https://github.com/postmanpat-303/BigWaveRadio">BigWave Radio</a> · <a href="https://github.com/postmanpat-303/ChipWaveTracker">ChipWave Tracker</a> · <a href="https://github.com/postmanpat-303/StreamWave">StreamWave</a></p></div></section>
+cargo run --release</pre></div>
+  </div>
+  <p class="note">🛡 Not code-signed yet. On Windows, if SmartScreen appears, click <b>More info → Run anyway</b>. On a Mac, open it the first time with <b>Control-click → Open</b> (<a href="https://github.com/postmanpat-303/ChipWaveTracker/blob/main/docs/MACOS.md">details</a>).</p>
+</div></section>
+
+<section id="faq" class="alt"><div class="wrap">
+  <h2>FAQ</h2>
+  <p class="sub">Quick answers. The <a href="https://github.com/postmanpat-303/ChipWaveTracker#documentation">documentation</a> has the rest.</p>
+  <div class="faq">
+    <details><summary>Is ChipWave Tracker really free?</summary><p>Yes. ChipWave Tracker is a free music DAW and tracker, released as free software under the GNU GPL v3. There's no account, trial or paid tier. If you enjoy it, a coffee helps keep it going.</p></details>
+    <details><summary>Which systems does it run on?</summary><p>64-bit Windows (installer or portable zip), macOS 11 or later as a universal app for Apple Silicon and Intel, and Linux by building from source with Rust.</p></details>
+    <details><summary>What is a tracker, and do I need to know one?</summary><p>A tracker writes music as a vertical grid of rows, one column per channel, played top to bottom, driven mostly from the keyboard. ChipWave keeps that fast workflow from OctaMED and adds DAW parts: an arranger, automation, a mixer and knob-based instrument editing. The demo songs are a good way in: open one from File &gt; Demo songs and press Space. <kbd>F12</kbd> shows every key.</p></details>
+    <details><summary>Can I use plugins?</summary><p>Yes, CLAP instrument plugins such as Surge XT, with a crash-guarded scanner, parameter list, 8 macros, automation and state saved in the song. VST3 hosting and plugin effects are planned but not in the app yet.</p></details>
+    <details><summary>Can it open MOD or MED files?</summary><p>Not yet. MED and MOD loading are on the roadmap. ChipWave saves its own <code>.cwt</code> songs, a ZIP of TOML and WAV files you can inspect, and exports WAV and MP3.</p></details>
+    <details><summary>Can I use a MIDI keyboard?</summary><p>Yes. Play the current instrument with velocity, sustain and pitch bend, record step or live into the pattern, and MIDI-learn faders and knobs.</p></details>
+    <details><summary>Windows or macOS warns me when I open it. Is it safe?</summary><p>The builds aren't code-signed or notarised yet, so the system warns about an unknown publisher. On Windows click More info → Run anyway; on a Mac Control-click the app and choose Open. Every release has a SHA256SUMS.txt so you can check your download, and the full source is on GitHub.</p></details>
+    <details><summary>How do I get updates?</summary><p>Use Help &gt; Check for updates…, or turn on the quiet check at startup. The download links on this page always point to the newest release.</p></details>
+  </div>
+</div></section>
+
+<section id="credits"><div class="wrap">
+  <h2>Built on open source</h2>
+  <p class="sub">ChipWave stands on the shoulders of open source and published research. Thank you to these projects and their creators. Licences are in <code>THIRD_PARTY_LICENSES.txt</code> with every download, and the full list is in the <a href="https://github.com/postmanpat-303/ChipWaveTracker#acknowledgements--credits">README</a>.</p>
+  <ul class="credits">
+    <li><a href="https://github.com/emilk/egui">egui / eframe</a> <span>Emil Ernerfeldt and contributors · MIT/Apache-2.0 · the UI</span></li>
+    <li><a href="https://github.com/RustAudio/cpal">cpal</a> <span>RustAudio · Apache-2.0 · audio output</span></li>
+    <li><a href="https://github.com/Boddlnagg/midir">midir</a> <span>MIT · MIDI input</span></li>
+    <li><a href="https://github.com/ruuda/hound">hound</a>, <a href="https://github.com/toml-rs/toml">toml</a>, <a href="https://github.com/zip-rs/zip2">zip</a> <span>WAV files and the <code>.cwt</code> song format</span></li>
+    <li><a href="https://lame.sourceforge.io">LAME</a> via <a href="https://github.com/DoumanAsh/mp3lame-encoder">mp3lame-encoder</a> <span>LGPL · MP3 export</span></li>
+    <li><a href="https://github.com/free-audio/clap">CLAP</a> <span>Alexandre Bique and the free-audio project · MIT · the plugin standard ChipWave hosts</span></li>
+    <li><a href="https://github.com/micahrj/clap-sys">clap-sys</a> <span>micahrj · MIT/Apache-2.0 · CLAP bindings</span></li>
+    <li><a href="https://github.com/prokopyl/clack">clack</a>, <a href="https://github.com/falkTX/Carla">Carla</a>, <a href="https://ardour.org">Ardour</a> <span>Adrien Prokopowicz, Filipe Coelho (falkTX) · host design references</span></li>
+    <li><a href="https://github.com/nagisa/rust_libloading">libloading</a>, <a href="https://github.com/microsoft/windows-rs">windows-sys</a> <span>Simonas Kazlauskas (ISC), Microsoft (MIT/Apache-2.0) · plugin loading and editor windows</span></li>
+    <li><a href="https://www.drpetter.se/project_sfxr.html">sfxr</a> via <a href="https://github.com/bzar/sfxr-rs">sfxr-rs</a> <span>Tomas Pettersson (DrPetter), Teemu Erkkola · MIT · the Chip FX generator</span></li>
+    <li><a href="https://github.com/pichenettes/eurorack">Mutable Instruments Plaits</a> <span>Emilie Gillet · MIT · Voice design and drum models</span></li>
+    <li><a href="https://dood.al/pinktrombone/">Pink Trombone</a> <span>Neil Thapen · MIT · the Voice Throat mode</span></li>
+    <li><a href="https://github.com/electro-smith/DaisySP">DaisySP</a> <span>Electrosmith, Richard van Hoesel, Infrasonic Audio · MIT · ladder filter and drum references</span></li>
+    <li><a href="https://github.com/SamiPerttu/fundsp">fundsp</a>, <a href="https://github.com/ddiakopoulos/MoogLadders">MoogLadders</a> <span>Sami Perttu, Dimitri Diakopoulos · Moog ladder cross-checks</span></li>
+    <li><a href="https://github.com/sonic-pi-net/sonic-pi">Sonic Pi sc808</a> <span>Sam Aaron and contributors · MIT · Drum Synth recipes</span></li>
+    <li><a href="https://github.com/mtytel/vital">Vital</a>, <a href="https://github.com/surge-synthesizer/surge">Surge XT</a> <span>Matt Tytel, Surge Synth Team · GPL-3 · Analog generator ideas</span></li>
+    <li><a href="https://github.com/asb2m10/dexed">Dexed</a>, <a href="https://github.com/google/music-synthesizer-for-android">MSFA</a> <span>Pascal Gauthier, Raph Levien · FM-4 generator references</span></li>
+    <li><a href="https://github.com/supercollider/supercollider">SuperCollider</a> <span>Dust generators · the Noise generator</span></li>
+    <li><a href="https://github.com/csound/csound">Csound</a> <span>The Csound community · LGPL-2.1 · vowel formant table</span></li>
+    <li><a href="https://github.com/jiixyj/libebur128">libebur128</a>, <a href="https://github.com/csteinmetz1/pyloudnorm">pyloudnorm</a> <span>Jan Kokemüller, Christian Steinmetz · MIT · K-weighting formulas</span></li>
+    <li><a href="https://signalsmith-audio.co.uk/writing/2022/limiter/">Signalsmith limiter</a> <span>Geraint Luff · the master limiter design</span></li>
+    <li><a href="https://en.wikipedia.org/wiki/OctaMED">OctaMED</a> <span>Teijo Kinnunen and Ray Burt-Frost · the workflow ChipWave follows</span></li>
+    <li><a href="https://github.com/storytold/photocraft">PhotoCraft</a> <span>storytold · inspired the look of the Wave family icons</span></li>
+  </ul>
+</div></section>
+
+<section id="support" class="alt"><div class="wrap">
+  <h2>Keep ChipWave going</h2>
+  <p class="sub">ChipWave Tracker is made by Derek Heasley and will stay free. To keep the software going I need coffee :)</p>
+  <div class="support">
+    <a class="btn coffee" href="https://buymeacoffee.com/postmanpat" rel="noopener">☕ Buy me a coffee</a>
+    <a class="btn" href="https://paypal.me/derekh100" rel="noopener">PayPal</a>
+    <a class="btn" href="https://www.youtube.com/@whatgoesaround1551" rel="noopener">▶ YouTube</a>
+    <a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker" rel="noopener">★ Star on GitHub</a>
+    <a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker/issues/new" rel="noopener">🐞 Report a bug</a>
+  </div>
+  <p class="family">Part of the Wave family: <a href="https://github.com/postmanpat-303/BigWaveRadio">BigWave Radio</a> · <a href="https://postmanpat-303.github.io/StreamWave/">StreamWave</a> · ChipWave Tracker</p>
+</div></section>
 </main>
-<footer><div class="wrap"><span>© 2026 Derek Heasley (postmanpat-303) · GPL-3.0 licence</span><span><a href="https://github.com/postmanpat-303/ChipWaveTracker">GitHub</a> · <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest">Releases</a> · <a href="https://buymeacoffee.com/postmanpat">Buy me a coffee</a></span></div></footer>
+
+<footer><div class="wrap">
+  <div>© 2026 Derek Heasley (postmanpat-303) · ChipWave Tracker · GPL-3.0 licence</div>
+  <div><a href="https://github.com/postmanpat-303/ChipWaveTracker">GitHub</a> · <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases">Releases</a> · <a href="https://github.com/postmanpat-303/ChipWaveTracker/blob/main/docs/CHANGELOG.md">Changelog</a> · <a href="https://github.com/postmanpat-303/ChipWaveTracker/issues">Issues</a></div>
+</div></footer>
+
 <script>
-document.querySelectorAll('.video').forEach(v=>v.addEventListener('click',()=>{v.innerHTML='<iframe src="https://www.youtube-nocookie.com/embed/'+v.dataset.id+'?autoplay=1&rel=0" title="'+v.dataset.title+'" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>'},{once:true}));
-// Keep download buttons pointing at the newest release (falls back to the static links).
-fetch('https://api.github.com/repos/postmanpat-303/ChipWaveTracker/releases/latest').then(r=>r.ok?r.json():null).then(j=>{if(!j)return;
- document.querySelectorAll('[data-asset]').forEach(a=>{const re=new RegExp(a.dataset.asset);const m=(j.assets||[]).find(x=>re.test(x.name));if(m)a.href=m.browser_download_url});
- document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=j.tag_name)}).catch(()=>{});
+// Lite YouTube embed: load the player only when asked.
+document.querySelectorAll('.video[data-id]').forEach(v=>v.addEventListener('click',e=>{e.preventDefault();
+  const f=document.createElement('iframe');f.src='https://www.youtube-nocookie.com/embed/'+v.dataset.id+'?autoplay=1&rel=0';
+  f.title='ChipWave Tracker promo video';f.allow='autoplay; encrypted-media; picture-in-picture';f.allowFullscreen=true;v.replaceChildren(f);f.focus()},{once:true}));
+// Mac visitors: make the macOS button the primary one.
+if(/Mac/.test(navigator.platform||navigator.userAgent)){const w=document.getElementById('dl-win'),m=document.getElementById('dl-mac');w.classList.remove('primary');m.classList.add('primary');m.parentNode.insertBefore(m,w)}
+// Show the newest release tag (the static text is the fallback).
+fetch('https://api.github.com/repos/postmanpat-303/ChipWaveTracker/releases/latest').then(r=>r.ok?r.json():null).then(j=>{if(j&&j.tag_name)document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=j.tag_name)}).catch(()=>{});
+// Screenshot carousel: buttons, dots and arrow keys on top of native scroll-snap.
+(()=>{const c=document.querySelector('.carousel');if(!c)return;
+  const t=c.querySelector('.track'),s=[...t.children],d=c.querySelector('.dots'),p=c.querySelector('.prev'),n=c.querySelector('.next');
+  const step=()=>s[1].offsetLeft-s[0].offsetLeft,go=i=>t.scrollTo({left:Math.max(0,Math.min(i,s.length-1))*step()}),cur=()=>Math.round(t.scrollLeft/step());
+  s.forEach((_,i)=>{const b=document.createElement('button');b.type='button';b.setAttribute('aria-label','Show screenshot '+(i+1));b.onclick=()=>go(i);d.appendChild(b)});
+  const up=()=>{const i=cur(),max=t.scrollWidth-t.clientWidth-2;[...d.children].forEach((b,j)=>b.setAttribute('aria-current',j===i?'true':'false'));p.disabled=t.scrollLeft<=2;n.disabled=t.scrollLeft>=max};
+  p.onclick=()=>go(cur()-1);n.onclick=()=>go(cur()+1);
+  t.addEventListener('keydown',e=>{if(e.key==='ArrowRight'){e.preventDefault();go(cur()+1)}if(e.key==='ArrowLeft'){e.preventDefault();go(cur()-1)}});
+  t.addEventListener('scroll',()=>requestAnimationFrame(up),{passive:true});addEventListener('resize',up);up()})();
 </script>
-</body></html>
+</body>
+</html>
