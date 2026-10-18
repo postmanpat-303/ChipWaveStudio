@@ -15,16 +15,18 @@ DUR=${DUR:-9}
 FPS=${FPS:-10}
 TMP=$(mktemp -d)
 
-# rec <name> <view> <theme> <crop w:h:x:y> <out width>
+# rec <name> <view> <theme> <crop w:h:x:y> <out width> [lower panel]
+# (lower panel, 0.2.3.19: instrument | arranger | automation | full)
 rec() {
-  local name=$1 view=$2 theme=$3 crop=$4 width=$5
-  "$BIN" --screenshot "$TMP/unused.png" --view "$view" --theme "$theme" \
+  local name=$1 view=$2 theme=$3 crop=$4 width=$5 lower=${6:-}
+  CHIPWAVE_SHOT_LOWER=$lower "$BIN" --screenshot "$TMP/unused.png" --view "$view" --theme "$theme" \
     --size 1900x1060 --hold $((DUR + 6)) >/dev/null 2>&1 &
   local pid=$!
   sleep 2.5
   local win
   win=$(xdotool search --name "^ChipWave Tracker$" | tail -1)
   xdotool windowmove "$win" 0 0 || true
+  xdotool mousemove 1919 1199 || true  # keep the pointer out of the clip
   sleep 0.8
   local x y
   x=$(xwininfo -id "$win" | awk '/Absolute upper-left X/ {print $4}')
@@ -45,9 +47,9 @@ rec() {
   ls -la "$OUT/$name.gif"
 }
 
-rec pattern-playing pattern    dark  1100:620:340:40  800
-rec arranger        arranger   dark  1560:620:340:40  800
-rec mixer-meters    mixer      dark  1300:640:340:40  800
+rec pattern-playing pattern    dark  1555:980:345:66   800 instrument
+rec arranger        arranger   dark  1555:980:345:66   800
+rec mixer-meters    mixer      dark  1555:680:345:66   800
 rec themes          themes     dark  1900:1060:0:0    800
-rec instrument      instrument dark  1000:980:0:60    640
+rec instrument      instrument dark  1555:380:345:652  800 instrument
 rm -rf "$TMP"

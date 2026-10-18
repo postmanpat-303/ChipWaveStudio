@@ -80,6 +80,13 @@ impl App {
     fn shot_setup(&mut self, ctx: &egui::Context, view: &str) {
         // "Drop 2" (block 08) of the Lumen Drift demo, looping
         self.pattern = 8.min(self.with(|s| s.song.patterns.len().saturating_sub(1)));
+        // CHIPWAVE_SHOT_BLOCK=<n>: another block (e.g. the disco demo's Chorus)
+        if let Some(n) = std::env::var("CHIPWAVE_SHOT_BLOCK")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+        {
+            self.pattern = n.min(self.with(|s| s.song.patterns.len().saturating_sub(1)));
+        }
         self.row = 0;
         match view {
             "arranger" | "cue" => self.view = View::Arranger,
@@ -195,6 +202,14 @@ impl App {
                 self.plug.browser = true;
             }
             _ => {}
+        }
+        // CHIPWAVE_SHOT_INSTR=<n>: select instrument n (1-based, as in the list)
+        if let Some(n) = std::env::var("CHIPWAVE_SHOT_INSTR")
+            .ok()
+            .and_then(|v| v.parse::<u8>().ok())
+        {
+            let len = self.with(|s| s.song.instruments.len()) as u8;
+            self.instr = n.clamp(1, len.max(1));
         }
         if view == "arranger" {
             // whole song from half-way through "Build" (order 13), so the

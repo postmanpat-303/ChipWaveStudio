@@ -4,7 +4,11 @@ Since 0.2.3.19 instruments are edited in the **lower panel** under the pattern e
 knobs, tabs and cards, instead of the long slider list in the sidebar. The sidebar keeps the
 compact instrument list.
 
-![The Analog generator in the lower-panel instrument editor](screenshots/dark-instrument-editor.png)
+![The Octave Bass (Analog generator) from the Velvet Mirrorball demo in the lower-panel instrument editor, with the compact instrument list on the left](screenshots/dark-instrument-editor.png)
+
+![The FX tab: the Disco Strings effect chain as knob cards](screenshots/dark-instrument-fx.png)
+
+![Full-height pattern (F11): the lower panel hidden](screenshots/dark-pattern-full.png)
 
 ## 1. Sidebar
 

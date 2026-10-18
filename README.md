@@ -29,8 +29,8 @@
 ```
 
 <p align="center">
-  <img src="docs/screenshots/pattern-playing.gif" alt="The pattern editor playing the Lumen Drift demo (real capture)" width="800">
-  <br><sub>Real capture of ChipWave 0.2.3.14 playing the built-in demo song “Lumen Drift”.</sub>
+  <img src="docs/screenshots/pattern-playing.gif" alt="ChipWave 0.2.3.19 playing the Lumen Drift demo: the pattern editor above, the Trance Kick open in the lower-panel instrument editor" width="800">
+  <br><sub>Real capture of ChipWave 0.2.3.19 playing the built-in demo song “Lumen Drift”, with the instrument editor in the lower panel.</sub>
 </p>
 
 <p align="center">
@@ -54,31 +54,35 @@ All pictures on this page are real captures of the current build (no mockups). T
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/dark-pattern.png" alt="Pattern editor"><br><b>Pattern editor</b>: OctaMED-style blocks of 64 rows, note / instrument / volume / effect columns, the classic Z–M keyboard layout, selection, copy/paste, transpose and undo. The cursor follows the playing row.</td>
-    <td width="50%"><img src="docs/screenshots/dark-arranger.png" alt="Arranger"><br><b>Arranger</b>: the song order as coloured clips with role badges (Intro, Verse, Chorus, Bridge, Breakdown, Outro), drag to reorder, duplicate, zoom, plus <b>automation lanes</b> for filter sweeps, levels and delay feedback.</td>
+    <td width="50%"><img src="docs/screenshots/dark-pattern.png" alt="Pattern editor playing the Velvet Mirrorball disco demo, with the Cyber Choir voice open in the lower-panel instrument editor"><br><b>Pattern editor</b>: OctaMED-style blocks (64 rows by default; set the length on the one-line Block bar), note / instrument / volume / effect columns, decimal row numbers (hex in Settings › Look), the classic Z–M keyboard layout, selection, copy/paste, transpose and undo. The cursor follows the playing row. Shown: the “Velvet Mirrorball” disco demo with its Cyber Choir voice in the instrument editor below.</td>
+    <td width="50%"><img src="docs/screenshots/dark-arranger.png" alt="Arranger view of the Velvet Mirrorball demo with clips and automation lanes"><br><b>Arranger</b>: the song order as coloured clips with role badges (Intro, Verse, Chorus, Bridge, Breakdown, Outro), drag to reorder, duplicate, zoom, plus <b>automation lanes</b> for filter sweeps, levels and delay feedback.</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/dark-mixer.png" alt="Mixer"><br><b>Mixer</b>: per-channel fader, pan, mute/solo, peak meters, two send/return buses (delay and reverb) and <b>sidechain ducking</b>: pick a key channel and set Duck % per channel for the trance pump.</td>
+    <td width="50%"><img src="docs/screenshots/dark-mixer.png" alt="Mixer with channel strips, send returns and the master limiter"><br><b>Mixer</b>: per-channel fader, pan, mute/solo, peak meters, two send/return buses (delay and reverb) and <b>sidechain ducking</b>: pick a key channel and set Duck % per channel for the trance pump.</td>
     <td width="50%"><img src="docs/screenshots/dark-fx-chrome.png" alt="FX chain with the chrome devices"><br><b>FX chain</b>: per-instrument device strip with Filter, Chorus/Flanger, Delay, Reverb, Drive, Bitcrusher and Compressor, plus the chrome devices <b>Metal resonator</b>, <b>Digital distortion</b> and <b>Sub bass</b> (0.2.3.11, they follow the note; <code>40</code>–<code>42</code> set their mix); bypass, collapse, drag to reorder, presets.</td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/dark-fill.png" alt="Fill to length"><br><b>Fill to length</b>: auto-arrange the song to a target length from a style, with an editable energy curve, variation, seed, preview and section locks.</td>
     <td width="50%"><img src="docs/screenshots/dark-settings.png" alt="Settings"><br><b>Settings</b>: summary cards for Audio, Look, Keys (remappable), Files &amp; Safety (autosave, backups, crash recovery, update check) and MIDI. <sub>(Captured on a machine without a sound card, hence “no audio output”.)</sub></td>
   </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/dark-pattern-full.png" alt="Full-height pattern: the lower panel hidden so the tracker fills the window"><br><b>Full-height pattern</b> <sub>(0.2.3.19)</sub>: <code>F11</code>, the <b>Full height</b> button, or dragging the splitter to the bottom hides the lower panel so the pattern fills the window; press <code>F11</code> again to bring it back.</td>
+    <td width="50%"><img src="docs/screenshots/dark-instrument-fx.png" alt="The FX tab of the instrument editor showing the Disco Strings effect chain as knob cards"><br><b>FX tab</b> <sub>(0.2.3.19)</sub>: an instrument's effect chain as knob cards in the lower panel (here the disco demo’s strings: high-pass and low-pass filters and two chorus/flanger stages), next to the Main, Modulation and Advanced tabs.</td>
+  </tr>
 </table>
 
 <table>
   <tr>
-    <td width="34%" valign="top"><img src="docs/screenshots/instrument.gif" alt="Sound editor browsing the demo instruments"><br><b>Synth / sound editor</b>: oscillator, unison + detune, stereo width, LP/HP/BP filter (SVF or Moog ladder, clean / vintage, 12/24 dB) with envelope, ADSR, drive, an 808-style metallic source for hats, velocity → cutoff, start delay, 303 glide / legato and accent, and a tempo-syncable LFO to cutoff, amp and pitch. <a href="docs/screenshots/dark-instrument.png">Still</a>.</td>
+    <td width="34%" valign="top"><img src="docs/screenshots/instrument.gif" alt="The lower-panel instrument editor browsing the demo’s synth sounds"><br><b>Synth / sound editor</b>: oscillator, unison + detune, stereo width, LP/HP/BP filter (SVF or Moog ladder, clean / vintage, 12/24 dB) with envelope, ADSR, drive, an 808-style metallic source for hats, velocity → cutoff, start delay, 303 glide / legato and accent, and a tempo-syncable LFO to cutoff, amp and pitch. <a href="docs/screenshots/dark-instrument.png">Still</a>.</td>
     <td width="66%" valign="top"><img src="docs/screenshots/mixer-meters.gif" alt="Mixer meters moving while the demo plays"><br><b>Mixer while playing</b>: the pads and bass duck under the kick (sidechain), meters per channel and on the master.
     <br><br><img src="docs/screenshots/arranger.gif" alt="Arranger playhead moving through the song"><br><b>Arranger while playing</b>: the playhead runs through the clips and the automation curves.</td>
   </tr>
   <tr>
-    <td width="34%" valign="top"><img src="docs/screenshots/dark-instrument-editor.png" alt="Instrument editor in the lower panel"></td>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-instrument-editor.png" alt="The Octave Bass (Analog generator) in the lower-panel instrument editor, with the compact instrument list on the left"></td>
     <td width="66%" valign="top"><b>Instrument editor</b> <sub>(0.2.3.19)</sub>: every instrument (synth, sample, Voice, generators, Chip FX, CLAP plugins) is edited under the pattern with <b>knobs</b> on side-by-side, collapsible cards in four tabs (Main, Modulation, FX, Advanced), small envelope / filter / wave pictures, presets, A/B compare and <b>parameter search</b> (<code>Ctrl+F</code>). Drag a knob, <code>Ctrl</code>-drag for fine steps, double-click for the default, right-click to automate or MIDI-learn. The lower panel switches between Arranger, Instrument and Automation, resizes with a splitter, and <b>Full-height pattern</b> (<code>F11</code>) hides it. See <a href="docs/INSTRUMENT_EDITOR.md">INSTRUMENT_EDITOR.md</a>.</td>
   </tr>
   <tr>
-    <td width="34%" valign="top"><img src="docs/screenshots/dark-voice.png" alt="Voice (glitch) instrument panel"></td>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-voice.png" alt="Glitch Babble Voice instrument in the lower-panel editor: Voice, Vowels, Words, Output, Filter and Envelope cards"></td>
     <td width="66%" valign="top"><b>Voice (glitch) instrument</b> <sub>(0.2.3.6)</sub>: synthetic “ahh, eee, ohh, err” vowel chops for dark psytrance. No samples: a glottal pulse with breath and jitter through five formant filters, a vowel sequence you build from chips (A E I O U ER AE), smooth morphing, random <i>babble</i>, Bass/Tenor/Alto/Soprano/<b>Demon</b> registers, formant shift, a tempo-synced chop gate and <b>stutter / beat-repeat</b>. Pattern effects <code>30</code>–<code>37</code> change the vowel, shift and stutter per row (<code>33xy</code> stutters any instrument). Presets: Demon Ahh, Choir Eee, Glitch Babble, Robot Err, Stutter Ohh, Whisper Ooh. See <a href="docs/VOICE.md">VOICE.md</a>. <a href="docs/screenshots/amiga-voice.png">Amiga theme</a>.</td>
 </tr>
   <tr>
@@ -87,7 +91,7 @@ All pictures on this page are real captures of the current build (no mockups). T
   </tr>
   <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/dark-32-channels.png" alt="Pattern editor with a 32-channel song"></td>
-    <td width="66%" valign="top"><b>Up to 32 channels</b> <sub>(0.2.3.8)</sub>: a 32-channel test song in the pattern editor (drums, bass, a four-channel interlocking arp, eight string voices, sixteen sparkle voices). The bar under the grid reads “channels 1–8 of 32”; click or drag it, or Tab through the channels. The mixer strips scroll the same way beside the pinned master.</td>
+    <td width="66%" valign="top"><b>Up to 32 channels</b> <sub>(0.2.3.8)</sub>: a 32-channel test song in the pattern editor (four sets of kick, hat, clap, bass, three arp voices and a lead). The bar under the grid reads “channels 1–11 of 32”; click or drag it, or Tab through the channels. The mixer strips scroll the same way beside the pinned master.</td>
   </tr>
   <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/dark-chord-helper.png" alt="Chord helper window"></td>
@@ -106,7 +110,7 @@ All pictures on this page are real captures of the current build (no mockups). T
     <td width="66%" valign="top"><b>Chop / slice</b> <sub>(0.2.3.10)</sub>: a synthesised breakbeat cut at its transients (or on a grid) into numbered slices. Select a slice to normalise, reverse or fade just that part; <b>To instruments</b> makes one instrument per slice and <b>To notes</b> writes them into the block at the song tempo, ready to rearrange. See <a href="docs/SAMPLES.md">SAMPLES.md</a>.</td>
   </tr>
   <tr>
-    <td width="34%" valign="top"><img src="docs/screenshots/dark-voice-transform.png" alt="Voice Transform section"></td>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-voice-transform.png" alt="Voice Transform cards (metallic resonance, digital distortion, sub bass) on the FX tab of the instrument editor"></td>
     <td width="66%" valign="top"><b>Voice Transform</b> <sub>(0.2.3.11)</sub>: blend the voice into <b>metallic resonance</b> (modal resonators tuned to the note: metal, bell, bar, harmonic, odd), <b>digital distortion</b> (clip/fold, bits, sample-rate, ring mod) and a <b>heavy sub</b> (sine or octave divider, mono below the crossover), with formant drop for a monster voice. Presets Metal Demon, Digital Ghost, Sub Beast, Cyber Choir, Ritual Growl; <code>3F</code>–<code>42</code> per row; the stages are FX devices for any instrument too. See <a href="docs/VOICE.md">VOICE.md</a>.</td>
   </tr>
   <tr>
@@ -124,6 +128,10 @@ All pictures on this page are real captures of the current build (no mockups). T
   <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/dark-generators-chipfx.png" alt="Chip FX generator"></td>
     <td width="66%" valign="top"><b>Generators: Chip FX</b> <sub>(0.2.3.13)</sub>: retro game sounds from a port of <a href="https://www.drpetter.se/project_sfxr.html">sfxr</a> by DrPetter (via <a href="https://github.com/bzar/sfxr-rs">sfxr-rs</a>, both MIT). Click <b>Pickup</b>, <b>Laser</b>, <b>Explosion</b>, <b>Power-up</b>, <b>Hit</b>, <b>Jump</b> or <b>Blip</b> for a new sound, <b>Randomize</b> for anything, <b>Mutate</b> to nudge it; lock what you like, step back through 16 rolls, bake to a sample. Plays in tune with the pattern note. See <a href="docs/GENERATORS.md">GENERATORS.md</a>.</td>
+  </tr>
+  <tr>
+    <td width="34%" valign="top"><img src="docs/screenshots/plugin-clap.png" alt="Surge XT CLAP plugin as an instrument, with its eight macro knobs in the lower panel"></td>
+    <td width="66%" valign="top"><b>CLAP plugin instruments</b> <sub>(0.2.3.16)</sub>: Surge XT and other CLAP instruments play from the pattern like any other instrument. The lower panel shows the plugin card (Configure… opens its own editor on Windows), eight macro knobs for <code>43xy</code> and automation, and every plugin parameter, searchable, on the Advanced tab (<a href="docs/screenshots/plugin-clap-params.png">picture</a>). See <a href="docs/PLUGINS.md">PLUGINS.md</a>.</td>
   </tr>
 </table>
 

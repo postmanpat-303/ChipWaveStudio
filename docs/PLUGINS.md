@@ -2,7 +2,9 @@
 
 ChipWave 0.2.3.16 can play **CLAP** instrument plugins (Surge XT and so on) as ordinary instruments. They take notes from the pattern, velocity, glide and slides, run through the instrument's FX chain and the mixer, and are saved inside the song. This page covers what works today. The longer-term design (VST3, MIDI output, LV2) is in [MIDI_VST.md](MIDI_VST.md) and [PLUGIN_MANAGER.md](PLUGIN_MANAGER.md).
 
-![Plugin instrument panel](screenshots/plugin-0.2.3.16.png)
+![Surge XT as an instrument: the plugin card and its eight macro knobs in the lower-panel editor (0.2.3.19)](screenshots/plugin-clap.png)
+
+![The Advanced tab: all 775 Surge XT parameters, searchable](screenshots/plugin-clap-params.png)
 
 ## Formats
 

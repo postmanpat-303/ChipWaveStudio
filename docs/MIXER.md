@@ -29,7 +29,7 @@ Return A has a synced ping-pong delay and return B a Freeverb-style reverb, both
 
 ## 3. Master
 
-![Mixer with the Limiter & loudness panel](screenshots/dark-mixer-limiter.png)
+![Mixer playing the Velvet Mirrorball demo, with the Limiter & loudness panel](screenshots/dark-mixer-limiter.png)
 
 - Master fader and stereo meters.
 - **Limiter (0.2.3.7):** a lookahead true-peak brickwall limiter on the master and in every export, using the peak-hold + moving-average design from Signalsmith Audio. Controls: gain, ceiling (default **−1.0 dBTP**) and release, with a gain-reduction bar. Unticking it bypasses to the old soft clipper. Exports go through the same limiter and match playback bit for bit.
