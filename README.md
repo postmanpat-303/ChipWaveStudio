@@ -281,6 +281,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [SETTINGS.md](docs/SETTINGS.md) — settings
 - [OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md) — the full OctaMED feature blueprint
 - [SOUND_DESIGN.md](docs/SOUND_DESIGN.md) — the synth and effects
+- [FX.md](docs/FX.md) — the FX devices (Phaser and the rest)
 - [ARRANGER.md](docs/ARRANGER.md) — the timeline
 - [AUTO_ARRANGE.md](docs/AUTO_ARRANGE.md) — fill-to-length auto arrange and quick-start fun features
 - [EXPORT.md](docs/EXPORT.md) — WAV/MP3 export
@@ -318,7 +319,7 @@ ChipWave stands on the shoulders of open source and published research. With tha
 - **G. E. Peterson & H. L. Barney** (1952), [“Control methods used in a study of the vowels”](https://doi.org/10.1121/1.1906875): the ER and AE vowels.
 - **A. E. Rosenberg** (1971), [glottal pulse shape](https://doi.org/10.1121/1.1912389), and **G. Fant, J. Liljencrants & Q. Lin** (1985), the LF glottal flow model: the voice's pulse and “tension”.
 - **Dennis H. Klatt** (1980), [“Software for a cascade/parallel formant synthesizer”](https://doi.org/10.1121/1.383940): the parallel formant structure.
-- **Vadim Zavalishin**, *The Art of VA Filter Design*: the TPT state-variable filter used throughout the synth.
+- **Vadim Zavalishin**, *The Art of VA Filter Design*: the TPT state-variable filter used throughout the synth, and the zero-delay-feedback all-pass stages of the **Phaser** FX (whose swept-notch structure follows analog phaser pedals such as the MXR Phase 90 and Electro-Harmonix Small Stone; no circuit or code copied).
 - **ITU-R BS.1770-4** and **EBU R 128 / Tech 3341**: the loudness meter (K-weighting, gating, momentary / short-term / integrated LUFS) and the 4x oversampled true-peak measurement used by the master limiter.
 - **Jan Kokemüller** ([libebur128](https://github.com/jiixyj/libebur128), MIT) and **Christian Steinmetz** ([pyloudnorm](https://github.com/csteinmetz1/pyloudnorm), MIT): the sample-rate-independent K-weighting filter formulas (no code copied).
 - **Geraint Luff / Signalsmith Audio**, [“Designing a straightforward limiter”](https://signalsmith-audio.co.uk/writing/2022/limiter/): the peak-hold + moving-average lookahead design of the master limiter.

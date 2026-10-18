@@ -190,6 +190,12 @@ Generators (src/gen.rs, src/ladder.rs, 0.2.3.12):
   * Paul Kellet's "pink noise filter" (musicdsp.org, public domain).
   GPL-3.0 and Apache-2.0 sources were read as references only; ChipWave is
   itself distributed under the GPL-3.0, which is compatible with both.
+- Phaser FX device (src/fxmod.rs, after 0.2.4.0), an independent
+  implementation: zero-delay-feedback (TPT) one-pole all-pass stages after
+  Vadim Zavalishin, "The Art of VA Filter Design" (Native Instruments,
+  2012-2018), swept by an LFO and mixed with the dry signal, the structure
+  of analog phaser pedals such as the MXR Phase 90 and Electro-Harmonix
+  Small Stone (idea only; no circuit or code copied).
 - Chip FX (src/chipfx.rs, 0.2.3.13) is a port of sfxr by Tomas Pettersson
   (DrPetter), https://www.drpetter.se/project_sfxr.html , by way of its Rust
   reimplementation sfxr-rs by Teemu Erkkola, https://github.com/bzar/sfxr-rs

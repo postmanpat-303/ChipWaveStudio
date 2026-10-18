@@ -2821,6 +2821,73 @@ mod tests {
         assert_eq!(n, 0, "render allocated {n} times");
     }
 
+    /// a held saw chord through `kind` on instrument 1, with an automation
+    /// lane taking FX param `param` from 0 to 1 over the first 32 rows
+    fn mod_fx_song(kind: crate::fx::FxKind, param: &str) -> Song {
+        use crate::automation::{Lane, Point, Shape, Target};
+        let mut song = acid_song(crate::synth::Patch {
+            cutoff: 6000.0,
+            amp: crate::synth::Adsr {
+                a: 0.01,
+                d: 0.5,
+                s: 1.0,
+                r: 0.2,
+            },
+            ..Default::default()
+        });
+        song.instruments[0].fx = vec![crate::fx::Device::new(kind)];
+        song.patterns[0].cells[0][0] = note(37, 0, 0);
+        let p = crate::fx::Device::param_index(kind, param).expect("param");
+        let mut l = Lane::new(Target::Fx(0, 0, p), param.into());
+        for (pos, value) in [(0.0, 0.0), (32.0, 1.0)] {
+            l.points.push(Point {
+                pos,
+                value,
+                shape: Shape::Linear,
+            });
+        }
+        song.automation = vec![l];
+        song
+    }
+
+    #[test]
+    fn phaser_renders_follows_its_automation_lane_and_is_allocation_free() {
+        use crate::fx::FxKind;
+        let song = mod_fx_song(FxKind::Phaser, "mix");
+        let out = render_secs(&song, 2.0);
+        assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
+        // the lane takes the mix from 0 (dry) towards 1: the start of the
+        // note matches a render without the phaser, later it doesn't
+        let mut dry = song.clone();
+        dry.instruments[0].fx.clear();
+        dry.automation.clear();
+        let d = render_secs(&dry, 2.0);
+        let diff = |a: usize, b: usize| -> f32 {
+            out[a..b]
+                .iter()
+                .zip(&d[a..b])
+                .map(|(x, y)| (x - y).abs())
+                .sum::<f32>()
+                / (b - a) as f32
+        };
+        // 120 BPM speed 6: 32 rows = 4 s, so the mix is ~1 % at 0.05 s and
+        // ~45 % at 1.8 s
+        let (early, late) = (diff(4000, 8000), diff(150_000, 190_000));
+        assert!(late > 0.01 && late > 8.0 * early, "{early} -> {late}");
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 512];
+        for _ in 0..50 {
+            e.render(&song, &mut buf);
+        }
+        let n = alloc_count::count(|| {
+            for _ in 0..500 {
+                e.render(&song, &mut buf);
+            }
+        });
+        assert_eq!(n, 0, "render allocated {n} times");
+    }
+
     // ------------------------------------------------ 0.2.3.12: generators
 
     /// a generator on instrument 2, hits every 4 rows on channel 0

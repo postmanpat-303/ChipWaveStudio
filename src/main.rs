@@ -15,6 +15,7 @@ mod engine;
 mod export;
 mod fileio;
 mod fx;
+mod fxmod;
 mod gen;
 mod gen2;
 mod input;

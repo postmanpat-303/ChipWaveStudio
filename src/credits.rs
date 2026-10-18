@@ -152,6 +152,9 @@ pub const CREDITS: &[Credit] = &[
         "https://signalsmith-audio.co.uk/writing/2022/limiter/"),
     c(Effects, "Analog octave pedals", "e.g. Boss OC-2",
         "Sub bass: the octave divider follows them", "", "Idea only", ""),
+    c(Effects, "Analog phaser pedals", "e.g. MXR Phase 90, Electro-Harmonix Small Stone",
+        "Phaser: swept all-pass stages mixed with the dry signal", "",
+        "Idea only, no circuit or code copied", ""),
     // Plugin hosting
     c(Plugins, "CLAP", "the free-audio project (Alexandre Bique et al.)",
         "Plugin hosting: the plugin standard ChipWave hosts", "MIT", "",
@@ -232,7 +235,7 @@ pub const CREDITS: &[Credit] = &[
     c(Research, "Linkwitz (1976)", "S. H. Linkwitz",
         "Sub crossover: Linkwitz-Riley", "", "", "https://www.linkwitzlab.com/filters.htm"),
     c(Research, "Zavalishin, The Art of VA Filter Design (2018)", "V. Zavalishin",
-        "Moog ladder and the TPT state-variable filter", "", "",
+        "Moog ladder, the TPT state-variable filter and the Phaser's all-pass stages", "", "",
         "https://www.native-instruments.com/fileadmin/ni_media/downloads/pdf/VAFilterDesign_2.1.0.pdf"),
     c(Research, "Huovilainen (2004)", "A. Huovilainen",
         "Moog ladder (non-linear model)", "", "DAFx-04", ""),

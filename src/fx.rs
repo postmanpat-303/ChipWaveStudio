@@ -17,10 +17,12 @@ pub enum FxKind {
     Resonator,
     Digital,
     Sub,
+    /// all-pass phaser (crate::fxmod)
+    Phaser,
 }
 
 impl FxKind {
-    pub const ALL: [FxKind; 10] = [
+    pub const ALL: [FxKind; 11] = [
         FxKind::Delay,
         FxKind::Reverb,
         FxKind::Drive,
@@ -31,6 +33,7 @@ impl FxKind {
         FxKind::Resonator,
         FxKind::Digital,
         FxKind::Sub,
+        FxKind::Phaser,
     ];
     pub fn name(self) -> &'static str {
         match self {
@@ -44,12 +47,13 @@ impl FxKind {
             FxKind::Resonator => "Metal resonator",
             FxKind::Digital => "Digital distortion",
             FxKind::Sub => "Sub bass",
+            FxKind::Phaser => "Phaser",
         }
     }
     /// muted strip tint per device type
     pub fn tint(self) -> u32 {
         match self {
-            FxKind::Delay | FxKind::Chorus => 0x6B5E8A, // time-based: violet
+            FxKind::Delay | FxKind::Chorus | FxKind::Phaser => 0x6B5E8A, // time-based: violet
             FxKind::Reverb => 0x5E5A86,
             FxKind::Drive | FxKind::Bitcrusher | FxKind::Digital => 0x8A5A4E, // warm
             FxKind::Resonator => 0x7A6E4E,
@@ -204,6 +208,20 @@ const SUB: [ParamInfo; 6] = [
     p("xover", "Crossover", 60.0, 250.0, 120.0, true, "Hz"),
 ];
 
+/// Phaser LFO sync: "Hz" = the Rate knob, else one LFO cycle per this many beats
+pub const PHASER_SYNC: [&str; 7] = ["Hz", "1/4", "1/2", "1 bar", "2 bars", "4 bars", "8 bars"];
+const PHASER_SYNC_BEATS: [f32; 6] = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0];
+pub const PHASER: [ParamInfo; 8] = [
+    c("stages", "Stages", &["4", "6", "8", "12"], 1.0),
+    c("sync", "Sync", &PHASER_SYNC, 0.0),
+    p("rate", "Rate", 0.02, 10.0, 0.35, true, "Hz"),
+    p("depth", "Depth", 0.0, 1.0, 0.7, false, "%"),
+    p("center", "Centre", 80.0, 5000.0, 800.0, true, "Hz"),
+    p("feedback", "Feedback", -0.95, 0.95, 0.4, false, "%"),
+    p("stereo", "Stereo phase", 0.0, 180.0, 90.0, false, "°"),
+    p("mix", "Mix", 0.0, 1.0, 0.5, false, "%"),
+];
+
 pub fn params(k: FxKind) -> &'static [ParamInfo] {
     match k {
         FxKind::Delay => &DELAY,
@@ -216,6 +234,7 @@ pub fn params(k: FxKind) -> &'static [ParamInfo] {
         FxKind::Resonator => &RESONATOR,
         FxKind::Digital => &DIGITAL,
         FxKind::Sub => &SUB,
+        FxKind::Phaser => &PHASER,
     }
 }
 
@@ -252,12 +271,13 @@ impl ParamInfo {
         }
         match self.unit {
             "%" => format!("{:.0} %", v * 100.0),
-            "Hz" if v >= 1000.0 => format!("{:.2} kHz", v / 1000.0),
+            "Hz" if v.abs() >= 1000.0 => format!("{:.2} kHz", v / 1000.0),
             "Hz" => format!("{v:.1} Hz"),
             "ms" => format!("{v:.1} ms"),
             "dB" => format!("{v:+.1} dB"),
             ":1" => format!("{v:.1}:1"),
             "bit" => format!("{v:.0} bit"),
+            "°" => format!("{v:.0}°"),
             u => format!("{v:.2} {u}"),
         }
     }
@@ -524,6 +544,55 @@ pub fn presets(k: FxKind) -> &'static [(&'static str, &'static [(&'static str, f
                 &[("mode", 1.0), ("drive", 0.6), ("growl", 0.5), ("mix", 0.6)],
             ),
         ],
+        FxKind::Phaser => &[
+            (
+                "Slow swirl",
+                &[
+                    ("stages", 1.0),
+                    ("sync", 0.0),
+                    ("rate", 0.25),
+                    ("depth", 0.8),
+                    ("feedback", 0.5),
+                    ("mix", 0.5),
+                ],
+            ),
+            (
+                "Disco strings (1 bar)",
+                &[
+                    ("stages", 2.0),
+                    ("sync", 3.0),
+                    ("depth", 0.7),
+                    ("center", 900.0),
+                    ("feedback", 0.6),
+                    ("stereo", 120.0),
+                    ("mix", 0.5),
+                ],
+            ),
+            (
+                "Jet 12-stage",
+                &[
+                    ("stages", 3.0),
+                    ("sync", 0.0),
+                    ("rate", 0.12),
+                    ("depth", 1.0),
+                    ("center", 1200.0),
+                    ("feedback", 0.85),
+                    ("mix", 0.5),
+                ],
+            ),
+            (
+                "Vibe (4-stage)",
+                &[
+                    ("stages", 0.0),
+                    ("sync", 0.0),
+                    ("rate", 3.5),
+                    ("depth", 0.4),
+                    ("feedback", -0.3),
+                    ("stereo", 0.0),
+                    ("mix", 0.5),
+                ],
+            ),
+        ],
         FxKind::Compressor => &[
             (
                 "Glue",
@@ -563,7 +632,8 @@ pub fn from_preset(t: &toml::Value) -> Option<Device> {
         "resonator" => FxKind::Resonator,
         "digital" => FxKind::Digital,
         "sub" | "subbass" => FxKind::Sub,
-        _ => return None, // e.g. phaser: not yet
+        "phaser" => FxKind::Phaser,
+        _ => return None,
     };
     let num = |k: &str| {
         t.get(k)
@@ -627,6 +697,31 @@ pub fn from_preset(t: &toml::Value) -> Option<Device> {
             }
             if let Some(v) = num("depth") {
                 d.set_real("depth", v * 8.0);
+            }
+        }
+        FxKind::Phaser => {
+            if let Some(n) = num("stages") {
+                // 2..12 stages in the factory format: the nearest choice
+                let i = [4.0, 6.0, 8.0, 12.0]
+                    .iter()
+                    .enumerate()
+                    .min_by(|a, b| (a.1 - n).abs().total_cmp(&(b.1 - n).abs()))
+                    .map_or(1, |x| x.0);
+                d.set_real("stages", i as f32);
+            }
+            if let Some(tm) = t.get("rate").and_then(|x| x.as_str()) {
+                if let Some(i) = PHASER_SYNC.iter().position(|s| *s == tm) {
+                    d.set_real("sync", i as f32);
+                }
+            } else if let Some(hz) = num("rate_hz").or(num("rate")) {
+                d.set_real("sync", 0.0);
+                d.set_real("rate", hz);
+            }
+            if let Some(v) = num("depth") {
+                d.set_real("depth", v);
+            }
+            if let Some(v) = num("feedback") {
+                d.set_real("feedback", v);
             }
         }
         FxKind::Bitcrusher => {
@@ -772,6 +867,7 @@ enum Dsp {
         env: f32,
     },
     Stage(Box<crate::transform::FxStage>),
+    Phaser(crate::fxmod::Phaser),
 }
 
 /// realtime state for one device instance
@@ -843,6 +939,7 @@ impl FxState {
             },
             FxKind::Compressor => Dsp::Comp { env: 0.0 },
             FxKind::Resonator | FxKind::Digital | FxKind::Sub => Dsp::Stage(Box::default()),
+            FxKind::Phaser => Dsp::Phaser(Default::default()),
         };
         let mut s = Self {
             kind: d.kind,
@@ -916,6 +1013,7 @@ impl FxState {
             }
             Dsp::Comp { env } => *env = 0.0,
             Dsp::Stage(st) => **st = crate::transform::FxStage::default(),
+            Dsp::Phaser(ph) => *ph = Default::default(),
         }
         self.on_gain = if d.enabled { 1.0 } else { 0.0 };
         self.set_targets(d, |_| None);
@@ -1130,6 +1228,24 @@ impl FxState {
                 };
                 let g = db(p[4] - gr);
                 (l * g, r * g)
+            }
+            Dsp::Phaser(ph) => {
+                let sync = p[1] as usize;
+                let rate = if sync == 0 {
+                    p[2]
+                } else {
+                    ctx.bpm.max(20.0) / 60.0 / PHASER_SYNC_BEATS[(sync - 1).min(5)]
+                };
+                let pp = crate::fxmod::PhaserParams {
+                    stages: crate::fxmod::STAGES[(p[0] as usize).min(3)],
+                    rate,
+                    depth: p[3],
+                    center: p[4],
+                    feedback: p[5],
+                    stereo: p[6],
+                    mix: p[7],
+                };
+                ph.process(l, r, &pp, sr)
             }
             Dsp::Stage(st) => match self.kind {
                 FxKind::Resonator => st.resonator(l, r, &p, ctx.note, sr),
