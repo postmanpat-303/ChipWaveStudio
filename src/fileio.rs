@@ -394,6 +394,8 @@ pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
             }
         }
     }
+    // plugin instruments that are not installed here: placeholder + warning
+    warnings.extend(crate::plugin::missing_warnings(&song));
     Ok((song, warnings))
 }
 
@@ -743,6 +745,52 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
                 transpose: int(i, "transpose", 0) as i8,
                 fx,
                 kind: InstrumentKind::Gen(gp),
+            });
+            continue;
+        }
+        // patch = "clap:<plugin id>": a CLAP plugin instrument; optional
+        // `plugin_path`, `state` (base64) and `macros` = [param ids]
+        if let Some(pid) = src.strip_prefix("clap:") {
+            let mut fx = vec![];
+            for f in i.get("fx").and_then(|x| x.as_array()).into_iter().flatten() {
+                let kind = f
+                    .get("kind")
+                    .and_then(|x| x.as_str())
+                    .and_then(fx_kind)
+                    .ok_or_else(|| format!("instrument {name}: unknown fx kind"))?;
+                let mut d = crate::fx::Device::new(kind);
+                apply_fx_params(&mut d, f);
+                fx.push(d);
+            }
+            let st = |k: &str| i.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let pp = crate::plugin::PluginPatch {
+                format: "clap".into(),
+                id: pid.into(),
+                name: name.into(),
+                vendor: String::new(),
+                path: st("plugin_path"),
+                state: st("state"),
+                params: vec![],
+                macros: i
+                    .get("macros")
+                    .and_then(|x| x.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .map(|v| {
+                                v.as_integer()
+                                    .map(|n| n as u32)
+                                    .unwrap_or(crate::plugin::NO_PARAM)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            };
+            song.instruments.push(Instrument {
+                name: name.into(),
+                volume: real(i, "volume").unwrap_or(1.0),
+                transpose: int(i, "transpose", 0) as i8,
+                fx,
+                kind: InstrumentKind::Plugin(pp),
             });
             continue;
         }

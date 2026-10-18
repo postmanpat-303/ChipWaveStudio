@@ -95,6 +95,7 @@ pub(super) fn apply_learned(s: &mut Shared, target: &str, n: f32) -> bool {
             Some(m) if b < 2 => m.send[b] = n,
             _ => return false,
         },
+        Target::Macro(i, k) => return crate::plugin::set_macro_norm(s, i, k, n),
         Target::Master => song.mixer.master = real,
         Target::Tempo => {
             song.bpm = real.round();

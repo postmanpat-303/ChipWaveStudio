@@ -122,6 +122,8 @@ pub enum InstrumentKind {
     Voice(crate::voice::VoicePatch),
     /// Generator (drum synth, kit; src/gen.rs)
     Gen(crate::gen::GenPatch),
+    /// CLAP plugin instrument (src/plugin/, 0.2.3.16)
+    Plugin(crate::plugin::PluginPatch),
 }
 
 impl InstrumentKind {
@@ -131,7 +133,7 @@ impl InstrumentKind {
             InstrumentKind::Synth(p) => Some(p),
             InstrumentKind::Voice(v) => Some(&v.base),
             InstrumentKind::Gen(g) => Some(&g.base),
-            InstrumentKind::Sample { .. } => None,
+            InstrumentKind::Sample { .. } | InstrumentKind::Plugin(_) => None,
         }
     }
 }

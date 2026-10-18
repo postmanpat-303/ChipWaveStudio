@@ -19,6 +19,7 @@ impl App {
                             InstrumentKind::Sample { .. } => "  (sample)",
                             InstrumentKind::Voice(_) => "  (voice)",
                             InstrumentKind::Gen(_) => "  (gen)",
+                            InstrumentKind::Plugin(_) => "  (plugin)",
                             InstrumentKind::Synth(_) => "",
                         },
                     )

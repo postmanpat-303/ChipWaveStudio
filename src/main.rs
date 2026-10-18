@@ -23,6 +23,8 @@ mod ladder;
 mod master;
 mod midi;
 mod model;
+#[allow(dead_code)] // TEMP: the app UI wiring lands in the next step
+mod plugin;
 mod presets;
 mod prompt;
 mod recovery;
@@ -652,6 +654,46 @@ fn main() {
             }
         }
         return;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--scan-plugin") {
+        // child process of the plugin scanner: check one file, print JSON
+        let Some(p) = args.get(i + 1) else {
+            std::process::exit(2);
+        };
+        let rep = plugin::scan::check_file(std::path::Path::new(p));
+        println!("{}", serde_json::to_string(&rep).unwrap_or_default());
+        std::process::exit(0);
+    }
+    if let Some(i) = args.iter().position(|a| a == "--scan-plugins") {
+        // scan every plugin folder (plus an optional extra one) and list instruments
+        let mut dirs = plugin::scan::all_dirs(&settings::load().extra.plugin_dirs);
+        if let Some(d) = args.get(i + 1).filter(|a| !a.starts_with("--")) {
+            dirs.push(PathBuf::from(d));
+        }
+        let exe = std::env::current_exe().unwrap_or_default();
+        let c = plugin::scan::scan(&exe, &dirs, &plugin::scan::cache(), true, &|k, n, f| {
+            if !f.is_empty() {
+                println!("[{}/{n}] {f}", k + 1);
+            }
+        });
+        for e in &c.entries {
+            println!("  {} {}: {} {}", e.format, e.status, e.path, e.message);
+            for p in &e.plugins {
+                println!(
+                    "      {} — {} ({}){}",
+                    p.desc.name,
+                    p.desc.vendor,
+                    p.desc.id,
+                    if p.desc.is_instrument() {
+                        " [instrument]"
+                    } else {
+                        ""
+                    }
+                );
+            }
+        }
+        plugin::scan::set_cache(c);
+        std::process::exit(0);
     }
     if let Some(i) = args.iter().position(|a| a == "--self-test") {
         let out = args

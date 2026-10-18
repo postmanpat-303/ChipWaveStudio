@@ -105,6 +105,8 @@ pub enum Target {
     Ret(usize, usize),
     /// channel, return bus
     Send(usize, usize),
+    /// plugin instrument, macro 0-7 (0.2.3.16)
+    Macro(usize, usize),
 }
 
 impl Target {
@@ -146,6 +148,11 @@ impl Target {
                     crate::fx::FxKind::Reverb
                 };
                 param_ix(kind, key).map(|p| Target::Ret(ri, p))
+            }
+            ["instrument", n, "macro", k] => {
+                let i = num(n)?;
+                let k = num(k).filter(|k| *k < 8)?;
+                Some(Target::Macro(i, k))
             }
             ["instrument", n, "fx", d, key] => {
                 let i = num(n)?;
@@ -193,6 +200,7 @@ impl Target {
             Target::Send(c, r) => {
                 format!("mixer.ch.{}.send_{}", c + 1, if r == 0 { "a" } else { "b" })
             }
+            Target::Macro(i, k) => format!("instrument.{}.macro.{}", i + 1, k + 1),
         }
     }
 
@@ -230,7 +238,7 @@ impl Target {
                 p,
             )
             .unwrap_or_default(),
-            Target::Send(..) => format!("{:.0} %", n * 100.0),
+            Target::Send(..) | Target::Macro(..) => format!("{:.0} %", n * 100.0),
             _ => self.format(n),
         }
     }
@@ -238,7 +246,9 @@ impl Target {
     /// (min, max, logarithmic)
     fn range(self) -> (f32, f32, bool) {
         match self {
-            Target::Fx(..) | Target::Ret(..) | Target::Send(..) => (0.0, 1.0, false),
+            Target::Fx(..) | Target::Ret(..) | Target::Send(..) | Target::Macro(..) => {
+                (0.0, 1.0, false)
+            }
             Target::Cutoff(_) => (20.0, 18000.0, true),
             Target::Resonance(_) => (0.0, 0.98, false),
             Target::Drive(_) => (0.0, 1.0, false),
@@ -281,6 +291,7 @@ impl Target {
             Target::Tempo => "Tempo",
             Target::Fx(..) | Target::Ret(..) => "FX param",
             Target::Send(..) => "Send",
+            Target::Macro(..) => "Macro",
         }
     }
 

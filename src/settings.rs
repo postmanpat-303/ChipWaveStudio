@@ -25,6 +25,9 @@ pub struct Settings {
 /// Settings screen values (0.2.0)
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Extra {
+    /// extra plugin folders to scan (CLAP / VST3), besides the standard ones (0.2.3.16)
+    #[serde(default)]
+    pub plugin_dirs: Vec<String>,
     /// output device name, "" = system default
     #[serde(default)]
     pub device: String,
@@ -76,6 +79,7 @@ fn one() -> u32 {
 impl Default for Extra {
     fn default() -> Self {
         Self {
+            plugin_dirs: vec![],
             device: String::new(),
             rate: 0,
             accent: String::new(),

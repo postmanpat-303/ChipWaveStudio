@@ -89,6 +89,11 @@ fn duck_env(t: f32, release: f32) -> f32 {
     }
 }
 
+/// tracker note (C-0 = 1) -> MIDI key (C-0 = 12)
+fn midi_key(n: u8) -> u8 {
+    (n as i32 + 11).clamp(0, 127) as u8
+}
+
 #[allow(clippy::too_many_arguments)]
 fn voice(
     song: &Song,
@@ -144,6 +149,9 @@ fn voice_raw(
             let v = synth.render_gen(p, gp, freq, sr, bpm);
             (v, !synth.amp.done() && !synth.gen.done)
         }
+        // plugin instruments render in the rack (Engine::render); the channel
+        // voice only keeps the note state
+        InstrumentKind::Plugin(_) => ((0.0, 0.0), true),
         InstrumentKind::Sample {
             data,
             rate,
@@ -294,6 +302,8 @@ pub struct AutoState {
     fx: Vec<(usize, usize, usize, f32)>,
     /// automated return-bus params (bus, param, value)
     ret: Vec<(usize, usize, f32)>,
+    /// automated plugin macros (instrument, macro 0-7, normalised value)
+    macros: Vec<(usize, usize, f32)>,
     send: [[Option<f32>; 2]; MAX_CHANNELS],
     /// parsed lane targets: (target string it was parsed from, result).
     /// Re-parsed only when a lane's target text changes.
@@ -345,6 +355,8 @@ pub struct Engine {
     meter: crate::master::Loudness,
     /// loudness / true peak / gain reduction for the UI
     pub loud: crate::master::Readout,
+    /// plugin instrument instances (src/plugin/), one per instrument x channel
+    pub plugins: crate::plugin::Rack,
 }
 
 impl Engine {
@@ -371,6 +383,7 @@ impl Engine {
             auto: AutoState {
                 fx: Vec::with_capacity(FX_OVER_CAP),
                 ret: Vec::with_capacity(FX_OVER_CAP),
+                macros: Vec::with_capacity(FX_OVER_CAP),
                 ..Default::default()
             },
             song_pos: 0.0,
@@ -380,6 +393,7 @@ impl Engine {
             test_tone: 0,
             tone_ph: 0.0,
             live: Live::new(),
+            plugins: crate::plugin::Rack::new(),
             lim: crate::master::Limiter::new(sr),
             meter: crate::master::Loudness::new(sr),
             loud: Default::default(),
@@ -404,6 +418,35 @@ impl Engine {
     /// Apply one live MIDI event (allocation-free).
     pub fn live_event(&mut self, song: &Song, ev: crate::midi::LiveEv) {
         use crate::midi::LiveEv;
+        if !self.plugins.is_empty() {
+            match ev {
+                LiveEv::On {
+                    key,
+                    note,
+                    vel,
+                    instr,
+                    ch,
+                } => {
+                    let i = (instr as usize).wrapping_sub(1);
+                    if let Some(inst) = song.instruments.get(i) {
+                        if matches!(inst.kind, InstrumentKind::Plugin(_)) {
+                            let n = (note as i32 + inst.transpose as i32).clamp(1, 127) as u8;
+                            self.plugins.live_on(
+                                i,
+                                ch as usize,
+                                key,
+                                midi_key(n),
+                                inst.volume * vel,
+                            );
+                            return;
+                        }
+                    }
+                }
+                LiveEv::Off { key } => self.plugins.live_off(key),
+                LiveEv::AllOff => self.plugins.all_off(),
+                _ => {}
+            }
+        }
         let lv = &mut self.live;
         match ev {
             LiveEv::On {
@@ -518,6 +561,7 @@ impl Engine {
     /// undo): map every voice, fading tail and FX chain to the instrument's
     /// new index. Voices of a removed instrument stop.
     pub fn remap_instruments(&mut self, f: &dyn Fn(usize) -> Option<usize>) {
+        drop(self.plugins.remap(f));
         for c in &mut self.chans {
             if c.instr != usize::MAX {
                 match f(c.instr) {
@@ -648,6 +692,7 @@ impl Engine {
 
     pub fn stop(&mut self) {
         self.playing = false;
+        self.plugins.all_off();
         for c in &mut self.chans {
             c.synth.amp.release();
         }
@@ -823,6 +868,21 @@ impl Engine {
                 Some(p) if p.accent_vel > 0.0 && c.vol >= p.accent_vel - 1e-4 => p.accent,
                 _ => 0.0,
             };
+        }
+        // plugin instruments: note on / off events (mono per channel)
+        if !self.plugins.is_empty() {
+            let (ci, cn, cv) = (c.instr, c.note, c.vol);
+            if cell.note == NOTE_OFF {
+                self.plugins.release_ch(ch);
+            } else if new_note && !gliding {
+                match song.instruments.get(ci) {
+                    Some(inst) if matches!(inst.kind, InstrumentKind::Plugin(_)) => {
+                        let n = (cn as i32 + inst.transpose as i32).clamp(1, 127) as u8;
+                        self.plugins.note(ci, ch, midi_key(n), cv);
+                    }
+                    _ => self.plugins.release_ch(ch),
+                }
+            }
         }
     }
 
@@ -1074,6 +1134,7 @@ impl Engine {
         a.master = None;
         a.fx.clear();
         a.ret.clear();
+        a.macros.clear();
         a.send = [[None; 2]; MAX_CHANNELS];
         let ni = song.instruments.len();
         if a.level.len() != ni {
@@ -1155,6 +1216,7 @@ impl Engine {
                     }
                 }
                 Target::Send(c, b) if c < MAX_CHANNELS && b < 2 => a.send[c][b] = Some(real),
+                Target::Macro(i, m) if a.macros.len() < FX_OVER_CAP => a.macros.push((i, m, real)),
                 _ => {}
             }
         }
@@ -1259,6 +1321,14 @@ impl Engine {
 
     /// Render interleaved stereo.
     pub fn render(&mut self, song: &Song, out: &mut [f32]) {
+        crate::plugin::clap::AUDIO_THREAD.with(|a| a.set(true));
+        self.render_inner(song, out);
+        crate::plugin::clap::AUDIO_THREAD.with(|a| a.set(false));
+    }
+
+    fn render_inner(&mut self, song: &Song, out: &mut [f32]) {
+        let frames_total = out.len() / 2;
+        let plugs = !self.plugins.is_empty();
         // live MIDI events (lock-free queue, filled by the MIDI thread)
         if let Some(mut rx) = self.live.rx.take() {
             while let Ok(ev) = rx.pop() {
@@ -1303,7 +1373,7 @@ impl Engine {
             crate::master::db_to_lin(ls.ceiling_db),
             ls.release_ms / 1000.0,
         );
-        for frame in out.chunks_mut(2) {
+        for (fi, frame) in out.chunks_mut(2).enumerate() {
             // automation is evaluated every 32 frames (sub-block), values smoothed
             if self.auto.countdown == 0 {
                 self.auto.countdown = 32;
@@ -1322,6 +1392,18 @@ impl Engine {
                 }
                 self.samples_to_tick -= 1.0;
             }
+            // plugin chunks end where the next tick (new events) starts
+            let chunk = if plugs {
+                let left = frames_total - fi;
+                let until = if self.playing {
+                    self.samples_to_tick.ceil().max(0.0) as usize + 1
+                } else {
+                    usize::MAX
+                };
+                left.min(until).min(crate::plugin::MAX_BLOCK)
+            } else {
+                0
+            };
             let mut l = 0.0;
             let mut r = 0.0;
             let mut bus = [[0.0f32; 2]; 2];
@@ -1406,6 +1488,48 @@ impl Engine {
                     c.active = alive;
                     s += v * c.vol;
                     s_r += vr * c.vol;
+                }
+                // plugin instruments on this channel (their own release tails)
+                if plugs {
+                    let rack = &mut self.plugins;
+                    for k in 0..rack.ch_slots(i).len() {
+                        let si = rack.ch_slots(i)[k] as usize;
+                        let pi = rack.slots[si].instr;
+                        let mine = pi == c.instr;
+                        if rack.needs_chunk(si) {
+                            if mine {
+                                if let Some((n, _)) = rack.held(si) {
+                                    let base = note_freq(n.saturating_sub(11));
+                                    if base > 0.0 && c.freq > 0.0 {
+                                        rack.set_tuning(si, 12.0 * (c.freq / base).log2());
+                                    }
+                                }
+                            }
+                            for m in 0..8 {
+                                let v = if mine && c.gmo[m] >= 0.0 {
+                                    c.gmo[m]
+                                } else {
+                                    self.auto
+                                        .macros
+                                        .iter()
+                                        .find(|x| x.0 == pi && x.1 == m)
+                                        .map(|x| x.2)
+                                        .unwrap_or(-1.0)
+                                };
+                                rack.set_macro(si, m, v);
+                            }
+                            rack.chunk(si, chunk);
+                        }
+                        let (pl, pr) = rack.sample(si);
+                        let lvl = self.auto.level.get(pi).copied().unwrap_or(1.0);
+                        // volume column / 0C / 0D after the note: relative gain
+                        let g = match rack.held(si) {
+                            Some((_, v0)) if mine => (c.vol / v0).min(4.0),
+                            _ => 1.0,
+                        } * lvl;
+                        s += pl * g;
+                        s_r += pr * g;
+                    }
                 }
                 if c.tail.gain > 0.0 {
                     let t = &mut c.tail;
@@ -1506,6 +1630,7 @@ impl Engine {
 /// Render the whole song once (order list) offline.
 pub fn render_song(song: &Song, sr: u32) -> Vec<f32> {
     let mut e = Engine::new(sr as f32);
+    crate::plugin::prepare(&mut e.plugins, song, sr as f32);
     e.start(song, 0, 0, false, 0);
     let mut out = Vec::new();
     let mut buf = vec![0.0f32; 1024];

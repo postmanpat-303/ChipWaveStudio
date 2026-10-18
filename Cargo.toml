@@ -28,6 +28,9 @@ midir = "0.11.1"
 ureq = "3"
 serde_json = "1"
 png = "0.18"
+clap-sys = "0.5"
+libloading = "0.9"
+base64 = "0.22"
 
 [dev-dependencies]
 egui_kittest = { version = "0.37", features = ["eframe"] }
@@ -41,3 +44,6 @@ strip = true
 
 [profile.dev]
 opt-level = 1
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_System_Threading"] }

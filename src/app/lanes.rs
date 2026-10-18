@@ -108,6 +108,26 @@ impl App {
                         crate::fx::params(k).get(p).map(|x| x.name).unwrap_or("")
                     )
                 }
+                Target::Macro(i, k) => {
+                    let pn = match s.song.instruments.get(i).map(|x| &x.kind) {
+                        Some(InstrumentKind::Plugin(p)) => s
+                            .engine
+                            .plugins
+                            .primary(i)
+                            .and_then(|si| {
+                                let id = p.macro_id(k);
+                                s.engine.plugins.slots[si]
+                                    .inst
+                                    .params()
+                                    .into_iter()
+                                    .find(|x| x.id == id)
+                                    .map(|x| x.name)
+                            })
+                            .unwrap_or_default(),
+                        _ => String::new(),
+                    };
+                    format!("{} - Macro {} {pn}", iname(i), k + 1)
+                }
                 Target::Send(c, r) => {
                     format!(
                         "Ch {} {} - Send {}",
@@ -159,6 +179,7 @@ impl App {
                     .get(c)
                     .map(|m| m.send[r])
                     .unwrap_or(0.0),
+                Target::Macro(i, k) => crate::plugin::macro_norm(s, i, k).unwrap_or(0.5),
             };
             let mut lane = Lane::new(t, label.clone());
             lane.points.push(crate::automation::Point {
@@ -196,6 +217,13 @@ impl App {
             )
         });
         let _ = ninst;
+        let plugs: Vec<bool> = self.with(|s| {
+            s.song
+                .instruments
+                .iter()
+                .map(|i| matches!(i.kind, InstrumentKind::Plugin(_)))
+                .collect()
+        });
         ui.horizontal_wrapped(|ui| {
             ui.checkbox(
                 &mut self.show_auto,
@@ -210,6 +238,9 @@ impl App {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for (i, (n, synth)) in synths.iter().enumerate() {
                         let mut ts = vec![Target::Level(i)];
+                        if plugs.get(i).copied().unwrap_or(false) {
+                            ts.extend((0..8).map(|k| Target::Macro(i, k)));
+                        }
                         if *synth {
                             ts = vec![
                                 Target::Cutoff(i),
@@ -219,10 +250,13 @@ impl App {
                             ];
                         }
                         for t in ts {
-                            if ui
-                                .button(format!("{:02X} {n} - {}", i + 1, t.param_name()))
-                                .clicked()
-                            {
+                            let txt = match t {
+                                Target::Macro(_, k) => {
+                                    format!("{:02X} {n} - Macro {}", i + 1, k + 1)
+                                }
+                                _ => format!("{:02X} {n} - {}", i + 1, t.param_name()),
+                            };
+                            if ui.button(txt).clicked() {
                                 add = Some(t);
                                 ui.close();
                             }
