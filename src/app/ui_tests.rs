@@ -891,7 +891,7 @@ fn mixer_double_click_resets_fader_and_pan() {
 fn help_about_shows_credit_and_coffee_link() {
     let mut h = harness();
     click_exact(&mut h, "Help");
-    click_exact(&mut h, "About ChipWave");
+    click_exact(&mut h, "About ChipWave Studio");
     assert!(h.state().show_about);
     exact(&h, "Created by Del (postmanpat)");
     exact(&h, "To keep the software going I need Coffee :)");
@@ -928,6 +928,76 @@ fn help_about_shows_credit_and_coffee_link() {
         click_link("YouTube: demos & promos"),
         ["https://www.youtube.com/@whatgoesaround1551"]
     );
+}
+
+/// the About window opens centred in the main window, every time
+fn about_centred(h: &Harness<'static, App>) {
+    let st = egui::AreaState::load(&h.ctx, egui::Id::unique("about_chipwave_studio"))
+        .expect("About window shown");
+    let c = st.rect().center();
+    let want = h.ctx.content_rect().center();
+    assert!(
+        (c - want).length() < 2.0,
+        "About at {c:?} (size {:?}), centre {want:?}",
+        st.size
+    );
+}
+
+#[test]
+fn about_window_is_centred_and_has_credit_tabs() {
+    let mut h = harness();
+    h.state_mut().show_about = true;
+    frames(&mut h, 4);
+    about_centred(&h);
+    exact(&h, "ChipWave Studio");
+    exact(&h, "A tracker for chip and psytrance sounds");
+    exact(&h, "Created by Del (postmanpat)");
+    exact(&h, "Full notices: THIRD_PARTY_LICENSES.txt");
+    // Credits tab: grouped, headed sections with every credit
+    click_exact(&mut h, "Credits");
+    frames(&mut h, 2);
+    for g in crate::credits::Group::ALL {
+        exact(&h, g.title());
+    }
+    exact(&h, "OctaMED");
+    exact(&h, "Peterson & Barney (1952)");
+    // the filter narrows the list
+    h.state_mut().about.filter = "trombone".into();
+    frames(&mut h, 2);
+    exact(&h, "Pink Trombone");
+    assert!(
+        h.query_all_by(|n| n.label().as_deref() == Some("OctaMED"))
+            .next()
+            .is_none(),
+        "filtered out"
+    );
+    // Licences tab
+    click_exact(&mut h, "Licences");
+    frames(&mut h, 2);
+    exact(&h, "Licences of credited work");
+    // dragged away by its title, closed and opened again: centred again
+    let title = h
+        .query_all_by(|n| n.label().as_deref() == Some("About ChipWave Studio"))
+        .map(|n| n.rect())
+        .min_by(|a, b| a.height().total_cmp(&b.height()))
+        .expect("title");
+    // (the window's node covers it all; its title bar is the top strip)
+    let grab = egui::pos2(title.center().x - 120.0, title.top() + 14.0);
+    drag(&mut h, grab, grab + egui::vec2(300.0, 150.0));
+    frames(&mut h, 2);
+    let moved = egui::AreaState::load(&h.ctx, egui::Id::unique("about_chipwave_studio"))
+        .unwrap()
+        .rect()
+        .center();
+    assert!(
+        (moved - h.ctx.content_rect().center()).length() > 50.0,
+        "dragged"
+    );
+    h.state_mut().show_about = false;
+    frames(&mut h, 2);
+    h.state_mut().show_about = true;
+    frames(&mut h, 4);
+    about_centred(&h);
 }
 
 #[test]
@@ -1488,6 +1558,75 @@ fn library_add_save_reload_replace_and_undo() {
         "undo replace"
     );
     let _ = std::fs::remove_dir_all(&lib);
+}
+
+/// double-click instrument 03 and replace the rename field's text
+fn start_rename_03(h: &mut Harness<'static, App>, text: &str) {
+    let r = labelled(h, "03  ");
+    double_click(h, r.center());
+    frames(h, 2);
+    assert!(h.state().renaming.is_some(), "rename field open");
+    assert!(h.ctx.text_edit_focused(), "rename field focused");
+    h.state_mut().renaming.as_mut().unwrap().1 = text.into();
+    frames(h, 2);
+}
+
+#[test]
+fn instrument_rename_commits_on_focus_loss_and_esc_cancels() {
+    let mut h = harness();
+    let before = song(&mut h, |s| s.clone());
+    let old = before.instruments[2].name.clone();
+    let pats = |h: &mut Harness<'static, App>| song(h, |s| format!("{:?}", s.patterns));
+    let pats0 = pats(&mut h);
+    // typing goes into the field only: Q and W are note keys in the pattern
+    start_rename_03(&mut h, "");
+    h.input_mut()
+        .events
+        .push(egui::Event::Text("Qw Lead".into()));
+    frame(&mut h);
+    key(&mut h, Key::Q, egui::Modifiers::NONE);
+    key(&mut h, Key::W, egui::Modifiers::NONE);
+    assert!(h.state().renaming.is_some(), "still editing");
+    assert_eq!(pats(&mut h), pats0, "no notes entered while renaming");
+    // clicking somewhere else commits
+    let away = h.ctx.content_rect().center();
+    click_at(&mut h, away);
+    frames(&mut h, 2);
+    assert!(h.state().renaming.is_none(), "edit mode closed");
+    assert_eq!(instr_names(&mut h)[2], "Qw Lead");
+    // one undo step
+    ctrl_z(&mut h);
+    assert_eq!(instr_names(&mut h)[2], old, "undo rename");
+    // Esc cancels and keeps the old name
+    start_rename_03(&mut h, "Nope");
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().renaming.is_none());
+    assert_eq!(instr_names(&mut h)[2], old, "Esc keeps the old name");
+    // empty / whitespace-only names revert
+    start_rename_03(&mut h, "   ");
+    key(&mut h, Key::Enter, egui::Modifiers::NONE);
+    assert!(h.state().renaming.is_none());
+    assert_eq!(instr_names(&mut h)[2], old, "blank name reverts");
+    // Tab commits
+    start_rename_03(&mut h, "Tabbed");
+    key(&mut h, Key::Tab, egui::Modifiers::NONE);
+    assert!(h.state().renaming.is_none(), "Tab closes the field");
+    assert_eq!(instr_names(&mut h)[2], "Tabbed");
+    // clicking another instrument commits and selects it
+    start_rename_03(&mut h, "Clicked away");
+    let r5 = labelled(&h, "05  ");
+    click_at(&mut h, r5.center());
+    frames(&mut h, 2);
+    assert!(h.state().renaming.is_none());
+    assert_eq!(instr_names(&mut h)[2], "Clicked away");
+    assert_eq!(h.state().instr, 5);
+    // switching views commits
+    start_rename_03(&mut h, "View switch");
+    h.state_mut().view = View::Mixer;
+    frames(&mut h, 2);
+    assert!(h.state().renaming.is_none());
+    assert_eq!(instr_names(&mut h)[2], "View switch");
+    assert_eq!(pats(&mut h), pats0, "patterns untouched throughout");
 }
 
 #[test]

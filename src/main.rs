@@ -10,6 +10,7 @@ mod audio;
 mod automation;
 mod chipfx;
 mod chords;
+mod credits;
 mod engine;
 mod export;
 mod fileio;

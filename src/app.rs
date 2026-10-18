@@ -10,6 +10,7 @@ use eframe::egui::{self, Color32, FontId, Key, Pos2, Rect, Sense, Stroke};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+mod about;
 mod arranger;
 mod blocklen;
 mod chordview;
@@ -147,6 +148,10 @@ pub struct App {
     ip: instpanel::InstUi,
     /// instrument being renamed in the list (slot, text)
     renaming: Option<(u8, String)>,
+    /// the rename field has been focused (losing focus after that commits)
+    rename_focus: bool,
+    /// view when the rename started (switching views commits)
+    rename_view: View,
     show_info: bool,
     /// action waiting for the Save / Don't save / Cancel answer
     prompt: Option<crate::prompt::Pending>,
@@ -204,6 +209,7 @@ pub struct App {
     theme: theme::Theme,
     show_help: bool,
     show_about: bool,
+    about: about::AboutState,
     /// key events taken from egui before it can use them for focus navigation
     pending: Vec<egui::Event>,
     /// undo/redo keys pressed while a text field had focus: run next frame,
@@ -444,6 +450,8 @@ impl App {
             gen_ui: Default::default(),
             ip: Default::default(),
             renaming: None,
+            rename_focus: false,
+            rename_view: View::Pattern,
             show_info: false,
             prompt: None,
             discarded: false,
@@ -484,6 +492,7 @@ impl App {
             theme: crate::settings::load().theme(),
             show_help: false,
             show_about: false,
+            about: Default::default(),
             pending: vec![],
             deferred_keys: vec![],
             mouse_since_commit: false,

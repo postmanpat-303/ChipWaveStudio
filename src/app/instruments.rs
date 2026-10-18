@@ -2,6 +2,43 @@
 use super::*;
 
 impl App {
+    /// open the inline rename field of an instrument
+    pub(super) fn start_rename(&mut self, slot: u8, name: String) {
+        self.renaming = Some((slot, name));
+        self.rename_focus = false;
+    }
+
+    /// close the rename field: `Some(name)` commits it (one undo step; empty or
+    /// unchanged names keep the old one), `None` cancels
+    pub(super) fn finish_rename(&mut self, slot: u8, name: Option<String>) {
+        if self.renaming.as_ref().map(|r| r.0) != Some(slot) {
+            return;
+        }
+        self.renaming = None;
+        self.rename_focus = false;
+        let Some(name) = name else {
+            self.status = format!("Rename of instrument {slot:02X} cancelled");
+            return;
+        };
+        let name = name.trim().to_string();
+        let i = slot as usize - 1;
+        let old = self.with(|s| s.song.instruments.get(i).map(|x| x.name.clone()));
+        if name.is_empty() || old.as_deref() == Some(name.as_str()) || old.is_none() {
+            return;
+        }
+        self.snapshot();
+        self.with(|s| {
+            if let Some(x) = s.song.instruments.get_mut(i) {
+                x.name = name.clone();
+                if let InstrumentKind::Synth(p) = &mut x.kind {
+                    p.name = name.clone();
+                }
+            }
+        });
+        self.dirty = true;
+        self.status = format!("Renamed instrument {slot:02X} to {name}");
+    }
+
     pub(super) fn side_panel(&mut self, ui: &mut egui::Ui) {
         ui.add_space(4.0);
         let names: Vec<(String, &str)> = self.with(|s| {
@@ -58,7 +95,10 @@ impl App {
         });
         self.instrument_toolbar(ui, names.len());
         let q = self.instr_query.to_lowercase();
-        let mut commit_rename: Option<(u8, String)> = None;
+        // (slot, new name); None = Esc: cancel
+        let mut commit_rename: Option<(u8, Option<String>)> = None;
+        let mut rename_drawn = false;
+        let renaming_before = self.renaming.as_ref().map(|r| r.0);
         // compact rows; the list grows with the panel and only scrolls when
         // it has to, with a thin bar in its own gutter (never over the names)
         let row_h = (ui.text_style_height(&egui::TextStyle::Monospace) + 4.0).max(17.0);
@@ -115,6 +155,7 @@ impl App {
                         }
                         if let Some((rs, txt)) = &mut self.renaming {
                             if *rs == slot {
+                                rename_drawn = true;
                                 ui.horizontal(|ui| {
                                     ui.add_space(10.0);
                                     ui.label(
@@ -122,16 +163,27 @@ impl App {
                                     );
                                     let r = ui.add(
                                         egui::TextEdit::singleline(txt)
+                                            .id(egui::Id::unique(("inst_rename", slot)))
                                             .desired_width(ui.available_width() - 8.0)
                                             .char_limit(64),
                                     );
-                                    r.request_focus();
+                                    // focus the field once; after that, losing focus
+                                    // (a click anywhere else, Tab, a view switch) commits
+                                    let had_focus = self.rename_focus;
+                                    if !had_focus {
+                                        r.request_focus();
+                                        self.rename_focus = true;
+                                        self.rename_view = self.view;
+                                    }
                                     let enter = ui.input(|i| i.key_pressed(Key::Enter));
                                     let esc = ui.input(|i| i.key_pressed(Key::Escape));
                                     if esc {
-                                        commit_rename = Some((0, String::new()));
-                                    } else if enter || r.lost_focus() {
-                                        commit_rename = Some((slot, txt.clone()));
+                                        commit_rename = Some((slot, None));
+                                    } else if enter
+                                        || (had_focus && !r.has_focus())
+                                        || self.view != self.rename_view
+                                    {
+                                        commit_rename = Some((slot, Some(txt.clone())));
                                     }
                                 });
                                 continue;
@@ -144,7 +196,7 @@ impl App {
                             self.instr = slot;
                         }
                         if r.double_clicked() {
-                            self.renaming = Some((slot, n.clone()));
+                            self.start_rename(slot, n.clone());
                         }
                         // a newly selected instrument (duplicate, Up/Down, MIDI...) scrolls into view
                         if self.instr == slot && self.instr_shown != slot {
@@ -197,7 +249,7 @@ impl App {
                                 .on_hover_text("or double-click the name")
                                 .clicked()
                             {
-                                self.renaming = Some((slot, n.clone()));
+                                self.start_rename(slot, n.clone());
                                 ui.close();
                             }
                             if ui
@@ -286,23 +338,16 @@ impl App {
             );
             r.context_menu(|ui| self.list_actions_menu(ui));
         }
-        if let Some((slot, name)) = commit_rename {
-            self.renaming = None;
-            let name = name.trim().to_string();
-            if slot > 0 && !name.is_empty() {
-                self.snapshot();
-                let i = slot as usize - 1;
-                self.with(|s| {
-                    if let Some(x) = s.song.instruments.get_mut(i) {
-                        x.name = name.clone();
-                        if let InstrumentKind::Synth(p) = &mut x.kind {
-                            p.name = name.clone();
-                        }
-                    }
-                });
-                self.dirty = true;
-                self.status = format!("Renamed instrument {slot:02X} to {name}");
+        // the field wasn't drawn (filtered out, panel hidden): keep what was typed
+        if commit_rename.is_none() && !rename_drawn {
+            if let Some((slot, txt)) = &self.renaming {
+                if renaming_before == Some(*slot) {
+                    commit_rename = Some((*slot, Some(txt.clone())));
+                }
             }
+        }
+        if let Some((slot, name)) = commit_rename {
+            self.finish_rename(slot, name);
         }
         ui.add_space(2.0);
         ui.separator();

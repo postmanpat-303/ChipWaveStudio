@@ -157,7 +157,18 @@ impl App {
                 self.set_card = 1; // Look (themes, scale, accent)
                 self.set_open = Some(1);
             }
-            "about" => self.show_about = true,
+            "about" => {
+                self.show_about = true;
+                // CHIPWAVE_SHOT_ABOUT_TAB=credits|licences, CHIPWAVE_SHOT_ABOUT_FILTER=<text>
+                self.about.tab = match std::env::var("CHIPWAVE_SHOT_ABOUT_TAB").as_deref() {
+                    Ok("credits") => about::AboutTab::Credits,
+                    Ok("licences") => about::AboutTab::Licences,
+                    _ => about::AboutTab::About,
+                };
+                if let Ok(f) = std::env::var("CHIPWAVE_SHOT_ABOUT_FILTER") {
+                    self.about.filter = f;
+                }
+            }
             "library" => self.open_library(),
             "chords" => {
                 self.chords.open = true;

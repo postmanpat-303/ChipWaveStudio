@@ -2,6 +2,17 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## Unreleased
+
+- **About window redesigned** (Help › About ChipWave Studio): a header with the cicada logo, **ChipWave Studio** in large type, the version, the tagline, "Created by Del (postmanpat)", and links to the website, GitHub and the GPL-3.0-or-later licence. Below it are **About | Credits | Licences** tabs:
+  - **About:** a "Support ChipWave" card with tidy **Buy me a coffee**, **PayPal** and **YouTube: demos & promos** buttons ("To keep the software going I need Coffee :)"), a short description and version / licence / website / source rows.
+  - **Credits:** the old wall of ~30 small lines is now grouped into collapsible sections (Voice & speech, Synthesis & generators, Drums & Chip FX, Effects, mixing & loudness, Plugin hosting, Libraries, Inspiration, Research & papers with years, Tracker heritage). Each entry is a two-column row: the project or author in link colour (clickable where it has a page) with its author underneath, then what it's used for, a small licence badge (MIT, GPL-3, Apache-2.0, LGPL, ISC…) and muted notes such as "No code copied" or "Idea only, no material used". A filter box narrows the list.
+  - **Licences:** ChipWave's own GPL-3.0-or-later statement and the credited work grouped by licence.
+  - A **Full notices: THIRD_PARTY_LICENSES.txt** button (always visible) opens the file next to the app (or in the Mac bundle's Resources).
+  - The window is 640×560 by default, resizable, scrolls inside, works in every theme, and opens **centred in the main window every time** (it stays where you drag it until closed).
+  - The credits now live in one structured list, `src/credits.rs` (`Credit { group, name, by, what, licence, note, url }`), so the README and website can follow it. Every earlier credit is kept (a test checks all the old names and links), plus the ones that were only in the README (Kelly & Lochbaum, Roland TR-808 and TB-303, Bitwig, Boss OC-2, the Rust libraries). The screenshot harness takes `CHIPWAVE_SHOT_ABOUT_TAB=credits|licences`.
+- **Instrument rename fix:** the inline rename box (double-click an instrument) no longer stays open when you click elsewhere. Clicking anywhere else (pattern, another instrument, empty space, lower panel), Tab or switching views commits the new name; Enter commits; **Esc cancels** and keeps the old name. Empty or whitespace-only names keep the old name. A rename is one undo step, and typing in the box never enters notes or triggers shortcuts. UI test: `instrument_rename_commits_on_focus_loss_and_esc_cancels`.
+
 ## 0.2.4.0: ChipWave Tracker is now ChipWave Studio
 
 - **New name:** ChipWave Tracker is now **ChipWave Studio**, to tell it apart from an unrelated paid iOS chiptune app called "ChipWave" that appeared on the App Store in August 2026. Same app, same file formats, same settings folder (`%APPDATA%\ChipWave`, `~/Library/Application Support/ChipWave`, `~/.config/chipwave`), so settings, recent files, keys and the instrument library carry over untouched. Plan and details: [RENAME.md](RENAME.md).

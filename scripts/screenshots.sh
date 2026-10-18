@@ -29,7 +29,8 @@ CHIPWAVE_SHOT_LOWER=full CHIPWAVE_SHOT_BLOCK=6 shot "$OUT/dark-pattern-full.png"
 CHIPWAVE_SHOT_BLOCK=6 shot "$OUT/dark-mixer-limiter.png" mixer dark $DISCO
 shot "$OUT/dark-arranger-play-marker.png" cue dark $DISCO
 CHIPWAVE_SHOT_BLOCK=6 shot "$OUT/dark-chord-helper.png" chords dark $DISCO
-for v in fill settings about library; do
+CHIPWAVE_SHOT_ABOUT_TAB=credits shot "$OUT/dark-about.png" about dark $DISCO
+for v in fill settings library; do
   f=$v; [ $v = library ] && f=instrument-library
   shot "$OUT/dark-$f.png" $v dark $DISCO
 done

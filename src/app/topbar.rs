@@ -203,130 +203,7 @@ pub(super) const DONATE_URL: &str = "https://buymeacoffee.com/postmanpat";
 pub(super) const PAYPAL_URL: &str = "https://paypal.me/derekh100";
 pub(super) const YOUTUBE_URL: &str = "https://www.youtube.com/@whatgoesaround1551";
 
-/// Help > About credits for work that inspired or informed ChipWave
-/// (no code is copied unless THIRD_PARTY_LICENSES says so)
-pub(super) const CREDITS: &[(&str, &str)] = &[
-    (
-        "Voice engine inspired by Mutable Instruments Plaits by Emilie Gillet (MIT)",
-        "https://github.com/pichenettes/eurorack/tree/master/plaits/dsp/speech",
-    ),
-    (
-        "Vowel formant data: Csound manual formant table (Csound community, LGPL)",
-        "https://csound.com/docs/manual/MiscFormants.html",
-    ),
-    (
-        "Vowel data: Peterson & Barney (1952), JASA 24(2)",
-        "https://doi.org/10.1121/1.1906875",
-    ),
-    (
-        "Glottal pulse: Rosenberg (1971); LF model: Fant, Liljencrants & Lin (1985)",
-        "https://doi.org/10.1121/1.1912389",
-    ),
-    (
-        "Parallel formant synthesis: Dennis H. Klatt (1980), JASA 67(3)",
-        "https://doi.org/10.1121/1.383940",
-    ),
-    (
-        "Loudness meter + true peak: ITU-R BS.1770-4 and EBU R 128",
-        "https://www.itu.int/rec/R-REC-BS.1770",
-    ),
-    (
-        "K-weighting formulas as in libebur128 (Jan Kokemüller, MIT) and pyloudnorm (C. Steinmetz, MIT)",
-        "https://github.com/jiixyj/libebur128",
-    ),
-    (
-        "Lookahead limiter design: Geraint Luff, Signalsmith Audio",
-        "https://signalsmith-audio.co.uk/writing/2022/limiter/",
-    ),
-    (
-        "Throat mode inspired by Pink Trombone by Neil Thapen (MIT)",
-        "https://dood.al/pinktrombone/",
-    ),
-    (
-        "Consonant loci: Delattre, Liberman & Cooper (1955); noise bands: K. N. Stevens, Acoustic Phonetics",
-        "https://doi.org/10.1121/1.1908024",
-    ),
-    (
-        "Transform resonators: constant-gain resonator after J. O. Smith & J. B. Angell (1982)",
-        "https://ccrma.stanford.edu/~jos/filters/",
-    ),
-    (
-        "Bell and bar mode ratios: N. H. Fletcher & T. D. Rossing, The Physics of Musical Instruments",
-        "https://doi.org/10.1007/978-0-387-21603-4",
-    ),
-    (
-        "Sub crossover: Linkwitz-Riley (S. H. Linkwitz 1976); octave divider after analog octave pedals",
-        "https://www.linkwitzlab.com/filters.htm",
-    ),
-    (
-        "Moog ladder: V. Zavalishin, The Art of VA Filter Design; A. Huovilainen (DAFx-04); Välimäki & Huovilainen (2006)",
-        "https://www.native-instruments.com/fileadmin/ni_media/downloads/pdf/VAFilterDesign_2.1.0.pdf",
-    ),
-    (
-        "Ladder cross-checks: DaisySP (R. van Hoesel, Infrasonic Audio, MIT), fundsp (S. Perttu), MoogLadders (D. Diakopoulos)",
-        "https://github.com/ddiakopoulos/MoogLadders",
-    ),
-    (
-        "Drum Synth recipes: Sonic Pi sc808 (S. Aaron et al., MIT) after Yoshinosuke Horiuchi's SC-808",
-        "https://github.com/sonic-pi-net/sonic-pi",
-    ),
-    (
-        "Drum models: Plaits by Emilie Gillet (MIT), as ported to DaisySP by Electrosmith (MIT)",
-        "https://github.com/electro-smith/DaisySP",
-    ),
-    (
-        "Chip FX: sfxr by Tomas Pettersson (DrPetter, MIT) via sfxr-rs by Teemu Erkkola (MIT)",
-        "https://github.com/bzar/sfxr-rs",
-    ),
-    (
-        "Analog generator: Minimoog (R. Moog) design; polyBLEP oscillators after Välimäki & Huovilainen (2007)",
-        "https://doi.org/10.1109/MSP.2007.323276",
-    ),
-    (
-        "Analog / FM-4 inspiration: Vital by Matt Tytel (GPL-3, no code copied)",
-        "https://github.com/mtytel/vital",
-    ),
-    (
-        "Analog / Noise inspiration: Surge XT by the Surge Synth Team (GPL-3, no code copied)",
-        "https://github.com/surge-synthesizer/surge",
-    ),
-    (
-        "FM-4 inspiration: Dexed by Pascal Gauthier (GPL-3) on MSFA by Raph Levien (Apache-2.0); algorithms after the Yamaha DX21/TX81Z",
-        "https://github.com/asb2m10/dexed",
-    ),
-    (
-        "Plugin hosting: CLAP by the free-audio project (Alexandre Bique et al., MIT)",
-        "https://github.com/free-audio/clap",
-    ),
-    (
-        "CLAP bindings: clap-sys by micahrj et al. (MIT/Apache-2.0); host design after clack (prokopyl, MIT/Apache-2.0)",
-        "https://github.com/micahrj/clap-sys",
-    ),
-    (
-        "Plugin scanning ideas: Carla by Filipe Coelho (falkTX) and Ardour (GPL-2.0+, no code copied)",
-        "https://github.com/falkTX/Carla",
-    ),
-    (
-        "Plugin loading: libloading (S. Kazlauskas, ISC); windows-sys (Microsoft, MIT/Apache-2.0); base64 (MIT/Apache-2.0)",
-        "https://github.com/nagisa/rust_libloading",
-    ),
-    (
-        "Noise: pink noise filter by Paul Kellet (musicdsp.org); crackle after SuperCollider Dust / DaisySP Dust",
-        "https://www.musicdsp.org/en/latest/Filters/76-pink-noise-filter.html",
-    ),
-    (
-        "Key finding: Krumhansl–Schmuckler algorithm with the Krumhansl & Kessler (1982) key profiles",
-        "https://doi.org/10.1037/0033-295X.89.4.334",
-    ),
-    (
-        "Chord helper inspired by Scaler (Plugin Boutique): idea only, no material used",
-        "https://www.pluginboutique.com/product/2-Effects/26-Chords/12468-Scaler-3",
-    ),
-    (
-        "OctaMED by Teijo Kinnunen and Ray Burt-Frost: the workflow ChipWave follows",
-        "https://en.wikipedia.org/wiki/OctaMED",
-    ),
-];
+// The About credits live in `crate::credits::CREDITS` (one structured list).
 
 impl App {
     pub(super) fn synth_key(&mut self, ctx: &egui::Context, key: Key, modifiers: egui::Modifiers) {
@@ -679,7 +556,7 @@ impl App {
                     self.check_updates(true);
                     ui.close();
                 }
-                if ui.button("About ChipWave").clicked() {
+                if ui.button("About ChipWave Studio").clicked() {
                     self.show_about = true;
                 }
             });
@@ -1000,45 +877,7 @@ impl App {
     }
 
     pub(super) fn dialogs(&mut self, ctx: &egui::Context) {
-        if self.show_about {
-            let mut open = true;
-            egui::Window::new("About ChipWave")
-                .open(&mut open)
-                .resizable(false)
-                .collapsible(false)
-                .show(ctx, |ui| {
-                    ui.label(
-                        egui::RichText::new(format!("ChipWave Studio {}", crate::VERSION)).strong(),
-                    );
-                    ui.label("A tracker for chip and psytrance sounds.");
-                    ui.label("Created by Del (postmanpat)");
-                    ui.label("GPL-3.0-or-later");
-                    ui.add_space(8.0);
-                    ui.label("To keep the software going I need Coffee :)");
-                    ui.horizontal(|ui| {
-                        ui.hyperlink_to("Buy me a coffee", DONATE_URL)
-                            .on_hover_text(DONATE_URL);
-                        ui.label("·");
-                        ui.hyperlink_to("PayPal", PAYPAL_URL)
-                            .on_hover_text(PAYPAL_URL);
-                        ui.label("·");
-                        ui.hyperlink_to("YouTube: demos & promos", YOUTUBE_URL)
-                            .on_hover_text(YOUTUBE_URL);
-                    });
-                    ui.add_space(8.0);
-                    ui.label(egui::RichText::new("Acknowledgements / Credits").strong());
-                    for (txt, url) in CREDITS {
-                        ui.hyperlink_to(egui::RichText::new(*txt).small(), *url)
-                            .on_hover_text(*url);
-                    }
-                    ui.label(
-                        egui::RichText::new("Full notices: THIRD_PARTY_LICENSES.txt")
-                            .small()
-                            .color(th().ink2),
-                    );
-                });
-            self.show_about = open;
-        }
+        self.about_window(ctx);
         if self.orphans.is_empty() {
             return;
         }
