@@ -124,8 +124,8 @@ impl App {
             // start flat at the current value
             let cur = match t {
                 Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) => {
-                    match s.song.instruments.get(i).map(|x| &x.kind) {
-                        Some(InstrumentKind::Synth(p)) => t.to_norm(match t {
+                    match s.song.instruments.get(i).and_then(|x| x.kind.patch()) {
+                        Some(p) => t.to_norm(match t {
                             Target::Cutoff(_) => p.cutoff,
                             Target::Resonance(_) => p.resonance,
                             _ => p.drive,
@@ -189,7 +189,7 @@ impl App {
                 s.song
                     .instruments
                     .iter()
-                    .map(|i| (i.name.clone(), matches!(i.kind, InstrumentKind::Synth(_))))
+                    .map(|i| (i.name.clone(), i.kind.patch().is_some()))
                     .collect::<Vec<_>>(),
                 s.song.channels,
                 s.song.automation.len(),

@@ -118,6 +118,16 @@ Effect columns accept classic OctaMED/ProTracker commands (page 1, binary-compat
 | 1E | Repeat row | count |
 | 1F | Note delay / retrigger | delay, retrig |
 | 2E | Set pan (SoundStudio) | pan |
+| 30 | Voice: set vowel (ChipWave) | x vowel 0–6 (A E I O U ER AE), y glide ×25 ms |
+| 31 | Voice: jump to vowel-sequence step (ChipWave) | step |
+| 32 | Voice: formant shift (ChipWave) | 80 = ×1 |
+| 33 | Stutter / beat-repeat, any instrument (ChipWave) | x length (1 = 1/64 … 6 = 1/2 note), y repeats |
+| 34 | Stutter pitch step (ChipWave) | +x / −y semitones |
+| 35 | Voice: breath (ChipWave) | 00–40 |
+| 36 | Voice: babble (ChipWave) | x step length, y amount |
+| 37 | Voice: chop gate (ChipWave) | x cycle length, y open y/16 |
+
+Effects 30–37 are documented in [VOICE.md](VOICE.md).
 
 ## 6. Context-aware effect autocomplete
 Typing hex codes is fast for experts but hard to learn. ChipWave adds a dropdown that **knows what's on this channel**.

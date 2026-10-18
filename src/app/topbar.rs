@@ -202,6 +202,35 @@ pub(super) const VIEWS: [(View, &str, &str); 5] = [
 pub(super) const DONATE_URL: &str = "https://buymeacoffee.com/postmanpat";
 pub(super) const PAYPAL_URL: &str = "https://paypal.me/derekh100";
 
+/// Help > About credits for work that inspired or informed ChipWave
+/// (no code is copied unless THIRD_PARTY_LICENSES says so)
+pub(super) const CREDITS: &[(&str, &str)] = &[
+    (
+        "Voice engine inspired by Mutable Instruments Plaits by Emilie Gillet (MIT)",
+        "https://github.com/pichenettes/eurorack/tree/master/plaits/dsp/speech",
+    ),
+    (
+        "Vowel formant data: Csound manual formant table (Csound community, LGPL)",
+        "https://csound.com/docs/manual/MiscFormants.html",
+    ),
+    (
+        "Vowel data: Peterson & Barney (1952), JASA 24(2)",
+        "https://doi.org/10.1121/1.1906875",
+    ),
+    (
+        "Glottal pulse: Rosenberg (1971); LF model: Fant, Liljencrants & Lin (1985)",
+        "https://doi.org/10.1121/1.1912389",
+    ),
+    (
+        "Parallel formant synthesis: Dennis H. Klatt (1980), JASA 67(3)",
+        "https://doi.org/10.1121/1.383940",
+    ),
+    (
+        "OctaMED by Teijo Kinnunen and Ray Burt-Frost: the workflow ChipWave follows",
+        "https://en.wikipedia.org/wiki/OctaMED",
+    ),
+];
+
 impl App {
     pub(super) fn synth_key(&mut self, ctx: &egui::Context, key: Key, modifiers: egui::Modifiers) {
         self.pending.push(egui::Event::Key {
@@ -241,9 +270,16 @@ impl App {
                 if item(ui, "Open…", "Ctrl+O") {
                     self.request(crate::prompt::Pending::Open, &ctx);
                 }
-                if item(ui, "New from demo song", "") {
-                    self.request(crate::prompt::Pending::Demo, &ctx);
-                }
+                ui.menu_button("Demo songs", |ui| {
+                    for (i, (name, about, _)) in fileio::DEMOS.iter().enumerate() {
+                        if ui.button(*name).on_hover_text(*about).clicked() {
+                            self.request(crate::prompt::Pending::Demo(i), &ctx);
+                            ui.close();
+                        }
+                    }
+                })
+                .response
+                .on_hover_text("open a built-in demo song (unsaved; Save As keeps a copy)");
                 ui.menu_button("Recent", |ui| self.recent_menu(ui));
                 ui.separator();
                 if item(ui, "Save", "Ctrl+S") {
@@ -463,8 +499,12 @@ impl App {
                 if item(ui, "Keys", "F12") {
                     self.show_help = !self.show_help;
                 }
-                if ui.button("Load demo song").clicked() {
-                    self.request(crate::prompt::Pending::Demo, &ctx);
+                if ui
+                    .button("Load demo song")
+                    .on_hover_text("Lumen Drift; all demos are in File > Demo songs")
+                    .clicked()
+                {
+                    self.request(crate::prompt::Pending::Demo(0), &ctx);
                 }
                 if ui
                     .button("Check for updates…")
@@ -680,7 +720,19 @@ impl App {
                 ui.ctx()
                     .request_repaint_after(std::time::Duration::from_millis(160));
             }
+            // the right-hand status cluster (latency, Rec, Chord, MIDI) goes on
+            // its own row when it does not fit next to the groups (it used to
+            // overlap the view tabs at ~1600 px with the latency text shown)
+            let right_id = ui.scope_id().with("toolbar_right_w");
+            let right_w = ui
+                .ctx()
+                .data(|d| d.get_temp::<f32>(right_id))
+                .unwrap_or(340.0);
+            if ui.available_size_before_wrap().x < right_w + 12.0 {
+                ui.end_row();
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let right_edge = ui.max_rect().right();
                 ui.add_space(10.0);
                 if let Some(a) = &self.audio {
                     let u = a.stats.underruns.load(std::sync::atomic::Ordering::Relaxed);
@@ -763,6 +815,8 @@ impl App {
                     self.set_card = 4;
                     self.set_open = Some(4);
                 }
+                let used = right_edge - ui.min_rect().left();
+                ui.ctx().data_mut(|d| d.insert_temp(right_id, used));
             });
         });
     }
@@ -791,6 +845,17 @@ impl App {
                         ui.hyperlink_to("PayPal", PAYPAL_URL)
                             .on_hover_text(PAYPAL_URL);
                     });
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new("Acknowledgements / Credits").strong());
+                    for (txt, url) in CREDITS {
+                        ui.hyperlink_to(egui::RichText::new(*txt).small(), *url)
+                            .on_hover_text(*url);
+                    }
+                    ui.label(
+                        egui::RichText::new("Full notices: THIRD_PARTY_LICENSES.txt")
+                            .small()
+                            .color(th().ink2),
+                    );
                 });
             self.show_about = open;
         }

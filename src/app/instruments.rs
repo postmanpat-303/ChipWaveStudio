@@ -8,14 +8,18 @@ impl App {
             ui.add_space(14.0);
             ui.label(egui::RichText::new("Instruments").strong().size(15.0));
         });
-        let names: Vec<(String, bool)> = self.with(|s| {
+        let names: Vec<(String, &str)> = self.with(|s| {
             s.song
                 .instruments
                 .iter()
                 .map(|i| {
                     (
                         i.name.clone(),
-                        matches!(i.kind, InstrumentKind::Sample { .. }),
+                        match i.kind {
+                            InstrumentKind::Sample { .. } => "  (sample)",
+                            InstrumentKind::Voice(_) => "  (voice)",
+                            InstrumentKind::Synth(_) => "",
+                        },
                     )
                 })
                 .collect()
@@ -24,17 +28,12 @@ impl App {
             .id_salt("inst")
             .max_height(260.0)
             .show(ui, |ui| {
-                for (i, (n, is_sample)) in names.iter().enumerate() {
+                for (i, (n, tag)) in names.iter().enumerate() {
                     let slot = (i + 1) as u8;
                     ui.horizontal(|ui| {
                         ui.add_space(14.0);
-                        let txt = egui::RichText::new(format!(
-                            "{:02X}  {}{}",
-                            slot,
-                            n,
-                            if *is_sample { "  (sample)" } else { "" }
-                        ))
-                        .monospace();
+                        let txt =
+                            egui::RichText::new(format!("{:02X}  {}{}", slot, n, tag)).monospace();
                         let r = ui.selectable_label(self.instr == slot, txt);
                         if r.clicked() {
                             self.instr = slot;
@@ -90,6 +89,8 @@ impl App {
                                 self.request_delete_instrument(slot);
                                 ui.close();
                             }
+                            ui.separator();
+                            ui.menu_button("New instrument", |ui| self.new_instrument_menu(ui));
                         });
                     });
                 }
@@ -114,6 +115,9 @@ impl App {
         });
         ui.horizontal(|ui| {
             ui.add_space(14.0);
+            ui.menu_button("New…", |ui| self.new_instrument_menu(ui))
+                .response
+                .on_hover_text("add a Synth or a Voice (glitch) instrument");
             if ui.button("Import WAV…").clicked() {
                 if let Some(p) = rfd::FileDialog::new()
                     .add_filter("WAV", &["wav"])
@@ -132,17 +136,19 @@ impl App {
         // patch editor for the selected synth instrument
         let idx = self.instr as usize;
         let mut changed = false;
-        let Some((name, mut volume, mut transpose, mut patch)) = self.with(|s| {
+        let Some((name, mut volume, mut transpose, mut patch, mut voice)) = self.with(|s| {
             s.song.instruments.get(idx.wrapping_sub(1)).map(|i| {
-                let patch = match &i.kind {
-                    InstrumentKind::Synth(p) => Some(p.clone()),
-                    _ => None,
+                let (patch, voice) = match &i.kind {
+                    InstrumentKind::Synth(p) => (Some(p.clone()), None),
+                    InstrumentKind::Voice(v) => (Some(v.base.clone()), Some(v.clone())),
+                    _ => (None, None),
                 };
-                (i.name.clone(), i.volume, i.transpose, patch)
+                (i.name.clone(), i.volume, i.transpose, patch, voice)
             })
         }) else {
             return;
         };
+        let is_voice = voice.is_some();
         let mut learn: Vec<(egui::Response, crate::automation::Target)> = vec![];
         // edit a copy without holding the audio lock, commit only on change
         ui.horizontal(|ui| {
@@ -177,44 +183,66 @@ impl App {
                 }
             }
         });
+        if let Some(v) = &mut voice {
+            changed |= super::voiceview::voice_panel(ui, v);
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(
+                    egui::RichText::new("Envelope · filter · LFO")
+                        .small()
+                        .color(th().ink2),
+                );
+            });
+        }
         if let Some(p) = &mut patch {
             egui::Grid::new("patch")
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("   Osc");
-                    egui::ComboBox::from_id_salt("wave")
-                        .selected_text(format!("{:?}", p.osc1))
-                        .show_ui(ui, |ui| {
-                            for w in [
-                                Wave::Saw,
-                                Wave::Square,
-                                Wave::Pulse,
-                                Wave::Triangle,
-                                Wave::Sine,
-                            ] {
-                                changed |= ui
-                                    .selectable_value(&mut p.osc1, w, format!("{w:?}"))
-                                    .changed();
-                            }
-                        });
-                    ui.end_row();
+                    if !is_voice {
+                        ui.label("   Osc");
+                        egui::ComboBox::from_id_salt("wave")
+                            .selected_text(format!("{:?}", p.osc1))
+                            .show_ui(ui, |ui| {
+                                for w in [
+                                    Wave::Saw,
+                                    Wave::Square,
+                                    Wave::Pulse,
+                                    Wave::Triangle,
+                                    Wave::Sine,
+                                ] {
+                                    changed |= ui
+                                        .selectable_value(&mut p.osc1, w, format!("{w:?}"))
+                                        .changed();
+                                }
+                            });
+                        ui.end_row();
+                    }
                     ui.label("   Octave");
                     changed |= ui.add(egui::Slider::new(&mut p.osc1_oct, -3..=3)).changed();
                     ui.end_row();
-                    ui.label("   Pulse width");
-                    changed |= ui
-                        .add(egui::Slider::new(&mut p.pulse_width, 0.05..=0.95))
-                        .changed();
-                    ui.end_row();
-                    ui.label("   Unison");
-                    changed |= ui.add(egui::Slider::new(&mut p.unison, 1..=8)).changed();
-                    ui.end_row();
-                    ui.label("   Detune ct");
-                    changed |= ui
-                        .add(egui::Slider::new(&mut p.detune_cents, 0.0..=50.0))
-                        .changed();
-                    ui.end_row();
+                    if !is_voice
+                        || voice
+                            .as_ref()
+                            .is_some_and(|v| v.source == crate::voice::VoiceSource::Pulse)
+                    {
+                        ui.label("   Pulse width");
+                        changed |= ui
+                            .add(egui::Slider::new(&mut p.pulse_width, 0.05..=0.95))
+                            .changed();
+                        ui.end_row();
+                    }
+                    if !is_voice {
+                        ui.label("   Unison");
+                        changed |= ui.add(egui::Slider::new(&mut p.unison, 1..=8)).changed();
+                        ui.end_row();
+                        ui.label("   Detune ct");
+                        changed |= ui
+                            .add(egui::Slider::new(&mut p.detune_cents, 0.0..=50.0))
+                            .changed();
+                        ui.end_row();
+                    }
                     ui.label("   Filter");
                     egui::ComboBox::from_id_salt("fmode")
                         .selected_text(format!("{:?}", p.filter))
@@ -270,24 +298,26 @@ impl App {
                     changed |= r.changed();
                     learn.push((r, crate::automation::Target::Drive(idx.wrapping_sub(1))));
                     ui.end_row();
-                    ui.label("   Stereo width");
-                    changed |= ui
-                        .add(egui::Slider::new(&mut p.width, 0.0..=1.0))
-                        .on_hover_text(
-                            "spreads the unison voices left/right (Unison > 1); \
-                             with Noise it makes the noise stereo (hats)",
-                        )
-                        .changed();
-                    ui.end_row();
-                    ui.label("   Metal (808)");
-                    changed |= ui
-                        .add(egui::Slider::new(&mut p.metal, 0.0..=1.0))
-                        .on_hover_text(
-                            "six square oscillators at 808 hi-hat ratios: the metallic \
-                             part of a hat or cymbal (mix with Noise, high-pass filter)",
-                        )
-                        .changed();
-                    ui.end_row();
+                    if !is_voice {
+                        ui.label("   Stereo width");
+                        changed |= ui
+                            .add(egui::Slider::new(&mut p.width, 0.0..=1.0))
+                            .on_hover_text(
+                                "spreads the unison voices left/right (Unison > 1); \
+                                 with Noise it makes the noise stereo (hats)",
+                            )
+                            .changed();
+                        ui.end_row();
+                        ui.label("   Metal (808)");
+                        changed |= ui
+                            .add(egui::Slider::new(&mut p.metal, 0.0..=1.0))
+                            .on_hover_text(
+                                "six square oscillators at 808 hi-hat ratios: the metallic \
+                                 part of a hat or cymbal (mix with Noise, high-pass filter)",
+                            )
+                            .changed();
+                        ui.end_row();
+                    }
                     ui.label("   Velocity > cutoff");
                     changed |= ui
                         .add(egui::Slider::new(&mut p.vel_cutoff, 0.0..=4.0).suffix(" oct"))
@@ -376,8 +406,13 @@ impl App {
                 if let Some(inst) = s.song.instruments.get_mut(idx.wrapping_sub(1)) {
                     inst.volume = volume;
                     inst.transpose = transpose;
-                    if let (Some(p), InstrumentKind::Synth(dst)) = (patch, &mut inst.kind) {
-                        *dst = p;
+                    match (patch, voice, &mut inst.kind) {
+                        (Some(p), None, InstrumentKind::Synth(dst)) => *dst = p,
+                        (Some(p), Some(mut v), InstrumentKind::Voice(dst)) => {
+                            v.base = p;
+                            *dst = v;
+                        }
+                        _ => {}
                     }
                 }
             });

@@ -30,6 +30,7 @@ mod topbar;
 mod ui_tests;
 mod undo;
 mod updates;
+mod voiceview;
 
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect
 const SUBCOLS: usize = 9;
@@ -597,6 +598,11 @@ impl App {
             });
             ui.label(
                 "Effects: 01/02 slide, 08 note decay (xx*10 ms), 09 speed, 0C volume, 0D vol slide, 0F tempo (0F00 = break)",
+            );
+            ui.label(
+                "Voice / glitch: 30xy vowel x (0 A 1 E 2 I 3 O 4 U 5 ER 6 AE), glide y*25 ms · 31xx sequence step · \
+                 32xx formant shift (80 = x1) · 33xy stutter: length x (1 1/64 .. 3 1/16 .. 6 1/2 note), y repeats (any instrument) · \
+                 34xy stutter pitch +x/-y st · 35xx breath (00-40) · 36xy babble rate x, amount y · 37xy chop rate x, open y/16 (0 = off)",
             );
         });
         self.show_help = open;

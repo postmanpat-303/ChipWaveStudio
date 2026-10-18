@@ -189,8 +189,8 @@ impl App {
 
     /// open a .cwt by path (File > Recent, drag and drop)
     /// replace the song with the built-in demo (unsaved, no file path)
-    pub(super) fn load_demo(&mut self) {
-        let song = fileio::demo_song();
+    pub(super) fn load_demo(&mut self, i: usize) {
+        let song = fileio::demo_song_n(i);
         let title = song.title.clone();
         self.with(|s| {
             s.engine.stop();

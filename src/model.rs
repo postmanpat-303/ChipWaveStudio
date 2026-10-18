@@ -115,6 +115,19 @@ pub enum InstrumentKind {
         #[serde(default)]
         lp: crate::sample::SampleLoop,
     },
+    /// Voice (glitch): synthetic vowel generator (src/voice.rs)
+    Voice(crate::voice::VoicePatch),
+}
+
+impl InstrumentKind {
+    /// the synth patch (a Voice's envelopes / filter / LFO live in `base`)
+    pub fn patch(&self) -> Option<&Patch> {
+        match self {
+            InstrumentKind::Synth(p) => Some(p),
+            InstrumentKind::Voice(v) => Some(&v.base),
+            InstrumentKind::Sample { .. } => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

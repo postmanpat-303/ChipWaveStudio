@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 9] = [
+pub const VIEWS: [&str; 10] = [
     "pattern",
     "arranger",
     "mixer",
@@ -43,6 +43,7 @@ pub const VIEWS: [&str; 9] = [
     "settings",
     "about",
     "themes",
+    "voice",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -75,6 +76,13 @@ impl App {
             }
             "fill" => self.open_fill(),
             "instrument" => self.instr = 7,
+            "voice" => {
+                // a Voice (glitch) instrument added to the demo, selected
+                let mut p = crate::voice::preset("Glitch Babble").unwrap_or_default();
+                p.base.name = "Glitch Babble".into();
+                self.add_instrument("Glitch Babble", InstrumentKind::Voice(p));
+                self.dirty = false;
+            }
             "settings" => {
                 self.view = View::Settings;
                 self.set_card = 1; // Look (themes, scale, accent)

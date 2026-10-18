@@ -58,7 +58,7 @@ impl App {
             Pending::New => self.new_song(),
             Pending::Open => self.open(),
             Pending::OpenPath(p) => self.open_path(p),
-            Pending::Demo => self.load_demo(),
+            Pending::Demo(i) => self.load_demo(i),
         }
     }
 
@@ -209,7 +209,7 @@ impl App {
             let what = match p {
                 Pending::Quit => "quitting",
                 Pending::New => "starting a new song",
-                Pending::Open | Pending::OpenPath(_) | Pending::Demo => "opening another song",
+                Pending::Open | Pending::OpenPath(_) | Pending::Demo(_) => "opening another song",
             };
             let title = self.with(|s| s.song.title.clone());
             let mut choice = None;

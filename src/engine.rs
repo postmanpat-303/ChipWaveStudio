@@ -26,6 +26,10 @@ struct Chan {
     gr: f32,
     /// previous voice fading out over ~5 ms after a retrigger (declick)
     tail: Tail,
+    /// beat-repeat (effect 33 / Voice stutter), before the insert chain
+    stut: crate::voice::Stutter,
+    /// 34xy pitch step override for this note's stutter
+    stut_semi: Option<f32>,
 }
 
 #[derive(Clone)]
@@ -90,6 +94,15 @@ fn voice_raw(
             let v = synth.render_st(p, freq, sr, bpm);
             (v, !synth.amp.done())
         }
+        InstrumentKind::Voice(vp) => {
+            let p = ov
+                .patches
+                .get(instr)
+                .and_then(|o| o.as_ref())
+                .unwrap_or(&vp.base);
+            let v = synth.render_voice(p, vp, freq, sr, bpm);
+            (v, !synth.amp.done())
+        }
         InstrumentKind::Sample {
             data,
             rate,
@@ -124,8 +137,10 @@ impl Chan {
         self.active = false;
     }
 
-    fn new() -> Self {
+    fn new(sr: f32) -> Self {
         Self {
+            stut: crate::voice::Stutter::new(sr as usize, (sr * 0.002) as usize),
+            stut_semi: None,
             instr: usize::MAX,
             note: 0,
             freq: 0.0,
@@ -292,7 +307,7 @@ impl Engine {
             speed: 6,
             bpm: 125.0,
             duck_t: 1e9,
-            chans: (0..MAX_CHANNELS).map(|_| Chan::new()).collect(),
+            chans: (0..MAX_CHANNELS).map(|_| Chan::new(sr)).collect(),
             song_ended: false,
             peak: 0.0,
             peak_lr: [0.0; 2],
@@ -574,11 +589,40 @@ impl Engine {
         self.sr as f64 * 60.0 / (self.bpm as f64 * 4.0 * self.speed as f64)
     }
 
+    /// frames of `beats` at the running tempo
+    fn beat_frames(&self, beats: f32) -> usize {
+        (beats as f64 * 60.0 / self.bpm.max(1.0) as f64 * self.sr as f64) as usize
+    }
+
     fn trigger(&mut self, song: &Song, ch: usize, cell: &Cell) {
         if ch == song.mixer.duck_key && cell.note > 0 && cell.note != NOTE_OFF {
             self.duck_t = 0.0;
         }
+        let new_note = cell.note > 0 && cell.note != NOTE_OFF;
+        let ci = if cell.instr > 0 {
+            cell.instr as usize - 1
+        } else {
+            self.chans[ch].instr
+        };
+        // Voice patch stutter: every note repeats its first slice
+        let auto_stut = match song.instruments.get(ci).map(|i| &i.kind) {
+            Some(InstrumentKind::Voice(vp)) if vp.stutter_len > 0.0 && vp.stutter_repeats > 0 => {
+                Some((
+                    self.beat_frames(vp.stutter_len),
+                    vp.stutter_repeats,
+                    vp.stutter_pitch,
+                ))
+            }
+            _ => None,
+        };
         let c = &mut self.chans[ch];
+        if new_note && ci < song.instruments.len() {
+            c.stut_semi = None;
+            match auto_stut {
+                Some((f, n, semi)) => c.stut.start(f, n, semi),
+                None => c.stut.stop(),
+            }
+        }
         if cell.instr > 0 && (cell.instr as usize) <= song.instruments.len() {
             c.instr = cell.instr as usize - 1;
             c.vol = song.instruments[c.instr].volume;
@@ -639,12 +683,68 @@ impl Engine {
                 0x0D => c.vol_slide = (cell.fxp >> 4) as f32 - (cell.fxp & 15) as f32,
                 0x0F if cell.fxp == 0 => brk = true,
                 0x0F if cell.fxp <= 0xF0 => self.bpm = cell.fxp as f32,
+                0x30..=0x37 => self.voice_fx(song, ch, cell.fx, cell.fxp),
                 _ => {}
             }
         }
         if brk {
             self.row = pat.rows;
         } // jump to next pattern at advance
+    }
+
+    /// Voice / glitch effects 30-37 (docs/PATTERN_EDITOR.md). 33/34 work
+    /// on any instrument; the others change the Voice generator of the note.
+    fn voice_fx(&mut self, song: &Song, ch: usize, fx: u8, fxp: u8) {
+        use crate::voice::{len_code_beats, Vowel};
+        let (x, y) = (fxp >> 4, fxp & 15);
+        match fx {
+            0x33 => {
+                let frames = self.beat_frames(len_code_beats(x));
+                let c = &mut self.chans[ch];
+                let semi = c.stut_semi.unwrap_or_else(|| {
+                    match song.instruments.get(c.instr).map(|i| &i.kind) {
+                        Some(InstrumentKind::Voice(vp)) => vp.stutter_pitch,
+                        _ => 0.0,
+                    }
+                });
+                if x == 0 || y == 0 {
+                    c.stut.stop();
+                } else {
+                    c.stut.start(frames, y, semi);
+                }
+            }
+            0x34 => {
+                let c = &mut self.chans[ch];
+                let semi = x as f32 - y as f32;
+                c.stut_semi = Some(semi);
+                c.stut.set_pitch(semi);
+            }
+            _ => {
+                let c = &mut self.chans[ch];
+                let v = &mut c.synth.vox;
+                match fx {
+                    0x30 => {
+                        if let Some(vw) = Vowel::from_index(x) {
+                            v.fx.vowel = Some((vw, y as f32 * 25.0));
+                        }
+                    }
+                    0x31 => v.set_step(fxp as usize),
+                    0x32 => v.fx.shift = Some(2f32.powf((fxp as f32 - 128.0) / 128.0)),
+                    0x35 => v.fx.breath = Some(fxp.min(0x40) as f32 / 64.0),
+                    0x36 => {
+                        v.fx.babble = Some((len_code_beats(x.max(1)), y as f32 / 15.0));
+                    }
+                    0x37 => {
+                        v.fx.chop = Some(if y == 0 || x == 0 {
+                            (0.0, 1.0)
+                        } else {
+                            (len_code_beats(x), y as f32 / 16.0)
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 
     fn advance_row(&mut self, song: &Song) {
@@ -776,8 +876,7 @@ impl Engine {
             let real = t.to_real(*v);
             match t {
                 Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) => {
-                    let Some(InstrumentKind::Synth(src)) = song.instruments.get(i).map(|x| &x.kind)
-                    else {
+                    let Some(src) = song.instruments.get(i).and_then(|x| x.kind.patch()) else {
                         continue;
                     };
                     let slot = &mut a.patches[i];
@@ -1041,6 +1140,7 @@ impl Engine {
                     s_r += vr * t.vol * t.gain;
                     t.gain = if alive { (t.gain - step).max(0.0) } else { 0.0 };
                 }
+                (s, s_r) = c.stut.process(s, s_r);
                 let (tl, tr) = tgt[i];
                 c.gl += (tl - c.gl) * k;
                 c.gr += (tr - c.gr) * k;
@@ -1709,5 +1809,146 @@ mod tests {
         // the queue survives an engine swap (device change)
         let rx = e.take_live_input();
         assert!(rx.is_some());
+    }
+
+    fn voice_song(preset: &str) -> Song {
+        let mut song = live_song();
+        song.bpm = 120.0;
+        song.speed = 6;
+        song.instruments[1].kind =
+            InstrumentKind::Voice(crate::voice::preset(preset).expect("preset"));
+        song.instruments[1].fx.clear();
+        let pat = &mut song.patterns[0];
+        for row in pat.cells.iter_mut() {
+            row.iter_mut().for_each(|c| *c = Cell::default());
+        }
+        song.order = vec![0];
+        song.mixer.channels[0].send = [0.0; 2];
+        song.mixer.channels[0].duck = 0.0;
+        song.mixer.master = 1.0;
+        song
+    }
+
+    fn render_secs(song: &Song, secs: f32) -> Vec<f32> {
+        let mut e = Engine::new(48000.0);
+        e.start(song, 0, 0, false, 0);
+        let mut out = vec![0.0f32; (secs * 48000.0) as usize * 2];
+        for c in out.chunks_mut(512) {
+            e.render(song, c);
+        }
+        out
+    }
+
+    #[test]
+    fn voice_presets_and_effects_render_finite_and_allocation_free() {
+        for (name, _, _) in crate::voice::presets() {
+            let mut song = voice_song(name);
+            // notes plus every voice effect 30-37
+            let fx = [
+                (0x30, 0x22),
+                (0x31, 0x01),
+                (0x32, 0x60),
+                (0x33, 0x23),
+                (0x34, 0x02),
+                (0x35, 0x30),
+                (0x36, 0x38),
+                (0x37, 0x38),
+            ];
+            for (k, (f, p)) in fx.iter().enumerate() {
+                let r = k * 8;
+                song.patterns[0].cells[r][0] = Cell {
+                    note: if k % 2 == 0 { 37 } else { 0 },
+                    instr: 2,
+                    vol: 0,
+                    fx: *f,
+                    fxp: *p,
+                };
+            }
+            let out = render_secs(&song, 3.0);
+            assert!(
+                out.iter().all(|x| x.is_finite() && x.abs() <= 1.0),
+                "{name}"
+            );
+            let rms = (out.iter().map(|x| x * x).sum::<f32>() / out.len() as f32).sqrt();
+            assert!(rms > 0.005, "{name} silent ({rms})");
+            // allocation-free after warm-up
+            let mut e = Engine::new(48000.0);
+            e.start(&song, 0, 0, false, 0);
+            let mut buf = vec![0.0f32; 512];
+            for _ in 0..50 {
+                e.render(&song, &mut buf);
+            }
+            let n = alloc_count::count(|| {
+                for _ in 0..500 {
+                    e.render(&song, &mut buf);
+                }
+            });
+            assert_eq!(n, 0, "{name}: render allocated {n} times");
+        }
+    }
+
+    #[test]
+    fn effect_33_stutter_repeats_a_beat_slice_on_the_grid() {
+        // 120 BPM at 48 kHz: 1/16 note = 6000 frames; 3302 = 2 repeats
+        let mut song = voice_song("Choir Eee");
+        if let InstrumentKind::Voice(v) = &mut song.instruments[1].kind {
+            v.jitter = 0.0;
+            v.breath = 0.0;
+            v.base.lfo = Default::default();
+            v.base.amp = crate::synth::Adsr {
+                a: 0.05,
+                d: 0.5,
+                s: 0.5,
+                r: 0.1,
+            };
+        }
+        song.patterns[0].cells[0][0] = Cell {
+            note: 37,
+            instr: 2,
+            vol: 0,
+            fx: 0x33,
+            fxp: 0x32,
+        };
+        let out = render_secs(&song, 0.6);
+        let l: Vec<f32> = out.chunks(2).map(|f| f[0]).collect();
+        let diff = |a: usize, b: usize| {
+            (200..5800)
+                .map(|i| (l[a + i] - l[b + i]).abs())
+                .fold(0.0f32, f32::max)
+        };
+        let peak = l[..18000].iter().fold(0.0f32, |m, x| m.max(x.abs()));
+        assert!(peak > 0.02, "audible ({peak})");
+        // frames 6000.. and 12000.. replay frames 0..6000
+        assert!(diff(6000, 0) < peak * 0.02, "repeat 1 {}", diff(6000, 0));
+        assert!(diff(12000, 0) < peak * 0.02, "repeat 2 {}", diff(12000, 0));
+        // then the live voice continues (no third repeat)
+        assert!(diff(18000, 0) > peak * 0.1, "live again {}", diff(18000, 0));
+    }
+
+    #[test]
+    fn voice_effects_30_31_32_set_the_note_state() {
+        let mut song = voice_song("Glitch Babble");
+        song.patterns[0].cells[0][0] = Cell {
+            note: 37,
+            instr: 2,
+            vol: 0,
+            fx: 0x30,
+            fxp: 0x24,
+        };
+        song.patterns[0].cells[1][0] = Cell {
+            fx: 0x32,
+            fxp: 0x80,
+            ..Default::default()
+        };
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let fx = e.chans[0].synth.vox.fx;
+        assert_eq!(fx.vowel, Some((crate::voice::Vowel::I, 100.0)));
+        let mut buf = vec![0.0f32; 2 * 6200];
+        e.render(&song, &mut buf);
+        assert_eq!(e.chans[0].synth.vox.fx.shift, Some(1.0), "32 80 = x1.0");
+        // a new note resets the per-note overrides
+        e.preview(&song, 0, 40, 2);
+        assert!(e.chans[0].synth.vox.fx.vowel.is_none());
     }
 }

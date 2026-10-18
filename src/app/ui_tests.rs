@@ -921,15 +921,28 @@ fn help_about_shows_credit_and_coffee_link() {
 }
 
 #[test]
-fn file_new_from_demo_and_help_load_demo_song() {
+fn file_demo_songs_menu_and_help_load_demo_song() {
     let mut h = harness();
-    // start from an empty song, then File > New from demo song
+    // start from an empty song, then File > Demo songs > Lumen Drift
     h.state_mut().with(|s| s.song = Song::empty());
     frames(&mut h, 2); // the change is noticed (dirty); pretend it was saved
     h.state_mut().dirty = false;
     frames(&mut h, 2);
     click_exact(&mut h, "File");
-    click_label(&mut h, "New from demo");
+    click_exact(&mut h, "Demo songs");
+    // every built-in demo is listed; Hollow Ritual loads
+    for (name, _, _) in fileio::DEMOS {
+        exact(&h, name);
+    }
+    click_exact(&mut h, "Hollow Ritual");
+    assert_eq!(
+        song(&mut h, |s| s.title.clone()),
+        fileio::demo_song_n(1).title
+    );
+    assert!(!h.state().dirty);
+    click_exact(&mut h, "File");
+    click_exact(&mut h, "Demo songs");
+    click_exact(&mut h, "Lumen Drift");
     let demo = fileio::demo_song();
     assert_eq!(song(&mut h, |s| s.title.clone()), demo.title);
     assert_eq!(song(&mut h, |s| s.order.clone()), demo.order);
@@ -1168,4 +1181,46 @@ fn file_open_text_song_loads_unsaved() {
     // never saved back over the text file: Save goes to Save As
     assert!(h.state().path.is_none());
     assert_eq!(song(&mut h, |s| s.mixer.channels[0].pan), 0.0);
+}
+
+#[test]
+fn new_voice_instrument_from_the_instrument_menu_edits_and_undoes() {
+    let mut h = harness();
+    let n0 = song(&mut h, |s| s.instruments.len());
+    instr_menu(&mut h, 1);
+    click_exact(&mut h, "New instrument");
+    click_exact(&mut h, "Voice (glitch)");
+    for (name, _, _) in crate::voice::presets() {
+        exact(&h, name);
+    }
+    click_exact(&mut h, "Demon Ahh");
+    frames(&mut h, 2);
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0 + 1);
+    assert_eq!(
+        h.state().instr as usize,
+        n0 + 1,
+        "the new voice is selected"
+    );
+    let seq = |h: &mut Harness<'static, App>| {
+        song(h, |s| match &s.instruments.last().unwrap().kind {
+            InstrumentKind::Voice(v) => v.vowels.clone(),
+            _ => panic!("not a voice"),
+        })
+    };
+    assert_eq!(
+        seq(&mut h),
+        crate::voice::preset("Demon Ahh").unwrap().vowels
+    );
+    // the Voice panel is shown; clicking the ER chip adds it to the sequence
+    exact(&h, "VOICE (glitch)");
+    let before = seq(&mut h);
+    click_exact(&mut h, "ER");
+    let after = seq(&mut h);
+    assert_eq!(after.len(), before.len() + 1);
+    assert_eq!(*after.last().unwrap(), crate::voice::Vowel::Er);
+    // undo: first the chip, then the new instrument
+    ctrl_z(&mut h);
+    assert_eq!(seq(&mut h), before);
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0);
 }

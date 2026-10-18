@@ -24,6 +24,11 @@ from PIL import Image
 p = sys.argv[1]
 Image.open(p).crop((0, 70, 334, 1058)).save(p)
 PY
+# Voice (glitch) panel close-ups (a Glitch Babble voice added to the demo)
+for th in dark amiga; do
+  "$BIN" --screenshot "$OUT/$th-voice.png" --view voice --theme $th --size $SIZE
+  python3 -c "import sys; from PIL import Image; p=sys.argv[1]; Image.open(p).crop((0, 70, 334, 1058)).save(p)" "$OUT/$th-voice.png"
+done
 python3 scripts/theme_swatches.py "$OUT/theme-palettes.png"
 if command -v pngquant >/dev/null; then
   pngquant --force --skip-if-larger --quality 80-95 --speed 1 --ext .png "$OUT"/*.png || true

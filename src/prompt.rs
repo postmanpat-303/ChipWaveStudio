@@ -9,8 +9,9 @@ pub enum Pending {
     Open,
     /// open this file (Recent, drag and drop)
     OpenPath(PathBuf),
-    /// load the built-in demo song (File > New from demo, Help > Load demo song)
-    Demo,
+    /// load built-in demo song N of `fileio::DEMOS` (File > Demo songs,
+    /// Help > Load demo song)
+    Demo(usize),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

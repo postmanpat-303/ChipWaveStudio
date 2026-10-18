@@ -21,6 +21,56 @@ while todo:
             todo.append(d["pkg"])
 pkgs = sorted((p for p in meta["packages"] if p["id"] in keep and p["id"] != root),
               key=lambda p: (p["name"], p["version"]))
+CREDITS = """Acknowledgements / Credits
+-------------------------
+The Voice (glitch) instrument (src/voice.rs) is an independent implementation
+whose design is inspired by the "naive speech synth" of Mutable Instruments
+Plaits by Emilie Gillet: a pulse source into zero-delay state-variable
+formant filters with a vowel x register morph table. No Plaits source code
+or table data is copied; Plaits' MIT notice is reproduced below in
+acknowledgement. https://github.com/pichenettes/eurorack/tree/master/plaits/dsp/speech
+
+  Copyright 2016 Emilie Gillet.
+
+  Author: Emilie Gillet (emilie.o.gillet@gmail.com)
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+
+  See http://creativecommons.org/licenses/MIT/ for more information.
+
+Data and literature the Voice instrument uses (facts and published
+measurements, credited with thanks):
+- Csound Manual, Appendix "Formant values" (bass/tenor/alto/soprano a e i o u),
+  the Csound community: https://csound.com/docs/manual/MiscFormants.html
+  (Csound is LGPL-2.1: https://github.com/csound/csound)
+- G. E. Peterson & H. L. Barney (1952), "Control methods used in a study of
+  the vowels", JASA 24(2) (ER and AE formants)
+- A. E. Rosenberg (1971), "Effect of glottal pulse shape on the quality of
+  natural vowels", JASA 49(2) (glottal pulse)
+- G. Fant, J. Liljencrants & Q. Lin (1985), "A four-parameter model of glottal
+  flow", STL-QPSR (the LF model; the "tension" control)
+- D. H. Klatt (1980), "Software for a cascade/parallel formant synthesizer",
+  JASA 67(3) (parallel formant structure)
+Research notes: docs/research/voice-glitch.md
+
+"""
+
 out = sys.stdout
 out.write("ChipWave Tracker - third-party software\n")
 out.write("=" * 60 + "\n\n")
@@ -29,6 +79,7 @@ out.write("ChipWave Tracker is GPL-3.0-or-later (see LICENSE.txt). It includes t
           "mp3lame-sys; LAME's source is at https://lame.sourceforge.io and the\n"
           "complete ChipWave source (needed to relink) is at\n"
           "https://github.com/postmanpat-303/ChipWaveTracker\n\n")
+out.write(CREDITS)
 for p in pkgs:
     out.write(f"- {p['name']} {p['version']}: {p.get('license') or 'see files'}\n")
 out.write("\n\n")

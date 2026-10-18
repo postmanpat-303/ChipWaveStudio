@@ -286,6 +286,19 @@ impl Svf {
         let fc = cutoff.clamp(20.0, sr * 0.45);
         let g = (std::f32::consts::PI * fc / sr).tan();
         let k = 2.0 - 1.98 * res.clamp(0.0, 1.0);
+        let (lp, bp, hp) = self.process_gk(x, g, k);
+        match mode {
+            FilterMode::Lp => lp,
+            FilterMode::Bp => bp,
+            FilterMode::Hp => hp,
+        }
+    }
+
+    /// One step with precomputed coefficients: `g` = tan(pi fc / sr),
+    /// `k` = 1 / Q. Returns (low-pass, band-pass, high-pass); the band-pass
+    /// peaks at 1 / k (multiply by k for unity peak gain).
+    #[inline]
+    pub fn process_gk(&mut self, x: f32, g: f32, k: f32) -> (f32, f32, f32) {
         let a1 = 1.0 / (1.0 + g * (g + k));
         let a2 = g * a1;
         let a3 = g * a2;
@@ -294,11 +307,7 @@ impl Svf {
         let v2 = self.ic2 + a2 * self.ic1 + a3 * v3;
         self.ic1 = 2.0 * v1 - self.ic1;
         self.ic2 = 2.0 * v2 - self.ic2;
-        match mode {
-            FilterMode::Lp => v2,
-            FilterMode::Bp => v1,
-            FilterMode::Hp => x - k * v1 - v2,
-        }
+        (v2, v1, x - k * v1 - v2)
     }
 }
 
@@ -355,6 +364,8 @@ pub struct SynthVoice {
     pub decay: f32,
     /// time waited so far for `start_delay`
     pub waited: f32,
+    /// vowel generator state (Voice instruments only)
+    pub vox: crate::voice::VoxState,
 }
 
 /// 808 hi-hat oscillator ratios (205.3, 304.4, 369.6, 522.7, 540, 800 Hz)
@@ -385,6 +396,7 @@ impl SynthVoice {
             vel: 1.0,
             decay: 0.0,
             waited: 0.0,
+            vox: crate::voice::VoxState::new(),
         }
     }
 
@@ -394,18 +406,44 @@ impl SynthVoice {
         let mut v = Self::new();
         v.noise = seed | 1;
         v.noise_r = seed.rotate_left(16) ^ 0x9E37_79B9 | 1;
+        v.vox.seed(seed.rotate_left(7) ^ 0x3C6E_F372);
         v
     }
 
     /// stereo render; `bpm` drives tempo-synced LFOs. Allocation-free.
     pub fn render_st(&mut self, p: &Patch, freq: f32, sr: f32, bpm: f32) -> (f32, f32) {
+        self.render_with(p, None, freq, sr, bpm)
+    }
+
+    /// Voice (glitch) instrument: the vowel generator replaces the
+    /// oscillators; `p` (normally `vp.base`, or its automated copy) gives
+    /// the envelopes, filter, drive, pitch env and LFO. Allocation-free.
+    pub fn render_voice(
+        &mut self,
+        p: &Patch,
+        vp: &crate::voice::VoicePatch,
+        freq: f32,
+        sr: f32,
+        bpm: f32,
+    ) -> (f32, f32) {
+        self.render_with(p, Some(vp), freq, sr, bpm)
+    }
+
+    fn render_with(
+        &mut self,
+        p: &Patch,
+        vp: Option<&crate::voice::VoicePatch>,
+        freq: f32,
+        sr: f32,
+        bpm: f32,
+    ) -> (f32, f32) {
         let dt_s = 1.0 / sr;
         if self.waited < p.start_delay {
             self.waited += dt_s;
             return (0.0, 0.0);
         }
         // LFO (-1..1)
-        let lv = if p.lfo.active() {
+        let lv = if p.lfo.active() || vp.is_some_and(|v| v.lfo_used()) {
             let ph = self.lfo_phase;
             let v = match p.lfo.shape {
                 Wave::Sine => (ph * std::f32::consts::TAU).sin(),
@@ -436,69 +474,75 @@ impl SynthVoice {
         };
         self.t += dt_s;
         let f = freq * 2f32.powf(p.osc1_oct as f32 + (pitch_semi + lv * p.lfo.pitch) / 12.0);
-        let n = p.unison.clamp(1, 8) as usize;
-        // stereo: spread unison voices, or decorrelated noise for drums
-        let st_noise = p.width > 0.0 && p.noise_level > 0.0;
-        let stereo = p.width > 0.0 && (n > 1 || st_noise);
-        let (mut sl, mut sr_) = (0.0, 0.0);
-        for i in 0..n {
-            let spread = if n > 1 {
-                i as f32 / (n - 1) as f32 * 2.0 - 1.0
-            } else {
-                0.0
-            };
-            let fi = f * 2f32.powf(spread * p.detune_cents / 1200.0);
-            let dt = (fi / sr).min(0.5);
-            let v = osc(p.osc1, self.phases[i], dt, p.pulse_width);
-            if stereo {
-                // alternate sides so detune and pan are not correlated
-                let pan = if i % 2 == 0 { spread } else { -spread } * p.width.min(1.0);
-                sl += v * (1.0 - pan).sqrt();
-                sr_ += v * (1.0 + pan).sqrt();
-            } else {
-                sl += v;
+        let (sl, s, sr_, s_r, stereo) = if let Some(vp) = vp {
+            let v = self.vox.render(vp, f, sr, bpm, lv);
+            (v, 0.0, v, 0.0, false)
+        } else {
+            let n = p.unison.clamp(1, 8) as usize;
+            // stereo: spread unison voices, or decorrelated noise for drums
+            let st_noise = p.width > 0.0 && p.noise_level > 0.0;
+            let stereo = p.width > 0.0 && (n > 1 || st_noise);
+            let (mut sl, mut sr_) = (0.0, 0.0);
+            for i in 0..n {
+                let spread = if n > 1 {
+                    i as f32 / (n - 1) as f32 * 2.0 - 1.0
+                } else {
+                    0.0
+                };
+                let fi = f * 2f32.powf(spread * p.detune_cents / 1200.0);
+                let dt = (fi / sr).min(0.5);
+                let v = osc(p.osc1, self.phases[i], dt, p.pulse_width);
+                if stereo {
+                    // alternate sides so detune and pan are not correlated
+                    let pan = if i % 2 == 0 { spread } else { -spread } * p.width.min(1.0);
+                    sl += v * (1.0 - pan).sqrt();
+                    sr_ += v * (1.0 + pan).sqrt();
+                } else {
+                    sl += v;
+                }
+                self.phases[i] = (self.phases[i] + dt) % 1.0;
             }
-            self.phases[i] = (self.phases[i] + dt) % 1.0;
-        }
-        let norm = p.osc1_level / (n as f32).sqrt();
-        sl *= norm;
-        sr_ = if stereo { sr_ * norm } else { sl };
-        let mut s = 0.0;
-        let mut s_r = 0.0;
-        if let Some((w, semi, lvl)) = p.osc2 {
-            let f2 = f * 2f32.powf(semi as f32 / 12.0);
-            let dt = (f2 / sr).min(0.5);
-            s += osc(w, self.phase2, dt, p.pulse_width) * lvl;
-            self.phase2 = (self.phase2 + dt) % 1.0;
-        }
-        if p.sub_level > 0.0 {
-            s += (self.sub_phase * std::f32::consts::TAU).sin() * p.sub_level;
-            self.sub_phase = (self.sub_phase + f * 0.5 / sr) % 1.0;
-        }
-        if p.metal > 0.0 {
-            let base = f * (205.3 / 523.25);
-            let mut m = 0.0;
-            for (ph, r) in self.metal_ph.iter_mut().zip(METAL) {
-                let dt = (base * r / sr).min(0.5);
-                m += osc(Wave::Square, *ph, dt, 0.5);
-                *ph = (*ph + dt) % 1.0;
+            let norm = p.osc1_level / (n as f32).sqrt();
+            sl *= norm;
+            sr_ = if stereo { sr_ * norm } else { sl };
+            let mut s = 0.0;
+            let mut s_r = 0.0;
+            if let Some((w, semi, lvl)) = p.osc2 {
+                let f2 = f * 2f32.powf(semi as f32 / 12.0);
+                let dt = (f2 / sr).min(0.5);
+                s += osc(w, self.phase2, dt, p.pulse_width) * lvl;
+                self.phase2 = (self.phase2 + dt) % 1.0;
             }
-            s += m * (p.metal / 6.0);
-        }
-        s_r += s;
-        if p.noise_level > 0.0 {
-            let nl = xorshift(&mut self.noise);
-            s += nl * p.noise_level;
-            if st_noise {
-                // partly independent right channel, equal power
-                let w = p.width.min(1.0) * 0.7;
-                let nr = xorshift(&mut self.noise_r);
-                let k = 1.0 / ((1.0 - w) * (1.0 - w) + w * w).sqrt();
-                s_r += ((1.0 - w) * nl + w * nr) * k * p.noise_level;
-            } else {
-                s_r += nl * p.noise_level;
+            if p.sub_level > 0.0 {
+                s += (self.sub_phase * std::f32::consts::TAU).sin() * p.sub_level;
+                self.sub_phase = (self.sub_phase + f * 0.5 / sr) % 1.0;
             }
-        }
+            if p.metal > 0.0 {
+                let base = f * (205.3 / 523.25);
+                let mut m = 0.0;
+                for (ph, r) in self.metal_ph.iter_mut().zip(METAL) {
+                    let dt = (base * r / sr).min(0.5);
+                    m += osc(Wave::Square, *ph, dt, 0.5);
+                    *ph = (*ph + dt) % 1.0;
+                }
+                s += m * (p.metal / 6.0);
+            }
+            s_r += s;
+            if p.noise_level > 0.0 {
+                let nl = xorshift(&mut self.noise);
+                s += nl * p.noise_level;
+                if st_noise {
+                    // partly independent right channel, equal power
+                    let w = p.width.min(1.0) * 0.7;
+                    let nr = xorshift(&mut self.noise_r);
+                    let k = 1.0 / ((1.0 - w) * (1.0 - w) + w * w).sqrt();
+                    s_r += ((1.0 - w) * nl + w * nr) * k * p.noise_level;
+                } else {
+                    s_r += nl * p.noise_level;
+                }
+            }
+            (sl, s, sr_, s_r, stereo)
+        };
         let fe = self.fenv.next(&p.fenv, dt_s);
         let kt = (f / 261.63).powf(p.key_track);
         let cutoff = p.cutoff

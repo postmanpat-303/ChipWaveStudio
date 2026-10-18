@@ -102,6 +102,16 @@ Automation: lanes under the arranger (toggle "Automation", "+ Lane"): click = ad
 Mixer: per-channel fader, pan, mute/solo, meters; master fader. Saved in .cwt.
 Instrument panel: Transpose -12 / - / + / +12 per instrument.
 Theme: "Dark Circuit (default)" or "Amiga (Workbench Gradient)" in the toolbar.
+Voice (glitch) instrument (0.2.3.6): "New..." under the instrument list (or right-click
+  an instrument > New instrument) > Voice (glitch) > a preset. Synthetic vowels
+  (ahh eee ohh err), babble, chop and stutter. Pattern effects 30-37: 30xy vowel x
+  (0 A 1 E 2 I 3 O 4 U 5 ER 6 AE) glide y*25 ms, 31xx sequence step, 32xx formant
+  shift (80 = x1), 33xy stutter (x length 1=1/64 .. 3=1/16 .. 6=1/2 note, y repeats;
+  any instrument), 34xy stutter pitch +x/-y, 35xx breath, 36xy babble, 37xy chop.
+Demo songs: File > Demo songs (Lumen Drift, Hollow Ritual).
+Credits: Help > About and THIRD_PARTY_LICENSES.txt (Voice design inspired by
+  Mutable Instruments Plaits by Emilie Gillet, MIT; formant data from the Csound
+  manual and Peterson & Barney 1952).
 Updates (0.2.3.5): Help > Check for updates... asks GitHub for a newer version and
   shows the release notes; "Download installer" opens the setup .exe in your browser
   (nothing is downloaded or opened unless you click). Settings > Files & Safety >
