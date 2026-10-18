@@ -1951,3 +1951,87 @@ fn synth_panel_offers_the_ladder_filter() {
     });
     assert!(p.ladder_12db);
 }
+
+#[test]
+fn chip_fx_categories_randomize_mutate_locks_and_bake() {
+    use crate::chipfx::{BASE_FREQ, WAVE_LOCK};
+    let mut h = harness();
+    instr_menu(&mut h, 1);
+    click_exact(&mut h, "New instrument");
+    click_exact(&mut h, "Generator (chip FX)");
+    click_exact(&mut h, "Coin");
+    frames(&mut h, 2);
+    let n0 = song(&mut h, |s| s.instruments.len());
+    exact(&h, "GENERATOR · CHIP FX");
+    let sfx = |g: &crate::gen::GenPatch| match &g.engine {
+        crate::gen::GenEngine::ChipFx(s) => *s,
+        _ => panic!("not chip fx"),
+    };
+    let s0 = sfx(&last_gen(&mut h));
+    for c in [
+        "Pickup",
+        "Laser",
+        "Explosion",
+        "Power-up",
+        "Hit",
+        "Jump",
+        "Blip",
+    ] {
+        exact(&h, c);
+    }
+    click_exact(&mut h, "Explosion");
+    frames(&mut h, 2);
+    let s1 = sfx(&last_gen(&mut h));
+    assert_eq!(s1.wave, crate::chipfx::Wave::Noise, "explosions are noise");
+    assert_ne!(s1.p, s0.p);
+    // lock the Freq knob (first knob lock) and the wave, then Randomize
+    let locks: Vec<Rect> = h
+        .query_all_by(|n| n.label().as_deref() == Some("lock"))
+        .map(|n| n.rect())
+        .collect();
+    assert!(locks.len() >= 9, "wave lock + 8 knob locks");
+    click_at(&mut h, locks[0].center());
+    frames(&mut h, 1);
+    click_at(&mut h, locks[1].center());
+    frames(&mut h, 2);
+    let s2 = sfx(&last_gen(&mut h));
+    assert_eq!(s2.locks, WAVE_LOCK | (1 << BASE_FREQ), "{:x}", s2.locks);
+    click_exact(&mut h, "Randomize");
+    frames(&mut h, 2);
+    let s3 = sfx(&last_gen(&mut h));
+    assert_eq!(s3.wave, s1.wave);
+    assert_eq!(s3.p[BASE_FREQ], s1.p[BASE_FREQ]);
+    assert_ne!(s3.p, s1.p);
+    click_exact(&mut h, "Mutate");
+    frames(&mut h, 2);
+    let s4 = sfx(&last_gen(&mut h));
+    assert_ne!(s4.p, s3.p);
+    assert_eq!(s4.p[BASE_FREQ], s1.p[BASE_FREQ]);
+    // history: back to the explosion
+    exact(&h, "roll 3/3");
+    for _ in 0..2 {
+        click_exact(&mut h, "<");
+        frames(&mut h, 2);
+    }
+    assert_eq!(sfx(&last_gen(&mut h)).p, s1.p);
+    // scroll the side panel down (pointer on the header, not on a knob)
+    let at = exact(&h, "GENERATOR · CHIP FX").center();
+    h.input_mut().events.push(egui::Event::PointerMoved(at));
+    frame(&mut h);
+    for _ in 0..3 {
+        h.input_mut().events.push(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -200.0),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+            modifiers: Default::default(),
+        });
+        frame(&mut h);
+    }
+    frames(&mut h, 10);
+    click_exact(&mut h, "Bake to sample");
+    frames(&mut h, 2);
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0 + 1);
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0);
+}

@@ -2,12 +2,13 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 /// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.12";
+pub const VERSION: &str = "0.2.3.13";
 
 mod app;
 mod arrange;
 mod audio;
 mod automation;
+mod chipfx;
 mod chords;
 mod engine;
 mod export;
@@ -343,7 +344,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         let rms = (pcm.iter().map(|x| x * x).sum::<f32>() / pcm.len().max(1) as f32).sqrt();
         let ok = fin && tp < 1.0 && rms > 0.003 && s.instruments.len() == base + presets.len() + 3;
         report.push_str(&format!(
-            "  generators: {} presets + 3 filter models, rms {rms:.4}, true peak {:.2} dBTP ({})\n",
+            "  generators: {} presets (drums, kits, chip FX) + 3 filter models, rms {rms:.4}, true peak {:.2} dBTP ({})\n",
             presets.len(),
             20.0 * tp.max(1e-9).log10(),
             if ok { "ok" } else { "FAILED" }

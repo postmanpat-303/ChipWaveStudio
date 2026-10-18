@@ -441,7 +441,7 @@ mod tests {
             )
             .unwrap(),
         );
-        for name in ["Psy Kit", "Comb Hat"] {
+        for name in ["Psy Kit", "Comb Hat", "Coin", "Psy Laser"] {
             insts.push(
                 instantiate(
                     &factory_entries()

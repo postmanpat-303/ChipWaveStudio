@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 17] = [
+pub const VIEWS: [&str; 18] = [
     "pattern",
     "arranger",
     "mixer",
@@ -51,6 +51,7 @@ pub const VIEWS: [&str; 17] = [
     "transform",
     "drums",
     "kit",
+    "chipfx",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -105,12 +106,13 @@ impl App {
                 self.dirty = false;
                 super::voiceview::TF_SCROLL.with(|f| f.set(true));
             }
-            "drums" | "kit" => {
-                // a Generator (0.2.3.12): the Zap kick or the Psy Kit
-                let name = if view == "kit" {
-                    "Psy Kit"
-                } else {
-                    "Psy Zap Kick"
+            "drums" | "kit" | "chipfx" => {
+                // a Generator (0.2.3.12): the Zap kick or the Psy Kit;
+                // Chip FX (0.2.3.13): the Psy Laser
+                let name = match view {
+                    "kit" => "Psy Kit",
+                    "chipfx" => "Psy Laser",
+                    _ => "Psy Zap Kick",
                 };
                 let p = crate::gen::preset(name).unwrap_or_default();
                 self.add_instrument(name, InstrumentKind::Gen(p));

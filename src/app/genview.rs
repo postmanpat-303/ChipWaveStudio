@@ -161,12 +161,15 @@ pub(super) fn gen_panel(
         };
     }
     let is_kit = matches!(g.engine, GenEngine::Kit(_));
+    let is_fx = matches!(g.engine, GenEngine::ChipFx(_));
     st.sel = st.sel.min(7);
     ui.horizontal(|ui| {
         ui.add_space(14.0);
         ui.label(
             egui::RichText::new(if is_kit {
                 "GENERATOR · DRUM KIT"
+            } else if is_fx {
+                "GENERATOR · CHIP FX"
             } else {
                 "GENERATOR · DRUM SYNTH"
             })
@@ -200,9 +203,11 @@ pub(super) fn gen_panel(
         });
     }
     let sel = st.sel;
+    if is_fx {
+        chipfx_buttons(ui, g, st, &mut out);
+    }
     // kind + model of the shown drum
-    {
-        let d = g.drum_mut(sel);
+    if let Some(d) = g.drum_mut(sel) {
         ui.horizontal_wrapped(|ui| {
             ui.add_space(14.0);
             for k in DrumKind::ALL {
@@ -331,9 +336,11 @@ pub(super) fn gen_panel(
             out.changed = true;
         }
     });
+    if is_fx {
+        chipfx_knobs(ui, g, &mut out);
+    }
     // the eight macro knobs
-    {
-        let d = g.drum_mut(sel);
+    if let Some(d) = g.drum_mut(sel) {
         let defs = d.kind.macros();
         for row in 0..2 {
             ui.horizontal(|ui| {
@@ -425,12 +432,136 @@ pub(super) fn gen_panel(
             out.bake = true;
         }
         ui.label(
-            egui::RichText::new("43xy: macro x (1-8) = y (0-F)")
-                .small()
-                .color(th().ink2),
+            egui::RichText::new(if is_fx {
+                "43xy: knob x (1-8) = y (0-F), read at note start"
+            } else {
+                "43xy: macro x (1-8) = y (0-F)"
+            })
+            .small()
+            .color(th().ink2),
         );
     });
     out
+}
+
+/// Chip FX: category buttons, Randomize, waveform
+fn chipfx_buttons(ui: &mut egui::Ui, g: &mut GenPatch, st: &mut GenUi, out: &mut GenOut) {
+    use crate::chipfx::{Category, Wave, WAVE_LOCK};
+    let before = g.clone();
+    let seed = new_seed(g.seed);
+    let mut act: Option<Option<Category>> = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        for c in Category::ALL {
+            if ui
+                .button(c.name())
+                .on_hover_text(format!(
+                    "a new {} sound (sfxr recipe; locked knobs stay)",
+                    c.name()
+                ))
+                .clicked()
+            {
+                act = Some(Some(c));
+            }
+        }
+        if ui
+            .button("Randomize")
+            .on_hover_text("sfxr's Randomize: any sound at all (locked knobs stay)")
+            .clicked()
+        {
+            act = Some(None);
+        }
+    });
+    if let Some(a) = act {
+        g.seed = seed;
+        if let GenEngine::ChipFx(s) = &mut g.engine {
+            match a {
+                Some(c) => s.category(c, seed),
+                None => s.randomize(seed),
+            }
+        }
+        st.record(&before, g);
+        out.changed = true;
+    }
+    let GenEngine::ChipFx(s) = &mut g.engine else {
+        return;
+    };
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label("Wave");
+        egui::ComboBox::from_id_salt("sfx_wave")
+            .width(80.0)
+            .selected_text(s.wave.name())
+            .show_ui(ui, |ui| {
+                for w in Wave::ALL {
+                    out.changed |= ui.selectable_value(&mut s.wave, w, w.name()).changed();
+                }
+            });
+        let mut l = s.locks & WAVE_LOCK != 0;
+        if ui
+            .selectable_label(l, "lock")
+            .on_hover_text("keep the wave on rolls")
+            .clicked()
+        {
+            l = !l;
+            s.locks ^= WAVE_LOCK;
+            out.changed = true;
+        }
+        let _ = l;
+        out.changed |= ui
+            .checkbox(&mut s.follow_note, "Follow note")
+            .on_hover_text("C-4 plays the sound as designed; other notes transpose it")
+            .changed();
+    });
+}
+
+/// Chip FX: the eight macro knobs (43xy targets) and every sfxr parameter
+fn chipfx_knobs(ui: &mut egui::Ui, g: &mut GenPatch, out: &mut GenOut) {
+    use crate::chipfx::{MACROS, N, PARAMS};
+    let GenEngine::ChipFx(s) = &mut g.engine else {
+        return;
+    };
+    fn one(ui: &mut egui::Ui, i: usize, s: &mut crate::chipfx::SfxP) -> bool {
+        let def = &PARAMS[i];
+        let mut v = def.unmap(s.p[i]);
+        let mut locked = s.locks & (1 << i) != 0;
+        let ch = knob(ui, &mut v, def, &mut locked, ("sfx", i));
+        if ch {
+            s.p[i] = def.map(v);
+        }
+        let was = s.locks & (1 << i) != 0;
+        if locked != was {
+            s.locks ^= 1 << i;
+        }
+        ch || locked != was
+    }
+    for row in 0..2 {
+        ui.horizontal(|ui| {
+            ui.add_space(8.0);
+            ui.spacing_mut().item_spacing.x = 2.0;
+            for &i in &MACROS[row * 4..row * 4 + 4] {
+                out.changed |= one(ui, i, s);
+            }
+        });
+    }
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label("Level");
+        out.changed |= ui.add(egui::Slider::new(&mut s.level, 0.0..=1.5)).changed();
+    });
+    egui::CollapsingHeader::new("All sfxr parameters")
+        .id_salt("sfx_all")
+        .show(ui, |ui| {
+            let rest: Vec<usize> = (0..N).filter(|i| !MACROS.contains(i)).collect();
+            for r in rest.chunks(4) {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    for &i in r {
+                        out.changed |= one(ui, i, s);
+                    }
+                });
+            }
+        });
 }
 
 /// filter model picker (SVF / ladder clean / ladder vintage) + the ladder slope
@@ -542,6 +673,23 @@ impl App {
                         }
                     }
                 });
+            }
+        });
+        ui.menu_button("Generator (chip FX)", |ui| {
+            ui.label(
+                egui::RichText::new("sfxr-style game sounds: categories, Randomize, Mutate")
+                    .small()
+                    .color(th().ink2),
+            );
+            for (name, tip, mut p) in crate::gen::presets() {
+                if !matches!(p.engine, crate::gen::GenEngine::ChipFx(_)) {
+                    continue;
+                }
+                if ui.button(name).on_hover_text(tip).clicked() {
+                    p.base.name = name.into();
+                    self.add_instrument(name, InstrumentKind::Gen(p));
+                    ui.close();
+                }
             }
         });
     }

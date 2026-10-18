@@ -514,6 +514,8 @@ impl Default for KitP {
 pub enum GenEngine {
     Drum(DrumP),
     Kit(KitP),
+    /// sfxr-style game sound (0.2.3.13)
+    ChipFx(crate::chipfx::SfxP),
 }
 
 impl Default for GenEngine {
@@ -577,6 +579,7 @@ impl GenPatch {
         match &mut self.engine {
             GenEngine::Drum(d) => d.fix(),
             GenEngine::Kit(k) => k.pieces.iter_mut().for_each(|d| d.fix()),
+            GenEngine::ChipFx(s) => s.fix(),
         }
         self.mutate = if self.mutate.is_finite() {
             self.mutate.clamp(0.0, 0.5)
@@ -585,22 +588,39 @@ impl GenPatch {
         };
     }
     /// the drum the editor shows: the Drum, or kit piece `sel`
-    pub fn drum_mut(&mut self, sel: usize) -> &mut DrumP {
+    /// (None for Chip FX)
+    pub fn drum_mut(&mut self, sel: usize) -> Option<&mut DrumP> {
         match &mut self.engine {
-            GenEngine::Drum(d) => d,
-            GenEngine::Kit(k) => &mut k.pieces[sel.min(7)],
+            GenEngine::Drum(d) => Some(d),
+            GenEngine::Kit(k) => Some(&mut k.pieces[sel.min(7)]),
+            GenEngine::ChipFx(_) => None,
+        }
+    }
+    pub fn chip_fx(sfx: crate::chipfx::SfxP) -> Self {
+        GenPatch {
+            engine: GenEngine::ChipFx(sfx),
+            ..Default::default()
         }
     }
     /// Dice: re-roll every unlocked macro of the shown drum inside its range
+    /// (Chip FX: roll again in the last category)
     pub fn dice(&mut self, sel: usize, seed: u32) {
         self.seed = seed;
-        roll(self.drum_mut(sel), seed);
+        match &mut self.engine {
+            GenEngine::ChipFx(s) => s.dice(seed),
+            _ => {
+                if let Some(d) = self.drum_mut(sel) {
+                    roll(d, seed)
+                }
+            }
+        }
     }
     /// Dice every kit piece (or the one drum)
     pub fn dice_all(&mut self, seed: u32) {
         self.seed = seed;
         match &mut self.engine {
             GenEngine::Drum(d) => roll(d, seed),
+            GenEngine::ChipFx(s) => s.dice(seed),
             GenEngine::Kit(k) => {
                 for (i, d) in k.pieces.iter_mut().enumerate() {
                     roll(d, seed.wrapping_add(i as u32 * 0x9E37_79B9));
@@ -611,7 +631,13 @@ impl GenPatch {
     /// Mutate: nudge every unlocked macro by up to ±`mutate`
     pub fn mutate(&mut self, sel: usize, seed: u32) {
         let a = self.mutate;
-        let d = self.drum_mut(sel);
+        if let GenEngine::ChipFx(s) = &mut self.engine {
+            s.mutate(a, seed);
+            return;
+        }
+        let Some(d) = self.drum_mut(sel) else {
+            return;
+        };
         let mut r = Rng::new(seed);
         for i in 0..8 {
             let x = r.f() * 2.0 - 1.0;
@@ -716,6 +742,7 @@ pub struct GenState {
     piece: usize,
     off: f32,
     pub done: bool,
+    sfx: crate::chipfx::SfxState,
 }
 
 impl Default for GenState {
@@ -737,6 +764,7 @@ impl Default for GenState {
             note_f: -1.0,
             piece: 0,
             off: 0.0,
+            sfx: crate::chipfx::SfxState::default(),
             done: false,
         }
     }
@@ -753,7 +781,15 @@ impl GenState {
         if self.done {
             return (0.0, 0.0, false);
         }
+        if let GenEngine::ChipFx(p) = &g.engine {
+            let (y, alive) = self.sfx.render(p, ov, freq, sr);
+            if !alive {
+                self.done = true;
+            }
+            return (y, y, false);
+        }
         let (d, ratio) = match &g.engine {
+            GenEngine::ChipFx(_) => unreachable!(),
             GenEngine::Drum(d) => (
                 d,
                 if d.follow_note && freq > 0.0 {
@@ -1183,6 +1219,7 @@ impl GenState {
 
 /// Factory generator presets: (name, tip, patch)
 pub fn presets() -> Vec<(&'static str, &'static str, GenPatch)> {
+    use crate::chipfx::Category;
     use DrumKind::*;
     let d = |k, m, v: &[f32]| GenPatch::drum(DrumP::new(k, m, v));
     vec![
@@ -1224,7 +1261,40 @@ pub fn presets() -> Vec<(&'static str, &'static str, GenPatch)> {
                 ..Default::default()
             }
         }),
+        ("Coin", "chip FX: sfxr Pickup", fx(Category::Pickup, 3)),
+        ("Laser Shot", "chip FX: sfxr Laser", fx(Category::Laser, 2)),
+        ("Explosion", "chip FX: sfxr Explosion", fx(Category::Explosion, 4)),
+        ("Power Up", "chip FX: sfxr Power-up", fx(Category::PowerUp, 1)),
+        ("Hit", "chip FX: sfxr Hit", fx(Category::Hit, 5)),
+        ("Jump", "chip FX: sfxr Jump", fx(Category::Jump, 2)),
+        ("Blip", "chip FX: sfxr Blip", fx(Category::Blip, 6)),
+        ("Psy Laser", "chip FX: a falling saw laser with phaser, for psy fills", {
+            use crate::chipfx::*;
+            let mut s = SfxP {
+                wave: Wave::Saw,
+                category: 1,
+                ..Default::default()
+            };
+            s.p[BASE_FREQ] = 0.62;
+            s.p[FREQ_RAMP] = -0.38;
+            s.p[FREQ_LIMIT] = 0.1;
+            s.p[ENV_ATTACK] = 0.0;
+            s.p[ENV_SUSTAIN] = 0.28;
+            s.p[ENV_DECAY] = 0.35;
+            s.p[ENV_PUNCH] = 0.2;
+            s.p[PHA_OFFSET] = 0.18;
+            s.p[PHA_RAMP] = -0.15;
+            s.p[LPF_FREQ] = 0.8;
+            s.p[LPF_RES] = 0.4;
+            GenPatch::chip_fx(s)
+        }),
     ]
+}
+
+fn fx(c: crate::chipfx::Category, seed: u32) -> GenPatch {
+    let mut s = crate::chipfx::SfxP::default();
+    s.category(c, seed);
+    GenPatch::chip_fx(s)
 }
 
 pub fn preset(name: &str) -> Option<GenPatch> {
@@ -1326,21 +1396,21 @@ mod tests {
             assert_ne!(a, b, "another seed rolls another sound");
             // locks
             let mut c = GenPatch::drum(DrumP::new(kind, 0, &[]));
-            c.drum_mut(0).locks = 0b0000_0101;
-            c.drum_mut(0).macros[0] = 0.987;
-            c.drum_mut(0).macros[2] = 0.012;
+            c.drum_mut(0).unwrap().locks = 0b0000_0101;
+            c.drum_mut(0).unwrap().macros[0] = 0.987;
+            c.drum_mut(0).unwrap().macros[2] = 0.012;
             for s in 0..20 {
                 c.dice(0, s);
                 c.mutate(0, s + 1000);
             }
-            assert_eq!(c.drum_mut(0).macros[0], 0.987);
-            assert_eq!(c.drum_mut(0).macros[2], 0.012);
+            assert_eq!(c.drum_mut(0).unwrap().macros[0], 0.987);
+            assert_eq!(c.drum_mut(0).unwrap().macros[2], 0.012);
             // mutate stays within ±amount
             let mut e = GenPatch::drum(DrumP::new(kind, 0, &[]));
-            let before = e.drum_mut(0).macros;
+            let before = e.drum_mut(0).unwrap().macros;
             e.mutate = 0.1;
             e.mutate(0, 5);
-            for (x, y) in before.iter().zip(e.drum_mut(0).macros) {
+            for (x, y) in before.iter().zip(e.drum_mut(0).unwrap().macros) {
                 assert!((x - y).abs() <= 0.1 + 1e-6);
             }
         }
@@ -1440,9 +1510,9 @@ mod tests {
                 }
                 10.0 * (s / m.max(1e-12)).log10()
             };
-            g.drum_mut(0).macros[if name.contains("Clap") { 6 } else { 5 }] = 0.9;
+            g.drum_mut(0).unwrap().macros[if name.contains("Clap") { 6 } else { 5 }] = 0.9;
             assert!(side(&g) > -20.0, "{name} wide {:.1}", side(&g));
-            g.drum_mut(0).macros[if name.contains("Clap") { 6 } else { 5 }] = 0.0;
+            g.drum_mut(0).unwrap().macros[if name.contains("Clap") { 6 } else { 5 }] = 0.0;
             assert!(side(&g) < -100.0, "{name} mono {:.1}", side(&g));
         }
     }

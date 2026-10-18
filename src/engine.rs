@@ -2585,6 +2585,8 @@ mod tests {
             ("Psy Zap Kick", gen_song("Psy Zap Kick", &[49, 45])),
             ("Comb Hat", gen_song("Comb Hat", &[49])),
             ("Cymbal", gen_song("Cymbal", &[49])),
+            ("Explosion", gen_song("Explosion", &[49, 37])),
+            ("Psy Laser", gen_song("Psy Laser", &[49, 61])),
         ] {
             let mut song = song;
             // and through the ladder (vintage) with pattern filter + macro commands

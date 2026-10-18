@@ -1388,6 +1388,39 @@ mix = 0.7
     }
 
     #[test]
+    fn text_song_chip_fx() {
+        let t = r#"
+[song]
+title = "fx"
+[[instrument]]
+name = "Coin"
+patch = "gen:Coin"
+[instrument.gen.engine.ChipFx]
+wave = "Triangle"
+level = 0.5
+"#;
+        let s = song_from_text(t).unwrap();
+        let InstrumentKind::Gen(g) = &s.instruments[0].kind else {
+            panic!("not a generator")
+        };
+        let crate::gen::GenEngine::ChipFx(x) = &g.engine else {
+            panic!("not chip fx")
+        };
+        let crate::gen::GenEngine::ChipFx(pre) = crate::gen::preset("Coin").unwrap().engine else {
+            panic!()
+        };
+        assert_eq!(x.wave, crate::chipfx::Wave::Triangle);
+        assert_eq!(x.level, 0.5);
+        assert_eq!(x.p, pre.p, "the other fields come from the preset");
+        // .cwt round trip
+        let dir = std::env::temp_dir().join("cw_chipfx_rt.cwt");
+        save_cwt(&s, &dir).unwrap();
+        let back = load_cwt(&dir).unwrap();
+        assert_eq!(back.instruments[0].kind, s.instruments[0].kind);
+        let _ = std::fs::remove_file(&dir);
+    }
+
+    #[test]
     fn text_song_generators_and_ladder_filters() {
         let t = r#"
 [song]

@@ -582,7 +582,7 @@ dependencies = [
 
 [[package]]
 name = "chipwave"
-version = "0.2.3+fix.12"
+version = "0.2.3+fix.13"
 dependencies = [
  "cpal",
  "eframe",
