@@ -176,6 +176,14 @@ pub struct App {
     arr_scroll: f32,
     arr_scroll_set: Option<f32>,
     arr_area: Rect,
+    /// arranger play marker (song-order entry, row): Play song starts here;
+    /// set by clicking / dragging the arranger's timeline ruler
+    pub(crate) cue: (usize, usize),
+    /// the arranger ruler's screen rect and the x of row 0 (tests, shots)
+    pub(crate) arr_ruler: Rect,
+    pub(crate) arr_x0: f32,
+    /// a ruler scrub is in progress (suspends follow-scrolling)
+    ruler_drag: bool,
     zoom: f32,
     buffer: u32,
     win_max: bool,
@@ -447,6 +455,10 @@ impl App {
             arr_scroll: 0.0,
             arr_scroll_set: None,
             arr_area: Rect::NOTHING,
+            cue: (0, 0),
+            arr_ruler: Rect::NOTHING,
+            arr_x0: 0.0,
+            ruler_drag: false,
             zoom: crate::settings::load().zoom,
             buffer: crate::settings::load().buffer,
             win_max: crate::settings::load().maximized,
@@ -594,6 +606,7 @@ impl App {
 
     fn play(&mut self, mode: u8) {
         let (pattern, row) = (self.pattern, self.row);
+        let cue = self.cue;
         if let Some(f) = &mut self.fill {
             f.previewing = false;
         }
@@ -607,7 +620,17 @@ impl App {
                 return;
             }
             match mode {
-                0 => engine.start(song, 0, 0, false, 0),          // song
+                0 => {
+                    // song: from the arranger play marker (bar 1 unless moved)
+                    let op = cue.0.min(song.order.len().saturating_sub(1));
+                    let rows = song
+                        .order
+                        .get(op)
+                        .and_then(|&b| song.patterns.get(b))
+                        .map(|p| p.rows)
+                        .unwrap_or(ROWS);
+                    engine.start(song, op, cue.1.min(rows.saturating_sub(1)), false, 0)
+                }
                 1 | 3 => engine.start(song, 0, 0, true, pattern), // block loop
                 _ => engine.start(song, 0, row, true, pattern),   // from row
             }
@@ -624,13 +647,14 @@ impl App {
                     ("Z S X D C V G B H N J M", "notes C..B (base octave)"), ("Q 2 W 3 E R 5 T 6 Y 7 U I 9 O 0 P", "notes, octave +1"),
                     ("1", "note off"), ("F1 - F8", "base octave 1-8"), ("0-9 A-F", "hex in instr/vol/effect columns"),
                     ("Delete", "clear field"), ("Backspace / Insert", "pull up / push down rows"),
-                    ("Space", "play / stop current block (loop)"), ("Shift+Space", "play / stop song"), ("Enter / Ctrl+Enter", "restart block / play from row"), ("Ctrl+= / Ctrl+- / Ctrl+0", "UI scale up / down / 100 %"), ("Esc", "edit mode on/off"),
+                    ("Space", "play / stop current block (loop)"), ("Shift+Space", "play / stop song (from the arranger play marker)"), ("Enter / Ctrl+Enter", "restart block / play from row"), ("Ctrl+= / Ctrl+- / Ctrl+0", "UI scale up / down / 100 %"), ("Esc", "edit mode on/off"),
                     ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Ctrl+Shift+F", "fill to length (auto arrange)"), ("1-7 / 0 in arranger", "tag block role / clear"), ("Alt +/- (Shift = octave)", "transpose selection or channel"), ("F9 / F10", "mute / solo channel"),
                     ("Numpad - / +", "base octave down / up"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
                     ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Delete (with selection)", "clear selection"),
                     ("Ctrl+Tab, Ctrl+1..5", "views: pattern / arranger / mixer / FX / sample"), ("F12", "this key list"), ("Ctrl+Q", "quit"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"),
                     ("Arranger (click it to focus)", "click / Shift+click / Ctrl+click select; Ctrl+X/C/V cut/copy/paste after selection; Ctrl+Shift+V paste as new blocks; Del; Ctrl+A; right-click menu"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
                     ("Arranger: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
+                    ("Arranger ruler (bar numbers)", "click = move the play marker to that bar (jumps there while playing), drag = scrub, Alt = exact row; Play song starts from the marker"),
                     ("Ctrl+N / O / S / Shift+S", "new / open / save / save as (.cwt)"), ("Ctrl+E", "export WAV"),
                     ("MIDI keyboard", "plays the current instrument (velocity, sustain pedal, pitch bend); Settings > MIDI picks the device"),
                     ("MIDI + edit mode", "records the note at the cursor (instrument + velocity), moves by Step; while playing: at the playing row"),

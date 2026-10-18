@@ -714,7 +714,7 @@ impl App {
                     self.play(3);
                 }
                 if tool_button(ui, Ic::PlaySong, "Play song", playing && !loop_on, t.accent)
-                    .on_hover_text("play the whole song from the start (Shift+Space)")
+                    .on_hover_text("play the song from the arranger play marker (Shift+Space; click the arranger ruler to move it)")
                     .clicked()
                 {
                     if playing {

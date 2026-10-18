@@ -70,7 +70,7 @@ Timeline position is measured in **lines** (rows), not seconds, because block le
 | Double-click clip | Opens the block in the track editor; Esc returns to arranger |
 | Drag on section strip | Select range → "Make section" turns it into a named playing sequence |
 | Wheel / Shift+wheel / Ctrl+wheel | Scroll / scroll horizontally / zoom around cursor |
-| Click ruler | Move play position; drag to set loop range |
+| Click ruler | Move the play marker (implemented in 0.2.3.15, see below); a loop range is not implemented yet. When it comes: click = seek, Shift+drag = loop range |
 | Right-click clip | Colour, rename block, make unique, delete, "show all uses" (highlights every clip using this block) |
 | Del / Backspace | Remove entry (block stays in pool) |
 | Ctrl+Z / Ctrl+Y | Undo / redo (shared undo stack with the rest of the editor) |
@@ -113,3 +113,22 @@ A second lane lets you lay an alternative block under a clip (e.g. drum fill) an
 Fill-to-length with roles, style templates, a seeded generator and non-destructive variations: see [AUTO_ARRANGE.md](AUTO_ARRANGE.md).
 
 **Implemented in 0.1.3 (basic):** single lane over `song.order`: coloured clips (muted palette by block id) with note-density previews, drag to reorder, Duplicate (Ctrl+D), Copy as new block (Ctrl+Shift+D), Insert block (Ins), Delete (Del), click = open block, double-click = pattern view, playhead with follow, zoom (+/−), ruler in bars, dockable under the pattern editor. Zoom is saved in `.cwt` as `arranger.toml`. Deferred: sections/sequences, repeat handles, block pool, colours per block, markers, loop range, lanes, mini-map.
+
+## Play marker and ruler seek (0.2.3.15)
+
+![Play marker moved by a ruler click](screenshots/dark-arranger-play-marker.png)
+
+The ruler above the clips (bar numbers 1, 5, 9, 13 …; one bar = 16 rows) moves the **play marker**:
+
+| Action | Result |
+|---|---|
+| Click the ruler | Marker jumps to the start of the bar under the pointer. If that bar line lies before the clip the pointer is over (blocks whose length isn't a multiple of 16), it snaps to the clip's first row instead, so the marker is always inside the clicked clip. |
+| Alt+click | Exact row, no bar snap |
+| Drag along the ruler | Scrubs the marker; while playing, playback jumps each time it crosses a bar |
+| While playing | Playback jumps to the marker at once and keeps playing (running tempo and speed are kept; sounding notes fade out). Playing a block loop: if the target is in the looped block it keeps looping from that row, otherwise it switches to playing the song from there. |
+| While stopped | Nothing plays; **Play song** (toolbar or Shift+Space) starts from the marker. Space / Enter / Ctrl+Enter still play the cursor block, which is now the marker's block and row. |
+
+- The marker is drawn as a triangle on the ruler with a line across the clips and the automation lanes (bright when stopped, dimmed while playing). The running playhead has its own triangle and line in the play colour.
+- The pattern editor shows the marker's block and row. The arranger's clip selection, the clip drag, the Select / Pencil tools and the automation lanes are not affected; the ruler is its own strip above the clips.
+- The marker goes back to bar 1 on New / Open / demo load. It is not saved in the song.
+- `--screenshot out.png --view cue` captures the arranger with the marker moved (stopped); `--view arranger` shows a playing playhead with the marker behind it.

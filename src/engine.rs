@@ -617,6 +617,35 @@ impl Engine {
         self.process_row(song);
     }
 
+    /// Jump the running playback to `order_pos` / `row` (arranger ruler
+    /// click). Keeps playing, the running tempo and speed; sounding notes fade
+    /// out. A block loop keeps looping if the target is in the looped block,
+    /// otherwise playback switches to the song order. Stopped: does nothing.
+    pub fn seek(&mut self, song: &Song, order_pos: usize, row: usize) {
+        if !self.playing || song.order.is_empty() {
+            return;
+        }
+        let op = order_pos.min(song.order.len() - 1);
+        let pat = song.order[op];
+        if self.loop_pattern && pat != self.pattern {
+            self.loop_pattern = false;
+        }
+        self.order_pos = op;
+        self.pattern = pat;
+        let rows = song.patterns.get(pat).map(|p| p.rows).unwrap_or(ROWS);
+        self.row = row.min(rows.saturating_sub(1));
+        self.tick = 0;
+        self.samples_to_tick = self.tick_len();
+        self.song_ended = false;
+        for c in &mut self.chans {
+            if c.active {
+                c.fade_to_tail();
+            }
+        }
+        self.process_row(song);
+        self.song_pos = self.calc_song_pos(song);
+    }
+
     pub fn stop(&mut self) {
         self.playing = false;
         for c in &mut self.chans {

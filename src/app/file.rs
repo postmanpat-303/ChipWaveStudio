@@ -271,6 +271,7 @@ impl App {
         self.sel = None;
         self.arr_sel = 0;
         self.arr_multi.clear();
+        self.cue = (0, 0);
         self.dirty = false;
     }
 

@@ -2,6 +2,8 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+v0.2.3.15 adds **click-to-seek on the arranger ruler**. Clicking the bar-number strip above the clips moves the **play marker** to that bar (snapped to the bar line, never before the start of the clicked clip; Alt+click = exact row). While playing, playback jumps there at once and keeps going (tempo and speed are kept; a block loop keeps looping if the target is in its block, otherwise the song plays on from there). While stopped, **Play song** (Shift+Space) starts from the marker instead of bar 1. Dragging along the ruler scrubs. The marker is a triangle on the ruler with a line across the clips and automation lanes; the playhead gets a triangle too. The pattern editor follows the marker; clip selection, clip dragging and the automation tools are unaffected. New `Engine::seek`, `--screenshot --view cue`, unit tests for the bar → order entry / row mapping and UI tests for click, Alt+click, drag and the jump while playing. Details: [ARRANGER.md](ARRANGER.md#play-marker-and-ruler-seek-02315).
+
 v0.2.3.14 (Generators stage 2) adds three generators, all written from scratch.
 
 - **Analog** is a Moog-style synth: three oscillators (saw, triangle, square, pulse; polyBLEP anti-aliasing), each with octave, semitone, level and wave. It has detune, PWM with rate and width, analogue pitch and phase **drift**, hard **sync** of oscillator 2 to oscillator 1, noise, the Zavalishin ladder (vintage by default; LP/BP/HP, 12/24 dB, key tracking), filter and amp ADSR, and glide/legato. Presets: Fat Moog Bass, Psy Rolling Bass, Warm Lead, Brass, Dark Pad, Acid Squelch.

@@ -203,7 +203,8 @@ On Linux, build it from source (below).
 | `0`–`9` `A`–`F` | hex in the instrument / volume / effect columns |
 | Arrows, `PgUp`/`PgDn`, `Home`/`End` | move (Ctrl+Home/End = first / last block) |
 | `Tab` / `Shift+Tab` | next / previous channel |
-| `Space` / `Shift+Space` | play / stop block (loop) / whole song |
+| `Space` / `Shift+Space` | play / stop block (loop) / whole song (from the arranger play marker) |
+| Click / drag the arranger ruler | move the play marker to that bar (jumps there while playing); drag = scrub, `Alt`+click = exact row |
 | `Enter` / `Ctrl+Enter` | restart block / play from the cursor row |
 | `Esc` | edit mode on / off |
 | `Delete`, `Backspace`, `Insert` | clear, pull up, push down |

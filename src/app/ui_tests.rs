@@ -2126,3 +2126,133 @@ fn stage2_generators_menu_dice_locks_history_and_bake() {
         assert_eq!(song(&mut h, |s| s.instruments.len()), n0);
     }
 }
+
+/// demo song with four 64-row entries in the order, arranger view open
+fn ruler_harness() -> Harness<'static, App> {
+    let mut song = fileio::demo_song();
+    song.patterns[0].rows = 64;
+    let row0 = song.patterns[0].cells[0].clone();
+    song.patterns[0].cells.resize(64, row0);
+    song.order = vec![0, 0, 0, 0];
+    let mut h = harness_with(song);
+    h.state_mut().view = View::Arranger;
+    frames(&mut h, 3);
+    h
+}
+
+/// screen point on the arranger ruler over timeline row `r`
+fn ruler_at(h: &mut Harness<'static, App>, r: f32) -> Pos2 {
+    let zoom = song(h, |s| s.arranger_zoom);
+    let st = h.state();
+    let p = Pos2::new(st.arr_x0 + (r + 0.5) * zoom, st.arr_ruler.center().y);
+    assert!(st.arr_ruler.contains(p), "row {r} is on the visible ruler");
+    p
+}
+
+#[test]
+fn arranger_ruler_click_moves_the_play_marker_and_song_play_starts_there() {
+    let mut h = ruler_harness();
+    let sel0 = (h.state().arr_sel, h.state().arr_multi.clone());
+    // row 150 = entry 2, row 22 -> snaps back to the bar line at row 16
+    let p = ruler_at(&mut h, 150.0);
+    click_at(&mut h, p);
+    assert_eq!(h.state().cue, (2, 16));
+    assert_eq!(
+        (h.state().pattern, h.state().row),
+        (0, 16),
+        "editor follows"
+    );
+    assert_eq!(
+        (h.state().arr_sel, h.state().arr_multi.clone()),
+        sel0,
+        "clip selection untouched"
+    );
+    assert!(
+        !h.with_engine(|s| s.engine.playing),
+        "a click does not start playback"
+    );
+    // Play song (Shift+Space) starts at the marker
+    key(&mut h, Key::Space, egui::Modifiers::SHIFT);
+    let (playing, looped, op, row) = h.with_engine(|s| {
+        (
+            s.engine.playing,
+            s.engine.loop_pattern,
+            s.engine.order_pos,
+            s.engine.row,
+        )
+    });
+    assert!(playing && !looped);
+    assert_eq!((op, row), (2, 16));
+    // Alt-click: exact row, no bar snap
+    h.with_engine(|s| s.engine.stop());
+    let p = ruler_at(&mut h, 69.0);
+    h.input_mut()
+        .events
+        .push(egui::Event::ModifiersChanged(egui::Modifiers::ALT));
+    click_at(&mut h, p);
+    h.input_mut()
+        .events
+        .push(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+    frames(&mut h, 2);
+    assert_eq!(h.state().cue, (1, 5));
+    // a new song puts the marker back at bar 1
+    h.state_mut().new_song();
+    assert_eq!(h.state().cue, (0, 0));
+}
+
+#[test]
+fn arranger_ruler_click_while_playing_jumps_and_keeps_playing() {
+    let mut h = ruler_harness();
+    h.state_mut().follow = false;
+    h.with_engine(|s| {
+        let Shared { song, engine, .. } = s;
+        engine.start(song, 0, 0, false, 0);
+    });
+    let p = ruler_at(&mut h, 200.0);
+    click_at(&mut h, p);
+    let (playing, op, row) =
+        h.with_engine(|s| (s.engine.playing, s.engine.order_pos, s.engine.row));
+    assert!(playing, "still playing after the jump");
+    assert_eq!((op, row), (3, 0), "row 200 -> entry 3, bar at row 192");
+    assert_eq!(h.state().cue, (3, 0));
+    // a block loop whose block is the target keeps looping
+    h.with_engine(|s| {
+        let Shared { song, engine, .. } = s;
+        engine.start(song, 0, 0, true, 0);
+    });
+    let p = ruler_at(&mut h, 40.0);
+    click_at(&mut h, p);
+    let (looped, row) = h.with_engine(|s| (s.engine.loop_pattern, s.engine.row));
+    assert!(looped);
+    assert_eq!(row, 32);
+}
+
+#[test]
+fn arranger_ruler_drag_scrubs_without_moving_clips() {
+    let mut h = ruler_harness();
+    let order0 = song(&mut h, |s| s.order.clone());
+    let (a, b) = (ruler_at(&mut h, 3.0), ruler_at(&mut h, 180.0));
+    drag(&mut h, a, b);
+    assert_eq!(h.state().cue, (2, 48), "marker follows the drag to row 176");
+    assert_eq!(song(&mut h, |s| s.order.clone()), order0, "no clip moved");
+    assert!(h.state().arr_drag.is_none());
+}
+
+#[test]
+fn engine_seek_keeps_tempo_and_switches_loop_to_song_for_other_blocks() {
+    let mut song = fileio::demo_song();
+    song.order = vec![0, 1, 0];
+    let mut e = Engine::new(48000.0);
+    e.seek(&song, 1, 4);
+    assert!(!e.playing, "seek on a stopped engine does nothing");
+    e.start(&song, 0, 0, true, 0);
+    e.seek(&song, 1, 8);
+    assert!(
+        e.playing && !e.loop_pattern,
+        "other block: plays the song order"
+    );
+    assert_eq!((e.order_pos, e.pattern, e.row), (1, 1, 8));
+    e.seek(&song, 9, 9999);
+    let rows = song.patterns[0].rows;
+    assert_eq!((e.order_pos, e.row), (2, rows - 1), "clamped");
+}

@@ -1,4 +1,4 @@
-ChipWave Tracker 0.2.3.14 - Windows x64
+ChipWave Tracker 0.2.3.15 - Windows x64
 ==============================================================
 GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
@@ -21,7 +21,7 @@ Keys (press "? Keys" in the toolbar for the full list)
   Shift+arrows/PgUp/PgDn, drag   select (highlighted green)
   Ctrl+A                         select channel; press again = whole block
   Ctrl+C / Ctrl+X / Ctrl+V       copy / cut / paste at cursor
-  Space / Shift+Space            play/stop current block (loop) / play/stop song
+  Space / Shift+Space            play/stop current block (loop) / play/stop song (from the play marker)
   Enter / Ctrl+Enter             restart block / play from cursor row
   Esc                            edit mode on/off
   Ctrl+Z / Ctrl+Y                undo / redo (notes, arranger, sounds, FX, mixer, tempo, channels; each click or
@@ -45,6 +45,8 @@ Keys (press "? Keys" in the toolbar for the full list)
     Ctrl+X / C / V cut / copy / paste after selection (Ctrl+Shift+V = as new blocks),
     Del, Ctrl+A, Shift+Left/Right, right-click menu; click the pattern to focus it again
   Arranger: Left/Right, Del, Ins, Ctrl+D (Shift = unique copy), +/-  zoom
+  Arranger ruler (bar numbers)   click = move the play marker to that bar (jumps there while
+                                 playing), drag = scrub, Alt+click = exact row
   Ctrl+N / Ctrl+O / Ctrl+S       new / open / save .cwt   (Ctrl+Shift+S = save as)
   Ctrl+E                         quick export WAV
   Ctrl+Shift+E                   export dialog (WAV / MP3, tags, range)

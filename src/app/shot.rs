@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 21] = [
+pub const VIEWS: [&str; 22] = [
     "pattern",
     "arranger",
     "mixer",
@@ -55,6 +55,7 @@ pub const VIEWS: [&str; 21] = [
     "analog",
     "fm",
     "noise",
+    "cue",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -79,7 +80,7 @@ impl App {
         self.pattern = 8.min(self.with(|s| s.song.patterns.len().saturating_sub(1)));
         self.row = 0;
         match view {
-            "arranger" => self.view = View::Arranger,
+            "arranger" | "cue" => self.view = View::Arranger,
             "mixer" => self.view = View::Mixer,
             "fx" => {
                 self.instr = 7; // Supersaw Pad: filter + chorus
@@ -171,6 +172,12 @@ impl App {
                 let pos = 13.min(song.order.len().saturating_sub(1));
                 engine.start(song, pos, 32, false, 0);
             });
+            // the play marker (where Play song started) stays behind it
+            self.cue = (13.min(self.order_len().saturating_sub(1)), 32);
+        } else if view == "cue" {
+            // stopped, play marker moved by a ruler click into the 6th clip, bar 3
+            let n = self.order_len();
+            self.seek_to((5.min(n.saturating_sub(1)), 32));
         } else if !matches!(
             view,
             "fill" | "settings" | "about" | "library" | "chords" | "slice"

@@ -35,6 +35,33 @@ impl App {
         self.row = self.row.min(self.rows() - 1);
     }
 
+    /// Move the play marker to (song-order entry, row): the pattern editor
+    /// shows that block and row, and running song playback jumps there. The
+    /// arranger's clip selection is left alone.
+    pub(super) fn seek_to(&mut self, t: (usize, usize)) {
+        let Some(b) = self.with(|s| s.song.order.get(t.0).copied()) else {
+            return;
+        };
+        self.cue = t;
+        self.pattern = b;
+        self.row = t.1.min(self.rows().saturating_sub(1));
+        self.with(|s| {
+            let Shared {
+                song,
+                engine,
+                preview,
+            } = s;
+            if engine.playing && preview.is_none() {
+                engine.seek(song, t.0, t.1);
+            }
+        });
+        self.status = format!(
+            "Play marker: entry {} · block {b:02} · row {}",
+            t.0 + 1,
+            t.1
+        );
+    }
+
     pub(super) fn arr_flash_now(&mut self, idx: Vec<usize>, ctx: &egui::Context) {
         self.arr_flash = Some((idx, ctx.input(|i| i.time)));
     }
@@ -341,7 +368,7 @@ impl App {
             ui.checkbox(&mut self.follow, "Follow");
             ui.label(
                 egui::RichText::new(format!(
-                    "{} entries · drag clips to reorder · click = open in editor",
+                    "{} entries · drag clips to reorder · click = open in editor · click the ruler = move the play marker",
                     order.len()
                 ))
                 .small()
@@ -475,6 +502,41 @@ impl App {
                     );
                 }
                 r += step;
+            }
+            // ruler: click = move the play marker there, drag = scrub,
+            // Alt = exact row (no bar snap). Clip selection is untouched.
+            let ruler = Rect::from_min_max(
+                rect.min,
+                Pos2::new(rect.right(), rect.top() + ruler_h + 3.0),
+            );
+            self.arr_ruler = ruler;
+            self.arr_x0 = xof(0);
+            let rresp = ui
+                .interact(ruler, ui.scope_id().with("ruler"), Sense::click_and_drag())
+                .on_hover_text(
+                    "click: move the play marker here (jumps while playing) · drag: scrub · Alt: exact row",
+                );
+            if rresp.hovered() || rresp.dragged() {
+                painter.rect_filled(ruler, 2, th().ink2.gamma_multiply(0.12));
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            if rresp.drag_started() {
+                self.ruler_drag = true;
+            }
+            if !rresp.dragged() && !rresp.drag_started() {
+                self.ruler_drag = false;
+            }
+            if rresp.clicked() || rresp.dragged() || rresp.drag_started() {
+                if let Some(p) = rresp.interact_pointer_pos() {
+                    let lens: Vec<usize> = starts.windows(2).map(|w| w[1] - w[0]).collect();
+                    let abs = ((p.x - xof(0)) / zoom).max(0.0) as usize;
+                    let alt = ui.input(|i| i.modifiers.alt);
+                    let t = ruler_target(&lens, abs, !alt);
+                    if rresp.clicked() || rresp.drag_started() || t != self.cue {
+                        self.seek_to(t);
+                    }
+                    self.arr_focus = true;
+                }
             }
             let pointer = ui.input(|i| i.pointer.interact_pos());
             let mods = ui.input(|i| i.modifiers);
@@ -693,6 +755,19 @@ impl App {
             } else if released {
                 self.arr_drag = None;
             }
+            // play marker: a triangle on the ruler and a line across the clips
+            // (dimmer while playing, where it is the next Play song start)
+            let cue = self.cue;
+            if cue.0 < order.len() {
+                let x = xof(starts[cue.0] + cue.1);
+                let col = if playing {
+                    th().accent.gamma_multiply(0.5)
+                } else {
+                    th().accent
+                };
+                painter.vline(x, lane.y_range(), Stroke::new(if playing { 1.0 } else { 2.0 }, col));
+                marker(&painter, x, rect.top() + ruler_h + 3.0, col);
+            }
             // playhead
             if playing {
                 let idx = if loop_pat {
@@ -707,7 +782,8 @@ impl App {
                 if let Some(i) = idx {
                     let x = xof(starts[i] + prow);
                     painter.vline(x, rect.y_range(), Stroke::new(2.0, th().play));
-                    if follow {
+                    marker(&painter, x, rect.top() + ruler_h + 3.0, th().play);
+                    if follow && !self.ruler_drag {
                         ui.scroll_to_rect(
                             Rect::from_center_size(
                                 Pos2::new(x, rect.center().y),
@@ -780,9 +856,12 @@ impl App {
                             p.circle_stroke(c, 7.0, Stroke::new(1.5, th().selection_outline));
                         }
                     }
-                    // playhead
+                    // playhead (stopped: the play marker)
                     if playing {
                         p.vline(to_x(song_pos), lr.y_range(), Stroke::new(1.5, th().play));
+                    } else if cue.0 < order.len() {
+                        let x = to_x((starts[cue.0] + cue.1) as f32);
+                        p.vline(x, lr.y_range(), Stroke::new(1.0, th().accent));
                     }
                     let resp =
                         ui.interact(lr, ui.scope_id().with(("lane", k)), Sense::click_and_drag());
@@ -876,5 +955,75 @@ impl App {
         self.arr_scroll = out.state.clamped_offset().x;
         self.arr_area = out.inner_rect;
         self.apply_lane_ops(lane_ops);
+    }
+}
+
+/// Ruler click -> (song-order entry, row). `lens` = rows of each order entry,
+/// `abs` = clicked row on the whole timeline. With `snap` the row goes back to
+/// the start of its bar (16 rows, the ruler ticks), but never before the start
+/// of the block it lands in. Past the end: the last block's last bar / row.
+pub(crate) fn ruler_target(lens: &[usize], abs: usize, snap: bool) -> (usize, usize) {
+    let total: usize = lens.iter().sum();
+    if total == 0 {
+        return (0, 0);
+    }
+    let abs = abs.min(total - 1);
+    let mut start = 0;
+    for (i, &n) in lens.iter().enumerate() {
+        if abs < start + n {
+            let t = if snap {
+                (abs / 16 * 16).max(start)
+            } else {
+                abs
+            };
+            return (i, t - start);
+        }
+        start += n;
+    }
+    (lens.len() - 1, 0)
+}
+
+/// down-pointing play-marker triangle whose tip sits at (x, tip_y)
+fn marker(p: &egui::Painter, x: f32, tip_y: f32, col: Color32) {
+    p.add(egui::Shape::convex_polygon(
+        vec![
+            Pos2::new(x - 5.0, tip_y - 8.0),
+            Pos2::new(x + 5.0, tip_y - 8.0),
+            Pos2::new(x, tip_y),
+        ],
+        col,
+        Stroke::NONE,
+    ));
+}
+
+#[cfg(test)]
+mod ruler_tests {
+    use super::ruler_target;
+
+    #[test]
+    fn bar_snap_maps_to_order_entry_and_row() {
+        let lens = [64, 64, 32, 64];
+        assert_eq!(ruler_target(&lens, 0, true), (0, 0));
+        assert_eq!(ruler_target(&lens, 37, true), (0, 32));
+        assert_eq!(ruler_target(&lens, 37, false), (0, 37));
+        assert_eq!(ruler_target(&lens, 64, true), (1, 0));
+        assert_eq!(ruler_target(&lens, 100, true), (1, 32));
+        assert_eq!(ruler_target(&lens, 130, true), (2, 0));
+        assert_eq!(ruler_target(&lens, 150, true), (2, 16));
+        assert_eq!(ruler_target(&lens, 175, true), (3, 0));
+        assert_eq!(ruler_target(&lens, 180, true), (3, 16));
+        // past the end: last bar of the last block
+        assert_eq!(ruler_target(&lens, 10_000, true), (3, 48));
+        assert_eq!(ruler_target(&lens, 10_000, false), (3, 63));
+    }
+
+    #[test]
+    fn odd_block_lengths_never_snap_into_the_previous_block() {
+        // block 1 starts at row 24, between the bar lines at 16 and 32
+        let lens = [24, 40];
+        assert_eq!(ruler_target(&lens, 20, true), (0, 16));
+        assert_eq!(ruler_target(&lens, 26, true), (1, 0));
+        assert_eq!(ruler_target(&lens, 33, true), (1, 8));
+        assert_eq!(ruler_target(&[], 5, true), (0, 0));
     }
 }
