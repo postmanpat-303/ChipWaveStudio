@@ -58,6 +58,12 @@ pub struct Extra {
     /// version the user chose to skip ("Skip this version"), "" = none
     #[serde(default)]
     pub update_skip: String,
+    /// instrument library folder, "" = <config>/Instruments (0.2.3.9)
+    #[serde(default)]
+    pub library_dir: String,
+    /// snap typed and MIDI notes to the song key (chord helper)
+    #[serde(default)]
+    pub scale_lock: bool,
 }
 
 fn two() -> u32 {
@@ -81,6 +87,8 @@ impl Default for Extra {
             update_check: true,
             update_last: 0,
             update_skip: String::new(),
+            library_dir: String::new(),
+            scale_lock: false,
         }
     }
 }

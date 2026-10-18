@@ -2,17 +2,19 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 /// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.8";
+pub const VERSION: &str = "0.2.3.9";
 
 mod app;
 mod arrange;
 mod audio;
 mod automation;
+mod chords;
 mod engine;
 mod export;
 mod fileio;
 mod fx;
 mod input;
+mod instfile;
 mod keymap;
 mod master;
 mod midi;
@@ -180,7 +182,56 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         ok
     };
+    // 0.2.3.9: .cwi instrument file round trip, key detection, chord writing
+    let inst_ok = {
+        let dir = std::env::temp_dir().join("chipwave_selftest_lib");
+        let _ = std::fs::create_dir_all(&dir);
+        let mut all = true;
+        let mut n = 0;
+        for i in &song.instruments {
+            let p = instfile::free_path(&dir, &i.name);
+            let back = instfile::save_cwi(i, &p).and_then(|_| instfile::load_cwi(&p));
+            all &= matches!(&back, Ok(b) if b.name == i.name);
+            n += 1;
+        }
+        let listed = instfile::scan(&dir).len();
+        let _ = std::fs::remove_dir_all(&dir);
+        let key = chords::detect(&song).first().map(|(k, _)| *k);
+        let mut pat = song.patterns[0].clone();
+        let w = key.and_then(|k| {
+            let prog: Vec<chords::Step> = [0usize, 5, 2, 6]
+                .iter()
+                .map(|&d| chords::Step::new(d, chords::ChordKind::Triad))
+                .collect();
+            chords::write(
+                &mut pat,
+                k,
+                &prog,
+                &chords::WriteOpts {
+                    style: chords::Style::Chords,
+                    channel: 1,
+                    instr: 1,
+                    octave: 3,
+                    rows_per_beat: song.lines_per_beat.max(1) as usize,
+                    start_row: 0,
+                    fill: true,
+                    vol: 0,
+                    seed: 1,
+                },
+            )
+            .ok()
+        });
+        let ok = all && listed == n && key.is_some() && w.as_ref().is_some_and(|w| w.notes > 0);
+        report.push_str(&format!(
+            "  instruments + chords: {n} .cwi saved/loaded/listed {listed}, key {}, {} chord note(s) ({})\n",
+            key.map(|k| k.name()).unwrap_or_else(|| "?".into()),
+            w.map(|w| w.notes).unwrap_or(0),
+            if ok { "ok" } else { "FAILED" }
+        ));
+        ok
+    };
     let ok = fill_ok
+        && inst_ok
         && midi_ok
         && peak > 0.05
         && rms > 0.005

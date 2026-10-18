@@ -238,6 +238,14 @@ pub(super) const CREDITS: &[(&str, &str)] = &[
         "https://signalsmith-audio.co.uk/writing/2022/limiter/",
     ),
     (
+        "Key finding: Krumhansl–Schmuckler algorithm with the Krumhansl & Kessler (1982) key profiles",
+        "https://doi.org/10.1037/0033-295X.89.4.334",
+    ),
+    (
+        "Chord helper inspired by Scaler (Plugin Boutique): idea only, no material used",
+        "https://www.pluginboutique.com/product/2-Effects/26-Chords/12468-Scaler-3",
+    ),
+    (
         "OctaMED by Teijo Kinnunen and Ray Burt-Frost: the workflow ChipWave follows",
         "https://en.wikipedia.org/wiki/OctaMED",
     ),
@@ -312,6 +320,22 @@ impl App {
                 }
                 if item(ui, "Quick export WAV…", "Ctrl+E") {
                     self.export_wav();
+                }
+                ui.separator();
+                if item(ui, "Instrument library…", "") {
+                    self.open_library();
+                    ui.close();
+                }
+                if item(ui, "Import instrument (.cwi)…", "") {
+                    if let Some(p) = rfd::FileDialog::new()
+                        .add_filter("ChipWave instrument", &[crate::instfile::EXT])
+                        .pick_file()
+                    {
+                        self.import_cwi(&p);
+                    }
+                }
+                if item(ui, "Export instrument (.cwi)…", "") {
+                    self.export_instrument(self.instr);
                 }
                 ui.separator();
                 if item(ui, "Quit", "Ctrl+Q") {
@@ -501,6 +525,10 @@ impl App {
                 }
                 if item(ui, "Fill to length…", "Ctrl+Shift+F") {
                     self.open_fill();
+                    ui.close();
+                }
+                if item(ui, "Chord helper…", "") {
+                    self.chords.open = true;
                     ui.close();
                 }
                 ui.separator();

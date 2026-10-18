@@ -85,6 +85,24 @@ impl App {
             {
                 self.set_channels(ch);
             }
+            ui.separator();
+            if ui
+                .button("Chords…")
+                .on_hover_text(
+                    "chord helper: song key, chord pads, progressions into this block, scale lock",
+                )
+                .clicked()
+            {
+                self.chords.open = !self.chords.open;
+            }
+            if let Some(k) = self.scale_lock_key() {
+                ui.label(
+                    egui::RichText::new(format!("lock {}", k.name()))
+                        .small()
+                        .color(th().accent),
+                )
+                .on_hover_text("scale lock: typed and MIDI notes snap to this key (Chord helper)");
+            }
         });
 
         let full = ui.available_rect_before_wrap();

@@ -177,6 +177,9 @@ pub struct SongInfo {
     pub year: String,
     #[serde(default)]
     pub comment: String,
+    /// song key for the chord helper and scale lock (0.2.3.9)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<crate::chords::Key>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -392,6 +395,82 @@ impl Song {
         used
     }
 
+    /// Move instrument `from` to position `to` (0-based; the slots between
+    /// shift by one). Every note, cached block and automation lane follows
+    /// its instrument, so the song sounds the same. Returns the old -> new
+    /// index map (for the engine), None if an index is out of range.
+    pub fn move_instrument(&mut self, from: usize, to: usize) -> Option<Vec<usize>> {
+        let n = self.instruments.len();
+        if from >= n || to >= n || n > 255 {
+            return None;
+        }
+        let mut order: Vec<usize> = (0..n).collect();
+        let x = order.remove(from);
+        order.insert(to, x);
+        // map[old] = new
+        let mut map = vec![0; n];
+        for (new, &old) in order.iter().enumerate() {
+            map[old] = new;
+        }
+        let old = std::mem::take(&mut self.instruments);
+        let mut slots: Vec<Option<Instrument>> = old.into_iter().map(Some).collect();
+        self.instruments = order.iter().map(|&o| slots[o].take().unwrap()).collect();
+        self.remap_slots(&map);
+        Some(map)
+    }
+
+    /// renumber instrument slots in cells, block caches and lanes (map[old] = new, 0-based)
+    fn remap_slots(&mut self, map: &[usize]) {
+        let fix = |c: &mut Cell| {
+            if c.instr > 0 {
+                if let Some(&n) = map.get(c.instr as usize - 1) {
+                    c.instr = n as u8 + 1;
+                }
+            }
+        };
+        for p in &mut self.patterns {
+            p.cells.iter_mut().flatten().for_each(fix);
+            p.cache.iter_mut().flatten().for_each(fix);
+        }
+        for l in &mut self.automation {
+            if let Some(i) = lane_instrument(&l.target) {
+                if let Some(&n) = map.get(i) {
+                    l.target = with_lane_instrument(&l.target, n);
+                }
+            }
+        }
+    }
+
+    /// Swap instrument slot `from` for `to` (1-based) on every note that
+    /// uses it, in block `only` or the whole song. Returns the cells changed.
+    pub fn replace_instrument_uses(&mut self, from: u8, to: u8, only: Option<usize>) -> usize {
+        if from == 0 || to == 0 || from == to || to as usize > self.instruments.len() {
+            return 0;
+        }
+        let mut n = 0;
+        for (i, p) in self.patterns.iter_mut().enumerate() {
+            if only.is_some_and(|b| b != i) || p.derived.is_some() {
+                continue;
+            }
+            for c in p.cells.iter_mut().flatten() {
+                if c.instr == from {
+                    c.instr = to;
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
+    /// Insert `inst` as a new slot after the last one; None if all 255 are used.
+    pub fn add_instrument(&mut self, inst: Instrument) -> Option<usize> {
+        if self.instruments.len() >= 255 {
+            return None;
+        }
+        self.instruments.push(inst);
+        Some(self.instruments.len() - 1)
+    }
+
     /// Append a copy of instrument `idx` (0-based, with its FX chain) and
     /// return the new index. Nothing else changes; None if the 255 slots
     /// are full.
@@ -541,5 +620,64 @@ mod tests {
         assert_eq!(s.instruments[2].name, "c copy");
         assert_eq!(s.instruments[2].fx.len(), 1);
         assert_eq!(s.delete_instrument(9), 0);
+    }
+
+    #[test]
+    fn move_instrument_keeps_the_song_sounding_the_same() {
+        let mut s = crate::fileio::demo_song();
+        s.automation.push(crate::automation::Lane::new(
+            crate::automation::Target::Cutoff(1),
+            "cut".into(),
+        ));
+        let lane_t = s.automation.last().unwrap().target.clone();
+        assert!(lane_t.starts_with("instrument.2."), "{lane_t}");
+        let names: Vec<String> = s.instruments.iter().map(|i| i.name.clone()).collect();
+        let uses: Vec<usize> = (1..=names.len() as u8)
+            .map(|k| s.instrument_uses(k))
+            .collect();
+        let mut song = s.clone();
+        song.order.truncate(2);
+        song.automation.clear();
+        let before = crate::engine::render_song(&song, 22050);
+        let map = s.move_instrument(1, 4).unwrap();
+        assert_eq!(map[1], 4);
+        assert_eq!(s.instruments[4].name, names[1]);
+        assert_eq!(s.instruments[1].name, names[2]);
+        assert_eq!(s.instrument_uses(5), uses[1]);
+        assert_eq!(s.instrument_uses(2), uses[2]);
+        assert!(s
+            .automation
+            .last()
+            .unwrap()
+            .target
+            .starts_with("instrument.5."));
+        let mut song = s.clone();
+        song.order.truncate(2);
+        song.automation.clear();
+        let after = crate::engine::render_song(&song, 22050);
+        assert_eq!(before, after, "reordering does not change the sound");
+        // and back
+        s.move_instrument(4, 1).unwrap();
+        assert_eq!(s.instruments[1].name, names[1]);
+        assert!(s.move_instrument(0, 99).is_none());
+    }
+
+    #[test]
+    fn replace_instrument_uses_in_song_or_one_block() {
+        let mut s = crate::fileio::demo_song();
+        let u1 = s.instrument_uses(1);
+        let in_b0 = s.patterns[0]
+            .cells
+            .iter()
+            .flatten()
+            .filter(|c| c.instr == 1)
+            .count();
+        assert!(u1 > in_b0 && in_b0 > 0);
+        let mut one = s.clone();
+        assert_eq!(one.replace_instrument_uses(1, 3, Some(0)), in_b0);
+        assert_eq!(one.instrument_uses(1), u1 - in_b0);
+        assert_eq!(s.replace_instrument_uses(1, 3, None), u1);
+        assert_eq!(s.instrument_uses(1), 0);
+        assert_eq!(s.replace_instrument_uses(1, 200, None), 0, "no such slot");
     }
 }

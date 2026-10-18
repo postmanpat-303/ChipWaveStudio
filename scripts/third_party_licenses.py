@@ -86,6 +86,17 @@ implementations of published methods, credited with thanks:
 - Glide and accent (effects 3C / 3D) follow the behaviour of the Roland
   TB-303 Bass Line (1981); no Roland material is used.
 
+Chord helper and key detection (src/chords.rs), independent implementations:
+- Key finding: the Krumhansl-Schmuckler algorithm, as described in
+  C. L. Krumhansl (1990), "Cognitive Foundations of Musical Pitch", Oxford
+  University Press, using the major / minor key profiles of C. L. Krumhansl &
+  E. J. Kessler (1982), "Tracing the dynamic changes in perceived tonal
+  organization in a spatial representation of musical keys", Psychological
+  Review 89(4), 334-368. https://doi.org/10.1037/0033-295X.89.4.334
+- The chord pad / progression workflow is inspired by Scaler by Plugin
+  Boutique (https://www.pluginboutique.com); no code, data or artwork from
+  Scaler is used. Scales and chord names are standard music theory.
+
 """
 
 out = sys.stdout

@@ -173,6 +173,8 @@ pub struct Config {
     pub bend_range: AtomicU8,
     /// messages received (activity light)
     pub activity: AtomicU32,
+    /// scale lock (chords::pack): incoming notes snap to the song key
+    pub scale: AtomicU32,
 }
 
 impl Default for Config {
@@ -186,6 +188,7 @@ impl Default for Config {
             mon_ch: AtomicU8::new(0),
             bend_range: AtomicU8::new(2),
             activity: AtomicU32::new(0),
+            scale: AtomicU32::new(0),
         }
     }
 }
@@ -224,6 +227,7 @@ impl Config {
                 let Some(note) = tracker_note(key, oct) else {
                     return (None, None);
                 };
+                let note = crate::chords::snap_packed(note, self.scale.load(Relaxed));
                 let g = if self.velocity.load(Relaxed) {
                     self.curve().apply(vel)
                 } else {

@@ -632,6 +632,10 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
     song.bpm = real(s, "bpm").unwrap_or(145.0);
     song.speed = int(s, "speed", 6) as u32;
     song.channels = channels;
+    if let Some(k) = s.get("key").and_then(|x| x.as_str()) {
+        song.info.key =
+            Some(crate::chords::parse_key(k).ok_or_else(|| format!("unknown key {k:?}"))?);
+    }
     // instruments
     song.instruments.clear();
     for i in v
@@ -1387,5 +1391,29 @@ shift = 0.9
         assert_eq!(s.channel_names[15], "T15");
         assert_eq!(s.mixer.channels[15].pan, -1.0);
         assert_eq!(s.patterns[0].cells[0][15].note, 49);
+    }
+
+    #[test]
+    fn song_key_in_text_songs_and_cwt_round_trip() {
+        let t = "[song]\ntitle = \"k\"\nkey = \"F# dorian\"\n[[instrument]]\nname = \"a\"\npatch = \"builtin:init\"\n[[block]]\nname = \"b\"\nlines = 4\nrows = \"\"\"\n00 | C-4 01 .. ....\n\"\"\"\n";
+        let s = song_from_text(t).unwrap();
+        let k = s.info.key.expect("key parsed");
+        assert_eq!(k.name(), "F# dorian");
+        assert!(song_from_text(&t.replace("F# dorian", "H lydian")).is_err());
+        // .cwt keeps the key; songs without one stay keyless
+        let p = std::env::temp_dir().join(format!("cw-key-{}.cwt", std::process::id()));
+        save_cwt(&s, &p).unwrap();
+        assert_eq!(load_cwt(&p).unwrap().info.key, Some(k));
+        let mut s2 = s.clone();
+        s2.info.key = None;
+        save_cwt(&s2, &p).unwrap();
+        assert_eq!(load_cwt(&p).unwrap().info.key, None);
+        let _ = std::fs::remove_file(&p);
+        // a 0.2.3.6 song (no key field) still loads
+        let old = load_cwt(std::path::Path::new(
+            "tests/fixtures/chipwave-0.2.3.6-song.cwt",
+        ))
+        .unwrap();
+        assert_eq!(old.info.key, None);
     }
 }

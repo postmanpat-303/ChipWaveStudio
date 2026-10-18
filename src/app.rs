@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod arranger;
+mod chordview;
 mod dialogs;
 mod edit;
 mod file;
@@ -19,6 +20,7 @@ mod fxview;
 mod instruments;
 mod keys;
 mod lanes;
+mod library;
 mod midiview;
 mod mixer;
 mod pattern;
@@ -124,6 +126,14 @@ pub struct App {
     export_dlg: Option<dialogs::ExportDlg>,
     /// Song > Fill to length dialog state
     fill: Option<fillview::FillState>,
+    /// chord helper window (0.2.3.9)
+    chords: chordview::ChordHelper,
+    /// instrument library window (0.2.3.9)
+    library: library::Library,
+    /// instrument list search
+    instr_query: String,
+    /// instrument being renamed in the list (slot, text)
+    renaming: Option<(u8, String)>,
     show_info: bool,
     /// action waiting for the Save / Don't save / Cancel answer
     prompt: Option<crate::prompt::Pending>,
@@ -252,7 +262,15 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
         _ => String::new(),
     };
     let status = if shot.is_some() {
-        "Lumen Drift demo loaded.".to_string()
+        match &open {
+            Some(p) => format!(
+                "Opened {}",
+                p.file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_default()
+            ),
+            None => "Lumen Drift demo loaded.".to_string(),
+        }
     } else {
         status
     };
@@ -395,6 +413,10 @@ impl App {
             bind_msg: String::new(),
             export_dlg: None,
             fill: None,
+            chords: Default::default(),
+            library: Default::default(),
+            instr_query: String::new(),
+            renaming: None,
             show_info: false,
             prompt: None,
             discarded: false,
@@ -630,6 +652,17 @@ impl App {
                  the bar under the pattern and under the mixer strips shows which are in view - click or drag it to scroll.",
             );
             ui.label(
+                "Instruments: double-click a name to rename; right-click for Move up / down, Use this instead of (swap the notes), \
+                 Save to library, Export .cwi; Up / Down move the selected one (notes follow). File > Instrument library… browses \
+                 the song, your library folder (.cwi files, sub-folders = categories) and the factory sounds: › auditions, + adds, \
+                 right-click replaces the selected slot's sound. Drop a .cwi file on the window to import it.",
+            );
+            ui.label(
+                "Chords: Song > Chord helper… or Chords… in the block bar. Pick or detect the song key, click pads to build a \
+                 progression (or pick a preset), then Write into block as chords (one tone per channel from the cursor channel), \
+                 an arpeggio or a bass line. Scale lock snaps typed and MIDI notes to the key.",
+            );
+            ui.label(
                 "Master: Mixer > Limiter & loudness (true-peak limiter, LUFS meter); exports use the same limiter.",
             );
         });
@@ -727,6 +760,8 @@ impl eframe::App for App {
         self.poll_save();
         self.load_warnings_window(ui.ctx());
         self.instr_delete_dialog(ui.ctx());
+        self.chord_window(ui.ctx());
+        self.library_window(ui.ctx());
         if self.save_job.is_some() {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(50));
@@ -794,6 +829,11 @@ impl eframe::App for App {
                 .unwrap_or(false)
             {
                 self.request(crate::prompt::Pending::OpenPath(p), &ctx);
+            } else if p
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case(crate::instfile::EXT))
+            {
+                self.import_cwi(&p);
             } else {
                 self.import_sample(p);
             }

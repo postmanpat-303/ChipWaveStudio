@@ -135,6 +135,8 @@ impl App {
         let cfg = self.midi.hub.cfg.clone();
         cfg.instr.store(self.instr, Relaxed);
         cfg.mon_ch.store(self.ch as u8, Relaxed);
+        cfg.scale
+            .store(crate::chords::pack(self.scale_lock_key()), Relaxed);
         if self.extra.midi.auto_connect {
             self.midi.hub.poll();
         }

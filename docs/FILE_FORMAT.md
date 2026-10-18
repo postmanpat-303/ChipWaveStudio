@@ -109,6 +109,7 @@ Our Octopus-tracker review found its song loader trusts the file without checks,
 | Extension | MIME | What |
 |---|---|---|
 | `.cwt` | `application/x-chipwave-song` | song (this doc) |
+| `.cwi` | `application/x-chipwave-instrument` | one instrument, ZIP of `instrument.toml` (+ `sample.wav`) (INSTRUMENT_LIBRARY.md) |
 | `.cwpatch` | `application/x-chipwave-patch` | synth patch preset, plain TOML (SOUND_DESIGN.md §8) |
 
 ## 7. File association

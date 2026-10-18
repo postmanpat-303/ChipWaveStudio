@@ -321,7 +321,10 @@ impl App {
                         if repeat {
                             continue;
                         }
-                        let note = (self.octave as i32 * 12 + off + 1).clamp(1, 120) as u8;
+                        let mut note = (self.octave as i32 * 12 + off + 1).clamp(1, 120) as u8;
+                        if let Some(k) = self.scale_lock_key() {
+                            note = k.snap(note);
+                        }
                         let (ch, ins) = (self.ch, self.instr);
                         self.with(|s| {
                             let Shared { song, engine, .. } = s;

@@ -1381,3 +1381,270 @@ fn thirty_two_channels_scroll_in_the_pattern_editor_and_mixer() {
 fn h_pattern(s: &Song) -> usize {
     s.order.first().copied().unwrap_or(0)
 }
+
+// ---- 0.2.3.9: instrument library, instrument management, chord helper ----
+
+/// rect of the first widget (or plain label) whose text starts with `prefix`
+fn text_rect(h: &Harness<'static, App>, prefix: &str) -> Rect {
+    h.query_all_by(|n| {
+        n.label().is_some_and(|l| l.starts_with(prefix))
+            || n.value().is_some_and(|l| l.starts_with(prefix))
+    })
+    .next()
+    .unwrap_or_else(|| panic!("no text starting {prefix:?}"))
+    .rect()
+}
+
+fn temp_library(tag: &str) -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!("cw-lib-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+#[test]
+fn library_add_save_reload_replace_and_undo() {
+    let mut h = harness();
+    let lib = temp_library("ui");
+    h.state_mut().extra.library_dir = lib.display().to_string();
+    let n0 = song(&mut h, |s| s.instruments.len());
+    // File > Instrument library…
+    click_exact(&mut h, "File");
+    click_label(&mut h, "Instrument library");
+    assert!(h.state().library.open, "library window open");
+    assert!(!h.state().library.factory.is_empty(), "factory list");
+    // "+" on the first factory sound adds it as a new slot
+    let first = h.state().library.factory[0].name.clone();
+    let row = text_rect(&h, &format!("{first} ("));
+    let plus = *rects(&h, Role::Button, Some("+"))
+        .iter()
+        .find(|r| (r.center().y - row.center().y).abs() < 4.0 && r.right() <= row.left() + 1.0)
+        .expect("+ next to the first factory sound");
+    click_at(&mut h, plus.center());
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0 + 1);
+    assert_eq!(instr_names(&mut h)[n0], first);
+    assert_eq!(h.state().instr as usize, n0 + 1, "new slot selected");
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0, "undo add");
+    // save slot 02 to the library from the footer button; it shows up in "My library"
+    h.state_mut().instr = 2;
+    frames(&mut h, 2);
+    let name2 = instr_names(&mut h)[1].clone();
+    click_label(&mut h, "Save 02 ");
+    let files: Vec<_> = std::fs::read_dir(&lib)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .collect();
+    assert_eq!(files.len(), 1, "one .cwi written: {files:?}");
+    frames(&mut h, 2);
+    assert!(
+        h.state().library.user.iter().any(|e| e.name == name2),
+        "rescanned library lists {name2}"
+    );
+    // the saved file round-trips
+    let back = crate::instfile::load_cwi(&files[0]).unwrap();
+    assert_eq!(back.name, name2);
+    // right-click a factory sound > Replace sound of 05 keeps slot 05's notes
+    h.state_mut().instr = 5;
+    frames(&mut h, 2);
+    let uses5 = song(&mut h, |s| s.instrument_uses(5));
+    assert!(uses5 > 0);
+    let label = format!("{} (", h.state().library.factory[1].name);
+    let r = text_rect(&h, &label);
+    click_with(&mut h, r.center(), egui::PointerButton::Secondary);
+    click_label(&mut h, "Replace sound of 05");
+    assert_eq!(instr_names(&mut h)[4], h.state().library.factory[1].name);
+    assert_eq!(song(&mut h, |s| s.instrument_uses(5)), uses5, "notes kept");
+    ctrl_z(&mut h);
+    assert_ne!(
+        instr_names(&mut h)[4],
+        h.state().library.factory[1].name,
+        "undo replace"
+    );
+    let _ = std::fs::remove_dir_all(&lib);
+}
+
+#[test]
+fn instrument_rename_move_and_swap_from_the_instrument_list() {
+    let mut h = harness();
+    let before = song(&mut h, |s| s.clone());
+    // double-click renames inline; Enter commits; Ctrl+Z undoes
+    let r = labelled(&h, "03  ");
+    double_click(&mut h, r.center());
+    assert!(h.state().renaming.is_some(), "rename field open");
+    h.state_mut().renaming.as_mut().unwrap().1 = "Hat X".into();
+    key(&mut h, Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(instr_names(&mut h)[2], "Hat X");
+    ctrl_z(&mut h);
+    assert_eq!(
+        instr_names(&mut h)[2],
+        before.instruments[2].name,
+        "undo rename"
+    );
+    // context menu > Move down: slot 03 becomes 04 and its notes follow
+    let u3 = before.instrument_uses(3);
+    let u4 = before.instrument_uses(4);
+    instr_menu(&mut h, 3);
+    click_label(&mut h, "Move down");
+    let after = song(&mut h, |s| s.clone());
+    assert_eq!(after.instruments[3].name, before.instruments[2].name);
+    assert_eq!(after.instruments[2].name, before.instruments[3].name);
+    assert_eq!(after.instrument_uses(4), u3);
+    assert_eq!(after.instrument_uses(3), u4);
+    // the moved song renders exactly like the original
+    let render = |s: &Song| {
+        let mut e = Engine::new(48000.0);
+        let mut s = s.clone();
+        s.order.truncate(2);
+        e.start(&s, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 48000];
+        e.render(&s, &mut buf);
+        buf
+    };
+    assert_eq!(render(&before), render(&after), "move keeps the sound");
+    ctrl_z(&mut h);
+    assert_eq!(
+        instr_names(&mut h),
+        before
+            .instruments
+            .iter()
+            .map(|i| i.name.clone())
+            .collect::<Vec<_>>()
+    );
+    // Up / Down buttons
+    h.state_mut().instr = 2;
+    frames(&mut h, 2);
+    click_exact(&mut h, "Up");
+    assert_eq!(instr_names(&mut h)[0], before.instruments[1].name);
+    assert_eq!(h.state().instr, 1, "selection follows");
+    ctrl_z(&mut h);
+    // Use this instead of > 02 (whole song): 02's notes now play 06
+    let u2 = before.instrument_uses(2);
+    let u6 = before.instrument_uses(6);
+    instr_menu(&mut h, 6);
+    click_label(&mut h, "Use this instead of");
+    click_label(&mut h, &format!("02 {}", before.instruments[1].name));
+    assert_eq!(song(&mut h, |s| s.instrument_uses(2)), 0);
+    assert_eq!(song(&mut h, |s| s.instrument_uses(6)), u2 + u6);
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.instrument_uses(2)), u2, "undo swap");
+    // search filters the list
+    h.state_mut().instr_query = "bass".into();
+    frames(&mut h, 2);
+    let shown = h
+        .query_all_by(|n| {
+            n.label()
+                .is_some_and(|l| l.len() > 4 && l.as_bytes()[2] == b' ' && l.as_bytes()[3] == b' ')
+        })
+        .count();
+    let want = before
+        .instruments
+        .iter()
+        .filter(|i| i.name.to_lowercase().contains("bass"))
+        .count();
+    assert_eq!(shown, want, "search shows only matching instruments");
+}
+
+#[test]
+fn chord_helper_pads_progression_write_undo_and_scale_lock() {
+    let mut h = harness();
+    // Song > Chord helper…
+    click_exact(&mut h, "Song");
+    click_label(&mut h, "Chord helper");
+    assert!(h.state().chords.open);
+    click_label(&mut h, "Detect from song");
+    let k = song(&mut h, |s| s.info.key).expect("key set by detection");
+    assert_eq!(k.name(), "A minor", "Lumen Drift is in A minor");
+    // click pads i, VI, III, VII (A minor: Am F C G)
+    let pads: Vec<Rect> = (1..=7)
+        .map(|d| {
+            h.query_all_by(|n| {
+                n.role() == Role::Button
+                    && n.label().is_some_and(|l| {
+                        l.ends_with(["Am", "Bdim", "C", "Dm", "Em", "F", "G"][d - 1])
+                            && l.contains('\n')
+                    })
+            })
+            .next()
+            .unwrap_or_else(|| panic!("pad {d}"))
+            .rect()
+        })
+        .collect();
+    for d in [0, 5, 2, 6] {
+        click_at(&mut h, pads[d].center());
+    }
+    let degs: Vec<usize> = h.state().chords.prog.iter().map(|s| s.deg).collect();
+    assert_eq!(degs, [0, 5, 2, 6]);
+    // a pad click previews: live voices sound
+    assert!(!h.state().chords.offs.is_empty(), "preview notes held");
+    // write into an empty block on channel 2 as chords
+    let p = h.state().pattern;
+    h.state_mut().ch = 1;
+    let before = song(&mut h, |s| s.patterns[p].clone());
+    click_label(&mut h, "Write into block");
+    let after = song(&mut h, |s| s.patterns[p].clone());
+    let ch_notes = |c: usize| -> Vec<u8> {
+        after
+            .cells
+            .iter()
+            .map(|r| r[c].note)
+            .filter(|&n| n > 0 && n < 97)
+            .collect()
+    };
+    assert!(
+        !ch_notes(1).is_empty() && !ch_notes(2).is_empty() && !ch_notes(3).is_empty(),
+        "triad over 3 channels"
+    );
+    for c in 1..4 {
+        for n in ch_notes(c) {
+            assert!(k.contains(crate::chords::pc_of(n)), "note {n} in A minor");
+        }
+    }
+    assert_eq!(
+        after.cells.iter().map(|r| r[0]).collect::<Vec<_>>(),
+        before.cells.iter().map(|r| r[0]).collect::<Vec<_>>(),
+        "channel 1 untouched"
+    );
+    ctrl_z(&mut h);
+    assert_eq!(
+        song(&mut h, |s| s.patterns[p].clone()).cells,
+        before.cells,
+        "undo write"
+    );
+    // bass style writes one channel
+    click_exact(&mut h, "Bass");
+    click_label(&mut h, "Write into block");
+    let after = song(&mut h, |s| s.patterns[p].clone());
+    assert!(after.cells.iter().any(|r| r[1].note > 0 && r[1].note < 97));
+    assert_eq!(
+        after.cells.iter().map(|r| r[2]).collect::<Vec<_>>(),
+        before.cells.iter().map(|r| r[2]).collect::<Vec<_>>(),
+        "bass: one channel"
+    );
+    ctrl_z(&mut h);
+    // scale lock: typing C# (key 2, in octave 4) snaps into A minor
+    click_label(&mut h, "Scale lock");
+    assert!(h.state().extra.scale_lock);
+    exact(&h, "lock A minor");
+    h.state_mut().chords.open = false;
+    h.state_mut().edit = true;
+    h.state_mut().row = 1;
+    h.state_mut().col = 0;
+    h.state_mut().ch = 5;
+    frames(&mut h, 2);
+    key(&mut h, Key::Num2, egui::Modifiers::NONE); // C#
+    let c = song(&mut h, |s| s.patterns[p].cells[1][5]);
+    assert!(
+        c.note > 0 && k.contains(crate::chords::pc_of(c.note)),
+        "snapped note {}",
+        c.note
+    );
+    // without the lock the same key gives C#
+    h.state_mut().extra.scale_lock = false;
+    h.state_mut().row = 2;
+    frames(&mut h, 2);
+    key(&mut h, Key::Num2, egui::Modifiers::NONE);
+    let c2 = song(&mut h, |s| s.patterns[p].cells[2][5]);
+    assert_eq!(crate::chords::pc_of(c2.note), 1, "unlocked C#: {}", c2.note);
+}

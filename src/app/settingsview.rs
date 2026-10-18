@@ -4,7 +4,7 @@ use crate::keymap::{self, Action, Bind, Combo};
 
 pub(super) const CARDS: [&str; 6] = ["Audio", "Look", "Keys", "Files & Safety", "MIDI", "Plugins"];
 
-fn open_folder(p: &std::path::Path) {
+pub(super) fn open_folder(p: &std::path::Path) {
     let _ = std::fs::create_dir_all(p);
     #[cfg(windows)]
     let cmd = "explorer";
@@ -556,6 +556,33 @@ impl App {
                         if let Some(d) = rfd::FileDialog::new().pick_folder() {
                             self.extra.song_dir = d.display().to_string();
                             changed = true;
+                        }
+                    }
+                });
+                ui.end_row();
+                ui.label("Instrument library");
+                ui.horizontal(|ui| {
+                    let def = crate::instfile::library_dir("")
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default();
+                    changed |= ui
+                        .add(
+                            egui::TextEdit::singleline(&mut self.extra.library_dir)
+                                .hint_text(def)
+                                .desired_width(300.0),
+                        )
+                        .on_hover_text("where Save to library puts .cwi instrument files; sub-folders become categories")
+                        .changed();
+                    if ui.button("Browse…").clicked() {
+                        if let Some(d) = rfd::FileDialog::new().pick_folder() {
+                            self.extra.library_dir = d.display().to_string();
+                            changed = true;
+                        }
+                    }
+                    if ui.button("Open").clicked() {
+                        if let Some(p) = crate::instfile::library_dir(&self.extra.library_dir) {
+                            let _ = std::fs::create_dir_all(&p);
+                            open_folder(&p);
                         }
                     }
                 });

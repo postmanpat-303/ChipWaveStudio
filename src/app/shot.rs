@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 10] = [
+pub const VIEWS: [&str; 12] = [
     "pattern",
     "arranger",
     "mixer",
@@ -44,6 +44,8 @@ pub const VIEWS: [&str; 10] = [
     "about",
     "themes",
     "voice",
+    "library",
+    "chords",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -89,6 +91,17 @@ impl App {
                 self.set_open = Some(1);
             }
             "about" => self.show_about = true,
+            "library" => self.open_library(),
+            "chords" => {
+                self.chords.open = true;
+                self.detect_key();
+                // i - VI - III - VII (Am F C G), the trance staple
+                self.chords.prog = [0usize, 5, 2, 6]
+                    .iter()
+                    .map(|&d| crate::chords::Step::new(d, crate::chords::ChordKind::Triad))
+                    .collect();
+                self.chords.prog[3].beats = 8.0;
+            }
             "themes" => {}
             _ => {}
         }
@@ -101,7 +114,7 @@ impl App {
                 let pos = 13.min(song.order.len().saturating_sub(1));
                 engine.start(song, pos, 32, false, 0);
             });
-        } else if !matches!(view, "fill" | "settings" | "about") {
+        } else if !matches!(view, "fill" | "settings" | "about" | "library" | "chords") {
             self.play(3);
         }
         ctx.request_repaint();

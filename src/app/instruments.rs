@@ -24,12 +24,59 @@ impl App {
                 })
                 .collect()
         });
+        // search (name or kind); shown once the list gets long
+        if names.len() > 6 || !self.instr_query.is_empty() {
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.instr_query)
+                        .hint_text("search instruments")
+                        .desired_width(150.0),
+                )
+                .on_hover_text("filter the list by name or kind (synth, sample, voice)");
+                if !self.instr_query.is_empty() && ui.small_button("×").clicked() {
+                    self.instr_query.clear();
+                }
+            });
+        }
+        let q = self.instr_query.to_lowercase();
+        let mut commit_rename: Option<(u8, String)> = None;
         egui::ScrollArea::vertical()
             .id_salt("inst")
             .max_height(260.0)
             .show(ui, |ui| {
                 for (i, (n, tag)) in names.iter().enumerate() {
                     let slot = (i + 1) as u8;
+                    let kind = if tag.is_empty() { "synth" } else { tag.trim() };
+                    if !q.is_empty()
+                        && !q
+                            .split_whitespace()
+                            .all(|w| n.to_lowercase().contains(w) || kind.contains(w))
+                    {
+                        continue;
+                    }
+                    if let Some((rs, txt)) = &mut self.renaming {
+                        if *rs == slot {
+                            ui.horizontal(|ui| {
+                                ui.add_space(14.0);
+                                ui.label(egui::RichText::new(format!("{slot:02X}")).monospace());
+                                let r = ui.add(
+                                    egui::TextEdit::singleline(txt)
+                                        .desired_width(150.0)
+                                        .char_limit(64),
+                                );
+                                r.request_focus();
+                                let enter = ui.input(|i| i.key_pressed(Key::Enter));
+                                let esc = ui.input(|i| i.key_pressed(Key::Escape));
+                                if esc {
+                                    commit_rename = Some((0, String::new()));
+                                } else if enter || r.lost_focus() {
+                                    commit_rename = Some((slot, txt.clone()));
+                                }
+                            });
+                            continue;
+                        }
+                    }
                     ui.horizontal(|ui| {
                         ui.add_space(14.0);
                         let txt =
@@ -37,6 +84,9 @@ impl App {
                         let r = ui.selectable_label(self.instr == slot, txt);
                         if r.clicked() {
                             self.instr = slot;
+                        }
+                        if r.double_clicked() {
+                            self.renaming = Some((slot, n.clone()));
                         }
                         // a newly selected instrument (duplicate, Up/Down, MIDI...) scrolls into view
                         if self.instr == slot && self.instr_shown != slot {
@@ -81,6 +131,72 @@ impl App {
                                 ui.close();
                             }
                             ui.separator();
+                            if ui
+                                .button("Rename")
+                                .on_hover_text("or double-click the name")
+                                .clicked()
+                            {
+                                self.renaming = Some((slot, n.clone()));
+                                ui.close();
+                            }
+                            if ui
+                                .add_enabled(i > 0, egui::Button::new("Move up"))
+                                .clicked()
+                            {
+                                self.move_instrument(i, i - 1);
+                                ui.close();
+                            }
+                            if ui
+                                .add_enabled(i + 1 < names.len(), egui::Button::new("Move down"))
+                                .clicked()
+                            {
+                                self.move_instrument(i, i + 1);
+                                ui.close();
+                            }
+                            ui.menu_button("Use this instead of", |ui| {
+                                ui.label(
+                                    egui::RichText::new(
+                                        "notes of the instrument you pick switch to this one",
+                                    )
+                                    .small()
+                                    .color(th().ink2),
+                                );
+                                for (j, (m, _)) in names.iter().enumerate() {
+                                    let other = (j + 1) as u8;
+                                    if other == slot {
+                                        continue;
+                                    }
+                                    ui.horizontal(|ui| {
+                                        if ui
+                                            .button(format!("{other:02X} {m}"))
+                                            .on_hover_text("whole song")
+                                            .clicked()
+                                        {
+                                            self.swap_instrument_notes(other, slot, false);
+                                            ui.close();
+                                        }
+                                        if ui.small_button("this block").clicked() {
+                                            self.swap_instrument_notes(other, slot, true);
+                                            ui.close();
+                                        }
+                                    });
+                                }
+                            });
+                            ui.separator();
+                            if ui.button("Save to library").clicked() {
+                                self.save_instrument_to_library(slot);
+                                ui.close();
+                            }
+                            if ui.button("Export .cwi…").clicked() {
+                                self.export_instrument(slot);
+                                ui.close();
+                            }
+                            if ui.button("Replace sound from library…").clicked() {
+                                self.instr = slot;
+                                self.open_library();
+                                ui.close();
+                            }
+                            ui.separator();
                             if ui.button("Duplicate instrument").clicked() {
                                 self.duplicate_instrument(slot);
                                 ui.close();
@@ -95,6 +211,24 @@ impl App {
                     });
                 }
             });
+        if let Some((slot, name)) = commit_rename {
+            self.renaming = None;
+            let name = name.trim().to_string();
+            if slot > 0 && !name.is_empty() {
+                self.snapshot();
+                let i = slot as usize - 1;
+                self.with(|s| {
+                    if let Some(x) = s.song.instruments.get_mut(i) {
+                        x.name = name.clone();
+                        if let InstrumentKind::Synth(p) = &mut x.kind {
+                            p.name = name.clone();
+                        }
+                    }
+                });
+                self.dirty = true;
+                self.status = format!("Renamed instrument {slot:02X} to {name}");
+            }
+        }
         let has = (self.instr as usize).wrapping_sub(1) < names.len();
         ui.horizontal(|ui| {
             ui.add_space(14.0);
@@ -111,6 +245,28 @@ impl App {
                 .clicked()
             {
                 self.request_delete_instrument(self.instr);
+            }
+            let i = (self.instr as usize).wrapping_sub(1);
+            if ui
+                .add_enabled(has && i > 0, egui::Button::new("Up").small())
+                .on_hover_text("move the selected instrument up one slot (notes follow)")
+                .clicked()
+            {
+                self.move_instrument(i, i - 1);
+            }
+            if ui
+                .add_enabled(has && i + 1 < names.len(), egui::Button::new("Down").small())
+                .on_hover_text("move the selected instrument down one slot (notes follow)")
+                .clicked()
+            {
+                self.move_instrument(i, i + 1);
+            }
+            if ui
+                .button(egui::RichText::new("Library…").small())
+                .on_hover_text("browse, audition, add and save instruments (.cwi files)")
+                .clicked()
+            {
+                self.open_library();
             }
         });
         ui.horizontal(|ui| {

@@ -148,3 +148,18 @@ in the block bar or the Song menu, 1-32). The bar under the pattern grid and
 under the mixer strips shows which channels are in view; click or drag it to
 scroll (Tab / Shift+Tab move through the channels). Songs with more than 8
 channels open in older versions with only their first 8.
+
+Instrument library (0.2.3.9): File > Instrument library... shows the song's
+instruments, your library folder (.cwi files, sub-folders = categories) and
+the factory sounds; > auditions, + adds, right-click replaces the selected
+slot's sound but keeps its notes. In the instrument list: double-click to
+rename, Up / Down to reorder (notes follow), right-click > Use this instead
+of to swap instruments in the song or one block, Save to library, Export
+.cwi. Drop a .cwi file on the window to import it.
+
+Chord helper (0.2.3.9): Song > Chord helper... or Chords... in the block bar.
+Pick or detect the song key, click chord pads to hear them and build a
+progression (or pick a preset), then Write into block as chords, arp or
+bass. Scale lock snaps typed and MIDI notes to the key. Key detection:
+Krumhansl-Schmuckler with the Krumhansl & Kessler (1982) profiles; the
+workflow is inspired by Scaler (Plugin Boutique), no material used.
