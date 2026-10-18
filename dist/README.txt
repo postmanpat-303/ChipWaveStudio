@@ -1,9 +1,9 @@
-ChipWave Tracker 0.2.3.5 - Windows x64
+ChipWave Tracker 0.2.3.14 - Windows x64
 ==============================================================
 GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
 
-Run: double-click ChipWave.exe (no install needed; single self-contained exe).
+Run: the setup .exe installs it; the zip holds a portable ChipWave.exe (no install needed).
 Windows SmartScreen may warn because the exe is not code-signed:
 "More info" -> "Run anyway".
 
@@ -69,100 +69,58 @@ MIDI keyboard (0.2.3, details in docs/MIDI.md on GitHub)
     Drive / BPM > "MIDI learn", then move a knob or the mod wheel.
   Check a keyboard from cmd:  ChipWave.exe --midi-list   and   ChipWave.exe --midi-monitor 15
 
-Effects: 01/02 slide up/down, 08 note decay (xx x 10 ms), 09 speed,
-0C set volume, 0D volume slide,
-0F tempo (0F00 = pattern break).
+
+Pattern effects (full table: docs/PATTERN_EDITOR.md on GitHub)
+  01xx / 02xx  slide up / down           08xx  note decay (xx x 10 ms)
+  09xx         speed (ticks per row)     0Cxx  set volume      0Dxy  volume slide
+  0Fxx         tempo (0F00 = pattern break)
+  30xy  Voice vowel x (0 A 1 E 2 I 3 O 4 U 5 ER 6 AE), glide y x 25 ms
+  31xx  Voice sequence step          32xx  Voice formant shift (80 = x1)
+  33xy  stutter, any instrument (x length 1=1/64 .. 6=1/2 note, y repeats)
+  34xy  stutter pitch +x / -y        35xx  Voice breath
+  36xy  Voice babble                 37xy  Voice chop gate
+  38xx  filter cutoff (00 = instrument, 01-FF = 20 Hz-20 kHz)
+  39xx  filter resonance             3Axx / 3Bxx  cutoff slide up / down per tick
+  3Cxx  303 glide (00 off, 01 instrument time, 02-FF xx x 5 ms)
+  3Dxx  accent (00 = instrument amount, 01-40 = amount)
+  3Exx  Voice: speak word xx
+  3Fxx  Voice Transform blend        40xx  metallic resonance (also Metal resonator device)
+  41xx  digital distortion (also Digital distortion device)
+  42xx  sub level (also Sub bass device)   (3F-42: 00 = instrument, 01-FF = 0-100 %)
+  43xy  generator macro x (1-8) = y (0-F); 4300 = instrument values
 
 Instruments: the left panel lists the factory psytrance/alien synth sounds;
-select one to edit oscillator, filter (LP/HP/BP, cutoff, resonance), envelope.
+select one to edit oscillator, filter (SVF or Moog ladder, LP/HP/BP, cutoff,
+resonance), envelopes, LFO, glide and accent. "New..." under the list adds a
+synth, a Voice (glitch), or a Generator (drums, chip FX, analog, FM-4, noise).
 Import WAV samples with "Import WAV..." or drag .wav files onto the window.
-Demo song "Lumen Drift" (trance, A minor, 140 BPM, 2:26): opens on first run;
-load it any time with File > New from demo song or Help > Load demo song.
-Synth: "Stereo width" spreads unison voices (and noise); LFO (shape, free Hz or
-synced 1/16..2 bars) to cutoff, amp (trance gate) and pitch.
-0.2.3.4: demo hi-hat is a classic offbeat hat (one hit between kicks).
-0.2.3.3: reworked hi-hats in the demo; "Metal (808)" metallic hat source,
-"Velocity > cutoff" (soft notes darker), "Start delay" (laid-back percussion),
-new "shaker" sound, effect 08xx = note decay (short/long hats). A new note on
-the same channel chokes the old one (open hat cut by the next closed hat).
-Rows now play sample-accurately (the first row after Play was 1 tick early).
 Right-click an instrument: Add effect, Copy effects, Paste effects (replace or
 append), Open in FX view, Duplicate, Delete. Ctrl+Z undoes each.
-Mixer: double-click a fader = 0 dB, double-click pan = centre.
+Instrument panel: Transpose -12 / - / + / +12 per instrument.
+
+Demo songs: File > Demo songs: "Lumen Drift" (uplifting trance, A minor,
+140 BPM, 2:26; opens on first run) and "Hollow Ritual" (dark psytrance,
+E Phrygian, 147 BPM). Help > Load demo song loads Lumen Drift.
+
+Mixer: per-channel fader, pan, mute/solo, delay/reverb sends, meters; master
+fader. Double-click a fader = 0 dB, double-click pan = centre.
   Sidechain: pick the "Sidechain key" channel (e.g. the kick) and a release;
   each channel's "Duck" % sets how far it pumps under the key notes.
+Master limiter and loudness (0.2.3.7): Mixer > "Limiter & loudness" (right of
+  the master strip). True-peak limiter on the master and in every export:
+  gain, ceiling (default -1.0 dBTP), release; untick it for the old soft clip.
+  Readout: momentary / short-term / integrated LUFS and true peak (ITU-R BS.1770).
 Audio: "Buffer" in the toolbar (Auto/256/512/1024/2048). The status bar
-shows latency and an underrun counter; latency grows automatically on dropouts.
-BPM / Speed changes apply instantly, also while playing.
+  shows latency and an underrun counter; latency grows automatically on dropouts.
 Arranger: song order as coloured clips; drag to reorder, click to open a block.
   "Dock arranger" shows it under the pattern editor.
 Automation: lanes under the arranger (toggle "Automation", "+ Lane"): click = add point,
   drag = move, right-click = delete, Pencil = draw, Shape = Linear/Step/Smooth.
   Targets: synth cutoff/resonance/drive, amp level, mixer volume/pan, master, tempo.
-Mixer: per-channel fader, pan, mute/solo, meters; master fader. Saved in .cwt.
-Instrument panel: Transpose -12 / - / + / +12 per instrument.
-Theme: "Dark Circuit (default)" or "Amiga (Workbench Gradient)" in the toolbar.
-Voice (glitch) instrument (0.2.3.6): "New..." under the instrument list (or right-click
-  an instrument > New instrument) > Voice (glitch) > a preset. Synthetic vowels
-  (ahh eee ohh err), babble, chop and stutter. Pattern effects 30-37: 30xy vowel x
-  (0 A 1 E 2 I 3 O 4 U 5 ER 6 AE) glide y*25 ms, 31xx sequence step, 32xx formant
-  shift (80 = x1), 33xy stutter (x length 1=1/64 .. 3=1/16 .. 6=1/2 note, y repeats;
-  any instrument), 34xy stutter pitch +x/-y, 35xx breath, 36xy babble, 37xy chop.
-Demo songs: File > Demo songs (Lumen Drift, Hollow Ritual).
-Credits: Help > About and THIRD_PARTY_LICENSES.txt (Voice design inspired by
-  Mutable Instruments Plaits by Emilie Gillet, MIT; formant data from the Csound
-  manual and Peterson & Barney 1952).
-Updates (0.2.3.5): Help > Check for updates... asks GitHub for a newer version and
-  shows the release notes; "Download installer" opens the setup .exe in your browser
-  (nothing is downloaded or opened unless you click). Settings > Files & Safety >
-  "Check for updates at startup" (on by default, at most once a day): a small
-  "Update X available" badge appears in the menu bar. "Skip this version" stops
-  reminders for that version.
+Theme: "Dark Circuit (default)" or "Amiga (Workbench Gradient)" (View > Theme).
 
-Command line:
-  ChipWave.exe --self-test [out.wav]   render the demo, check it is not silent
-  ChipWave.exe --render demo out.wav   render the demo (or a .cwt) to WAV (or .mp3)
-  ChipWave.exe --version
-  ChipWave.exe --check-updates        ask GitHub whether a newer version is out
-
-Created by Derek Heasley.
-To keep the software going I need Coffee :)
-Buy me a coffee: https://buymeacoffee.com/postmanpat
-PayPal:          https://paypal.me/derekh100   (both also in Help > About)
-
-Master limiter and loudness (0.2.3.7): Mixer > "Limiter & loudness" (right of
-the master strip). True-peak limiter on the master and in every export:
-gain, ceiling (default -1.0 dBTP), release; untick it for the old soft clip.
-Readout: momentary / short-term / integrated LUFS and true peak (ITU-R BS.1770).
-
-Filter and acid effects (0.2.3.7): 38xx cutoff (00 = instrument, 01-FF =
-20 Hz-20 kHz), 39xx resonance, 3Axx / 3Bxx cutoff slide up / down per tick,
-3Cxx glide to the note (00 off, 01 instrument time, 02-FF xx*5 ms), 3Dxx
-accent. Sound editor: Glide time + Legato, Accent amount + "at vol >=".
-Reverb has Low cut (default 200 Hz) and High cut; the fold drive no longer
-flips polarity.
-
-
-Up to 32 channels (0.2.3.8): each song sets its channel count (Channels box
-in the block bar or the Song menu, 1-32). The bar under the pattern grid and
-under the mixer strips shows which channels are in view; click or drag it to
-scroll (Tab / Shift+Tab move through the channels). Songs with more than 8
-channels open in older versions with only their first 8.
-
-Instrument library (0.2.3.9): File > Instrument library... shows the song's
-instruments, your library folder (.cwi files, sub-folders = categories) and
-the factory sounds; > auditions, + adds, right-click replaces the selected
-slot's sound but keeps its notes. In the instrument list: double-click to
-rename, Up / Down to reorder (notes follow), right-click > Use this instead
-of to swap instruments in the song or one block, Save to library, Export
-.cwi. Drop a .cwi file on the window to import it.
-
-Voice words and Throat mode (0.2.3.10): a Voice instrument's Words row
-holds short words (ka, ta, sha, dum ...); each note speaks the next one and
-3Exx speaks word xx. Tract: Throat swaps the formant filters for a simulated
-vocal tract inspired by Pink Trombone by Neil Thapen (MIT). Presets: Talk
-Ka-Ta, Throat Ahh, Throat Speech, Demon Words.
-
+What's new, newest first
+------------------------
 Analog, FM-4, Noise (0.2.3.14): New... > Generator (analog) is a Moog-style
 synth: 3 drifting oscillators (saw/tri/square/pulse, PWM, sync), noise, the
 vintage ladder, filter + amp envelopes, glide/legato. Presets Fat Moog Bass,
@@ -198,10 +156,24 @@ Digital Ghost, Sub Beast, Cyber Choir, Ritual Growl. Pattern: 3Fxx blend,
 The stages are also FX devices for any instrument (Metal resonator, Digital
 distortion, Sub bass).
 
+Voice words and Throat mode (0.2.3.10): a Voice instrument's Words row
+holds short words (ka, ta, sha, dum ...); each note speaks the next one and
+3Exx speaks word xx. Tract: Throat swaps the formant filters for a simulated
+vocal tract inspired by Pink Trombone by Neil Thapen (MIT). Presets: Talk
+Ka-Ta, Throat Ahh, Throat Speech, Demon Words.
+
 Chop / slice (0.2.3.10): in the Sample editor, Transients or Grid cuts the
 sample into numbered slices; click one (or Prev / Next) to edit just that
 slice; To instruments makes one instrument per slice, To notes also writes
 them into the block on the cursor channel at the song tempo.
+
+Instrument library (0.2.3.9): File > Instrument library... shows the song's
+instruments, your library folder (.cwi files, sub-folders = categories) and
+the factory sounds; > auditions, + adds, right-click replaces the selected
+slot's sound but keeps its notes. In the instrument list: double-click to
+rename, Up / Down to reorder (notes follow), right-click > Use this instead
+of to swap instruments in the song or one block, Save to library, Export
+.cwi. Drop a .cwi file on the window to import it.
 
 Chord helper (0.2.3.9): Song > Chord helper... or Chords... in the block bar.
 Pick or detect the song key, click chord pads to hear them and build a
@@ -209,3 +181,52 @@ progression (or pick a preset), then Write into block as chords, arp or
 bass. Scale lock snaps typed and MIDI notes to the key. Key detection:
 Krumhansl-Schmuckler with the Krumhansl & Kessler (1982) profiles; the
 workflow is inspired by Scaler (Plugin Boutique), no material used.
+
+Up to 32 channels (0.2.3.8): each song sets its channel count (Channels box
+in the block bar or the Song menu, 1-32). The bar under the pattern grid and
+under the mixer strips shows which channels are in view; click or drag it to
+scroll (Tab / Shift+Tab move through the channels). Songs with more than 8
+channels open in older versions with only their first 8.
+
+Filter and acid effects (0.2.3.7): 38xx-3Dxx (see the table above). Sound
+editor: Glide time + Legato, Accent amount + "at vol >=". Reverb has Low cut
+(default 200 Hz) and High cut; the fold drive no longer flips polarity.
+
+Voice (glitch) instrument (0.2.3.6): "New..." under the instrument list (or
+right-click an instrument > New instrument) > Voice (glitch) > a preset.
+Synthetic vowels (ahh eee ohh err), babble, chop and stutter (effects 30-37).
+
+Updates (0.2.3.5): Help > Check for updates... asks GitHub for a newer version and
+shows the release notes; "Download installer" opens the setup .exe in your browser
+(nothing is downloaded or opened unless you click). Settings > Files & Safety >
+"Check for updates at startup" (on by default, at most once a day): a small
+"Update X available" badge appears in the menu bar. "Skip this version" stops
+reminders for that version.
+
+Earlier: 0.2.3.4 classic offbeat demo hat; 0.2.3.3 "Metal (808)" hat source,
+"Velocity > cutoff", "Start delay", shaker, 08xx note decay, same-channel choke,
+sample-accurate rows.
+
+Command line:
+  ChipWave.exe --self-test [out.wav]   render the demo and check every engine
+  ChipWave.exe --render demo out.wav   render the demo (or a .cwt) to WAV (or .mp3)
+  ChipWave.exe --version
+  ChipWave.exe --check-updates         ask GitHub whether a newer version is out
+
+Videos: promo https://youtu.be/6VWhFZxexIc
+        demos & promos https://www.youtube.com/@whatgoesaround1551
+
+Credits (full list with links: Help > About and THIRD_PARTY_LICENSES.txt):
+  OctaMED (Teijo Kinnunen, Ray Burt-Frost); Plaits (Emilie Gillet, MIT) and
+  DaisySP (Electrosmith, MIT); Pink Trombone (Neil Thapen, MIT); Sonic Pi sc808
+  (Sam Aaron et al., MIT); sfxr (DrPetter, MIT) and sfxr-rs (Teemu Erkkola,
+  MIT); Vital (Matt Tytel) and Surge XT (GPL-3, ideas only); Dexed (Pascal
+  Gauthier, GPL-3) and MSFA (Raph Levien, Apache-2.0, ideas only); Zavalishin,
+  Huovilainen and Valimaki (filters, oscillators); Signalsmith (limiter);
+  ITU-R BS.1770 / EBU R 128; Csound formants, Peterson & Barney 1952;
+  Krumhansl & Kessler 1982; Paul Kellet (pink noise); the Rust crate authors.
+
+Created by Derek Heasley.
+To keep the software going I need Coffee :)
+Buy me a coffee: https://buymeacoffee.com/postmanpat
+PayPal:          https://paypal.me/derekh100   (both also in Help > About)

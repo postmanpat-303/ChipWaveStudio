@@ -20,7 +20,7 @@
 
 - **In this song**: the song's instruments, with how many notes use each. Right-click for Move up/down, Save to library, Export, and *Use instead of XX* (whole song / this block; XX = the instrument selected in the main list).
 - **My library**: `.cwi` files in your library folder. Sub-folders (one level) are categories, e.g. `Instruments/Bass/Rolling.cwi`.
-- **Factory**: the factory synth presets, the built-in sounds (init, trance kick, hats, shaker, clap, riser) and the Voice presets.
+- **Factory**: the factory synth presets, the built-in sounds (init, trance kick, hats, shaker, clap, riser), the Voice presets and (since 0.2.3.12) every Generator preset (kind "generator": drums and kits, Chip FX, and from 0.2.3.14 Analog, FM-4 and Noise, 46 in all).
 
 `›` auditions a sound (a short phrase with the current song's tempo, about 2.5 s, without touching the song), `+` adds it as a new instrument (selected, undoable), and right-click > **Replace sound of XX** swaps the selected slot's sound while keeping its notes. The search box matches the name, kind and category; the chips filter by kind. **Rescan** re-reads the folder, **Open folder** opens it in the file manager, **Import .cwi…** adds a file from anywhere. Dropping a `.cwi` file on the window imports it too.
 
@@ -33,7 +33,7 @@ A `.cwi` is a small ZIP, like a `.cwt` song:
 | Entry | Content |
 |---|---|
 | `mimetype` | `application/x-chipwave-instrument` (stored, first) |
-| `instrument.toml` | `format = "chipwave-instrument"`, `format_version = 1`, `app = "ChipWave Tracker 0.2.3.9"`, then the `[instrument]` table: exactly the same fields a song's instrument has (synth patch, sample settings, Voice parameters, FX chain, glide/accent, transpose, …) |
+| `instrument.toml` | `format = "chipwave-instrument"`, `format_version = 1`, `app = "ChipWave Tracker <version>"` (e.g. `0.2.3.14`), then the `[instrument]` table: exactly the same fields a song's instrument has (synth patch, sample settings, Voice parameters, Generator engine and knobs, FX chain, glide/accent, transpose, …) |
 | `sample.wav` | only for sample instruments: the sample as 32-bit float WAV |
 
 Files are written to a temporary name and renamed, so a crash never leaves half a file. Unknown fields are ignored and missing ones take their defaults, so later versions can add fields; a `format_version` above 1 is refused with a message.

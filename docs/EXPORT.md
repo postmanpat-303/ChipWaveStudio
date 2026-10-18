@@ -1,7 +1,6 @@
 # ChipWave Tracker: Audio Export (WAV and MP3)
 
-**Status:** design. No code yet.
-**Status:** implemented in 0.2.0 (WAV + MP3 via LAME, ID3v2.4 tags, song/block/selection range, limiter/normalise, progress + cancel).
+**Status:** implemented in 0.2.0 (WAV + MP3 via LAME, ID3v2.4 tags, song/block/selection range, limiter/normalise, progress + cancel). Since 0.2.3.7 exports go through the master true-peak limiter (bit-identical to playback), *Normalise* works by true peak, and the status line reports integrated LUFS and dBTP ([MIXER.md](MIXER.md#3-master)).
 ## 1. What can be exported
 | Scope | Description |
 |---|---|

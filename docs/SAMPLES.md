@@ -1,6 +1,6 @@
 # ChipWave Tracker: Instrument List and Sample Importer
 
-**Status:** design. No code yet. Visual style: [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
+**Status (0.2.3.14):** the instrument list (New…, Duplicate, Delete…, Up / Down, rename, search, right-click menu), WAV import (button and drag and drop), the sample view with loop points and preview, and chop / slice (§8, 0.2.3.10) are implemented; the instrument library is in [INSTRUMENT_LIBRARY.md](INSTRUMENT_LIBRARY.md). Formats beyond WAV, the full browser and the MED/MOD slot limits below are still design. Visual style: [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
 
 ![Instrument list and importer mockup](mockups/samples.png)
 
@@ -92,6 +92,9 @@ All decoding runs on a worker thread; large files show progress and can be cance
 - **Phase 1.5:** import options (normalise, mono, resample, Paula crunch, trim, auto loop, naming), favourites, module sample extraction, raw import, purge/compact.
 
 ## 8. Chop / slice (0.2.3.10)
+
+![Chop / slice](screenshots/dark-sample-slicing.png)
+
 The sample editor has a **Slice** row under the edit buttons.
 
 - **Transients** cuts at the hits. The level is measured in 5 ms frames

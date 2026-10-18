@@ -1,6 +1,6 @@
 # ChipWave Tracker: Native Song Format (`.cwt`)
 
-**Status:** design. No code yet.
+**Status (0.2.3.14):** implemented: the `.cwt` ZIP container (TOML + WAV), the single-file text song `.cwt.toml` (used by the demos; `patch = "gen:<preset>"` / `"voice:<preset>"` load factory sounds), `.cwi` instrument files ([INSTRUMENT_LIBRARY.md](INSTRUMENT_LIBRARY.md)), autosave and backups. Up to 32 channels per song (0.2.3.8). New features add fields with defaults, so older songs load unchanged; a song that uses a newer instrument type does not open in an older version. Render-to-sample links, MED/MOD import and file association below are still plans.
 
 `.cwt` is ChipWave's main save format. It holds everything MMD/MOD can't: arranger layout, synth patches and FX chains, render links, settings. MMD/MOD stay **import/export** formats ([OCTAMED_SPEC.md](OCTAMED_SPEC.md)).
 

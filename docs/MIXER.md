@@ -1,5 +1,14 @@
 # Mixer
 
+**Status (0.2.3.14):** this page began as the design. Implemented:
+- a strip per channel (up to 32, scrolling beside the pinned master) with fader, pan, mute/solo and meters;
+- Delay (A) and Reverb (B) sends and returns;
+- sidechain ducking (key channel + Duck % per channel);
+- the master fader;
+- the **Limiter & loudness** panel (0.2.3.7, see §3).
+
+Channel insert slots, extra returns, LRA and stem export are still plans.
+
 ![Mixer mockup](mockups/mixer.png) (SVG: [`mockups/mixer.svg`](mockups/mixer.svg))
 
 Opened with `F6`, or as a dockable panel. There's one strip per tracker channel, plus two send returns and the master. It uses the A2 style with the muted palette; meters and values are the only saturated colours.
@@ -19,10 +28,13 @@ Opened with `F6`, or as a dockable panel. There's one strip per tracker channel,
 Return A has a synced ping-pong delay and return B a Freeverb-style reverb, both from the built-in FX. Each return has its own fader, mute, meter and EQ low-cut. Returns can feed each other (delay → reverb) with a loop guard.
 
 ## 3. Master
+
+![Mixer with the Limiter & loudness panel](screenshots/dark-mixer-limiter.png)
+
 - Master fader and stereo meters.
-- **Limiter:** a look-ahead brickwall (~1.5 ms) with true-peak detection (4× oversampled), ceiling default −0.3 dBTP and release 50 ms (auto option). It shows gain reduction and is on by default on export.
-- **Loudness:** LUFS-M (momentary), LUFS-S (short-term), LUFS-I (integrated since play started) and LRA, per **ITU-R BS.1770 / EBU R128** (K-weighting, 400 ms / 3 s windows, gating). Reset on play. Optional target hints, e.g. "−14 LUFS for streaming", shown neutrally rather than as warnings.
-- **Crate check:** the `ebur128` crate (Rust port of libebur128) is a candidate for this. Check its version and licence on crates.io before adopting it. Otherwise it's about 200 lines of our own code.
+- **Limiter (0.2.3.7):** a lookahead true-peak brickwall limiter on the master and in every export, using the peak-hold + moving-average design from Signalsmith Audio. Controls: gain, ceiling (default **−1.0 dBTP**) and release, with a gain-reduction bar. Unticking it bypasses to the old soft clipper. Exports go through the same limiter and match playback bit for bit.
+- **Loudness (0.2.3.7):** momentary, short-term and integrated LUFS plus true peak, per **ITU-R BS.1770-4 / EBU R 128** (K-weighting, gating). It is ChipWave's own code, checked against libebur128 and pyloudnorm. A neutral loudness-target hint suggests streaming −14, podcast −16, club −9 or broadcast −23 LUFS. Everything sits in the **Limiter & loudness** panel to the right of the master strip.
+- LRA (loudness range) is not shown yet.
 
 ## 4. Engine notes
 - Signal flow per channel: voices → instrument patch FX → channel inserts → fader/pan → sends → master bus → master inserts → limiter → output/export.

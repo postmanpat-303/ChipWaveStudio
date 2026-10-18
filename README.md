@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0a84ff" alt="Windows | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.3.13-00d0ff" alt="Version 0.2.3.13">
+  <img src="https://img.shields.io/badge/version-0.2.3.14-00d0ff" alt="Version 0.2.3.14">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveTracker?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -20,7 +20,7 @@
 
 ```
  ┌──────────────────────────────────────────────────────────────────────────┐
- │  C H I P W A V E   T R A C K E R          v0.2.3.5     BPM 140  SPD 06  │
+ │  C H I P W A V E   T R A C K E R          v0.2.3.14    BPM 140  SPD 06  │
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
  │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ OctaMED-inspired  │
  │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ tracker + synth   │
@@ -30,11 +30,11 @@
 
 <p align="center">
   <img src="docs/screenshots/pattern-playing.gif" alt="The pattern editor playing the Lumen Drift demo (real capture)" width="800">
-  <br><sub>Real capture of ChipWave 0.2.3.5 playing the built-in demo song “Lumen Drift”.</sub>
+  <br><sub>Real capture of ChipWave 0.2.3.14 playing the built-in demo song “Lumen Drift”.</sub>
 </p>
 
 <p align="center">
-  <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest"><b>⬇ Download for Windows</b></a> &nbsp;·&nbsp;
+  <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/tag/v0.2.3.14"><b>⬇ Download 0.2.3.14 for Windows</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -42,7 +42,7 @@
   <a href="https://github.com/postmanpat-303/BigWaveRadio"><b>BigWave Radio</b></a> (sister project)
 </p>
 
-**ChipWave Tracker** is a music tracker inspired by **OctaMED** and the Commodore **Amiga**: the fast, keyboard-driven pattern workflow of a classic tracker, plus a built-in synth, a visual arranger, a mixer with sidechain ducking, automation and WAV/MP3 export. Written in Rust with egui and cpal, for Windows and Linux. Early version, in active development.
+**ChipWave Tracker** is a music tracker inspired by **OctaMED** and the Commodore **Amiga**: the fast, keyboard-driven pattern workflow of a classic tracker, plus a built-in synth, a synthetic Voice instrument, macro-knob Generators (drums, chip FX, analog, FM, noise), a visual arranger, a mixer with sidechain ducking and a true-peak limiter, automation and WAV/MP3 export, in up to 32 channels. Written in Rust with egui and cpal, for Windows and Linux. Early version, in active development.
 
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
@@ -58,7 +58,7 @@ All pictures on this page are real captures of the current build (no mockups). T
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/dark-mixer.png" alt="Mixer"><br><b>Mixer</b>: per-channel fader, pan, mute/solo, peak meters, two send/return buses (delay and reverb) and <b>sidechain ducking</b>: pick a key channel and set Duck % per channel for the trance pump.</td>
-    <td width="50%"><img src="docs/screenshots/dark-fx.png" alt="FX chain"><br><b>FX chain</b>: per-instrument device strip with Filter, Chorus/Flanger, Delay, Reverb, Drive, Bitcrusher and Compressor; bypass, collapse, drag to reorder, presets.</td>
+    <td width="50%"><img src="docs/screenshots/dark-fx-chrome.png" alt="FX chain with the chrome devices"><br><b>FX chain</b>: per-instrument device strip with Filter, Chorus/Flanger, Delay, Reverb, Drive, Bitcrusher and Compressor, plus the chrome devices <b>Metal resonator</b>, <b>Digital distortion</b> and <b>Sub bass</b> (0.2.3.11, they follow the note; <code>40</code>–<code>42</code> set their mix); bypass, collapse, drag to reorder, presets.</td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/dark-fill.png" alt="Fill to length"><br><b>Fill to length</b>: auto-arrange the song to a target length from a style, with an editable energy curve, variation, seed, preview and section locks.</td>
@@ -68,7 +68,7 @@ All pictures on this page are real captures of the current build (no mockups). T
 
 <table>
   <tr>
-    <td width="34%" valign="top"><img src="docs/screenshots/instrument.gif" alt="Sound editor browsing the demo instruments"><br><b>Synth / sound editor</b>: oscillator, unison + detune, stereo width, LP/HP/BP filter with envelope, ADSR, drive, an 808-style metallic source for hats, velocity → cutoff, start delay, 303 glide / legato and accent, and a tempo-syncable LFO to cutoff, amp and pitch. <a href="docs/screenshots/dark-instrument.png">Still</a>.</td>
+    <td width="34%" valign="top"><img src="docs/screenshots/instrument.gif" alt="Sound editor browsing the demo instruments"><br><b>Synth / sound editor</b>: oscillator, unison + detune, stereo width, LP/HP/BP filter (SVF or Moog ladder, clean / vintage, 12/24 dB) with envelope, ADSR, drive, an 808-style metallic source for hats, velocity → cutoff, start delay, 303 glide / legato and accent, and a tempo-syncable LFO to cutoff, amp and pitch. <a href="docs/screenshots/dark-instrument.png">Still</a>.</td>
     <td width="66%" valign="top"><img src="docs/screenshots/mixer-meters.gif" alt="Mixer meters moving while the demo plays"><br><b>Mixer while playing</b>: the pads and bass duck under the kick (sidechain), meters per channel and on the master.
     <br><br><img src="docs/screenshots/arranger.gif" alt="Arranger playhead moving through the song"><br><b>Arranger while playing</b>: the playhead runs through the clips and the automation curves.</td>
   </tr>
@@ -130,12 +130,14 @@ All pictures on this page are real captures of the current build (no mockups). T
 | 🎚️ **Up to 32 channels** | each song sets its own channel count (1–32); the pattern editor and mixer scroll with a bar showing which channels are in view |
 | 🎼 **Chords & scale lock** | song key (pick or detect), chord pads, progressions written as chords, arps or bass, scale lock for typing and MIDI |
 | 📚 **Instrument library** | `.cwi` instrument files, a library folder with categories, factory sounds, audition, rename / reorder / swap instruments |
-| 🎛️ **Effects column** | `01`/`02` slide, `08` note decay, `09` speed, `0C` volume, `0D` volume slide, `0F` tempo; Voice `30`–`37`; filter and acid `38`–`3D` (cutoff, resonance, cutoff slides, 303 glide, accent) |
+| 🎛️ **Effects column** | `01`/`02` slide, `08` note decay, `09` speed, `0C` volume, `0D` volume slide, `0F` tempo; Voice `30`–`37` (`33`/`34` stutter any instrument); filter and acid `38`–`3D` (cutoff, resonance, cutoff slides, 303 glide, accent); `3E` speak word; `3F`–`42` Voice Transform and chrome devices; `43xy` generator macros. Full table: [PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md#5-effect-commands) |
+| 🎲 **Generators** | macro-knob instruments: Drum Synth and kits, Chip FX (sfxr), Analog (Moog-style), FM-4, Noise; Dice, Mutate, locks, 16-roll history, Bake to sample; 46 presets |
+| 🗣️ **Voice** | synthetic vowels, babble, stutter, spoken words, Throat (vocal tract) mode and the Transform (metal, digital, sub) |
 | 🧱 **Master limiter** | lookahead true-peak limiter on the master and in every export (ceiling −1 dBTP by default, gain, release, bypass), with a loudness meter: momentary, short-term and integrated LUFS plus true peak, and a loudness-target hint |
-| 🔊 **Samples** | import WAV (button or drag and drop), sample view with loop points and preview |
+| 🔊 **Samples** | import WAV (button or drag and drop), sample view with loop points and preview, chop / slice into instruments or notes |
 | 💾 **Files** | `.cwt` songs (a ZIP of TOML + WAV you can inspect), autosave, backups and crash recovery |
 | 📼 **Export** | WAV and MP3 with ID3 tags; whole song, the current block or the arranger selection |
-| 🎵 **Demo song** | “Lumen Drift”, an original 140 BPM uplifting trance track (File > New from demo song) |
+| 🎵 **Demo songs** | File > Demo songs: “Lumen Drift” (140 BPM uplifting trance) and “Hollow Ritual” (147 BPM dark psytrance), both original |
 | ⬆️ **Update check** | Help > Check for updates…, and an optional quiet check at startup |
 | 🖥️ **Scaling** | UI scale in 25 % steps (Ctrl+= / Ctrl+-, up to what fits the window), remembers window size and position |
 
@@ -184,7 +186,7 @@ The palettes, generated from the colour values in [`src/theme.rs`](src/theme.rs)
 ```
 <a id="download"></a>
 
-Get the **Windows** installer (`ChipWave-x.y.z-setup-x64.exe`) or the portable zip from the [latest release](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest). The exe isn't code-signed yet, so SmartScreen may warn: click “More info”, then “Run anyway”. The app opens with the demo song loaded: press **Space** to play.
+Get the **Windows** installer [`ChipWave-0.2.3.14-setup-x64.exe`](https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.14/ChipWave-0.2.3.14-setup-x64.exe) or the portable [`ChipWave-0.2.3.14-windows-x64.zip`](https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.14/ChipWave-0.2.3.14-windows-x64.zip) from the [0.2.3.14 release](https://github.com/postmanpat-303/ChipWaveTracker/releases/tag/v0.2.3.14) (always newest: [latest release](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest)). Already on 0.2.3.5 or later? **Help > Check for updates…** offers it. The exe isn't code-signed yet, so SmartScreen may warn: click “More info”, then “Run anyway”. The app opens with the demo song loaded: press **Space** to play.
 
 On Linux, build it from source (below).
 
@@ -236,21 +238,22 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 ```
 
 - MED (MMD0–MMD3) and MOD loading, more OctaMED effect commands, optional “Paula” mode
-- More filter models (ladder, Sallen-Key), wavetables, a full mod matrix, render-to-sample
+- More filter models (Sallen-Key, diode), wavetables, a full mod matrix, render-to-sample for synth and Voice instruments (generators already Bake), oversampled FM
 - MIDI output and clock sync, CLAP/VST3 plugin hosting (the Plugins settings card is a placeholder today)
-- Stem export and loudness normalisation; MOD/XM export
+- Stem export and LUFS-target normalisation; MOD/XM export
+- Polyphony within one channel (today chords use several channels)
 - See [OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md), [SOUND_DESIGN.md](docs/SOUND_DESIGN.md) and [MIDI_VST.md](docs/MIDI_VST.md) for the plans.
 
 <a id="documentation"></a>
 ## Documentation
 
-- [PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md) — the core pattern editor and keymap
+- [PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md) — the core pattern editor, keymap, 32 channels and all effect commands (00–43)
 - [PACKAGING.md](docs/PACKAGING.md) — Windows/Linux/macOS packages and CI
 - [STARTER_SOUNDS.md](docs/STARTER_SOUNDS.md) — the psytrance and alien factory presets
 - [SAFETY.md](docs/SAFETY.md) — autosave, crash recovery and recent files
-- [MIXER.md](docs/MIXER.md) — the mixer
+- [MIXER.md](docs/MIXER.md) — the mixer, master limiter and LUFS meter (0.2.3.7)
 - [AUTOMATION.md](docs/AUTOMATION.md) — automation lanes
-- [FIRST_RUN.md](docs/FIRST_RUN.md) — the self-building first-run demo
+- [FIRST_RUN.md](docs/FIRST_RUN.md) — the self-building first-run demo and the demo songs
 - [SETTINGS.md](docs/SETTINGS.md) — settings
 - [OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md) — the full OctaMED feature blueprint
 - [SOUND_DESIGN.md](docs/SOUND_DESIGN.md) — the synth and effects
@@ -259,8 +262,10 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [EXPORT.md](docs/EXPORT.md) — WAV/MP3 export
 - [FILE_FORMAT.md](docs/FILE_FORMAT.md) — the `.cwt` song format
 - [UI_SCALING.md](docs/UI_SCALING.md) — screen scaling and layouts
-- [SAMPLES.md](docs/SAMPLES.md) — the instrument list and importer
-- [VOICE.md](docs/VOICE.md) — the Voice (glitch) instrument: synthetic vowels, babble, stutter, effects 30–37 (0.2.3.6)
+- [SAMPLES.md](docs/SAMPLES.md) — the instrument list, importer and chop / slice (0.2.3.10)
+- [INSTRUMENT_LIBRARY.md](docs/INSTRUMENT_LIBRARY.md) — instrument library, `.cwi` files, rename / reorder / swap (0.2.3.9)
+- [CHORDS.md](docs/CHORDS.md) — chord helper and scale lock (0.2.3.9)
+- [VOICE.md](docs/VOICE.md) — the Voice (glitch) instrument: vowels, babble, stutter, words, Throat mode, Transform and chrome FX devices, effects 30–42 (0.2.3.6-11)
 - [GENERATORS.md](docs/GENERATORS.md) — generators: Drum Synth, kits, Chip FX (sfxr), Analog, FM-4, Noise, Dice, Bake, Moog ladder filter, effect 43xy (0.2.3.12-14)
 - [MIDI.md](docs/MIDI.md) — MIDI keyboard input: play, record, velocity, sustain, MIDI learn (0.2.3)
 - [MIDI_VST.md](docs/MIDI_VST.md) — MIDI and plugins (plan)

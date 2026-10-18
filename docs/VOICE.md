@@ -1,4 +1,13 @@
-# Voice (glitch) instrument (0.2.3.6)
+# Voice (glitch) instrument (0.2.3.6 – 0.2.3.11)
+
+![Voice (glitch) panel](screenshots/dark-voice.png)
+
+What this page covers:
+- **Vowels, babble, chop and stutter** (0.2.3.6, effects `30`–`37`).
+- **Spoken words** (`3E`) and **Throat** mode (0.2.3.10).
+- The **Transform** stages: metallic resonance, digital distortion and sub (`3F`–`42`, 0.2.3.11). They are also available as the chrome FX devices **Metal resonator**, **Digital distortion** and **Sub bass** for any instrument.
+
+All the pattern commands are listed in [PATTERN_EDITOR.md](PATTERN_EDITOR.md#5-effect-commands).
 
 A synthetic voice for dark psytrance chops: **"ahh, eee, ohh, err"** vowel
 glitches, babble and stutters. No recorded voice and no samples. Everything
@@ -40,7 +49,7 @@ vowel sequence / babble / LFO / 30-32 -> formant table morph --^         |
 | Whisper Ooh | noise-only U > O with an LFO formant shift: a ghost voice |
 
 ## Effect commands 30–37
-The 3x range is unused by OctaMED (see [OCTAMED_SPEC.md §5](OCTAMED_SPEC.md)) and by ChipWave.
+The 3x range is unused by OctaMED (see [OCTAMED_SPEC.md §5](OCTAMED_SPEC.md)). ChipWave uses `30`–`37` for the voice, `38`–`3D` for filter and acid commands, `3E` for words (below), `3F`–`42` for the Transform (below) and `43` for generator macros.
 
 | Cmd | Effect | Argument |
 |---|---|---|
@@ -58,6 +67,8 @@ The effects in a row with a note apply to that new note. A new note resets
 
 Example: `C-2 05 3000`, then `--- -- 3053` and later `--- -- 3022`, gives "ahh → err → eee".
 `--- -- 3332` on a later row stutters the last 1/16 twice.
+
+![Voice words](screenshots/dark-voice-words.png)
 
 ## Consonants and words (0.2.3.10)
 Give the voice **Words** (the row of small text boxes under the vowel
@@ -97,6 +108,9 @@ Throat mode costs more CPU (8 throat voices render about 6× faster than realtim
 on one core; formant mode is several times cheaper).
 
 ## Transform (0.2.3.11)
+
+![Voice Transform](screenshots/dark-voice-transform.png)
+
 The **TRANSFORM** section under the voice settings turns the voice into
 metal, broken electronics or a sub-heavy monster. Three stages, each with its
 own amount, and a master **Blend** between the dry voice (0) and the
@@ -166,6 +180,8 @@ stay on the channel until a different instrument plays there):
 
 Values glide over 10 ms (no zipper noise). A voice whose Blend is 0 gets its
 transform from `3Fxx` alone (`3FFF` = fully transformed).
+
+![Chrome FX devices](screenshots/dark-fx-chrome.png)
 
 **As FX devices.** The three stages are also devices for any instrument
 (Add effect > *Metal resonator*, *Digital distortion*, *Sub bass*). The

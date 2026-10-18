@@ -1,6 +1,6 @@
 # ChipWave Tracker: UI Scaling and Screen Modes
 
-**Status:** design. No code yet.
+**Status (0.2.3.14):** UI scale in 25 % steps (Ctrl+= / Ctrl+- / Ctrl+0, Settings > Look) and remembered window size and position are implemented; the per-layout ideas below are partly design.
 
 Goal: ChipWave looks sharp and usable on a 1366×768 laptop, a 4K monitor, an ultrawide, or a portrait screen, and on any OS scale setting.
 

@@ -19,6 +19,8 @@ On the dark CRT display: notes white `#FFFFFF`, instrument green `#7CFF9B`, volu
 ## 3. Scaling
 Uses [UI_SCALING.md](UI_SCALING.md). The font is monospace (bundled **JetBrains Mono** or **DejaVu Sans Mono**; both are open licences, to be confirmed at bundling). Font size scales with `pixels_per_point` and `Ctrl + mouse wheel` changes pattern zoom only. Channels that don't fit scroll horizontally, and the cursor channel is always kept visible.
 
+![32 channels](screenshots/dark-32-channels.png)
+
 **Up to 32 channels (0.2.3.8).** A song has 1–32 channels (the **Channels** box in the block bar or the Song menu; 8 was the limit before). When they don't all fit, a bar under the grid shows which are in view ("channels 9–16 of 32"); click or drag it to scroll, and the cursor moves into view. `Tab` / `Shift+Tab` and the arrow keys scroll the view along with the cursor.
 
 ## 4. Keymap (defaults)
@@ -94,7 +96,21 @@ Z X C V B N M , Q W E R T Y U I    Z = C (base octave), Q = C (base octave + 1)
 | Switch screen: pattern / arranger / sound / samples | `F2` / `F3` / `F4` / `F5` | `Fn+F…` or `Cmd+1…4` (set in prefs) |
 
 ## 5. Effect commands
-Effect columns accept classic OctaMED/ProTracker commands (page 1, binary-compatible with MMD) plus ChipWave extended commands (§6). Main OctaMED commands, from [OCTAMED_SPEC.md §5](OCTAMED_SPEC.md):
+Effect columns accept classic OctaMED/ProTracker commands (page 1, binary-compatible with MMD) plus ChipWave extended commands (§6). Main OctaMED commands, from [OCTAMED_SPEC.md §5](OCTAMED_SPEC.md).
+
+**Played today (0.2.3.14):**
+
+| Commands | What |
+|---|---|
+| `01`/`02` | slides |
+| `08` | note decay (xx × 10 ms) |
+| `09` | speed |
+| `0C` | volume |
+| `0D` | volume slide |
+| `0F` | `0F00` pattern break, `0F01`–`0FF0` tempo |
+| `30`–`43` | all ChipWave commands |
+
+The other OctaMED commands below are stored and shown, but not played yet (see the roadmap).
 
 | Cmd | Name | Arg |
 |---|---|---|
@@ -138,9 +154,9 @@ Effect columns accept classic OctaMED/ProTracker commands (page 1, binary-compat
 | 40 | Transform metallic resonance amount; also the Metal resonator device's mix (ChipWave) | 00 = instrument; 01–FF = 0–100 % |
 | 41 | Transform digital distortion amount; also the Digital distortion device's mix (ChipWave) | 00 = instrument; 01–FF = 0–100 % |
 | 42 | Transform sub level; also the Sub bass device's level (ChipWave) | 00 = instrument; 01–FF = 0–100 % |
-| 43 | Generator macro (ChipWave, 0.2.3.12) | x = macro 1–8, y = 0–F (0–100 %); 4300 = instrument values; stays on the channel. See [GENERATORS.md](GENERATORS.md) |
+| 43 | Generator macro (ChipWave, 0.2.3.12) | x = macro 1–8, y = 0–F (0–100 %); 4300 = instrument values; stays on the channel. Chip FX reads the macros when the note starts; the Drum Synth, Analog, FM-4 and Noise also follow a change on a sounding note. See [GENERATORS.md](GENERATORS.md) |
 
-Effects 30–37 are documented in [VOICE.md](VOICE.md).
+Effects 30–37, 3E and 3F–42 are documented in [VOICE.md](VOICE.md) (3F–42 also drive the Metal resonator, Digital distortion and Sub bass FX devices); 43 in [GENERATORS.md](GENERATORS.md#pattern-effect-43xy).
 
 **Filter and acid commands 38–3D (0.2.3.7).** They work on synth and Voice instruments (sample instruments have no filter; `3C` glides samples too). OctaMED uses 00–1F plus 20, 29 and 2E (SoundStudio), and ChipWave's Voice uses 30–37, so 38–3D are free.
 - `38`/`39` set the cutoff / resonance for the channel's notes until another `38`/`39`, `3800`/`3900`, or a note with a **different instrument number** (filter settings belong to the instrument they were set for). The filter envelope, key tracking, velocity and LFO still move the filter around the new cutoff.

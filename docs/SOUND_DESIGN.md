@@ -1,6 +1,12 @@
 # ChipWave Tracker: Sound Design System
 
-**Status:** design. No code yet.
+**Status (0.2.3.14):** this page is the original design. Implemented so far:
+- **Synth patch:** oscillator with unison, detune and stereo width, plus an 808-style metal source. The filter is the SVF or, since 0.2.3.12, the **Moog ladder** (clean or vintage, 12/24 dB, LP/BP/HP). It has filter and amp envelopes, drive, a tempo-syncable LFO, velocity → cutoff, glide/legato and accent.
+- **Voice (glitch)** instrument ([VOICE.md](VOICE.md)).
+- **Generators** ([GENERATORS.md](GENERATORS.md)): Drum Synth, Chip FX, Analog, FM-4 and Noise. Their **Bake to sample** covers render-to-sample for generators.
+- **FX chain:** Filter, Chorus/Flanger, Delay, Reverb, Drive, Bitcrusher and Compressor, plus Metal resonator, Digital distortion and Sub bass.
+
+Still planned: Sallen-Key, diode, comb and formant filter models, wavetables, the mod matrix and drag-to-modulate, and render-to-sample for synth patches.
 
 ChipWave lets you build your own sounds *inside* the tracker and play them as ordinary instruments. Each sound is a **Patch**: an analogue-style subtractive synth voice followed by a per-instrument effects chain. A patch can stay **live** (rendered in real time) or be **sampled** to a normal 8/16-bit sample, the way Amiga musicians bounced synth sounds into samples for ProTracker/OctaMED.
 

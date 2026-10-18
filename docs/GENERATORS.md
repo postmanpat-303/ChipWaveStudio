@@ -1,4 +1,14 @@
-# Generators (0.2.3.12)
+# Generators (0.2.3.12 – 0.2.3.14)
+
+| Generator | Since | New… menu | Presets |
+|---|---|---|---|
+| [Drum Synth and kits](#drum-synth) | 0.2.3.12 | Generator (drums) | kicks, snares, hats, claps, toms, percs, kits |
+| [Chip FX](#chip-fx-02313) (sfxr) | 0.2.3.13 | Generator (chip FX) | Coin, Laser Shot, Explosion, Power Up, Hit, Jump, Blip, Psy Laser |
+| [Analog](#analog-02314) | 0.2.3.14 | Generator (analog) | Fat Moog Bass, Psy Rolling Bass, Warm Lead, Brass, Dark Pad, Acid Squelch |
+| [FM-4](#fm-4-02314) | 0.2.3.14 | Generator (FM-4) | E-Piano, Metallic Bell, Psy Zap Bass, Growl, Dark Pluck |
+| [Noise](#noise-02314) | 0.2.3.14 | Generator (noise) | White Riser, Downlifter, Impact, Wind, Vinyl Crackle |
+
+46 presets in all; every one is also in the instrument library under "generator".
 
 Generators are instruments that synthesise a sound from a few **macro knobs**
 instead of playing a sample or a full synth patch. Each one can be rolled with

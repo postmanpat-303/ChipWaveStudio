@@ -11,6 +11,12 @@ v0.2.3.14 (Generators stage 2) adds three generators, all written from scratch.
 - New menus are **New… > Generator (analog / FM-4 / noise)**, plus `--screenshot --view analog|fm|noise`. Text songs take `patch = "gen:Fat Moog Bass"` with `[instrument.gen.engine.Analog]` overrides.
 - Credits: Minimoog, Välimäki & Huovilainen, Vital (Matt Tytel), Surge XT, Dexed (Pascal Gauthier), MSFA (Raph Levien), Plaits/DaisySP, SuperCollider, Paul Kellet.
 - Old songs are unchanged. Details: [GENERATORS.md](GENERATORS.md#analog-02314).
+- Released as [v0.2.3.14](https://github.com/postmanpat-303/ChipWaveTracker/releases/tag/v0.2.3.14), the first public release since v0.2.3.5, covering 0.2.3.6–0.2.3.14.
+- Docs refresh:
+  - Every guide now matches 0.2.3.14, and the screenshots and GIFs are new captures. A new screenshot shows the chrome FX devices.
+  - The README links straight to the v0.2.3.14 downloads.
+  - PATTERN_EDITOR.md marks which effect commands play today.
+  - The status notes in MIXER, SOUND_DESIGN, SAMPLES, FILE_FORMAT, EXPORT and UI_SCALING are corrected.
 
 v0.2.3.13 adds the **Chip FX** generator, a port of **sfxr** by Tomas Pettersson (DrPetter, MIT) via **sfxr-rs** by Teemu Erkkola (MIT). **Category buttons** Pickup, Laser, Explosion, Power-up, Hit, Jump and Blip use the sfxr recipes; **Randomize** and **Mutate** behave as in sfxr; Dice rolls again in the last category. Every parameter and the wave can be **locked**; seed, 16-roll history and Bake to sample work as for the drums. Eight knobs (Freq, Slide, Duty, Sustain, Decay, LP cutoff, Phaser, Repeat) are `43xy` targets, and all 23 sfxr parameters are editable. The engine is sfxr's (oscillator with slide, duty sweep, vibrato, arpeggio; ASD envelope with punch; resonant LP/HP with sweeps; phaser; repeat; 8x supersampling at 44.1 kHz), resampled to the song rate and allocation-free. Notes transpose relative to C-4. Eight presets: Coin, Laser Shot, Explosion, Power Up, Hit, Jump, Blip, Psy Laser. New menu **New… > Generator (chip FX)**; `--screenshot --view chipfx`; text songs take `patch = "gen:Coin"`. Details: [GENERATORS.md](GENERATORS.md#chip-fx-02313). Help > About links to the ChipWave YouTube channel (demos & promos), and the README opens with the promo video.
 
