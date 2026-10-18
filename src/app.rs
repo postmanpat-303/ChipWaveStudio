@@ -674,7 +674,8 @@ impl App {
             ui.label(
                 "Generators: 43xy sets macro x (1-8) to y (0-F) on that channel, 4300 = instrument. Dice rolls the \
                  unlocked knobs, Mutate nudges them, < > walk the last 16 rolls, Bake to sample renders C-4 to a sample. \
-                 Chip FX (sfxr): Pickup / Laser / Explosion / Power-up / Hit / Jump / Blip roll a sound, Randomize anything.",
+                 Chip FX (sfxr): Pickup / Laser / Explosion / Power-up / Hit / Jump / Blip roll a sound, Randomize anything. \
+                 Analog / FM-4 / Noise (0.2.3.14) play their own envelopes; the note-off releases them.",
             );
             ui.label(
                 "Voice Transform: 3Fxx blend · 40xx metallic resonance · 41xx digital distortion · 42xx sub level \

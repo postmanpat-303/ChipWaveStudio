@@ -163,6 +163,17 @@ holds short words (ka, ta, sha, dum ...); each note speaks the next one and
 vocal tract inspired by Pink Trombone by Neil Thapen (MIT). Presets: Talk
 Ka-Ta, Throat Ahh, Throat Speech, Demon Words.
 
+Analog, FM-4, Noise (0.2.3.14): New... > Generator (analog) is a Moog-style
+synth: 3 drifting oscillators (saw/tri/square/pulse, PWM, sync), noise, the
+vintage ladder, filter + amp envelopes, glide/legato. Presets Fat Moog Bass,
+Psy Rolling Bass, Warm Lead, Brass, Dark Pad, Acid Squelch. Generator (FM-4):
+4 operators, 8 DX21-style algorithms, per-operator ratio and envelope;
+E-Piano, Metallic Bell, Psy Zap Bass, Growl, Dark Pluck. Generator (noise):
+white/pink/brown/crackle through a swept ladder or SVF; White Riser,
+Downlifter, Impact, Wind, Vinyl Crackle. Eight macros each (43xy), Dice,
+Mutate, locks, Bake. Inspired by Vital (Matt Tytel), Surge XT, Dexed/MSFA,
+Plaits/DaisySP; written from scratch.
+
 Chip FX (0.2.3.13): New... > Generator (chip FX) makes retro game sounds
 (a port of sfxr by DrPetter via sfxr-rs, MIT). Click Pickup, Laser,
 Explosion, Power-up, Hit, Jump or Blip for a new sound, Randomize for any

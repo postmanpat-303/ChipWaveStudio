@@ -279,6 +279,26 @@ pub(super) const CREDITS: &[(&str, &str)] = &[
         "https://github.com/bzar/sfxr-rs",
     ),
     (
+        "Analog generator: Minimoog (R. Moog) design; polyBLEP oscillators after Välimäki & Huovilainen (2007)",
+        "https://doi.org/10.1109/MSP.2007.323276",
+    ),
+    (
+        "Analog / FM-4 inspiration: Vital by Matt Tytel (GPL-3, no code copied)",
+        "https://github.com/mtytel/vital",
+    ),
+    (
+        "Analog / Noise inspiration: Surge XT by the Surge Synth Team (GPL-3, no code copied)",
+        "https://github.com/surge-synthesizer/surge",
+    ),
+    (
+        "FM-4 inspiration: Dexed by Pascal Gauthier (GPL-3) on MSFA by Raph Levien (Apache-2.0); algorithms after the Yamaha DX21/TX81Z",
+        "https://github.com/asb2m10/dexed",
+    ),
+    (
+        "Noise: pink noise filter by Paul Kellet (musicdsp.org); crackle after SuperCollider Dust / DaisySP Dust",
+        "https://www.musicdsp.org/en/latest/Filters/76-pink-noise-filter.html",
+    ),
+    (
         "Key finding: Krumhansl–Schmuckler algorithm with the Krumhansl & Kessler (1982) key profiles",
         "https://doi.org/10.1037/0033-295X.89.4.334",
     ),

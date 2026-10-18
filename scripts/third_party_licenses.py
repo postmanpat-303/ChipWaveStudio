@@ -166,6 +166,30 @@ Generators (src/gen.rs, src/ladder.rs, 0.2.3.12):
   Independent Rust implementations of those recipes; no samples used. The
   macro-knob + dice workflow is inspired by Bitwig Studio's Grid and drum
   devices (ideas only, no code or assets).
+- Analog, FM-4 and Noise generators (src/gen2.rs, 0.2.3.14) are written from
+  scratch for ChipWave; no code from the projects below is copied. They were
+  informed by, and ChipWave gratefully credits:
+  * the Minimoog Model D (Robert Moog / Moog Music): the 3-oscillator +
+    noise + ladder + two-envelope voice and its glide;
+  * V. Valimaki & A. Huovilainen, "Antialiasing oscillators in subtractive
+    synthesis", IEEE Signal Processing Magazine 24(2), 2007 (polyBLEP);
+    M. Finke's polyBLEP notes;
+  * Vital by Matt Tytel, GPL-3.0, https://github.com/mtytel/vital (oscillator
+    drift and macro/random workflow ideas);
+  * Surge XT by the Surge Synth Team, GPL-3.0,
+    https://github.com/surge-synthesizer/surge (analog-style drift, noise
+    colours);
+  * Dexed by Pascal Gauthier, GPL-3.0, https://github.com/asb2m10/dexed , and
+    the Music Synthesizer for Android (MSFA) by Raph Levien / Google,
+    Apache-2.0, https://github.com/google/music-synthesizer-for-android
+    (operator feedback averaging, envelope behaviour); the 8 four-operator
+    algorithms follow the Yamaha DX21 / DX100 / TX81Z;
+  * Mutable Instruments Plaits by Emilie Gillet (MIT) and DaisySP by
+    Electrosmith (MIT) (FM and noise models; DaisySP's Dust);
+  * SuperCollider's Dust UGen (GPL-3.0, https://github.com/supercollider/supercollider);
+  * Paul Kellet's "pink noise filter" (musicdsp.org, public domain).
+  GPL-3.0 and Apache-2.0 sources were read as references only; ChipWave is
+  itself distributed under the GPL-3.0, which is compatible with both.
 - Chip FX (src/chipfx.rs, 0.2.3.13) is a port of sfxr by Tomas Pettersson
   (DrPetter), https://www.drpetter.se/project_sfxr.html , by way of its Rust
   reimplementation sfxr-rs by Teemu Erkkola, https://github.com/bzar/sfxr-rs

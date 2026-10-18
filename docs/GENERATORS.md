@@ -8,7 +8,8 @@ its last 16 rolls and **baked** to a sample. Research notes:
 
 Add one from the instrument list with **New… > Generator (drums)** (kits,
 kicks, snares, hats, claps, toms, percussion) or **New… > Generator (chip FX)**
-(sfxr-style game sounds, 0.2.3.13).
+(sfxr-style game sounds, 0.2.3.13), or, since 0.2.3.14, **Generator (analog)**,
+**Generator (FM-4)** and **Generator (noise)**.
 
 ![Drum kit generator](screenshots/dark-generators-kit.png)
 
@@ -119,6 +120,57 @@ Changes from sfxr:
 - nothing allocates while the sound plays
 - "Vib delay" is stored but unused, as in sfxr
 
+## Analog (0.2.3.14)
+
+![Analog generator](screenshots/dark-generators-analog.png)
+
+The Analog generator is a Moog-style synth voice: three oscillators, noise, the ladder filter, two ADSR envelopes and glide.
+
+- **Oscillators:** each one is Saw, Tri, Square or Pulse. Saw and pulse use polyBLEP; the triangle is an integrated band-limited square. Each oscillator has its own level, plus octave (osc 2 and 3: Oct ±2) and semitone (osc 2) settings.
+- **Detune** spreads osc 2 and 3 by up to ±40 cents. **Drift** adds a slow random walk of pitch (up to about ±15 cents) and random start phases, so no two notes are identical. **PWM** (depth and rate) and **Width** shape the pulse. **Sync 2>1** hard-syncs osc 2 to osc 1.
+- **Filter:** the ChipWave Zavalishin ladder, **Vintage** by default (saturated, 2× oversampled), with LP/BP/HP modes, 12 or 24 dB, key tracking and a filter envelope.
+- **Amp:** an ADSR, then soft saturation (**Drive**).
+- **Glide** and **Legato** use the instrument's glide time. Overlapping notes slide like a mono synth.
+- **Macros (43xy):** 1 Cutoff, 2 Res, 3 Env amt, 4 F.Decay, 5 Detune, 6 Drift, 7 Drive, 8 PWM. **More knobs** holds the oscillator levels, octaves, envelopes, key tracking, PWM rate and width.
+- **Dice** keeps osc 1 audible. The "lock" next to each wave keeps it.
+
+| Preset | Sound |
+|---|---|
+| Fat Moog Bass | 3 saws (−1 oct), 24 dB vintage, glide |
+| Psy Rolling Bass | short, dark, plucky saw/square for offbeat psy bass in E or F# |
+| Warm Lead | saw + square, gentle filter, glide |
+| Brass | saws with a slow filter attack |
+| Dark Pad | detuned saws, slow attack, low cutoff |
+| Acid Squelch | single saw, high resonance, snappy envelope, glide |
+
+## FM-4 (0.2.3.14)
+
+![FM-4 generator](screenshots/dark-generators-fm.png)
+
+FM-4 has four sine operators arranged by one of the **8 four-operator algorithms** of the Yamaha DX21 / DX100 / TX81Z (from a 4>3>2>1 stack to four carriers). Each operator has a **ratio** (20 steps from 0.5 to 16), a level and an ADSR. Operator 4 has **feedback**, averaged over two samples as in Dexed/MSFA.
+
+The macros are Bright (modulation index), Feedback, Mod decay, Ratio 2, Attack ×, Release ×, Detune and Drive. Operator settings are under **Operators**, and "lock" next to the algorithm keeps it on Dice.
+
+| Preset | Sound |
+|---|---|
+| E-Piano | two 1:1 / 14:1 pairs, tine attack |
+| Metallic Bell | inharmonic ratios, long decay |
+| Psy Zap Bass | fast-decaying index, a zappy psy bass |
+| Growl | feedback stack, gritty |
+| Dark Pluck | short, low-index pluck |
+
+## Noise (0.2.3.14)
+
+![Noise generator](screenshots/dark-generators-noise.png)
+
+The Noise generator makes risers, downlifters, impacts and textures.
+
+- **Colours:** white, pink (Paul Kellet's filter), brown (a leaky integrator) or crackle (Poisson clicks like SuperCollider's Dust, with **Density**, plus **Hiss**).
+- **Filter:** the **Ladder** or the SVF (LP/BP/HP). The cutoff sweeps from **Cut start** to **Cut end** over **Length** (up to 16 s), and **Curve** shapes the sweep. **Rise** places the loudness peak.
+- **Hold** keeps the sound at the peak while the note is held (wind, vinyl); otherwise it is a one-shot. **Gust** adds random cutoff motion, **Thump** adds a low sine hit for impacts, and **Width** decorrelates left and right.
+
+Presets: White Riser, Downlifter, Impact, Wind, Vinyl Crackle.
+
 ## Moog ladder filter
 
 The Synth, Voice and Generator filters can be switched from the default **SVF
@@ -166,6 +218,12 @@ the shortest decay (macro 2 = Punch, macro 4 = Decay).
 - Songs using generators or the ladder filter don't open in ChipWave
   versions before 0.2.3.12, and songs with Chip FX don't open before
   0.2.3.13.
+- Analog, FM-4 and Noise don't open in versions before 0.2.3.14.
+- A channel plays one note, so the Analog generator is mono per channel.
+  Chords use several channels (chord spread).
+- FM-4 isn't oversampled, so very high ratios with a high Bright alias.
+- Drift is a random walk, not a model of real oscillator temperature.
+- Bake holds the note for 1.2 s, then renders the release.
 - Chip FX is mono. It runs at sfxr's 44.1 kHz with linear-interpolation
   resampling, so very high pitches alias slightly, as in sfxr. Its pitch is
   capped at sfxr's 8-supersample minimum period.
@@ -183,5 +241,16 @@ the shortest decay (macro 2 = Punch, macro 4 = Decay).
 - **Bitwig Studio**, for the macro and dice idea (no code or assets).
 - **sfxr** by Tomas Pettersson (DrPetter, MIT) and **sfxr-rs** by Teemu
   Erkkola (MIT): the Chip FX generator.
+
+- **Robert Moog**'s Minimoog (the Analog voice), **V. Välimäki & A.
+  Huovilainen**, IEEE SPM 2007 (polyBLEP).
+- **Vital** by Matt Tytel (GPL-3, https://github.com/mtytel/vital) and
+  **Surge XT** by the Surge Synth Team (GPL-3,
+  https://github.com/surge-synthesizer/surge): drift, noise and macro ideas.
+- **Dexed** by Pascal Gauthier (GPL-3, https://github.com/asb2m10/dexed) and
+  **MSFA** by Raph Levien (Apache-2.0): FM feedback and envelopes; Yamaha
+  DX21/TX81Z algorithms.
+- **Paul Kellet**'s pink noise filter; **SuperCollider** and DaisySP Dust.
+- All of the above are references only. ChipWave's code is its own.
 
 The licence notices are in `THIRD_PARTY_LICENSES.txt`.
