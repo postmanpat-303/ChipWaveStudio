@@ -38,6 +38,7 @@ impl App {
             if ui.button(">").clicked() && self.pattern + 1 < npat {
                 self.pattern += 1;
             }
+            self.block_len_controls(ui, pat.rows);
             if ui
                 .button("+ New block")
                 .on_hover_text("add an empty block at the end of the order")
@@ -303,7 +304,7 @@ impl App {
             painter.text(
                 Pos2::new(avail.left() + 10.0, y + 2.0),
                 egui::Align2::LEFT_TOP,
-                format!("{:02X}", r),
+                self.row_text(r, pat.rows),
                 font.clone(),
                 if r.is_multiple_of(4) {
                     th().fx

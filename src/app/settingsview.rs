@@ -432,6 +432,17 @@ impl App {
                     changed = true;
                 }
                 ui.end_row();
+                ui.label("Row numbers");
+                ui.horizontal(|ui| {
+                    let a = ui
+                        .selectable_value(&mut self.extra.row_hex, false, "Decimal")
+                        .on_hover_text("00 01 … 63 (three digits for blocks over 100 rows)");
+                    let b = ui
+                        .selectable_value(&mut self.extra.row_hex, true, "Hex")
+                        .on_hover_text("00 01 … 3F, like classic trackers");
+                    changed |= a.changed() || b.changed();
+                });
+                ui.end_row();
             });
         if changed {
             self.apply_theme(ui.ctx());

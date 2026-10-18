@@ -55,6 +55,98 @@ impl Pattern {
             cache: vec![],
         }
     }
+
+    /// longest block the length controls offer (files allow longer ones)
+    pub const MAX_EDIT_ROWS: usize = 256;
+
+    /// Cells (any channel) with something in them at or after row `rows`:
+    /// what shortening the block to `rows` would cut.
+    pub fn cut_by(&self, rows: usize) -> usize {
+        self.cells
+            .iter()
+            .skip(rows)
+            .flat_map(|r| r.iter())
+            .filter(|c| !c.is_empty())
+            .count()
+    }
+
+    /// Cells that halving with `squash` would lose (an odd row whose cell
+    /// can't move onto an empty even row above it).
+    pub fn lost_by_squash(&self) -> usize {
+        let mut n = 0;
+        for r in (1..self.rows).step_by(2) {
+            for (ch, c) in self.cells[r].iter().enumerate() {
+                if !c.is_empty() && !self.cells[r - 1][ch].is_empty() {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
+    /// New length: growing adds empty rows, shrinking drops the rows after
+    /// the new end. A derived block becomes an ordinary one (its cells are
+    /// now hand-shaped).
+    pub fn set_rows(&mut self, rows: usize) {
+        let rows = rows.max(1);
+        let ch = self.cells.first().map(|r| r.len()).unwrap_or(0);
+        self.cells.resize(rows, vec![Cell::default(); ch]);
+        self.rows = rows;
+        self.derived = None;
+        self.cache.clear();
+    }
+
+    /// Double the length and move every row r to 2r (notes keep their
+    /// musical position; the tempo of the music halves relative to rows).
+    pub fn stretch(&mut self) {
+        let old = std::mem::take(&mut self.cells);
+        let ch = old.first().map(|r| r.len()).unwrap_or(0);
+        let rows = self.rows * 2;
+        self.cells = vec![vec![Cell::default(); ch]; rows];
+        for (r, row) in old.into_iter().enumerate().take(self.rows) {
+            self.cells[r * 2] = row;
+        }
+        self.rows = rows;
+        self.derived = None;
+        self.cache.clear();
+    }
+
+    /// Halve the length and move row r to r/2. An odd row's cell moves up
+    /// only where the even row above is empty; otherwise it is dropped
+    /// (`lost_by_squash` counts those).
+    pub fn squash(&mut self) {
+        let rows = self.rows.div_ceil(2).max(1);
+        let ch = self.cells.first().map(|r| r.len()).unwrap_or(0);
+        let mut cells = vec![vec![Cell::default(); ch]; rows];
+        for (r, row) in self.cells.iter().enumerate().take(self.rows) {
+            for (c, cell) in row.iter().enumerate() {
+                if cell.is_empty() {
+                    continue;
+                }
+                let t = &mut cells[r / 2][c];
+                if r % 2 == 0 || t.is_empty() {
+                    *t = *cell;
+                }
+            }
+        }
+        self.cells = cells;
+        self.rows = rows;
+        self.derived = None;
+        self.cache.clear();
+    }
+}
+
+/// How the pattern editor numbers rows (Settings > Look > Pattern).
+/// Decimal (0.2.3.17 default): 00..63, three digits for blocks over 100
+/// rows. Hex: 00..3F, three digits over 256 rows.
+pub fn row_label(r: usize, rows: usize, hex: bool) -> String {
+    if hex {
+        let w = if rows > 0x100 { 3 } else { 2 };
+        format!("{r:0w$X}")
+    } else {
+        let w = if rows > 100 { 3 } else { 2 };
+        format!("{r:0w$}")
+    }
 }
 
 /// Sample PCM, shared copy-on-write: cloning a song (undo history, save and
@@ -685,5 +777,101 @@ mod tests {
         assert_eq!(s.replace_instrument_uses(1, 3, None), u1);
         assert_eq!(s.instrument_uses(1), 0);
         assert_eq!(s.replace_instrument_uses(1, 200, None), 0, "no such slot");
+    }
+}
+
+#[cfg(test)]
+mod block_len_tests {
+    use super::*;
+
+    fn note(p: &mut Pattern, r: usize, ch: usize, n: u8) {
+        p.cells[r][ch] = Cell {
+            note: n,
+            instr: 1,
+            ..Default::default()
+        };
+    }
+
+    #[test]
+    fn row_labels_decimal_and_hex_with_adaptive_width() {
+        assert_eq!(row_label(0, 64, false), "00");
+        assert_eq!(row_label(13, 64, false), "13");
+        assert_eq!(row_label(63, 64, false), "63");
+        assert_eq!(row_label(99, 100, false), "99");
+        assert_eq!(row_label(5, 128, false), "005");
+        assert_eq!(row_label(127, 128, false), "127");
+        assert_eq!(row_label(13, 64, true), "0D");
+        assert_eq!(row_label(255, 256, true), "FF");
+        assert_eq!(row_label(256, 300, true), "100");
+        assert_eq!(row_label(1, 300, true), "001");
+    }
+
+    #[test]
+    fn grow_adds_empty_rows_and_shrink_counts_what_it_cuts() {
+        let mut p = Pattern::new("b", 64, 4);
+        note(&mut p, 10, 0, 49);
+        note(&mut p, 40, 2, 50);
+        note(&mut p, 63, 3, 51);
+        assert_eq!(p.cut_by(64), 0);
+        assert_eq!(p.cut_by(32), 2);
+        assert_eq!(p.cut_by(11), 2);
+        assert_eq!(p.cut_by(10), 3);
+        p.set_rows(96);
+        assert_eq!((p.rows, p.cells.len()), (96, 96));
+        assert!(p.cells[64..].iter().flatten().all(|c| c.is_empty()));
+        assert_eq!(p.cells[95].len(), 4);
+        p.set_rows(32);
+        assert_eq!((p.rows, p.cells.len()), (32, 32));
+        assert_eq!(p.cells[10][0].note, 49);
+        p.set_rows(0);
+        assert_eq!(p.rows, 1, "never empty");
+    }
+
+    #[test]
+    fn stretch_and_squash_move_notes_and_squash_reports_losses() {
+        let mut p = Pattern::new("b", 16, 2);
+        note(&mut p, 0, 0, 49);
+        note(&mut p, 3, 0, 50);
+        note(&mut p, 15, 1, 51);
+        p.stretch();
+        assert_eq!(p.rows, 32);
+        assert_eq!(
+            (p.cells[0][0].note, p.cells[6][0].note, p.cells[30][1].note),
+            (49, 50, 51)
+        );
+        assert_eq!(p.lost_by_squash(), 0);
+        p.squash();
+        assert_eq!(p.rows, 16);
+        assert_eq!(
+            (p.cells[0][0].note, p.cells[3][0].note, p.cells[15][1].note),
+            (49, 50, 51)
+        );
+        // odd row onto a busy even row: lost, onto an empty one: moved up
+        let mut q = Pattern::new("b", 4, 1);
+        note(&mut q, 0, 0, 49);
+        note(&mut q, 1, 0, 50);
+        note(&mut q, 3, 0, 52);
+        assert_eq!(q.lost_by_squash(), 1);
+        q.squash();
+        assert_eq!(q.rows, 2);
+        assert_eq!((q.cells[0][0].note, q.cells[1][0].note), (49, 52));
+        // odd lengths round up
+        let mut o = Pattern::new("b", 5, 1);
+        o.squash();
+        assert_eq!(o.rows, 3);
+    }
+
+    #[test]
+    fn resizing_a_derived_block_makes_it_ordinary() {
+        let mut p = Pattern::new("b", 16, 1);
+        p.derived = Some(crate::arrange::Derived {
+            source: 0,
+            ops: vec![],
+            seed: 0,
+            drums: 0,
+        });
+        p.cache = p.cells.clone();
+        p.set_rows(32);
+        assert!(p.derived.is_none() && p.cache.is_empty());
     }
 }

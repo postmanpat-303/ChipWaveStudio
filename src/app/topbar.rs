@@ -506,6 +506,14 @@ impl App {
                 {
                     self.save_settings();
                 }
+                ui.horizontal(|ui| {
+                    ui.label("Row numbers");
+                    let a = ui.selectable_value(&mut self.extra.row_hex, false, "Decimal");
+                    let b = ui.selectable_value(&mut self.extra.row_hex, true, "Hex");
+                    if a.changed() || b.changed() {
+                        self.save_settings();
+                    }
+                });
                 ui.separator();
                 if item(ui, "Settings…", "Ctrl+,") {
                     self.toggle_settings();
@@ -619,6 +627,7 @@ impl App {
                 if ui.button("Add block").clicked() {
                     self.add_block();
                 }
+                ui.menu_button("Block", |ui| self.block_len_menu(ui));
             });
             ui.menu_button("Help", |ui| {
                 if item(ui, "Keys", "F12") {

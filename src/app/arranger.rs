@@ -55,10 +55,11 @@ impl App {
                 engine.seek(song, t.0, t.1);
             }
         });
+        let rows = self.rows();
         self.status = format!(
             "Play marker: entry {} · block {b:02} · row {}",
             t.0 + 1,
-            t.1
+            self.row_text(t.1, rows)
         );
     }
 

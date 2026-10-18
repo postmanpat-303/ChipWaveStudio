@@ -219,6 +219,7 @@ On Linux, build it from source (below).
 | `F9` / `F10` | mute / solo channel |
 | `Ctrl+1`…`5`, `Ctrl+Tab` | Pattern / Arranger / Mixer / FX / Sample view |
 | `Ctrl+Shift+F` | Fill to length |
+| `Ctrl+Shift+PgDn` / `Ctrl+Shift+PgUp` | double / halve the block length (or the Length field in the Block bar) |
 | `Ctrl+N` / `Ctrl+O` / `Ctrl+S` | new / open / save |
 | `Ctrl+E` / `Ctrl+Shift+E` | quick WAV export / export dialog |
 | `Ctrl+,` | settings |

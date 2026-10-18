@@ -236,7 +236,12 @@ impl App {
             let rows = self.with(|s| s.song.patterns.get(epat).map_or(1, |p| p.rows.max(1)));
             let row = live_row(erow, phase, back, rows, looping);
             self.set_cell_at(epat, row, ch, put);
-            self.status = format!("MIDI rec {} row {row:02} ch {}", note_name(note), ch + 1);
+            self.status = format!(
+                "MIDI rec {} row {} ch {}",
+                note_name(note),
+                self.row_text(row, rows),
+                ch + 1
+            );
         } else {
             let (p, r) = (self.pattern, self.row);
             self.set_cell_at(p, r, ch, put);

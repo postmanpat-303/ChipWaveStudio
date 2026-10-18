@@ -31,6 +31,9 @@ pub struct Extra {
     /// pattern editor: tint every other channel column (0.2.3.16)
     #[serde(default = "yes")]
     pub alt_columns: bool,
+    /// pattern row numbers in hex (00..3F) instead of decimal (00..63) (0.2.3.17)
+    #[serde(default)]
+    pub row_hex: bool,
     /// output device name, "" = system default
     #[serde(default)]
     pub device: String,
@@ -84,6 +87,7 @@ impl Default for Extra {
         Self {
             plugin_dirs: vec![],
             alt_columns: true,
+            row_hex: false,
             device: String::new(),
             rate: 0,
             accent: String::new(),

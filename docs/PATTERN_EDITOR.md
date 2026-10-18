@@ -7,11 +7,24 @@ Del: *"the pattern editor is the main part, definitely want arrow keys to move a
 The defaults follow the conventions most trackers share (FastTracker 2, ProTracker, OpenMPT, Renoise), plus normal desktop shortcuts, so anyone who has used a tracker or a text editor feels at home. Everything can be remapped (§9).
 
 ## 1. Layout
-- **Rows** run down the screen, **channels** across. Row numbers are in hex by default (decimal is an option), with a highlight every 4 rows (beat) and every 16 (bar). Both values are configurable.
+- **Rows** run down the screen, **channels** across. Row numbers count in **decimal** by default since 0.2.3.17 (00–63 for a 64-row block, three digits for blocks over 100 rows). **View → Row numbers → Hex** or **Settings → Look → Row numbers** switches to classic hex (00–3F). Every 4th row (beat) and 16th row (bar) is highlighted either way, and the setting is saved. The status bar ("Row 32/64"), the play-marker message and MIDI recording messages use the same numbering. Effect, instrument, volume and order numbers stay hex.
 - Each channel has **columns**: `Note` (C-4, `---` empty, `===`/`^^^` note-off), `Instr` (01–FF), `Vol` (00–40, or `..`), and 1–8 **effect columns** (`cmd` 2 hex + `arg` 2 hex). Cursor **sub-columns** step through the digits.
 - **Channel header:** name, colour, **S**olo and **M**ute buttons, a mini level meter, and a collapse arrow that shrinks a channel to the note column only.
 - **Follow playback:** the playing row stays centred (`Scroll Lock` or the toolbar toggle). With follow off, a play marker moves and the cursor stays put.
 - **Edit step:** after a note is entered the cursor moves down *step* rows (0–16, default 1).
+
+### Block length (0.2.3.17)
+Each block has its own length, from 1 to 256 rows (older files can hold up to 3200, and those stay editable). The **Block bar** has a **Length** field next to the block selector. Drag it or type a value, or use the ▾ dropdown for 16 / 32 / 48 / 64 / 96 / 128 / 192 / 256. The quick buttons are **/2**, **x2**, **-16** and **+16**. **Song → Block** has **Set length…**, **Double length**, **Halve length**, **Stretch x2** and **Squash /2**, and `Ctrl+Shift+PgDn` / `Ctrl+Shift+PgUp` double or halve the length.
+
+- **Growing** adds empty rows at the end.
+- **Shrinking** asks first if any notes or effects would be cut ("removes N cell(s) … after row 31"). Shrinking over empty rows doesn't ask.
+- **Stretch x2** doubles the length and moves every row r to 2r, so the block plays at half speed in rows. **Squash /2** halves it and moves row r to r/2. A note on an odd row moves up only if the row above is empty; otherwise it's dropped, and you're asked first.
+- Every change is **one undo step** (`Ctrl+Z`).
+- The arranger clip, the ruler, the play marker, the song length in the status bar and exports all follow the new length straight away. If the block is playing and the play position is past the new end, playback continues from the last row.
+- A **derived** block (a Fill to length variation) becomes an ordinary block once it's resized.
+- The length is saved per block in `.cwt` files. In text songs (`.cwt.toml`) it's the block's `lines = N`.
+
+Before 0.2.3.17 there was no way to change a block's length in the app. **Fill to length** could only make derived blocks, and text songs could set `lines`.
 
 ## 2. Colours and readability (A2 rules)
 On the dark CRT display: notes white `#FFFFFF`, instrument green `#7CFF9B`, volume cyan `#22E3FF`, effects yellow `#FFD400`, empty cells dim blue `#4F6FA0`, beat rows `#24477F`. The cursor is a yellow outline and the current row a blue bar. Yellow appears only on the dark display. Every colour pair meets WCAG AA (4.5:1) against `#0A1F45`, and a high-contrast theme and a colour-blind palette (effects in orange, instruments in light blue) are included.
@@ -81,6 +94,7 @@ Z X C V B N M , Q W E R T Y U I    Z = C (base octave), Q = C (base octave + 1)
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (also `Ctrl+Shift+Z`) | `Cmd+Z` / `Cmd+Shift+Z` |
 | Transpose selection ±1 semitone | `Alt+=` / `Alt+-` | `Option+=/-` |
 | Transpose ±1 octave | `Alt+Shift+=` / `Alt+Shift+-` | `Option+Shift+=/-` |
+| Double / halve block length | `Ctrl+Shift+PgDn` / `Ctrl+Shift+PgUp` (rebindable) | `Cmd+Shift+Fn+↓/↑` |
 | Interpolate (volume or effect arg, first→last row) | `Ctrl+I` | `Cmd+Shift+I` (since `Cmd+I` is insert row on Mac) |
 | Humanise (random ±volume / micro-delay) | `Ctrl+H` | `Cmd+Option+H` (Cmd+H hides the app) |
 | Set instrument of selection to current | `Ctrl+R` | `Cmd+R` |
@@ -135,7 +149,7 @@ The other OctaMED commands below are stored and shown, but not played yet (see t
 | 18 | Cut note at tick | tick |
 | 19 | Sample offset | ×256 |
 | 1A / 1B | Fine volume up / down | amount |
-| 1D | Pattern break to line | line |
+| 1D | Pattern break to line | line (the parameter is hex: `1D20` = row 32 in decimal numbering) |
 | 1E | Repeat row | count |
 | 1F | Note delay / retrigger | delay, retrig |
 | 2E | Set pan (SoundStudio) | pan |

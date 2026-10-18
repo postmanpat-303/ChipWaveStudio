@@ -201,6 +201,14 @@ impl App {
                 }
                 Key::ArrowUp => self.move_row(-1),
                 Key::ArrowDown => self.move_row(1),
+                Key::PageDown if cmd && m.shift => {
+                    let n = self.rows() * 2;
+                    self.block_length(blocklen::LenOp::Set(n));
+                }
+                Key::PageUp if cmd && m.shift => {
+                    let n = self.rows().div_ceil(2);
+                    self.block_length(blocklen::LenOp::Set(n));
+                }
                 Key::PageUp => self.move_row(-16),
                 Key::PageDown => self.move_row(16),
                 Key::Home if cmd => {

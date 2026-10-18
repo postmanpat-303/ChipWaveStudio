@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod arranger;
+mod blocklen;
 mod chordview;
 mod dialogs;
 mod edit;
@@ -204,6 +205,8 @@ pub struct App {
     mouse_since_commit: bool,
     /// delete-instrument confirmation: (slot, name, notes using it)
     instr_delete: Option<(u8, String, usize)>,
+    /// block length change waiting for "cut N cells?" (block, op, cells lost)
+    len_confirm: Option<(usize, blocklen::LenOp, usize)>,
     /// MIDI keyboard input (app/midiview.rs)
     midi: midiview::MidiUi,
     /// instrument FX chain clipboard (Copy / Paste effects)
@@ -476,6 +479,7 @@ impl App {
             deferred_keys: vec![],
             mouse_since_commit: false,
             instr_delete: None,
+            len_confirm: None,
             midi,
             fx_clip: None,
             instr_shown: 0,
@@ -670,7 +674,7 @@ impl App {
                     ("Delete", "clear field"), ("Backspace / Insert", "pull up / push down rows"),
                     ("Space", "play / stop current block (loop)"), ("Shift+Space", "play / stop song (from the arranger play marker)"), ("Enter / Ctrl+Enter", "restart block / play from row"), ("Ctrl+= / Ctrl+- / Ctrl+0", "UI scale up / down / 100 %"), ("Esc", "edit mode on/off"),
                     ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Ctrl+Shift+F", "fill to length (auto arrange)"), ("1-7 / 0 in arranger", "tag block role / clear"), ("Alt +/- (Shift = octave)", "transpose selection or channel"), ("F9 / F10", "mute / solo channel"),
-                    ("Numpad - / +", "base octave down / up"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
+                    ("Numpad - / +", "base octave down / up"), ("Ctrl+Shift+PgDn / PgUp", "double / halve the block length (Length field in the Block bar; Song > Block: set length, stretch, squash)"), ("Row numbers", "decimal 00-63 by default; View > Row numbers or Settings > Look switches to hex 00-3F. Effect values stay hex"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
                     ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Delete (with selection)", "clear selection"),
                     ("Ctrl+Tab, Ctrl+1..5", "views: pattern / arranger / mixer / FX / sample"), ("F12", "this key list"), ("Ctrl+Q", "quit"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"),
                     ("Arranger (click it to focus)", "click / Shift+click / Ctrl+click select; Ctrl+X/C/V cut/copy/paste after selection; Ctrl+Shift+V paste as new blocks; Del; Ctrl+A; right-click menu"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
@@ -833,6 +837,7 @@ impl eframe::App for App {
         self.poll_save();
         self.load_warnings_window(ui.ctx());
         self.instr_delete_dialog(ui.ctx());
+        self.block_len_dialog(ui.ctx());
         self.chord_window(ui.ctx());
         self.library_window(ui.ctx());
         if self.save_job.is_some() {
@@ -950,7 +955,7 @@ impl eframe::App for App {
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let (peak, len) = self.with(|s| (s.engine.peak, s.song.length_seconds()));
-                    ui.label(egui::RichText::new(format!("Instr {:02X} · Oct {} · Step {} · length {}:{:04.1} · peak {:.0} %", self.instr, self.octave, self.step, (len / 60.0) as u32, len % 60.0, peak * 100.0)).color(Color32::WHITE).monospace());
+                    ui.label(egui::RichText::new(format!("Row {}/{} · Instr {:02X} · Oct {} · Step {} · length {}:{:04.1} · peak {:.0} %", self.row_text(self.row, self.rows()), self.rows(), self.instr, self.octave, self.step, (len / 60.0) as u32, len % 60.0, peak * 100.0)).color(Color32::WHITE).monospace());
                 });
             });
         });

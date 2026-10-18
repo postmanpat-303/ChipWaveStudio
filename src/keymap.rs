@@ -34,6 +34,8 @@ pub enum Action {
     Mute,
     Solo,
     Panic,
+    BlockLonger,
+    BlockShorter,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,7 +117,7 @@ mod key_name {
 }
 
 use Action as A;
-pub const DEFAULTS: [(Action, &str, Combo); 26] = [
+pub const DEFAULTS: [(Action, &str, Combo); 28] = [
     (
         A::PlayBlock,
         "Play / stop block",
@@ -197,6 +199,16 @@ pub const DEFAULTS: [(Action, &str, Combo); 26] = [
         A::Panic,
         "Panic: stop all sound",
         Combo::new(Key::Period, true, false),
+    ),
+    (
+        A::BlockLonger,
+        "Double block length",
+        Combo::new(Key::PageDown, true, true),
+    ),
+    (
+        A::BlockShorter,
+        "Halve block length",
+        Combo::new(Key::PageUp, true, true),
     ),
 ];
 

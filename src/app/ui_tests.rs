@@ -2448,3 +2448,150 @@ fn alternate_column_shading_toggles_from_the_view_menu_and_scrolls() {
     assert!(h.state().ch_view > 0, "scrolled to the last channel");
     assert_eq!(h.state().ch, 31);
 }
+
+// ---- 0.2.3.17: decimal row numbers, block length ----
+
+/// rows are counted in decimal by default; View > Row numbers > Hex goes
+/// back to 00..3F; the status bar follows the setting
+#[test]
+fn row_numbers_are_decimal_by_default_and_hex_from_the_view_menu() {
+    let mut h = harness();
+    assert!(!h.state().extra.row_hex, "decimal by default");
+    let st = h.state_mut();
+    st.view = View::Pattern;
+    st.pattern = 0;
+    st.row = 13;
+    frames(&mut h, 2);
+    let rows = song(&mut h, |s| s.patterns[0].rows);
+    assert!(
+        has_text(&h, &format!("Row 13/{rows}")),
+        "status bar shows decimal"
+    );
+    let v = rects(&h, Role::Button, Some("View"))[0];
+    click_at(&mut h, v.center());
+    let hx = h
+        .query_all_by(|n| n.label().is_some_and(|l| l == "Hex"))
+        .next()
+        .expect("View > Row numbers > Hex")
+        .rect();
+    click_at(&mut h, hx.center());
+    assert!(h.state().extra.row_hex);
+    frames(&mut h, 2);
+    assert!(
+        has_text(&h, &format!("Row 0D/{rows}")),
+        "status bar shows hex"
+    );
+    assert_eq!(h.state().row_text(13, 64), "0D");
+    h.state_mut().extra.row_hex = false;
+    assert_eq!(h.state().row_text(13, 64), "13");
+    assert_eq!(h.state().row_text(7, 128), "007");
+}
+
+fn len_of(h: &mut Harness<'static, App>, p: usize) -> usize {
+    song(h, |s| s.patterns[p].rows)
+}
+
+/// Block bar: x2 / /2 / +16 / -16, the cut warning, undo, Ctrl+Shift+PgDn/PgUp
+#[test]
+fn block_length_buttons_warn_before_cutting_notes_and_undo() {
+    let mut h = harness();
+    h.state_mut().view = View::Pattern;
+    h.state_mut().pattern = 0;
+    h.state_mut().follow = false;
+    frames(&mut h, 2);
+    let n0 = len_of(&mut h, 0);
+    let secs0 = song(&mut h, |s| s.length_seconds());
+    click_label(&mut h, "x2");
+    assert_eq!(len_of(&mut h, 0), n0 * 2, "x2 doubles");
+    assert!(
+        song(&mut h, |s| s.length_seconds()) > secs0,
+        "song gets longer"
+    );
+    assert!(song(&mut h, |s| s.patterns[0].cells[n0..]
+        .iter()
+        .flatten()
+        .all(|c| c.is_empty())));
+    key(&mut h, Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(len_of(&mut h, 0), n0, "undo");
+    click_label(&mut h, "+16");
+    assert_eq!(len_of(&mut h, 0), n0 + 16);
+    click_label(&mut h, "-16");
+    assert_eq!(len_of(&mut h, 0), n0);
+    // a note in the second half: halving asks first
+    h.state().with(|s| {
+        s.song.patterns[0].cells[n0 - 1][0] = Cell {
+            note: 49,
+            instr: 1,
+            ..Default::default()
+        }
+    });
+    let cut = song(&mut h, |s| s.patterns[0].cut_by(n0 / 2));
+    assert!(cut >= 1);
+    click_label(&mut h, "/2");
+    assert_eq!(len_of(&mut h, 0), n0, "nothing cut before confirming");
+    assert!(h.state().len_confirm.is_some());
+    click_label(&mut h, "Cancel");
+    assert_eq!(len_of(&mut h, 0), n0, "cancel keeps it");
+    assert!(h.state().len_confirm.is_none());
+    click_label(&mut h, "/2");
+    click_label(&mut h, &format!("Remove {cut} cell(s)"));
+    assert_eq!(len_of(&mut h, 0), n0 / 2, "confirmed");
+    key(&mut h, Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(len_of(&mut h, 0), n0);
+    assert_eq!(
+        song(&mut h, |s| s.patterns[0].cells[n0 - 1][0].note),
+        49,
+        "undo brings the note back"
+    );
+    // keyboard: Ctrl+Shift+PgDn doubles (nothing cut, no question)
+    let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+    key(&mut h, Key::PageDown, cs);
+    assert_eq!(len_of(&mut h, 0), n0 * 2);
+    key(&mut h, Key::PageUp, cs);
+    assert_eq!(len_of(&mut h, 0), n0, "only empty rows go: no question");
+    assert!(h.state().len_confirm.is_none());
+}
+
+/// odd lengths: the arranger ruler maps onto the new layout and the play
+/// marker seeks into the resized block; the length survives save / load
+#[test]
+fn odd_block_length_maps_in_the_arranger_seeks_and_saves() {
+    let mut h = harness();
+    h.state_mut().pattern = 0;
+    h.state_mut()
+        .block_length_now(0, super::blocklen::LenOp::Set(37));
+    let s0 = song(&mut h, |s| s.clone());
+    assert_eq!(s0.patterns[0].rows, 37);
+    let lens: Vec<usize> = s0.order.iter().map(|&b| s0.patterns[b].rows).collect();
+    let k = s0.order.iter().position(|&b| b == 0).unwrap();
+    let start: usize = lens[..k].iter().sum();
+    assert_eq!(
+        super::arranger::ruler_target(&lens, start + 36, false),
+        (k, 36)
+    );
+    assert_eq!(
+        super::arranger::ruler_target(&lens, start + 37, false).0,
+        k + 1,
+        "next clip starts right after row 36"
+    );
+    // seek while playing lands on the right row of the odd block
+    h.state_mut().play(0);
+    frames(&mut h, 2);
+    h.state_mut().seek_to((k, 30));
+    let (pat, row) = h.state().with(|s| (s.engine.pattern, s.engine.row));
+    assert_eq!((pat, row), (0, 30));
+    h.state_mut().play(0);
+    // .cwt round trip
+    let dir = std::env::temp_dir().join(format!("cw-len-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = dir.join("odd.cwt");
+    crate::fileio::save_cwt(&s0, &p).unwrap();
+    let back = crate::fileio::load_cwt(&p).unwrap();
+    assert_eq!(back.patterns[0].rows, 37);
+    assert_eq!(back.patterns[0].cells.len(), 37);
+    let _ = std::fs::remove_dir_all(&dir);
+    // text songs: `lines` sets the length
+    let t = "[song]\ntitle = \"t\"\n[[instrument]]\nname = \"a\"\npatch = \"builtin:init\"\n[[block]]\nname = \"b\"\nlines = 37\nrows = \"\"\"\n36 | C-4 01 .. ....\n\"\"\"\n";
+    let ts = crate::fileio::song_from_text(t).unwrap();
+    assert_eq!(ts.patterns[0].rows, 37);
+}

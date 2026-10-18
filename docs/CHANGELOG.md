@@ -2,6 +2,24 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+v0.2.3.17 counts **pattern rows in decimal** and makes **block length** easy to change.
+
+- **Row numbers:**
+  - The pattern gutter now counts 00–63 for a 64-row block instead of hex 00–3F, with three digits for blocks over 100 rows.
+  - The beat and bar highlights are kept.
+  - **View → Row numbers → Decimal / Hex** and **Settings → Look → Row numbers** switch between them; the choice is saved.
+  - The new **Row 32/64** readout in the status bar, the play-marker message and MIDI-recording messages use the same numbering.
+  - Effect, instrument, volume and order numbers stay hex. The docs note that `1Dxx` takes a hex row (`1D20` = row 32).
+- **Block length:**
+  - Before this version the app had no way to change a block's length: only Fill to length (derived blocks) and the text-song `lines`.
+  - New **Length** field in the Block bar (1–256 rows), with a preset dropdown (16 … 256) and **/2**, **x2**, **-16**, **+16** buttons.
+  - **Song → Block** has **Set length…**, **Double length**, **Halve length**, **Stretch x2** (moves notes to row 2r) and **Squash /2** (row r/2). `Ctrl+Shift+PgDn` / `PgUp` double or halve the length, and both are rebindable.
+  - Growing adds empty rows. Shrinking (or squashing) asks first if notes or effects would be lost.
+  - Every change is one undo step.
+  - The arranger, ruler, play marker, song length and export follow at once, and a resized derived block becomes ordinary.
+  - The length is stored per block in `.cwt` (`lines` in text songs), so the file format is unchanged.
+- **Tests:** row labels (decimal, hex, widths); grow, shrink and cut counts; stretch and squash losses; derived blocks; UI tests for the Hex toggle with the status bar, the buttons, the cut warning (Cancel and confirm), undo and the shortcuts; and a 37-row block checked through the arranger ruler mapping, seek while playing, `.cwt` round trip and text-song `lines`.
+
 v0.2.3.16 brings **plugin instruments**: ChipWave now hosts **CLAP** instrument plugins (Surge XT and others) as normal instruments. Details: [PLUGINS.md](PLUGINS.md).
 
 - **Scanner:** checks the standard CLAP folders for Windows, macOS and Linux, plus `CLAP_PATH` and your own folders (Settings → Plugins). Each plugin is checked in a separate ChipWave process, so crashes, exceptions and hangs (20 s timeout) can't take the app down, and Windows crash dialogs are suppressed. Results are cached and only changed files are re-checked. `chipwave --scan-plugins` prints the results. VST3 files are listed as "not hosted yet".
