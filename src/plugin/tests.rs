@@ -329,9 +329,14 @@ fn bundle_folders_load_their_binary() {
     .unwrap();
     std::fs::copy(fixture(), b.join("Contents/MacOS/RealBin")).unwrap();
     assert_eq!(clap::binary_path(&b), b.join("Contents/MacOS/RealBin"));
-    let r = scan::check_file(&b);
-    assert!(r.ok, "{}", r.message);
-    assert_eq!(r.plugins[0].desc.id, TEST_ID);
+    // Loading needs a real macOS-style bundle binary. On Windows, LoadLibraryExW
+    // appends ".dll" to a file name without an extension ("RealBin"), so the copy
+    // can't be loaded there, and Windows CLAPs are plain files anyway.
+    if cfg!(not(windows)) {
+        let r = scan::check_file(&b);
+        assert!(r.ok, "{}", r.message);
+        assert_eq!(r.plugins[0].desc.id, TEST_ID);
+    }
     // found once by the scanner (the bundle, not its insides)
     let found = scan::find_files(std::slice::from_ref(&d));
     assert_eq!(found, vec![(b.clone(), "clap")]);
