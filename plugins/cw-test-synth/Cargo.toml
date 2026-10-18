@@ -3,7 +3,7 @@ name = "cw-test-synth"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
-description = "Tiny CLAP test instrument used by ChipWave Tracker's plugin-hosting tests"
+description = "Tiny CLAP test instrument used by ChipWave Studio's plugin-hosting tests"
 publish = false
 
 # standalone (not part of a workspace): built by the tests with its own lock file

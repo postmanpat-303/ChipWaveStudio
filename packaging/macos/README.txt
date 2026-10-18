@@ -1,6 +1,6 @@
-ChipWave Tracker @VERSION@ - macOS (universal: Apple Silicon + Intel)
+ChipWave Studio @VERSION@ - macOS (universal: Apple Silicon + Intel)
 =====================================================================
-GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
+GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveStudio
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
 
 Install: drag ChipWave.app onto the Applications folder.
@@ -20,4 +20,4 @@ block (Shift+Space = whole song). On a Mac, shortcuts written as Ctrl in
 the app also work with the Command key (Cmd+S saves). Settings are kept in
 ~/Library/Application Support/ChipWave/.
 
-More: https://github.com/postmanpat-303/ChipWaveTracker/blob/main/docs/MACOS.md
+More: https://github.com/postmanpat-303/ChipWaveStudio/blob/main/docs/MACOS.md

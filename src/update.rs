@@ -8,9 +8,13 @@ use std::time::Duration;
 /// and we double-check the flags anyway). The `CHIPWAVE_UPDATE_URL` environment
 /// variable overrides it (for testing against a mock http server).
 pub const LATEST_URL: &str =
+    "https://api.github.com/repos/postmanpat-303/ChipWaveStudio/releases/latest";
+/// the pre-rename address (ChipWave Tracker, up to 0.2.3.19). Asked when the new one answers 404
+/// (e.g. before the GitHub repo rename); after the rename GitHub redirects it to the new repo.
+pub const LEGACY_LATEST_URL: &str =
     "https://api.github.com/repos/postmanpat-303/ChipWaveTracker/releases/latest";
 /// shown when no release page is known
-pub const RELEASES_PAGE: &str = "https://github.com/postmanpat-303/ChipWaveTracker/releases";
+pub const RELEASES_PAGE: &str = "https://github.com/postmanpat-303/ChipWaveStudio/releases";
 /// startup checks run at most this often (seconds)
 pub const STARTUP_INTERVAL: u64 = 24 * 60 * 60;
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -133,20 +137,34 @@ pub fn evaluate(fetched: Result<Release, String>, current: &str) -> Outcome {
     }
 }
 
-fn url() -> String {
-    std::env::var("CHIPWAVE_UPDATE_URL").unwrap_or_else(|_| LATEST_URL.into())
-}
-
 /// blocking fetch (call from a background thread); 5 s overall timeout
 pub fn fetch_latest() -> Result<Release, String> {
-    fetch_from(&url())
+    match std::env::var("CHIPWAVE_UPDATE_URL") {
+        Ok(u) => fetch_from(&u),
+        Err(_) => fetch_first(&[LATEST_URL, LEGACY_LATEST_URL]),
+    }
 }
+
+/// try `urls` in order; only a 404 ("no published release") moves on to the next one
+pub fn fetch_first(urls: &[&str]) -> Result<Release, String> {
+    let mut last = Err("no update address".to_string());
+    for u in urls {
+        last = fetch_from(u);
+        match &last {
+            Err(e) if e == NOT_FOUND => continue,
+            _ => break,
+        }
+    }
+    last
+}
+
+const NOT_FOUND: &str = "no published release was found";
 
 /// blocking fetch of one release JSON from `url`
 pub fn fetch_from(url: &str) -> Result<Release, String> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(TIMEOUT))
-        .user_agent(format!("ChipWave-Tracker/{}", crate::VERSION))
+        .user_agent(format!("ChipWave-Studio/{}", crate::VERSION))
         .build()
         .into();
     let mut resp = agent
@@ -154,7 +172,7 @@ pub fn fetch_from(url: &str) -> Result<Release, String> {
         .header("Accept", "application/vnd.github+json")
         .call()
         .map_err(|e| match e {
-            ureq::Error::StatusCode(404) => "no published release was found".to_string(),
+            ureq::Error::StatusCode(404) => NOT_FOUND.to_string(),
             ureq::Error::StatusCode(403) | ureq::Error::StatusCode(429) => {
                 "GitHub is rate-limiting requests right now; try again later".to_string()
             }
@@ -264,22 +282,22 @@ pub(crate) const SAMPLE_INSTALLER: &str = if cfg!(target_os = "macos") {
 
 #[cfg(test)]
 pub(crate) const SAMPLE_JSON: &str = r###"{
-  "url": "https://api.github.com/repos/postmanpat-303/ChipWaveTracker/releases/1",
-  "html_url": "https://github.com/postmanpat-303/ChipWaveTracker/releases/tag/v0.2.3.9",
+  "url": "https://api.github.com/repos/postmanpat-303/ChipWaveStudio/releases/1",
+  "html_url": "https://github.com/postmanpat-303/ChipWaveStudio/releases/tag/v0.2.3.9",
   "tag_name": "v0.2.3.9",
-  "name": "ChipWave Tracker 0.2.3.9",
+  "name": "ChipWave Studio 0.2.3.9",
   "draft": false,
   "prerelease": false,
   "body": "## What's new\r\n\r\n- **Update check** in Help\r\n- See [docs](https://example.com/docs)\r\n\r\nThanks!",
   "assets": [
     {"name": "ChipWave-0.2.3.9-windows-x64.zip",
-     "browser_download_url": "https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9/ChipWave-0.2.3.9-windows-x64.zip"},
+     "browser_download_url": "https://github.com/postmanpat-303/ChipWaveStudio/releases/download/v0.2.3.9/ChipWave-0.2.3.9-windows-x64.zip"},
     {"name": "ChipWave-0.2.3.9-setup-x64.exe",
-     "browser_download_url": "https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9/ChipWave-0.2.3.9-setup-x64.exe"},
+     "browser_download_url": "https://github.com/postmanpat-303/ChipWaveStudio/releases/download/v0.2.3.9/ChipWave-0.2.3.9-setup-x64.exe"},
     {"name": "ChipWave-0.2.3.9-macos-universal.dmg",
-     "browser_download_url": "https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9/ChipWave-0.2.3.9-macos-universal.dmg"},
+     "browser_download_url": "https://github.com/postmanpat-303/ChipWaveStudio/releases/download/v0.2.3.9/ChipWave-0.2.3.9-macos-universal.dmg"},
     {"name": "demo-0.2.3.9.mp3",
-     "browser_download_url": "https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9/demo-0.2.3.9.mp3"}
+     "browser_download_url": "https://github.com/postmanpat-303/ChipWaveStudio/releases/download/v0.2.3.9/demo-0.2.3.9.mp3"}
   ]
 }"###;
 
@@ -310,11 +328,85 @@ mod tests {
     }
 
     #[test]
+    fn rename_release_0_2_4_0_is_newer_than_every_0_2_3_fix_build() {
+        // 0.2.4.0 (Cargo 0.2.4+fix.0, the ChipWave Studio rename) must be offered to every
+        // ChipWave Tracker 0.2.3.x install (Cargo 0.2.3+fix.N, shown as 0.2.3.N)
+        assert!(is_newer("v0.2.4.0", "0.2.3.19"));
+        assert!(is_newer("0.2.4.0", "0.2.3.19"));
+        for n in 0..=99 {
+            assert!(is_newer("v0.2.4.0", &format!("0.2.3.{n}")), "0.2.3.{n}");
+        }
+        assert!(is_newer("0.2.4.0", "0.2.3"));
+        assert!(!is_newer("v0.2.4.0", "0.2.4.0"));
+        assert!(!is_newer("0.2.3.19", "0.2.4.0"), "no downgrade offer");
+        // the Cargo version string, written the way the app displays it
+        let cargo = env!("CARGO_PKG_VERSION"); // "0.2.4+fix.0"
+        let display = cargo.replace("+fix.", ".");
+        assert_eq!(display, crate::VERSION, "Cargo.toml and main.rs VERSION agree");
+        assert!(is_newer(&display, "0.2.3.19"));
+        // a 0.2.3.19 install asking the new release sees it as newer
+        assert!(matches!(
+            evaluate(parse_release(&SAMPLE_JSON.replace("0.2.3.9", "0.2.4.0")), "0.2.3.19"),
+            Outcome::Newer(r) if r.version == "0.2.4.0"
+        ));
+    }
+
+    #[test]
+    fn update_url_points_at_the_renamed_repo() {
+        assert_eq!(
+            LATEST_URL,
+            "https://api.github.com/repos/postmanpat-303/ChipWaveStudio/releases/latest"
+        );
+        assert_eq!(RELEASES_PAGE, "https://github.com/postmanpat-303/ChipWaveStudio/releases");
+        assert_eq!(
+            LEGACY_LATEST_URL,
+            "https://api.github.com/repos/postmanpat-303/ChipWaveTracker/releases/latest"
+        );
+    }
+
+    /// one-shot mock server answering `status` with `body`
+    fn mock(status: &'static str, body: &'static str) -> (String, std::thread::JoinHandle<()>) {
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://127.0.0.1:{}/latest", l.local_addr().unwrap().port());
+        let h = std::thread::spawn(move || {
+            let (mut s, _) = l.accept().unwrap();
+            let mut req = [0u8; 4096];
+            let _ = s.read(&mut req);
+            let _ = write!(
+                s,
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        });
+        (url, h)
+    }
+
+    #[test]
+    fn falls_back_to_the_old_repo_address_only_on_404() {
+        // new address 404 (repo not renamed yet) -> the old address answers
+        let (a, ha) = mock("404 Not Found", "{\"message\":\"Not Found\"}");
+        let (b, hb) = mock("200 OK", SAMPLE_JSON);
+        assert_eq!(fetch_first(&[&a, &b]).unwrap().version, "0.2.3.9");
+        ha.join().unwrap();
+        hb.join().unwrap();
+        // the new address answers -> the old one is never asked
+        let (a, ha) = mock("200 OK", SAMPLE_JSON);
+        assert_eq!(fetch_first(&[&a, "http://127.0.0.1:9/never"]).unwrap().version, "0.2.3.9");
+        ha.join().unwrap();
+        // rate limiting is not a reason to ask again
+        let (a, ha) = mock("403 Forbidden", "{}");
+        let e = fetch_first(&[&a, "http://127.0.0.1:9/never"]).unwrap_err();
+        assert!(e.contains("rate-limiting"), "{e}");
+        ha.join().unwrap();
+    }
+
+    #[test]
     fn parses_the_github_release_json() {
         let r = parse_release(SAMPLE_JSON).unwrap();
         assert_eq!(r.tag, "v0.2.3.9");
         assert_eq!(r.version, "0.2.3.9");
-        assert_eq!(r.name, "ChipWave Tracker 0.2.3.9");
+        assert_eq!(r.name, "ChipWave Studio 0.2.3.9");
         assert!(r.page.ends_with("/releases/tag/v0.2.3.9"));
         assert!(r.download_url().ends_with(SAMPLE_INSTALLER));
         assert!(!r.draft && !r.prerelease);
@@ -449,7 +541,7 @@ mod tests {
         let req = srv.join().unwrap();
         assert_eq!(r.unwrap().version, "0.2.3.9");
         let lower = req.to_ascii_lowercase();
-        assert!(lower.contains("user-agent: chipwave-tracker/"), "{req}");
+        assert!(lower.contains("user-agent: chipwave-studio/"), "{req}");
         assert!(
             lower.contains("accept: application/vnd.github+json"),
             "{req}"

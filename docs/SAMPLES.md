@@ -1,4 +1,4 @@
-# ChipWave Tracker: Instrument List and Sample Importer
+# ChipWave Studio: Instrument List and Sample Importer
 
 **Status (0.2.3.14):** the instrument list (New…, Duplicate, Delete…, Up / Down, rename, search, right-click menu), WAV import (button and drag and drop), the sample view with loop points and preview, and chop / slice (§8, 0.2.3.10) are implemented; the instrument library is in [INSTRUMENT_LIBRARY.md](INSTRUMENT_LIBRARY.md). Formats beyond WAV, the full browser and the MED/MOD slot limits below are still design. Visual style: [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
 

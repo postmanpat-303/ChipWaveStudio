@@ -1095,7 +1095,7 @@ fn update_check_newer_version_dialog_opens_links_only_on_click() {
     assert_eq!(
         click_urls(&mut h, "Download installer"),
         [format!(
-            "https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9{}",
+            "https://github.com/postmanpat-303/ChipWaveStudio/releases/download/v0.2.3.9{}",
             crate::update::SAMPLE_INSTALLER
         )]
     );
@@ -1103,7 +1103,7 @@ fn update_check_newer_version_dialog_opens_links_only_on_click() {
     manual_check(&mut h, Outcome::Newer(sample_release()));
     assert_eq!(
         click_urls(&mut h, "Open release page"),
-        ["https://github.com/postmanpat-303/ChipWaveTracker/releases/tag/v0.2.3.9"]
+        ["https://github.com/postmanpat-303/ChipWaveStudio/releases/tag/v0.2.3.9"]
     );
     manual_check(&mut h, Outcome::Newer(sample_release()));
     assert!(click_urls(&mut h, "Not now").is_empty());

@@ -5,9 +5,9 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>ChipWave Tracker</string>
+	<string>ChipWave Studio</string>
 	<key>CFBundleName</key>
-	<string>ChipWave</string>
+	<string>ChipWave Studio</string>
 	<key>CFBundleExecutable</key>
 	<string>ChipWave</string>
 	<key>CFBundleIconFile</key>

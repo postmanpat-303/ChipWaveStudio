@@ -260,7 +260,7 @@ pub fn write_tags(path: &Path, song: &Song) -> Result<(), String> {
         description: String::new(),
         text: c,
     });
-    t.set_text("TSSE", format!("ChipWave Tracker {}", crate::VERSION));
+    t.set_text("TSSE", format!("ChipWave Studio {}", crate::VERSION));
     t.write_to_path(path, id3::Version::Id3v24)
         .map_err(|e| e.to_string())
 }

@@ -27,7 +27,7 @@ by a script (amiga/test/make_test_mod.py in the ChipWave repository); all
 samples are synthesised. It is dedicated to the public domain (CC0 1.0).
 
 Licence: GNU GPL version 3 or later (see LICENSE). Source:
-https://github.com/postmanpat-303/ChipWaveTracker (folder amiga/)
+https://github.com/postmanpat-303/ChipWaveStudio (folder amiga/)
 
 Credits
   ptplayer 6.4 by Frank Wille (public domain), with small ChipWave Lite

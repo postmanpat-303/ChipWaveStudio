@@ -1,6 +1,6 @@
-ChipWave Tracker 0.2.3.19 - Windows x64
+ChipWave Studio 0.2.4.0 - Windows x64
 ==============================================================
-GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveTracker
+GPL-3.0-or-later - https://github.com/postmanpat-303/ChipWaveStudio
 Licence: LICENSE.txt (GPL-3). Third-party notices incl. LAME (LGPL): THIRD_PARTY_LICENSES.txt
 
 Run: the setup .exe installs it; the zip holds a portable ChipWave.exe (no install needed).

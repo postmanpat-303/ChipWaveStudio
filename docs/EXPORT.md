@@ -1,4 +1,4 @@
-# ChipWave Tracker: Audio Export (WAV and MP3)
+# ChipWave Studio: Audio Export (WAV and MP3)
 
 **Status:** implemented in 0.2.0 (WAV + MP3 via LAME, ID3v2.4 tags, song/block/selection range, limiter/normalise, progress + cancel). Since 0.2.3.7 exports go through the master true-peak limiter (bit-identical to playback), *Normalise* works by true peak, and the status line reports integrated LUFS and dBTP ([MIXER.md](MIXER.md#3-master)).
 ## 1. What can be exported
@@ -31,7 +31,7 @@ Other export routes stay as they are: **MOD/MMD** module export ([OCTAMED_SPEC.m
 - CBR bitrate presets: 128, 192, 256, **320 kbps**.
 - Sample rate: 44.1 or 48 kHz (same as render). Joint stereo, mono or stereo.
 - Encoder quality: LAME `-q` 2 (high) by default.
-- **ID3v2.4 tags** from song info: title, artist, album, year, genre, comment ("Made with ChipWave Tracker"), track number, and optional cover art (PNG/JPEG from song info). Written with the `id3` crate after encoding.
+- **ID3v2.4 tags** from song info: title, artist, album, year, genre, comment ("Made with ChipWave Studio"), track number, and optional cover art (PNG/JPEG from song info). Written with the `id3` crate after encoding.
 - MP3 always takes 32-bit float from the engine (no dither needed; LAME does its own quantisation).
 
 ## 5. Offline render engine

@@ -24,7 +24,7 @@ rec() {
   local pid=$!
   sleep 2.5
   local win
-  win=$(xdotool search --name "^ChipWave Tracker$" | tail -1)
+  win=$(xdotool search --name "^ChipWave Studio$" | tail -1)
   xdotool windowmove "$win" 0 0 || true
   xdotool mousemove 1919 1199 || true  # keep the pointer out of the clip
   sleep 0.8

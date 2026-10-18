@@ -33,7 +33,7 @@ A `.cwi` is a small ZIP, like a `.cwt` song:
 | Entry | Content |
 |---|---|
 | `mimetype` | `application/x-chipwave-instrument` (stored, first) |
-| `instrument.toml` | `format = "chipwave-instrument"`, `format_version = 1`, `app = "ChipWave Tracker <version>"` (e.g. `0.2.3.14`), then the `[instrument]` table: exactly the same fields a song's instrument has (synth patch, sample settings, Voice parameters, Generator engine and knobs, FX chain, glide/accent, transpose, …) |
+| `instrument.toml` | `format = "chipwave-instrument"`, `format_version = 1`, `app = "ChipWave Studio <version>"` (e.g. `0.2.3.14`), then the `[instrument]` table: exactly the same fields a song's instrument has (synth patch, sample settings, Voice parameters, Generator engine and knobs, FX chain, glide/accent, transpose, …) |
 | `sample.wav` | only for sample instruments: the sample as 32-bit float WAV |
 
 Files are written to a temporary name and renamed, so a crash never leaves half a file. Unknown fields are ignored and missing ones take their defaults, so later versions can add fields; a `format_version` above 1 is refused with a message.

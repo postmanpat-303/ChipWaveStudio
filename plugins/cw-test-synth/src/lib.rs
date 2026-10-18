@@ -1,5 +1,5 @@
 //! ChipWave Test Synth: a tiny CLAP instrument used as a test fixture by
-//! ChipWave Tracker's plugin host (src/plugin/). Polyphonic sine/square with
+//! ChipWave Studio's plugin host (src/plugin/). Polyphonic sine/square with
 //! two parameters (Gain, Tone), state save/load, CLAP and MIDI note dialects
 //! and per-note tuning expressions. Built on clap-sys (MIT OR Apache-2.0,
 //! https://github.com/micahrj/clap-sys); CLAP is by free-audio (MIT,
@@ -44,7 +44,7 @@ static DESC: Desc = Desc(clap_plugin_descriptor {
     id: ID.as_ptr(),
     name: NAME.as_ptr(),
     vendor: c"ChipWave".as_ptr(),
-    url: c"https://github.com/postmanpat-303/ChipWaveTracker".as_ptr(),
+    url: c"https://github.com/postmanpat-303/ChipWaveStudio".as_ptr(),
     manual_url: c"".as_ptr(),
     support_url: c"".as_ptr(),
     version: c"0.1.0".as_ptr(),

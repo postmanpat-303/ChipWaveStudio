@@ -1,15 +1,15 @@
 # ChipWave on macOS
 
-ChipWave Tracker has a **universal macOS build**: one `ChipWave.app` that runs natively on **Apple Silicon** (M1, M2, M3, M4…) and **Intel** Macs. It needs **macOS 11 Big Sur or later**.
+ChipWave Studio has a **universal macOS build**: one `ChipWave.app` that runs natively on **Apple Silicon** (M1, M2, M3, M4…) and **Intel** Macs. It needs **macOS 11 Big Sur or later**.
 
-> **Status:** the Mac build is made by GitHub Actions and checked there automatically (both CPU halves start, render audio and pass the self-test). Nobody has tried it on a real Mac yet, so please report anything odd in an [issue](https://github.com/postmanpat-303/ChipWaveTracker/issues) and include your macOS version and chip. The first release with Mac files is **v0.2.3.14**.
+> **Status:** the Mac build is made by GitHub Actions and checked there automatically (both CPU halves start, render audio and pass the self-test). Nobody has tried it on a real Mac yet, so please report anything odd in an [issue](https://github.com/postmanpat-303/ChipWaveStudio/issues) and include your macOS version and chip. The first release with Mac files is **v0.2.3.14**.
 
 <p align="center"><img src="screenshots/macos-launch.png" alt="ChipWave 0.2.3.15 running on macOS (GitHub Actions macos-latest runner, Apple Silicon)" width="720"><br><sub>The universal build running on a GitHub Actions macOS machine (Apple Silicon, CoreAudio "Apple Virtual Sound Device"), captured by the workflow.</sub></p>
 
 ## Download
 
-- **Disk image (recommended):** [`ChipWave-macos-universal.dmg`](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-macos-universal.dmg)
-- **Zip of the app:** [`ChipWave-macos-universal.zip`](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-macos-universal.zip)
+- **Disk image (recommended):** [`ChipWave-macos-universal.dmg`](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg)
+- **Zip of the app:** [`ChipWave-macos-universal.zip`](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.zip)
 
 These links always fetch the newest release. Each release also has the versioned files (`ChipWave-<version>-macos-universal.dmg` / `.zip`) and their checksums in `SHA256SUMS.txt`.
 
@@ -24,6 +24,7 @@ These links always fetch the newest release. Each release also has the versioned
      xattr -dr com.apple.quarantine /Applications/ChipWave.app
      ```
    After that it opens normally.
+3. **Upgrading from ChipWave Tracker (0.2.3.x):** drag the new `ChipWave.app` over the old one and choose **Replace**. The bundle keeps its name and its id (`com.postmanpat303.chipwave`), so it is the same app to macOS; the menu bar and Dock now say **ChipWave Studio**. Settings stay in `~/Library/Application Support/ChipWave`.
 
 The app is **ad-hoc signed**, which is what Apple Silicon needs before it will run native code. It is **not notarised**, because that needs a paid Apple Developer account.
 
@@ -51,7 +52,7 @@ scripts/package-macos.sh            # version from Cargo.toml, e.g. 0.2.3+fix.15
 
 This writes `dist/mac/ChipWave.app` and `dist/mac/ChipWave-<ver>-macos-universal.{dmg,zip}`, plus versionless copies and `SHA256SUMS.txt`. For a quick single-architecture build, just run `cargo run --release`.
 
-Without a Mac, run the **macOS** workflow on GitHub: **Actions → macOS → Run workflow** (or `gh workflow run macos.yml`). It builds both architectures on `macos-latest`, joins them with `lipo`, builds the `.app` (Info.plist, an `.icns` made with `sips`/`iconutil` from `assets/icon/chipwave_tracker_1024.png`), makes the dmg (retrying `hdiutil` on "Resource busy") and zip, smoke-tests both halves, mounts the dmg to check it, and uploads everything as a workflow **artifact**. It never attaches anything to a release.
+Without a Mac, run the **macOS** workflow on GitHub: **Actions → macOS → Run workflow** (or `gh workflow run macos.yml`). It builds both architectures on `macos-latest`, joins them with `lipo`, builds the `.app` (Info.plist, an `.icns` made with `sips`/`iconutil` from `assets/icon/chipwave_studio_1024.png`), makes the dmg (retrying `hdiutil` on "Resource busy") and zip, smoke-tests both halves, mounts the dmg to check it, and uploads everything as a workflow **artifact**. It never attaches anything to a release.
 
 ## Publishing (release checklist)
 

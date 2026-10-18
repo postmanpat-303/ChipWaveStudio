@@ -71,7 +71,7 @@ pub fn save_cwi(inst: &Instrument, path: &Path) -> Result<(), String> {
         let f = InstFile {
             format: FORMAT.into(),
             format_version: 1,
-            app: format!("ChipWave Tracker {}", crate::VERSION),
+            app: format!("ChipWave Studio {}", crate::VERSION),
             instrument: i,
         };
         z.start_file("instrument.toml", defl).map_err(e)?;

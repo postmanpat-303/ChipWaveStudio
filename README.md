@@ -1,26 +1,26 @@
 <p align="center">
-  <img src="assets/icon/chipwave_tracker_256.png" alt="ChipWave Tracker icon" width="128">
+  <img src="assets/icon/chipwave_studio_256.png" alt="ChipWave Studio icon" width="128">
 </p>
 
-<h1 align="center">ChipWave Tracker</h1>
+<h1 align="center">ChipWave Studio</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.3.19-00d0ff" alt="Version 0.2.3.19">
+  <img src="https://img.shields.io/badge/version-0.2.4.0-00d0ff" alt="Version 0.2.4.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
-  <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveTracker?label=release&color=7c4dff" alt="Latest release"></a>
+  <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/6VWhFZxexIc"><img src="docs/screenshots/promo-thumb.jpg" alt="Watch the ChipWave Tracker promo on YouTube" width="640"></a>
+  <a href="https://youtu.be/6VWhFZxexIc"><img src="docs/screenshots/promo-thumb.jpg" alt="Watch the ChipWave Studio promo on YouTube" width="640"></a>
   <br><sub>▶ Watch the promo on YouTube · more demos on <a href="https://www.youtube.com/@whatgoesaround1551">the channel</a></sub>
 </p>
 
 ```
  ┌──────────────────────────────────────────────────────────────────────────┐
- │  C H I P W A V E   T R A C K E R          v0.2.3.16    BPM 140  SPD 06  │
+ │  C H I P W A V E   S T U D I O            v0.2.4.0     BPM 140  SPD 06  │
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
  │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ OctaMED-inspired  │
  │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ tracker + synth   │
@@ -34,8 +34,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
-  <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
+  <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
+  <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -43,7 +43,9 @@
   <a href="https://github.com/postmanpat-303/BigWaveRadio"><b>BigWave Radio</b></a> (sister project)
 </p>
 
-**ChipWave Tracker** is a music tracker inspired by **OctaMED** and the Commodore **Amiga**: the fast, keyboard-driven pattern workflow of a classic tracker, plus a built-in synth, a synthetic Voice instrument, macro-knob Generators (drums, chip FX, analog, FM, noise), a visual arranger, a mixer with sidechain ducking and a true-peak limiter, automation and WAV/MP3 export, in up to 32 channels. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
+**ChipWave Studio** is a music tracker inspired by **OctaMED** and the Commodore **Amiga**: the fast, keyboard-driven pattern workflow of a classic tracker, plus a built-in synth, a synthetic Voice instrument, macro-knob Generators (drums, chip FX, analog, FM, noise), a visual arranger, a mixer with sidechain ducking and a true-peak limiter, automation and WAV/MP3 export, in up to 32 channels. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
+
+> **ChipWave Studio was called ChipWave Tracker until 0.2.3.19.** It was renamed in 0.2.4.0 to tell it apart from an unrelated iOS app called "ChipWave". Same app, same settings, same `.cwt` songs; the old GitHub links redirect here. Website: **[postmanpat-303.github.io/ChipWaveStudio](https://postmanpat-303.github.io/ChipWaveStudio/)**. Details: [docs/RENAME.md](docs/RENAME.md).
 
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
@@ -200,9 +202,9 @@ The palettes, generated from the colour values in [`src/theme.rs`](src/theme.rs)
 ```
 <a id="download"></a>
 
-Get the **Windows** installer [`ChipWave-setup-x64.exe`](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-setup-x64.exe) or the portable [`ChipWave-windows-x64.zip`](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-windows-x64.zip) from the [latest release](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest) (these links always fetch the newest version; older versions are on the [releases page](https://github.com/postmanpat-303/ChipWaveTracker/releases)). Already on 0.2.3.5 or later? **Help > Check for updates…** offers it. The exe isn't code-signed yet, so SmartScreen may warn: click “More info”, then “Run anyway”. The app opens with the demo song loaded: press **Space** to play.
+Get the **Windows** installer [`ChipWave-setup-x64.exe`](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-setup-x64.exe) or the portable [`ChipWave-windows-x64.zip`](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-windows-x64.zip) from the [latest release](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest) (these links always fetch the newest version; older versions are on the [releases page](https://github.com/postmanpat-303/ChipWaveStudio/releases)). Already on 0.2.3.5 or later? **Help > Check for updates…** offers it. The exe isn't code-signed yet, so SmartScreen may warn: click “More info”, then “Run anyway”. The app opens with the demo song loaded: press **Space** to play.
 
-**macOS**: the universal disk image [`ChipWave-macos-universal.dmg`](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-macos-universal.dmg) runs on both Apple Silicon and Intel Macs, macOS 11 or later (or get the zip, [`ChipWave-macos-universal.zip`](https://github.com/postmanpat-303/ChipWaveTracker/releases/latest/download/ChipWave-macos-universal.zip)). It isn't notarised, so open it the first time with Control-click → **Open** (or `xattr -dr com.apple.quarantine /Applications/ChipWave.app`). See [MACOS.md](docs/MACOS.md).
+**macOS**: the universal disk image [`ChipWave-macos-universal.dmg`](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg) runs on both Apple Silicon and Intel Macs, macOS 11 or later (or get the zip, [`ChipWave-macos-universal.zip`](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.zip)). It isn't notarised, so open it the first time with Control-click → **Open** (or `xattr -dr com.apple.quarantine /Applications/ChipWave.app`). See [MACOS.md](docs/MACOS.md).
 
 On Linux, build it from source (below).
 
@@ -337,7 +339,7 @@ Research notes: [docs/research/voice-glitch.md](docs/research/voice-glitch.md).
 
 ## Licence
 
-ChipWave Tracker is free software, licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-or-later).
+ChipWave Studio is free software, licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-or-later).
 
 ## 💛 Thank you
 

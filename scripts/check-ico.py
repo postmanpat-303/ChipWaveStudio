@@ -6,7 +6,7 @@ frames below 256 px and fall back to the generic program icon. A standard .ico k
 256 px as PNG and every smaller size (128, 64, 48, 32, 24, 16) as 32-bit BMP.
 
 Usage:
-  scripts/check-ico.py assets/icon/chipwave_tracker.ico      # an .ico file
+  scripts/check-ico.py assets/icon/chipwave_studio.ico      # an .ico file
   scripts/check-ico.py dist/pkg/ChipWave.exe                  # every icon group in a PE (.exe)
   scripts/check-ico.py --extract OUTDIR file.exe              # also write the groups as .ico files
 Exits 1 if a frame below 256 px is PNG, or 16, 32 or 48 px is missing.

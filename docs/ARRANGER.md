@@ -1,4 +1,4 @@
-# ChipWave Tracker: Visual Arranger
+# ChipWave Studio: Visual Arranger
 
 **Status:** basic version implemented in 0.1.3 (see the end of this page).
 

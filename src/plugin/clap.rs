@@ -456,9 +456,9 @@ impl ClapInst {
             host: clap_host {
                 clap_version: CLAP_VERSION,
                 host_data: std::ptr::null_mut(),
-                name: c"ChipWave Tracker".as_ptr(),
+                name: c"ChipWave Studio".as_ptr(),
                 vendor: c"ChipWave".as_ptr(),
-                url: c"https://github.com/postmanpat-303/ChipWaveTracker".as_ptr(),
+                url: c"https://github.com/postmanpat-303/ChipWaveStudio".as_ptr(),
                 version: c"0.2.3.16".as_ptr(),
                 get_extension: Some(h_get_ext),
                 request_restart: Some(h_restart),

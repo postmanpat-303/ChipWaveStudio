@@ -1,4 +1,4 @@
-# ChipWave Tracker: Sound Design System
+# ChipWave Studio: Sound Design System
 
 **Status (0.2.3.14):** this page is the original design. Implemented so far:
 - **Synth patch:** oscillator with unison, detune and stereo width, plus an 808-style metal source. The filter is the SVF or, since 0.2.3.12, the **Moog ladder** (clean or vintage, 12/24 dB, LP/BP/HP). It has filter and amp envelopes, drive, a tempo-syncable LFO, velocity → cutoff, glide/legato and accent.

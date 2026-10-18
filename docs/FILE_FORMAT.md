@@ -1,4 +1,4 @@
-# ChipWave Tracker: Native Song Format (`.cwt`)
+# ChipWave Studio: Native Song Format (`.cwt`)
 
 **Status (0.2.3.14):** implemented: the `.cwt` ZIP container (TOML + WAV), the single-file text song `.cwt.toml` (used by the demos; `patch = "gen:<preset>"` / `"voice:<preset>"` load factory sounds), `.cwi` instrument files ([INSTRUMENT_LIBRARY.md](INSTRUMENT_LIBRARY.md)), autosave and backups. Up to 32 channels per song (0.2.3.8). New features add fields with defaults, so older songs load unchanged; a song that uses a newer instrument type does not open in an older version. Render-to-sample links, MED/MOD import and file association below are still plans.
 
@@ -71,7 +71,7 @@ If the hash no longer matches, the sample shows as stale (SOUND_DESIGN.md §7).
 format = "chipwave-song"
 format_version = 1            # bump on breaking change
 min_reader_version = 1        # oldest reader that can still open it safely
-app = "ChipWave Tracker 0.3.0"
+app = "ChipWave Studio 0.3.0"
 created = 2026-10-16T13:45:00+01:00
 
 [[file]]
@@ -118,7 +118,7 @@ Our Octopus-tracker review found its song loader trusts the file without checks,
 ```xml
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
   <mime-type type="application/x-chipwave-song">
-    <comment>ChipWave Tracker song</comment>
+    <comment>ChipWave Studio song</comment>
     <sub-class-of type="application/zip"/>
     <glob pattern="*.cwt"/>
     <magic priority="60"><match type="string" offset="30" value="mimetypeapplication/x-chipwave-song"/></magic>

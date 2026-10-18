@@ -150,7 +150,7 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
         z.write_all(b"application/x-chipwave-song")
             .map_err(|e| e.to_string())?;
         z.start_file("manifest.toml", defl).map_err(e)?;
-        z.write_all(format!("format = \"chipwave-song\"\nformat_version = 1\nmin_reader_version = 1\napp = \"ChipWave Tracker {}\"\n", crate::VERSION).as_bytes()).map_err(|e| e.to_string())?;
+        z.write_all(format!("format = \"chipwave-song\"\nformat_version = 1\nmin_reader_version = 1\napp = \"ChipWave Studio {}\"\n", crate::VERSION).as_bytes()).map_err(|e| e.to_string())?;
         let mut instruments = song.instruments.clone();
         for (i, inst) in instruments.iter_mut().enumerate() {
             if let InstrumentKind::Sample {

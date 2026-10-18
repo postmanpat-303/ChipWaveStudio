@@ -33,7 +33,7 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # Icon: an .iconset from the 1024 px app icon, then iconutil.
 SET="$(mktemp -d)/ChipWave.iconset"; mkdir -p "$SET"
-SRC=assets/icon/chipwave_tracker_1024.png
+SRC=assets/icon/chipwave_studio_1024.png
 for s in 16 32 128 256 512; do
   sips -z $s $s "$SRC" --out "$SET/icon_${s}x${s}.png" >/dev/null
   d=$((s * 2)); sips -z $d $d "$SRC" --out "$SET/icon_${s}x${s}@2x.png" >/dev/null
@@ -61,7 +61,7 @@ cp "$DOCS/LICENSE.txt" "$DOCS/THIRD_PARTY_LICENSES.txt" "$DMGDIR/"
 # hdiutil sometimes fails with "Resource busy" on CI runners; try a few times.
 ok=0
 for i in 1 2 3 4 5 6; do
-  if hdiutil create -volname "ChipWave $VER" -srcfolder "$DMGDIR" -fs HFS+ -format UDZO -ov "$OUT/$NAME.dmg"; then
+  if hdiutil create -volname "ChipWave Studio $VER" -srcfolder "$DMGDIR" -fs HFS+ -format UDZO -ov "$OUT/$NAME.dmg"; then
     ok=1; break
   fi
   echo "hdiutil failed (try $i), retrying"; sleep $((i * 5))

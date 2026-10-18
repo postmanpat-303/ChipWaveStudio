@@ -1,8 +1,8 @@
-// ChipWave Tracker - GPL-3.0-or-later
+// ChipWave Studio - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-/// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.19";
+/// Display version (Cargo: 0.2.4+fix.0 -> "0.2.4.0"; the updater compares it part by part).
+pub const VERSION: &str = "0.2.4.0";
 
 mod app;
 mod arrange;
@@ -693,7 +693,7 @@ fn main() {
     }
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version") {
-        println!("ChipWave Tracker {}", crate::VERSION);
+        println!("ChipWave Studio {}", crate::VERSION);
         return;
     }
     if let Some(i) = args.iter().position(|a| a == "--screenshot") {
@@ -701,7 +701,7 @@ fn main() {
     }
     if args.iter().any(|a| a == "--check-updates") {
         // same check as Help > Check for updates (5 s timeout); exit 0 = ran
-        println!("ChipWave Tracker {}: checking for updates…", crate::VERSION);
+        println!("ChipWave Studio {}: checking for updates…", crate::VERSION);
         match update::evaluate(update::fetch_latest(), crate::VERSION) {
             update::Outcome::Newer(r) => println!(
                 "  newer version {} available

@@ -1,10 +1,11 @@
 [package]
 name = "chipwave"
-version = "0.2.3+fix.19"
+version = "0.2.4+fix.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
-description = "ChipWave Tracker - an OctaMED-inspired tracker with a built-in synth"
-repository = "https://github.com/postmanpat-303/ChipWaveTracker"
+description = "ChipWave Studio - an OctaMED-inspired tracker with a built-in synth"
+repository = "https://github.com/postmanpat-303/ChipWaveStudio"
+homepage = "https://postmanpat-303.github.io/ChipWaveStudio/"
 
 [[bin]]
 name = "chipwave"

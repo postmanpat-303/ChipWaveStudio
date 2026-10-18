@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=ChipWave Studio
+GenericName=Music Tracker
+Comment=Free music DAW and tracker with built-in synths (formerly ChipWave Tracker)
+Exec=chipwave %f
+Icon=io.github.postmanpat_303.ChipWaveStudio
+Terminal=false
+Categories=AudioVideo;Audio;Music;Sequencer;Midi;
+Keywords=tracker;DAW;music;chiptune;synth;OctaMED;Amiga;ChipWave Tracker;
+MimeType=application/x-chipwave-song;application/x-chipwave-patch;
+StartupWMClass=ChipWave Studio

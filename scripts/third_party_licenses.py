@@ -330,13 +330,13 @@ Plugin instrument hosting (src/plugin/, 0.2.3.16):
 """
 
 out = sys.stdout
-out.write("ChipWave Tracker - third-party software\n")
+out.write("ChipWave Studio - third-party software\n")
 out.write("=" * 60 + "\n\n")
-out.write("ChipWave Tracker is GPL-3.0-or-later (see LICENSE.txt). It includes the\n"
+out.write("ChipWave Studio is GPL-3.0-or-later (see LICENSE.txt). It includes the\n"
           "crates below. MP3 export uses LAME 3.100 (LGPL), statically linked through\n"
           "mp3lame-sys; LAME's source is at https://lame.sourceforge.io and the\n"
           "complete ChipWave source (needed to relink) is at\n"
-          "https://github.com/postmanpat-303/ChipWaveTracker\n\n")
+          "https://github.com/postmanpat-303/ChipWaveStudio\n\n")
 out.write(CREDITS)
 for p in pkgs:
     out.write(f"- {p['name']} {p['version']}: {p.get('license') or 'see files'}\n")

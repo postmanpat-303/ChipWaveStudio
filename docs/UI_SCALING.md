@@ -1,4 +1,4 @@
-# ChipWave Tracker: UI Scaling and Screen Modes
+# ChipWave Studio: UI Scaling and Screen Modes
 
 **Status (0.2.3.14):** UI scale in 25 % steps (Ctrl+= / Ctrl+- / Ctrl+0, Settings > Look) and remembered window size and position are implemented; the per-layout ideas below are partly design.
 

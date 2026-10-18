@@ -3,7 +3,7 @@
  * - plays a 1 s square-wave beep on Paula channel 0 through audio.device
  *   (the OS-friendly way: channel allocation, CMD_WRITE, chip RAM sample)
  * - writes DH0:c-spike-result.txt so a headless emulator run can be checked
- * GPL-3.0-or-later, part of ChipWave Tracker. */
+ * GPL-3.0-or-later, part of ChipWave Studio. */
 #include <exec/exec.h>
 #include <devices/audio.h>
 #include <intuition/intuition.h>
