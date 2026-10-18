@@ -134,6 +134,10 @@ Effect columns accept classic OctaMED/ProTracker commands (page 1, binary-compat
 | 3C | 303 glide to this note (ChipWave) | 00 = no glide (retrigger), 01 = the instrument's glide time, 02–FF = xx × 5 ms |
 | 3D | Accent this note (ChipWave) | 00 = the instrument's accent amount, 01–40 = amount |
 | 3E | Voice: speak word xx (ChipWave, 0.2.3.10) | 00–0F = word number; on a held note (no note in the row) the word is said again |
+| 3F | Voice Transform blend (ChipWave, 0.2.3.11) | 00 = instrument; 01–FF = 0–100 % (stays on the channel) |
+| 40 | Transform metallic resonance amount; also the Metal resonator device's mix (ChipWave) | 00 = instrument; 01–FF = 0–100 % |
+| 41 | Transform digital distortion amount; also the Digital distortion device's mix (ChipWave) | 00 = instrument; 01–FF = 0–100 % |
+| 42 | Transform sub level; also the Sub bass device's level (ChipWave) | 00 = instrument; 01–FF = 0–100 % |
 
 Effects 30–37 are documented in [VOICE.md](VOICE.md).
 

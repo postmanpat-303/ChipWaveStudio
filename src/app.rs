@@ -668,6 +668,11 @@ impl App {
                  an arpeggio or a bass line. Scale lock snaps typed and MIDI notes to the key.",
             );
             ui.label(
+                "Voice Transform: 3Fxx blend · 40xx metallic resonance · 41xx digital distortion · 42xx sub level \
+                 (00 = instrument, 01-FF = 0-100 %; 40-42 also set the Metal resonator / Digital distortion / Sub bass \
+                 devices' mix on that channel).",
+            );
+            ui.label(
                 "Slicing (Sample editor): Transients cuts the sample at its hits (sens = sensitivity, gap = shortest slice), \
                  Grid cuts it into 2-64 equal parts. Click a slice to select it (Prev / Next step through them); Normalise, \
                  Reverse, Fade, Gain then work on that slice. Alt+click adds a slice, right-click a marker removes it. \

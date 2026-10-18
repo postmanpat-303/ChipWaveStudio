@@ -126,6 +126,22 @@ Voice consonants and Throat mode (src/speech.rs, 0.2.3.10):
 - Frication / burst noise bands: K. N. Stevens (1998), "Acoustic
   Phonetics", MIT Press.
 
+Voice Transform (src/transform.rs, 0.2.3.11), independent implementations:
+- Metallic resonance: two-pole modal resonators in the constant-peak-gain
+  form of J. O. Smith & J. B. Angell (1982), "A constant-gain digital
+  resonator tuned by a single coefficient", Computer Music Journal 6(4);
+  see also J. O. Smith, "Introduction to Digital Filters",
+  https://ccrma.stanford.edu/~jos/filters/
+- Mode ratios: church-bell partials and free-free bar modes after
+  N. H. Fletcher & T. D. Rossing, "The Physics of Musical Instruments"
+  (Springer, 1998); the "metal" ratios are the six square-wave oscillator
+  frequencies of the Roland TR-808 cymbal / hi-hat (no Roland material used).
+- Sub crossover: Linkwitz-Riley filters, S. H. Linkwitz (1976), "Active
+  crossover networks for noncoincident drivers", JAES 24(1); the side-only
+  high-pass ("mono maker") follows the elliptical EQ of vinyl mastering.
+- Octave divider: a flip-flop on the zero crossings, the principle of analog
+  octave pedals such as the Boss OC-2 (1982); no circuit or code copied.
+
 Chord helper and key detection (src/chords.rs), independent implementations:
 - Key finding: the Krumhansl-Schmuckler algorithm, as described in
   C. L. Krumhansl (1990), "Cognitive Foundations of Musical Pitch", Oxford

@@ -609,6 +609,24 @@ fn role_of(r: &str) -> Option<crate::arrange::Role> {
     }
 }
 
+/// overlay `o` on `m`; tables merge key by key (so `[instrument.voice.transform]`
+/// changes only the keys it names)
+fn merge_toml(m: &mut toml::Value, o: &toml::Value) {
+    match (m.as_table_mut(), o.as_table()) {
+        (Some(mt), Some(ot)) => {
+            for (k, v) in ot {
+                match mt.get_mut(k) {
+                    Some(dst) if dst.is_table() && v.is_table() => merge_toml(dst, v),
+                    _ => {
+                        mt.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
+        _ => *m = o.clone(),
+    }
+}
+
 fn fx_kind(name: &str) -> Option<crate::fx::FxKind> {
     crate::fx::FxKind::ALL.into_iter().find(|k| {
         format!("{k:?}").eq_ignore_ascii_case(name) || k.name().eq_ignore_ascii_case(name)
@@ -653,11 +671,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
                 .ok_or_else(|| format!("instrument {name}: unknown voice preset {vname:?}"))?;
             if let Some(t) = i.get("voice") {
                 let mut merged = toml::Value::try_from(&vp).map_err(|e| e.to_string())?;
-                if let (Some(m), Some(o)) = (merged.as_table_mut(), t.as_table()) {
-                    for (k, v) in o {
-                        m.insert(k.clone(), v.clone());
-                    }
-                }
+                merge_toml(&mut merged, t);
                 vp = merged
                     .try_into()
                     .map_err(|e| format!("instrument {name}: voice: {e}"))?;
@@ -1287,6 +1301,43 @@ shift = 0.9
         assert_eq!(v.base.cutoff, 3000.0);
         assert_eq!(v.register, crate::voice::Register::Demon);
         assert!(song_from_text(&t.replace("Demon Ahh", "Nope")).is_err());
+    }
+
+    #[test]
+    fn text_song_voice_transform_overrides_merge_into_the_preset() {
+        let t = r#"
+[song]
+title = "tf"
+[[instrument]]
+name = "Beast"
+patch = "voice:Sub Beast"
+[instrument.voice.transform]
+blend = 0.5
+[instrument.voice.transform.sub]
+octave = 2
+[[instrument]]
+name = "Dry"
+patch = "voice:Demon Ahh"
+[[instrument.fx]]
+kind = "Metal resonator"
+mix = 0.7
+"#;
+        let s = song_from_text(t).unwrap();
+        let InstrumentKind::Voice(v) = &s.instruments[0].kind else {
+            panic!("not a voice")
+        };
+        let pre = crate::voice::preset("Sub Beast").unwrap().transform;
+        assert_eq!(v.transform.blend, 0.5);
+        assert_eq!(v.transform.sub.octave, 2);
+        // everything else stays the preset's
+        assert_eq!(v.transform.sub.formant_drop, pre.sub.formant_drop);
+        assert_eq!(v.transform.sub.mode, pre.sub.mode);
+        assert_eq!(v.transform.dig, pre.dig);
+        let InstrumentKind::Voice(d) = &s.instruments[1].kind else {
+            panic!("not a voice")
+        };
+        assert_eq!(d.transform, crate::transform::Transform::default());
+        assert_eq!(s.instruments[1].fx[0].kind, crate::fx::FxKind::Resonator);
     }
 
     #[test]

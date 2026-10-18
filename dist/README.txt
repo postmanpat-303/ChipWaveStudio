@@ -163,6 +163,16 @@ holds short words (ka, ta, sha, dum ...); each note speaks the next one and
 vocal tract inspired by Pink Trombone by Neil Thapen (MIT). Presets: Talk
 Ka-Ta, Throat Ahh, Throat Speech, Demon Words.
 
+Voice Transform (0.2.3.11): the TRANSFORM section of a Voice instrument
+blends three stages over the voice: metallic resonance (resonators tuned to
+the note), digital distortion (clip / fold, bits, sample rate, ring mod) and
+a sub-bass layer (sine or octave divider, mono below the crossover), with
+formant drop for a monster voice. Blend 0 = off. Presets: Metal Demon,
+Digital Ghost, Sub Beast, Cyber Choir, Ritual Growl. Pattern: 3Fxx blend,
+40xx resonance, 41xx digital, 42xx sub (00 = instrument, 01-FF = 0-100 %).
+The stages are also FX devices for any instrument (Metal resonator, Digital
+distortion, Sub bass).
+
 Chop / slice (0.2.3.10): in the Sample editor, Transients or Grid cuts the
 sample into numbered slices; click one (or Prev / Next) to edit just that
 slice; To instruments makes one instrument per slice, To notes also writes

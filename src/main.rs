@@ -2,7 +2,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 /// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.10";
+pub const VERSION: &str = "0.2.3.11";
 
 mod app;
 mod arrange;
@@ -288,8 +288,66 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         ok
     };
+    // 0.2.3.11: Voice Transform presets + the three FX devices
+    let tf_ok = {
+        let mut s = song.clone();
+        for row in s.patterns[0].cells.iter_mut() {
+            row.iter_mut().for_each(|c| *c = model::Cell::default());
+        }
+        s.order = vec![0];
+        let names = [
+            "Metal Demon",
+            "Digital Ghost",
+            "Sub Beast",
+            "Cyber Choir",
+            "Ritual Growl",
+        ];
+        let base = s.instruments.len() as u8;
+        for (k, name) in names.iter().enumerate() {
+            if let Some(p) = voice::preset(name) {
+                s.instruments.push(model::Instrument {
+                    name: (*name).into(),
+                    volume: 0.8,
+                    transpose: 0,
+                    fx: vec![],
+                    kind: model::InstrumentKind::Voice(p),
+                });
+            }
+            s.patterns[0].cells[k * 6][k % 4] = model::Cell {
+                note: 25,
+                instr: base + k as u8 + 1,
+                ..Default::default()
+            };
+        }
+        if let Some(i) = s.instruments.get_mut(1) {
+            i.fx = vec![
+                fx::Device::new(fx::FxKind::Resonator),
+                fx::Device::new(fx::FxKind::Digital),
+                fx::Device::new(fx::FxKind::Sub),
+            ];
+        }
+        s.patterns[0].cells[2][4] = model::Cell {
+            note: 37,
+            instr: 2,
+            fx: 0x3F,
+            fxp: 0x80,
+            ..Default::default()
+        };
+        let pcm = engine::render_song(&s, 44100);
+        let fin = pcm.iter().all(|x| x.is_finite());
+        let tp = master::true_peak(&pcm);
+        let rms = (pcm.iter().map(|x| x * x).sum::<f32>() / pcm.len().max(1) as f32).sqrt();
+        let ok = fin && tp < 1.0 && rms > 0.003 && s.instruments.len() == base as usize + 5;
+        report.push_str(&format!(
+            "  voice transform: 5 presets + 3 FX devices, rms {rms:.4}, true peak {:.2} dBTP ({})\n",
+            20.0 * tp.max(1e-9).log10(),
+            if ok { "ok" } else { "FAILED" }
+        ));
+        ok
+    };
     let ok = fill_ok
         && inst_ok
+        && tf_ok
         && speech_ok
         && midi_ok
         && peak > 0.05

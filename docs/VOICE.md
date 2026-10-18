@@ -96,6 +96,90 @@ how fast the tongue moves. Presets: **Throat Ahh**, **Throat Speech**, **Demon W
 Throat mode costs more CPU (8 throat voices render about 6× faster than realtime
 on one core; formant mode is several times cheaper).
 
+## Transform (0.2.3.11)
+The **TRANSFORM** section under the voice settings turns the voice into
+metal, broken electronics or a sub-heavy monster. Three stages, each with its
+own amount, and a master **Blend** between the dry voice (0) and the
+transformed one (1). Blend 0 is off (the default, and what every song from
+0.2.3.10 and older gets): the voice renders bit for bit as before.
+
+Signal flow per note:
+
+```
+voice (formants / Throat) ─┬─ Digital ─ Resonance ─┐   (or Resonance ─ Digital: Order)
+                           │                       ├─ Blend ─ mono below the crossover ─ filter, drive ─┬─ amp env
+                           └───────────── dry ─────┘                                                    │
+                           └─ Sub (sine / divider, follows the voice's envelope) ─ saturate ─ crossover ┘
+```
+
+**Metallic resonance**: six two-pole modal resonators (constant peak gain,
+after Smith & Angell 1982). *Ratios*: harmonic (1 2 3 4 5 6, a robotic
+comb buzz), metal (the TR-808 cymbal ratios), bell (church-bell partials:
+hum, prime, tierce, quint, nominal, deciem), bar (free-free bar modes,
+glassy) or odd (1 3 5 7 9 11, hollow). *Pitch*: Note (follows the note, plus
+*Tune* in semitones) or Fixed (30–4000 Hz). *Decay* is the ring time of the
+lowest mode (20 ms–4 s, the "feedback"); *Damping* makes the higher modes die
+faster and darkens the ring; *Spread* detunes the modes apart, left against
+right, for a stereo shimmer. The poles always stay inside the unit circle and
+the output is soft-limited, so no setting can run away.
+
+**Digital distortion**: *Pre HP* → *Drive* (0–36 dB) into a hard **Clip** or
+a **Fold** → *Bits* (1–16) → *Rate* (sample-rate reduction, 300 Hz–48 kHz;
+*Aliasing* on = raw sample-and-hold, off = filtered decimation) → *Ring mod*
+at the note × *Ring ratio* → *Post LP*. Every step keeps the polarity of its
+input (the fold is the in-phase fold of the Drive device), so blending never
+hollows the voice out; the drive is level-compensated.
+
+**Sub bass**: a layer under the voice. *Mode*: sine (follows the note pitch),
+divider (an octave divider: a flip-flop on the zero crossings of the voice,
+like an analog octave pedal) or both; *Octave* −1 or −2. The sub follows the
+voice's own amplitude (2 ms attack / 60 ms release), *Drive* saturates it
+(adds harmonics, keeps its peak level) and *Growl* sets how much of those
+harmonics above the *Crossover* (60–250 Hz) you hear. Below the crossover the
+sub is clean, and the whole voice is folded to mono there (only the side
+signal is high-passed, 48 dB/oct, an octave above the crossover: the side is
+at least ~50 dB down below the crossover, the mid is untouched). The sub is
+added after the patch filter and drive, before the amp envelope, so the
+filter never muddies it. *Formant drop* (0–12 semitones, scaled by the
+Blend) lowers the formants for a monster voice.
+
+**Order**: Dist > Res (default: the resonators ring on the grit) or
+Res > Dist (the ringing gets crushed).
+
+| Preset | Sound |
+|---|---|
+| **Metal Demon** | Demon A/O voice ringing through metal resonators, light crush, sub, formants −3 st |
+| **Digital Ghost** | thin Soprano E/I/U whisper through a 5-bit 6 kHz aliasing crusher and a ring modulator, glassy bar resonators |
+| **Sub Beast** | words (dum bom gha), formants −7 st, saturated sine + divider sub, clipped grit |
+| **Cyber Choir** | Alto A-E-I-O choir through harmonic resonators an octave up, light filtered crush |
+| **Ritual Growl** | Throat-mode Demon words (gha om kar osh), bell resonators an octave down, then folded distortion, divider sub |
+
+Pattern effects (00 = the instrument's own value, 01–FF = 0–100 %; they
+stay on the channel until a different instrument plays there):
+
+| Effect | Sets |
+|---|---|
+| `3Fxx` | Transform blend |
+| `40xx` | metallic resonance amount |
+| `41xx` | digital distortion amount |
+| `42xx` | sub level |
+
+Values glide over 10 ms (no zipper noise). A voice whose Blend is 0 gets its
+transform from `3Fxx` alone (`3FFF` = fully transformed).
+
+**As FX devices.** The three stages are also devices for any instrument
+(Add effect > *Metal resonator*, *Digital distortion*, *Sub bass*). The
+resonator and the sub sine follow the pitch of the note playing on that
+channel (without a note: the fixed pitch, and the sub falls back to the
+octave divider); `40xx`–`42xx` set the device's mix on that channel. Device
+presets: Robot ring, Cyber metal, Temple bell; 8-bit grit, Ring robot,
+Broken DAC; Clean sine sub, Octaver growl.
+
+In text songs: `[instrument.voice.transform]` (and `.res`, `.dig`, `.sub`
+sub-tables) changes only the keys it names, e.g.
+`[instrument.voice.transform]` `blend = 0.6`, `[instrument.voice.transform.sub]`
+`octave = 2`.
+
 ## Text songs
 In a `.cwt.toml` text song, `patch = "voice:Demon Ahh"` makes a Voice
 instrument. An optional `[instrument.voice]` table overrides its fields
@@ -113,6 +197,12 @@ use), renders them with `chipwave --render` and joins them into one MP3.
   diphthong rules); words are phoneme strings, not English text-to-speech.
 - In Throat mode voiced closures (b d g) are almost silent: the tube has no
   wall radiation for the voice bar.
+- Transform: the resonators and the sub start fresh with every note (the
+  previous note fades out over 5 ms as before), so a long resonator ring is
+  cut by the next note; use the Metal resonator FX device to ring across notes.
+  The octave divider needs a clear fundamental; on noisy or whispered input it
+  jitters (use the sine mode). Formant drop only applies to the Voice
+  instrument, not the FX devices.
 - Stutter slices are at most 1 second long and sit before the instrument FX chain.
   Live MIDI notes are not stuttered.
 
@@ -135,6 +225,14 @@ use), renders them with `chipwave --render` and joins them into one MP3.
 - **Neil Thapen**, Pink Trombone (2017, MIT), https://dood.al/pinktrombone/ :
   the Throat mode's vocal-tract design. Independent implementation; the MIT
   notice is in THIRD_PARTY_LICENSES.txt.
+- **J. O. Smith & J. B. Angell** (1982), "A constant-gain digital resonator
+  tuned by a single coefficient", Computer Music Journal 6(4); J. O. Smith,
+  *Introduction to Digital Filters*, https://ccrma.stanford.edu/~jos/filters/ :
+  the Transform resonators.
+- **N. H. Fletcher & T. D. Rossing**, *The Physics of Musical Instruments*
+  (1998): bell partials and bar modes; the metal ratios are the Roland TR-808
+  cymbal oscillators. **S. H. Linkwitz** (1976): the crossover. The octave
+  divider follows analog octave pedals (Boss OC-2).
 - **J. L. Kelly & C. C. Lochbaum** (1962), "Speech synthesis": the tube model.
 - **P. Delattre, A. Liberman & F. Cooper** (1955), "Acoustic loci and
   transitional cues for consonants", JASA 27(4),

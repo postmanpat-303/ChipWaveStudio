@@ -246,6 +246,18 @@ pub(super) const CREDITS: &[(&str, &str)] = &[
         "https://doi.org/10.1121/1.1908024",
     ),
     (
+        "Transform resonators: constant-gain resonator after J. O. Smith & J. B. Angell (1982)",
+        "https://ccrma.stanford.edu/~jos/filters/",
+    ),
+    (
+        "Bell and bar mode ratios: N. H. Fletcher & T. D. Rossing, The Physics of Musical Instruments",
+        "https://doi.org/10.1007/978-0-387-21603-4",
+    ),
+    (
+        "Sub crossover: Linkwitz-Riley (S. H. Linkwitz 1976); octave divider after analog octave pedals",
+        "https://www.linkwitzlab.com/filters.htm",
+    ),
+    (
         "Key finding: Krumhansl–Schmuckler algorithm with the Krumhansl & Kessler (1982) key profiles",
         "https://doi.org/10.1037/0033-295X.89.4.334",
     ),

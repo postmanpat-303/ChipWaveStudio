@@ -94,6 +94,10 @@ All pictures on this page are real captures of the current build (no mockups). T
     <td width="34%" valign="top"><img src="docs/screenshots/dark-sample-slicing.png" alt="Sample editor slicing a breakbeat"></td>
     <td width="66%" valign="top"><b>Chop / slice</b> <sub>(0.2.3.10)</sub>: a synthesised breakbeat cut at its transients (or on a grid) into numbered slices. Select a slice to normalise, reverse or fade just that part; <b>To instruments</b> makes one instrument per slice and <b>To notes</b> writes them into the block at the song tempo, ready to rearrange. See <a href="docs/SAMPLES.md">SAMPLES.md</a>.</td>
   </tr>
+  <tr>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-voice-transform.png" alt="Voice Transform section"></td>
+    <td width="66%" valign="top"><b>Voice Transform</b> <sub>(0.2.3.11)</sub>: blend the voice into <b>metallic resonance</b> (modal resonators tuned to the note: metal, bell, bar, harmonic, odd), <b>digital distortion</b> (clip/fold, bits, sample-rate, ring mod) and a <b>heavy sub</b> (sine or octave divider, mono below the crossover), with formant drop for a monster voice. Presets Metal Demon, Digital Ghost, Sub Beast, Cyber Choir, Ritual Growl; <code>3F</code>–<code>42</code> per row; the stages are FX devices for any instrument too. See <a href="docs/VOICE.md">VOICE.md</a>.</td>
+  </tr>
 </table>
 
 **Also in the box**
@@ -266,6 +270,7 @@ ChipWave stands on the shoulders of open source and published research. With tha
 - **Geraint Luff / Signalsmith Audio**, [“Designing a straightforward limiter”](https://signalsmith-audio.co.uk/writing/2022/limiter/): the peak-hold + moving-average lookahead design of the master limiter.
 - **Neil Thapen**, [Pink Trombone](https://dood.al/pinktrombone/) (MIT): the Voice instrument's **Throat** mode follows its vocal-tract design (a Kelly-Lochbaum tube with tongue, lips, nose and turbulence noise). Independent implementation; the MIT notice is in `THIRD_PARTY_LICENSES.txt`.
 - **P. Delattre, A. Liberman & F. Cooper** (1955), [“Acoustic loci and transitional cues for consonants”](https://doi.org/10.1121/1.1908024), and **K. N. Stevens**, *Acoustic Phonetics* (1998): consonant formant transitions and noise bands. **J. L. Kelly & C. C. Lochbaum** (1962): the tube model.
+- **Julius O. Smith & James B. Angell** (1982), “A constant-gain digital resonator tuned by a single coefficient” ([J. O. Smith, *Introduction to Digital Filters*](https://ccrma.stanford.edu/~jos/filters/)): the Transform's modal resonators. **N. H. Fletcher & T. D. Rossing**, *The Physics of Musical Instruments*: the bell and bar mode ratios; the “metal” ratios are the Roland TR-808 cymbal oscillator frequencies. **S. H. Linkwitz** (1976): the Linkwitz-Riley crossover that keeps the sub mono; the octave divider follows analog octave pedals (Boss OC-2).
 - **Carol L. Krumhansl & Edward J. Kessler** (1982), [key profiles](https://doi.org/10.1037/0033-295X.89.4.334), and the **Krumhansl–Schmuckler** key-finding algorithm (Krumhansl, *Cognitive Foundations of Musical Pitch*, 1990): the chord helper's key detection.
 - **Scaler** by Plugin Boutique: the inspiration for the chord pads and progressions (no code, data or artwork used).
 - The **Roland TB-303**, whose glide and accent the `3C` / `3D` effects imitate.

@@ -2469,6 +2469,42 @@ mod tests {
     }
 
     #[test]
+    fn transform_voices_render_fast_enough() {
+        // 8 Metal Demon voices vs the same voices dry: the transform's
+        // cost relative to the voice (robust to a busy machine), and the
+        // absolute speed
+        let bench = |dry: bool| {
+            let mut song = tf_song("Metal Demon", dry);
+            for ch in 0..8 {
+                for r in (0..64).step_by(8) {
+                    song.patterns[0].cells[r][ch] = Cell {
+                        note: 25 + (ch as u8) * 3,
+                        instr: 2,
+                        ..Default::default()
+                    };
+                }
+            }
+            song.channels = 8;
+            let mut e = Engine::new(48000.0);
+            e.start(&song, 0, 0, false, 0);
+            let mut buf = vec![0.0f32; 1024];
+            let t0 = std::time::Instant::now();
+            for _ in 0..(48000 * 3) / 512 {
+                e.render(&song, &mut buf);
+            }
+            3.0 / t0.elapsed().as_secs_f64()
+        };
+        let (wet, dry) = (bench(false), bench(true));
+        eprintln!("8 Metal Demon voices: {wet:.1}x realtime (dry {dry:.1}x)");
+        assert!(
+            dry / wet < 3.0,
+            "transform costs {:.1}x the voice",
+            dry / wet
+        );
+        assert!(wet > 2.0, "8 transformed voices at {wet:.1}x realtime");
+    }
+
+    #[test]
     fn transform_fx_devices_follow_the_note_and_are_allocation_free() {
         use crate::fx::{Device, FxKind};
         let mut song = acid_song(crate::synth::Patch::default());
