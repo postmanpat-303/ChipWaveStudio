@@ -29,6 +29,23 @@ for th in dark amiga; do
   "$BIN" --screenshot "$OUT/$th-voice.png" --view voice --theme $th --size $SIZE
   python3 -c "import sys; from PIL import Image; p=sys.argv[1]; Image.open(p).crop((0, 70, 334, 1058)).save(p)" "$OUT/$th-voice.png"
 done
+# chrome FX devices (0.2.3.11) on the demo's Supersaw Pad: a copy of the demo with
+# Metal resonator, Digital distortion and Sub bass in its chain
+python3 - "$OUT" "$BIN" <<'PY'
+import subprocess, sys
+out, binp = sys.argv[1], sys.argv[2]
+s = open("demos/first_run.cwt.toml").read()
+a = 'fx = [{ kind = "Filter", mode = 1.0, cutoff = 320.0, resonance = 0.1 }, '
+s = s.replace(a, 'fx = [{ kind = "Metal resonator", mix = 0.5 }, { kind = "Digital distortion", mix = 0.35 }, '
+              '{ kind = "Sub bass", mix = 0.6 }, ', 1)
+open("/tmp/chrome.cwt.toml", "w").write(s)
+subprocess.run([binp, "--screenshot", f"{out}/dark-fx-chrome.png", "--view", "fx", "--theme", "dark",
+                "--size", "1920x1080", "--song", "/tmp/chrome.cwt.toml"], check=True)
+PY
+# the generator panels (1280x1024)
+for v in kit chipfx analog fm noise; do
+  "$BIN" --screenshot "$OUT/dark-generators-$v.png" --view "$v" --theme dark --size 1280x1024
+done
 python3 scripts/theme_swatches.py "$OUT/theme-palettes.png"
 if command -v pngquant >/dev/null; then
   pngquant --force --skip-if-larger --quality 80-95 --speed 1 --ext .png "$OUT"/*.png || true
