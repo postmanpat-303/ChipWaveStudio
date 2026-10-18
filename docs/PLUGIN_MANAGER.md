@@ -2,6 +2,8 @@
 
 Del's ask: *"an easy way for these to be loaded in and verified activated."* The Plugin Manager finds every CLAP, VST3 and LV2 plugin on the machine, test-loads each one in a sandbox, shows a clear badge, and lets you switch it on with one click. It extends [MIDI_VST.md](MIDI_VST.md).
 
+**Status (0.2.3.16):** the CLAP part is implemented in a simpler form: an out-of-process crash/hang-guarded scanner, a cache, user folders and Rescan in Settings → Plugins, and the Add plugin instrument browser. See [PLUGINS.md](PLUGINS.md). Not done yet: VST3 and LV2 hosting, enable/disable badges, drag and drop of plugin files, and parallel scan helpers.
+
 ![Plugin manager mockup](mockups/plugin_manager.png) (SVG: [`mockups/plugin_manager.svg`](mockups/plugin_manager.svg), Workbench Gradient A2 style per [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md))
 
 ## 1. Finding plugins

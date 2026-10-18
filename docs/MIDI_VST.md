@@ -1,6 +1,6 @@
 # ChipWave Tracker: MIDI and Plugin Hosting (CLAP / VST3)
 
-**Status:** MIDI keyboard input (play, record, velocity, sustain, pitch bend, simple CC learn) is implemented in 0.2.3, see [MIDI.md](MIDI.md). MIDI output, clock and plugin hosting are still design. Visual style: [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
+**Status:** MIDI keyboard input (play, record, velocity, sustain, pitch bend, simple CC learn) is implemented in 0.2.3, see [MIDI.md](MIDI.md). **CLAP instrument hosting** is implemented in 0.2.3.16, see [PLUGINS.md](PLUGINS.md). VST3 hosting, plugin effects, MIDI output and clock are still design. Visual style: [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
 
 ![MIDI and plugins mockup](mockups/midi_plugins.png)
 

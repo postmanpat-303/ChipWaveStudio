@@ -680,6 +680,7 @@ impl App {
                     ("MIDI keyboard", "plays the current instrument (velocity, sustain pedal, pitch bend); Settings > MIDI picks the device"),
                     ("MIDI + edit mode", "records the note at the cursor (instrument + velocity), moves by Step; while playing: at the playing row"),
                     ("Right-click a fader / knob", "MIDI learn: then move a knob or the mod wheel"),
+                    ("New > Plugin instrument…", "a CLAP instrument plugin (Surge XT …): Configure… opens its editor, 43xy / lanes drive its 8 macros (docs/PLUGINS.md)"),
                     ("Help > Check for updates…", "ask GitHub for a newer version (Settings > Files & Safety: check at startup)"),
                 ] { ui.label(egui::RichText::new(k).monospace().color(th().value)); ui.label(v); ui.end_row(); }
             });
