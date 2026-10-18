@@ -163,6 +163,14 @@ holds short words (ka, ta, sha, dum ...); each note speaks the next one and
 vocal tract inspired by Pink Trombone by Neil Thapen (MIT). Presets: Talk
 Ka-Ta, Throat Ahh, Throat Speech, Demon Words.
 
+Generators (0.2.3.12): New... > Generator (drums) adds a Drum Synth
+(kick v0/808/909/Zap, snare, hat, clap, tom, perc) or a kit (one piece per
+note: C kick, D snare, D# clap, F#/A# hats, E-A toms) played from eight macro
+knobs. Dice rolls a sound, Mutate nudges it, "lock" keeps a knob, < > steps
+through 16 rolls, Bake to sample renders it. The Synth filter can be the
+Moog ladder (clean / vintage, 12/24 dB). Pattern: 43xy sets macro x (1-8)
+to y (0-F); 4300 = instrument.
+
 Voice Transform (0.2.3.11): the TRANSFORM section of a Voice instrument
 blends three stages over the voice: metallic resonance (resonators tuned to
 the note), digital distortion (clip / fold, bits, sample rate, ring mod) and

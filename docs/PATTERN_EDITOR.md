@@ -138,6 +138,7 @@ Effect columns accept classic OctaMED/ProTracker commands (page 1, binary-compat
 | 40 | Transform metallic resonance amount; also the Metal resonator device's mix (ChipWave) | 00 = instrument; 01–FF = 0–100 % |
 | 41 | Transform digital distortion amount; also the Digital distortion device's mix (ChipWave) | 00 = instrument; 01–FF = 0–100 % |
 | 42 | Transform sub level; also the Sub bass device's level (ChipWave) | 00 = instrument; 01–FF = 0–100 % |
+| 43 | Generator macro (ChipWave, 0.2.3.12) | x = macro 1–8, y = 0–F (0–100 %); 4300 = instrument values; stays on the channel. See [GENERATORS.md](GENERATORS.md) |
 
 Effects 30–37 are documented in [VOICE.md](VOICE.md).
 

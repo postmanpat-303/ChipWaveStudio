@@ -142,6 +142,86 @@ Voice Transform (src/transform.rs, 0.2.3.11), independent implementations:
 - Octave divider: a flip-flop on the zero crossings, the principle of analog
   octave pedals such as the Boss OC-2 (1982); no circuit or code copied.
 
+Generators (src/gen.rs, src/ladder.rs, 0.2.3.12):
+- Moog ladder filter: the zero-delay-feedback (TPT) ladder of Vadim
+  Zavalishin, "The Art of VA Filter Design" (Native Instruments, 2012-2018);
+  stage saturation after A. Huovilainen, "Non-linear digital implementation
+  of the Moog ladder filter", DAFx-04 (2004), and V. Valimaki &
+  A. Huovilainen, "Oscillator and filter algorithms for virtual analog
+  synthesis", Computer Music Journal 30(2) (2006); 12/24 dB LP/BP/HP pole
+  mixing as in those papers. Cross-checked in the tests against the DaisySP
+  ladder (Richard van Hoesel / Infrasonic Audio, MIT, notice below), the
+  fundsp Moog filter (Sami Perttu, MIT / Apache-2.0,
+  https://github.com/SamiPerttu/fundsp) and the MoogLadders collection by
+  Dimitri Diakopoulos (https://github.com/ddiakopoulos/MoogLadders; the
+  Improved model by Stefano D'Angelo, ISC). The DaisySP and fundsp ladders
+  are ported only inside the test that compares against them; the 0.5 k
+  passband compensation follows DaisySP.
+- Drum Synth recipes: the Sonic Pi sc808 SynthDefs (Sonic Pi, Sam Aaron and
+  contributors, MIT, https://github.com/sonic-pi-net/sonic-pi), based on
+  Yoshinosuke Horiuchi's free SuperCollider TR-808; and the analog / synthetic
+  bass drum, snare and hi-hat models of Mutable Instruments Plaits by
+  Emilie Gillet (MIT, https://github.com/pichenettes/eurorack), as ported to
+  DaisySP by Electrosmith (MIT, https://github.com/electro-smith/DaisySP).
+  Independent Rust implementations of those recipes; no samples used. The
+  macro-knob + dice workflow is inspired by Bitwig Studio's Grid and drum
+  devices (ideas only, no code or assets).
+- Chip FX (0.2.3.13) ports sfxr by Tomas Pettersson (DrPetter, MIT) via
+  sfxr-rs by Teemu Erkkola (MIT); see that section.
+
+  DaisySP ladder (src/Filters/ladder.cpp), ported in a test:
+
+  Copyright (c) 2021, Richard van Hoesel
+  Copyright (c) 2024, Infrasonic Audio LLC
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to permit
+  persons to whom the Software is furnished to do so, subject to the
+  following conditions:
+
+  The above copyright notice, development funding notice, and this
+  permission notice shall be included in all copies or substantial portions
+  of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+  NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+  DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+  OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+  USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+  fundsp (moog.rs), ported in a test: Copyright (c) Sami Perttu, MIT
+  licence (same text as below).
+
+  Sonic Pi sc808 (etc/synthdefs/designs/supercollider/sc808.scd):
+  Copyright (c) Sam Aaron and the Sonic Pi contributors, MIT:
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to permit
+  persons to whom the Software is furnished to do so, subject to the
+  following conditions:
+
+  The above copyright notice and this permission notice shall be included
+  in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+  NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+  DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+  OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+  USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+  DaisySP (Electrosmith) and Plaits (Copyright Emilie Gillet) are MIT
+  licensed with the same text.
+
 Chord helper and key detection (src/chords.rs), independent implementations:
 - Key finding: the Krumhansl-Schmuckler algorithm, as described in
   C. L. Krumhansl (1990), "Cognitive Foundations of Musical Pitch", Oxford
