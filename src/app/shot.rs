@@ -274,6 +274,10 @@ impl App {
         if std::env::var_os("CHIPWAVE_SHOT_CLASSIC").is_some() {
             self.extra.classic_editor = true;
         }
+        // CHIPWAVE_SHOT_MIXSCROLL=end: the mixer scrolled to its last strip
+        if std::env::var("CHIPWAVE_SHOT_MIXSCROLL").as_deref() == Ok("end") {
+            ctx.data_mut(|d| d.insert_temp(egui::Id::unique("mixer_scroll_to_end"), true));
+        }
         // CHIPWAVE_SHOT_SEL=r0,c0,r1,c1: a pattern selection (0-based rows and
         // channels), e.g. for the Block bar transpose buttons; add
         // CHIPWAVE_SHOT_NOPLAY=1 so the view stays at the top of the block

@@ -2946,3 +2946,61 @@ fn edit_menu_transpose_items_and_transpose_by() {
     assert_eq!(*super::transpose::BY_RANGE.start(), -24);
     assert_eq!(*super::transpose::BY_RANGE.end(), 24);
 }
+
+/// the mixer at 1024, 1360, 1920 and 2560 px: scrolled to the end, the last
+/// return strip (Ret B) is fully visible, with a clear gap before the pinned
+/// Master strip, and the master section stays in the window (0.2.4.x fix:
+/// Ret B used to be cut off right next to Master on wide screens)
+#[test]
+fn mixer_return_strips_never_hide_behind_master() {
+    for song_n in [None, Some(2)] {
+        let s = song_n.map_or_else(fileio::demo_song, fileio::demo_song_n);
+        let mut h = harness_with(s);
+        mixer(&mut h);
+        for w in [1024.0f32, 1360.0, 1920.0, 2560.0] {
+            h.set_size(egui::vec2(w, 1000.0));
+            frames(&mut h, 4);
+            let bar = h.state().mix_bar;
+            if bar.width() > 10.0 {
+                // scrolling: the view ends on a whole strip, so its right edge
+                // never cuts one in half. A strip's frame starts 17 px left of
+                // its fader (8 px margin + 1 px stroke + 8 px space), 110 px wide
+                let cut: Vec<Rect> = rects(&h, Role::Slider, None)
+                    .into_iter()
+                    .filter(|r| r.height() > 100.0 && r.left() < 2.0 * w)
+                    .filter(|r| {
+                        let x = r.left() - 17.0;
+                        x < bar.right() - 1.0 && x + 110.0 > bar.right() + 1.0
+                    })
+                    .collect();
+                assert!(
+                    cut.is_empty(),
+                    "{w}: strips cut by the scroll edge: {cut:?}"
+                );
+                click_at(&mut h, Pos2::new(bar.right() - 1.0, bar.center().y));
+                frames(&mut h, 4);
+            }
+            let on: Vec<Rect> = h
+                .query_all_by(|n| n.label().as_deref() == Some("On"))
+                .map(|n| n.rect())
+                .collect();
+            assert_eq!(on.len(), 2, "{w}: two return strips");
+            let master = text_rect(&h, "Master");
+            // strips are 110 px wide, centred on their labels
+            let ret_b_right = on[1].center().x + 55.0;
+            let master_left = master.center().x - 55.0;
+            assert!(
+                ret_b_right <= master_left - (super::mixer::MIXER_GAP - 4.0),
+                "{w} {song_n:?}: Ret B ends at {ret_b_right}, Master starts at {master_left}"
+            );
+            if bar.width() > 10.0 {
+                assert!(
+                    ret_b_right <= bar.right() + 1.0,
+                    "{w} {song_n:?}: Ret B inside the scroll area ({ret_b_right} vs {bar:?})"
+                );
+            }
+            let gr = text_rect(&h, "Limiter & loudness");
+            assert!(gr.right() < w, "{w}: master panel in the window");
+        }
+    }
+}

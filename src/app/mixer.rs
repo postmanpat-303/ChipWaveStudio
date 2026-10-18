@@ -241,15 +241,25 @@ impl App {
         });
         ui.add_space(6.0);
         let fader_h = (ui.available_height() - 150.0).clamp(80.0, 320.0);
-        // master section pinned on the right, channels + returns scroll
-        let master_w = 400.0;
+        // master section pinned on the right, channels + returns scroll.
+        // Its real width is measured each frame (egui memory), so the scroll
+        // area gets every pixel left of it minus a clear gap; before 0.2.4.x a
+        // fixed 400 px guess left the last return strip cut off right next to
+        // Master on wide screens, looking hidden behind it.
+        let master_id = ui.make_persistent_id("mixer_master_w");
+        let master_w: f32 = ui
+            .ctx()
+            .data(|d| d.get_temp(master_id))
+            .unwrap_or(MIXER_MASTER_W_GUESS);
+        let nret = mix.returns.len();
         let strip = |ui: &mut egui::Ui,
                      title: String,
                      spine: Color32,
                      vol: &mut f32,
                      levels: &[f32],
                      target: Option<crate::automation::Target>,
-                     extra: &mut dyn FnMut(&mut egui::Ui)| {
+                     extra: &mut dyn FnMut(&mut egui::Ui)|
+         -> Rect {
             egui::Frame::new()
                 .fill(th().cart_top)
                 .stroke(Stroke::new(1.0, spine))
@@ -291,17 +301,27 @@ impl App {
                         );
                         extra(ui);
                     });
-                });
+                })
+                .response
+                .rect
         };
         ui.horizontal_top(|ui| {
+        // right edges of the strips (from the content's left), last frame
+        let edges_id = ui.make_persistent_id("mixer_strip_edges");
+        let last_edges: Vec<f32> = ui.ctx().data(|d| d.get_temp(edges_id)).unwrap_or_default();
+        let room = mixer_scroll_width(ui.available_width(), master_w);
+        let view_w = mixer_view_width(room, &last_edges);
+        let mut edges: Vec<f32> = Vec::with_capacity(nch + nret);
         let mut area = egui::ScrollArea::horizontal()
             .id_salt("mixer_scroll")
-            .max_width((ui.available_width() - master_w).max(200.0));
+            .max_width(view_w);
         if let Some(x) = self.mix_scroll.take() {
             area = area.horizontal_scroll_offset(x);
         }
         let scrolled = area.show(ui, |ui| {
                 ui.horizontal_top(|ui| {
+                    let x0 = ui.cursor().left();
+                    let mut edge = |r: Rect| edges.push(r.right() - x0);
                     for ch in 0..nch.min(MAX_CHANNELS) {
                         let c = &mut mix.channels[ch];
                         let mut vol = c.volume;
@@ -309,7 +329,7 @@ impl App {
                         let mut send = c.send;
                         let mut duck = c.duck;
                         let is_key = mix.duck_key == ch;
-                        strip(
+                        edge(strip(
                             ui,
                             format!("{} {}", ch + 1, names.get(ch).cloned().unwrap_or_default()),
                             th().slate,
@@ -400,7 +420,7 @@ impl App {
                                     }
                                 });
                             },
-                        );
+                        ));
                         let c = &mut mix.channels[ch];
                         c.duck = duck;
                         c.send = send;
@@ -414,7 +434,7 @@ impl App {
                     for b in 0..mix.returns.len() {
                         let mut lvl = mix.returns[b].level;
                         let mut dev = mix.returns[b].device.clone();
-                        strip(
+                        edge(strip(
                             ui,
                             format!("Ret {}", mix.returns[b].name),
                             fxview::strip_fill(dev.kind, dev.enabled),
@@ -450,7 +470,7 @@ impl App {
                                 }
                                 ui.toggle_value(&mut dev.enabled, "On");
                             },
-                        );
+                        ));
                         mix.returns[b].level = lvl;
                         mix.returns[b].device = dev;
                     }
@@ -466,6 +486,16 @@ impl App {
         // right under the strips (the area itself reaches the panel bottom)
         let bar_y = (inner.top() + scrolled.content_size.y + 8.0).min(inner.bottom() - 20.0);
         self.mix_bar = egui::Rect::NOTHING;
+        // screenshot harness: CHIPWAVE_SHOT_MIXSCROLL=end scrolls to the last strip
+        let end_id = egui::Id::unique("mixer_scroll_to_end");
+        if ui.ctx().data(|d| d.get_temp::<bool>(end_id)).unwrap_or(false)
+            && content > inner.width() + 1.0
+            && edges == last_edges
+        {
+            ui.ctx().data_mut(|d| d.remove::<bool>(end_id));
+            self.mix_scroll = Some(content - inner.width());
+            ui.ctx().request_repaint();
+        }
         if content > inner.width() + 1.0 {
             let bar = egui::Rect::from_min_size(
                 egui::pos2(inner.left(), bar_y),
@@ -489,19 +519,40 @@ impl App {
                 egui::vec2(w * inner.width() / content, bar.height()),
             );
             p.rect_filled(thumb, 4, th().slate);
-            // strips are 108 px apart (92 + margins + spacing)
-            let per = (content / (nch + 2) as f32).max(1.0);
-            let a = (off / per).floor() as usize + 1;
-            let b = (((off + inner.width()) / per).floor() as usize).clamp(a, nch);
+            let (a, b) = mixer_visible_strips(&edges, off, inner.width());
             p.text(
                 bar.center(),
                 egui::Align2::CENTER_CENTER,
-                format!("channels {}–{} of {} · drag / Shift+wheel to scroll", a.min(nch), b, nch),
+                format!(
+                    "{} · drag / Shift+wheel to scroll",
+                    mixer_bar_label(a, b, nch, nret)
+                ),
                 egui::FontId::proportional(11.0),
                 Color32::WHITE,
             );
         }
-                    ui.add_space(8.0);
+        if edges != last_edges {
+            ui.ctx().data_mut(|d| d.insert_temp(edges_id, edges));
+            ui.ctx().request_repaint();
+        }
+        // when the strips scroll, Master stays pinned on the right: the room
+        // left over by showing only whole strips goes before the divider
+        if content > inner.width() + 1.0 {
+            ui.add_space((room - inner.width()).max(0.0));
+        }
+        // a clear gap with a divider between the scrolling strips and Master
+        ui.add_space(MIXER_GAP / 2.0 - ui.spacing().item_spacing.x);
+        let (div, _) = ui.allocate_exact_size(
+            egui::vec2(1.0, (inner.height()).max(40.0)),
+            Sense::hover(),
+        );
+        ui.painter().vline(
+            div.center().x,
+            div.top() + 4.0..=div.top() + scrolled.content_size.y.min(div.height()),
+            Stroke::new(1.0, th().crt_grid),
+        );
+        ui.add_space(MIXER_GAP / 2.0 - ui.spacing().item_spacing.x);
+        let master_start = ui.cursor().left();
                     let mut master = mix.master;
                     strip(
                         ui,
@@ -522,6 +573,12 @@ impl App {
                     mix.master = master;
                     ui.add_space(8.0);
                     Self::master_panel(ui, &mut mix.limiter, &loud);
+                    // measured width of the master section, for the next frame
+                    let used = ui.min_rect().right() - master_start;
+                    if (used - master_w).abs() > 0.5 {
+                        ui.ctx().data_mut(|d| d.insert_temp(master_id, used));
+                        ui.ctx().request_repaint();
+                    }
         });
         if mix != before {
             self.with(|s| s.song.mixer = mix);
@@ -530,5 +587,121 @@ impl App {
         for (r, t) in learn.into_inner() {
             self.learn_menu(&r, t);
         }
+    }
+}
+
+/// first-frame guess for the master section (Master strip + limiter panel)
+const MIXER_MASTER_W_GUESS: f32 = 372.0;
+/// gap (with a divider line) between the scrolling strips and Master
+pub(super) const MIXER_GAP: f32 = 24.0;
+
+/// width for the strip scroll area: everything left of the master section and
+/// its gap (never under 200 px, so very narrow windows still show a strip)
+pub(super) fn mixer_scroll_width(avail: f32, master_w: f32) -> f32 {
+    (avail - master_w - MIXER_GAP).max(200.0)
+}
+
+/// visible width of the strip area. `edges` are the strips' right edges
+/// (from the left of the strip row, last frame). If they all fit it is just
+/// `room`; otherwise it ends at the last strip that fits whole, so the right
+/// edge never slices a strip in half (which looked like Ret B hiding behind
+/// Master). Never under one strip.
+pub(super) fn mixer_view_width(room: f32, edges: &[f32]) -> f32 {
+    match edges.last() {
+        Some(&end) if end > room + 0.5 => edges
+            .iter()
+            .copied()
+            .filter(|&e| e <= room + 0.5)
+            .fold(edges[0].min(room), f32::max),
+        _ => room,
+    }
+}
+
+/// 1-based (first, last) strips wholly in view; `edges` are the strips'
+/// right edges from the left of the strip row, `off` the scroll offset
+pub(super) fn mixer_visible_strips(edges: &[f32], off: f32, width: f32) -> (usize, usize) {
+    let mut left = 0.0;
+    let (mut a, mut b) = (0, 0);
+    for (i, &e) in edges.iter().enumerate() {
+        if left >= off - 1.0 && e <= off + width + 1.0 {
+            if a == 0 {
+                a = i + 1;
+            }
+            b = i + 1;
+        }
+        left = e;
+    }
+    if a == 0 {
+        // nothing whole in view (a tiny window): the strip under the left edge
+        let i = edges.iter().position(|&e| e > off).unwrap_or(0);
+        (i + 1, i + 1)
+    } else {
+        (a, b)
+    }
+}
+
+/// "channels 3–8 of 8 + Ret A" style text for the strip bar: strips `a..=b`
+/// (1-based) of `nch` channels followed by `nret` return strips
+pub(super) fn mixer_bar_label(a: usize, b: usize, nch: usize, nret: usize) -> String {
+    let ret = |i: usize| format!("Ret {}", (b'A' + i as u8) as char);
+    let mut s = if a <= nch {
+        format!("channels {}–{} of {}", a, b.min(nch), nch)
+    } else {
+        format!("{} channels", nch)
+    };
+    if b > nch {
+        let r0 = a.saturating_sub(nch + 1);
+        let r1 = (b - nch - 1).min(nret.saturating_sub(1));
+        if r0 == r1 {
+            s += &format!(" + {}", ret(r1));
+        } else {
+            s += &format!(" + {}–{}", ret(r0), (b'A' + r1 as u8) as char);
+        }
+    }
+    s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bar_label_names_channels_and_returns() {
+        assert_eq!(mixer_bar_label(1, 6, 8, 2), "channels 1–6 of 8");
+        assert_eq!(mixer_bar_label(3, 9, 8, 2), "channels 3–8 of 8 + Ret A");
+        assert_eq!(mixer_bar_label(4, 10, 8, 2), "channels 4–8 of 8 + Ret A–B");
+        assert_eq!(mixer_bar_label(10, 10, 8, 2), "8 channels + Ret B");
+    }
+
+    #[test]
+    fn view_width_shows_whole_strips_only_when_scrolling() {
+        let edges = [110.0, 228.0, 346.0, 476.0, 620.0];
+        // everything fits (or nothing measured yet): all the room
+        assert_eq!(mixer_view_width(700.0, &edges), 700.0);
+        assert_eq!(mixer_view_width(300.0, &[]), 300.0);
+        // overflow: up to the last whole strip, even with uneven widths
+        assert_eq!(mixer_view_width(600.0, &edges), 476.0);
+        assert_eq!(mixer_view_width(476.0, &edges), 476.0);
+        assert_eq!(mixer_view_width(475.0, &edges), 346.0);
+        // tiny windows still show (at most) one strip
+        assert_eq!(mixer_view_width(100.0, &edges), 100.0);
+    }
+
+    #[test]
+    fn visible_strips_counts_whole_strips() {
+        let edges = [110.0, 228.0, 346.0, 476.0, 620.0];
+        assert_eq!(mixer_visible_strips(&edges, 0.0, 346.0), (1, 3));
+        assert_eq!(mixer_visible_strips(&edges, 110.0, 366.0), (2, 4));
+        assert_eq!(mixer_visible_strips(&edges, 300.0, 320.0), (4, 5));
+        assert_eq!(mixer_visible_strips(&edges, 0.0, 50.0), (1, 1));
+    }
+
+    #[test]
+    fn scroll_width_leaves_master_and_gap() {
+        assert_eq!(
+            mixer_scroll_width(1500.0, 372.0),
+            1500.0 - 372.0 - MIXER_GAP
+        );
+        assert_eq!(mixer_scroll_width(300.0, 372.0), 200.0);
     }
 }
