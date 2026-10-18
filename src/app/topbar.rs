@@ -201,6 +201,7 @@ pub(super) const VIEWS: [(View, &str, &str); 5] = [
 /// donation link on Help > About (opens in the system browser)
 pub(super) const DONATE_URL: &str = "https://buymeacoffee.com/postmanpat";
 pub(super) const PAYPAL_URL: &str = "https://paypal.me/derekh100";
+pub(super) const YOUTUBE_URL: &str = "https://www.youtube.com/@whatgoesaround1551";
 
 /// Help > About credits for work that inspired or informed ChipWave
 /// (no code is copied unless THIRD_PARTY_LICENSES says so)
@@ -925,6 +926,9 @@ impl App {
                         ui.label("·");
                         ui.hyperlink_to("PayPal", PAYPAL_URL)
                             .on_hover_text(PAYPAL_URL);
+                        ui.label("·");
+                        ui.hyperlink_to("YouTube: demos & promos", YOUTUBE_URL)
+                            .on_hover_text(YOUTUBE_URL);
                     });
                     ui.add_space(8.0);
                     ui.label(egui::RichText::new("Acknowledgements / Credits").strong());

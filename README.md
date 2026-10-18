@@ -8,8 +8,14 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0a84ff" alt="Windows | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.3.5-00d0ff" alt="Version 0.2.3.5">
+  <img src="https://img.shields.io/badge/version-0.2.3.13-00d0ff" alt="Version 0.2.3.13">
+  <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveTracker?label=release&color=7c4dff" alt="Latest release"></a>
+</p>
+
+<p align="center">
+  <a href="https://youtu.be/6VWhFZxexIc"><img src="docs/screenshots/promo-thumb.jpg" alt="Watch the ChipWave Tracker promo on YouTube" width="640"></a>
+  <br><sub>▶ Watch the promo on YouTube · more demos on <a href="https://www.youtube.com/@whatgoesaround1551">the channel</a></sub>
 </p>
 
 ```
@@ -101,6 +107,10 @@ All pictures on this page are real captures of the current build (no mockups). T
   <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/dark-generators-kit.png" alt="Drum kit generator with macro knobs"></td>
     <td width="66%" valign="top"><b>Generators: Drum Synth</b> <sub>(0.2.3.12)</sub>: kick (v0, 808, 909, psy Zap), snare, hat, clap, tom and perc from eight macro knobs, or a whole <b>kit</b> on one instrument. <b>Dice</b> rolls a new sound within sensible ranges, <b>Mutate</b> nudges it, <b>lock</b> keeps a knob, 16 rolls of history, stored seed, <b>Bake to sample</b>. Plus a <b>Moog ladder filter</b> (clean or vintage, 12/24 dB LP/BP/HP) in every synth. <code>43xy</code> sets a macro per row. See <a href="docs/GENERATORS.md">GENERATORS.md</a>.</td>
+  </tr>
+  <tr>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-generators-chipfx.png" alt="Chip FX generator"></td>
+    <td width="66%" valign="top"><b>Generators: Chip FX</b> <sub>(0.2.3.13)</sub>: retro game sounds from a port of <a href="https://www.drpetter.se/project_sfxr.html">sfxr</a> by DrPetter (via <a href="https://github.com/bzar/sfxr-rs">sfxr-rs</a>, both MIT). Click <b>Pickup</b>, <b>Laser</b>, <b>Explosion</b>, <b>Power-up</b>, <b>Hit</b>, <b>Jump</b> or <b>Blip</b> for a new sound, <b>Randomize</b> for anything, <b>Mutate</b> to nudge it; lock what you like, step back through 16 rolls, bake to a sample. Plays in tune with the pattern note. See <a href="docs/GENERATORS.md">GENERATORS.md</a>.</td>
   </tr>
 </table>
 
@@ -243,7 +253,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [UI_SCALING.md](docs/UI_SCALING.md) — screen scaling and layouts
 - [SAMPLES.md](docs/SAMPLES.md) — the instrument list and importer
 - [VOICE.md](docs/VOICE.md) — the Voice (glitch) instrument: synthetic vowels, babble, stutter, effects 30–37 (0.2.3.6)
-- [GENERATORS.md](docs/GENERATORS.md) — generators: Drum Synth, kits, Dice, Bake, Moog ladder filter, effect 43xy (0.2.3.12)
+- [GENERATORS.md](docs/GENERATORS.md) — generators: Drum Synth, kits, Chip FX (sfxr), Dice, Bake, Moog ladder filter, effect 43xy (0.2.3.12-13)
 - [MIDI.md](docs/MIDI.md) — MIDI keyboard input: play, record, velocity, sustain, MIDI learn (0.2.3)
 - [MIDI_VST.md](docs/MIDI_VST.md) — MIDI and plugins (plan)
 - [PLUGIN_MANAGER.md](docs/PLUGIN_MANAGER.md) — the plugin manager (scan, verify, activate)
@@ -257,7 +267,8 @@ Created by **Derek Heasley**. To keep the software going I need Coffee :)
 
 <p>
   <a href="https://buymeacoffee.com/postmanpat"><b>☕ Buy me a coffee</b></a> &nbsp;·&nbsp;
-  <a href="https://paypal.me/derekh100"><b>PayPal</b></a>
+  <a href="https://paypal.me/derekh100"><b>PayPal</b></a> &nbsp;·&nbsp;
+  <a href="https://www.youtube.com/@whatgoesaround1551"><b>▶ YouTube: demos &amp; promos</b></a>
 </p>
 
 ### Acknowledgements / Credits

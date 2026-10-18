@@ -163,6 +163,12 @@ holds short words (ka, ta, sha, dum ...); each note speaks the next one and
 vocal tract inspired by Pink Trombone by Neil Thapen (MIT). Presets: Talk
 Ka-Ta, Throat Ahh, Throat Speech, Demon Words.
 
+Chip FX (0.2.3.13): New... > Generator (chip FX) makes retro game sounds
+(a port of sfxr by DrPetter via sfxr-rs, MIT). Click Pickup, Laser,
+Explosion, Power-up, Hit, Jump or Blip for a new sound, Randomize for any
+sound, Mutate to nudge it; "lock" keeps a parameter, < > walks 16 rolls,
+Bake to sample renders it. 43xy sets knob x (1-8) at the note start.
+
 Generators (0.2.3.12): New... > Generator (drums) adds a Drum Synth
 (kick v0/808/909/Zap, snare, hat, clap, tom, perc) or a kit (one piece per
 note: C kick, D snare, D# clap, F#/A# hats, E-A toms) played from eight macro

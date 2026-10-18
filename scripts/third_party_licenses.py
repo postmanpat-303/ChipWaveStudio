@@ -166,8 +166,32 @@ Generators (src/gen.rs, src/ladder.rs, 0.2.3.12):
   Independent Rust implementations of those recipes; no samples used. The
   macro-knob + dice workflow is inspired by Bitwig Studio's Grid and drum
   devices (ideas only, no code or assets).
-- Chip FX (0.2.3.13) ports sfxr by Tomas Pettersson (DrPetter, MIT) via
-  sfxr-rs by Teemu Erkkola (MIT); see that section.
+- Chip FX (src/chipfx.rs, 0.2.3.13) is a port of sfxr by Tomas Pettersson
+  (DrPetter), https://www.drpetter.se/project_sfxr.html , by way of its Rust
+  reimplementation sfxr-rs by Teemu Erkkola, https://github.com/bzar/sfxr-rs
+  (synthesis, category recipes, Randomize and Mutate). Both MIT:
+
+  sfxr: Copyright (c) 2007 Tomas Pettersson
+  sfxr-rs: Copyright (c) 2018 Teemu Erkkola
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to permit
+  persons to whom the Software is furnished to do so, subject to the
+  following conditions:
+
+  The above copyright notice and this permission notice shall be included
+  in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+  NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+  DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+  OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+  USE OR OTHER DEALINGS IN THE SOFTWARE.
 
   DaisySP ladder (src/Filters/ladder.cpp), ported in a test:
 

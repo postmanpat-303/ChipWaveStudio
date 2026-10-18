@@ -918,6 +918,10 @@ fn help_about_shows_credit_and_coffee_link() {
         ["https://buymeacoffee.com/postmanpat"]
     );
     assert_eq!(click_link("PayPal"), ["https://paypal.me/derekh100"]);
+    assert_eq!(
+        click_link("YouTube: demos & promos"),
+        ["https://www.youtube.com/@whatgoesaround1551"]
+    );
 }
 
 #[test]

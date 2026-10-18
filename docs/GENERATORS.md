@@ -6,9 +6,9 @@ instead of playing a sample or a full synth patch. Each one can be rolled with
 its last 16 rolls and **baked** to a sample. Research notes:
 [research/sound-generators.md](research/sound-generators.md).
 
-Add one with **New… > Generator (drums)** in the instrument list (kits, kicks,
-snares, hats, claps, toms, percussion). Chip FX (sfxr-style game sounds)
-follows in 0.2.3.13.
+Add one from the instrument list with **New… > Generator (drums)** (kits,
+kicks, snares, hats, claps, toms, percussion) or **New… > Generator (chip FX)**
+(sfxr-style game sounds, 0.2.3.13).
 
 ![Drum kit generator](screenshots/dark-generators-kit.png)
 
@@ -71,6 +71,54 @@ should overlap on different channels. Presets: **Psy Kit** and **808 Kit**.
   to 8 s) into a new Sample instrument named "<name> (baked)", with the same
   volume and FX.
 
+## Chip FX (0.2.3.13)
+
+![Chip FX generator](screenshots/dark-generators-chipfx.png)
+
+A port of **sfxr** by Tomas Pettersson (DrPetter), by way of **sfxr-rs** by
+Teemu Erkkola (both MIT).
+
+- **Sound engine:**
+  - a square / saw / sine / noise / triangle oscillator, with frequency
+    slide and delta slide, a minimum frequency (the sound stops there), duty
+    sweep, vibrato and one arpeggio jump
+  - an attack / sustain / decay envelope with punch
+  - a resonant low-pass and a high-pass, each with a sweep
+  - a phaser and a repeat
+  - 8x supersampling at 44.1 kHz, resampled to the song rate
+- **Category buttons:** **Pickup**, **Laser**, **Explosion**, **Power-up**,
+  **Hit**, **Jump** and **Blip** each roll a new sound from sfxr's recipe for
+  that category.
+- **Randomize:** sfxr's anything-goes roll. It also rolls the wave, and the
+  attack is capped so the sound stays audible.
+- **Dice:** rolls again in the last category.
+- **Mutate:** sfxr's mutate. Each parameter has a 50 % chance to move by up
+  to ±N % of its half range; ±10 % matches sfxr's ±0.05.
+- **Locks:** a **lock** keeps a parameter (or the wave) through every roll.
+  Seed, history and **Bake to sample** work as for the drums.
+- **Knobs:**
+  - eight knobs show the main parameters: Freq, Slide, Duty, Sustain, Decay,
+    LP cutoff, Phaser, Repeat
+  - **All sfxr parameters** opens the other 15
+  - with **Follow note**, C-4 plays the sound as designed and other notes
+    transpose it
+- **Presets:** Coin, Laser Shot, Explosion, Power Up, Hit, Jump, Blip, Psy
+  Laser.
+- **43xy:** sets knob x (1–8) to y (0–F). Chip FX reads it when the note
+  starts, as sfxr computes a sound from its parameters at the start.
+- **Text songs:** `patch = "gen:Coin"`, with optional overrides in
+  `[instrument.gen.engine.ChipFx]` (for example `wave = "Triangle"` or
+  `level = 0.5`).
+
+Changes from sfxr:
+
+- the saw is a plain ramp, and triangle is a real triangle
+- the negative arpeggio follows the original sfxr (sfxr-rs flips its sign)
+- zero-length envelope stages don't divide by zero
+- seeded rolls replace sfxr's unseeded `rand()`
+- nothing allocates while the sound plays
+- "Vib delay" is stored but unused, as in sfxr
+
 ## Moog ladder filter
 
 The Synth, Voice and Generator filters can be switched from the default **SVF
@@ -116,7 +164,11 @@ the shortest decay (macro 2 = Punch, macro 4 = Decay).
 - The vintage ladder adds about 0.5 ms of latency, which isn't compensated.
 - Perc and hat width come from decorrelated noise, not true stereo models.
 - Songs using generators or the ladder filter don't open in ChipWave
-  versions before 0.2.3.12.
+  versions before 0.2.3.12, and songs with Chip FX don't open before
+  0.2.3.13.
+- Chip FX is mono. It runs at sfxr's 44.1 kHz with linear-interpolation
+  resampling, so very high pitches alias slightly, as in sfxr. Its pitch is
+  capped at sfxr's 8-supersample minimum period.
 
 ## Credits
 
@@ -129,5 +181,7 @@ the shortest decay (macro 2 = Punch, macro 4 = Decay).
   Horiuchi's SC-808.
 - **Plaits** by Emilie Gillet (MIT), via DaisySP by Electrosmith (MIT).
 - **Bitwig Studio**, for the macro and dice idea (no code or assets).
+- **sfxr** by Tomas Pettersson (DrPetter, MIT) and **sfxr-rs** by Teemu
+  Erkkola (MIT): the Chip FX generator.
 
 The licence notices are in `THIRD_PARTY_LICENSES.txt`.

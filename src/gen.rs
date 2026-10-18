@@ -1838,4 +1838,124 @@ mod features {
         }
         crate::fileio::save_cwt(s, std::path::Path::new(&out)).unwrap();
     }
+
+    fn fxi(s: &mut Song, name: &str, sfx: crate::chipfx::SfxP, vol: f32) -> u8 {
+        add(
+            s,
+            name,
+            vol,
+            InstrumentKind::Gen(super::GenPatch::chip_fx(sfx)),
+        )
+    }
+
+    #[test]
+    #[ignore]
+    fn features_02313_demo() {
+        use crate::chipfx::{Category, SfxP};
+        let inp = std::env::var("CW_F2313_IN").expect("CW_F2313_IN");
+        let out = std::env::var("CW_F2313_OUT").expect("CW_F2313_OUT");
+        let mut s = crate::fileio::load_text_song(std::path::Path::new(&inp)).unwrap();
+        let s = &mut s;
+        // blocks 0-6: three rolls of each category button
+        for (b, c) in Category::ALL.iter().enumerate() {
+            for k in 0..3 {
+                let mut x = SfxP::default();
+                x.category(*c, 11 + k as u32);
+                let i = fxi(s, &format!("{} {}", c.name(), k + 1), x, 0.7);
+                put(s, b, k * 10, 5, "C-4", i, (0, 0));
+            }
+        }
+        // block 7: Randomize x4
+        for k in 0..4 {
+            let mut x = SfxP::default();
+            x.randomize(40 + k as u32);
+            let i = fxi(s, &format!("Random {}", k + 1), x, 0.6);
+            put(s, 7, k * 8, 5, "C-4", i, (0, 0));
+        }
+        // block 8: Laser Shot, then three 25 % mutations of it
+        let super::GenEngine::ChipFx(laser) = super::preset("Laser Shot").unwrap().engine else {
+            panic!()
+        };
+        for k in 0..4 {
+            let mut x = laser;
+            if k > 0 {
+                x.mutate(0.25, 60 + k as u32);
+            }
+            let i = fxi(s, &format!("Laser mutate {k}"), x, 0.7);
+            put(s, 8, k * 8, 5, "C-4", i, (0, 0));
+            put(s, 8, k * 8 + 4, 5, "C-4", i, (0, 0));
+        }
+        // block 9: Psy Laser played as a melody, Coin arpeggio on top
+        let pl = gen(s, "Psy Laser", 0.6);
+        let coin = gen(s, "Coin", 0.5);
+        for (k, n) in ["E-3", "G-3", "A-3", "B-3", "E-4", "D-4", "B-3", "G-3"]
+            .iter()
+            .enumerate()
+        {
+            put(s, 9, k * 4, 5, n, pl, (0, 0));
+        }
+        for (r, n) in [
+            (16, "E-4"),
+            (18, "G-4"),
+            (20, "B-4"),
+            (22, "E-5"),
+            (28, "E-5"),
+        ] {
+            put(s, 9, r, 6, n, coin, (0, 0));
+        }
+        // blocks 10-11: groove: Psy Kit + rolling bass + chip FX accents
+        let kit = gen(s, "Psy Kit", 0.85);
+        let bp = crate::synth::Patch {
+            name: "Rolling bass".into(),
+            osc1: crate::synth::Wave::Saw,
+            cutoff: 500.0,
+            resonance: 0.5,
+            env_amount: 1.6,
+            fenv: crate::synth::Adsr {
+                a: 0.001,
+                d: 0.09,
+                s: 0.0,
+                r: 0.03,
+            },
+            amp: crate::synth::Adsr {
+                a: 0.001,
+                d: 0.1,
+                s: 0.5,
+                r: 0.02,
+            },
+            filter_model: crate::ladder::FilterModel::Vintage,
+            ..Default::default()
+        };
+        let bass = add(s, "Rolling bass", 0.6, InstrumentKind::Synth(bp));
+        let ls = gen(s, "Laser Shot", 0.45);
+        let ex = gen(s, "Explosion", 0.6);
+        let pu = gen(s, "Power Up", 0.45);
+        let bl = gen(s, "Blip", 0.4);
+        for b in 10..12 {
+            for beat in 0..8 {
+                let r = beat * 4;
+                put(s, b, r, 0, "C-4", kit, (0, 0));
+                put(s, b, r + 2, 1, "A#4", kit, (0, 0));
+                put(s, b, r + 3, 1, "F#4", kit, (0, 0));
+                if beat % 2 == 1 {
+                    put(s, b, r, 2, "D#4", kit, (0, 0));
+                }
+                for k in 1..4 {
+                    put(s, b, r + k, 4, "E-2", bass, (0, 0));
+                }
+            }
+            // lasers on the offbeats, the Freq knob (43 1y) stepping up
+            for (k, r) in [6usize, 14, 22].iter().enumerate() {
+                put(s, b, *r, 5, "C-4", ls, (0x43, 0x18 + k as u8 * 3));
+            }
+            put(s, b, 10, 6, "E-4", bl, (0, 0));
+            put(s, b, 11, 6, "B-4", bl, (0, 0));
+            if b == 10 {
+                put(s, b, 24, 6, "C-4", pu, (0, 0));
+            } else {
+                put(s, b, 28, 5, "C-4", ex, (0, 0));
+            }
+        }
+        crate::fileio::save_cwt(s, std::path::Path::new(&out)).unwrap();
+    }
 }
