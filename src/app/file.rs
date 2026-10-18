@@ -203,13 +203,21 @@ impl App {
     }
 
     pub(super) fn open_path(&mut self, p: PathBuf) {
-        match fileio::load_cwt_warn(&p) {
+        // a single-file text song (demos/*.cwt.toml) opens unsaved: Save asks
+        // for a .cwt name instead of overwriting the text file
+        let text = fileio::is_text_song(&p);
+        let loaded = if text {
+            fileio::load_text_song(&p).map(|s| (s, Vec::new()))
+        } else {
+            fileio::load_cwt_warn(&p)
+        };
+        match loaded {
             Ok((song, warnings)) => {
                 self.with(|s| {
                     s.engine.stop();
                     s.song = song;
                 });
-                self.path = Some(p.clone());
+                self.path = if text { None } else { Some(p.clone()) };
                 self.reset_cursor();
                 self.add_recent(&p);
                 self.status = if warnings.is_empty() {
@@ -242,7 +250,9 @@ impl App {
     }
 
     pub(super) fn open(&mut self) {
-        let mut d = rfd::FileDialog::new().add_filter("ChipWave song", &["cwt"]);
+        let mut d = rfd::FileDialog::new()
+            .add_filter("ChipWave song", &["cwt"])
+            .add_filter("ChipWave text song / demo (.cwt.toml)", &["toml"]);
         if !self.extra.song_dir.is_empty() {
             d = d.set_directory(&self.extra.song_dir);
         }

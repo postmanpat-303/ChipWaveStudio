@@ -1157,3 +1157,15 @@ fn quiet_startup_check_shows_a_badge_and_respects_skip() {
     frames(&mut h, 3);
     assert!(h.state().upd.badge.is_none());
 }
+
+#[test]
+fn file_open_text_song_loads_unsaved() {
+    let mut h = harness();
+    let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("demos/dark_psy.cwt.toml");
+    h.state_mut().open_path(p);
+    frames(&mut h, 2);
+    assert!(song(&mut h, |s| s.title.clone()).starts_with("Hollow Ritual"));
+    // never saved back over the text file: Save goes to Save As
+    assert!(h.state().path.is_none());
+    assert_eq!(song(&mut h, |s| s.mixer.channels[0].pan), 0.0);
+}
