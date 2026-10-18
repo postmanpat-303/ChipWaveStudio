@@ -1,8 +1,8 @@
-# ChipWave Lite for the Amiga A1200: plan
+# ChipWave Lite for the Amiga (A500 and A1200): plan
 
-**Status:** this is a plan for Del to review, plus a feasibility spike (18 Oct 2026). Nothing is built yet beyond the spike in [`amiga/spike/`](../amiga/spike/).
+**Status:** plan **approved by Del on 18 Oct 2026** with the decisions in §12. The feasibility spike is in [`amiga/spike/`](../amiga/spike/) and is kept in the repo. Milestone **M1 Replay** (the `ChipWaveLite <file.mod>` CLI player) is in [`amiga/`](../amiga/README.md).
 
-ChipWave Lite is a small native tracker for AmigaOS 3.x on an A1200 (68020, AGA, 2 MB chip RAM). Del runs it in **WinUAE** on Windows. It plays four channels through Paula, has an OctaMED-style pattern editor and a Workbench look, and swaps songs with PC ChipWave. It ships as a bootable **.adf** and an **.lha**.
+ChipWave Lite is a small native tracker for AmigaOS 3.x (Kickstart 3.1 and later). It is built twice from the same source: a **68000** build for the A500 (OCS/ECS, 512 KB–1 MB chip RAM where possible) and a **68020** build for the A1200 (2 MB chip RAM). It uses no AGA features. Del runs it in **WinUAE** on Windows. It plays four channels through Paula, has an OctaMED-style pattern editor and a Workbench look, and swaps songs with PC ChipWave. It ships as a bootable **.adf** and an **.lha**.
 
 ## 1. Spike results (what already works)
 
@@ -30,7 +30,7 @@ All of this ran on the box (Debian 13, x86-64) in about 25 minutes, with no Dock
 
 | What | Choice | Licence / notes |
 |---|---|---|
-| C compiler | **m68k-amigaos-gcc** (AmigaPorts, after Stefan "bebbo" Franke's amiga-gcc), `-m68020 -Os -noixemul` with libnix | GCC is GPL-3 with the runtime exception; libnix is public domain. Prebuilt for Linux, macOS and Windows (installer). https://github.com/AmigaPorts/m68k-amigaos-gcc · https://codeberg.org/bebbo/amiga-gcc |
+| C compiler | **m68k-amigaos-gcc** (AmigaPorts, after Stefan "bebbo" Franke's amiga-gcc), `-m68000` and `-m68020`, `-Os -noixemul` with libnix | GCC is GPL-3 with the runtime exception; libnix is public domain. Prebuilt for Linux, macOS and Windows (installer). https://github.com/AmigaPorts/m68k-amigaos-gcc · https://codeberg.org/bebbo/amiga-gcc |
 | Alternative compiler | **vbcc** by Volker Barthelmann and Frank Wille, with vasm and vlink | Freeware: free for non-commercial use, and binaries for M68k AmigaOS may be distributed. It isn't GPL, but it is only a build tool. A fallback if gcc code is too big or slow. http://sun.hasenbraten.de/vbcc/ |
 | OS headers | **NDK 3.2** (Hyperion), bundled with the toolchain as `ndk-include` | Free download from Hyperion. We only compile against it; the headers aren't shipped. |
 | Replay routine | **ptplayer 6.4** by Frank Wille (ProTracker 2.3B replay, CIA timed, OS-friendly with `OSCOMPAT=1` through audio.device) | Public domain, so it can be used in GPL-3 code. https://aminet.net/package/mus/play/ptplayer · mirror https://github.com/AmigaPorts/ptplayer |
@@ -134,7 +134,7 @@ New PC ChipWave work; MOD load is already on the roadmap in OCTAMED_SPEC.md.
 
 ## 6. UI (Workbench look)
 
-Lite uses its own PAL hires screen (640×256, 16 colours), cloned from Workbench where possible (`SA_LikeWorkbench`) so it gets the user's palette and font. The fallback palette is the 3.x grey/black/white/blue, with topaz 8 for the pattern grid. The gadgets are GadTools (3D bevels, Workbench style). It is AGA-friendly but uses no AGA-only features, which keeps the A500 open for later.
+Lite uses its own PAL hires screen (640×256, 16 colours), cloned from Workbench where possible (`SA_LikeWorkbench`) so it gets the user's palette and font. The fallback palette is the 3.x grey/black/white/blue, with topaz 8 for the pattern grid. The gadgets are GadTools (3D bevels, Workbench style). It uses **no AGA features**, so the same screen opens on an A500 (OCS/ECS). On OCS/ECS the 68000 build opens the screen with 2 bitplanes (4 colours, 40 KB chip) instead of 4: hires with 4 bitplanes steals most of the chip bus from a 68000 during the display. NTSC machines get the same 640-pixel-wide screen with 200 lines (the pattern view shows fewer rows).
 
 ```
 +-------------------------------------------------------------------------------+
@@ -165,6 +165,8 @@ Lite uses its own PAL hires screen (640×256, 16 colours), cloned from Workbench
 
 ## 7. Memory and CPU budget
 
+### 7.1 A1200 (68020 build)
+
 **Baseline machine:** an A1200 with a 68020 at 14 MHz, 2 MB chip RAM and no fast RAM.
 
 | Item | Chip RAM | Fast/any RAM |
@@ -184,6 +186,26 @@ Lite uses its own PAL hires screen (640×256, 16 colours), cloned from Workbench
   - The pattern view redraws only changed rows; while following playback it scrolls one row at a time with `ScrollRaster`, then draws a single row.
   - Scopes: four 64-pixel bars at 25 fps, switched off automatically if a frame overruns.
   - Target: under 40 % CPU while playing with the editor open, so the system stays responsive.
+
+### 7.2 A500 (68000 build)
+
+**Baseline machines:** an A500 or A500+ with a 7.09 MHz 68000 (PAL), OCS or ECS chipset, Kickstart 3.1, booted from the ADF without Workbench. No AGA anywhere.
+
+| Configuration | What it is | Sample budget (chip) | Everything else |
+|---|---|---|---|
+| **512 KB chip** | stock A500 | **~200–250 KB** | program, song and screen all in chip; the editor screen is 2 bitplanes (40 KB) |
+| **512 KB chip + 512 KB slow** | A500 with the usual trapdoor card (slow RAM at `$C00000`, *not* chip) | **~300–350 KB** | program, song, undo and buffers load into slow RAM automatically (AmigaOS puts non-`MEMF_CHIP` allocations there) |
+| **1 MB chip** | A500+, or an A500 with an ECS Agnus (8372A) jumpered for 1 MB chip | **~600–650 KB** | as for 512 KB chip |
+
+- Kickstart 3.1 booted from the ADF with no Workbench uses about 100–150 KB of chip RAM on an A500; the CLI player alone is about 20 KB, the editor target is under 120 KB.
+- The PC exporter gets an **A500 preset**: a 256 KB or 512 KB sample budget (instead of 1 MB), which renders synth sounds shorter and at lower rates.
+- Lite checks free chip RAM before loading a song and reports how much is missing instead of failing halfway.
+
+**CPU on a 7 MHz 68000** (one PAL frame is 20 ms, about 141,800 CPU cycles):
+- **ptplayer:** measured in M1 (see [`amiga/README.md`](../amiga/README.md)); roughly 2–6 % of the CPU per tick, with the peak on rows where all four channels start notes with effects. It runs in the CIA-B interrupt, so the GUI can't make it stutter.
+- **Editor (M2):** the pattern view redraws only changed rows; while following playback it scrolls by one row (`ScrollRaster` on 2 bitplanes, done by the blitter) and draws one row of text. Target under 50 % CPU while playing.
+- **Scopes/VU:** off by default on the 68000 build; VU bars (cheap) can be switched on, scopes are 68020 only.
+- **No fast RAM** means the CPU shares the chip bus with the display; the 2-bitplane screen keeps that cost low.
 
 ## 8. Milestones
 
@@ -234,14 +256,19 @@ Each milestone is committed in small green steps. A GitHub release happens only 
 - **Frode Solheim** (FS-UAE), **Toni Wilen** (WinUAE), the **AROS Development Team** (AROS ROM)
 - **Cloanto** (Amiga Forever)
 
-## 12. Open questions for Del
+## 12. Decisions (approved by Del, 18 Oct 2026)
 
-1. **Kickstart / OS baseline:** 3.1 (the most common, covered by Amiga Forever), or 3.2 / 3.2.2 (Hyperion, newer)? Proposal: target 3.1 and test on 3.2 too. Nothing in v0.1 needs 3.2.
-2. **Screen:** our own PAL hires 640×256 screen (proposed), PAL interlace 640×512 (more rows but flicker), or a window on Workbench? And NTSC support?
-3. **Minimum RAM:** 2 MB chip only (proposed baseline, sample budget about 1 MB), or require fast RAM (for example 4 MB)?
-4. **Exchange format:** plain .mod only for v0.1 (proposed), or the IFF `CWLT` extension from the start?
-5. **PC export defaults:** which four channels; render synth sounds as one sample, or one per octave; chip RAM budget 1 MB?
-6. **Effect set in Lite:** ProTracker effects only (proposed), or OctaMED-style extras such as 8-channel mixing and MMD later?
-7. **Name and icon:** "ChipWave Lite" with a Workbench-style icon (as in the PC app's Amiga theme)?
-8. **Distribution:** host the ADF and .lha in this repo's releases (when Del approves), and on Aminet later?
-9. **CPU baseline:** 68020 only (per the requirement), or keep a 68000 build for A500 users (it costs little; the core is C89)?
+| Question | Decision |
+|---|---|
+| Kickstart / OS baseline | **Kickstart 3.1** is the target. Must also run on **3.2 / 3.2.2**; nothing needs 3.2. Tested headless with the AROS ROM; acceptance is Del in WinUAE with 3.1/3.2. |
+| Screen | **Own PAL hires screen, 640×256.** 16 colours on the 68020 build, 4 colours on OCS/ECS (§6, §7.2). NTSC opens 640×200. |
+| Minimum RAM | **2 MB chip** is the A1200 baseline (no fast RAM required). The A500 build aims to work with 512 KB–1 MB chip where possible (§7.2). |
+| Exchange format | **Plain ProTracker .mod** (M.K.) for v0.1. The IFF `CWLT` extension stays a "later" idea (§5.3). |
+| Effect set | **ProTracker effects only** (`0`–`F`, `E0`–`EF`), played by ptplayer. |
+| CPU baseline | **Two builds from one source:** `ChipWaveLite` for 68020 (A1200) and `ChipWaveLite.000` for 68000 (A500, OCS/ECS). Both are tested headless in FS-UAE (A500 and A1200 configs). |
+| Spike sources | Kept in `amiga/spike/`. |
+
+**Still open (not needed before M3/M4):**
+1. **PC export defaults:** which four channels; render synth sounds as one sample, or one per octave; chip budget 1 MB for A1200 and 256/512 KB for A500?
+2. **Name and icon:** "ChipWave Lite" with a Workbench-style icon (as in the PC app's Amiga theme)?
+3. **Distribution:** host the ADF and .lha in this repo's releases (only when Del approves), and on Aminet later?
