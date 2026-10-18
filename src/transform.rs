@@ -1082,3 +1082,154 @@ mod tests {
         assert_eq!(t.sub.xover, 120.0);
     }
 }
+
+/// `scripts/make_features_02311.py` builds the 0.2.3.11 Transform demo
+#[cfg(test)]
+mod features {
+    use crate::model::{Cell, Instrument, InstrumentKind, Song};
+
+    fn note(s: &str) -> u8 {
+        let names = [
+            "C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-",
+        ];
+        if s == "off" {
+            return 255;
+        }
+        if s.is_empty() {
+            return 0;
+        }
+        let k = names.iter().position(|n| s.starts_with(n)).unwrap();
+        let o: u8 = s[2..].parse().unwrap();
+        o * 12 + k as u8 + 1
+    }
+
+    struct W<'a>(&'a mut Song);
+    impl W<'_> {
+        fn put(&mut self, b: usize, r: usize, ch: usize, n: &str, ins: u8, fx: (u8, u8)) {
+            self.0.patterns[b].cells[r][ch] = Cell {
+                note: note(n),
+                instr: ins,
+                vol: 0,
+                fx: fx.0,
+                fxp: fx.1,
+            };
+        }
+    }
+
+    fn voice(s: &mut Song, preset: &str, vol: f32) -> u8 {
+        let mut p = crate::voice::preset(preset).unwrap();
+        p.base.name = preset.into();
+        let i = Instrument {
+            name: preset.into(),
+            volume: vol,
+            transpose: 0,
+            fx: vec![],
+            kind: InstrumentKind::Voice(p),
+        };
+        s.add_instrument(i).unwrap() as u8 + 1
+    }
+
+    /// the voice phrase (2 bars at 4 rows per beat)
+    const PHRASE: [(usize, &str); 8] = [
+        (0, "A-2"),
+        (4, "A-2"),
+        (8, "C-3"),
+        (12, "A-2"),
+        (16, "G-2"),
+        (20, "A-2"),
+        (24, "E-2"),
+        (30, "off"),
+    ];
+
+    #[test]
+    #[ignore]
+    fn features_02311_demo() {
+        let inp = std::env::var("CW_F2311_IN").expect("CW_F2311_IN");
+        let out = std::env::var("CW_F2311_OUT").expect("CW_F2311_OUT");
+        let mut s = crate::fileio::load_text_song(std::path::Path::new(&inp)).unwrap();
+        let names = [
+            "Metal Demon",
+            "Digital Ghost",
+            "Sub Beast",
+            "Cyber Choir",
+            "Ritual Growl",
+        ];
+        let slots: Vec<u8> = names
+            .iter()
+            .zip([0.9, 1.0, 0.8, 1.0, 0.9])
+            .map(|(n, v)| voice(&mut s, n, v))
+            .collect();
+        let fac = crate::instfile::factory_entries();
+        let e = fac
+            .iter()
+            .find(|e| crate::instfile::matches(e, "rolling offbeat bass"))
+            .unwrap();
+        let mut b = crate::instfile::instantiate(e).unwrap();
+        b.volume = 0.7;
+        let bass = s.add_instrument(b).unwrap() as u8 + 1;
+        let (md, gh, sb, cc, rg) = (slots[0], slots[1], slots[2], slots[3], slots[4]);
+        let mut w = W(&mut s);
+        // block 0: the phrase dry (Metal Demon's voice, 3F01 = blend 0)
+        // blocks 1-5: the same phrase, each preset transformed
+        for (blk, slot) in [(0usize, md), (1, md), (2, gh), (3, sb), (4, cc), (5, rg)] {
+            for (k, &(r, n)) in PHRASE.iter().enumerate() {
+                // 3F01 = blend 0 (dry); 3F00 = back to the preset's blend
+                let fx = match (blk, k) {
+                    (0, 0) => (0x3F, 0x01),
+                    (1, 0) => (0x3F, 0x00),
+                    _ => (0, 0),
+                };
+                let ins = if n == "off" { 0 } else { slot };
+                // the choir sings the phrase an octave up
+                let up;
+                let n = if blk == 4 && n != "off" {
+                    up = format!("{}{}", &n[..2], n[2..].parse::<u8>().unwrap() + 1);
+                    up.as_str()
+                } else {
+                    n
+                };
+                w.put(blk, r, 3, n, ins, fx);
+            }
+        }
+        // blocks 6-9: the groove (kick + rolling bass + hats from the base song)
+        for blk in 6..10 {
+            for r in (0..32).step_by(4) {
+                w.put(blk, r, 0, "A-2", 1, (0, 0));
+                w.put(blk, r + 2, 2, "C-5", 2, (0, 0));
+                for o in 1..4 {
+                    w.put(blk, r + o, 1, "A-1", bass, (0, 0));
+                }
+            }
+            // Sub Beast "dum bom gha dum" on the one of each bar
+            w.put(blk, 0, 3, "A-2", sb, (0x0C, 0x24));
+            w.put(blk, 3, 3, "off", 0, (0, 0));
+            w.put(blk, 16, 3, "A-2", sb, (0x0C, 0x24));
+            w.put(blk, 19, 3, "off", 0, (0, 0));
+            // Metal Demon stabs; 40xx opens the ring through the groove
+            let ring = [0x40u8, 0x80, 0xC0, 0xFF][blk - 6];
+            w.put(blk, 6, 4, "C-3", md, (0x40, ring));
+            w.put(blk, 9, 4, "off", 0, (0, 0));
+            w.put(blk, 22, 4, "D-3", md, (0, 0));
+            w.put(blk, 25, 4, "off", 0, (0, 0));
+        }
+        for blk in 7..10 {
+            // Digital Ghost: a long high note, 41xx crushes it harder
+            w.put(blk, 8, 5, "A-3", gh, (0x41, [0x60u8, 0xA0, 0xFF][blk - 7]));
+            w.put(blk, 24, 5, "off", 0, (0, 0));
+            // Cyber Choir pad
+            w.put(blk, 0, 6, "E-3", cc, (0, 0));
+        }
+        for blk in 8..10 {
+            // Ritual Growl words on beats 2 and 4, the blend sweeping up
+            for (k, r) in [4usize, 12, 20, 28].into_iter().enumerate() {
+                let bl = [0x40u8, 0x80, 0xC0, 0xFF][k];
+                w.put(blk, r, 7, "A-1", rg, (0x3F, bl));
+                w.put(blk, r + 3, 7, "off", 0, (0, 0));
+            }
+        }
+        // the last block: 42FF pushes the Sub Beast's sub to the top
+        w.put(9, 0, 3, "A-2", sb, (0x42, 0xFF));
+        w.0.patterns[9].cells[0][3].vol = 0x25;
+        crate::fileio::save_cwt(&s, std::path::Path::new(&out)).unwrap();
+    }
+}
