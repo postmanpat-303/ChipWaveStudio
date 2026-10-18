@@ -893,7 +893,7 @@ fn help_about_shows_credit_and_coffee_link() {
     click_exact(&mut h, "Help");
     click_exact(&mut h, "About ChipWave");
     assert!(h.state().show_about);
-    exact(&h, "Created by Derek Heasley");
+    exact(&h, "Created by Del (postmanpat)");
     exact(&h, "To keep the software going I need Coffee :)");
     // each link asks the platform to open its page
     let mut click_link = |label: &str| {

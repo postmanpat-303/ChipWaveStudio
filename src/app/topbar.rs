@@ -1011,7 +1011,7 @@ impl App {
                             .strong(),
                     );
                     ui.label("A tracker for chip and psytrance sounds.");
-                    ui.label("Created by Derek Heasley");
+                    ui.label("Created by Del (postmanpat)");
                     ui.label("GPL-3.0-or-later");
                     ui.add_space(8.0);
                     ui.label("To keep the software going I need Coffee :)");

@@ -299,7 +299,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 
 ## Credits
 
-Created by **Derek Heasley**. To keep the software going I need Coffee :)
+Created by **Del (postmanpat)**. To keep the software going I need Coffee :)
 
 <p>
   <a href="https://buymeacoffee.com/postmanpat"><b>☕ Buy me a coffee</b></a> &nbsp;·&nbsp;

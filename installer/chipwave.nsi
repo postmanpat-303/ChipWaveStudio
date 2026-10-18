@@ -16,7 +16,7 @@ Unicode true
 !endif
 
 !define APPNAME "ChipWave Tracker"
-!define PUBLISHER "postmanpat-303"
+!define PUBLISHER "Del (postmanpat)"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\ChipWaveTracker"
 !define ICON "..\assets\icon\chipwave_tracker.ico"
 

@@ -228,7 +228,7 @@ Credits (full list with links: Help > About and THIRD_PARTY_LICENSES.txt):
   ITU-R BS.1770 / EBU R 128; Csound formants, Peterson & Barney 1952;
   Krumhansl & Kessler 1982; Paul Kellet (pink noise); the Rust crate authors.
 
-Created by Derek Heasley.
+Created by Del (postmanpat).
 To keep the software going I need Coffee :)
 Buy me a coffee: https://buymeacoffee.com/postmanpat
 PayPal:          https://paypal.me/derekh100   (both also in Help > About)
