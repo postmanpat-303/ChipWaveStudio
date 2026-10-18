@@ -451,13 +451,6 @@ impl DrumP {
             1.0
         };
     }
-    pub fn label(&self) -> String {
-        format!(
-            "{} {}",
-            self.kind.name(),
-            self.kind.models()[self.model as usize]
-        )
-    }
 }
 
 /// Kit mode: eight drums on one instrument; the note picks the drum
@@ -517,6 +510,7 @@ impl Default for KitP {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)] // a kit is 8 pieces inline; no allocation on the audio thread
 pub enum GenEngine {
     Drum(DrumP),
     Kit(KitP),
@@ -525,15 +519,6 @@ pub enum GenEngine {
 impl Default for GenEngine {
     fn default() -> Self {
         GenEngine::Drum(DrumP::default())
-    }
-}
-
-impl GenEngine {
-    pub fn name(&self) -> &'static str {
-        match self {
-            GenEngine::Drum(_) => "Drum",
-            GenEngine::Kit(_) => "Kit",
-        }
     }
 }
 
@@ -1133,6 +1118,7 @@ impl GenState {
             // cymbal: the 808 metal set an octave down, long, plus noise
             3 => {
                 let mut s = 0.0;
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..6 {
                     self.ph[i] = (self.ph[i] + (HAT808[i] * 1.45 * tune / sr).min(0.5)).fract();
                     s += sq(self.ph[i]);

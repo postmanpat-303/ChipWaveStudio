@@ -293,18 +293,22 @@ impl App {
         // patch editor for the selected synth instrument
         let idx = self.instr as usize;
         let mut changed = false;
-        let Some((name, mut volume, mut transpose, mut patch, mut voice)) = self.with(|s| {
-            s.song.instruments.get(idx.wrapping_sub(1)).map(|i| {
-                let (patch, voice) = match &i.kind {
-                    InstrumentKind::Synth(p) => (Some(p.clone()), None),
-                    InstrumentKind::Voice(v) => (Some(v.base.clone()), Some(v.clone())),
-                    _ => (None, None),
-                };
-                (i.name.clone(), i.volume, i.transpose, patch, voice)
+        let Some((name, mut volume, mut transpose, mut patch, mut voice, mut gen)) =
+            self.with(|s| {
+                s.song.instruments.get(idx.wrapping_sub(1)).map(|i| {
+                    let (patch, voice, gen) = match &i.kind {
+                        InstrumentKind::Synth(p) => (Some(p.clone()), None, None),
+                        InstrumentKind::Voice(v) => (Some(v.base.clone()), Some(v.clone()), None),
+                        InstrumentKind::Gen(g) => (None, None, Some(g.clone())),
+                        _ => (None, None, None),
+                    };
+                    (i.name.clone(), i.volume, i.transpose, patch, voice, gen)
+                })
             })
-        }) else {
+        else {
             return;
         };
+        let mut bake = false;
         let is_voice = voice.is_some();
         let mut learn: Vec<(egui::Response, crate::automation::Target)> = vec![];
         // edit a copy without holding the audio lock, commit only on change
@@ -340,6 +344,11 @@ impl App {
                 }
             }
         });
+        if let Some(g) = &mut gen {
+            let o = super::genview::gen_panel(ui, g, &mut self.gen_ui, idx.wrapping_sub(1));
+            changed |= o.changed;
+            bake = o.bake;
+        }
         if let Some(v) = &mut voice {
             changed |= super::voiceview::voice_panel(ui, v);
             ui.add_space(4.0);
@@ -410,6 +419,11 @@ impl App {
                                     .changed();
                             }
                         });
+                    ui.end_row();
+                    ui.label("   Model");
+                    ui.horizontal(|ui| {
+                        changed |= super::genview::filter_model_combo(ui, "fmodel", p);
+                    });
                     ui.end_row();
                     ui.label("   Cutoff Hz");
                     let r =
@@ -619,6 +633,9 @@ impl App {
                 if let Some(inst) = s.song.instruments.get_mut(idx.wrapping_sub(1)) {
                     inst.volume = volume;
                     inst.transpose = transpose;
+                    if let (Some(g), InstrumentKind::Gen(dst)) = (gen, &mut inst.kind) {
+                        *dst = g;
+                    }
                     match (patch, voice, &mut inst.kind) {
                         (Some(p), None, InstrumentKind::Synth(dst)) => *dst = p,
                         (Some(p), Some(mut v), InstrumentKind::Voice(dst)) => {
@@ -633,6 +650,9 @@ impl App {
         }
         for (r, tg) in learn {
             self.learn_menu(&r, tg);
+        }
+        if bake {
+            self.bake_gen(idx.wrapping_sub(1));
         }
     }
 }

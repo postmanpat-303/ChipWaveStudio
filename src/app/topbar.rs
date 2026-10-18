@@ -258,6 +258,26 @@ pub(super) const CREDITS: &[(&str, &str)] = &[
         "https://www.linkwitzlab.com/filters.htm",
     ),
     (
+        "Moog ladder: V. Zavalishin, The Art of VA Filter Design; A. Huovilainen (DAFx-04); Välimäki & Huovilainen (2006)",
+        "https://www.native-instruments.com/fileadmin/ni_media/downloads/pdf/VAFilterDesign_2.1.0.pdf",
+    ),
+    (
+        "Ladder cross-checks: DaisySP (R. van Hoesel, Infrasonic Audio, MIT), fundsp (S. Perttu), MoogLadders (D. Diakopoulos)",
+        "https://github.com/ddiakopoulos/MoogLadders",
+    ),
+    (
+        "Drum Synth recipes: Sonic Pi sc808 (S. Aaron et al., MIT) after Yoshinosuke Horiuchi's SC-808",
+        "https://github.com/sonic-pi-net/sonic-pi",
+    ),
+    (
+        "Drum models: Plaits by Emilie Gillet (MIT), as ported to DaisySP by Electrosmith (MIT)",
+        "https://github.com/electro-smith/DaisySP",
+    ),
+    (
+        "Chip FX: sfxr by Tomas Pettersson (DrPetter, MIT) via sfxr-rs by Teemu Erkkola (MIT)",
+        "https://github.com/bzar/sfxr-rs",
+    ),
+    (
         "Key finding: Krumhansl–Schmuckler algorithm with the Krumhansl & Kessler (1982) key profiles",
         "https://doi.org/10.1037/0033-295X.89.4.334",
     ),

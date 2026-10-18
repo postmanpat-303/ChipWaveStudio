@@ -17,6 +17,7 @@ mod edit;
 mod file;
 mod fillview;
 mod fxview;
+mod genview;
 mod instruments;
 mod keys;
 mod lanes;
@@ -132,6 +133,8 @@ pub struct App {
     library: library::Library,
     /// instrument list search
     instr_query: String,
+    /// Generator editor state: kit piece, Dice history (0.2.3.12)
+    gen_ui: genview::GenUi,
     /// instrument being renamed in the list (slot, text)
     renaming: Option<(u8, String)>,
     show_info: bool,
@@ -416,6 +419,7 @@ impl App {
             chords: Default::default(),
             library: Default::default(),
             instr_query: String::new(),
+            gen_ui: Default::default(),
             renaming: None,
             show_info: false,
             prompt: None,
@@ -666,6 +670,10 @@ impl App {
                 "Chords: Song > Chord helper… or Chords… in the block bar. Pick or detect the song key, click pads to build a \
                  progression (or pick a preset), then Write into block as chords (one tone per channel from the cursor channel), \
                  an arpeggio or a bass line. Scale lock snaps typed and MIDI notes to the key.",
+            );
+            ui.label(
+                "Generators: 43xy sets macro x (1-8) to y (0-F) on that channel, 4300 = instrument. Dice rolls the \
+                 unlocked knobs, Mutate nudges them, < > walk the last 16 rolls, Bake to sample renders C-4 to a sample.",
             );
             ui.label(
                 "Voice Transform: 3Fxx blend · 40xx metallic resonance · 41xx digital distortion · 42xx sub level \

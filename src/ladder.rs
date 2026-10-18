@@ -184,6 +184,7 @@ impl Ladder {
 
     /// Filter one sample. `pole4` = 24 dB/oct (else 12 dB).
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     pub fn process(
         &mut self,
         x: f32,

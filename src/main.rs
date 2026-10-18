@@ -2,7 +2,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 /// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.11";
+pub const VERSION: &str = "0.2.3.12";
 
 mod app;
 mod arrange;
@@ -290,6 +290,66 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         ok
     };
+    // 0.2.3.12: generators (every drum preset + kits) and the ladder filter
+    let gen_ok = {
+        let mut s = song.clone();
+        for row in s.patterns[0].cells.iter_mut() {
+            row.iter_mut().for_each(|c| *c = model::Cell::default());
+        }
+        s.order = vec![0];
+        let base = s.instruments.len();
+        let presets = gen::presets();
+        let rows = s.patterns[0].cells.len();
+        for (k, (name, _, g)) in presets.iter().enumerate() {
+            s.instruments.push(model::Instrument {
+                name: (*name).into(),
+                volume: 0.8,
+                transpose: 0,
+                fx: vec![],
+                kind: model::InstrumentKind::Gen(g.clone()),
+            });
+            let r = (k * 2) % rows;
+            s.patterns[0].cells[r][k % 6] = model::Cell {
+                note: 49,
+                instr: (base + k + 1) as u8,
+                fx: if k % 3 == 0 { 0x43 } else { 0 },
+                fxp: 0x2C,
+                ..Default::default()
+            };
+        }
+        // a synth through each filter model
+        for (m, fm) in ladder::FilterModel::ALL.iter().enumerate() {
+            let p = synth::Patch {
+                filter_model: *fm,
+                resonance: 0.8,
+                ..Default::default()
+            };
+            s.instruments.push(model::Instrument {
+                name: fm.name().into(),
+                volume: 0.6,
+                transpose: 0,
+                fx: vec![],
+                kind: model::InstrumentKind::Synth(p),
+            });
+            s.patterns[0].cells[1 + m * 8][6] = model::Cell {
+                note: 25,
+                instr: s.instruments.len() as u8,
+                ..Default::default()
+            };
+        }
+        let pcm = engine::render_song(&s, 44100);
+        let fin = pcm.iter().all(|x| x.is_finite());
+        let tp = master::true_peak(&pcm);
+        let rms = (pcm.iter().map(|x| x * x).sum::<f32>() / pcm.len().max(1) as f32).sqrt();
+        let ok = fin && tp < 1.0 && rms > 0.003 && s.instruments.len() == base + presets.len() + 3;
+        report.push_str(&format!(
+            "  generators: {} presets + 3 filter models, rms {rms:.4}, true peak {:.2} dBTP ({})\n",
+            presets.len(),
+            20.0 * tp.max(1e-9).log10(),
+            if ok { "ok" } else { "FAILED" }
+        ));
+        ok
+    };
     // 0.2.3.11: Voice Transform presets + the three FX devices
     let tf_ok = {
         let mut s = song.clone();
@@ -350,6 +410,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
     let ok = fill_ok
         && inst_ok
         && tf_ok
+        && gen_ok
         && speech_ok
         && midi_ok
         && peak > 0.05

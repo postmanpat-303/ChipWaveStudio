@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 15] = [
+pub const VIEWS: [&str; 17] = [
     "pattern",
     "arranger",
     "mixer",
@@ -49,6 +49,8 @@ pub const VIEWS: [&str; 15] = [
     "speech",
     "slice",
     "transform",
+    "drums",
+    "kit",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -102,6 +104,17 @@ impl App {
                 self.add_instrument("Metal Demon", InstrumentKind::Voice(p));
                 self.dirty = false;
                 super::voiceview::TF_SCROLL.with(|f| f.set(true));
+            }
+            "drums" | "kit" => {
+                // a Generator (0.2.3.12): the Zap kick or the Psy Kit
+                let name = if view == "kit" {
+                    "Psy Kit"
+                } else {
+                    "Psy Zap Kick"
+                };
+                let p = crate::gen::preset(name).unwrap_or_default();
+                self.add_instrument(name, InstrumentKind::Gen(p));
+                self.dirty = false;
             }
             "slice" => {
                 // a breakbeat in the sample editor, sliced at its transients

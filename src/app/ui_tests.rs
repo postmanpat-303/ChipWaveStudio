@@ -1855,3 +1855,99 @@ fn voice_transform_section_edits_and_undoes() {
         );
     }
 }
+
+fn last_gen(h: &mut Harness<'static, App>) -> crate::gen::GenPatch {
+    song(h, |s| match &s.instruments.last().unwrap().kind {
+        InstrumentKind::Gen(g) => g.clone(),
+        _ => panic!("not a generator"),
+    })
+}
+
+#[test]
+fn generator_dice_locks_history_and_bake() {
+    let mut h = harness();
+    instr_menu(&mut h, 1);
+    click_exact(&mut h, "New instrument");
+    click_exact(&mut h, "Generator (drums)");
+    click_exact(&mut h, "Kicks");
+    click_exact(&mut h, "Psy Zap Kick");
+    frames(&mut h, 2);
+    let n0 = song(&mut h, |s| s.instruments.len());
+    let g0 = last_gen(&mut h);
+    exact(&h, "GENERATOR · DRUM SYNTH");
+    exact(&h, "Punch");
+    exact(&h, "no rolls yet");
+    let mac = |g: &crate::gen::GenPatch| match &g.engine {
+        crate::gen::GenEngine::Drum(d) => (d.macros, d.locks),
+        _ => panic!(),
+    };
+    click_exact(&mut h, "Dice");
+    frames(&mut h, 2);
+    let g1 = last_gen(&mut h);
+    assert_ne!(mac(&g1).0, mac(&g0).0, "Dice changes the sound");
+    assert_ne!(g1.seed, g0.seed, "and stores its seed");
+    exact(&h, "roll 1/1");
+    // lock Tune (the first lock), roll again: Tune stays
+    click_exact(&mut h, "lock");
+    frames(&mut h, 2);
+    assert_eq!(mac(&last_gen(&mut h)).1, 1);
+    let tune = mac(&last_gen(&mut h)).0[0];
+    click_exact(&mut h, "Dice");
+    frames(&mut h, 2);
+    let g2 = last_gen(&mut h);
+    assert_eq!(mac(&g2).0[0], tune, "the locked knob keeps its value");
+    assert_ne!(mac(&g2).0, mac(&g1).0);
+    click_exact(&mut h, "Mutate");
+    frames(&mut h, 2);
+    exact(&h, "roll 3/3");
+    // back twice: the first roll's sound again
+    click_exact(&mut h, "<");
+    frames(&mut h, 2);
+    click_exact(&mut h, "<");
+    frames(&mut h, 2);
+    exact(&h, "roll 1/3");
+    assert_eq!(mac(&last_gen(&mut h)).0, mac(&g1).0);
+    // Bake: a new sample instrument with the hit in it; one undo removes it
+    click_exact(&mut h, "Bake to sample");
+    frames(&mut h, 2);
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0 + 1);
+    let (name, len) = song(&mut h, |s| {
+        let i = s.instruments.last().unwrap();
+        (
+            i.name.clone(),
+            match &i.kind {
+                InstrumentKind::Sample { data, .. } => data.len(),
+                _ => 0,
+            },
+        )
+    });
+    assert_eq!(name, "Psy Zap Kick (baked)");
+    assert!(len > 4800, "baked {len} samples");
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0);
+}
+
+#[test]
+fn synth_panel_offers_the_ladder_filter() {
+    let mut h = harness();
+    instr_menu(&mut h, 1);
+    click_exact(&mut h, "New instrument");
+    click_exact(&mut h, "Synth (init)");
+    frames(&mut h, 2);
+    click_exact(&mut h, "SVF 12 dB");
+    frames(&mut h, 1);
+    click_exact(&mut h, "Ladder (vintage)");
+    frames(&mut h, 2);
+    let p = song(&mut h, |s| match &s.instruments.last().unwrap().kind {
+        InstrumentKind::Synth(p) => p.clone(),
+        _ => panic!(),
+    });
+    assert_eq!(p.filter_model, crate::ladder::FilterModel::Vintage);
+    click_exact(&mut h, "12 dB");
+    frames(&mut h, 2);
+    let p = song(&mut h, |s| match &s.instruments.last().unwrap().kind {
+        InstrumentKind::Synth(p) => p.clone(),
+        _ => panic!(),
+    });
+    assert!(p.ladder_12db);
+}

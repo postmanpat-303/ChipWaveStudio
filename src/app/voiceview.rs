@@ -623,6 +623,7 @@ impl App {
             self.add_instrument("Synth", InstrumentKind::Synth(Default::default()));
             ui.close();
         }
+        self.new_generator_menu(ui);
         ui.menu_button("Voice (glitch)", |ui| {
             ui.label(
                 egui::RichText::new("synthetic vowels: ahh eee ooh err")
