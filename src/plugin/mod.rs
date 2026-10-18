@@ -87,6 +87,8 @@ pub trait Hosted: Send {
     /// per-note pitch offset in semitones (glide, slides)
     fn tuning(&mut self, key: u8, semis: f32);
     fn param(&mut self, id: u32, value: f64);
+    /// panic: silence every voice now (all notes / sound off, plugin reset)
+    fn panic(&mut self);
     /// render `n` frames (<= MAX_BLOCK) with the queued events at frame 0
     fn process(&mut self, n: usize, l: &mut [f32], r: &mut [f32]);
     fn params(&self) -> Vec<ParamInfo>;
@@ -264,6 +266,18 @@ impl Rack {
     }
 
     // ---------------------------------------------------------- audio thread
+
+    /// panic: every instance stops all sound now (audio thread)
+    pub fn panic(&mut self) {
+        for s in &mut self.slots {
+            s.note = None;
+            s.inst.panic();
+            s.pos = s.len;
+        }
+        for l in self.live.iter_mut() {
+            l.1 = u16::MAX;
+        }
+    }
 
     /// a tracker note on channel `ch`: releases other plugin notes on the
     /// channel, then plays `key` on (instr, ch) if it has an instance

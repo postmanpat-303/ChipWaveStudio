@@ -696,6 +696,46 @@ impl Hosted for ClapInst {
         });
     }
 
+    fn panic(&mut self) {
+        // drop queued events, then all sound off: CC 120 + 123 (MIDI dialect)
+        // or a wildcard note choke (CLAP dialect), and reset the plugin
+        self.ev.v.clear();
+        if self.midi_notes {
+            for cc in [120u8, 123, 64] {
+                self.push(Ev {
+                    midi: clap_event_midi {
+                        header: header(std::mem::size_of::<clap_event_midi>(), CLAP_EVENT_MIDI),
+                        port_index: 0,
+                        data: [0xB0, cc, 0],
+                    },
+                });
+            }
+        } else {
+            self.push(Ev {
+                note: clap_event_note {
+                    header: header(
+                        std::mem::size_of::<clap_event_note>(),
+                        CLAP_EVENT_NOTE_CHOKE,
+                    ),
+                    note_id: -1,
+                    port_index: -1,
+                    channel: -1,
+                    key: -1,
+                    velocity: 0.0,
+                },
+            });
+        }
+        if self.active && self.processing {
+            // clap_plugin.reset is [audio-thread]: clears tails and voices
+            unsafe {
+                if let Some(r) = (*self.plugin).reset {
+                    r(self.plugin);
+                }
+            }
+        }
+        self.sleeping = false;
+    }
+
     fn process(&mut self, n: usize, out_l: &mut [f32], out_r: &mut [f32]) {
         let n = n.min(MAX_BLOCK).min(out_l.len()).min(out_r.len());
         if !self.active {

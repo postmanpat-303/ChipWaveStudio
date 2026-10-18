@@ -252,6 +252,7 @@ impl App {
                 Key::Y if cmd => self.do_undo(true),
                 Key::Q if cmd => self.request(crate::prompt::Pending::Quit, ctx),
                 Key::Comma if cmd => self.toggle_settings(),
+                Key::Period if cmd => self.panic(),
                 Key::E if cmd && m.shift => self.open_export(),
                 Key::F if cmd && m.shift => self.open_fill(),
                 Key::F12 => self.show_help = !self.show_help,

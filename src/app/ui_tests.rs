@@ -2317,3 +2317,44 @@ fn new_menu_opens_the_plugin_browser() {
     assert!(has_text(&h, "Add plugin instrument"));
     assert!(has_text(&h, "Rescan"));
 }
+
+#[test]
+fn panic_button_sits_at_the_far_right_of_the_toolbar_and_stops_everything() {
+    let mut h = harness();
+    let r = exact(&h, "Panic");
+    let win = h.ctx.content_rect();
+    assert!(
+        r.right() > win.right() - 40.0,
+        "far right: {r:?} in {win:?}"
+    );
+    assert!(r.top() < 120.0, "in the top toolbar: {r:?}");
+    // every other toolbar widget on that row is to its left
+    let others = h
+        .query_all_by(|n| n.label().is_some_and(|l| l != "Panic" && !l.is_empty()))
+        .filter(|n| {
+            let q = n.rect();
+            q.center().y > r.top()
+                && q.center().y < r.bottom()
+                && q.width() < 400.0
+                && q.left() > r.right() - 1.0
+        })
+        .count();
+    assert_eq!(others, 0, "nothing to the right of Panic");
+    // works while playing...
+    h.state_mut().play(0);
+    assert!(h.state().with(|s| s.engine.playing));
+    click_at(&mut h, r.center());
+    assert!(h
+        .state()
+        .with(|s| !s.engine.playing && s.engine.panicking()));
+    assert_eq!(h.state().status, "Panic: all sound stopped");
+    // ...and while stopped, from the keyboard (Ctrl+.)
+    h.state().with(|s| {
+        let mut b = vec![0.0f32; 512];
+        let song = s.song.clone();
+        s.engine.render(&song, &mut b);
+        assert!(!s.engine.panicking());
+    });
+    key(&mut h, Key::Period, egui::Modifiers::COMMAND);
+    assert!(h.state().with(|s| s.engine.panicking()));
+}

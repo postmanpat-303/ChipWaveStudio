@@ -641,6 +641,23 @@ impl App {
         });
     }
 
+    /// PANIC: stop playback and every sound now (toolbar button, Ctrl+.).
+    /// Works while stopped too: held MIDI notes, plugin voices and FX tails
+    /// are cleared by the audio thread after a 3 ms fade.
+    pub(super) fn panic(&mut self) {
+        if let Some(f) = &mut self.fill {
+            f.previewing = false;
+        }
+        self.with(|s| {
+            s.preview = None;
+            s.engine.stop();
+            s.engine.panic();
+        });
+        // (ChipWave has no MIDI output; held MIDI-input notes and the
+        // sustain pedal state are cleared in the engine)
+        self.status = "Panic: all sound stopped".into();
+    }
+
     fn help(&mut self, ctx: &egui::Context) {
         let mut open = self.show_help;
         egui::Window::new("Keys").open(&mut open).resizable(false).show(ctx, |ui| {
@@ -659,7 +676,7 @@ impl App {
                     ("Arranger (click it to focus)", "click / Shift+click / Ctrl+click select; Ctrl+X/C/V cut/copy/paste after selection; Ctrl+Shift+V paste as new blocks; Del; Ctrl+A; right-click menu"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
                     ("Arranger: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
                     ("Arranger ruler (bar numbers)", "click = move the play marker to that bar (jumps there while playing), drag = scrub, Alt = exact row; Play song starts from the marker"),
-                    ("Ctrl+N / O / S / Shift+S", "new / open / save / save as (.cwt)"), ("Ctrl+E", "export WAV"),
+                    ("Ctrl+N / O / S / Shift+S", "new / open / save / save as (.cwt)"), ("Ctrl+. (Panic button, far right of the toolbar)", "PANIC: stop all sound now: playback, held / MIDI notes, sustain, plugin voices, delay and reverb tails, limiter (3 ms fade, also while stopped)"), ("Ctrl+E", "export WAV"),
                     ("MIDI keyboard", "plays the current instrument (velocity, sustain pedal, pitch bend); Settings > MIDI picks the device"),
                     ("MIDI + edit mode", "records the note at the cursor (instrument + velocity), moves by Step; while playing: at the playing row"),
                     ("Right-click a fader / knob", "MIDI learn: then move a knob or the mod wheel"),

@@ -357,6 +357,11 @@ pub struct Engine {
     pub loud: crate::master::Readout,
     /// plugin instrument instances (src/plugin/), one per instrument x channel
     pub plugins: crate::plugin::Rack,
+    /// panic request (any thread sets it; the audio thread acts on it)
+    pub panic_req: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// panic fade-out frames left / total
+    panic_fade: u32,
+    panic_len: u32,
 }
 
 impl Engine {
@@ -394,6 +399,9 @@ impl Engine {
             tone_ph: 0.0,
             live: Live::new(),
             plugins: crate::plugin::Rack::new(),
+            panic_req: Default::default(),
+            panic_fade: 0,
+            panic_len: 1,
             lim: crate::master::Limiter::new(sr),
             meter: crate::master::Loudness::new(sr),
             loud: Default::default(),
@@ -688,6 +696,71 @@ impl Engine {
         }
         self.process_row(song);
         self.song_pos = self.calc_song_pos(song);
+    }
+
+    /// PANIC: stop playback and silence everything (voices, live notes,
+    /// plugins, FX tails, limiter) after a 3 ms fade. Only sets a flag: the
+    /// audio thread does the work at its next callback, without allocating.
+    pub fn panic(&self) {
+        self.panic_req
+            .store(true, std::sync::atomic::Ordering::Release);
+    }
+
+    /// a panic fade is running or requested
+    #[cfg(test)]
+    pub fn panicking(&self) -> bool {
+        self.panic_fade > 0 || self.panic_req.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    fn start_panic(&mut self) {
+        self.playing = false;
+        self.test_tone = 0;
+        self.live.sustain = false;
+        self.live.bend = 1.0;
+        for v in &mut self.live.v {
+            v.active = false;
+        }
+        self.plugins.panic();
+        self.panic_len = ((0.003 * self.sr) as u32).max(1);
+        self.panic_fade = self.panic_len;
+    }
+
+    /// end of the panic fade: clear every voice, tail and filter state
+    fn finish_panic(&mut self, song: &Song) {
+        for c in &mut self.chans {
+            c.active = false;
+            c.synth.amp.release();
+        }
+        for v in &mut self.live.v {
+            v.active = false;
+        }
+        let devs_of = |owner: usize| -> &[crate::fx::Device] {
+            song.instruments
+                .get(owner)
+                .map(|x| x.fx.as_slice())
+                .unwrap_or(&[])
+        };
+        for ch in self
+            .chains
+            .iter_mut()
+            .chain(std::iter::once(&mut self.live.chain))
+        {
+            let devs = devs_of(ch.owner);
+            for (st, d) in ch.states.iter_mut().zip(devs) {
+                if st.kind == d.kind {
+                    st.reset(d);
+                }
+            }
+        }
+        for (b, ch) in self.rets.iter_mut().enumerate() {
+            if let (Some(st), Some(ret)) = (ch.states.first_mut(), song.mixer.returns.get(b)) {
+                if st.kind == ret.device.kind {
+                    st.reset(&ret.device);
+                }
+            }
+        }
+        self.lim.clear();
+        self.plugins.panic();
     }
 
     pub fn stop(&mut self) {
@@ -1328,6 +1401,12 @@ impl Engine {
 
     fn render_inner(&mut self, song: &Song, out: &mut [f32]) {
         let frames_total = out.len() / 2;
+        if self
+            .panic_req
+            .swap(false, std::sync::atomic::Ordering::AcqRel)
+        {
+            self.start_panic();
+        }
         let plugs = !self.plugins.is_empty();
         // live MIDI events (lock-free queue, filled by the MIDI thread)
         if let Some(mut rx) = self.live.rx.take() {
@@ -1603,6 +1682,17 @@ impl Engine {
                     .process(l * mg * lim_gain, r * mg * lim_gain, lim_ceil, lim_rel)
             } else {
                 ((l * mg).tanh(), (r * mg).tanh())
+            };
+            let (l, r) = if self.panic_fade > 0 {
+                // panic: 3 ms fade (no click), then everything is cleared
+                self.panic_fade -= 1;
+                let g = self.panic_fade as f32 / self.panic_len as f32;
+                if self.panic_fade == 0 {
+                    self.finish_panic(song);
+                }
+                (l * g, r * g)
+            } else {
+                (l, r)
             };
             self.meter.push(l, r, self.playing);
             peak = peak.max(l.abs()).max(r.abs());
@@ -3266,5 +3356,110 @@ mod tests {
             }
         });
         assert_eq!(n, 0, "allocations with 32 channels");
+    }
+
+    // ------------------------------------------- 0.2.3.16: PANIC
+
+    fn tail_song() -> Song {
+        // the demo with long delay + reverb returns turned up on every channel
+        let mut s = crate::fileio::demo_song();
+        for m in s.mixer.channels.iter_mut() {
+            m.send = [0.8, 0.8];
+        }
+        for r in s.mixer.returns.iter_mut() {
+            r.level = 1.0;
+        }
+        s
+    }
+
+    fn max_abs(b: &[f32]) -> f32 {
+        b.iter().fold(0.0f32, |m, x| m.max(x.abs()))
+    }
+
+    #[test]
+    fn panic_silences_playback_and_fx_tails_within_5_ms() {
+        let song = tail_song();
+        assert!(!song.mixer.returns.is_empty());
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 1024];
+        let mut loud = 0.0f32;
+        for _ in 0..200 {
+            e.render(&song, &mut buf);
+            loud = loud.max(max_abs(&buf));
+        }
+        assert!(loud > 0.05, "the song plays: {loud}");
+        e.panic();
+        assert!(e.panicking());
+        // 5 ms = 240 frames: the 3 ms fade is over, then hard silence
+        let mut first = vec![0.0f32; 480];
+        e.render(&song, &mut first);
+        assert!(!e.playing);
+        assert!(!e.panicking());
+        assert!(
+            max_abs(&first[300..]) < 1e-6,
+            "after the fade: {}",
+            max_abs(&first[300..])
+        );
+        // the fade itself has no click: each step is small
+        let steps = first[..300]
+            .chunks(2)
+            .zip(first[2..302].chunks(2))
+            .map(|(a, b)| (a[0] - b[0]).abs())
+            .fold(0.0f32, f32::max);
+        assert!(steps < 0.1, "fade step {steps}");
+        // and no delay / reverb tail comes back afterwards
+        for _ in 0..100 {
+            e.render(&song, &mut buf);
+            assert!(max_abs(&buf) < 1e-6, "tail after panic: {}", max_abs(&buf));
+        }
+    }
+
+    #[test]
+    fn panic_works_while_stopped_and_without_allocating() {
+        let song = tail_song();
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 1024];
+        for _ in 0..200 {
+            e.render(&song, &mut buf);
+        }
+        // stopped: the release and the reverb / delay tails still ring
+        e.stop();
+        e.render(&song, &mut buf);
+        assert!(max_abs(&buf) > 1e-3, "tail rings after stop");
+        let n = alloc_count::count(|| {
+            e.panic();
+            e.render(&song, &mut buf);
+            e.render(&song, &mut buf);
+        });
+        assert_eq!(n, 0, "panic allocated {n} times");
+        assert!(max_abs(&buf) < 1e-6);
+        // playing again afterwards works
+        e.start(&song, 0, 0, false, 0);
+        let mut loud = 0.0f32;
+        for _ in 0..100 {
+            e.render(&song, &mut buf);
+            loud = loud.max(max_abs(&buf));
+        }
+        assert!(loud > 0.05, "plays again after panic: {loud}");
+    }
+
+    #[test]
+    fn panic_silences_plugin_voices() {
+        let song = crate::plugin::tests::plugin_song();
+        let mut e = Engine::new(48000.0);
+        crate::plugin::prepare(&mut e.plugins, &song, 48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 1024];
+        for _ in 0..10 {
+            e.render(&song, &mut buf);
+        }
+        assert!(max_abs(&buf) > 0.01);
+        e.panic();
+        e.render(&song, &mut buf);
+        assert!(max_abs(&buf[600..]) < 1e-6, "{}", max_abs(&buf[600..]));
+        e.render(&song, &mut buf);
+        assert!(max_abs(&buf) < 1e-6);
     }
 }

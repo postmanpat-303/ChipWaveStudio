@@ -92,6 +92,7 @@ Z X C V B N M , Q W E R T Y U I    Z = C (base octave), Q = C (base octave + 1)
 | New / Open / Save / Save as | `Ctrl+N` / `Ctrl+O` / `Ctrl+S` / `Ctrl+Shift+S` | `Cmd+…` |
 | Export WAV/MP3 | `Ctrl+E` | `Cmd+E` |
 | Quit | `Ctrl+Q` (Alt+F4 on Windows) | `Cmd+Q` |
+| **Panic**: stop all sound now (playback, held notes, plugin voices, delay/reverb tails, limiter) | `Ctrl+.` or the small **Panic** button at the far right of the toolbar | `Cmd+.` |
 | Command palette | `Ctrl+Shift+P` | `Cmd+Shift+P` |
 | Switch screen: pattern / arranger / sound / samples | `F2` / `F3` / `F4` / `F5` | `Fn+F…` or `Cmd+1…4` (set in prefs) |
 

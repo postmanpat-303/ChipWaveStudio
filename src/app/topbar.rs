@@ -836,6 +836,19 @@ impl App {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let right_edge = ui.max_rect().right();
                 ui.add_space(10.0);
+                // PANIC (0.2.3.16): far right, small, never a focus target
+                if ui
+                    .add(
+                        egui::Button::new(egui::RichText::new("Panic").small().color(hdr_dim()))
+                            .small()
+                            .min_size(egui::vec2(0.0, 16.0)),
+                    )
+                    .on_hover_text("Panic: stop all sound (Ctrl+.)")
+                    .clicked()
+                {
+                    self.panic();
+                }
+                ui.add_space(6.0);
                 if let Some(a) = &self.audio {
                     let u = a.stats.underruns.load(std::sync::atomic::Ordering::Relaxed);
                     let txt = format!("{:.0} ms · {} underruns", a.latency_ms(), u);

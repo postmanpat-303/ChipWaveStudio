@@ -242,6 +242,26 @@ impl Limiter {
         }
     }
 
+    /// Forget all audio and gain history (panic), without allocating.
+    pub fn clear(&mut self) {
+        for t in &mut self.tp {
+            t.hist = [0.0; TP_HIST];
+            t.w = 0;
+        }
+        self.prev_tp = 0.0;
+        self.dl.fill(0.0);
+        self.dw = 0;
+        self.hold.fill(1.0);
+        self.hw = 0;
+        self.boxb.fill(1.0);
+        self.bw = 0;
+        self.box_sum = self.box_n as f64;
+        self.renorm = 0;
+        self.env = 1.0;
+        self.gain = 1.0;
+        self.min_gain = 1.0;
+    }
+
     /// frames of delay the limiter adds
     #[cfg(test)]
     pub fn latency(&self) -> usize {

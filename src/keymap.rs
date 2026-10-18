@@ -33,6 +33,7 @@ pub enum Action {
     ScaleReset,
     Mute,
     Solo,
+    Panic,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,7 +115,7 @@ mod key_name {
 }
 
 use Action as A;
-pub const DEFAULTS: [(Action, &str, Combo); 25] = [
+pub const DEFAULTS: [(Action, &str, Combo); 26] = [
     (
         A::PlayBlock,
         "Play / stop block",
@@ -192,6 +193,11 @@ pub const DEFAULTS: [(Action, &str, Combo); 25] = [
     ),
     (A::Mute, "Mute channel", Combo::new(Key::F9, false, false)),
     (A::Solo, "Solo channel", Combo::new(Key::F10, false, false)),
+    (
+        A::Panic,
+        "Panic: stop all sound",
+        Combo::new(Key::Period, true, false),
+    ),
 ];
 
 pub fn default_of(a: Action) -> Combo {
