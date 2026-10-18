@@ -120,7 +120,7 @@ Master +6 dB. Sidechain key = kick, release 90 ms.
 |---|---|---|---|---|---|
 | 1 Kick | +3.0 dB | C | – | – | key |
 | 2 Bass | +1.5 dB | C | 0.15 | 0.06 | 80 % |
-| 3 Hats | -3.0 dB | R12 | 0.08 (0.5 in breakdown 2, 0.3 outro) | 0.12 | – |
+| 3 Hats | -8.0 dB | R12 | 0.06 (0.35 in breakdown 2, 0.2 outro) | 0.09 | – |
 | 4 Snare | -4.0 dB | L5 | 0.12 (0.6 on rolls) | 0.40 | 20 % |
 | 5 Acid | -6.0 dB | L15 | 0.30 (throws 0.9, 1.0 into the pre-drop hole) | 0.30 (0.5 breakdown) | 45 % |
 | 6 Metal | +3.0 dB | R35 | 0.35 (throws 0.9, 0.8 in the build) | 0.45 | 45 % |

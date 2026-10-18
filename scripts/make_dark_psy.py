@@ -469,10 +469,10 @@ send_b = 0.06
 duck = 0.8
 [[mixer.channel]]
 name = "Hats"
-volume_db = -3.0
+volume_db = -8.0
 pan = 0.12
-send_a = 0.08
-send_b = 0.12
+send_a = 0.06
+send_b = 0.09
 [[mixer.channel]]
 name = "Snare"
 volume_db = -4.0
@@ -637,7 +637,7 @@ lane("mixer.ch.4.send_a", "Snare - Echo on rolls", [
     (0, 0.12), (rollB + 3 * B, 0.6), (brk, 0.12), (bld + 8 * B, 0.6), (drp, 0.12), (rroll + 3 * B, 0.6),
     (fin, 0.12), (total, 0.12)], curve="step")
 lane("mixer.ch.3.send_a", "Hats - Echo in breakdown", [
-    (0, 0.08), (brk + 8 * B, 0.5), (bld, 0.08), (out, 0.3), (total, 0.3)], curve="step")
+    (0, 0.06), (brk + 8 * B, 0.35), (bld, 0.06), (out, 0.2), (total, 0.2)], curve="step")
 lane("mixer.ch.7.send_b", "Pad - Reverb", [
     (0, 0.5), (brk, 0.7), (bld, 0.6), (drp, 0.45), (out, 0.6), (total, 0.7)], curve="linear")
 lane("mixer.ch.5.send_b", "Acid - Reverb", [

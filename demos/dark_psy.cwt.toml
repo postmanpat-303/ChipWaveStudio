@@ -208,10 +208,10 @@ send_b = 0.06
 duck = 0.8
 [[mixer.channel]]
 name = "Hats"
-volume_db = -3.0
+volume_db = -8.0
 pan = 0.12
-send_a = 0.08
-send_b = 0.12
+send_a = 0.06
+send_b = 0.09
 [[mixer.channel]]
 name = "Snare"
 volume_db = -4.0
@@ -1868,11 +1868,11 @@ target = "mixer.ch.3.send_a"
 label = "Hats - Echo in breakdown"
 curve = "step"
 points = [
-  { pos = 0, value = 0.08 },
-  { pos = 896, value = 0.5 },
-  { pos = 960, value = 0.08 },
-  { pos = 1920, value = 0.3 },
-  { pos = 2048, value = 0.3 },
+  { pos = 0, value = 0.06 },
+  { pos = 896, value = 0.35 },
+  { pos = 960, value = 0.06 },
+  { pos = 1920, value = 0.2 },
+  { pos = 2048, value = 0.2 },
 ]
 
 [[automation]]
