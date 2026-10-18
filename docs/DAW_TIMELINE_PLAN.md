@@ -325,3 +325,6 @@ Each step ends in a normal release (installer, notes, screenshots). The timeline
 2. Should **timeline mode be the default for new songs** once M2 ships, or stay opt-in? (Recommended: opt-in until M3b.)
 3. Is the audio memory cap OK (a few minutes per clip embedded, streaming in M4b), or should streaming move earlier?
 4. Name for the wavetable instrument ("Wave", "Spectra", or something else; not "Vital").
+
+## 8. MIDI ideas (from Microsoft's Windows MIDI Services)
+Research on [microsoft/MIDI](https://github.com/microsoft/MIDI), including Microsoft's own MIDI 2.0 timeline app (Windows MIDI Sequencer, 960 PPQ like ours), is in [research/microsoft-midi.md](research/microsoft-midi.md). Proposed for **M0** (cheap now, a format migration later): `Note.vel` as 16-bit plus release velocity, per-note tuning, chance and per-note expression (maps onto CLAP note expressions), tempo ramps, per-track markers, and a `Clip.seed` with the rule "random results depend only on seed + pass" (keeps export bit-exact). It also proposes recording with **Capture** in M3b, and a new "M2.5 MIDI out" step after M2: look-ahead scheduler, per-device offset, MIDI clock/SPP/MTC.
