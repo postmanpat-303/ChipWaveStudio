@@ -339,3 +339,79 @@ fn bundle_folders_load_their_binary() {
     assert_eq!(clap::binary_path(&fixture()), fixture());
     let _ = std::fs::remove_dir_all(d);
 }
+
+/// A real plugin (CHIPWAVE_TEST_PLUGIN=<file.clap>, e.g. Surge XT):
+/// `cargo test real_plugin -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn real_plugin_from_env() {
+    let Some(path) = std::env::var_os("CHIPWAVE_TEST_PLUGIN").map(PathBuf::from) else {
+        eprintln!("set CHIPWAVE_TEST_PLUGIN");
+        return;
+    };
+    let r = scan::check_file(&path);
+    assert!(r.ok, "{}", r.message);
+    let f = r
+        .plugins
+        .iter()
+        .find(|p| p.desc.is_instrument())
+        .expect("an instrument");
+    let p = PluginPatch {
+        format: "clap".into(),
+        id: f.desc.id.clone(),
+        name: f.desc.name.clone(),
+        vendor: f.desc.vendor.clone(),
+        path: path.to_string_lossy().into_owned(),
+        state: String::new(),
+        params: vec![],
+        macros: vec![],
+    };
+    let mut a = instantiate(&p, 48000.0).unwrap();
+    let ps = a.params();
+    eprintln!(
+        "{}: {} parameters, editor {}",
+        f.desc.name,
+        ps.len(),
+        a.has_editor()
+    );
+    assert!(!ps.is_empty());
+    // change a parameter, save, load into a fresh instance
+    let k = ps.iter().find(|x| !x.readonly && !x.stepped).unwrap();
+    let v = k.min + (k.max - k.min) * 0.37;
+    a.set_param_main(k.id, v);
+    let st = a.save_state().expect("state");
+    eprintln!(
+        "state {} bytes; {} = {:?}",
+        st.len(),
+        k.name,
+        a.value_text(k.id, v)
+    );
+    let mut q = p.clone();
+    q.set_state_bytes(&st);
+    let b = instantiate(&q, 48000.0).unwrap();
+    let got = b.value(k.id).unwrap();
+    assert!(
+        (got - v).abs() < 1e-3 * (k.max - k.min).max(1.0),
+        "{got} vs {v}"
+    );
+    // a song with it renders sound, allocation-free per block after warm-up
+    let mut song = plugin_song();
+    song.instruments[0].kind = InstrumentKind::Plugin(q);
+    let mut e = crate::engine::Engine::new(48000.0);
+    prepare(&mut e.plugins, &song, 48000.0);
+    e.start(&song, 0, 0, true, 0);
+    let mut buf = vec![0.0f32; 1024];
+    let mut peak = 0.0f32;
+    for _ in 0..100 {
+        e.render(&song, &mut buf);
+        peak = buf.iter().fold(peak, |m, x| m.max(x.abs()));
+    }
+    eprintln!("peak {peak}");
+    assert!(peak > 1e-3);
+    let n = crate::engine::alloc_count::count(|| {
+        for _ in 0..50 {
+            e.render(&song, &mut buf);
+        }
+    });
+    eprintln!("allocations in 50 blocks (plugin's own included): {n}");
+}

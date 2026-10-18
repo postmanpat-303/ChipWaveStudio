@@ -2285,7 +2285,7 @@ fn plugin_instrument_loads_shows_its_panel_and_saves_its_state() {
     assert_eq!(&m[..2], &[1, 2]);
     assert!(has_text(&h, "Configure…"));
     assert!(has_text(&h, "Parameters (2)"));
-    assert!(has_text(&h, "   Gain [M1]"), "parameter sliders are listed");
+    assert!(has_text(&h, "[M1] Gain"), "parameter sliders are listed");
     // a parameter edit is copied into the song on save, without an undo step
     let undo_len = h.state().hist.len();
     h.state().with(|s| s.engine.plugins.set_param(0, 1, 0.9));

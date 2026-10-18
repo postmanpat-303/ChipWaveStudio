@@ -629,8 +629,12 @@ impl ClapInst {
     fn deactivate(&mut self) {
         unsafe {
             if self.processing {
+                // stop_processing is [audio-thread]: no audio callback runs
+                // now (the engine lock is held), so act as the audio thread
                 if let Some(s) = (*self.plugin).stop_processing {
+                    let was = AUDIO_THREAD.with(|a| a.replace(true));
                     s(self.plugin);
+                    AUDIO_THREAD.with(|a| a.set(was));
                 }
                 self.processing = false;
             }
@@ -884,11 +888,8 @@ impl Hosted for ClapInst {
                 let module = cbuf(&info.module);
                 v.push(ParamInfo {
                     id: info.id,
-                    name: if module.is_empty() {
-                        cbuf(&info.name)
-                    } else {
-                        format!("{module}/{}", cbuf(&info.name))
-                    },
+                    name: cbuf(&info.name),
+                    module: module.trim_matches('/').replace("//", "/"),
                     min: info.min_value,
                     max: info.max_value,
                     default: info.default_value,
@@ -988,7 +989,11 @@ impl Hosted for ClapInst {
         self.param(id, value);
         unsafe {
             if let Some(f) = (*self.params).flush {
+                // params.flush is [active ? audio-thread : main-thread]; the
+                // engine lock keeps the real audio thread out meanwhile
+                let was = AUDIO_THREAD.with(|a| a.replace(self.active));
                 f(self.plugin, &self.in_list, &self.out_list);
+                AUDIO_THREAD.with(|a| a.set(was));
             }
         }
         self.ev.v.clear();

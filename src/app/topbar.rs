@@ -295,6 +295,22 @@ pub(super) const CREDITS: &[(&str, &str)] = &[
         "https://github.com/asb2m10/dexed",
     ),
     (
+        "Plugin hosting: CLAP by the free-audio project (Alexandre Bique et al., MIT)",
+        "https://github.com/free-audio/clap",
+    ),
+    (
+        "CLAP bindings: clap-sys by micahrj et al. (MIT/Apache-2.0); host design after clack (prokopyl, MIT/Apache-2.0)",
+        "https://github.com/micahrj/clap-sys",
+    ),
+    (
+        "Plugin scanning ideas: Carla by Filipe Coelho (falkTX) and Ardour (GPL-2.0+, no code copied)",
+        "https://github.com/falkTX/Carla",
+    ),
+    (
+        "Plugin loading: libloading (S. Kazlauskas, ISC); windows-sys (Microsoft, MIT/Apache-2.0); base64 (MIT/Apache-2.0)",
+        "https://github.com/nagisa/rust_libloading",
+    ),
+    (
         "Noise: pink noise filter by Paul Kellet (musicdsp.org); crackle after SuperCollider Dust / DaisySP Dust",
         "https://www.musicdsp.org/en/latest/Filters/76-pink-noise-filter.html",
     ),

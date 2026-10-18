@@ -2,7 +2,8 @@
 //! and user folders, checks each one in a separate process
 //! (`chipwave --scan-plugin <file>`) so a crashing or hanging plugin cannot
 //! take ChipWave down, and caches the results by path, size and modification
-//! time in `plugin-cache.json` next to the settings.
+//! time in `plugin-cache.json` next to the settings. Out-of-process scanning
+//! follows the approach of Carla (falkTX) and Ardour (no code copied).
 use super::clap::{ClapLib, Desc};
 use super::PluginPatch;
 use serde::{Deserialize, Serialize};
@@ -231,10 +232,13 @@ pub fn check_file(path: &Path) -> Report {
                 }
             };
             let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+            // this thread plays the audio thread for the test render
+            super::clap::AUDIO_THREAD.with(|a| a.set(true));
             inst.note_on(60, 0.8);
             inst.process(512, &mut l, &mut r);
             inst.note_off(60);
             inst.process(512, &mut l, &mut r);
+            super::clap::AUDIO_THREAD.with(|a| a.set(false));
             if l.iter().chain(r.iter()).any(|x| !x.is_finite()) {
                 return Report {
                     ok: false,

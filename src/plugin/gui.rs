@@ -1,7 +1,9 @@
 //! Plugin editor windows. Windows: a top-level Win32 window that the plugin
 //! embeds its editor into (CLAP gui ext, api "win32"); a plugin that only
 //! offers a floating window gets that. Other platforms: floating editors only
-//! (x11 / cocoa), otherwise the parameter list is the editor.
+//! (x11 / cocoa), otherwise the parameter list is the editor. CLAP gui
+//! extension: free-audio CLAP (MIT) via clap-sys (MIT OR Apache-2.0); Win32
+//! through windows-sys (Microsoft, MIT OR Apache-2.0).
 use clap_sys::ext::gui::*;
 use clap_sys::plugin::clap_plugin;
 use std::ffi::CString;

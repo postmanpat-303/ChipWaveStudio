@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 22] = [
+pub const VIEWS: [&str; 24] = [
     "pattern",
     "arranger",
     "mixer",
@@ -56,6 +56,8 @@ pub const VIEWS: [&str; 22] = [
     "fm",
     "noise",
     "cue",
+    "plugin",
+    "plugins",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -161,6 +163,37 @@ impl App {
                 self.chords.prog[3].beats = 8.0;
             }
             "themes" => {}
+            // --song with a plugin instrument: select it (panel + parameters);
+            // CHIPWAVE_SHOT_EDITOR=1 also opens its editor window
+            "plugin" => {
+                let i = self.with(|s| {
+                    s.song
+                        .instruments
+                        .iter()
+                        .position(|x| matches!(x.kind, InstrumentKind::Plugin(_)))
+                });
+                if let Some(i) = i {
+                    self.instr = i as u8 + 1;
+                    let extra = Some((i, self.ch));
+                    crate::plugin::sync(&self.shared, extra);
+                    if std::env::var_os("CHIPWAVE_SHOT_EDITOR").is_some() {
+                        let r = self.with(|s| {
+                            let k = s.engine.plugins.primary(i)?;
+                            Some(
+                                s.engine.plugins.slots[k]
+                                    .inst
+                                    .open_editor("Plugin – ChipWave"),
+                            )
+                        });
+                        eprintln!("editor: {r:?}");
+                    }
+                }
+            }
+            // the "Add plugin instrument" browser (cache: CHIPWAVE_PLUGIN_CACHE)
+            "plugins" => {
+                self.plug.scan_msg = " ".into();
+                self.plug.browser = true;
+            }
             _ => {}
         }
         if view == "arranger" {

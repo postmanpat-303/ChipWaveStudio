@@ -2,7 +2,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 /// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.15";
+pub const VERSION: &str = "0.2.3.16";
 
 mod app;
 mod arrange;
@@ -410,7 +410,74 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         ok
     };
+    // plugin host (0.2.3.16): a missing plugin stays a silent placeholder;
+    // the scan cache is listed; CHIPWAVE_SELFTEST_PLUGIN=<file.clap> also
+    // plays a note through that plugin and needs sound
+    let plug_ok = {
+        let mut s = fileio::demo_song();
+        s.instruments[0].kind = model::InstrumentKind::Plugin(plugin::PluginPatch {
+            format: "clap".into(),
+            id: "org.chipwave.self-test.missing".into(),
+            name: "Missing".into(),
+            vendor: String::new(),
+            path: "/nonexistent/missing.clap".into(),
+            state: String::new(),
+            params: vec![],
+            macros: vec![],
+        });
+        s.order.truncate(1);
+        let warn = plugin::missing_warnings(&s);
+        let pcm = engine::render_song(&s, 22050);
+        let missing_ok = warn.len() == 1 && pcm.iter().all(|x| x.is_finite());
+        let found = plugin::scan::cache().instruments();
+        report.push_str(&format!(
+            "  plugins: missing plugin = silent placeholder + warning ({}); {} cached CLAP instrument(s){}\n",
+            if missing_ok { "ok" } else { "FAILED" },
+            found.len(),
+            found
+                .iter()
+                .take(6)
+                .map(|f| format!(", {}", f.desc.name))
+                .collect::<String>()
+        ));
+        let mut ok = missing_ok;
+        if let Some(p) = std::env::var_os("CHIPWAVE_SELFTEST_PLUGIN") {
+            let p = PathBuf::from(p);
+            let r = plugin::scan::check_file(&p);
+            let inst = r.plugins.iter().find(|x| x.desc.is_instrument());
+            let rendered = inst.map(|f| {
+                let mut s = fileio::demo_song();
+                s.instruments[0].kind = model::InstrumentKind::Plugin(plugin::PluginPatch {
+                    format: "clap".into(),
+                    id: f.desc.id.clone(),
+                    name: f.desc.name.clone(),
+                    vendor: f.desc.vendor.clone(),
+                    path: p.to_string_lossy().into_owned(),
+                    state: String::new(),
+                    params: vec![],
+                    macros: vec![],
+                });
+                s.order.truncate(1);
+                let pcm = engine::render_song(&s, 44100);
+                let rms = (pcm.iter().map(|x| x * x).sum::<f32>() / pcm.len().max(1) as f32).sqrt();
+                (f.desc.name.clone(), rms, pcm.iter().all(|x| x.is_finite()))
+            });
+            let good = matches!(&rendered, Some((_, rms, fin)) if *rms > 1e-4 && *fin);
+            report.push_str(&format!(
+                "  plugin {}: {} ({})\n",
+                p.display(),
+                match &rendered {
+                    Some((n, rms, _)) => format!("{n}, demo block rms {rms:.4}"),
+                    None => format!("no instrument ({})", r.message),
+                },
+                if good { "ok" } else { "FAILED" }
+            ));
+            ok &= good;
+        }
+        ok
+    };
     let ok = fill_ok
+        && plug_ok
         && inst_ok
         && tf_ok
         && gen_ok
@@ -659,6 +726,13 @@ fn main() {
         let Some(p) = args.get(i + 1) else {
             std::process::exit(2);
         };
+        // a crashing plugin must not pop up an error dialog / debugger:
+        // the parent sees the exit code and lists it as crashed
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::Diagnostics::Debug::*;
+            SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+        }
         let rep = plugin::scan::check_file(std::path::Path::new(p));
         println!("{}", serde_json::to_string(&rep).unwrap_or_default());
         std::process::exit(0);

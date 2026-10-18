@@ -281,6 +281,52 @@ Chord helper and key detection (src/chords.rs), independent implementations:
   Boutique (https://www.pluginboutique.com); no code, data or artwork from
   Scaler is used. Scales and chord names are standard music theory.
 
+Plugin instrument hosting (src/plugin/, 0.2.3.16):
+- CLAP, the CLever Audio Plug-in API by the free-audio project
+  (Alexandre Bique and contributors), MIT licence.
+  https://github.com/free-audio/clap . ChipWave talks to CLAP plugins
+  through the clap-sys crate (Rust bindings of the CLAP headers, by
+  micahrj and contributors, MIT OR Apache-2.0,
+  https://github.com/micahrj/clap-sys ), listed with the crates below.
+  With thanks, the CLAP licence:
+
+  MIT License
+
+  Copyright (c) 2021 Alexandre BIQUE
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to permit
+  persons to whom the Software is furnished to do so, subject to the
+  following conditions:
+
+  The above copyright notice and this permission notice shall be included
+  in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+  NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+  DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+  OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+  USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+- Host design references (no code copied): the clap-host example and
+  clap-helpers of the free-audio project (MIT), clack by Adrien Prokopowicz
+  (prokopyl) and contributors (MIT OR Apache-2.0,
+  https://github.com/prokopyl/clack ), and the plugin hosts of Carla by
+  Filipe Coelho (falkTX, GPL-2.0+, https://github.com/falkTX/Carla ) and
+  Ardour (GPL-2.0+, https://ardour.org ): out-of-process plugin scanning,
+  main-thread / audio-thread rules, sample-accurate event blocks.
+- Dynamic loading: libloading by Simonas Kazlauskas (ISC); Win32 editor
+  windows: windows-sys by Microsoft (MIT OR Apache-2.0); plugin state in
+  songs: base64 by Marshall Pierce and Alice Maz (MIT OR Apache-2.0).
+- Plugins tested with ChipWave: Surge XT by the Surge Synth Team (GPL-3,
+  https://surge-synthesizer.github.io ). Plugins are separate programs
+  installed by the user; none are bundled with ChipWave.
+
 """
 
 out = sys.stdout

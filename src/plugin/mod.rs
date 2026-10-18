@@ -68,10 +68,23 @@ impl PluginPatch {
     }
 }
 
+impl ParamInfo {
+    /// "name · module" for lists and menus
+    pub fn label(&self) -> String {
+        if self.module.is_empty() {
+            self.name.clone()
+        } else {
+            format!("{} · {}", self.name, self.module)
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParamInfo {
     pub id: u32,
     pub name: String,
+    /// the plugin's group path for it ("Oscillator 1", "Filter/Env")
+    pub module: String,
     pub min: f64,
     pub max: f64,
     pub default: f64,

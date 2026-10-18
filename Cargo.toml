@@ -1,6 +1,6 @@
 [package]
 name = "chipwave"
-version = "0.2.3+fix.15"
+version = "0.2.3+fix.16"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "ChipWave Tracker - an OctaMED-inspired tracker with a built-in synth"
@@ -46,4 +46,4 @@ strip = true
 opt-level = 1
 
 [target."cfg(windows)".dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_System_Diagnostics_Debug"] }

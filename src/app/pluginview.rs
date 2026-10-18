@@ -328,7 +328,11 @@ impl App {
                 egui::RichText::new(format!(
                     "{} · {} · {}",
                     p.name,
-                    if p.vendor.is_empty() { "?" } else { &p.vendor },
+                    if p.vendor.is_empty() {
+                        "plugin"
+                    } else {
+                        &p.vendor
+                    },
                     p.format.to_uppercase()
                 ))
                 .color(th().value),
@@ -452,7 +456,7 @@ impl App {
                             .show_ui(ui, |ui| {
                                 mchanged |= ui.selectable_value(m, NO_PARAM, "(none)").changed();
                                 for x in params.iter().filter(|x| !x.readonly) {
-                                    mchanged |= ui.selectable_value(m, x.id, &x.name).changed();
+                                    mchanged |= ui.selectable_value(m, x.id, x.label()).changed();
                                 }
                             });
                         ui.end_row();
@@ -489,7 +493,7 @@ impl App {
             let inst = &s.engine.plugins.slots[k].inst;
             params
                 .iter()
-                .filter(|x| q.is_empty() || x.name.to_lowercase().contains(&q))
+                .filter(|x| q.is_empty() || x.label().to_lowercase().contains(&q))
                 .take(300)
                 .map(|x| {
                     let v = inst.value(x.id).unwrap_or(x.default);
@@ -500,52 +504,51 @@ impl App {
         });
         let mut set: Vec<(u32, f64)> = vec![];
         let mut map: Option<(usize, u32)> = None;
-        egui::Grid::new("plug_params")
-            .num_columns(2)
-            .spacing([6.0, 2.0])
-            .show(ui, |ui| {
-                for (id, v, t) in &vals {
-                    let Some(info) = params.iter().find(|x| x.id == *id) else {
-                        continue;
-                    };
-                    let mut name = format!("   {}", info.name);
-                    if let Some(k) = macros.iter().position(|m| m == id) {
-                        name = format!("{name} [M{}]", k + 1);
-                    }
-                    ui.add(egui::Label::new(name).truncate())
-                        .on_hover_text(&info.name);
-                    let mut x = *v;
-                    let mut s = egui::Slider::new(&mut x, info.min..=info.max.max(info.min + 1e-9))
-                        .show_value(false);
-                    if info.stepped {
-                        s = s.step_by(1.0);
-                    }
-                    let r = ui
-                        .add_enabled_ui(!info.readonly, |ui| {
-                            ui.horizontal(|ui| {
-                                let r = ui.add(s);
-                                ui.label(
-                                    egui::RichText::new(t).small().monospace().color(th().value),
-                                );
-                                r
-                            })
-                            .inner
-                        })
-                        .inner;
-                    if r.changed() {
-                        set.push((*id, x));
-                    }
-                    r.context_menu(|ui| {
-                        for k in 0..8 {
-                            if ui.button(format!("Put on macro {}", k + 1)).clicked() {
-                                map = Some((k, *id));
-                                ui.close();
-                            }
-                        }
-                    });
-                    ui.end_row();
+        let lw = (ui.available_width() * 0.42).clamp(90.0, 170.0);
+        for (id, v, t) in &vals {
+            let Some(info) = params.iter().find(|x| x.id == *id) else {
+                continue;
+            };
+            let mut name = info.label();
+            if let Some(k) = macros.iter().position(|m| m == id) {
+                name = format!("[M{}] {name}", k + 1);
+            }
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(lw, 16.0),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.set_min_width(lw);
+                        ui.add(egui::Label::new(egui::RichText::new(&name).small()).truncate())
+                            .on_hover_text(&name);
+                    },
+                );
+                let mut x = *v;
+                let mut s = egui::Slider::new(&mut x, info.min..=info.max.max(info.min + 1e-9))
+                    .show_value(false);
+                if info.stepped {
+                    s = s.step_by(1.0);
                 }
+                ui.spacing_mut().slider_width = (ui.available_width() - 84.0).clamp(40.0, 130.0);
+                let r = ui.add_enabled(!info.readonly, s);
+                ui.add(
+                    egui::Label::new(egui::RichText::new(t).small().monospace().color(th().value))
+                        .truncate(),
+                );
+                if r.changed() {
+                    set.push((*id, x));
+                }
+                r.context_menu(|ui| {
+                    for k in 0..8 {
+                        if ui.button(format!("Put on macro {}", k + 1)).clicked() {
+                            map = Some((k, *id));
+                            ui.close();
+                        }
+                    }
+                });
             });
+        }
         if !set.is_empty() {
             self.with(|s| {
                 for (id, v) in &set {
