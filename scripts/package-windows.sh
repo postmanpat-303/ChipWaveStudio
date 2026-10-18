@@ -5,6 +5,8 @@
 # Release: attach all four files (versioned + versionless ChipWave-setup-x64.exe /
 # ChipWave-windows-x64.zip) to the GitHub release; the README links to
 # releases/latest/download/<versionless name>.
+# Checksums: scripts/release-sums.sh writes dist/SHA256SUMS.txt (run at the end of this script;
+# run it again after copying the Mac files into dist/, so one SHA256SUMS.txt covers all eight files).
 # macOS: run the "macOS" workflow (scripts/package-macos.sh) on the same commit and attach its
 # four files too (ChipWave-<ver>-macos-universal.{dmg,zip} + versionless copies); see docs/MACOS.md.
 set -euo pipefail
@@ -34,3 +36,4 @@ if command -v makensis >/dev/null; then
   cp "dist/ChipWave-$VER-setup-x64.exe" dist/ChipWave-setup-x64.exe
   echo "dist/ChipWave-setup-x64.exe"
 fi
+scripts/release-sums.sh dist "$VER"

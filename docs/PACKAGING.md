@@ -95,3 +95,12 @@ chipwave_1.0.0_amd64.deb
 io.github.postmanpat_303.ChipWave.flatpak   (Flathub later)
 SHA256SUMS.txt
 ```
+
+## 7. Release checklist (as of 0.2.3.16)
+Del must approve every public release.
+1. Tag the release commit (`v<ver>`, Cargo `0.2.3+fix.N` → `0.2.3.N`) and build the Windows files from a clean checkout of that tag: `scripts/package-windows.sh <ver>`. This makes the versioned and versionless setup exe and zip, plus `dist/SHA256SUMS.txt`.
+2. Mac: run `gh workflow run macos.yml -f source_ref=v<ver> -f version=<ver>`, check it's green, and download the artifact into `dist/` (see [MACOS.md](MACOS.md)).
+3. Run `scripts/release-sums.sh dist <ver>` again, so one `SHA256SUMS.txt` (standard `sha256  filename` lines) covers all eight files.
+4. Attach the eight files and `SHA256SUMS.txt`: `ChipWave-<ver>-setup-x64.exe`, `ChipWave-<ver>-windows-x64.zip`, `ChipWave-setup-x64.exe`, `ChipWave-windows-x64.zip`, `ChipWave-<ver>-macos-universal.dmg`/`.zip`, `ChipWave-macos-universal.dmg`/`.zip`. The README and Wave Hub use the versionless names through `releases/latest/download/`, and Wave Hub verifies downloads against `SHA256SUMS.txt`.
+5. Check that every `releases/latest/download/<versionless name>` returns 200 and matches `SHA256SUMS.txt`.
+6. Pushing a `v*` tag also starts `ci.yml`, whose tag steps would draft a cargo-packager release. Cancel that run (or keep its tests failing) while releases are made by hand.

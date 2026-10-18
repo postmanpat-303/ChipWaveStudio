@@ -6,9 +6,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0a84ff" alt="Windows | Linux">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.3.14-00d0ff" alt="Version 0.2.3.14">
+  <img src="https://img.shields.io/badge/version-0.2.3.16-00d0ff" alt="Version 0.2.3.16">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveTracker?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -20,7 +20,7 @@
 
 ```
  ┌──────────────────────────────────────────────────────────────────────────┐
- │  C H I P W A V E   T R A C K E R          v0.2.3.14    BPM 140  SPD 06  │
+ │  C H I P W A V E   T R A C K E R          v0.2.3.16    BPM 140  SPD 06  │
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
  │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ OctaMED-inspired  │
  │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ tracker + synth   │
@@ -244,7 +244,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 
 - MED (MMD0–MMD3) and MOD loading, more OctaMED effect commands, optional “Paula” mode
 - More filter models (Sallen-Key, diode), wavetables, a full mod matrix, render-to-sample for synth and Voice instruments (generators already Bake), oversampled FM
-- MIDI output and clock sync, CLAP/VST3 plugin hosting (the Plugins settings card is a placeholder today)
+- MIDI output and clock sync, VST3 plugin hosting and plugin effects (CLAP instruments work since 0.2.3.16)
 - Stem export and LUFS-target normalisation; MOD/XM export
 - Polyphony within one channel (today chords use several channels)
 - See [OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md), [SOUND_DESIGN.md](docs/SOUND_DESIGN.md) and [MIDI_VST.md](docs/MIDI_VST.md) for the plans.

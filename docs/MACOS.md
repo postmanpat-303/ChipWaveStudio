@@ -59,5 +59,5 @@ Publishing needs Del's approval. Once approved:
 
 1. Bump the version and build the Windows files as usual (`scripts/package-windows.sh <ver>`).
 2. Run the macOS workflow with `source_ref` set to the release tag and the same `version` (e.g. `gh workflow run macos.yml -f source_ref=v0.2.3.14 -f version=0.2.3.14`), so the app is built from exactly the released source.
-3. Download the `ChipWave-<ver>-macos-universal` artifact and attach **all four** Mac files to the release: `ChipWave-<ver>-macos-universal.dmg`, `ChipWave-<ver>-macos-universal.zip`, `ChipWave-macos-universal.dmg` and `ChipWave-macos-universal.zip`. Merge their lines into the release's `SHA256SUMS.txt`.
+3. Download the `ChipWave-<ver>-macos-universal` artifact and attach **all four** Mac files to the release: `ChipWave-<ver>-macos-universal.dmg`, `ChipWave-<ver>-macos-universal.zip`, `ChipWave-macos-universal.dmg` and `ChipWave-macos-universal.zip`. Copy them into `dist/` next to the Windows files and run `scripts/release-sums.sh dist <ver>`, so one `SHA256SUMS.txt` covers all eight files, and attach it too. Wave Hub checks downloads against it.
 4. Check that `releases/latest/download/ChipWave-macos-universal.dmg` downloads, and that the README's Mac links still work.
