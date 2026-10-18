@@ -2358,3 +2358,67 @@ fn panic_button_sits_at_the_far_right_of_the_toolbar_and_stops_everything() {
     key(&mut h, Key::Period, egui::Modifiers::COMMAND);
     assert!(h.state().with(|s| s.engine.panicking()));
 }
+
+#[test]
+fn instrument_list_is_compact_one_toolbar_row_and_the_bar_never_covers_names() {
+    let mut s = fileio::demo_song();
+    let base = s.instruments[0].clone();
+    while s.instruments.len() < 40 {
+        let mut i = base.clone();
+        i.name = format!(
+            "Very Long Instrument Name Number {}",
+            s.instruments.len() + 1
+        );
+        s.instruments.push(i);
+    }
+    let mut h = harness_with(s);
+    frames(&mut h, 2);
+    let rows: Vec<Rect> = h
+        .query_all_by(|n| {
+            n.label()
+                .is_some_and(|l| l.len() > 4 && l.as_bytes()[2] == b' ' && l.as_bytes()[3] == b' ')
+        })
+        .map(|n| n.rect())
+        .collect();
+    assert!(rows.len() >= 15, "many rows fit: {}", rows.len());
+    let h0 = rows[0].height();
+    assert!(h0 <= 22.0, "compact rows: {h0}");
+    // the list scrolls (40 rows) but the rows stop before the scroll gutter
+    let side_right = rows.iter().map(|r| r.right()).fold(0.0f32, f32::max);
+    let first = labelled(&h, "Duplicate");
+    assert!(
+        side_right < 330.0 + 8.0 - 6.0,
+        "row ends {side_right} leave a gutter"
+    );
+    // the seven list actions sit on one row of small buttons
+    let ys: Vec<f32> = [
+        "New…",
+        "Import WAV…",
+        "Duplicate",
+        "Delete…",
+        "Up",
+        "Down",
+        "Library…",
+    ]
+    .iter()
+    .map(|n| exact(&h, n).center().y)
+    .collect();
+    assert!(
+        ys.iter().all(|y| (y - ys[0]).abs() < 1.0),
+        "one toolbar row: {ys:?}"
+    );
+    assert!(first.height() <= 22.0);
+    assert!(
+        h.query_all_by(|n| n.label().is_some_and(|l| l.starts_with("or drop")))
+            .next()
+            .is_none(),
+        "the drop hint moved into the tooltip"
+    );
+    // right-click a row: the list actions are in its menu too
+    instr_menu(&mut h, 2);
+    let n = h
+        .query_all_by(|n| n.label().as_deref() == Some("Import WAV…"))
+        .count();
+    assert_eq!(n, 2, "toolbar icon + menu item");
+    assert!(labelled(&h, "Instrument library…").width() > 0.0);
+}

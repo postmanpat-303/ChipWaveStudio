@@ -3,11 +3,7 @@ use super::*;
 
 impl App {
     pub(super) fn side_panel(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            ui.add_space(14.0);
-            ui.label(egui::RichText::new("Instruments").strong().size(15.0));
-        });
+        ui.add_space(4.0);
         let names: Vec<(String, &str)> = self.with(|s| {
             s.song
                 .instruments
@@ -26,64 +22,112 @@ impl App {
                 })
                 .collect()
         });
-        // search (name or kind); shown once the list gets long
-        if names.len() > 6 || !self.instr_query.is_empty() {
-            ui.horizontal(|ui| {
-                ui.add_space(14.0);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.instr_query)
-                        .hint_text("search instruments")
-                        .desired_width(150.0),
-                )
-                .on_hover_text("filter the list by name or kind (synth, sample, voice)");
-                if !self.instr_query.is_empty() && ui.small_button("×").clicked() {
-                    self.instr_query.clear();
-                }
-            });
-        }
+        // header: title, count and (for long lists) the search box on one row
+        ui.horizontal(|ui| {
+            ui.add_space(10.0);
+            ui.label(egui::RichText::new("Instruments").strong().size(15.0));
+            ui.label(
+                egui::RichText::new(format!("{}", names.len()))
+                    .small()
+                    .color(th().ink2),
+            );
+            if names.len() > 6 || !self.instr_query.is_empty() {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add_space(6.0);
+                    if !self.instr_query.is_empty() && ui.small_button("×").clicked() {
+                        self.instr_query.clear();
+                    }
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.instr_query)
+                            .hint_text("search")
+                            .desired_width(ui.available_width().clamp(60.0, 130.0)),
+                    )
+                    .on_hover_text(
+                        "filter the list by name or kind (synth, sample, voice, gen, plugin)",
+                    );
+                });
+            }
+        });
+        self.instrument_toolbar(ui, names.len());
         let q = self.instr_query.to_lowercase();
         let mut commit_rename: Option<(u8, String)> = None;
-        egui::ScrollArea::vertical()
-            .id_salt("inst")
-            .max_height(260.0)
-            .show(ui, |ui| {
-                for (i, (n, tag)) in names.iter().enumerate() {
-                    let slot = (i + 1) as u8;
-                    let kind = if tag.is_empty() { "synth" } else { tag.trim() };
-                    if !q.is_empty()
-                        && !q
-                            .split_whitespace()
-                            .all(|w| n.to_lowercase().contains(w) || kind.contains(w))
-                    {
-                        continue;
-                    }
-                    if let Some((rs, txt)) = &mut self.renaming {
-                        if *rs == slot {
-                            ui.horizontal(|ui| {
-                                ui.add_space(14.0);
-                                ui.label(egui::RichText::new(format!("{slot:02X}")).monospace());
-                                let r = ui.add(
-                                    egui::TextEdit::singleline(txt)
-                                        .desired_width(150.0)
-                                        .char_limit(64),
-                                );
-                                r.request_focus();
-                                let enter = ui.input(|i| i.key_pressed(Key::Enter));
-                                let esc = ui.input(|i| i.key_pressed(Key::Escape));
-                                if esc {
-                                    commit_rename = Some((0, String::new()));
-                                } else if enter || r.lost_focus() {
-                                    commit_rename = Some((slot, txt.clone()));
-                                }
-                            });
+        // compact rows; the list grows with the panel and only scrolls when
+        // it has to, with a thin bar in its own gutter (never over the names)
+        let row_h = (ui.text_style_height(&egui::TextStyle::Monospace) + 4.0).max(17.0);
+        let visible = names
+            .iter()
+            .filter(|(n, tag)| {
+                let kind = if tag.is_empty() { "synth" } else { tag.trim() };
+                q.is_empty()
+                    || q.split_whitespace()
+                        .all(|w| n.to_lowercase().contains(w) || kind.contains(w))
+            })
+            .count();
+        let panel_h = ui.clip_rect().height();
+        let max_h = (panel_h * 0.45).max(row_h * 8.0);
+        if names.is_empty() {
+            ui.horizontal(|ui| {
+                ui.add_space(10.0);
+                ui.label(
+                    egui::RichText::new(
+                        "No instruments yet: + adds one, or drop .wav / .cwi files on the window",
+                    )
+                    .small()
+                    .color(th().ink2),
+                );
+            });
+        }
+        let mut empty_menu = false;
+        ui.scope(|ui| {
+            let sc = &mut ui.spacing_mut().scroll;
+            sc.floating = false;
+            sc.bar_width = 5.0;
+            sc.bar_inner_margin = 3.0;
+            sc.bar_outer_margin = 0.0;
+            sc.handle_min_length = 16.0;
+            ui.spacing_mut().item_spacing.y = 0.0;
+            egui::ScrollArea::vertical()
+                .id_salt("inst")
+                .max_height(max_h.min(visible as f32 * row_h + 2.0).max(row_h))
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    for (i, (n, tag)) in names.iter().enumerate() {
+                        let slot = (i + 1) as u8;
+                        let kind = if tag.is_empty() { "synth" } else { tag.trim() };
+                        if !q.is_empty()
+                            && !q
+                                .split_whitespace()
+                                .all(|w| n.to_lowercase().contains(w) || kind.contains(w))
+                        {
                             continue;
                         }
-                    }
-                    ui.horizontal(|ui| {
-                        ui.add_space(14.0);
-                        let txt =
-                            egui::RichText::new(format!("{:02X}  {}{}", slot, n, tag)).monospace();
-                        let r = ui.selectable_label(self.instr == slot, txt);
+                        if let Some((rs, txt)) = &mut self.renaming {
+                            if *rs == slot {
+                                ui.horizontal(|ui| {
+                                    ui.add_space(10.0);
+                                    ui.label(
+                                        egui::RichText::new(format!("{slot:02X}")).monospace(),
+                                    );
+                                    let r = ui.add(
+                                        egui::TextEdit::singleline(txt)
+                                            .desired_width(ui.available_width() - 8.0)
+                                            .char_limit(64),
+                                    );
+                                    r.request_focus();
+                                    let enter = ui.input(|i| i.key_pressed(Key::Enter));
+                                    let esc = ui.input(|i| i.key_pressed(Key::Escape));
+                                    if esc {
+                                        commit_rename = Some((0, String::new()));
+                                    } else if enter || r.lost_focus() {
+                                        commit_rename = Some((slot, txt.clone()));
+                                    }
+                                });
+                                continue;
+                            }
+                        }
+                        let label = format!("{:02X}  {}{}", slot, n, tag);
+                        let r =
+                            instrument_row(ui, row_h, slot, n, kind, self.instr == slot, &label);
                         if r.clicked() {
                             self.instr = slot;
                         }
@@ -95,6 +139,9 @@ impl App {
                             r.scroll_to_me(None);
                             self.instr_shown = slot;
                         }
+                        let r = r.on_hover_text(format!(
+                            "{slot:02X} {n} ({kind})\ndouble-click: rename · right-click: more"
+                        ));
                         r.context_menu(|ui| {
                             ui.menu_button("Add effect", |ui| {
                                 for k in crate::fx::FxKind::ALL {
@@ -209,10 +256,24 @@ impl App {
                             }
                             ui.separator();
                             ui.menu_button("New instrument", |ui| self.new_instrument_menu(ui));
+
+                            ui.separator();
+                            self.list_actions_menu(ui);
                         });
-                    });
-                }
-            });
+                    }
+                });
+            // an empty (or fully filtered) list: right-click offers the list actions
+            if names.is_empty() || visible == 0 {
+                empty_menu = true;
+            }
+        });
+        if empty_menu {
+            let r = ui.allocate_response(
+                egui::vec2(ui.available_width(), row_h * 2.0),
+                Sense::click(),
+            );
+            r.context_menu(|ui| self.list_actions_menu(ui));
+        }
         if let Some((slot, name)) = commit_rename {
             self.renaming = None;
             let name = name.trim().to_string();
@@ -231,65 +292,7 @@ impl App {
                 self.status = format!("Renamed instrument {slot:02X} to {name}");
             }
         }
-        let has = (self.instr as usize).wrapping_sub(1) < names.len();
-        ui.horizontal(|ui| {
-            ui.add_space(14.0);
-            if ui
-                .add_enabled(has, egui::Button::new("Duplicate").small())
-                .on_hover_text("Duplicate the selected instrument (with its FX chain); also right-click an instrument or use Edit menu")
-                .clicked()
-            {
-                self.duplicate_instrument(self.instr);
-            }
-            if ui
-                .add_enabled(has, egui::Button::new("Delete…").small())
-                .on_hover_text("Delete the selected instrument; its notes are removed and later instruments move up one slot (Ctrl+Z undoes)")
-                .clicked()
-            {
-                self.request_delete_instrument(self.instr);
-            }
-            let i = (self.instr as usize).wrapping_sub(1);
-            if ui
-                .add_enabled(has && i > 0, egui::Button::new("Up").small())
-                .on_hover_text("move the selected instrument up one slot (notes follow)")
-                .clicked()
-            {
-                self.move_instrument(i, i - 1);
-            }
-            if ui
-                .add_enabled(has && i + 1 < names.len(), egui::Button::new("Down").small())
-                .on_hover_text("move the selected instrument down one slot (notes follow)")
-                .clicked()
-            {
-                self.move_instrument(i, i + 1);
-            }
-            if ui
-                .button(egui::RichText::new("Library…").small())
-                .on_hover_text("browse, audition, add and save instruments (.cwi files)")
-                .clicked()
-            {
-                self.open_library();
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.add_space(14.0);
-            ui.menu_button("New…", |ui| self.new_instrument_menu(ui))
-                .response
-                .on_hover_text("add a Synth or a Voice (glitch) instrument");
-            if ui.button("Import WAV…").clicked() {
-                if let Some(p) = rfd::FileDialog::new()
-                    .add_filter("WAV", &["wav"])
-                    .pick_file()
-                {
-                    self.import_sample(p);
-                }
-            }
-            ui.label(
-                egui::RichText::new("or drop .wav files")
-                    .small()
-                    .color(th().ink2),
-            );
-        });
+        ui.add_space(2.0);
         ui.separator();
         // patch editor for the selected synth instrument
         let idx = self.instr as usize;
@@ -827,6 +830,230 @@ impl App {
             self.delete_instrument_now(slot);
         } else if no {
             self.instr_delete = None;
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Glyph {
+    Import,
+    Duplicate,
+    Delete,
+    Up,
+    Down,
+    Library,
+}
+
+/// tiny vector icons for the instrument toolbar (no icon font needed)
+fn paint_glyph(p: &egui::Painter, r: Rect, g: Glyph, col: Color32) {
+    let c = r.center();
+    let s = Stroke::new(1.3, col);
+    let v = |x: f32, y: f32| c + egui::vec2(x, y);
+    match g {
+        Glyph::Import => {
+            // waveform with a down arrow: "bring in a sample"
+            let pts: Vec<Pos2> = (0..=10)
+                .map(|i| {
+                    let x = -6.0 + i as f32 * 1.2;
+                    let a = [0.0, 2.0, -3.0, 4.0, -4.0, 3.0, -2.0, 1.5, -1.0, 0.5, 0.0][i];
+                    v(x, 2.0 + a * 0.6)
+                })
+                .collect();
+            p.add(egui::Shape::line(pts, s));
+            p.line_segment([v(0.0, -6.0), v(0.0, -1.5)], s);
+            p.add(egui::Shape::convex_polygon(
+                vec![v(-2.5, -3.0), v(2.5, -3.0), v(0.0, -0.5)],
+                col,
+                Stroke::NONE,
+            ));
+        }
+        Glyph::Duplicate => {
+            p.rect_stroke(
+                Rect::from_min_size(v(-5.0, -5.0), egui::vec2(7.0, 7.0)),
+                1.0,
+                s,
+                egui::StrokeKind::Middle,
+            );
+            p.rect_filled(
+                Rect::from_min_size(v(-2.0, -2.0), egui::vec2(7.0, 7.0)),
+                1.0,
+                col,
+            );
+        }
+        Glyph::Delete => {
+            p.line_segment([v(-5.0, -4.0), v(5.0, -4.0)], s);
+            p.line_segment([v(-1.5, -5.5), v(1.5, -5.5)], s);
+            p.add(egui::Shape::closed_line(
+                vec![v(-3.8, -3.0), v(3.8, -3.0), v(3.0, 5.5), v(-3.0, 5.5)],
+                s,
+            ));
+            p.line_segment([v(-1.2, -1.0), v(-1.0, 3.8)], s);
+            p.line_segment([v(1.2, -1.0), v(1.0, 3.8)], s);
+        }
+        Glyph::Up | Glyph::Down => {
+            let d = if matches!(g, Glyph::Up) { 1.0 } else { -1.0 };
+            p.add(egui::Shape::convex_polygon(
+                vec![v(0.0, -5.0 * d), v(4.5, 0.0), v(-4.5, 0.0)],
+                col,
+                Stroke::NONE,
+            ));
+            p.line_segment([v(0.0, -0.5 * d), v(0.0, 5.0 * d)], Stroke::new(2.0, col));
+        }
+        Glyph::Library => {
+            for (k, h) in [(0, 10.0), (1, 9.0), (2, 11.0)] {
+                let x = -5.5 + k as f32 * 3.6;
+                p.rect_stroke(
+                    Rect::from_min_max(v(x, 5.5 - h), v(x + 2.6, 5.5)),
+                    0.5,
+                    s,
+                    egui::StrokeKind::Middle,
+                );
+            }
+            p.line_segment([v(5.5, 5.5), v(7.0, -3.5)], s);
+        }
+    }
+}
+
+/// colour tag of an instrument kind (functional, readable on both themes)
+fn kind_colour(kind: &str) -> Color32 {
+    match kind {
+        "(sample)" => hex(0xE8C35A),
+        "(voice)" => hex(0xD98AD0),
+        "(gen)" => hex(0x8FD9A3),
+        "(plugin)" => hex(0x9AA8F0),
+        _ => hex(0x4FC3D9),
+    }
+}
+
+/// One compact list row: kind tag, slot number, name (clipped with an
+/// ellipsis, never under the scroll bar). `label` is the accessible name.
+fn instrument_row(
+    ui: &mut egui::Ui,
+    h: f32,
+    slot: u8,
+    name: &str,
+    kind: &str,
+    selected: bool,
+    label: &str,
+) -> egui::Response {
+    let w = ui.available_width();
+    let (rect, r) = ui.allocate_exact_size(egui::vec2(w, h), Sense::click());
+    let lbl = label.to_string();
+    r.widget_info(|| egui::WidgetInfo::selected(egui::Role::ListBoxOption, true, selected, &lbl));
+    if ui.is_rect_visible(rect) {
+        let t = th();
+        let p = ui.painter_at(rect);
+        let body = rect.shrink2(egui::vec2(4.0, 1.0));
+        if selected {
+            p.rect_filled(body, 4.0, t.sel);
+        } else if r.hovered() {
+            p.rect_filled(body, 4.0, t.ink2.gamma_multiply(0.15));
+        }
+        // kind tag
+        let tag = Rect::from_min_size(
+            Pos2::new(body.left() + 3.0, body.top() + 3.0),
+            egui::vec2(3.0, body.height() - 6.0),
+        );
+        p.rect_filled(tag, 1.0, kind_colour(kind));
+        let font = egui::TextStyle::Monospace.resolve(ui.style());
+        let x0 = tag.right() + 6.0;
+        p.text(
+            Pos2::new(x0, body.center().y),
+            egui::Align2::LEFT_CENTER,
+            format!("{slot:02X}"),
+            font.clone(),
+            t.ink2,
+        );
+        let nx = x0 + font.size * 1.9;
+        let avail = body.right() - 4.0 - nx;
+        let col = if selected { t.ink } else { t.value };
+        let mut job = egui::text::LayoutJob::simple_singleline(name.to_string(), font, col);
+        job.wrap = egui::text::TextWrapping::truncate_at_width(avail.max(8.0));
+        let g = ui.fonts_mut(|f| f.layout_job(job));
+        p.galley(Pos2::new(nx, body.center().y - g.size().y / 2.0), g, col);
+    }
+    r
+}
+
+impl App {
+    /// one row of small icon buttons over the list (with tooltips)
+    fn instrument_toolbar(&mut self, ui: &mut egui::Ui, n: usize) {
+        let has = (self.instr as usize).wrapping_sub(1) < n;
+        let i = (self.instr as usize).wrapping_sub(1);
+        // a small painted-icon button whose accessible name is the action
+        fn ib(ui: &mut egui::Ui, on: bool, icon: Glyph, name: &str, tip: &str) -> egui::Response {
+            let r = ui
+                .add_enabled(
+                    on,
+                    egui::Button::new("")
+                        .small()
+                        .min_size(egui::vec2(22.0, 18.0)),
+                )
+                .on_hover_text(tip)
+                .on_disabled_hover_text(tip);
+            let col = if on {
+                ui.visuals().widgets.inactive.fg_stroke.color
+            } else {
+                th().ink2.gamma_multiply(0.5)
+            };
+            paint_glyph(ui.painter(), r.rect, icon, col);
+            let nm = name.to_string();
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, on, &nm));
+            r
+        }
+        ui.horizontal(|ui| {
+            ui.add_space(10.0);
+            ui.spacing_mut().item_spacing.x = 3.0;
+            let r = ui
+                .menu_button(egui::RichText::new("+").size(14.0).strong(), |ui| {
+                    self.new_instrument_menu(ui)
+                })
+                .response;
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "New…"));
+            r.on_hover_text("New instrument: Synth, Generator, Plugin, Voice");
+            if ib(ui, true, Glyph::Import, "Import WAV…", "Import WAV… as a sample instrument (or drop .wav / .cwi files on the window)").clicked() {
+                self.import_wav_dialog();
+            }
+            ui.add_space(4.0);
+            if ib(ui, has, Glyph::Duplicate, "Duplicate", "Duplicate the selected instrument (with its FX chain)").clicked() {
+                self.duplicate_instrument(self.instr);
+            }
+            if ib(ui, has, Glyph::Delete, "Delete…", "Delete the selected instrument; its notes are removed and later instruments move up one slot (Ctrl+Z undoes)").clicked() {
+                self.request_delete_instrument(self.instr);
+            }
+            if ib(ui, has && i > 0, Glyph::Up, "Up", "Move the selected instrument up one slot (notes follow)").clicked() {
+                self.move_instrument(i, i - 1);
+            }
+            if ib(ui, has && i + 1 < n, Glyph::Down, "Down", "Move the selected instrument down one slot (notes follow)").clicked() {
+                self.move_instrument(i, i + 1);
+            }
+            ui.add_space(4.0);
+            if ib(ui, true, Glyph::Library, "Library…", "Instrument library: browse, audition, add and save instruments (.cwi)").clicked() {
+                self.open_library();
+            }
+        });
+        ui.add_space(2.0);
+    }
+
+    fn import_wav_dialog(&mut self) {
+        if let Some(p) = rfd::FileDialog::new()
+            .add_filter("WAV", &["wav"])
+            .pick_file()
+        {
+            self.import_sample(p);
+        }
+    }
+
+    /// list-wide actions (right-click menu of rows and of the empty list)
+    fn list_actions_menu(&mut self, ui: &mut egui::Ui) {
+        ui.menu_button("New instrument", |ui| self.new_instrument_menu(ui));
+        if ui.button("Import WAV…").clicked() {
+            ui.close();
+            self.import_wav_dialog();
+        }
+        if ui.button("Instrument library…").clicked() {
+            ui.close();
+            self.open_library();
         }
     }
 }
