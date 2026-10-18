@@ -182,7 +182,7 @@ Lite uses its own PAL hires screen (640×256, 16 colours), cloned from Workbench
 - With fast RAM, everything except samples and the screen moves out of chip RAM, so the sample budget grows to about 1.4 MB.
 - The PC exporter defaults to 1 MB of samples and warns above that.
 - **CPU:**
-  - ptplayer takes about 1–3 % of a 68020/14 per CIA tick.
+  - ptplayer takes 2.3 % of a 68020/14 per tick on average and 4.2 % at peak (measured in M1).
   - The pattern view redraws only changed rows; while following playback it scrolls one row at a time with `ScrollRaster`, then draws a single row.
   - Scopes: four 64-pixel bars at 25 fps, switched off automatically if a frame overruns.
   - Target: under 40 % CPU while playing with the editor open, so the system stays responsive.
@@ -202,7 +202,7 @@ Lite uses its own PAL hires screen (640×256, 16 colours), cloned from Workbench
 - Lite checks free chip RAM before loading a song and reports how much is missing instead of failing halfway.
 
 **CPU on a 7 MHz 68000** (one PAL frame is 20 ms, about 141,800 CPU cycles):
-- **ptplayer:** measured in M1 (see [`amiga/README.md`](../amiga/README.md)); roughly 2–6 % of the CPU per tick, with the peak on rows where all four channels start notes with effects. It runs in the CIA-B interrupt, so the GUI can't make it stutter.
+- **ptplayer (measured in M1)** on FS-UAE's cycle-exact A500 with the test song: on average **1.0 ms per tick (5 %)**, with a peak of **1.7 ms (8.6 %)** on rows where every channel starts a note with effects. One tick is 20 ms at 125 BPM. It runs in the CIA-B interrupt, so the GUI can't make it stutter. For comparison, the A1200 without fast RAM takes 0.45 ms on average and 0.84 ms at peak (2.3 % / 4.2 %).
 - **Editor (M2):** the pattern view redraws only changed rows; while following playback it scrolls by one row (`ScrollRaster` on 2 bitplanes, done by the blitter) and draws one row of text. Target under 50 % CPU while playing.
 - **Scopes/VU:** off by default on the 68000 build; VU bars (cheap) can be switched on, scopes are 68020 only.
 - **No fast RAM** means the CPU shares the chip bus with the display; the 2-bitplane screen keeps that cost low.
@@ -211,10 +211,12 @@ Lite uses its own PAL hires screen (640×256, 16 colours), cloned from Workbench
 
 | Milestone | Deliverable | Done when | Rough effort |
 |---|---|---|---|
-| **M1 Replay** | `cwlite` plays a .mod from the command line through ptplayer (`OSCOMPAT`); C core with the MOD reader; host unit tests | A test MOD and the PC demo exported by hand play in FS-UAE/AROS and WinUAE/KS 3.x; replay register log matches pt2-clone timing within one tick | 2–3 sessions |
+| **M1 Replay** ✅ done 18 Oct 2026 | `ChipWaveLite` / `ChipWaveLite.000` play a .mod from the command line through ptplayer (`OSCOMPAT`); C core with the MOD reader; tick-log tests (see [`amiga/README.md`](../amiga/README.md)) | A test MOD and the PC demo exported by hand play in FS-UAE/AROS and WinUAE/KS 3.x; replay register log matches pt2-clone timing within one tick | 2–3 sessions |
 | **M2 Editor** | Screen, pattern view, keys, order list, instrument list, play/stop, follow, mute/solo, undo | Notes can be entered and heard while playing; GUI smoke test in FS-UAE produces the expected screenshot | 4–6 sessions |
 | **M3 Load/save + exchange** | MOD save, 8SVX load, own file requester; PC ChipWave "Export Amiga 4-channel" and "Import .mod" (Rust, with tests) | PC → .mod → Lite → .mod → PC round trip keeps notes, order, tempo and samples; the export report lists dropped effects | 3–4 sessions |
 | **M4 Packaging** | Bootable `ChipWaveLite-0.1.adf` (FFS, boot block, startup-sequence, Lite, a demo song, icons), `ChipWaveLite-0.1.lha` (drawer, icon, docs, demo songs); scripts in `amiga/pkg/`; README section | Both boot or run in FS-UAE/AROS headless, and Del confirms in WinUAE with Kickstart 3.1 or 3.2 | 1–2 sessions |
+
+**M1 result:** the per-tick Paula register log is identical across vamos, FS-UAE A500 (68000) and FS-UAE A1200 (68020). It matches libxmp per tick: periods, volumes and tempo, with libxmp's own departures from ProTracker listed and explained. Three ptplayer differences from ProTracker 2.3 were fixed in our copy (tremolo depth, 5xy/6xy, volume after tremolo).
 
 Each milestone is committed in small green steps. A GitHub release happens only when Del asks.
 
