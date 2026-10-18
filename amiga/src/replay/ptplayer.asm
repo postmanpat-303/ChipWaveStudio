@@ -5,6 +5,18 @@
 ; Version 6.4
 ; Written by Frank Wille in 2013, 2016-2024.
 ;
+; ChipWave Lite copy, with three changes so that it plays like ProTracker
+; 2.3 (checked against 8bitbubsy's pt2-clone replayer). The changes are
+; marked "ChipWave Lite" and are also released into the public domain:
+;  1. 7xy tremolo: PT depth (wave * amplitude >> 6, the vibrato tables
+;     give half of that) and PT's ramp waveform quirk (direction taken from
+;     the vibrato position).
+;  2. 5xy and 6xy: the volume slide no longer rewrites AUDxPER, which threw
+;     away the vibrato of 6xy and the glissando rounding of 5xy.
+;  3. On every tick after the first of a row, the channel volume is written
+;     again unless the effect is 7xy, as PT does, so a tremolo can't leave
+;     Paula at a modulated volume.
+;
 ; I, the copyright holder of this work, hereby release it into the
 ; public domain. This applies worldwide.
 ;
@@ -2121,6 +2133,22 @@ mt_checkfx:
 
 .4:	move.w	#$0fff,d4
 	and.w	n_cmd(a2),d4
+
+	; ChipWave Lite: like PT, rewrite the volume on every tick except
+	; for tremolo (7xy), so a tremolo can't leave a modulated volume.
+	moveq	#$0f,d0
+	and.b	n_cmd(a2),d0
+	cmp.b	#7,d0
+	beq	.5
+	move.w	n_volume(a2),d0
+	ifeq	MINIMAL
+	move.l	mt_MasterVolTab(a4),a0
+	move.b	(a0,d0.w),d0
+	and.b	n_enable(a2),d0
+	endc
+	move.w	d0,AUDVOL(a5)
+.5:	tst.w	d4
+
 	beq	mt_pernop
 	and.w	#$00ff,d4
 
@@ -2689,7 +2717,7 @@ mt_tonevolslide:
 ; cmd 5 x y (x = volume-up, y = volume-down)
 ; d4 = xy
 
-	pea	mt_volumeslide(pc)
+	pea	mt_volslide_noper(pc)	; ChipWave Lite: keep the period
 	bra	mt_toneporta_nc
 
 
@@ -2703,7 +2731,7 @@ mt_vibrvolslide:
 	bsr	mt_vibrato_nc
 
 	move.w	d3,d4
-	bra	mt_volumeslide
+	bra	mt_volslide_noper	; ChipWave Lite: keep the vibrato
 
 
 mt_tremolo:
@@ -2723,35 +2751,41 @@ mt_tremolo:
 	bra	.4
 .3:	move.b	n_tremolospd(a2),d4
 
-	; calculate tremolo table offset: 64 * amplitude + (pos & 63)
-.4:	lsl.w	#6,d2
-	moveq	#63,d0
-	and.b	n_tremolopos(a2),d0
-	add.w	d0,d2
-
+	; ChipWave Lite: tremolo as in PT 2.3. The position p (0..63) is PT's
+	; position / 4; PT's wave index is p & 31, the sign is set from p >= 32.
+	; delta = wave(index) * amplitude >> 6 (the vibrato tables are >> 7).
+.4:	moveq	#63,d1
+	and.b	n_tremolopos(a2),d1
 	ifne	ENABLE_SAWRECT
-	; select tremolo waveform
-	moveq	#3,d1
-	and.b	n_tremoloctrl(a2),d1
+	moveq	#3,d0
+	and.b	n_tremoloctrl(a2),d0
 	beq	.6
-	subq.b	#1,d1
+	subq.b	#1,d0
 	beq	.5
-
-	; ctrl 2 & 3 select a rectangle tremolo
-	lea	mt_VibratoRectTable(pc),a0
+	; ctrl 2 & 3: square
+	move.w	#255,d0
 	bra	.9
-
-	; ctrl 1 selects a sawtooth tremolo
-.5:	lea	mt_VibratoSawTable(pc),a0
+	; ctrl 1: ramp; PT takes its direction from the vibrato position
+.5:	moveq	#31,d0
+	and.b	d1,d0
+	lsl.w	#3,d0
+	btst	#5,n_vibratopos(a2)
+	beq	.9
+	neg.w	d0
+	add.w	#255,d0
 	bra	.9
 	endc	; ENABLE_SAWRECT
-
-	; ctrl 0 selects a sine tremolo
-.6:	lea	mt_VibratoSineTable(pc),a0
-
-	; add tremolo-offset to volume
-.9:	move.w	n_volume(a2),d0
-	add.b	(a0,d2.w),d0
+	; ctrl 0: sine
+.6:	moveq	#31,d0
+	and.b	d1,d0
+	lea	mt_PTSineTable(pc),a0
+	move.b	(a0,d0.w),d0
+.9:	mulu	d2,d0
+	lsr.w	#6,d0
+	btst	#5,d1
+	beq	.8
+	neg.w	d0
+.8:	add.w	n_volume(a2),d0
 	bpl	.10
 	moveq	#0,d0
 .10:	cmp.w	#64,d0
@@ -2773,6 +2807,12 @@ mt_tremolo:
 .12:	add.b	d4,n_tremolopos(a2)
 	rts
 
+
+mt_PTSineTable:
+; ChipWave Lite: ProTracker's 32-entry half sine (for the tremolo)
+	dc.b	0,24,49,74,97,120,141,161,180,197,212,224,235,244,250,253
+	dc.b	255,253,250,244,235,224,212,197,180,161,141,120,97,74,49,24
+	even
 
 mt_volumeslide:
 ; cmd A x y (x = volume-up, y = volume-down)
@@ -2800,6 +2840,26 @@ vol_slide_down:
 
 set_pervol:
 	move.w	n_period(a2),AUDPER(a5)
+	bra	set_vol
+
+mt_volslide_noper:
+; ChipWave Lite: the volume slide of 5xy and 6xy. Same as mt_volumeslide,
+; but it leaves AUDxPER alone, so the vibrato (6xy) or the glissando
+; rounded period (5xy) written just before stays, as in PT.
+	move.w	n_volume(a2),d0
+	moveq	#$0f,d1
+	and.b	d4,d1
+	lsr.b	#4,d4
+	beq	.down
+	add.b	d4,d0
+	cmp.b	#64,d0
+	bls	set_vol
+	moveq	#64,d0
+	bra	set_vol
+.down:	sub.b	d1,d0
+	bpl	set_vol
+	moveq	#0,d0
+
 set_vol:
 	move.w	d0,n_volume(a2)
 	ifeq	MINIMAL
