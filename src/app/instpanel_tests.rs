@@ -45,8 +45,14 @@ fn ctrl_i_opens_the_instrument_editor_and_every_type_and_tab_draws_its_parameter
         let is_plugin = matches!(inst.kind, InstrumentKind::Plugin(_));
         let mut h = with_inst(inst.clone());
         assert!(
-            !h.state().extra.lower_inst,
-            "{ty}: the arranger is the default"
+            h.state().extra.lower_inst && h.state().lower_visible(),
+            "{ty}: the instrument editor is the default"
+        );
+        h.state_mut().set_lower(0);
+        frames(&mut h, 2);
+        assert!(
+            h.state().arr_docked(),
+            "{ty}: the switch shows the arranger"
         );
         key(&mut h, Key::I, ctrl());
         frames(&mut h, 2);
@@ -225,6 +231,7 @@ fn parameter_search_jumps_to_the_card_on_its_tab() {
 fn full_height_pattern_hides_the_lower_panel_and_restores_its_height() {
     let mut h = with_inst(analog());
     h.state_mut().extra.lower_h = 333.0;
+    h.state_mut().set_lower(0);
     frame(&mut h);
     assert!(h.state().arr_docked());
     key(&mut h, Key::F11, Default::default());
@@ -424,6 +431,9 @@ fn a_b_compare_swaps_the_sound_and_undoes() {
 #[test]
 fn sidebar_shows_type_tags_summary_and_the_edit_button() {
     let mut h = with_inst(analog());
+    // the button shows while the lower panel is on something else
+    h.state_mut().set_lower(0);
+    frame(&mut h);
     let r = h
         .query_all_by(|n| {
             n.role() == Role::Button
@@ -461,6 +471,47 @@ fn sidebar_shows_type_tags_summary_and_the_edit_button() {
 fn old_settings_files_get_the_new_defaults() {
     let e: crate::settings::Extra = toml::from_str("").expect("empty extra");
     assert_eq!(e.lower_h, 0.0);
-    assert!(!e.lower_inst && !e.full_height && !e.classic_editor);
+    // the instrument editor is the default view (no choice saved yet)
+    assert!(e.lower_inst && !e.lower_chosen);
+    assert!(!e.full_height && !e.classic_editor);
     assert!(e.cards_closed.is_empty());
+}
+
+/// new users (and settings with no saved choice) get the instrument editor in
+/// the lower panel; the switch remembers the user's choice, and adding an
+/// automation lane shows the lanes
+#[test]
+fn lower_panel_opens_on_the_instrument_editor_and_remembers_the_choice() {
+    let mut h = with_inst(analog());
+    assert!(h.state().extra.lower_inst && h.state().lower_visible());
+    assert!(!h.state().extra.lower_chosen);
+    assert!(!h.state().arr_docked(), "the arranger isn't docked");
+    // the Arranger switch is a choice
+    let b = labelled_rect(&h, Role::Button, "Arranger").expect("Arranger switch");
+    let c = b.center();
+    h.input_mut().events.push(egui::Event::PointerMoved(c));
+    frame(&mut h);
+    for pressed in [true, false] {
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos: c,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        });
+        frame(&mut h);
+    }
+    frames(&mut h, 2);
+    let e = &h.state().extra;
+    assert!(!e.lower_inst && e.lower_chosen, "the arranger, remembered");
+    let mut saved = e.clone();
+    saved.default_lower_view();
+    assert!(!saved.lower_inst, "kept on the next start");
+    // Ctrl+I back to the instrument editor, then a new automation lane
+    // switches the lower panel to the lanes
+    key(&mut h, Key::I, ctrl());
+    frames(&mut h, 2);
+    assert!(h.state().extra.lower_inst);
+    h.state_mut().add_lane(crate::automation::Target::Master);
+    frames(&mut h, 2);
+    assert!(!h.state().extra.lower_inst && h.state().show_auto);
 }

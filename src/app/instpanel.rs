@@ -173,6 +173,7 @@ impl App {
         self.dock_arranger = true;
         self.extra.full_height = false;
         self.extra.lower_inst = true;
+        self.extra.lower_chosen = true;
         self.arr_focus = false;
         self.save_settings();
     }
@@ -182,6 +183,7 @@ impl App {
         self.dock_arranger = true;
         self.extra.full_height = false;
         self.extra.lower_inst = m == 1;
+        self.extra.lower_chosen = true;
         if m == 1 {
             self.arr_focus = false;
         } else {

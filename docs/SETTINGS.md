@@ -48,7 +48,9 @@ Default song folder, autosave interval, number of backups and backup location, j
 ### 2.7 Layout (0.2.3.19)
 These are set from the View menu and the lower panel, and saved in `settings.toml`:
 - the lower panel's height (`lower_h`, 0 = automatic)
-- whether it shows the instrument editor (`lower_inst`)
+- whether it shows the instrument editor (`lower_inst`), and whether you chose that view
+  yourself (`lower_chosen`). With no choice saved it opens on the instrument editor (Unreleased;
+  before, it opened on the arranger)
 - Full-height pattern (`full_height`)
 - the classic sidebar instrument editor (`classic_editor`)
 - the collapsed instrument-editor cards (`cards_closed`, as "Type/Card")

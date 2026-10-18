@@ -24,6 +24,8 @@ pub(super) fn harness_with(song: Song) -> Harness<'static, App> {
 /// the pre-0.2.3.19 sidebar instrument editor (View > Classic sidebar instrument editor)
 fn classic(h: &mut Harness<'static, App>) {
     h.state_mut().extra.classic_editor = true;
+    // ...with the arranger in the lower panel, as before 0.2.3.19
+    h.state_mut().extra.lower_inst = false;
     frame(h);
 }
 

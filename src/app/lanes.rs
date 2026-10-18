@@ -192,6 +192,12 @@ impl App {
         });
         self.auto_lane = n;
         self.show_auto = true;
+        // the lower panel shows the new lane (it opens on the instrument
+        // editor by default, where lanes aren't drawn)
+        if self.extra.lower_inst {
+            self.extra.lower_inst = false;
+            self.save_settings();
+        }
         self.status = format!("Added lane '{label}' (click to add points, Pencil to draw)");
     }
 

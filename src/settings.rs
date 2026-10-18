@@ -76,9 +76,16 @@ pub struct Extra {
     /// lower panel height in points (0 = automatic) (0.2.3.19)
     #[serde(default)]
     pub lower_h: f32,
-    /// the lower panel shows the instrument editor (else arranger / automation)
-    #[serde(default)]
+    /// the lower panel shows the instrument editor (else arranger / automation);
+    /// the instrument editor is the default (Unreleased), see `lower_chosen`
+    #[serde(default = "yes")]
     pub lower_inst: bool,
+    /// the user picked the lower panel's view themselves (Arranger | Instrument |
+    /// Automation switch, Ctrl+I, ...). Until then it opens on the instrument
+    /// editor, also for settings files from 0.2.3.19 / 0.2.4.0, which always
+    /// wrote `lower_inst = false` whether or not anyone chose the arranger
+    #[serde(default)]
+    pub lower_chosen: bool,
     /// Full-height pattern: the lower panel is hidden
     #[serde(default)]
     pub full_height: bool,
@@ -117,7 +124,8 @@ impl Default for Extra {
             library_dir: String::new(),
             scale_lock: false,
             lower_h: 0.0,
-            lower_inst: false,
+            lower_inst: true,
+            lower_chosen: false,
             full_height: false,
             classic_editor: false,
             cards_closed: vec![],
@@ -127,6 +135,15 @@ impl Default for Extra {
 
 fn yes() -> bool {
     true
+}
+
+impl Extra {
+    /// no saved choice of lower-panel view: open on the instrument editor
+    pub fn default_lower_view(&mut self) {
+        if !self.lower_chosen {
+            self.lower_inst = true;
+        }
+    }
 }
 
 impl Default for Settings {
@@ -185,10 +202,11 @@ fn path() -> Option<PathBuf> {
 }
 
 pub fn load() -> Settings {
-    let s: Settings = path()
+    let mut s: Settings = path()
         .and_then(|p| std::fs::read_to_string(p).ok())
         .and_then(|t| toml::from_str(&t).ok())
         .unwrap_or_default();
+    s.extra.default_lower_view();
     Settings {
         zoom: if s.zoom.is_finite() {
             s.zoom.clamp(0.5, 3.0)
@@ -232,5 +250,24 @@ mod tests {
         // old settings files without [midi] still load
         let old: Settings = toml::from_str("zoom = 1.0\ntheme = \"Dark\"\n").unwrap();
         assert_eq!(old.extra.midi, crate::midi::MidiSettings::default());
+    }
+
+    #[test]
+    fn lower_panel_opens_on_the_instrument_editor_unless_the_user_chose() {
+        // new users: no settings at all
+        assert!(Extra::default().lower_inst && !Extra::default().lower_chosen);
+        // 0.2.3.19 / 0.2.4.0 settings always wrote lower_inst = false
+        let mut e: Extra = toml::from_str("lower_inst = false").unwrap();
+        e.default_lower_view();
+        assert!(e.lower_inst, "no saved choice: the instrument editor");
+        // a choice made in this version is kept, both ways
+        for inst in [false, true] {
+            let mut s = Settings::default();
+            s.extra.lower_inst = inst;
+            s.extra.lower_chosen = true;
+            let mut back: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
+            back.extra.default_lower_view();
+            assert_eq!(back.extra.lower_inst, inst);
+        }
     }
 }

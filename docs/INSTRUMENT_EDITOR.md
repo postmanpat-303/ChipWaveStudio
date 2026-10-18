@@ -29,6 +29,11 @@ compact instrument list.
   - **Automation:** the arranger with its automation lanes. This is the same as the arranger's
     Automation checkbox.
   - **Instrument:** this editor.
+  - **Default (Unreleased):** the panel opens on **Instrument** for new users and whenever no
+    choice has been saved; once you pick a view (the switch, `Ctrl+I`, the sidebar button) it is
+    remembered and used on the next start. Settings from 0.2.3.19 / 0.2.4.0 count as "no choice"
+    (they always saved the arranger), so the first start after updating opens on Instrument.
+    Adding an automation lane (right-click › Automate, **+ Lane**) switches the panel to the lanes.
 - **Splitter:** the dotted bar between the pattern and the panel.
   - Drag it to resize.
   - Double-click it for the automatic height.
