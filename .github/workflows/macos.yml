@@ -4,9 +4,15 @@ name: macOS
 # Run it by hand: Actions > macOS > Run workflow (or `gh workflow run macos.yml`).
 # Output is uploaded as a workflow artifact only. It is NOT attached to any release:
 # publishing is a separate, approved step (docs/MACOS.md, "Publishing").
+# source_ref builds the app from another commit or tag (e.g. v0.2.3.14) with the packaging
+# files (scripts/package-macos.sh, packaging/macos/) taken from the branch the workflow runs on.
 on:
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: "App source to build: tag, branch or SHA (empty = the commit the workflow runs on)"
+        required: false
+        default: ""
       version:
         description: "Display version for the file names, e.g. 0.2.3.15 (empty = from Cargo.toml; must match it)"
         required: false
@@ -19,12 +25,31 @@ jobs:
   macos:
     runs-on: macos-latest
     timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout packaging files (workflow branch)
+        uses: actions/checkout@v4
+        with:
+          path: tools
+      - name: Checkout app source (${{ inputs.source_ref || github.sha }})
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          path: app
+      - name: Use this branch's packaging files
+        run: |
+          mkdir -p scripts packaging
+          cp ../tools/scripts/package-macos.sh scripts/
+          rm -rf packaging/macos && cp -R ../tools/packaging/macos packaging/
+          echo "app source: $(git rev-parse HEAD) ($(git describe --tags --always))"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
 
       - name: Version
         id: ver
@@ -36,6 +61,7 @@ jobs:
           fi
           echo "ver=$VER" >> "$GITHUB_OUTPUT"
           echo "ChipWave $VER (Cargo $CARGO_VER)"
+          echo "ChipWave $VER from $(git rev-parse HEAD) ($(git describe --tags --always))" > "$RUNNER_TEMP/source.txt"
 
       - name: Build and package (universal .app, dmg, zip, SHA256SUMS.txt)
         run: scripts/package-macos.sh "${{ steps.ver.outputs.ver }}"
@@ -89,11 +115,11 @@ jobs:
         with:
           name: ChipWave-${{ steps.ver.outputs.ver }}-macos-universal
           path: |
-            dist/mac/ChipWave-*-macos-universal.dmg
-            dist/mac/ChipWave-*-macos-universal.zip
-            dist/mac/ChipWave-macos-universal.dmg
-            dist/mac/ChipWave-macos-universal.zip
-            dist/mac/SHA256SUMS.txt
+            app/dist/mac/ChipWave-*-macos-universal.dmg
+            app/dist/mac/ChipWave-*-macos-universal.zip
+            app/dist/mac/ChipWave-macos-universal.dmg
+            app/dist/mac/ChipWave-macos-universal.zip
+            app/dist/mac/SHA256SUMS.txt
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
@@ -103,4 +129,5 @@ jobs:
           path: |
             ${{ runner.temp }}/macos-*.png
             ${{ runner.temp }}/run.log
+            ${{ runner.temp }}/source.txt
           if-no-files-found: ignore
