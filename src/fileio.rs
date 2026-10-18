@@ -477,6 +477,11 @@ pub const DEMOS: &[(&str, &str, &str)] = &[
         "dark psytrance, E Phrygian, 147 BPM",
         include_str!("../demos/dark_psy.cwt.toml"),
     ),
+    (
+        "Velvet Mirrorball",
+        "disco, F minor, 104 BPM (voice, phaser strings, filter sweeps)",
+        include_str!("../demos/disco.cwt.toml"),
+    ),
 ];
 
 /// demo `i` of `DEMOS` (falls back to the first)
@@ -991,6 +996,27 @@ mod tests {
         let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("demos/dark_psy.cwt.toml");
         assert!(is_text_song(&p) && !is_text_song(std::path::Path::new("a.cwt")));
         assert_eq!(load_text_song(&p).unwrap().order, s.order);
+    }
+    #[test]
+    fn disco_demo_loads_from_menu() {
+        let i = DEMOS
+            .iter()
+            .position(|d| d.0 == "Velvet Mirrorball")
+            .expect("disco demo registered in File > Demo songs");
+        let s = demo_song_n(i);
+        assert!(s.title.starts_with("Velvet Mirrorball"));
+        assert_eq!(s.bpm, 104.0);
+        assert_eq!(s.channels, 15);
+        assert_eq!(s.mixer.duck_key, 0);
+        assert!(s.mixer.limiter.enabled && s.mixer.limiter.ceiling_db <= -1.0);
+        assert!(s
+            .instruments
+            .iter()
+            .any(|i| matches!(i.kind, InstrumentKind::Voice(_))));
+        assert!(s.automation.len() >= 8);
+        // ~3:25: 22 blocks of 64 lines at 104 BPM
+        let secs = s.order.len() as f32 * 64.0 * 60.0 / (104.0 * 4.0);
+        assert!((180.0..240.0).contains(&secs), "{secs}");
     }
     /// arbitrary (non-ASCII, garbage) text must never panic the parsers
     #[test]
