@@ -1693,3 +1693,114 @@ fn voice_words_and_throat_mode_from_the_voice_panel() {
         assert!(names.contains(&p), "{p} preset");
     }
 }
+
+/// a 2 s "drum loop": 8 decaying noise hits, one every 250 ms (120 BPM 8ths)
+fn loop_instrument() -> Instrument {
+    let mut n = 0x2545_F491u32;
+    let mut d = vec![0.0f32; 96000];
+    for h in 0..8 {
+        for k in 0..6000 {
+            n ^= n << 13;
+            n ^= n >> 17;
+            n ^= n << 5;
+            let r = n as f32 / u32::MAX as f32 * 2.0 - 1.0;
+            d[h * 12000 + k] += r * 0.7 * (-(k as f32) / 900.0).exp();
+        }
+    }
+    Instrument {
+        name: "Loop".into(),
+        volume: 1.0,
+        transpose: 0,
+        fx: vec![],
+        kind: InstrumentKind::Sample {
+            file: String::new(),
+            rate: 48000,
+            data: d.into(),
+            base_note: 49,
+            lp: Default::default(),
+        },
+    }
+}
+
+#[test]
+fn sample_editor_slices_selects_edits_and_makes_notes() {
+    let mut sg = fileio::demo_song();
+    sg.bpm = 120.0;
+    sg.lines_per_beat = 4;
+    sg.instruments.push(loop_instrument());
+    let slot = sg.instruments.len() as u8;
+    let mut h = harness_with(sg);
+    h.state_mut().instr = slot;
+    h.state_mut().view = View::Sample;
+    frames(&mut h, 3);
+    click_exact(&mut h, "Transients");
+    assert_eq!(h.state().smp.slices.len(), 8, "{:?}", h.state().smp.slices);
+    exact(&h, "8 slices");
+    // Next selects slice 1, then 2; Reverse only touches that slice
+    click_exact(&mut h, "Next");
+    click_exact(&mut h, "Next");
+    let sel = h.state().smp.sel.expect("slice selected");
+    assert!(
+        sel.0.abs_diff(12000) < 200 && sel.1.abs_diff(24000) < 200,
+        "{sel:?}"
+    );
+    exact(&h, "slice 2/8");
+    let data = |h: &mut Harness<'static, App>| {
+        song(h, |s| match &s.instruments[slot as usize - 1].kind {
+            InstrumentKind::Sample { data, .. } => data.to_vec(),
+            _ => unreachable!(),
+        })
+    };
+    let before = data(&mut h);
+    click_exact(&mut h, "Reverse");
+    let after = data(&mut h);
+    assert_eq!(
+        after[..sel.0],
+        before[..sel.0],
+        "before the slice untouched"
+    );
+    assert_eq!(after[sel.1..], before[sel.1..], "after the slice untouched");
+    assert_eq!(after[sel.0], before[sel.1 - 1], "slice reversed");
+    // the sample editor's own undo puts it back (and drops the stale slices)
+    ctrl_z(&mut h);
+    assert_eq!(data(&mut h), before);
+    assert!(h.state().smp.slices.is_empty());
+    // Grid 4 replaces the slices
+    h.state_mut().smp.grid_n = 4;
+    click_exact(&mut h, "Grid");
+    assert_eq!(h.state().smp.slices.len(), 4);
+    click_exact(&mut h, "Transients");
+    // To notes: 8 instruments + 8 notes on the cursor channel, at rows 0, 2, 4 ...
+    let n0 = song(&mut h, |s| s.instruments.len());
+    h.state_mut().ch = 6;
+    let p = h.state().pattern;
+    click_exact(&mut h, "To notes");
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0 + 8);
+    assert_eq!(h.state().view, View::Pattern, "shows the notes");
+    let rows: Vec<usize> = song(&mut h, |s| {
+        s.patterns[p]
+            .cells
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r[6].note > 0)
+            .map(|(i, _)| i)
+            .collect()
+    });
+    assert_eq!(
+        rows,
+        [0, 2, 4, 6, 8, 10, 12, 14],
+        "one note per 8th at 120 BPM"
+    );
+    let first = song(&mut h, |s| s.patterns[p].cells[0][6]);
+    assert_eq!(first.instr as usize, n0 + 1);
+    // the slice instruments hold the audio of their slice
+    let l1 = song(&mut h, |s| match &s.instruments[n0 + 1].kind {
+        InstrumentKind::Sample { data, .. } => data.len(),
+        _ => 0,
+    });
+    assert!(l1.abs_diff(12000) < 400, "slice 2 length {l1}");
+    // one undo step removes it all
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0);
+    assert!(song(&mut h, |s| s.patterns[p].cells[0][6].instr as usize) <= n0);
+}

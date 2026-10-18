@@ -21,11 +21,19 @@ pub(super) struct SampleEd {
     /// first visible frame and visible span in frames (0 = fit)
     from: f64,
     span: f64,
-    sel: Option<(usize, usize)>,
+    pub sel: Option<(usize, usize)>,
     drag: Option<Drag>,
     undo: Vec<SmpUndo>,
     redo: Vec<SmpUndo>,
     gain_db: f32,
+    /// slice start frames of the edited sample (0.2.3.10; not saved)
+    pub slices: Vec<usize>,
+    /// instrument the slices belong to
+    slices_of: usize,
+    /// transient sensitivity 0..1 and minimum gap in ms
+    pub sens: f32,
+    pub gap_ms: f32,
+    pub grid_n: usize,
 }
 
 impl Default for SampleEd {
@@ -38,6 +46,11 @@ impl Default for SampleEd {
             undo: vec![],
             redo: vec![],
             gain_db: 3.0,
+            slices: vec![],
+            slices_of: usize::MAX,
+            sens: 0.5,
+            gap_ms: 50.0,
+            grid_n: 8,
         }
     }
 }
@@ -108,6 +121,7 @@ impl App {
         }
         self.smp_restore(u);
         self.smp.sel = None;
+        self.smp.slices.clear();
         self.dirty = true;
         self.status = if redo {
             "Redo (sample)".into()
@@ -129,6 +143,9 @@ impl App {
             }
         });
         if let Some(ns) = r {
+            if matches!(op, Op::Crop | Op::Delete | Op::TrimSilence) {
+                self.smp.slices.clear();
+            }
             self.smp.sel = ns;
             self.dirty = true;
             self.status = format!(
@@ -140,6 +157,150 @@ impl App {
                     "whole sample"
                 }
             );
+        }
+    }
+
+    /// cut the sample into slices at transients (`grid` = None) or a grid
+    pub(super) fn slice_sample(&mut self, idx: usize, grid: Option<usize>) {
+        let (sens, gap) = (self.smp.sens, self.smp.gap_ms);
+        let r = self.with(|s| match s.song.instruments.get(idx).map(|x| &x.kind) {
+            Some(InstrumentKind::Sample { data, rate, .. }) => Some(match grid {
+                Some(n) => sample::grid_slices(data, n),
+                None => sample::transient_slices(data, *rate, sens, gap),
+            }),
+            _ => None,
+        });
+        if let Some(v) = r {
+            self.status = format!(
+                "{} slice(s) {}",
+                v.len(),
+                match grid {
+                    Some(n) => format!("on a {n}-step grid"),
+                    None => format!("at transients (sensitivity {:.0} %)", sens * 100.0),
+                }
+            );
+            self.smp.slices = v;
+            self.smp.slices_of = idx;
+        }
+    }
+
+    /// select slice `k` (the edit ops then work on it)
+    pub(super) fn select_slice(&mut self, idx: usize, k: usize) {
+        let len = self.with(|s| match s.song.instruments.get(idx).map(|x| &x.kind) {
+            Some(InstrumentKind::Sample { data, .. }) => data.len(),
+            _ => 0,
+        });
+        if let Some(&(a, b)) = sample::slice_bounds(&self.smp.slices, len).get(k) {
+            self.smp.sel = Some((a, b));
+        }
+    }
+
+    /// Each slice becomes a new sample instrument; with `notes`, the slices
+    /// are also written into the current block on the cursor channel at the
+    /// rows where they sit at the song tempo (so the loop plays back).
+    /// One undo step (Edit > Undo / Ctrl+Z outside the sample editor).
+    pub(super) fn slices_to_instruments(&mut self, idx: usize, notes: bool) {
+        let slices = self.smp.slices.clone();
+        let parts = self.with(|s| match s.song.instruments.get(idx) {
+            Some(Instrument {
+                name,
+                kind:
+                    InstrumentKind::Sample {
+                        data,
+                        rate,
+                        base_note,
+                        ..
+                    },
+                ..
+            }) => {
+                let b = sample::slice_bounds(&slices, data.len());
+                Some((
+                    name.clone(),
+                    *rate,
+                    *base_note,
+                    b.iter()
+                        .map(|&(a, e)| (a, sample::extract(data, a, e, *rate)))
+                        .collect::<Vec<_>>(),
+                ))
+            }
+            _ => None,
+        });
+        let Some((name, rate, base, parts)) = parts else {
+            return;
+        };
+        if parts.len() < 2 {
+            self.status = "Slice the sample first (Transients or Grid)".into();
+            return;
+        }
+        self.snapshot();
+        let (pat, ch) = (self.pattern, self.ch);
+        let res = self.with(|s| {
+            let free = 255usize.saturating_sub(s.song.instruments.len());
+            let n = parts.len().min(free);
+            let first = s.song.instruments.len();
+            for (k, (_, d)) in parts.iter().take(n).enumerate() {
+                s.song.instruments.push(Instrument {
+                    name: format!("{name} {:02}", k + 1),
+                    volume: 1.0,
+                    transpose: 0,
+                    fx: vec![],
+                    kind: InstrumentKind::Sample {
+                        file: String::new(),
+                        rate,
+                        data: d.clone().into(),
+                        base_note: base,
+                        lp: Default::default(),
+                    },
+                });
+            }
+            let mut placed = 0;
+            if notes {
+                let row_s =
+                    60.0 / (s.song.bpm.max(1.0) as f64 * s.song.lines_per_beat.max(1) as f64);
+                if let Some(p) = s.song.patterns.get_mut(pat) {
+                    if ch < p.cells.first().map_or(0, |r| r.len()) {
+                        for r in p.cells.iter_mut() {
+                            r[ch] = Cell::default();
+                        }
+                        for (k, (a, _)) in parts.iter().take(n).enumerate() {
+                            let row = (*a as f64 / rate.max(1) as f64 / row_s).round() as usize;
+                            if let Some(r) = p.cells.get_mut(row) {
+                                r[ch] = Cell {
+                                    note: base,
+                                    instr: (first + k + 1) as u8,
+                                    ..Default::default()
+                                };
+                                placed += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            (first, n, placed)
+        });
+        let (first, n, placed) = res;
+        self.dirty = true;
+        if n == 0 {
+            self.status = "All 255 instrument slots are used".into();
+            return;
+        }
+        self.status = if notes {
+            format!(
+                "{n} slice instrument(s) {:02X}-{:02X}; {placed} note(s) written on channel {} of block {:02} (Ctrl+Z here undoes)",
+                first + 1,
+                first + n,
+                ch + 1,
+                pat
+            )
+        } else {
+            format!(
+                "{n} slice instrument(s) {:02X}-{:02X} (Edit > Undo undoes)",
+                first + 1,
+                first + n
+            )
+        };
+        if notes {
+            self.view = View::Pattern;
         }
     }
 
@@ -388,6 +549,117 @@ impl App {
         if let Some(o) = op {
             self.smp_op(idx, o);
         }
+        // ---------------------------------------------------------- slices
+        if self.smp.slices_of != idx {
+            self.smp.slices.clear();
+            self.smp.slices_of = idx;
+        }
+        let mut slice_act: Option<u8> = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new("Slice").color(t.ink2));
+            if ui
+                .button("Transients")
+                .on_hover_text("cut at the hits (drum loops, chops); Alt+click adds a slice, right-click removes one")
+                .clicked()
+            {
+                slice_act = Some(0);
+            }
+            ui.add(
+                egui::Slider::new(&mut self.smp.sens, 0.0..=1.0)
+                    .text("sens")
+                    .show_value(false),
+            )
+            .on_hover_text("transient sensitivity: higher finds softer hits");
+            ui.add(
+                egui::DragValue::new(&mut self.smp.gap_ms)
+                    .range(5.0..=1000.0)
+                    .suffix(" ms gap"),
+            )
+            .on_hover_text("minimum distance between transient slices");
+            ui.separator();
+            egui::ComboBox::from_id_salt("smp_grid")
+                .width(50.0)
+                .selected_text(self.smp.grid_n.to_string())
+                .show_ui(ui, |ui| {
+                    for n in [2usize, 3, 4, 6, 8, 12, 16, 24, 32, 64] {
+                        ui.selectable_value(&mut self.smp.grid_n, n, n.to_string());
+                    }
+                });
+            if ui
+                .button("Grid")
+                .on_hover_text("cut into equal slices (a one-bar loop into 8 or 16)")
+                .clicked()
+            {
+                slice_act = Some(1);
+            }
+            let n = sample::slice_bounds(&self.smp.slices, len).len();
+            let have = self.smp.slices.len() > 1;
+            if ui.add_enabled(have, egui::Button::new("Clear")).clicked() {
+                slice_act = Some(2);
+            }
+            ui.separator();
+            let cur = self.smp.sel.and_then(|sel| {
+                sample::slice_bounds(&self.smp.slices, len)
+                    .iter()
+                    .position(|&b| b == sel)
+            });
+            if ui.add_enabled(have, egui::Button::new("Prev")).clicked() {
+                slice_act = Some(3);
+            }
+            ui.label(
+                egui::RichText::new(match (have, cur) {
+                    (false, _) => "no slices".to_string(),
+                    (true, Some(k)) => format!("slice {}/{n}", k + 1),
+                    (true, None) => format!("{n} slices"),
+                })
+                .monospace()
+                .color(t.value),
+            );
+            if ui
+                .add_enabled(have, egui::Button::new("Next"))
+                .on_hover_text("select the next slice: Normalise, Reverse, Fade and Gain then work on it")
+                .clicked()
+            {
+                slice_act = Some(4);
+            }
+            ui.separator();
+            if ui
+                .add_enabled(have, egui::Button::new("To instruments"))
+                .on_hover_text("each slice becomes a new sample instrument")
+                .clicked()
+            {
+                slice_act = Some(5);
+            }
+            if ui
+                .add_enabled(have, egui::Button::new("To notes"))
+                .on_hover_text(
+                    "slice instruments plus notes in this block on the cursor channel, \
+                     one per slice at its position at the song tempo (rearrange them to remix the loop)",
+                )
+                .clicked()
+            {
+                slice_act = Some(6);
+            }
+            if let (Some(a), Some(c)) = (slice_act, cur) {
+                if a == 3 || a == 4 {
+                    let k = if a == 3 { c.saturating_sub(1) } else { (c + 1).min(n - 1) };
+                    slice_act = Some(100 + k as u8);
+                }
+            }
+        });
+        match slice_act {
+            Some(0) => self.slice_sample(idx, None),
+            Some(1) => self.slice_sample(idx, Some(self.smp.grid_n)),
+            Some(2) => self.smp.slices.clear(),
+            Some(3) | Some(4) => self.select_slice(idx, 0),
+            Some(5) => self.slices_to_instruments(idx, false),
+            Some(6) => self.slices_to_instruments(idx, true),
+            Some(k) if k >= 100 => self.select_slice(idx, (k - 100) as usize),
+            _ => {}
+        }
+        if self.view != View::Sample {
+            return;
+        }
         // ---------------------------------------------------------- waveform
         let (len, lp) = self.with(|s| match s.song.instruments.get(idx).map(|x| &x.kind) {
             Some(InstrumentKind::Sample { data, lp, .. }) => (data.len(), *lp),
@@ -476,6 +748,20 @@ impl App {
             handle(lp.start, "S");
             handle(lp.end, "E");
         }
+        // slice markers
+        for (k, &f) in self.smp.slices.iter().enumerate() {
+            let x = to_x(f as f64);
+            if x >= wave.left() - 1.0 && x <= wave.right() + 1.0 {
+                p.vline(x, wave.y_range(), Stroke::new(1.0, t.value));
+                p.text(
+                    Pos2::new(x + 3.0, wave.bottom() - 3.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    format!("{}", k + 1),
+                    FontId::monospace(10.0),
+                    t.value,
+                );
+            }
+        }
         // preview playhead
         let ph = self.with(|s| s.engine.sample_playhead(&s.song, PREVIEW_CH));
         if let Some((pi, pos)) = ph {
@@ -559,7 +845,38 @@ impl App {
             self.smp.drag = None;
         }
         if resp.clicked() {
-            self.smp.sel = None;
+            let alt = ui.input(|i| i.modifiers.alt);
+            let at = resp.interact_pointer_pos().map(|pp| to_f(pp.x) as usize);
+            match at {
+                Some(f) if alt => {
+                    // Alt+click: add a slice here (at a zero crossing)
+                    let g = self.with(|s| match s.song.instruments.get(idx).map(|x| &x.kind) {
+                        Some(InstrumentKind::Sample { data, .. }) => sample::snap_zero(data, f, 64),
+                        _ => f,
+                    });
+                    if self.smp.slices.is_empty() {
+                        self.smp.slices.push(0);
+                    }
+                    if !self.smp.slices.contains(&g) && self.smp.slices.len() < sample::MAX_SLICES {
+                        self.smp.slices.push(g);
+                        self.smp.slices.sort_unstable();
+                    }
+                }
+                Some(f) if self.smp.slices.len() > 1 => {
+                    // click selects the slice under the mouse
+                    let b = sample::slice_bounds(&self.smp.slices, len);
+                    self.smp.sel = b.iter().copied().find(|&(a, e)| f >= a && f < e);
+                }
+                _ => self.smp.sel = None,
+            }
+        }
+        if resp.secondary_clicked() {
+            // right-click near a slice marker removes it
+            if let Some(pp) = resp.interact_pointer_pos() {
+                if let Some(k) = self.smp.slices.iter().position(|&f| f > 0 && near(f, pp.x)) {
+                    self.smp.slices.remove(k);
+                }
+            }
         }
         // ---------------------------------------------------------- scrollbar + info
         let bar = Rect::from_min_max(

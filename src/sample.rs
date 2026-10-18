@@ -213,6 +213,127 @@ pub fn apply(
     out
 }
 
+// ------------------------------------------------------------ slicing (0.2.3.10)
+
+/// most slices a sample is cut into
+pub const MAX_SLICES: usize = 64;
+
+/// nearest zero crossing to `p` within `radius` frames (else `p`)
+pub fn snap_zero(data: &[f32], p: usize, radius: usize) -> usize {
+    if p == 0 || p >= data.len() {
+        return p.min(data.len());
+    }
+    let lo = p.saturating_sub(radius).max(1);
+    let hi = (p + radius).min(data.len() - 1);
+    (lo..=hi)
+        .filter(|&i| (data[i - 1] <= 0.0) != (data[i] <= 0.0) || data[i] == 0.0)
+        .min_by_key(|&i| i.abs_diff(p))
+        .unwrap_or(p)
+}
+
+/// `n` equal slices (start frames, the first is 0), snapped to zero crossings
+pub fn grid_slices(data: &[f32], n: usize) -> Vec<usize> {
+    let n = n.clamp(1, MAX_SLICES);
+    let len = data.len();
+    let mut v: Vec<usize> = (0..n).map(|k| snap_zero(data, k * len / n, 64)).collect();
+    v.dedup();
+    v
+}
+
+/// Slice starts at transients (onsets). `sensitivity` 0..1 (1 = finds the
+/// softest hits), `min_gap_ms` keeps slices apart. Energy-rise detector:
+/// 5 ms frames, the level jump in dB against the previous 15 ms, a floor
+/// 40 dB below the loudest frame, then the onset is moved to the zero
+/// crossing just before the attack. The first slice is always 0.
+pub fn transient_slices(data: &[f32], rate: u32, sensitivity: f32, min_gap_ms: f32) -> Vec<usize> {
+    let hop = (rate as usize / 200).max(16);
+    let n = data.len() / hop;
+    let mut out = vec![0usize];
+    if n < 4 {
+        return out;
+    }
+    let lvl: Vec<f32> = (0..n)
+        .map(|i| {
+            let a = i * hop;
+            let b = (a + hop * 2).min(data.len());
+            let e = data[a..b].iter().map(|x| x * x).sum::<f32>() / (b - a).max(1) as f32;
+            10.0 * (e + 1e-10).log10()
+        })
+        .collect();
+    let top = lvl.iter().cloned().fold(f32::MIN, f32::max);
+    let thr = 12.0 - 9.0 * sensitivity.clamp(0.0, 1.0);
+    let gap = ((min_gap_ms.max(5.0) / 1000.0) * rate as f32) as usize;
+    let rise = |i: usize| -> f32 {
+        let prev = (i.saturating_sub(3)..i)
+            .map(|j| lvl[j])
+            .fold(f32::MIN, f32::max);
+        lvl[i] - prev
+    };
+    #[allow(clippy::needless_range_loop)]
+    for i in 1..n {
+        if out.len() >= MAX_SLICES {
+            break;
+        }
+        let r = rise(i);
+        if r < thr || lvl[i] < top - 40.0 {
+            continue;
+        }
+        // the local maximum of the rise
+        if (i + 1 < n && rise(i + 1) > r) || rise(i - 1) > r {
+            continue;
+        }
+        // attack start: the first sample above 25 % of the next 10 ms peak
+        let a = (i * hop).saturating_sub(hop);
+        let b = (i * hop + hop * 2).min(data.len());
+        let pk = data[a..b].iter().fold(0.0f32, |m, x| m.max(x.abs()));
+        let first = data[a..b]
+            .iter()
+            .position(|x| x.abs() > pk * 0.25)
+            .map(|k| a + k)
+            .unwrap_or(i * hop);
+        // back to the zero crossing before it
+        let mut p = first;
+        while p > a && data[p - 1] != 0.0 && (data[p - 1] < 0.0) == (data[p] < 0.0) {
+            p -= 1;
+        }
+        if p >= out.last().copied().unwrap_or(0) + gap {
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// (start, end) of each slice of a `len`-frame sample
+pub fn slice_bounds(slices: &[usize], len: usize) -> Vec<(usize, usize)> {
+    let mut v: Vec<usize> = slices.iter().copied().filter(|&p| p < len).collect();
+    if v.first() != Some(&0) {
+        v.insert(0, 0);
+    }
+    v.sort_unstable();
+    v.dedup();
+    v.iter()
+        .enumerate()
+        .map(|(k, &a)| (a, v.get(k + 1).copied().unwrap_or(len)))
+        .filter(|(a, b)| b > a)
+        .collect()
+}
+
+/// copy frames `a..b` with short declick fades (1 ms in, 3 ms out)
+pub fn extract(data: &[f32], a: usize, b: usize, rate: u32) -> Vec<f32> {
+    let b = b.min(data.len());
+    let mut v = data[a.min(b)..b].to_vec();
+    let fi = (rate as usize / 1000).min(v.len() / 4);
+    let fo = (rate as usize * 3 / 1000).min(v.len() / 4);
+    for (k, x) in v.iter_mut().take(fi).enumerate() {
+        *x *= k as f32 / fi as f32;
+    }
+    let n = v.len();
+    for k in 0..fo {
+        v[n - 1 - k] *= k as f32 / fo as f32;
+    }
+    v
+}
+
 /// Min/max peaks for `cols` columns covering frames `from..to`.
 pub fn peaks(data: &[f32], from: f64, to: f64, cols: usize) -> Vec<(f32, f32)> {
     let mut out = Vec::with_capacity(cols);
@@ -323,5 +444,61 @@ mod tests {
         let p = peaks(&d, 0.0, 1000.0, 10);
         assert_eq!(p.len(), 10);
         assert!(p.iter().all(|(lo, hi)| *lo < -0.9 && *hi > 0.9));
+    }
+
+    // ---- slicing
+    /// four decaying noise-ish hits at known frames on a quiet bed
+    fn hits(at: &[usize], len: usize) -> Vec<f32> {
+        let mut v: Vec<f32> = (0..len).map(|i| ((i * 7919) % 13) as f32 * 1e-5).collect();
+        let mut n = 0x1234_5678u32;
+        for &a in at {
+            for k in 0..4000.min(len - a) {
+                n ^= n << 13;
+                n ^= n >> 17;
+                n ^= n << 5;
+                let r = n as f32 / u32::MAX as f32 * 2.0 - 1.0;
+                v[a + k] += r * 0.8 * (-(k as f32) / 700.0).exp();
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn transient_slicing_finds_the_hits() {
+        let at = [0, 12000, 24000, 30000, 42000];
+        let d = hits(&at, 48000);
+        let s = transient_slices(&d, 48000, 0.5, 30.0);
+        assert_eq!(s.len(), at.len(), "{s:?}");
+        for (got, want) in s.iter().zip(at) {
+            assert!(got.abs_diff(want) < 200, "{got} vs {want}");
+        }
+        // low sensitivity + a long gap merge close hits
+        let s2 = transient_slices(&d, 48000, 0.5, 200.0);
+        assert_eq!(s2.len(), 4, "30000 is within 200 ms of 24000: {s2:?}");
+        // silence: only the start
+        assert_eq!(transient_slices(&vec![0.0; 48000], 48000, 1.0, 30.0), [0]);
+    }
+
+    #[test]
+    fn grid_bounds_and_extract() {
+        let d: Vec<f32> = (0..8000).map(|i| (i as f32 * 0.05).sin()).collect();
+        let g = grid_slices(&d, 4);
+        assert_eq!(g.len(), 4);
+        assert_eq!(g[0], 0);
+        for (k, p) in g.iter().enumerate().skip(1) {
+            assert!(p.abs_diff(k * 2000) <= 64, "snapped near the grid");
+        }
+        let b = slice_bounds(&g, d.len());
+        assert_eq!(b.len(), 4);
+        assert_eq!(b[3].1, 8000);
+        assert!(b.windows(2).all(|w| w[0].1 == w[1].0), "contiguous");
+        let x = extract(&d, b[1].0, b[1].1, 48000);
+        assert_eq!(x.len(), b[1].1 - b[1].0);
+        assert_eq!(x[0], 0.0);
+        assert!(x[x.len() - 1].abs() < 1e-6, "faded out");
+        assert_eq!(
+            slice_bounds(&[5000, 100, 100], 8000),
+            [(0, 100), (100, 5000), (5000, 8000)]
+        );
     }
 }
