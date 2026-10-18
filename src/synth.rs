@@ -100,6 +100,49 @@ pub struct Patch {
     /// grid, e.g. laid-back hats; sample-accurate
     #[serde(default)]
     pub start_delay: f32,
+    /// 303-style glide time in seconds (pattern command 3C, or `legato`)
+    #[serde(default = "default_glide")]
+    pub glide: f32,
+    /// legato: a new note while the previous one still sounds glides to
+    /// it without retriggering the envelopes (303 slide)
+    #[serde(default)]
+    pub legato: bool,
+    /// accent strength 0..1 (louder, brighter, shorter decay)
+    #[serde(default = "default_accent")]
+    pub accent: f32,
+    /// notes at or above this velocity (volume column, 0..1) are accented;
+    /// 0 = only by pattern command 3D
+    #[serde(default)]
+    pub accent_vel: f32,
+}
+
+pub fn default_glide() -> f32 {
+    0.06
+}
+
+pub fn default_accent() -> f32 {
+    0.6
+}
+
+/// Per-note filter overrides from the pattern (commands 38-3B).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FiltMod {
+    /// absolute cutoff in Hz replacing the patch cutoff (0 = patch)
+    pub cut_abs: f32,
+    /// cutoff offset in octaves (slides)
+    pub cut_oct: f32,
+    /// resonance 0..1 replacing the patch resonance (< 0 = patch)
+    pub res: f32,
+}
+
+impl Default for FiltMod {
+    fn default() -> Self {
+        Self {
+            cut_abs: 0.0,
+            cut_oct: 0.0,
+            res: -1.0,
+        }
+    }
 }
 
 impl Patch {
@@ -132,6 +175,10 @@ impl Patch {
             metal,
             vel_cutoff,
             start_delay,
+            glide,
+            legato,
+            accent,
+            accent_vel,
         } = o;
         *self = Patch {
             name: std::mem::take(&mut self.name),
@@ -159,6 +206,10 @@ impl Patch {
             metal: *metal,
             vel_cutoff: *vel_cutoff,
             start_delay: *start_delay,
+            glide: *glide,
+            legato: *legato,
+            accent: *accent,
+            accent_vel: *accent_vel,
         };
     }
 }
@@ -201,6 +252,10 @@ impl Default for Patch {
             metal: 0.0,
             vel_cutoff: 0.0,
             start_delay: 0.0,
+            glide: default_glide(),
+            legato: false,
+            accent: default_accent(),
+            accent_vel: 0.0,
         }
     }
 }
@@ -366,6 +421,10 @@ pub struct SynthVoice {
     pub waited: f32,
     /// vowel generator state (Voice instruments only)
     pub vox: crate::voice::VoxState,
+    /// accent of this note 0..1 (pattern 3D or velocity threshold)
+    pub accent: f32,
+    /// pattern filter overrides (38-3B), set by the engine every frame
+    pub fmod: FiltMod,
 }
 
 /// 808 hi-hat oscillator ratios (205.3, 304.4, 369.6, 522.7, 540, 800 Hz)
@@ -397,6 +456,8 @@ impl SynthVoice {
             decay: 0.0,
             waited: 0.0,
             vox: crate::voice::VoxState::new(),
+            accent: 0.0,
+            fmod: FiltMod::default(),
         }
     }
 
@@ -543,17 +604,37 @@ impl SynthVoice {
             }
             (sl, s, sr_, s_r, stereo)
         };
-        let fe = self.fenv.next(&p.fenv, dt_s);
+        // accent (303): shorter filter + amp decay, more open filter, louder
+        let acc = self.accent.clamp(0.0, 1.0);
+        let fe = if acc > 0.0 {
+            let fenv = Adsr {
+                d: p.fenv.d * (1.0 - 0.5 * acc),
+                ..p.fenv
+            };
+            self.fenv.next(&fenv, dt_s)
+        } else {
+            self.fenv.next(&p.fenv, dt_s)
+        };
         let kt = (f / 261.63).powf(p.key_track);
-        let cutoff = p.cutoff
+        let fm = self.fmod;
+        let base = if fm.cut_abs > 0.0 {
+            fm.cut_abs
+        } else {
+            p.cutoff
+        };
+        let res = if fm.res >= 0.0 { fm.res } else { p.resonance };
+        let cutoff = base
             * kt
             * 2f32.powf(
-                p.env_amount * fe * 6.0 + lv * p.lfo.cutoff + p.vel_cutoff * (self.vel - 1.0),
+                p.env_amount * fe * 6.0
+                    + lv * p.lfo.cutoff
+                    + p.vel_cutoff * (self.vel - 1.0)
+                    + fm.cut_oct
+                    + acc * (0.6 + 1.6 * fe),
             );
-        let mut yl = self.filt.process(sl + s, cutoff, p.resonance, sr, p.filter);
+        let mut yl = self.filt.process(sl + s, cutoff, res, sr, p.filter);
         let mut yr = if stereo {
-            self.filt_r
-                .process(sr_ + s_r, cutoff, p.resonance, sr, p.filter)
+            self.filt_r.process(sr_ + s_r, cutoff, res, sr, p.filter)
         } else {
             yl
         };
@@ -569,10 +650,15 @@ impl SynthVoice {
                 d: self.decay,
                 ..p.amp
             }
+        } else if acc > 0.0 {
+            Adsr {
+                d: p.amp.d * (1.0 - 0.4 * acc),
+                ..p.amp
+            }
         } else {
             p.amp
         };
-        let g = self.amp.next(&amp, dt_s) * p.gain * gate;
+        let g = self.amp.next(&amp, dt_s) * p.gain * gate * (1.0 + 0.7 * acc);
         (yl * g, yr * g)
     }
 }

@@ -337,6 +337,62 @@ impl App {
                         changed = true;
                     }
                     ui.end_row();
+                    ui.label("   Glide (303)");
+                    ui.horizontal(|ui| {
+                        let mut ms = p.glide * 1000.0;
+                        if ui
+                            .add(
+                                egui::Slider::new(&mut ms, 1.0..=1000.0)
+                                    .logarithmic(true)
+                                    .suffix(" ms"),
+                            )
+                            .on_hover_text(
+                                "glide time: how long a slide to the next note takes \
+                                 (effect 3C01, or every held note with Legato on)",
+                            )
+                            .changed()
+                        {
+                            p.glide = ms / 1000.0;
+                            changed = true;
+                        }
+                        changed |= ui
+                            .checkbox(&mut p.legato, "Legato")
+                            .on_hover_text(
+                                "a new note while the last one still sounds glides to it \
+                                 without restarting the envelopes (put a note-off or 3C00 \
+                                 between notes to retrigger)",
+                            )
+                            .changed();
+                    });
+                    ui.end_row();
+                    ui.label("   Accent");
+                    ui.horizontal(|ui| {
+                        changed |= ui
+                            .add(egui::Slider::new(&mut p.accent, 0.0..=1.0))
+                            .on_hover_text(
+                                "accented notes (effect 3D or high velocity) are louder, \
+                                 with a more open filter and a shorter decay",
+                            )
+                            .changed();
+                        let mut v = (p.accent_vel * 64.0).round() as u32;
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut v)
+                                    .range(0..=64)
+                                    .hexadecimal(2, false, true)
+                                    .prefix("at vol ≥ "),
+                            )
+                            .on_hover_text(
+                                "notes with a volume-column value at or above this are \
+                                 accented (00 = off: only effect 3D accents)",
+                            )
+                            .changed()
+                        {
+                            p.accent_vel = v as f32 / 64.0;
+                            changed = true;
+                        }
+                    });
+                    ui.end_row();
                     ui.label("   LFO");
                     ui.horizontal(|ui| {
                         egui::ComboBox::from_id_salt("lfo_shape")

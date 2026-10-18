@@ -34,9 +34,11 @@ pub struct Opts {
     pub format: Format,
     pub mp3: Mp3Mode,
     pub sample_rate: u32,
-    /// peak-normalise to -0.3 dBFS
+    /// normalise: true peak to the master limiter ceiling, or (limiter
+    /// bypassed) sample peak to -0.3 dBFS
     pub normalise: bool,
-    /// soft limiter with a -0.3 dBFS ceiling
+    /// extra soft limiter (-0.3 dBFS), only used when the song's master
+    /// limiter is bypassed; the master limiter itself is part of the render
     pub limiter: bool,
     /// seconds rendered after the end (release / delay / reverb tails)
     pub tail_secs: f32,
@@ -130,13 +132,30 @@ pub fn render(song: &Song, o: &Opts, pr: &Progress) -> Result<Vec<f32>, String> 
     for (k, x) in out[len - f..].iter_mut().enumerate() {
         *x *= 1.0 - k as f32 / f as f32;
     }
-    post(&mut out, o);
+    let ml = s.mixer.limiter;
+    post(
+        &mut out,
+        o,
+        ml.enabled.then(|| crate::master::db_to_lin(ml.ceiling_db)),
+    );
     pr.set(0.8);
     Ok(out)
 }
 
-/// normalise / limit in place
-pub fn post(d: &mut [f32], o: &Opts) {
+/// normalise / limit in place. `master_ceiling` = the song's master limiter
+/// ceiling (linear, true peak) when it is on: the render already went
+/// through it, so only normalisation (by true peak) is left to do.
+pub fn post(d: &mut [f32], o: &Opts, master_ceiling: Option<f32>) {
+    if let Some(ceil) = master_ceiling {
+        if o.normalise {
+            let tp = crate::master::true_peak(d);
+            if tp > 1e-6 {
+                let g = ceil / tp;
+                d.iter_mut().for_each(|x| *x *= g);
+            }
+        }
+        return;
+    }
     if o.limiter {
         // soft knee above -6 dB, never past the ceiling
         for x in d.iter_mut() {
@@ -248,6 +267,8 @@ pub fn write_tags(path: &Path, song: &Song) -> Result<(), String> {
 pub fn export(song: &Song, o: &Opts, path: &Path, pr: &Progress) -> Result<String, String> {
     let d = render(song, o, pr)?;
     let secs = d.len() as f32 / 2.0 / o.sample_rate as f32;
+    let lufs = crate::master::integrated_lufs(&d, o.sample_rate as f32);
+    let tp = crate::master::lin_to_db(crate::master::true_peak(&d));
     let tmp = path.with_extension("part");
     match o.format {
         Format::Wav => crate::engine::write_wav(&tmp, &d, o.sample_rate)?,
@@ -263,7 +284,16 @@ pub fn export(song: &Song, o: &Opts, path: &Path, pr: &Progress) -> Result<Strin
     }
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
     pr.set(1.0);
-    Ok(format!("Exported {:.1} s to {}", secs, path.display()))
+    let lufs = if lufs.is_finite() {
+        format!("{lufs:.1} LUFS")
+    } else {
+        "silent".into()
+    };
+    Ok(format!(
+        "Exported {:.1} s to {} ({lufs}, true peak {tp:.1} dBTP)",
+        secs,
+        path.display()
+    ))
 }
 
 /// Export on a background thread. Poll `Progress`; the result arrives on the receiver.
@@ -422,6 +452,7 @@ mod tests {
                 limiter: false,
                 ..Default::default()
             },
+            None,
         );
         assert!((d[1].abs() - CEIL).abs() < 1e-4);
         let mut d = vec![3.0, -5.0, 0.3];
@@ -432,8 +463,71 @@ mod tests {
                 limiter: true,
                 ..Default::default()
             },
+            None,
         );
         assert!(d.iter().all(|x| x.abs() <= CEIL + 1e-6));
         assert_eq!(d[2], 0.3);
+        // master limiter on: the soft limiter is skipped, normalise is by
+        // true peak to the ceiling
+        let ceil = crate::master::db_to_lin(-1.0);
+        let mut d: Vec<f32> = (0..2000)
+            .flat_map(|i| {
+                let v = (i as f32 * 0.3).sin() * 0.2;
+                [v, v]
+            })
+            .collect();
+        post(&mut d, &Opts::default(), Some(ceil));
+        assert!(d.iter().all(|x| x.abs() <= 0.2 + 1e-6), "untouched");
+        post(
+            &mut d,
+            &Opts {
+                normalise: true,
+                ..Default::default()
+            },
+            Some(ceil),
+        );
+        let tp = crate::master::true_peak(&d);
+        assert!((tp - ceil).abs() < 1e-3, "{tp}");
+    }
+
+    /// export goes through the same engine and master limiter as playback:
+    /// rendering with realtime-sized callbacks gives the same samples
+    #[test]
+    fn export_matches_realtime_rendering() {
+        let mut song = crate::fileio::demo_song();
+        song.mixer.limiter.gain_db = 9.0; // drive it into the limiter
+        let o = Opts {
+            tail_secs: 0.0,
+            scope: Scope::Block(song.order[0]),
+            ..Default::default()
+        };
+        let off = render(&song, &o, &Progress::default()).unwrap();
+        let s = scoped(&song, o.scope);
+        let mut e = crate::engine::Engine::new(o.sample_rate as f32);
+        e.start(&s, 0, 0, false, 0);
+        let mut rt = Vec::new();
+        // odd callback sizes like a sound card (frames 113, 256, 512, ...)
+        let sizes = [113usize, 256, 512, 441, 1024];
+        let mut k = 0;
+        while rt.len() < off.len() {
+            let mut buf = vec![0.0f32; sizes[k % sizes.len()] * 2];
+            e.render(&s, &mut buf);
+            rt.extend_from_slice(&buf);
+            k += 1;
+        }
+        // the export fades out its last 50 ms; compare everything before it
+        let n = off.len() - (o.sample_rate as usize / 20) * 2 - 2;
+        let diff = off[..n]
+            .iter()
+            .zip(&rt[..n])
+            .fold(0.0f32, |m, (a, b)| m.max((a - b).abs()));
+        assert!(diff < 1e-6, "max diff {diff}");
+        let tp = crate::master::lin_to_db(crate::master::true_peak(&off));
+        assert!(tp <= -1.0 + 1e-3, "export true peak {tp}");
+        assert!(
+            e.loud.true_peak <= -1.0 + 1e-3,
+            "meter {}",
+            e.loud.true_peak
+        );
     }
 }

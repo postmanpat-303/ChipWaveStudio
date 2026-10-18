@@ -226,6 +226,18 @@ pub(super) const CREDITS: &[(&str, &str)] = &[
         "https://doi.org/10.1121/1.383940",
     ),
     (
+        "Loudness meter + true peak: ITU-R BS.1770-4 and EBU R 128",
+        "https://www.itu.int/rec/R-REC-BS.1770",
+    ),
+    (
+        "K-weighting formulas as in libebur128 (Jan Kokemüller, MIT) and pyloudnorm (C. Steinmetz, MIT)",
+        "https://github.com/jiixyj/libebur128",
+    ),
+    (
+        "Lookahead limiter design: Geraint Luff, Signalsmith Audio",
+        "https://signalsmith-audio.co.uk/writing/2022/limiter/",
+    ),
+    (
         "OctaMED by Teijo Kinnunen and Ray Burt-Frost: the workflow ChipWave follows",
         "https://en.wikipedia.org/wiki/OctaMED",
     ),

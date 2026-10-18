@@ -604,6 +604,14 @@ impl App {
                  32xx formant shift (80 = x1) · 33xy stutter: length x (1 1/64 .. 3 1/16 .. 6 1/2 note), y repeats (any instrument) · \
                  34xy stutter pitch +x/-y st · 35xx breath (00-40) · 36xy babble rate x, amount y · 37xy chop rate x, open y/16 (0 = off)",
             );
+            ui.label(
+                "Filter / acid (synth + voice): 38xx cutoff (00 = instrument, 01 20 Hz .. 80 ~630 Hz .. FF 20 kHz) · \
+                 39xx resonance (00 = instrument, 01-FF 0-100 %) · 3Axx / 3Bxx cutoff slide up / down xx/96 octave per tick · \
+                 3Cxx glide to this note (00 off, 01 instrument time, 02-FF xx*5 ms) · 3Dxx accent (00 instrument amount, 01-40)",
+            );
+            ui.label(
+                "Master: Mixer > Limiter & loudness (true-peak limiter, LUFS meter); exports use the same limiter.",
+            );
         });
         self.show_help = open;
     }

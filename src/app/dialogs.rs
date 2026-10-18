@@ -314,6 +314,7 @@ impl App {
             )
         });
         let _ = npat;
+        let ml = self.with(|s| s.song.mixer.limiter);
         let (sa, sb) = self.selection_range();
         let mut open = true;
         let mut close_btn = false;
@@ -436,9 +437,35 @@ impl App {
                             ui.end_row();
                             ui.label("Level");
                             ui.horizontal(|ui| {
-                                ui.checkbox(&mut d.opts.normalise, "Normalise to −0.3 dBFS");
-                                ui.checkbox(&mut d.opts.limiter, "Limiter")
-                                    .on_hover_text("soft limiter, ceiling −0.3 dBFS");
+                                if ml.enabled {
+                                    ui.checkbox(
+                                        &mut d.opts.normalise,
+                                        format!("Normalise to {:.1} dBTP", ml.ceiling_db),
+                                    )
+                                    .on_hover_text(
+                                        "scales the whole export so its true peak sits exactly \
+                                         at the master limiter ceiling",
+                                    );
+                                    ui.label(
+                                        egui::RichText::new(format!(
+                                            "Master limiter on ({:.1} dBTP, +{:.1} dB gain)",
+                                            ml.ceiling_db, ml.gain_db
+                                        ))
+                                        .small()
+                                        .color(th().ink2),
+                                    )
+                                    .on_hover_text(
+                                        "the export goes through the same true-peak limiter \
+                                         as playback (Mixer > Limiter & loudness)",
+                                    );
+                                } else {
+                                    ui.checkbox(&mut d.opts.normalise, "Normalise to −0.3 dBFS");
+                                    ui.checkbox(&mut d.opts.limiter, "Soft limiter")
+                                        .on_hover_text(
+                                            "soft limiter, ceiling −0.3 dBFS (the master \
+                                             limiter is bypassed in the mixer)",
+                                        );
+                                }
                             });
                             ui.end_row();
                             ui.label("Tail");

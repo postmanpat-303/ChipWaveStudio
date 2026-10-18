@@ -69,6 +69,23 @@ measurements, credited with thanks):
   JASA 67(3) (parallel formant structure)
 Research notes: docs/research/voice-glitch.md
 
+Master limiter and loudness meter (src/master.rs), independent
+implementations of published methods, credited with thanks:
+- ITU-R BS.1770-4 (2015), "Algorithms to measure audio programme loudness and
+  true-peak audio level": K-weighting, gating, 4x oversampled true peak.
+  https://www.itu.int/rec/R-REC-BS.1770
+- EBU R 128 and EBU Tech 3341 (momentary / short-term / integrated loudness).
+  https://tech.ebu.ch/publications/r128
+- K-weighting biquad formulas for any sample rate, as published in
+  libebur128 by Jan Kokemueller (MIT) https://github.com/jiixyj/libebur128
+  and pyloudnorm by Christian Steinmetz (MIT)
+  https://github.com/csteinmetz1/pyloudnorm (no code copied)
+- Lookahead limiter with peak hold + moving-average gain smoothing, after
+  Geraint Luff, "Designing a straightforward limiter" (Signalsmith Audio).
+  https://signalsmith-audio.co.uk/writing/2022/limiter/
+- Glide and accent (effects 3C / 3D) follow the behaviour of the Roland
+  TB-303 Bass Line (1981); no Roland material is used.
+
 """
 
 out = sys.stdout

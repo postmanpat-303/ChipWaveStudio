@@ -129,3 +129,16 @@ Created by Derek Heasley.
 To keep the software going I need Coffee :)
 Buy me a coffee: https://buymeacoffee.com/postmanpat
 PayPal:          https://paypal.me/derekh100   (both also in Help > About)
+
+Master limiter and loudness (0.2.3.7): Mixer > "Limiter & loudness" (right of
+the master strip). True-peak limiter on the master and in every export:
+gain, ceiling (default -1.0 dBTP), release; untick it for the old soft clip.
+Readout: momentary / short-term / integrated LUFS and true peak (ITU-R BS.1770).
+
+Filter and acid effects (0.2.3.7): 38xx cutoff (00 = instrument, 01-FF =
+20 Hz-20 kHz), 39xx resonance, 3Axx / 3Bxx cutoff slide up / down per tick,
+3Cxx glide to the note (00 off, 01 instrument time, 02-FF xx*5 ms), 3Dxx
+accent. Sound editor: Glide time + Legato, Accent amount + "at vol >=".
+Reverb has Low cut (default 200 Hz) and High cut; the fold drive no longer
+flips polarity.
+

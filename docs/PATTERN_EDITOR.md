@@ -126,8 +126,21 @@ Effect columns accept classic OctaMED/ProTracker commands (page 1, binary-compat
 | 35 | Voice: breath (ChipWave) | 00–40 |
 | 36 | Voice: babble (ChipWave) | x step length, y amount |
 | 37 | Voice: chop gate (ChipWave) | x cycle length, y open y/16 |
+| 38 | Filter cutoff for this channel's notes (ChipWave) | 00 = instrument; 01–FF = 20 Hz … 20 kHz, log (40 ≈ 160 Hz, 80 ≈ 630 Hz, C0 ≈ 2.5 kHz) |
+| 39 | Filter resonance (ChipWave) | 00 = instrument; 01–FF = 0–100 % |
+| 3A / 3B | Cutoff slide up / down per tick (ChipWave) | xx/96 octave per tick (10 = 1/6 oct; at speed 6 that is 5/6 oct per row) |
+| 3C | 303 glide to this note (ChipWave) | 00 = no glide (retrigger), 01 = the instrument's glide time, 02–FF = xx × 5 ms |
+| 3D | Accent this note (ChipWave) | 00 = the instrument's accent amount, 01–40 = amount |
 
 Effects 30–37 are documented in [VOICE.md](VOICE.md).
+
+**Filter and acid commands 38–3D (0.2.3.7).** They work on synth and Voice instruments (sample instruments have no filter; `3C` glides samples too). OctaMED uses 00–1F plus 20, 29 and 2E (SoundStudio), and ChipWave's Voice uses 30–37, so 38–3D are free.
+- `38`/`39` set the cutoff / resonance for the channel's notes until another `38`/`39`, `3800`/`3900`, or a note with a **different instrument number** (filter settings belong to the instrument they were set for). The filter envelope, key tracking, velocity and LFO still move the filter around the new cutoff.
+- `3A`/`3B` slide the cutoff on every tick of the row (not on tick 0, like `01`/`02`); the reached value stays until the next `38` or reset. Example acid sweep: `3820` on the first note, then `3A08` on following rows.
+- **Glide (303 slide):** the instrument's **Glide** time (sound editor, default 60 ms) and **Legato** switch. With Legato on, a new note while the previous one is still held (no note-off in between) glides to the new pitch without restarting the envelopes, like a TB-303 slide; `3C00` on a note forces a normal retrigger. With Legato off, `3C01` (instrument time) or `3Cxx` (xx × 5 ms) glides just that note. After a note-off (`===`) there is nothing to glide from, so the note starts normally. `01`/`02` slides still work as before and cancel a running glide.
+- **Accent:** the instrument's **Accent** amount (default 60 %) and an **at vol ≥** threshold (00 = off). An accented note is louder (up to about +4.6 dB), its filter opens further (more on the envelope peak) and both decays get shorter. `3D00` accents with the instrument amount, `3D01`–`3D40` with a set amount; or set the threshold, e.g. `30`, and type a volume of 30–40 on the notes to accent.
+- Text songs (`.cwt.toml`): `glide_ms`, `legato = true`, `accent`, `accent_vel` on an instrument.
+- Tests: `effect_38_39_set_cutoff_and_resonance_per_row`, `effect_3a_3b_slide_the_cutoff_per_tick_and_a_new_instrument_resets`, `legato_glides_between_held_notes_without_retrigger`, `glide_needs_a_held_note_and_slides_01_02_still_work`, `accent_is_louder_brighter_and_shorter`, `acid_commands_and_limiter_are_allocation_free`.
 
 ## 6. Context-aware effect autocomplete
 Typing hex codes is fast for experts but hard to learn. ChipWave adds a dropdown that **knows what's on this channel**.

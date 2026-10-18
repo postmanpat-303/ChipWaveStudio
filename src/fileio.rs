@@ -543,6 +543,14 @@ fn patch_overrides(p: &mut crate::synth::Patch, t: &toml::Value) {
     if let Some(ms) = r("start_delay_ms") {
         p.start_delay = (ms / 1000.0).clamp(0.0, 0.05);
     }
+    if let Some(ms) = r("glide_ms") {
+        p.glide = (ms / 1000.0).clamp(0.001, 2.0);
+    }
+    if let Some(b) = t.get("legato").and_then(|x| x.as_bool()) {
+        p.legato = b;
+    }
+    set("accent", &mut p.accent);
+    set("accent_vel", &mut p.accent_vel);
     set("pulse_width", &mut p.pulse_width);
     if let Some(v) = r("unison") {
         p.unison = (v as u32).clamp(1, 8);
@@ -740,6 +748,12 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
         }
         if let Some(k) = m.get("duck_key").and_then(|x| x.as_integer()) {
             song.mixer.duck_key = (k.max(1) as usize - 1).min(channels - 1);
+        }
+        if let Some(l) = m.get("limiter") {
+            if let Ok(mut ls) = l.clone().try_into::<crate::master::LimiterSettings>() {
+                ls.fix();
+                song.mixer.limiter = ls;
+            }
         }
         if let Some(ms) = real(m, "duck_release_ms") {
             song.mixer.duck_release = (ms / 1000.0).clamp(0.02, 1.0);
@@ -1183,6 +1197,64 @@ mod tests {
             .instruments
             .iter()
             .all(|i| !matches!(i.kind, InstrumentKind::Voice(_))));
+    }
+
+    /// a song saved by 0.2.3.6 (Hollow Ritual + a Voice) loads in 0.2.3.7:
+    /// new limiter defaults, reverb cuts appended, patches get glide/accent
+    /// defaults, and it renders under the ceiling
+    #[test]
+    fn song_saved_by_0_2_3_6_still_loads() {
+        let f = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/chipwave-0.2.3.6-song.cwt");
+        let mut s = load_cwt(&f).expect("old song");
+        assert_eq!(s.title, "Saved by 0.2.3.6");
+        let demo = demo_song_n(1);
+        assert_eq!(
+            s.instruments[..demo.instruments.len()],
+            demo.instruments[..]
+        );
+        assert!(matches!(
+            s.instruments.last().unwrap().kind,
+            InstrumentKind::Voice(_)
+        ));
+        assert_eq!(s.mixer.limiter, crate::master::LimiterSettings::default());
+        let rv = &s.mixer.returns[1].device;
+        assert_eq!(rv.params.len(), 7);
+        assert!((rv.real(5) - 200.0).abs() < 0.5);
+        let p = s.instruments[0].kind.patch().unwrap();
+        assert!(!p.legato && p.accent_vel == 0.0 && (p.glide - 0.06).abs() < 1e-6);
+        s.order.truncate(1);
+        let out = crate::engine::render_song(&s, 44100);
+        assert!(out.iter().all(|x| x.is_finite()));
+        let tp = crate::master::lin_to_db(crate::master::true_peak(&out));
+        assert!(tp <= -1.0 + 1e-3, "{tp}");
+    }
+
+    #[test]
+    fn text_song_limiter_and_acid_keys() {
+        let t = r#"
+[song]
+title = "acid"
+bpm = 138
+[[instrument]]
+name = "303"
+patch = "builtin:init"
+glide_ms = 80
+legato = true
+accent = 0.9
+accent_vel = 0.75
+[mixer]
+[mixer.limiter]
+gain_db = 6.0
+ceiling_db = -0.5
+"#;
+        let s = song_from_text(t).unwrap();
+        let p = s.instruments[0].kind.patch().unwrap();
+        assert!((p.glide - 0.08).abs() < 1e-6 && p.legato && p.accent == 0.9);
+        assert_eq!(p.accent_vel, 0.75);
+        assert_eq!(s.mixer.limiter.gain_db, 6.0);
+        assert_eq!(s.mixer.limiter.ceiling_db, -0.5);
+        assert!(s.mixer.limiter.enabled);
     }
 
     #[test]

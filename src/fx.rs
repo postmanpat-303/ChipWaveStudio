@@ -111,12 +111,16 @@ const DELAY: [ParamInfo; 7] = [
     p("lp", "Loop LP", 500.0, 18000.0, 6000.0, true, "Hz"),
     p("mix", "Mix", 0.0, 1.0, 0.3, false, "%"),
 ];
-const REVERB: [ParamInfo; 5] = [
+const REVERB: [ParamInfo; 7] = [
     p("size", "Size", 0.0, 1.0, 0.6, false, "%"),
     p("damping", "Damping", 0.0, 1.0, 0.5, false, "%"),
     p("predelay", "Pre-delay", 0.0, 200.0, 10.0, false, "ms"),
     p("width", "Width", 0.0, 1.0, 1.0, false, "%"),
     p("mix", "Mix", 0.0, 1.0, 0.25, false, "%"),
+    // on the reverb signal only (12 dB/oct): keeps the low end out of the
+    // tail (no mud under the kick and bass) and tames fizz
+    p("lowcut", "Low cut", 20.0, 1000.0, 200.0, true, "Hz"),
+    p("highcut", "High cut", 1000.0, 20000.0, 16000.0, true, "Hz"),
 ];
 const DRIVE: [ParamInfo; 5] = [
     c("mode", "Mode", &["soft", "hard", "fold"], 0.0),
@@ -620,6 +624,8 @@ enum Dsp {
         pw: usize,
         combs: Vec<[Comb; 2]>,
         aps: Vec<[Allpass; 2]>,
+        /// wet low cut / high cut (L, R)
+        cut: [[Svf; 2]; 2],
     },
     Drive {
         tone: [OnePole; 2],
@@ -687,6 +693,7 @@ impl FxState {
                         .iter()
                         .map(|&t| [Allpass::new(sz(t, 0)), Allpass::new(sz(t, 23))])
                         .collect(),
+                    cut: Default::default(),
                 }
             }
             FxKind::Drive => Dsp::Drive {
@@ -748,7 +755,9 @@ impl FxState {
                 pw,
                 combs,
                 aps,
+                cut,
             } => {
+                *cut = Default::default();
                 pre.fill(0.0);
                 *pw = 0;
                 for c in combs.iter_mut().flatten() {
@@ -876,6 +885,7 @@ impl FxState {
                 pw,
                 combs,
                 aps,
+                cut,
             } => {
                 let pd = (p[2] / 1000.0 * sr).clamp(0.0, (pre.len() - 2) as f32);
                 pre[*pw] = (l + r) * 0.5;
@@ -895,6 +905,14 @@ impl FxState {
                 let wid = p[3];
                 let (w1, w2) = ((wid / 2.0 + 0.5) * 3.0, ((1.0 - wid) / 2.0) * 3.0);
                 let (yl, yr) = (ol * w1 + or * w2, or * w1 + ol * w2);
+                // wet-only low cut / high cut (Butterworth, k = sqrt 2)
+                let gl = (std::f32::consts::PI * p[5].clamp(10.0, sr * 0.45) / sr).tan();
+                let gh = (std::f32::consts::PI * p[6].clamp(10.0, sr * 0.45) / sr).tan();
+                let k = std::f32::consts::SQRT_2;
+                let hl = cut[0][0].run(yl, gl, k).2;
+                let hr = cut[0][1].run(yr, gl, k).2;
+                let yl = cut[1][0].run(hl, gh, k).0;
+                let yr = cut[1][1].run(hr, gh, k).0;
                 let m = p[4];
                 (l * (1.0 - m) + yl * m, r * (1.0 - m) + yr * m)
             }
@@ -904,8 +922,11 @@ impl FxState {
                     0 => (x * g).tanh(),
                     1 => (x * g).clamp(-1.0, 1.0),
                     _ => {
+                        // triangle fold, in phase with the input (up to
+                        // 0.2.3.6 this was inverted, so a dry/wet blend
+                        // cancelled instead of thickening)
                         let y = x * g * 0.5;
-                        ((y + 1.0).rem_euclid(4.0) - 2.0).abs() - 1.0
+                        1.0 - ((y + 1.0).rem_euclid(4.0) - 2.0).abs()
                     }
                 };
                 let a = pole_coef(p[2], sr);
@@ -1235,5 +1256,98 @@ mod tests {
         let d = from_preset(&t).unwrap();
         assert_eq!(d.real(0), 2.0);
         assert!((d.real(2) - 0.4).abs() < 1e-3);
+    }
+
+    #[test]
+    fn reverb_low_cut_keeps_the_bass_out_of_the_tail() {
+        let sine = |hz: f32| -> Vec<f32> {
+            (0..48000)
+                .map(|i| (i as f32 * hz / 48000.0 * std::f32::consts::TAU).sin() * 0.5)
+                .collect()
+        };
+        let tail_rms = |d: &Device, x: &[f32]| {
+            let o = run(d, x);
+            let s: f32 = o[24000..].iter().map(|(l, r)| l * l + r * r).sum();
+            (s / 24000.0).sqrt()
+        };
+        let mut wet = Device::new(FxKind::Reverb);
+        wet.set_real("mix", 1.0);
+        assert!((wet.real(5) - 200.0).abs() < 0.5, "default low cut 200 Hz");
+        let mut open = wet.clone();
+        open.set_real("lowcut", 20.0);
+        open.set_real("highcut", 20000.0);
+        let bass = sine(60.0);
+        let db = 20.0 * (tail_rms(&wet, &bass) / tail_rms(&open, &bass)).log10();
+        assert!(
+            db < -12.0,
+            "60 Hz in the tail {db:.1} dB with the 200 Hz low cut"
+        );
+        let mid = sine(1000.0);
+        let db = 20.0 * (tail_rms(&wet, &mid) / tail_rms(&open, &mid)).log10();
+        assert!(db.abs() < 1.5, "1 kHz untouched ({db:.1} dB)");
+        let mut dark = wet.clone();
+        dark.set_real("highcut", 1500.0);
+        let air = sine(8000.0);
+        let db = 20.0 * (tail_rms(&dark, &air) / tail_rms(&wet, &air)).log10();
+        assert!(db < -12.0, "high cut {db:.1} dB");
+    }
+
+    #[test]
+    fn old_reverbs_load_with_the_new_cut_params() {
+        // a 0.2.3.6 reverb has 5 params; fix() appends the defaults
+        let mut d = Device {
+            kind: FxKind::Reverb,
+            enabled: true,
+            collapsed: false,
+            params: vec![0.5, 0.5, 0.1, 1.0, 1.0],
+        };
+        d.fix();
+        assert_eq!(d.params.len(), 7);
+        assert_eq!(d.params[..5], [0.5, 0.5, 0.1, 1.0, 1.0]);
+        assert!((d.real(5) - 200.0).abs() < 0.5 && (d.real(6) - 16000.0).abs() < 5.0);
+    }
+
+    #[test]
+    fn fold_is_in_phase_so_blends_do_not_cancel() {
+        let x: Vec<f32> = (0..4800)
+            .map(|i| (i as f32 * 220.0 / 48000.0 * std::f32::consts::TAU).sin() * 0.3)
+            .collect();
+        let fold = |drive: f32, mix: f32| {
+            let mut d = Device::new(FxKind::Drive);
+            d.set_real("mode", 2.0);
+            d.set_real("drive", drive);
+            d.set_real("tone", 18000.0);
+            d.set_real("output", 0.0);
+            d.set_real("mix", mix);
+            run(&d, &x)
+        };
+        let corr = |o: &[(f32, f32)]| {
+            o.iter()
+                .zip(&x)
+                .skip(480)
+                .map(|((l, _), v)| l * v)
+                .sum::<f32>()
+        };
+        let e = |o: &[(f32, f32)]| o.iter().skip(480).map(|(l, _)| l * l).sum::<f32>();
+        // below the fold point the fold is the identity (was: inverted)
+        assert!(corr(&fold(0.0, 1.0)) > 0.0);
+        // 50 % blend at low drive adds up instead of cancelling (the fold
+        // stage halves the level: wet = 0.5 x, blend = 0.75 x; it was 0.25 x)
+        let blend = e(&fold(0.0, 0.5));
+        let dry = x.iter().skip(480).map(|v| v * v).sum::<f32>();
+        assert!(blend > 0.5 * dry, "{blend} vs {dry}");
+        // 100 % wet: same sound as before up to polarity (old songs keep
+        // their sound): |new| == |old fold|
+        let o = fold(12.0, 1.0);
+        let g = 10f32.powf(12.0 / 20.0);
+        let mut tone = OnePole::default();
+        let a = pole_coef(18000.0, 48000.0);
+        for (i, ((l, _), v)) in o.iter().zip(&x).enumerate().skip(2000) {
+            let y = v * g * 0.5;
+            let old = ((y + 1.0).rem_euclid(4.0) - 2.0).abs() - 1.0;
+            let want = -tone.lp(old, a);
+            let _ = i;
+            assert!((l - want).abs() < 0.05, "{l} vs {want}");
+        }
     }
 }

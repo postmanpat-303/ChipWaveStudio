@@ -219,6 +219,9 @@ pub struct Mixer {
     /// ducking recovery time in seconds
     #[serde(default = "default_duck_release")]
     pub duck_release: f32,
+    /// master limiter (true-peak, lookahead); bypass = classic soft clip
+    #[serde(default)]
+    pub limiter: crate::master::LimiterSettings,
 }
 
 pub fn default_duck_release() -> f32 {
@@ -260,6 +263,7 @@ impl Default for Mixer {
             returns: default_returns(),
             duck_key: 0,
             duck_release: default_duck_release(),
+            limiter: Default::default(),
         }
     }
 }
@@ -276,6 +280,7 @@ impl Mixer {
     pub fn fix(&mut self) {
         self.channels.resize(MAX_CHANNELS, ChanMix::default());
         self.master = self.master.clamp(0.0, 2.0);
+        self.limiter.fix();
         let def = default_returns();
         if self.returns.len() != def.len() {
             self.returns = def;

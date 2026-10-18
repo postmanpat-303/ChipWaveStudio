@@ -1224,3 +1224,64 @@ fn new_voice_instrument_from_the_instrument_menu_edits_and_undoes() {
     ctrl_z(&mut h);
     assert_eq!(song(&mut h, |s| s.instruments.len()), n0);
 }
+
+#[test]
+fn mixer_limiter_panel_toggles_edits_and_undoes() {
+    let mut h = harness();
+    mixer(&mut h);
+    exact(&h, "Limiter & loudness");
+    assert!(song(&mut h, |s| s.mixer.limiter.enabled));
+    click_exact(&mut h, "True-peak limiter");
+    frames(&mut h, 2);
+    assert!(!song(&mut h, |s| s.mixer.limiter.enabled), "bypassed");
+    ctrl_z(&mut h);
+    assert!(song(&mut h, |s| s.mixer.limiter.enabled), "undo");
+    // drag the ceiling value up
+    let r = exact(&h, "-1.0 dBTP");
+    drag(&mut h, r.center(), r.center() + egui::vec2(40.0, 0.0));
+    let c = song(&mut h, |s| s.mixer.limiter.ceiling_db);
+    assert!(c > -1.0 && c <= 0.0, "ceiling {c}");
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.mixer.limiter.ceiling_db), -1.0);
+    // the loudness readout rows exist (no audio in tests: dashes)
+    exact(&h, "Integrated");
+    exact(&h, "True peak");
+}
+
+#[test]
+fn instrument_glide_legato_and_accent_are_editable_and_undoable() {
+    let mut h = harness();
+    h.state_mut().instr = 2;
+    frames(&mut h, 2);
+    let patch = |h: &mut Harness<'static, App>| {
+        song(h, |s| {
+            s.instruments[1].kind.patch().cloned().expect("synth")
+        })
+    };
+    assert!(!patch(&mut h).legato);
+    let at = exact(&h, "free Hz").center() - egui::vec2(0.0, 300.0);
+    h.input_mut().events.push(egui::Event::PointerMoved(at));
+    frame(&mut h);
+    for _ in 0..4 {
+        h.input_mut().events.push(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -200.0),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+            modifiers: Default::default(),
+        });
+        frame(&mut h);
+    }
+    frames(&mut h, 10);
+    click_exact(&mut h, "Legato");
+    frames(&mut h, 2);
+    assert!(patch(&mut h).legato, "legato on");
+    // accent threshold: drag the hex value up from 00
+    let r = exact(&h, "at vol ≥ 00");
+    drag(&mut h, r.center(), r.center() + egui::vec2(60.0, 0.0));
+    assert!(patch(&mut h).accent_vel > 0.0);
+    ctrl_z(&mut h);
+    assert_eq!(patch(&mut h).accent_vel, 0.0);
+    ctrl_z(&mut h);
+    assert!(!patch(&mut h).legato, "undo legato");
+}

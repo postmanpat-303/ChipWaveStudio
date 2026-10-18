@@ -2,7 +2,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 /// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.6";
+pub const VERSION: &str = "0.2.3.7";
 
 mod app;
 mod arrange;
@@ -14,6 +14,7 @@ mod fileio;
 mod fx;
 mod input;
 mod keymap;
+mod master;
 mod midi;
 mod model;
 mod presets;

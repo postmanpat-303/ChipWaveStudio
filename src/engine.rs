@@ -30,6 +30,15 @@ struct Chan {
     stut: crate::voice::Stutter,
     /// 34xy pitch step override for this note's stutter
     stut_semi: Option<f32>,
+    /// pattern filter overrides (38-3B); cleared by a different instrument
+    fm: crate::synth::FiltMod,
+    /// cutoff slide in octaves per tick (3A / 3B), this row only
+    cut_slide: f32,
+    /// note held (no note-off since it started): legato glide is possible
+    gate: bool,
+    /// glide target frequency (0 = none) and per-sample log step
+    glide_to: f32,
+    glide_k: f32,
 }
 
 #[derive(Clone)]
@@ -40,6 +49,11 @@ struct Tail {
     synth: SynthVoice,
     pos: f64,
     gain: f32,
+}
+
+/// Effect 38xx: code 01..FF -> 20 Hz .. 20 kHz on a log scale.
+pub fn cutoff_from_code(x: u8) -> f32 {
+    20.0 * 1000f32.powf((x.max(1) - 1) as f32 / 254.0)
 }
 
 /// Render one voice sample; returns (sample, still_active).
@@ -141,6 +155,11 @@ impl Chan {
         Self {
             stut: crate::voice::Stutter::new(sr as usize, (sr * 0.002) as usize),
             stut_semi: None,
+            fm: Default::default(),
+            cut_slide: 0.0,
+            gate: false,
+            glide_to: 0.0,
+            glide_k: 0.0,
             instr: usize::MAX,
             note: 0,
             freq: 0.0,
@@ -290,6 +309,11 @@ pub struct Engine {
     pub test_tone: u32,
     tone_ph: f32,
     live: Live,
+    /// master true-peak limiter and loudness meter (src/master.rs)
+    lim: crate::master::Limiter,
+    meter: crate::master::Loudness,
+    /// loudness / true peak / gain reduction for the UI
+    pub loud: crate::master::Readout,
 }
 
 impl Engine {
@@ -325,6 +349,9 @@ impl Engine {
             test_tone: 0,
             tone_ph: 0.0,
             live: Live::new(),
+            lim: crate::master::Limiter::new(sr),
+            meter: crate::master::Loudness::new(sr),
+            loud: Default::default(),
         }
     }
 
@@ -533,6 +560,8 @@ impl Engine {
         // (was 0: the first tick fired on sample 0, so row 1 came a tick early)
         self.samples_to_tick = self.tick_len();
         self.song_ended = false;
+        // integrated loudness and the true-peak hold measure from here
+        self.meter.reset();
         for c in &mut self.chans {
             if c.active {
                 c.fade_to_tail();
@@ -581,7 +610,7 @@ impl Engine {
             instr,
             ..Default::default()
         };
-        self.trigger(song, ch, &cell);
+        self.trigger(song, ch, &cell, None);
     }
 
     fn tick_len(&self) -> f64 {
@@ -589,12 +618,21 @@ impl Engine {
         self.sr as f64 * 60.0 / (self.bpm as f64 * 4.0 * self.speed as f64)
     }
 
+    /// output latency in frames added by the master limiter's lookahead
+    #[cfg(test)]
+    pub fn latency(&self) -> usize {
+        self.lim.latency()
+    }
+
     /// frames of `beats` at the running tempo
     fn beat_frames(&self, beats: f32) -> usize {
         (beats as f64 * 60.0 / self.bpm.max(1.0) as f64 * self.sr as f64) as usize
     }
 
-    fn trigger(&mut self, song: &Song, ch: usize, cell: &Cell) {
+    /// `glide`: pattern command 3C on this row: Some(None) = glide with the
+    /// instrument's time, Some(Some(s)) = glide time in seconds, and
+    /// Some(Some(0.0)) = force a retrigger (glide off for this note).
+    fn trigger(&mut self, song: &Song, ch: usize, cell: &Cell, glide: Option<Option<f32>>) {
         if ch == song.mixer.duck_key && cell.note > 0 && cell.note != NOTE_OFF {
             self.duck_t = 0.0;
         }
@@ -624,13 +662,40 @@ impl Engine {
             }
         }
         if cell.instr > 0 && (cell.instr as usize) <= song.instruments.len() {
+            if c.instr != cell.instr as usize - 1 {
+                // filter commands belong to the instrument they were set for
+                c.fm = Default::default();
+            }
             c.instr = cell.instr as usize - 1;
             c.vol = song.instruments[c.instr].volume;
         }
+        let patch = song.instruments.get(c.instr).and_then(|i| i.kind.patch());
+        // 303 glide: legato patch or 3C, onto a note that is still held
+        let glide_s = match glide {
+            Some(Some(t)) => t,
+            Some(None) => patch.map(|p| p.glide).unwrap_or(0.06),
+            None if patch.is_some_and(|p| p.legato) => patch.map(|p| p.glide).unwrap_or(0.0),
+            None => 0.0,
+        };
+        let gliding = new_note && glide_s > 0.0 && c.active && c.gate && c.instr != usize::MAX;
         if cell.note == NOTE_OFF {
+            c.gate = false;
+            c.glide_to = 0.0;
             c.synth.amp.release();
             c.synth.fenv.release();
+        } else if gliding {
+            c.note = cell.note;
+            let t = song
+                .instruments
+                .get(c.instr)
+                .map(|i| i.transpose)
+                .unwrap_or(0);
+            c.glide_to = note_freq((cell.note as i32 + t as i32).clamp(1, 127) as u8);
+            // exponential approach in log frequency, ~99 % there after glide_s
+            c.glide_k = 1.0 - (-4.6 / (glide_s.max(0.001) * self.sr)).exp();
         } else if cell.note > 0 && c.instr != usize::MAX {
+            c.gate = true;
+            c.glide_to = 0.0;
             if c.active {
                 c.fade_to_tail();
             }
@@ -653,6 +718,13 @@ impl Engine {
             c.vol = (cell.vol - 1) as f32 / 64.0;
         }
         c.synth.vel = c.vol;
+        // velocity accent (a new note; 3D on the row can override it)
+        if new_note && !gliding {
+            c.synth.accent = match patch {
+                Some(p) if p.accent_vel > 0.0 && c.vol >= p.accent_vel - 1e-4 => p.accent,
+                _ => 0.0,
+            };
+        }
     }
 
     fn process_row(&mut self, song: &Song) {
@@ -668,11 +740,19 @@ impl Engine {
             let cell = cells.get(ch).copied().unwrap_or_default();
             self.chans[ch].slide = 0.0;
             self.chans[ch].vol_slide = 0.0;
-            self.trigger(song, ch, &cell);
+            self.chans[ch].cut_slide = 0.0;
+            let glide = (cell.fx == 0x3C).then_some(match cell.fxp {
+                0 => Some(0.0),
+                1 => None,
+                x => Some(x as f32 * 0.005),
+            });
+            self.trigger(song, ch, &cell, glide);
             let c = &mut self.chans[ch];
             match cell.fx {
-                0x01 => c.slide = cell.fxp as f32,
-                0x02 => c.slide = -(cell.fxp as f32),
+                0x01 | 0x02 => {
+                    c.slide = if cell.fx == 1 { 1.0 } else { -1.0 } * cell.fxp as f32;
+                    c.glide_to = 0.0;
+                }
                 0x09 if cell.fxp > 0 => self.speed = cell.fxp as u32,
                 0x0C => {
                     c.vol = (cell.fxp.min(0x40)) as f32 / 64.0;
@@ -684,6 +764,38 @@ impl Engine {
                 0x0F if cell.fxp == 0 => brk = true,
                 0x0F if cell.fxp <= 0xF0 => self.bpm = cell.fxp as f32,
                 0x30..=0x37 => self.voice_fx(song, ch, cell.fx, cell.fxp),
+                // 38xx cutoff: 00 = instrument, 01-FF = 20 Hz .. 20 kHz (log)
+                0x38 => {
+                    c.fm.cut_oct = 0.0;
+                    c.fm.cut_abs = if cell.fxp == 0 {
+                        0.0
+                    } else {
+                        cutoff_from_code(cell.fxp)
+                    };
+                }
+                // 39xx resonance: 00 = instrument, 01-FF = 0 .. 100 %
+                0x39 => {
+                    c.fm.res = if cell.fxp == 0 {
+                        -1.0
+                    } else {
+                        (cell.fxp - 1) as f32 / 254.0
+                    };
+                }
+                // 3Axx / 3Bxx cutoff slide up / down: xx/96 octave per tick
+                0x3A => c.cut_slide = cell.fxp as f32 / 96.0,
+                0x3B => c.cut_slide = -(cell.fxp as f32) / 96.0,
+                // 3Dxx accent: 00 = instrument amount, 01-40 = amount
+                0x3D => {
+                    c.synth.accent = if cell.fxp == 0 {
+                        song.instruments
+                            .get(c.instr)
+                            .and_then(|i| i.kind.patch())
+                            .map(|p| p.accent)
+                            .unwrap_or(0.6)
+                    } else {
+                        cell.fxp.min(0x40) as f32 / 64.0
+                    };
+                }
                 _ => {}
             }
         }
@@ -778,6 +890,9 @@ impl Engine {
             for c in &mut self.chans {
                 if c.slide != 0.0 {
                     c.freq *= 2f32.powf(c.slide / 192.0);
+                }
+                if c.cut_slide != 0.0 {
+                    c.fm.cut_oct = (c.fm.cut_oct + c.cut_slide).clamp(-10.0, 10.0);
                 }
                 if c.vol_slide != 0.0 {
                     c.vol = (c.vol + c.vol_slide / 64.0).clamp(0.0, 1.0);
@@ -1038,11 +1153,20 @@ impl Engine {
         for p in &mut cpk {
             *p *= 0.97;
         }
-        self.eval_auto(song);
+        // automation is evaluated on its own 32-frame grid (below), not per
+        // callback, so the output does not depend on the buffer size
+        // (export == realtime); the FX structure is synced right away
         self.refresh_fx(song);
         let (mut tgt, mut master) = self.mix_targets(song);
         let mut stgt = self.send_targets(song);
         let k = 1.0 - (-1.0 / (0.005 * self.sr)).exp();
+        let ls = song.mixer.limiter;
+        let (lim_on, lim_gain, lim_ceil, lim_rel) = (
+            ls.enabled,
+            crate::master::db_to_lin(ls.gain_db),
+            crate::master::db_to_lin(ls.ceiling_db),
+            ls.release_ms / 1000.0,
+        );
         for frame in out.chunks_mut(2) {
             // automation is evaluated every 32 frames (sub-block), values smoothed
             if self.auto.countdown == 0 {
@@ -1066,6 +1190,7 @@ impl Engine {
             let mut r = 0.0;
             let mut bus = [[0.0f32; 2]; 2];
             let ctx = crate::fx::Ctx { bpm: self.bpm };
+            let mg = 0.6 * master;
             let sr = self.sr;
             let bpm = self.bpm;
             // sidechain pump: 2 ms dip, 10 ms hold, quadratic recovery
@@ -1109,6 +1234,18 @@ impl Engine {
                 .take(song.channels.min(MAX_CHANNELS))
             {
                 let (mut s, mut s_r) = (0.0, 0.0);
+                if c.glide_to > 0.0 {
+                    let lf = c.freq.ln();
+                    let lt = c.glide_to.ln();
+                    let d = lt - lf;
+                    if d.abs() < 1e-4 {
+                        c.freq = c.glide_to;
+                        c.glide_to = 0.0;
+                    } else {
+                        c.freq = (lf + d * c.glide_k).exp();
+                    }
+                }
+                c.synth.fmod = c.fm;
                 if c.active {
                     let ((v, vr), alive) = voice(
                         song,
@@ -1185,9 +1322,15 @@ impl Engine {
                 l += v;
                 r += v;
             }
-            // master volume, then soft master limiter
-            let l = (l * 0.6 * master).tanh();
-            let r = (r * 0.6 * master).tanh();
+            // master volume, then the true-peak limiter (or, bypassed, the
+            // classic tanh soft clipper of 0.2.3.6 and earlier)
+            let (l, r) = if lim_on {
+                self.lim
+                    .process(l * mg * lim_gain, r * mg * lim_gain, lim_ceil, lim_rel)
+            } else {
+                ((l * mg).tanh(), (r * mg).tanh())
+            };
+            self.meter.push(l, r, self.playing);
             peak = peak.max(l.abs()).max(r.abs());
             plr[0] = plr[0].max(l.abs());
             plr[1] = plr[1].max(r.abs());
@@ -1199,6 +1342,14 @@ impl Engine {
         self.peak = peak;
         self.peak_lr = plr;
         self.chan_peak = cpk;
+        self.loud = crate::master::Readout {
+            gain_red: if lim_on {
+                crate::master::lin_to_db(self.lim.take_min_gain())
+            } else {
+                0.0
+            },
+            ..self.meter.out
+        };
     }
 }
 
@@ -1603,8 +1754,10 @@ mod tests {
         }
         let mono: Vec<f32> = out.chunks(2).map(|f| f[0].abs().max(f[1].abs())).collect();
         let mut late = vec![];
+        // the master limiter's lookahead delays everything by a fixed amount
+        let lat = e.latency();
         for &r in &rows {
-            let at = r * 4725;
+            let at = r * 4725 + lat;
             // silent just before the row, sounding a few samples after it
             let before = mono[at.saturating_sub(300)..at]
                 .iter()
@@ -1950,5 +2103,340 @@ mod tests {
         // a new note resets the per-note overrides
         e.preview(&song, 0, 40, 2);
         assert!(e.chans[0].synth.vox.fx.vowel.is_none());
+    }
+
+    // ------------------------------------------------ 0.2.3.7: acid commands
+
+    /// one synth on channel 0, everything else silent
+    fn acid_song(p: crate::synth::Patch) -> Song {
+        let mut song = live_song();
+        song.bpm = 120.0;
+        song.speed = 6;
+        song.instruments[0].kind = InstrumentKind::Synth(p);
+        for row in song.patterns[0].cells.iter_mut() {
+            row.iter_mut().for_each(|c| *c = Cell::default());
+        }
+        song.order = vec![0];
+        for m in song.mixer.channels.iter_mut() {
+            m.send = [0.0; 2];
+            m.duck = 0.0;
+        }
+        song.mixer.master = 0.5;
+        song
+    }
+
+    fn saw_patch() -> crate::synth::Patch {
+        crate::synth::Patch {
+            cutoff: 400.0,
+            resonance: 0.1,
+            amp: crate::synth::Adsr {
+                a: 0.001,
+                d: 0.5,
+                s: 1.0,
+                r: 0.05,
+            },
+            ..Default::default()
+        }
+    }
+
+    fn note(n: u8, fx: u8, fxp: u8) -> Cell {
+        Cell {
+            note: n,
+            instr: 1,
+            vol: 0,
+            fx,
+            fxp,
+        }
+    }
+
+    fn left(out: &[f32]) -> Vec<f32> {
+        out.chunks(2).map(|f| f[0]).collect()
+    }
+
+    /// derivative energy / energy: higher = brighter
+    fn bright(x: &[f32]) -> f32 {
+        let e: f32 = x.iter().map(|v| v * v).sum::<f32>().max(1e-12);
+        x.windows(2).map(|w| (w[1] - w[0]).powi(2)).sum::<f32>() / e
+    }
+
+    /// frequency from positive zero crossings
+    fn freq_of(x: &[f32]) -> f32 {
+        let c: Vec<usize> = (1..x.len())
+            .filter(|&i| x[i - 1] <= 0.0 && x[i] > 0.0)
+            .collect();
+        if c.len() < 2 {
+            return 0.0;
+        }
+        48000.0 * (c.len() - 1) as f32 / (c[c.len() - 1] - c[0]) as f32
+    }
+
+    // 120 BPM, speed 6: one row = 6000 frames, one tick = 1000 frames
+
+    #[test]
+    fn effect_38_39_set_cutoff_and_resonance_per_row() {
+        let b = |fx: u8, fxp: u8| {
+            let mut song = acid_song(saw_patch());
+            song.patterns[0].cells[0][0] = note(37, fx, fxp);
+            bright(&left(&render_secs(&song, 0.12))[1000..5000])
+        };
+        let plain = b(0, 0);
+        let open = b(0x38, 0xD0);
+        let shut = b(0x38, 0x30);
+        assert!(
+            open > 3.0 * plain && plain > 1.5 * shut,
+            "{shut} {plain} {open}"
+        );
+        assert_eq!(b(0x38, 0x00), plain, "3800 = instrument cutoff");
+        assert!((cutoff_from_code(1) - 20.0).abs() < 0.01);
+        assert!((cutoff_from_code(0xFF) - 20000.0).abs() < 1.0);
+        // resonance: the harmonic at the cutoff rings louder
+        let res = |fxp: u8| {
+            let mut song = acid_song(crate::synth::Patch {
+                cutoff: 990.0,
+                ..saw_patch()
+            });
+            song.patterns[0].cells[0][0] = note(34, 0x39, fxp); // A-2 110 Hz
+            let x = left(&render_secs(&song, 0.15));
+            let (mut re, mut im) = (0.0f64, 0.0f64);
+            for (i, v) in x[1000..5800].iter().enumerate() {
+                let w = std::f64::consts::TAU * 990.0 * i as f64 / 48000.0;
+                re += *v as f64 * w.cos();
+                im += *v as f64 * w.sin();
+            }
+            (re * re + im * im).sqrt()
+        };
+        assert!(
+            res(0xF0) > 3.0 * res(0x01),
+            "{} vs {}",
+            res(0xF0),
+            res(0x01)
+        );
+    }
+
+    #[test]
+    fn effect_3a_3b_slide_the_cutoff_per_tick_and_a_new_instrument_resets() {
+        let mut song = acid_song(saw_patch());
+        song.patterns[0].cells[0][0] = note(37, 0x3A, 0x30); // +0.5 oct per tick
+        let x = left(&render_secs(&song, 0.25));
+        let early = bright(&x[200..900]);
+        let late = bright(&x[5100..5900]); // 5 ticks later: +2.5 octaves
+        assert!(late > 3.0 * early, "{early} -> {late}");
+        // the slide holds after the row, and 3B brings it down again
+        song.patterns[0].cells[1][0] = Cell {
+            fx: 0x3B,
+            fxp: 0x30,
+            ..Default::default()
+        };
+        let y = left(&render_secs(&song, 0.25));
+        assert!(bright(&y[11100..11900]) < 0.6 * bright(&y[5100..5900]));
+        // a note with a different instrument clears the overrides
+        let mut e = Engine::new(48000.0);
+        let mut s2 = acid_song(saw_patch());
+        s2.instruments[1] = s2.instruments[0].clone();
+        s2.patterns[0].cells[0][0] = note(37, 0x38, 0xF0);
+        s2.patterns[0].cells[1][0] = Cell {
+            instr: 2,
+            ..note(37, 0, 0)
+        };
+        e.start(&s2, 0, 0, false, 0);
+        assert!(e.chans[0].fm.cut_abs > 0.0);
+        let mut buf = vec![0.0f32; 6000 * 2 + 200];
+        e.render(&s2, &mut buf);
+        assert_eq!(e.chans[0].fm, crate::synth::FiltMod::default());
+    }
+
+    fn sine_patch() -> crate::synth::Patch {
+        crate::synth::Patch {
+            osc1: crate::synth::Wave::Sine,
+            cutoff: 18000.0,
+            ..saw_patch()
+        }
+    }
+
+    #[test]
+    fn legato_glides_between_held_notes_without_retrigger() {
+        // C-3 (130.8 Hz) then C-4 (261.6 Hz) one row later, glide 100 ms
+        let render = |legato: bool, fx: u8, fxp: u8| {
+            let mut song = acid_song(crate::synth::Patch {
+                legato,
+                glide: 0.1,
+                ..sine_patch()
+            });
+            song.patterns[0].cells[0][0] = note(37, 0, 0);
+            song.patterns[0].cells[1][0] = Cell {
+                instr: 0,
+                ..note(49, fx, fxp)
+            };
+            left(&render_secs(&song, 0.4))
+        };
+        let g = render(true, 0, 0);
+        let start = 6000;
+        let f_mid = freq_of(&g[start + 600..start + 1800]);
+        let f_end = freq_of(&g[start + 7000..start + 9000]);
+        assert!(f_mid > 145.0 && f_mid < 250.0, "mid glide {f_mid}");
+        assert!((f_end - 261.6).abs() < 3.0, "end {f_end}");
+        // no retrigger: the level stays (no 5 ms declick dip / attack)
+        let dip = rms(&g[start..start + 300]) / rms(&g[start - 600..start - 300]);
+        assert!(dip > 0.9, "level ratio {dip}");
+        // without legato it jumps at once
+        let j = render(false, 0, 0);
+        assert!((freq_of(&j[start + 600..start + 1800]) - 261.6).abs() < 5.0);
+        // 3C01 glides on a non-legato patch; 3C00 forces the jump on a legato one
+        let c = render(false, 0x3C, 0x01);
+        let f = freq_of(&c[start + 600..start + 1800]);
+        assert!(f > 145.0 && f < 250.0, "3C01 {f}");
+        let c = render(true, 0x3C, 0x00);
+        assert!((freq_of(&c[start + 600..start + 1800]) - 261.6).abs() < 5.0);
+        // 3Cxx sets the time: 3C02 = 10 ms, done long before 3C40 = 320 ms
+        let fast = render(false, 0x3C, 0x02);
+        assert!((freq_of(&fast[start + 1200..start + 2400]) - 261.6).abs() < 4.0);
+        let slow = render(false, 0x3C, 0x40);
+        assert!(freq_of(&slow[start + 1200..start + 2400]) < 200.0);
+    }
+
+    #[test]
+    fn glide_needs_a_held_note_and_slides_01_02_still_work() {
+        let mut song = acid_song(crate::synth::Patch {
+            legato: true,
+            ..sine_patch()
+        });
+        song.patterns[0].cells[0][0] = note(37, 0, 0);
+        song.patterns[0].cells[1][0] = Cell {
+            note: NOTE_OFF,
+            ..Default::default()
+        };
+        song.patterns[0].cells[2][0] = note(49, 0, 0);
+        let x = left(&render_secs(&song, 0.4));
+        let f = freq_of(&x[12600..13800]);
+        assert!((f - 261.6).abs() < 5.0, "after note-off: no glide ({f})");
+        // 01 slides up (1/192 octave per tick per unit)
+        let mut song = acid_song(sine_patch());
+        song.patterns[0].cells[0][0] = note(37, 0x01, 0x20);
+        let x = left(&render_secs(&song, 0.15));
+        let (a, b) = (freq_of(&x[100..900]), freq_of(&x[5100..5900]));
+        let want = 130.8 * 2f32.powf(5.0 * 32.0 / 192.0);
+        assert!(
+            (a - 130.8).abs() < 4.0 && (b - want).abs() < 8.0,
+            "{a} {b} {want}"
+        );
+    }
+
+    #[test]
+    fn accent_is_louder_brighter_and_shorter() {
+        let p = crate::synth::Patch {
+            env_amount: 0.4,
+            amp: crate::synth::Adsr {
+                a: 0.001,
+                d: 0.2,
+                s: 0.0,
+                r: 0.05,
+            },
+            ..saw_patch()
+        };
+        let r = |p: &crate::synth::Patch, c: Cell| {
+            let mut song = acid_song(p.clone());
+            song.mixer.limiter.enabled = false;
+            song.mixer.master = 0.2;
+            song.patterns[0].cells[0][0] = c;
+            left(&render_secs(&song, 0.3))
+        };
+        let plain = r(&p, note(37, 0, 0));
+        let acc = r(&p, note(37, 0x3D, 0x00));
+        let pk = |x: &[f32]| x.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        let db = 20.0 * (pk(&acc[..4000]) / pk(&plain[..4000])).log10();
+        assert!(db > 2.0, "accent +{db:.1} dB");
+        assert!(bright(&acc[200..2000]) > 1.3 * bright(&plain[200..2000]));
+        // shorter: relative tail level 150 ms in is lower
+        let tail = |x: &[f32]| rms(&x[7000..8000]) / pk(&x[..4000]);
+        assert!(
+            tail(&acc) < 0.8 * tail(&plain),
+            "{} {}",
+            tail(&acc),
+            tail(&plain)
+        );
+        // velocity threshold: vol 40 accents, vol 20 does not
+        let pv = crate::synth::Patch {
+            accent_vel: 0.75,
+            ..p.clone()
+        };
+        let hi = r(
+            &pv,
+            Cell {
+                vol: 0x41,
+                ..note(37, 0, 0)
+            },
+        );
+        let full = r(
+            &p,
+            Cell {
+                vol: 0x41,
+                ..note(37, 0, 0)
+            },
+        );
+        assert!(pk(&hi[..4000]) > 1.25 * pk(&full[..4000]));
+        let lo = r(
+            &pv,
+            Cell {
+                vol: 0x21,
+                ..note(37, 0, 0)
+            },
+        );
+        let lo_plain = r(
+            &p,
+            Cell {
+                vol: 0x21,
+                ..note(37, 0, 0)
+            },
+        );
+        assert_eq!(lo, lo_plain);
+    }
+
+    #[test]
+    fn acid_commands_and_limiter_are_allocation_free() {
+        let mut song = acid_song(crate::synth::Patch {
+            legato: true,
+            accent_vel: 0.5,
+            ..saw_patch()
+        });
+        song.mixer.limiter.gain_db = 12.0;
+        let cmds = [
+            (0x38, 0x60),
+            (0x39, 0xC0),
+            (0x3A, 0x10),
+            (0x3B, 0x08),
+            (0x3C, 0x01),
+            (0x3D, 0x30),
+        ];
+        for (k, (f, p)) in cmds.iter().enumerate() {
+            song.patterns[0].cells[k * 2][0] = note(37 + k as u8, *f, *p);
+        }
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 1024];
+        e.render(&song, &mut buf);
+        let n = alloc_count::count(|| {
+            for _ in 0..200 {
+                e.render(&song, &mut buf);
+            }
+        });
+        assert_eq!(n, 0);
+        assert!(buf.iter().all(|x| x.is_finite()));
+        assert!(e.loud.true_peak <= -1.0 + 1e-3, "{}", e.loud.true_peak);
+        assert!(e.loud.gain_red < 0.0 || e.loud.momentary.is_finite());
+    }
+
+    #[test]
+    fn master_limiter_holds_the_ceiling_on_the_demo_and_bypass_is_the_old_clipper() {
+        let mut song = crate::fileio::demo_song();
+        song.order.truncate(2);
+        song.mixer.limiter.gain_db = 12.0;
+        let out = render_song(&song, 44100);
+        let tp = crate::master::lin_to_db(crate::master::true_peak(&out));
+        assert!(tp <= -1.0 + 1e-3 && tp > -3.0, "{tp}");
+        // bypass: exactly tanh(0.6 * master * x) as in 0.2.3.6
+        song.mixer.limiter.enabled = false;
+        song.mixer.limiter.gain_db = 0.0;
+        let out = render_song(&song, 44100);
+        assert!(out.iter().all(|x| x.abs() < 1.0));
     }
 }
