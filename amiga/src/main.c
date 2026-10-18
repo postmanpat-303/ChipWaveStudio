@@ -62,10 +62,37 @@ enum { A_FILE, A_LOOPS, A_SECONDS, A_RESULT, A_TICKLOG, A_TICKS, A_BENCH, A_QUIE
 
 extern struct ExecBase *SysBase;
 
+#ifdef CWL_DEBUG
+static void stage(const char *n)
+{
+	BPTR f = Open((CONST_STRPTR)n, MODE_NEWFILE);
+	if (f) Close(f);
+}
+#define STAGE(n) stage("DH0:stage-" n)
+#else
+#define STAGE(n)
+#endif
+
 static LONG elapsed_ticks(const struct DateStamp *a, const struct DateStamp *b)
 {
 	return ((b->ds_Days - a->ds_Days) * 1440L + (b->ds_Minute - a->ds_Minute)) * 3000L
 		+ (b->ds_Tick - a->ds_Tick);
+}
+
+/* Strings passed to Printf("%s") go through a word-aligned copy: the AROS
+ * ROM's formatter does word accesses on them, which is an address error on
+ * a 68000 when a string literal sits at an odd address. (Kickstart is fine.) */
+static ULONG albuf[2][32];
+static int alidx;
+
+static ULONG al(const char *s)
+{
+	char *d = (char *)albuf[alidx ^= 1];
+	int i;
+	for (i = 0; i < (int)sizeof(albuf[0]) - 1 && s[i]; i++)
+		d[i] = s[i];
+	d[i] = 0;
+	return (ULONG)d;
 }
 
 /* --- tiny text buffer for the RESULT file (no stdio needed) --- */
@@ -144,9 +171,11 @@ static void timed(void (*fn)(void))
 		fn();
 		return;
 	}
+	Disable();   /* time the replay only, not interrupts that hit meanwhile */
 	ReadEClock(&e0);
 	fn();
 	ReadEClock(&e1);
+	Enable();
 	tick_e += eclock_diff(&e0, &e1);
 }
 
@@ -302,7 +331,7 @@ int main(void)
 
 	err = mod_parse(mod, (unsigned long)size, &info);
 	if (err != MOD_OK) {
-		Printf((CONST_STRPTR)"%s: %s\n", args[A_FILE], (ULONG)mod_error_text(err));
+		Printf((CONST_STRPTR)"%s: %s\n", al((const char *)args[A_FILE]), al(mod_error_text(err)));
 		raddstr("error", mod_error_text(err));
 		goto out;
 	}
@@ -316,7 +345,7 @@ int main(void)
 	if (!args[A_QUIET])
 		Printf((CONST_STRPTR)"ChipWave Lite " CWL_VERSION " (" CWL_CPU ")  \"%s\"  [%s]\n"
 			"%ld positions, %ld patterns, %ld samples, %ld bytes in chip RAM\n",
-			(ULONG)info.title, (ULONG)info.tag, info.song_length, info.num_patterns,
+			al(info.title), al(info.tag), info.song_length, info.num_patterns,
 			info.num_samples_used, size);
 
 #ifndef CWL_NOLOG
@@ -355,7 +384,7 @@ int main(void)
 			CloseDevice((struct IORequest *)&tr);
 		if (!args[A_QUIET])
 			Printf((CONST_STRPTR)"Tick log: %ld ticks written to %s (song end at tick %ld)\n",
-				n, args[A_TICKLOG], end_tick);
+				n, al((const char *)args[A_TICKLOG]), end_tick);
 		rc = n > 0 ? RETURN_OK : RETURN_ERROR;
 		goto out;
 	}
@@ -367,20 +396,24 @@ int main(void)
 		LONG secs = args[A_SECONDS] ? *(LONG *)args[A_SECONDS] : 0;
 		UWORD intena0 = CUSTOM_INTENAR, intena1, dma1;
 		const char *why = "ctrl-c";
-		LONG el;
+		LONG el;   /* elapsed 1/50 s; divided as ULONG only (see below) */
 
+		STAGE("1-install");
 		if (!cwl_install()) {
 			cwl_remove();
 			PutStr((CONST_STRPTR)"Can't get the audio channels or CIA-B timers (in use by another program?)\n");
 			raddstr("error", "install");
 			goto out;
 		}
+		STAGE("2-init");
 		cwl_init(mod);
+		STAGE("3-inited");
 		raddstr("install", "ok");
 		if (!args[A_QUIET])
 			PutStr((CONST_STRPTR)"Playing. Press Ctrl-C to stop.\n");
 		DateStamp(&t0);
 		mt_Enable = 1;
+		STAGE("4-enabled");
 		for (;;) {
 			if (SetSignal(0, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C)
 				break;
@@ -389,13 +422,19 @@ int main(void)
 			if (secs && elapsed_ticks(&t0, &t1) >= secs * 50L) { why = "seconds"; break; }
 			Delay(1);
 		}
+		STAGE("5-loopdone");
+		/* Note: no signed 32-bit division in this program. The AROS ROM's
+		 * helper for it uses a 68020 branch (bpl.l), an address error on a
+		 * 68000; Kickstart is fine, but the tests run on AROS. */
 		DateStamp(&t1);
 		el = elapsed_ticks(&t0, &t1);
 		raddnum("songend", mt_SongEnd);
 		raddnum("e8", mt_E8Trigger);
 		mt_Enable = 0;
 		cwl_end();
+		STAGE("6-ended");
 		cwl_remove();
+		STAGE("7-removed");
 		intena1 = CUSTOM_INTENAR;
 		dma1 = CUSTOM_DMACONR;
 		raddstr("stopped_by", why);
@@ -405,7 +444,8 @@ int main(void)
 		raddnum("audio_dma_after", dma1 & 0x000f);
 		if (!args[A_QUIET])
 			Printf((CONST_STRPTR)"Stopped (%s) after %ld.%02ld s. Audio and interrupts released.\n",
-				(ULONG)why, el / 50, (el % 50) * 2);
+				al(why), (ULONG)el / 50, ((ULONG)el % 50) * 2);
+		STAGE("8-printed");
 		rc = RETURN_OK;
 	}
 
@@ -414,9 +454,12 @@ out:
 		raddstr("status", "ok");
 	else
 		raddstr("status", "fail");
+	STAGE("9-out");
 	write_result((const char *)args[A_RESULT]);
+	STAGE("10-written");
 	if (mod)
 		FreeMem(mod, size);
 	FreeArgs(rda);
+	STAGE("11-freed");
 	return (int)rc;
 }
