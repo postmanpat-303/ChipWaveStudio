@@ -24,8 +24,7 @@ and the transpose buttons (2b3ad3f).
   numerically part by part (`0.2.4.0` > `0.2.3.19`), semver agrees (`0.2.4` > `0.2.3`), and a unit
   test covers 0.2.3.19 → 0.2.4.0.
 - **Never create a new repo named ChipWaveTracker** (it would break GitHub's redirects).
-- Until the repo is renamed, links in this repo to `github.com/postmanpat-303/ChipWaveStudio` and
-  the new website address do not resolve yet; the app's update check falls back to the old address.
+- The app's update check still falls back to the old address on a 404 (harmless now that the repo is renamed).
 - **Git history is not rewritten.** Old release notes, tags and the captured
   `src/update_fixture_v0.2.3.4.json` (a verbatim GitHub API reply) keep the old name: they are history.
 
@@ -89,11 +88,11 @@ The dmg volume is "ChipWave Studio <ver>".
 4. Docs: README, docs/*.md, CHANGELOG 0.2.4.0, dist/README.txt, credits generator, Cargo.toml.
 5. Verify: cargo test, clippy (Linux + Windows), cargo deny, Wine self-test, Wine upgrade from the
    v0.2.3.19 installer, check-ico, screenshots (About, title).
-6. Push to main. **On hold** (Wave Hub): `gh repo rename ChipWaveStudio`; update the remote, description, homepage, topics;
+6. Push to main, then `gh repo rename ChipWaveStudio` (done 18 Oct 2026, after Wave Hub 0.2.5, which follows the redirect); update the remote, description, homepage, topics;
    check the redirects.
-7. **On hold:** website on gh-pages at the new address (canonical, og:url, og:image, sitemap, robots, JSON-LD,
+7. Done: website on gh-pages at the new address (canonical, og:url, og:image, sitemap, robots, JSON-LD,
    "formerly ChipWave Tracker").
-8. **On hold:** release v0.2.4.0 (Windows + Mac, SHA256SUMS.txt), Latest.
+8. Done: release v0.2.4.0 (Windows + Mac, SHA256SUMS.txt), Latest.
 
 ## Known limits
 

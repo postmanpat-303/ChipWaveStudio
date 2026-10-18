@@ -4,7 +4,7 @@ ChipWave Studio has a **universal macOS build**: one `ChipWave.app` that runs na
 
 > **Status:** the Mac build is made by GitHub Actions and checked there automatically (both CPU halves start, render audio and pass the self-test). Nobody has tried it on a real Mac yet, so please report anything odd in an [issue](https://github.com/postmanpat-303/ChipWaveStudio/issues) and include your macOS version and chip. The first release with Mac files is **v0.2.3.14**.
 
-<p align="center"><img src="screenshots/macos-launch.png" alt="ChipWave 0.2.3.15 running on macOS (GitHub Actions macos-latest runner, Apple Silicon)" width="720"><br><sub>The universal build running on a GitHub Actions macOS machine (Apple Silicon, CoreAudio "Apple Virtual Sound Device"), captured by the workflow.</sub></p>
+<p align="center"><img src="screenshots/macos-launch.png" alt="ChipWave Studio 0.2.4.0 running on macOS (GitHub Actions macos-latest runner, Apple Silicon)" width="720"><br><sub>The universal build running on a GitHub Actions macOS machine (Apple Silicon, CoreAudio "Apple Virtual Sound Device"), captured by the workflow.</sub></p>
 
 ## Download
 
