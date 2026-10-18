@@ -12,7 +12,9 @@
 ;     give half of that) and PT's ramp waveform quirk (direction taken from
 ;     the vibrato position).
 ;  2. 5xy and 6xy: the volume slide no longer rewrites AUDxPER, which threw
-;     away the vibrato of 6xy and the glissando rounding of 5xy.
+;     away the vibrato of 6xy and the glissando rounding of 5xy. 6xy also
+;     clears d2 before loading the vibrato amplitude (a byte), because
+;     mt_vibrato_nc uses it as a word index.
 ;  3. On every tick after the first of a row, the channel volume is written
 ;     again unless the effect is 7xy, as PT does, so a tremolo can't leave
 ;     Paula at a modulated volume.
@@ -2726,6 +2728,7 @@ mt_vibrvolslide:
 ; d4 = xy
 
 	move.w	d4,d3
+	moveq	#0,d2			; ChipWave Lite: d2 is a word index below
 	move.b	n_vibratoamp(a2),d2
 	move.b	n_vibratospd(a2),d4
 	bsr	mt_vibrato_nc
