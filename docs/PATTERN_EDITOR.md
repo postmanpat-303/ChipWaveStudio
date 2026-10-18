@@ -133,6 +133,7 @@ Effect columns accept classic OctaMED/ProTracker commands (page 1, binary-compat
 | 3A / 3B | Cutoff slide up / down per tick (ChipWave) | xx/96 octave per tick (10 = 1/6 oct; at speed 6 that is 5/6 oct per row) |
 | 3C | 303 glide to this note (ChipWave) | 00 = no glide (retrigger), 01 = the instrument's glide time, 02–FF = xx × 5 ms |
 | 3D | Accent this note (ChipWave) | 00 = the instrument's accent amount, 01–40 = amount |
+| 3E | Voice: speak word xx (ChipWave, 0.2.3.10) | 00–0F = word number; on a held note (no note in the row) the word is said again |
 
 Effects 30–37 are documented in [VOICE.md](VOICE.md).
 

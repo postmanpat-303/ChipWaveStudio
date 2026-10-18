@@ -358,6 +358,13 @@ pub struct VoicePatch {
     pub chop_rate: f32,
     /// chop gate open fraction 0.05..1
     pub chop_duty: f32,
+    /// words to speak (0.2.3.10): each note speaks the next one (3Exx
+    /// picks one); empty = vowels only. See crate::speech::parse_word.
+    pub words: Vec<String>,
+    /// speech rate 0.25..3 (consonant / vowel timing and tract speed)
+    pub rate: f32,
+    /// Throat mode: a waveguide vocal tract instead of the formant bank
+    pub throat: bool,
 }
 
 impl Default for VoicePatch {
@@ -395,6 +402,9 @@ impl Default for VoicePatch {
             stutter_pitch: 0.0,
             chop_rate: 0.0,
             chop_duty: 0.5,
+            words: vec![],
+            rate: 1.0,
+            throat: false,
         }
     }
 }
@@ -421,6 +431,21 @@ impl VoicePatch {
         self.stutter_pitch = self.stutter_pitch.clamp(-12.0, 12.0);
         self.chop_rate = self.chop_rate.clamp(0.0, 4.0);
         self.chop_duty = self.chop_duty.clamp(0.05, 1.0);
+        self.words.truncate(crate::speech::MAX_WORDS);
+        for w in &mut self.words {
+            if w.len() > 48 {
+                let mut n = 48;
+                while !w.is_char_boundary(n) {
+                    n -= 1;
+                }
+                w.truncate(n);
+            }
+        }
+        self.rate = if self.rate.is_finite() {
+            self.rate.clamp(0.25, 3.0)
+        } else {
+            1.0
+        };
     }
 
     /// any modulation that needs the patch LFO to run
@@ -470,6 +495,18 @@ pub struct VoxState {
     babble_v: Option<Vowel>,
     rng: u32,
     pub fx: VoxFx,
+    /// the word being spoken (0.2.3.10)
+    pub speech: crate::speech::Speech,
+    ctl: Option<crate::speech::Ctrl>,
+    /// smoothed voicing / frication / aspiration gains
+    vg: f32,
+    ng: f32,
+    asp: f32,
+    nf: Svf,
+    nf_g: f32,
+    nf_k: f32,
+    tract: crate::speech::Tract,
+    ctl_cnt: u8,
 }
 
 impl Default for VoxState {
@@ -499,6 +536,10 @@ fn poly_blep(t: f32, dt: f32) -> f32 {
 
 /// output level trim so a sustained vowel sits near a synth saw's level
 const OUT_GAIN: f32 = 2.2;
+/// Throat mode output trim (before OUT_GAIN)
+const THROAT_GAIN: f32 = 0.12;
+/// frication / burst noise level (before OUT_GAIN)
+const FRIC_GAIN: f32 = 0.35;
 
 impl VoxState {
     pub fn new() -> Self {
@@ -521,7 +562,23 @@ impl VoxState {
             babble_v: None,
             rng: 0x6A09_E667,
             fx: VoxFx::default(),
+            speech: crate::speech::Speech::default(),
+            ctl: None,
+            vg: 1.0,
+            ng: 0.0,
+            asp: 0.0,
+            nf: Svf::default(),
+            nf_g: 0.1,
+            nf_k: 1.0,
+            tract: crate::speech::Tract::new(),
+            ctl_cnt: 0,
         }
+    }
+
+    /// speak `word` from its first phoneme (note-on, effect 3E)
+    pub fn speak(&mut self, word: &str) {
+        self.speech.speak(word);
+        self.ctl_cnt = 0;
     }
 
     pub fn seed(&mut self, s: u32) {
@@ -544,6 +601,9 @@ impl VoxState {
 
     /// Target formants for the current position (vowel sequence + LFO).
     fn target(&self, p: &VoicePatch, lfo: f32) -> Formants {
+        if let Some(c) = &self.ctl {
+            return c.form;
+        }
         if let Some((v, _)) = self.fx.vowel {
             return formants(p.register, v);
         }
@@ -569,6 +629,33 @@ impl VoxState {
             o.bw[k] = a.bw[k] + (b.bw[k] - a.bw[k]) * t;
         }
         o
+    }
+
+    /// tongue / lips of the current vowel position (Throat mode)
+    fn tongue(&self, p: &VoicePatch, lfo: f32) -> ((f32, f32), f32) {
+        use crate::speech::vowel_shape;
+        let one = |v: Vowel| {
+            let (i, d, l) = vowel_shape(v);
+            ((i, d), l)
+        };
+        if let Some(c) = &self.ctl {
+            return one(c.vowel);
+        }
+        if let Some((v, _)) = self.fx.vowel {
+            return one(v);
+        }
+        if let Some(v) = self.babble_v {
+            return one(v);
+        }
+        let n = p.vowels.len().max(1);
+        let pos = (self.idx as f32 + lfo * p.lfo_vowel).rem_euclid(n as f32);
+        let i0 = pos.floor() as usize % n;
+        let t = pos - pos.floor();
+        let v0 = p.vowels.get(i0).copied().unwrap_or(Vowel::A);
+        let v1 = p.vowels.get((i0 + 1) % n).copied().unwrap_or(Vowel::A);
+        let (a, b) = (vowel_shape(v0), vowel_shape(v1));
+        let m = |x: f32, y: f32| x + (y - x) * t;
+        ((m(a.0, b.0), m(a.1, b.1)), m(a.2, b.2))
     }
 
     /// One mono sample of the voice at fundamental `f` Hz. `lfo` is the
@@ -598,10 +685,33 @@ impl VoxState {
                 }
             }
         }
+        // --- speech: the phoneme timeline drives voicing, noise and formants
+        if self.speech.active() {
+            self.speech.advance(dt_s * p.rate);
+            if self.ctl_cnt == 0 {
+                self.ctl = Some(self.speech.ctrl(p.register, p.rate));
+            }
+            self.ctl_cnt = (self.ctl_cnt + 1) % 8;
+        } else {
+            self.ctl = None;
+        }
+        let (vg_t, ng_t, asp_t) = match &self.ctl {
+            Some(c) => (c.vg, c.ng, c.asp),
+            None => (1.0, 0.0, 0.0),
+        };
+        let k = |ms: f32| 1.0 - (-dt_s / (ms * 0.001)).exp();
+        if self.init {
+            // a new note starts on its first phoneme (no fade from a vowel)
+            (self.vg, self.ng, self.asp) = (vg_t, ng_t, asp_t);
+        }
+        self.vg += (vg_t - self.vg) * k(4.0);
+        self.ng += (ng_t - self.ng) * k(1.0);
+        self.asp += (asp_t - self.asp) * k(3.0);
         // --- smoothed formant targets
         let tg = self.target(p, lfo);
         let shift = self.fx.shift.unwrap_or(p.shift) * 2f32.powf(lfo * p.lfo_shift / 12.0);
         let morph_ms = match (self.fx.vowel, self.babble_v) {
+            _ if self.ctl.is_some() => self.ctl.map(|c| c.morph_ms).unwrap_or(35.0),
             (Some((_, ms)), _) => ms,
             (None, Some(_)) => p.morph_ms.min(20.0),
             _ => p.morph_ms,
@@ -622,7 +732,7 @@ impl VoxState {
             self.cur_bw[k] += (bt - self.cur_bw[k]) * a;
         }
         // filter coefficients every 4 samples (tan is the costly part)
-        if self.coef_cnt == 0 {
+        if self.coef_cnt == 0 && !p.throat {
             for k in 0..5 {
                 let fc = self.cur_f[k].clamp(40.0, nyq);
                 self.g[k] = (std::f32::consts::PI * fc / sr).tan();
@@ -666,13 +776,13 @@ impl VoxState {
             ),
             VoiceSource::Whisper => (0.0, 0.5),
         };
-        e *= self.per_amp;
+        e *= self.per_amp * self.vg;
         let nb = if p.source == VoiceSource::Whisper {
             0.6 + breath * 0.6
         } else {
             breath * 0.8 * (0.25 + 0.75 * flow)
         };
-        e += noise * nb;
+        e += noise * (nb * self.vg + self.asp * 0.8);
         self.ph += dt;
         if self.ph >= 1.0 {
             self.ph -= 1.0;
@@ -680,11 +790,51 @@ impl VoxState {
             self.per_pitch = 1.0 + j * 0.025 * (rnd(&mut self.rng) * 2.0 - 1.0);
             self.per_amp = 1.0 + j * 0.15 * (rnd(&mut self.rng) * 2.0 - 1.0);
         }
-        // --- parallel formant bank (constant-peak band-passes)
+        // --- frication / burst noise band (formant mode) and the tract
+        let n2 = rnd(&mut self.rng) * 2.0 - 1.0;
+        if self.ctl_cnt == 1 {
+            if let Some(c) = &self.ctl {
+                let fc = (c.nfc * shift.sqrt()).clamp(200.0, nyq);
+                self.nf_g = (std::f32::consts::PI * fc / sr).tan();
+                self.nf_k = (c.nbw / fc).clamp(0.05, 2.0);
+            }
+        }
         let mut y = 0.0;
-        for k in 0..5 {
-            let (_, bp, _) = self.form[k].process_gk(e, self.g[k], self.k[k]);
-            y += bp * self.k[k] * self.cur_a[k];
+        if p.throat {
+            if self.ctl_cnt % 8 == 1 || !self.speech.active() && self.coef_cnt == 0 {
+                let (tongue, lips) = self.tongue(p, lfo);
+                let (constr, velum) = match &self.ctl {
+                    Some(c) => (c.constr, c.velum),
+                    None => (None, 0.01),
+                };
+                let step = if self.speech.active() { 8.0 } else { 4.0 };
+                let speed = p.rate * (60.0 / p.morph_ms.max(10.0)).clamp(0.4, 3.0);
+                self.tract
+                    .shape(tongue, lips, constr, velum, step * dt_s, speed);
+            }
+            let reg = match p.register {
+                Register::Bass => 1.0,
+                Register::Tenor => 1.06,
+                Register::Alto => 1.17,
+                Register::Soprano => 1.25,
+                Register::Demon => 0.8,
+            };
+            let turb = 0.15 + self.ng * 4.0;
+            y = self.tract.render(e, n2, turb, sr, shift * reg) * THROAT_GAIN;
+        } else {
+            // parallel formant bank (constant-peak band-passes)
+            for k in 0..5 {
+                let (_, bp, _) = self.form[k].process_gk(e, self.g[k], self.k[k]);
+                y += bp * self.k[k] * self.cur_a[k];
+            }
+        }
+        if self.ng > 1e-4 {
+            let (_, bp, _) = self.nf.process_gk(n2, self.nf_g, self.nf_k);
+            let g = if p.throat { 0.5 } else { 1.0 };
+            y += bp * self.nf_k * self.ng * FRIC_GAIN * g;
+        }
+        if self.speech.done() && self.vg < 1e-3 && self.ng < 1e-4 && self.asp < 1e-4 {
+            y *= 0.0;
         }
         // --- chop gate
         self.beats += beat_dt;
@@ -958,6 +1108,70 @@ pub fn presets() -> Vec<(&'static str, &'static str, VoicePatch)> {
                 ..d()
             },
         ),
+        (
+            "Talk Ka-Ta",
+            "speaks ka, ta, ka, da: one syllable per note (consonants, 0.2.3.10)",
+            VoicePatch {
+                base: base("Talk Ka-Ta", 9000.0, 0.002, 0.25, 0.7, 0.08),
+                register: Register::Tenor,
+                vowels: vec![A],
+                words: vec!["ka".into(), "ta".into(), "ka".into(), "da".into()],
+                rate: 1.3,
+                tension: 0.6,
+                breath: 0.08,
+                ..d()
+            },
+        ),
+        (
+            "Throat Ahh",
+            "Throat mode: a simulated vocal tract (after Pink Trombone) sliding A > O",
+            VoicePatch {
+                base: base("Throat Ahh", 8000.0, 0.04, 0.6, 0.85, 0.35),
+                register: Register::Bass,
+                throat: true,
+                vowels: vec![A, O],
+                step: 1.0,
+                morph_ms: 120.0,
+                breath: 0.25,
+                tension: 0.5,
+                jitter: 0.3,
+                ..d()
+            },
+        ),
+        (
+            "Throat Speech",
+            "Throat mode with words: ma, na, ya, sha, one per note",
+            VoicePatch {
+                base: base("Throat Speech", 9000.0, 0.003, 0.3, 0.75, 0.1),
+                register: Register::Tenor,
+                throat: true,
+                vowels: vec![A],
+                words: vec!["ma".into(), "na".into(), "ya".into(), "sha".into()],
+                rate: 1.2,
+                breath: 0.12,
+                tension: 0.55,
+                ..d()
+            },
+        ),
+        (
+            "Demon Words",
+            "Throat mode, Demon register: growled gha, dum, osh, kar",
+            VoicePatch {
+                base: Patch {
+                    drive: 0.3,
+                    ..base("Demon Words", 6000.0, 0.005, 0.4, 0.8, 0.2)
+                },
+                register: Register::Demon,
+                throat: true,
+                vowels: vec![A],
+                words: vec!["gha".into(), "dum".into(), "osh".into(), "kar".into()],
+                rate: 0.9,
+                breath: 0.3,
+                tension: 0.7,
+                jitter: 0.45,
+                ..d()
+            },
+        ),
     ]
 }
 
@@ -1207,5 +1421,129 @@ mod tests {
         assert_eq!(q.register, Register::Demon);
         assert_eq!(q.vowels, vec![Vowel::Er, Vowel::A]);
         assert_eq!(q.shift, 1.0);
+    }
+
+    // ---- 0.2.3.10: consonants and Throat mode
+
+    fn speak(p: &VoicePatch, word: &str, secs: f32) -> Vec<f32> {
+        let mut v = VoxState::new();
+        v.speak(word);
+        (0..(secs * SR) as usize)
+            .map(|_| v.render(p, 110.0, SR, 120.0, 0.0))
+            .collect()
+    }
+
+    fn rms(x: &[f32]) -> f32 {
+        (x.iter().map(|v| v * v).sum::<f32>() / x.len().max(1) as f32).sqrt()
+    }
+
+    /// share of energy above `hz` (one-pole high-pass split)
+    fn hf_share(x: &[f32], hz: f32) -> f32 {
+        let a = (-std::f32::consts::TAU * hz / SR).exp();
+        let (mut lp, mut eh, mut et) = (0.0f32, 0.0f32, 0.0f32);
+        for &v in x {
+            lp = lp * a + v * (1.0 - a);
+            let h = v - lp;
+            eh += h * h;
+            et += v * v;
+        }
+        eh / et.max(1e-12)
+    }
+
+    fn ms(t: f32) -> usize {
+        (t * SR / 1000.0) as usize
+    }
+
+    #[test]
+    fn consonants_sound_like_their_class() {
+        for throat in [false, true] {
+            let p = VoicePatch {
+                throat,
+                breath: 0.05,
+                ..VoicePatch::default()
+            };
+            let tag = if throat { "throat" } else { "formant" };
+            // "sa": hiss first (energy above 3 kHz), then the vowel
+            let o = speak(&p, "sa", 0.6);
+            let (fric, vow) = (&o[ms(15.0)..ms(100.0)], &o[ms(250.0)..ms(550.0)]);
+            let (hf, hv) = (hf_share(fric, 3000.0), hf_share(vow, 3000.0));
+            eprintln!(
+                "{tag} sa: hf {hf:.2} vowel hf {hv:.3} rms {} {}",
+                rms(fric),
+                rms(vow)
+            );
+            assert!(
+                hf > 0.5 && hv < 0.2 && rms(fric) > rms(vow) * 0.05,
+                "{tag} s"
+            );
+            // "ta": a silent closure, a burst, then the vowel
+            let o = speak(&p, "ta", 0.6);
+            let close = rms(&o[ms(10.0)..ms(50.0)]);
+            let burst = rms(&o[ms(56.0)..ms(68.0)]);
+            let vowel = rms(&o[ms(250.0)..ms(550.0)]);
+            eprintln!("{tag} ta: close {close} burst {burst} vowel {vowel}");
+            assert!(close < vowel * 0.02, "{tag} t closure");
+            assert!(burst > close * 10.0 && burst > vowel * 0.1, "{tag} t burst");
+            // "pa" closure is silent, "ba" has a voice bar
+            let pa = rms(&speak(&p, "pa", 0.06)[ms(10.0)..ms(45.0)]);
+            let ba = rms(&speak(&p, "ba", 0.06)[ms(10.0)..ms(40.0)]);
+            eprintln!("{tag} pa {pa} ba {ba}");
+            assert!(ba > pa * 4.0, "{tag} voice bar");
+            // "ma": voiced murmur, quieter than the vowel and darker
+            let o = speak(&p, "ma", 0.6);
+            let (m, a) = (&o[ms(20.0)..ms(70.0)], &o[ms(250.0)..ms(550.0)]);
+            eprintln!(
+                "{tag} ma: m {} a {} hf {} {}",
+                rms(m),
+                rms(a),
+                hf_share(m, 1000.0),
+                hf_share(a, 1000.0)
+            );
+            assert!(rms(m) > rms(a) * 0.05 && rms(m) < rms(a), "{tag} m level");
+            assert!(
+                hf_share(m, 1000.0) < hf_share(a, 1000.0),
+                "{tag} m is darker"
+            );
+            // ending on a consonant goes silent
+            let o = speak(&p, "ak", 0.6);
+            assert!(rms(&o[ms(400.0)..]) < 1e-4, "{tag} silent after the word");
+            assert!(o.iter().all(|x| x.is_finite() && x.abs() < 4.0));
+        }
+    }
+
+    #[test]
+    fn throat_mode_level_matches_the_formant_bank() {
+        for v in Vowel::ALL {
+            let f = VoicePatch {
+                vowels: vec![v],
+                ..VoicePatch::default()
+            };
+            let t = VoicePatch {
+                throat: true,
+                ..f.clone()
+            };
+            let (a, b) = (
+                rms(&steady(&f, 110.0, 0.5)[4800..]),
+                rms(&steady(&t, 110.0, 0.5)[4800..]),
+            );
+            let db = 20.0 * (b / a).log10();
+            eprintln!("{v:?} formant {a:.3} throat {b:.3} ({db:+.1} dB)");
+            assert!(db.abs() < 9.0, "{v:?} throat level {db:+.1} dB");
+        }
+    }
+
+    #[test]
+    fn speech_rate_scales_the_timeline() {
+        let p = VoicePatch::default();
+        let fast = VoicePatch {
+            rate: 2.0,
+            ..p.clone()
+        };
+        let onset = |p: &VoicePatch| {
+            let o = speak(p, "ta", 0.3);
+            o.iter().position(|x| x.abs() > 0.01).unwrap_or(o.len())
+        };
+        let (a, b) = (onset(&p), onset(&fast));
+        assert!(b < a * 2 / 3, "rate 2 bursts earlier: {a} vs {b}");
     }
 }

@@ -119,6 +119,68 @@ pub(super) fn voice_panel(ui: &mut egui::Ui, vp: &mut VoicePatch) -> bool {
             }
         }
     });
+    // tract model
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("Tract").small().color(t.ink2));
+        changed |= ui
+            .selectable_value(&mut vp.throat, false, "Formant")
+            .on_hover_text("five formant filters (the classic ChipWave voice)")
+            .changed();
+        changed |= ui
+            .selectable_value(&mut vp.throat, true, "Throat")
+            .on_hover_text(
+                "a simulated vocal tract (tube with tongue, lips and nose), inspired by \
+                 Pink Trombone by Neil Thapen: rounder, more physical, more mouth noise",
+            )
+            .changed();
+    });
+    // words: each note speaks the next word (3Exx picks one)
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("Words").small().color(t.ink2))
+            .on_hover_text(
+                "each note speaks the next word; 3Exx speaks word xx. Letters: vowels a e i o u er ae, \
+                 p b t d k g, s z sh f v h, m n ng; . = pause. Empty = vowels only.",
+            );
+        let mut remove = None;
+        for (i, w) in vp.words.iter_mut().enumerate() {
+            let r = ui.add(
+                egui::TextEdit::singleline(w)
+                    .desired_width(56.0)
+                    .char_limit(48)
+                    .hint_text("ka"),
+            );
+            r.clone().on_hover_text(format!(
+                "word {:02X} (3E{:02X}): {}",
+                i,
+                i,
+                crate::speech::describe(w)
+            ));
+            changed |= r.changed();
+            if r.secondary_clicked() {
+                remove = Some(i);
+            }
+        }
+        if let Some(i) = remove {
+            vp.words.remove(i);
+            changed = true;
+        }
+        if vp.words.len() < crate::speech::MAX_WORDS
+            && ui
+                .small_button("+ word")
+                .on_hover_text("add a word (right-click a word to remove it)")
+                .clicked()
+        {
+            let next = ["ka", "ta", "da", "ma", "sha", "pa", "na", "ga"];
+            vp.words.push(next[vp.words.len() % next.len()].to_string());
+            changed = true;
+        }
+        if !vp.words.is_empty() && ui.small_button("clear").clicked() {
+            vp.words.clear();
+            changed = true;
+        }
+    });
     egui::Grid::new("voice_grid")
         .num_columns(2)
         .spacing([8.0, 4.0])
@@ -163,6 +225,12 @@ pub(super) fn voice_panel(ui: &mut egui::Ui, vp: &mut VoicePatch) -> bool {
                 4.0,
                 "move to the next vowel of the sequence every … (tempo-synced); off = hold the first",
             );
+            ui.end_row();
+            ui.label("   Speech rate");
+            changed |= ui
+                .add(egui::Slider::new(&mut vp.rate, 0.25..=3.0).logarithmic(true).suffix(" x"))
+                .on_hover_text("how fast words are spoken (consonant and vowel lengths, tongue speed)")
+                .changed();
             ui.end_row();
             ui.label("   Morph");
             changed |= ui

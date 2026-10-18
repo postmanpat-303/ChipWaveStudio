@@ -238,6 +238,14 @@ pub(super) const CREDITS: &[(&str, &str)] = &[
         "https://signalsmith-audio.co.uk/writing/2022/limiter/",
     ),
     (
+        "Throat mode inspired by Pink Trombone by Neil Thapen (MIT)",
+        "https://dood.al/pinktrombone/",
+    ),
+    (
+        "Consonant loci: Delattre, Liberman & Cooper (1955); noise bands: K. N. Stevens, Acoustic Phonetics",
+        "https://doi.org/10.1121/1.1908024",
+    ),
+    (
         "Key finding: Krumhansl–Schmuckler algorithm with the Krumhansl & Kessler (1982) key profiles",
         "https://doi.org/10.1037/0033-295X.89.4.334",
     ),

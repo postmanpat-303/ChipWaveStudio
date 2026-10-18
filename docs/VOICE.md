@@ -59,10 +59,48 @@ The effects in a row with a note apply to that new note. A new note resets
 Example: `C-2 05 3000`, then `--- -- 3053` and later `--- -- 3022`, gives "ahh → err → eee".
 `--- -- 3332` on a later row stutters the last 1/16 twice.
 
+## Consonants and words (0.2.3.10)
+Give the voice **Words** (the row of small text boxes under the vowel
+sequence; **+ word** adds one, right-click or **clear** removes). Each new
+note speaks the next word in the list, so a run of notes says
+"ka ta ka da …". `3Exx` on a note speaks word `xx` instead; `3Exx` on a row
+without a note says word `xx` again on the held note (a new syllable
+without a new envelope). With no words the voice works as before (vowels only).
+
+A word is a phoneme string. Letters:
+
+| Kind | Letters | How it sounds |
+|---|---|---|
+| vowels | `a e i o u`, `er`, `ae` (also `ee` = i, `oo` = u, `y` = i, `w` = u, `r` = er) | the vowel table; a vowel that is not last lasts 150 ms, the last one holds until the note ends |
+| plosives | `p b t d k g` (`c q` = k, `x` = k s, `ch` = t sh, `j` = d sh) | a closure (silent; a low *voice bar* for b d g), a 10 ms noise **burst** shaped by the place (lips ≈ 1.2 kHz, tongue tip ≈ 4.5 kHz, soft palate ≈ 2.3 kHz), then aspiration (p t k) and a **formant transition** from the consonant's locus into the vowel |
+| fricatives | `s z sh f v h` (`th` = f) | band-limited noise (s ≈ 6.5 kHz, sh ≈ 3.2 kHz, f/v broad and soft), voiced for z and v; `h` is breath through the next vowel's formants |
+| nasals | `m n ng` | a voiced, darker murmur (F1 ≈ 270 Hz, upper formants weak), then the transition into the vowel |
+| pause | `.` `-` `,` | 80 ms of silence |
+
+A word that ends on a consonant ("ak") goes silent after it until the next
+word. **Speech rate** (0.25–3×) scales all phoneme lengths and the
+transitions. The **Talk Ka-Ta** preset shows it.
+
+## Throat mode (0.2.3.10)
+**Tract: Throat** replaces the five formant filters with a simulated vocal
+tract, inspired by **Pink Trombone** by Neil Thapen (MIT): a 44-section
+waveguide tube (Kelly-Lochbaum) whose diameters follow a tongue position, the
+lips and constrictions, with a 28-section nose behind a velum. The glottal
+source, breath, tension and jitter are the same as in formant mode. Vowels
+become tongue and lip shapes (A = tongue back and low, I = front and high, U =
+back, high and rounded lips, …), consonants become closures and narrow
+constrictions at the lips, tongue tip or soft palate with turbulence noise,
+and nasals open the velum, so the transitions come out of the moving tract.
+Formant shift and register scale the tract length; Morph and Speech rate set
+how fast the tongue moves. Presets: **Throat Ahh**, **Throat Speech**, **Demon Words**.
+Throat mode costs more CPU (8 throat voices render about 6× faster than realtime
+on one core; formant mode is several times cheaper).
+
 ## Text songs
 In a `.cwt.toml` text song, `patch = "voice:Demon Ahh"` makes a Voice
 instrument. An optional `[instrument.voice]` table overrides its fields
-(e.g. `vowels = ["Er", "A"]`, `shift = 0.9`), and the usual synth keys
+(e.g. `vowels = ["Er", "A"]`, `shift = 0.9`, `words = ["ka", "ta"]`,
+`rate = 1.2`, `throat = true`), and the usual synth keys
 (`cutoff`, `attack`, …) override its envelope and filter.
 
 `scripts/make_voice_examples.py [out.mp3]` writes one example text song per
@@ -71,7 +109,10 @@ use), renders them with `chipwave --render` and joins them into one MP3.
 
 ## Limits (first version)
 - The voice is mono, and unison does not apply (use Chorus or the delay for width).
-- There are no consonants (no "k", "t" or "s"). It makes vowels only.
+- Consonants are simple (no l, no r colouring beyond the ER vowel, no
+  diphthong rules); words are phoneme strings, not English text-to-speech.
+- In Throat mode voiced closures (b d g) are almost silent: the tube has no
+  wall radiation for the voice bar.
 - Stutter slices are at most 1 second long and sit before the instrument FX chain.
   Live MIDI notes are not stuttered.
 
@@ -91,4 +132,13 @@ use), renders them with `chipwave --render` and joins them into one MP3.
   synthesizer", JASA 67(3), https://doi.org/10.1121/1.383940
 - **Vadim Zavalishin**, *The Art of VA Filter Design*: the TPT state-variable
   filter used for the formants.
+- **Neil Thapen**, Pink Trombone (2017, MIT), https://dood.al/pinktrombone/ :
+  the Throat mode's vocal-tract design. Independent implementation; the MIT
+  notice is in THIRD_PARTY_LICENSES.txt.
+- **J. L. Kelly & C. C. Lochbaum** (1962), "Speech synthesis": the tube model.
+- **P. Delattre, A. Liberman & F. Cooper** (1955), "Acoustic loci and
+  transitional cues for consonants", JASA 27(4),
+  https://doi.org/10.1121/1.1908024 : consonant loci.
+- **K. N. Stevens**, *Acoustic Phonetics* (MIT Press, 1998): burst and
+  frication noise bands.
 - Research notes: [research/voice-glitch.md](research/voice-glitch.md).

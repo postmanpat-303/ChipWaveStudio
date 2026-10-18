@@ -24,6 +24,7 @@ mod prompt;
 mod recovery;
 mod sample;
 mod settings;
+mod speech;
 mod synth;
 mod theme;
 mod update;

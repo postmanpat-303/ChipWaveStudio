@@ -652,6 +652,11 @@ impl App {
                  the bar under the pattern and under the mixer strips shows which are in view - click or drag it to scroll.",
             );
             ui.label(
+                "Voice words: each note speaks the next word of the Voice's Words list (ka, ta, sha, ...); \
+                 3Exx speaks word xx (on a held note: says it again). Tract: Throat = a simulated vocal tract \
+                 (inspired by Pink Trombone by Neil Thapen).",
+            );
+            ui.label(
                 "Instruments: double-click a name to rename; right-click for Move up / down, Use this instead of (swap the notes), \
                  Save to library, Export .cwi; Up / Down move the selected one (notes follow). File > Instrument library… browses \
                  the song, your library folder (.cwi files, sub-folders = categories) and the factory sounds: › auditions, + adds, \

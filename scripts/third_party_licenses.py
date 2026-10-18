@@ -86,6 +86,46 @@ implementations of published methods, credited with thanks:
 - Glide and accent (effects 3C / 3D) follow the behaviour of the Roland
   TB-303 Bass Line (1981); no Roland material is used.
 
+Voice consonants and Throat mode (src/speech.rs, 0.2.3.10):
+- Throat mode is inspired by Pink Trombone by Neil Thapen (2017),
+  https://dood.al/pinktrombone/ , released under the MIT licence. ChipWave's
+  tract is an independent Rust implementation of the structure Pink Trombone
+  describes (a 44-section Kelly-Lochbaum waveguide with a tongue-shaped
+  diameter profile, lips, a 28-section nasal branch behind a velum, and
+  turbulence noise at narrow constrictions); no Pink Trombone code is
+  copied. With thanks, its licence:
+
+  MIT License
+
+  Copyright (c) 2017 Neil Thapen
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to permit
+  persons to whom the Software is furnished to do so, subject to the
+  following conditions:
+
+  The above copyright notice and this permission notice shall be included
+  in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+  NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+  DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+  OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+  USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+- The tube model: J. L. Kelly & C. C. Lochbaum (1962), "Speech synthesis",
+  Proc. 4th International Congress on Acoustics.
+- Consonant formant loci: P. C. Delattre, A. M. Liberman & F. S. Cooper
+  (1955), "Acoustic loci and transitional cues for consonants", JASA 27(4).
+  https://doi.org/10.1121/1.1908024
+- Frication / burst noise bands: K. N. Stevens (1998), "Acoustic
+  Phonetics", MIT Press.
+
 Chord helper and key detection (src/chords.rs), independent implementations:
 - Key finding: the Krumhansl-Schmuckler algorithm, as described in
   C. L. Krumhansl (1990), "Cognitive Foundations of Musical Pitch", Oxford

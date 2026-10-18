@@ -1648,3 +1648,48 @@ fn chord_helper_pads_progression_write_undo_and_scale_lock() {
     let c2 = song(&mut h, |s| s.patterns[p].cells[2][5]);
     assert_eq!(crate::chords::pc_of(c2.note), 1, "unlocked C#: {}", c2.note);
 }
+
+// ---- 0.2.3.10: Voice words, Throat mode, sample slicing ----
+
+fn last_voice(h: &mut Harness<'static, App>) -> crate::voice::VoicePatch {
+    song(h, |s| match &s.instruments.last().unwrap().kind {
+        InstrumentKind::Voice(v) => v.clone(),
+        _ => panic!("not a voice"),
+    })
+}
+
+#[test]
+fn voice_words_and_throat_mode_from_the_voice_panel() {
+    let mut h = harness();
+    instr_menu(&mut h, 1);
+    click_exact(&mut h, "New instrument");
+    click_exact(&mut h, "Voice (glitch)");
+    click_exact(&mut h, "Init voice");
+    frames(&mut h, 2);
+    assert!(last_voice(&mut h).words.is_empty() && !last_voice(&mut h).throat);
+    // Tract: Throat
+    click_exact(&mut h, "Throat");
+    assert!(last_voice(&mut h).throat, "throat on");
+    // + word twice: ka, ta
+    click_exact(&mut h, "+ word");
+    click_exact(&mut h, "+ word");
+    assert_eq!(last_voice(&mut h).words, ["ka", "ta"]);
+    // the new word plays on the next note: preview and check the phoneme
+    let ins = h.state().instr;
+    h.with_engine(|s| {
+        let Shared { song, engine, .. } = s;
+        engine.preview(song, 0, 37, ins);
+    });
+    let ph = h.with_engine(|s| s.engine.chan_speech(0));
+    assert_eq!(ph, Some(crate::speech::Ph::K));
+    // undo: the words, then Throat
+    ctrl_z(&mut h);
+    assert_eq!(last_voice(&mut h).words, ["ka"]);
+    ctrl_z(&mut h);
+    ctrl_z(&mut h);
+    assert!(!last_voice(&mut h).throat, "undo throat");
+    let names: Vec<&str> = crate::voice::presets().iter().map(|p| p.0).collect();
+    for p in ["Talk Ka-Ta", "Throat Ahh", "Throat Speech", "Demon Words"] {
+        assert!(names.contains(&p), "{p} preset");
+    }
+}

@@ -30,6 +30,10 @@ struct Chan {
     stut: crate::voice::Stutter,
     /// 34xy pitch step override for this note's stutter
     stut_semi: Option<f32>,
+    /// next word a Voice note on this channel speaks (cycles the list)
+    word_next: usize,
+    /// a word was started on this row (3E then does not restart it)
+    spoke: bool,
     /// pattern filter overrides (38-3B); cleared by a different instrument
     fm: crate::synth::FiltMod,
     /// cutoff slide in octaves per tick (3A / 3B), this row only
@@ -155,6 +159,8 @@ impl Chan {
         Self {
             stut: crate::voice::Stutter::new(sr as usize, (sr * 0.002) as usize),
             stut_semi: None,
+            word_next: 0,
+            spoke: false,
             fm: Default::default(),
             cut_slide: 0.0,
             gate: false,
@@ -411,7 +417,15 @@ impl Engine {
                     instr: i,
                     freq: note_freq(n),
                     vol: inst.volume * vel,
-                    synth: SynthVoice::new(),
+                    synth: {
+                        let mut sv = SynthVoice::new();
+                        if let InstrumentKind::Voice(vp) = &inst.kind {
+                            if let Some(w) = vp.words.first() {
+                                sv.vox.speak(w);
+                            }
+                        }
+                        sv
+                    },
                     pos: 0.0,
                     active: true,
                     down: true,
@@ -600,6 +614,12 @@ impl Engine {
         }
     }
 
+    /// the phoneme a Voice note on `ch` is speaking (tests)
+    #[cfg(test)]
+    pub fn chan_speech(&self, ch: usize) -> Option<crate::speech::Ph> {
+        self.chans.get(ch)?.synth.vox.speech.current()
+    }
+
     /// stop the voice on `ch` (with the usual declick fade)
     pub fn release(&mut self, ch: usize) {
         if let Some(c) = self.chans.get_mut(ch) {
@@ -721,6 +741,21 @@ impl Engine {
             c.synth = SynthVoice::seeded(self.seed);
             c.pos = 0.0;
             c.active = true;
+            // Voice words: each note speaks the next word, 3Exx picks one
+            if let Some(InstrumentKind::Voice(vp)) = song.instruments.get(c.instr).map(|i| &i.kind)
+            {
+                if !vp.words.is_empty() {
+                    let n = vp.words.len();
+                    let w = if cell.fx == 0x3E {
+                        cell.fxp as usize
+                    } else {
+                        c.word_next
+                    } % n;
+                    c.synth.vox.speak(&vp.words[w]);
+                    c.word_next = (w + 1) % n;
+                    c.spoke = true;
+                }
+            }
         }
         if cell.vol > 0 {
             c.vol = (cell.vol - 1) as f32 / 64.0;
@@ -749,6 +784,7 @@ impl Engine {
             self.chans[ch].slide = 0.0;
             self.chans[ch].vol_slide = 0.0;
             self.chans[ch].cut_slide = 0.0;
+            self.chans[ch].spoke = false;
             let glide = (cell.fx == 0x3C).then_some(match cell.fxp {
                 0 => Some(0.0),
                 1 => None,
@@ -772,6 +808,19 @@ impl Engine {
                 0x0F if cell.fxp == 0 => brk = true,
                 0x0F if cell.fxp <= 0xF0 => self.bpm = cell.fxp as f32,
                 0x30..=0x37 => self.voice_fx(song, ch, cell.fx, cell.fxp),
+                // 3Exx: speak word xx (on a held note: say it again now)
+                0x3E if !c.spoke && c.active => {
+                    if let Some(InstrumentKind::Voice(vp)) =
+                        song.instruments.get(c.instr).map(|i| &i.kind)
+                    {
+                        if !vp.words.is_empty() {
+                            let n = vp.words.len();
+                            let w = cell.fxp as usize % n;
+                            c.synth.vox.speak(&vp.words[w]);
+                            c.word_next = (w + 1) % n;
+                        }
+                    }
+                }
                 // 38xx cutoff: 00 = instrument, 01-FF = 20 Hz .. 20 kHz (log)
                 0x38 => {
                     c.fm.cut_oct = 0.0;
@@ -2111,6 +2160,70 @@ mod tests {
         // a new note resets the per-note overrides
         e.preview(&song, 0, 40, 2);
         assert!(e.chans[0].synth.vox.fx.vowel.is_none());
+    }
+
+    #[test]
+    fn voice_words_cycle_per_note_and_3e_picks_or_respeaks() {
+        use crate::speech::Ph;
+        let mut song = voice_song("Talk Ka-Ta"); // ka ta ka da
+        let c = |note: u8, fx: u8, fxp: u8| Cell {
+            note,
+            instr: if note > 0 { 2 } else { 0 },
+            vol: 0,
+            fx,
+            fxp,
+        };
+        song.patterns[0].cells[0][0] = c(37, 0, 0);
+        song.patterns[0].cells[1][0] = c(37, 0, 0);
+        song.patterns[0].cells[2][0] = c(0, 0x3E, 0x00);
+        song.patterns[0].cells[3][0] = c(37, 0x3E, 0x03);
+        song.patterns[0].cells[4][0] = c(37, 0, 0);
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let cur = |e: &Engine| e.chans[0].synth.vox.speech.current();
+        assert_eq!(cur(&e), Some(Ph::K), "row 0: ka");
+        let mut buf = vec![0.0f32; 2 * 6200];
+        e.render(&song, &mut buf);
+        assert_eq!(cur(&e), Some(Ph::T), "row 1: next word ta");
+        let mut buf = vec![0.0f32; 2 * 6000];
+        e.render(&song, &mut buf);
+        assert_eq!(
+            cur(&e),
+            Some(Ph::K),
+            "row 2: 3E00 says ka again on the held note"
+        );
+        e.render(&song, &mut buf);
+        assert_eq!(cur(&e), Some(Ph::D), "row 3: 3E03 = da");
+        e.render(&song, &mut buf);
+        assert_eq!(cur(&e), Some(Ph::K), "row 4: cycles on to word 0");
+        assert!(buf.iter().all(|x| x.is_finite()));
+    }
+
+    #[test]
+    fn throat_voices_render_fast_enough() {
+        let mut song = voice_song("Demon Words");
+        for ch in 0..8 {
+            for r in (0..64).step_by(4) {
+                song.patterns[0].cells[r][ch] = Cell {
+                    note: 25 + (ch as u8) * 3,
+                    instr: 2,
+                    ..Default::default()
+                };
+            }
+        }
+        song.channels = 8;
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 1024];
+        let t0 = std::time::Instant::now();
+        let frames = 48000 * 4;
+        for _ in 0..frames / 512 {
+            e.render(&song, &mut buf);
+        }
+        let x = 4.0 / t0.elapsed().as_secs_f64();
+        eprintln!("8 throat voices: {x:.1}x realtime");
+        assert!(x > 3.0, "8 throat voices at {x:.1}x realtime");
+        assert!(buf.iter().all(|v| v.is_finite()));
     }
 
     // ------------------------------------------------ 0.2.3.7: acid commands
