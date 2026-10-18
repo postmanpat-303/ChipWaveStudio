@@ -516,6 +516,23 @@ pub enum GenEngine {
     Kit(KitP),
     /// sfxr-style game sound (0.2.3.13)
     ChipFx(crate::chipfx::SfxP),
+    /// Moog-style analog synth (0.2.3.14)
+    Analog(crate::gen2::AnalogP),
+    /// 4-operator FM (0.2.3.14)
+    Fm(crate::gen2::FmP),
+    /// noise: risers, downlifters, impacts, wind, crackle (0.2.3.14)
+    Noise(crate::gen2::NoiseP),
+}
+
+impl GenEngine {
+    /// engines with their own envelopes (the patch amp envelope is not used;
+    /// the note-off is passed in as a gate)
+    pub fn own_env(&self) -> bool {
+        matches!(
+            self,
+            GenEngine::Analog(_) | GenEngine::Fm(_) | GenEngine::Noise(_)
+        )
+    }
 }
 
 impl Default for GenEngine {
@@ -580,6 +597,9 @@ impl GenPatch {
             GenEngine::Drum(d) => d.fix(),
             GenEngine::Kit(k) => k.pieces.iter_mut().for_each(|d| d.fix()),
             GenEngine::ChipFx(s) => s.fix(),
+            GenEngine::Analog(a) => a.fix(),
+            GenEngine::Fm(f) => f.fix(),
+            GenEngine::Noise(n) => n.fix(),
         }
         self.mutate = if self.mutate.is_finite() {
             self.mutate.clamp(0.0, 0.5)
@@ -593,7 +613,7 @@ impl GenPatch {
         match &mut self.engine {
             GenEngine::Drum(d) => Some(d),
             GenEngine::Kit(k) => Some(&mut k.pieces[sel.min(7)]),
-            GenEngine::ChipFx(_) => None,
+            _ => None,
         }
     }
     pub fn chip_fx(sfx: crate::chipfx::SfxP) -> Self {
@@ -608,6 +628,9 @@ impl GenPatch {
         self.seed = seed;
         match &mut self.engine {
             GenEngine::ChipFx(s) => s.dice(seed),
+            GenEngine::Analog(a) => a.dice(seed),
+            GenEngine::Fm(f) => f.dice(seed),
+            GenEngine::Noise(n) => n.dice(seed),
             _ => {
                 if let Some(d) = self.drum_mut(sel) {
                     roll(d, seed)
@@ -621,6 +644,9 @@ impl GenPatch {
         match &mut self.engine {
             GenEngine::Drum(d) => roll(d, seed),
             GenEngine::ChipFx(s) => s.dice(seed),
+            GenEngine::Analog(a) => a.dice(seed),
+            GenEngine::Fm(f) => f.dice(seed),
+            GenEngine::Noise(n) => n.dice(seed),
             GenEngine::Kit(k) => {
                 for (i, d) in k.pieces.iter_mut().enumerate() {
                     roll(d, seed.wrapping_add(i as u32 * 0x9E37_79B9));
@@ -631,9 +657,12 @@ impl GenPatch {
     /// Mutate: nudge every unlocked macro by up to ±`mutate`
     pub fn mutate(&mut self, sel: usize, seed: u32) {
         let a = self.mutate;
-        if let GenEngine::ChipFx(s) = &mut self.engine {
-            s.mutate(a, seed);
-            return;
+        match &mut self.engine {
+            GenEngine::ChipFx(s) => return s.mutate(a, seed),
+            GenEngine::Analog(x) => return x.mutate(a, seed),
+            GenEngine::Fm(x) => return x.mutate(a, seed),
+            GenEngine::Noise(x) => return x.mutate(a, seed),
+            _ => {}
         }
         let Some(d) = self.drum_mut(sel) else {
             return;
@@ -743,6 +772,11 @@ pub struct GenState {
     off: f32,
     pub done: bool,
     sfx: crate::chipfx::SfxState,
+    an: crate::gen2::AnalogState,
+    fm: crate::gen2::FmState,
+    ns: crate::gen2::NoiseState,
+    /// note held (own-envelope engines release on false)
+    pub gate: bool,
 }
 
 impl Default for GenState {
@@ -765,6 +799,10 @@ impl Default for GenState {
             piece: 0,
             off: 0.0,
             sfx: crate::chipfx::SfxState::default(),
+            an: Default::default(),
+            fm: Default::default(),
+            ns: Default::default(),
+            gate: true,
             done: false,
         }
     }
@@ -781,6 +819,19 @@ impl GenState {
         if self.done {
             return (0.0, 0.0, false);
         }
+        let gate = self.gate;
+        let own = match &g.engine {
+            GenEngine::Analog(a) => Some(self.an.render(a, ov, freq, sr, gate)),
+            GenEngine::Fm(f) => Some(self.fm.render(f, ov, freq, sr, gate)),
+            GenEngine::Noise(n) => Some(self.ns.render(n, ov, freq, sr, gate)),
+            _ => None,
+        };
+        if let Some(o) = own {
+            if self.an.done || self.fm.done || self.ns.done {
+                self.done = true;
+            }
+            return o;
+        }
         if let GenEngine::ChipFx(p) = &g.engine {
             let (y, alive) = self.sfx.render(p, ov, freq, sr);
             if !alive {
@@ -789,7 +840,12 @@ impl GenState {
             return (y, y, false);
         }
         let (d, ratio) = match &g.engine {
-            GenEngine::ChipFx(_) => unreachable!(),
+            GenEngine::ChipFx(_)
+            | GenEngine::Analog(_)
+            | GenEngine::Fm(_)
+            | GenEngine::Noise(_) => {
+                unreachable!()
+            }
             GenEngine::Drum(d) => (
                 d,
                 if d.follow_note && freq > 0.0 {
@@ -1218,7 +1274,7 @@ impl GenState {
 }
 
 /// Factory generator presets: (name, tip, patch)
-pub fn presets() -> Vec<(&'static str, &'static str, GenPatch)> {
+fn presets1() -> Vec<(&'static str, &'static str, GenPatch)> {
     use crate::chipfx::Category;
     use DrumKind::*;
     let d = |k, m, v: &[f32]| GenPatch::drum(DrumP::new(k, m, v));
@@ -1291,6 +1347,21 @@ pub fn presets() -> Vec<(&'static str, &'static str, GenPatch)> {
     ]
 }
 
+/// every preset, with the stage-2 generators (Analog, FM-4, Noise)
+pub fn presets() -> Vec<(&'static str, &'static str, GenPatch)> {
+    let mut v = presets1();
+    for (n, tip, e, glide, legato) in crate::gen2::presets() {
+        let mut g = GenPatch {
+            engine: e,
+            ..Default::default()
+        };
+        g.base.glide = glide;
+        g.base.legato = legato;
+        v.push((n, tip, g));
+    }
+    v
+}
+
 fn fx(c: crate::chipfx::Category, seed: u32) -> GenPatch {
     let mut s = crate::chipfx::SfxP::default();
     s.category(c, seed);
@@ -1312,7 +1383,11 @@ pub fn preset(name: &str) -> Option<GenPatch> {
 pub fn bake(g: &GenPatch, freq: f32, sr: f32, max_s: f32) -> Vec<f32> {
     let mut v = crate::synth::SynthVoice::seeded(g.seed.wrapping_mul(2_654_435_761) | 1);
     let mut out = Vec::with_capacity((sr * max_s.min(2.0)) as usize);
-    for _ in 0..(sr * max_s) as usize {
+    let hold = (sr * 1.2) as usize;
+    for n in 0..(sr * max_s) as usize {
+        if n == hold && g.engine.own_env() {
+            v.amp.release();
+        }
         let (l, r) = v.render_gen(&g.base, g, freq, sr, 120.0);
         out.push(0.5 * (l + r));
         if v.gen.done || v.amp.done() {
@@ -1365,7 +1440,10 @@ mod tests {
                 );
                 let mut v = crate::synth::SynthVoice::seeded(3);
                 let mut n = 0;
-                while !v.gen.done && n < (SR * 6.0) as usize {
+                while !v.gen.done && n < (SR * 8.0) as usize {
+                    if n == SR as usize {
+                        v.amp.release();
+                    }
                     v.render_gen(&g.base, &g, f, SR, 120.0);
                     n += 1;
                 }

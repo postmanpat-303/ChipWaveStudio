@@ -15,6 +15,7 @@ mod export;
 mod fileio;
 mod fx;
 mod gen;
+mod gen2;
 mod input;
 mod instfile;
 mod keymap;

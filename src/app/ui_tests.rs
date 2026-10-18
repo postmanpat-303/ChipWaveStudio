@@ -2039,3 +2039,90 @@ fn chip_fx_categories_randomize_mutate_locks_and_bake() {
     ctrl_z(&mut h);
     assert_eq!(song(&mut h, |s| s.instruments.len()), n0);
 }
+
+#[test]
+fn stage2_generators_menu_dice_locks_history_and_bake() {
+    use crate::gen::GenEngine;
+    for (menu, preset, header) in [
+        (
+            "Generator (analog)",
+            "Psy Rolling Bass",
+            "GENERATOR · ANALOG",
+        ),
+        ("Generator (FM-4)", "E-Piano", "GENERATOR · FM-4"),
+        ("Generator (noise)", "Impact", "GENERATOR · NOISE"),
+    ] {
+        let mut h = harness();
+        instr_menu(&mut h, 1);
+        click_exact(&mut h, "New instrument");
+        click_exact(&mut h, menu);
+        click_exact(&mut h, preset);
+        frames(&mut h, 2);
+        exact(&h, header);
+        let n0 = song(&mut h, |s| s.instruments.len());
+        let knobs = |g: &crate::gen::GenPatch| -> (Vec<f32>, u64) {
+            match &g.engine {
+                GenEngine::Analog(a) => (a.p.to_vec(), a.locks),
+                GenEngine::Fm(f) => (f.p.to_vec(), f.locks),
+                GenEngine::Noise(n) => (n.p.to_vec(), n.locks),
+                _ => panic!("not stage 2"),
+            }
+        };
+        let g0 = knobs(&last_gen(&mut h));
+        // the first knob lock (macro 1) is the first "lock" after the choice locks;
+        // lock every knob lock on screen except none: pick the lock under macro 1
+        let locks: Vec<Rect> = h
+            .query_all_by(|n| n.label().as_deref() == Some("lock"))
+            .map(|n| n.rect())
+            .collect();
+        // the macro knob locks are the last 8 visible ones
+        assert!(locks.len() >= 8, "{menu}: {} locks", locks.len());
+        let first_macro_lock = locks[locks.len() - 8];
+        click_at(&mut h, first_macro_lock.center());
+        frames(&mut h, 2);
+        let g1 = knobs(&last_gen(&mut h));
+        assert_eq!(g1.1 & 1, 1, "{menu}: macro 1 locked ({:x})", g1.1);
+        click_exact(&mut h, "Dice");
+        frames(&mut h, 2);
+        let g2 = knobs(&last_gen(&mut h));
+        assert_eq!(g2.0[0], g0.0[0], "{menu}: locked knob kept");
+        assert_ne!(g2.0, g0.0, "{menu}: Dice changed the rest");
+        click_exact(&mut h, "Mutate");
+        frames(&mut h, 2);
+        let g3 = knobs(&last_gen(&mut h));
+        assert_ne!(g3.0, g2.0);
+        assert_eq!(g3.0[0], g0.0[0]);
+        click_exact(&mut h, "<");
+        frames(&mut h, 2);
+        assert_eq!(knobs(&last_gen(&mut h)).0, g2.0, "{menu}: history back");
+        // bake (scroll the panel down first)
+        let at = exact(&h, header).center();
+        h.input_mut().events.push(egui::Event::PointerMoved(at));
+        frame(&mut h);
+        for _ in 0..4 {
+            h.input_mut().events.push(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -200.0),
+                phase: egui::TouchPhase::Move,
+                source: egui::MouseWheelSource::Wheel,
+                modifiers: Default::default(),
+            });
+            frame(&mut h);
+        }
+        frames(&mut h, 10);
+        click_exact(&mut h, "Bake to sample");
+        frames(&mut h, 2);
+        assert_eq!(
+            song(&mut h, |s| s.instruments.len()),
+            n0 + 1,
+            "{menu}: baked"
+        );
+        let len = song(&mut h, |s| match &s.instruments.last().unwrap().kind {
+            InstrumentKind::Sample { data, .. } => data.len(),
+            _ => 0,
+        });
+        assert!(len > 2400, "{menu}: {len}");
+        ctrl_z(&mut h);
+        assert_eq!(song(&mut h, |s| s.instruments.len()), n0);
+    }
+}

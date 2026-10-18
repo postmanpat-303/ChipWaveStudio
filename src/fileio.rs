@@ -1388,6 +1388,49 @@ mix = 0.7
     }
 
     #[test]
+    fn text_song_stage2_generators() {
+        let t = r#"
+[song]
+title = "g2"
+[[instrument]]
+name = "Bass"
+patch = "gen:Psy Rolling Bass"
+[instrument.gen.engine.Analog]
+sync = true
+level = 0.9
+[[instrument]]
+name = "Bell"
+patch = "gen:Metallic Bell"
+[[instrument]]
+name = "Riser"
+patch = "gen:White Riser"
+"#;
+        let s = song_from_text(t).unwrap();
+        let kind = |i: usize| match &s.instruments[i].kind {
+            InstrumentKind::Gen(g) => g.engine.clone(),
+            _ => panic!("not a generator"),
+        };
+        let crate::gen::GenEngine::Analog(a) = kind(0) else {
+            panic!()
+        };
+        let crate::gen::GenEngine::Analog(pre) =
+            crate::gen::preset("Psy Rolling Bass").unwrap().engine
+        else {
+            panic!()
+        };
+        assert!(a.sync && a.level == 0.9 && a.p == pre.p && a.waves == pre.waves);
+        assert!(matches!(kind(1), crate::gen::GenEngine::Fm(_)));
+        assert!(matches!(kind(2), crate::gen::GenEngine::Noise(_)));
+        let dir = std::env::temp_dir().join("cw_g2_rt.cwt");
+        save_cwt(&s, &dir).unwrap();
+        let back = load_cwt(&dir).unwrap();
+        for i in 0..3 {
+            assert_eq!(back.instruments[i].kind, s.instruments[i].kind);
+        }
+        let _ = std::fs::remove_file(&dir);
+    }
+
+    #[test]
     fn text_song_chip_fx() {
         let t = r#"
 [song]

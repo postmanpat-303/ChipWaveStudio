@@ -302,6 +302,10 @@ impl Env {
     pub fn done(&self) -> bool {
         self.stage == Stage::Off
     }
+    /// still held (not released)
+    pub fn gate(&self) -> bool {
+        !matches!(self.stage, Stage::Release | Stage::Off)
+    }
     pub fn next(&mut self, e: &Adsr, dt: f32) -> f32 {
         match self.stage {
             Stage::Attack => {
@@ -517,6 +521,8 @@ impl SynthVoice {
             return (0.0, 0.0);
         }
         let gmo = self.gmo;
+        let own = gp.engine.own_env();
+        self.gen.gate = self.amp.gate();
         let (l, r, stereo) = self.gen.render(gp, &gmo, freq, sr);
         let fe = self.fenv.next(&p.fenv, dt_s);
         let (yl, yr) = if gp.filter_on {
@@ -536,7 +542,13 @@ impl SynthVoice {
             (l, r)
         };
         let acc = self.accent.clamp(0.0, 1.0);
-        let g = self.amp.next(&p.amp, dt_s) * p.gain * (1.0 + 0.5 * acc);
+        // own-envelope generators: the amp envelope only carries the gate
+        let env = if own {
+            1.0
+        } else {
+            self.amp.next(&p.amp, dt_s)
+        };
+        let g = env * p.gain * (1.0 + 0.5 * acc);
         (yl * g, yr * g)
     }
 

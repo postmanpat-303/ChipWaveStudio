@@ -162,6 +162,7 @@ pub(super) fn gen_panel(
     }
     let is_kit = matches!(g.engine, GenEngine::Kit(_));
     let is_fx = matches!(g.engine, GenEngine::ChipFx(_));
+    let own = g.engine.own_env();
     st.sel = st.sel.min(7);
     ui.horizontal(|ui| {
         ui.add_space(14.0);
@@ -170,6 +171,12 @@ pub(super) fn gen_panel(
                 "GENERATOR · DRUM KIT"
             } else if is_fx {
                 "GENERATOR · CHIP FX"
+            } else if matches!(g.engine, GenEngine::Analog(_)) {
+                "GENERATOR · ANALOG"
+            } else if matches!(g.engine, GenEngine::Fm(_)) {
+                "GENERATOR · FM-4"
+            } else if matches!(g.engine, GenEngine::Noise(_)) {
+                "GENERATOR · NOISE"
             } else {
                 "GENERATOR · DRUM SYNTH"
             })
@@ -205,6 +212,9 @@ pub(super) fn gen_panel(
     let sel = st.sel;
     if is_fx {
         chipfx_buttons(ui, g, st, &mut out);
+    }
+    if own {
+        out.changed |= g2_choices(ui, g);
     }
     // kind + model of the shown drum
     if let Some(d) = g.drum_mut(sel) {
@@ -339,6 +349,9 @@ pub(super) fn gen_panel(
     if is_fx {
         chipfx_knobs(ui, g, &mut out);
     }
+    if own {
+        out.changed |= g2_knobs(ui, g);
+    }
     // the eight macro knobs
     if let Some(d) = g.drum_mut(sel) {
         let defs = d.kind.macros();
@@ -366,58 +379,60 @@ pub(super) fn gen_panel(
         });
     }
     // shared: release, optional filter (SVF / ladder), bake
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        ui.label("Release");
-        let mut ms = g.base.amp.r * 1000.0;
-        if ui
-            .add(
-                egui::Slider::new(&mut ms, 5.0..=2000.0)
-                    .logarithmic(true)
-                    .suffix(" ms"),
-            )
-            .on_hover_text("how fast a note-off (===) fades the drum")
-            .changed()
-        {
-            g.base.amp.r = ms / 1000.0;
-            out.changed = true;
-        }
-    });
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        out.changed |= ui
-            .checkbox(&mut g.filter_on, "Filter")
-            .on_hover_text("run the drum through a filter (pattern commands 38-3B move it)")
-            .changed();
+    if !own {
+        ui.horizontal_wrapped(|ui| {
+            ui.add_space(14.0);
+            ui.label("Release");
+            let mut ms = g.base.amp.r * 1000.0;
+            if ui
+                .add(
+                    egui::Slider::new(&mut ms, 5.0..=2000.0)
+                        .logarithmic(true)
+                        .suffix(" ms"),
+                )
+                .on_hover_text("how fast a note-off (===) fades the drum")
+                .changed()
+            {
+                g.base.amp.r = ms / 1000.0;
+                out.changed = true;
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.add_space(14.0);
+            out.changed |= ui
+                .checkbox(&mut g.filter_on, "Filter")
+                .on_hover_text("run the drum through a filter (pattern commands 38-3B move it)")
+                .changed();
+            if g.filter_on {
+                out.changed |= filter_model_combo(ui, "gen_fm", &mut g.base);
+                egui::ComboBox::from_id_salt("gen_fmode")
+                    .width(46.0)
+                    .selected_text(format!("{:?}", g.base.filter))
+                    .show_ui(ui, |ui| {
+                        for m in [FilterMode::Lp, FilterMode::Bp, FilterMode::Hp] {
+                            out.changed |= ui
+                                .selectable_value(&mut g.base.filter, m, format!("{m:?}"))
+                                .changed();
+                        }
+                    });
+            }
+        });
         if g.filter_on {
-            out.changed |= filter_model_combo(ui, "gen_fm", &mut g.base);
-            egui::ComboBox::from_id_salt("gen_fmode")
-                .width(46.0)
-                .selected_text(format!("{:?}", g.base.filter))
-                .show_ui(ui, |ui| {
-                    for m in [FilterMode::Lp, FilterMode::Bp, FilterMode::Hp] {
-                        out.changed |= ui
-                            .selectable_value(&mut g.base.filter, m, format!("{m:?}"))
-                            .changed();
-                    }
-                });
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label("Cutoff");
+                out.changed |= ui
+                    .add(egui::Slider::new(&mut g.base.cutoff, 20.0..=18000.0).logarithmic(true))
+                    .changed();
+            });
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label("Res");
+                out.changed |= ui
+                    .add(egui::Slider::new(&mut g.base.resonance, 0.0..=1.0))
+                    .changed();
+            });
         }
-    });
-    if g.filter_on {
-        ui.horizontal(|ui| {
-            ui.add_space(14.0);
-            ui.label("Cutoff");
-            out.changed |= ui
-                .add(egui::Slider::new(&mut g.base.cutoff, 20.0..=18000.0).logarithmic(true))
-                .changed();
-        });
-        ui.horizontal(|ui| {
-            ui.add_space(14.0);
-            ui.label("Res");
-            out.changed |= ui
-                .add(egui::Slider::new(&mut g.base.resonance, 0.0..=1.0))
-                .changed();
-        });
     }
     ui.horizontal(|ui| {
         ui.add_space(14.0);
@@ -442,6 +457,218 @@ pub(super) fn gen_panel(
         );
     });
     out
+}
+
+/// a lock bit in a u64 mask, toggled by the knob's "lock"
+fn knob64(
+    ui: &mut egui::Ui,
+    v: &mut f32,
+    def: &crate::gen::MacroDef,
+    locks: &mut u64,
+    bit: usize,
+    id: impl std::hash::Hash + std::fmt::Debug,
+) -> bool {
+    let mut l = *locks & (1 << bit) != 0;
+    let ch = knob(ui, v, def, &mut l, id);
+    let was = *locks & (1 << bit) != 0;
+    if l != was {
+        *locks ^= 1 << bit;
+    }
+    ch || l != was
+}
+
+/// knobs `idx` in rows of `per`
+fn knob_rows(
+    ui: &mut egui::Ui,
+    p: &mut [f32],
+    defs: &[crate::gen::MacroDef],
+    locks: &mut u64,
+    idx: &[usize],
+    per: usize,
+    tag: &str,
+) -> bool {
+    let mut ch = false;
+    for r in idx.chunks(per) {
+        ui.horizontal(|ui| {
+            ui.add_space(8.0);
+            ui.spacing_mut().item_spacing.x = 2.0;
+            for &i in r {
+                ch |= knob64(ui, &mut p[i], &defs[i], locks, i, (tag, i));
+            }
+        });
+    }
+    ch
+}
+
+/// a lockable discrete choice ("lock" toggles bit `bit` of `locks`)
+fn choice_lock_ui(ui: &mut egui::Ui, locks: &mut u64, k: u32) -> bool {
+    let b = crate::gen2::choice_lock(k);
+    if ui
+        .selectable_label(*locks & b != 0, "lock")
+        .on_hover_text("keep this choice on Dice")
+        .clicked()
+    {
+        *locks ^= b;
+        return true;
+    }
+    false
+}
+
+fn mode_combo(ui: &mut egui::Ui, id: &str, m: &mut FilterMode) -> bool {
+    let mut ch = false;
+    egui::ComboBox::from_id_salt(id)
+        .width(46.0)
+        .selected_text(format!("{m:?}"))
+        .show_ui(ui, |ui| {
+            for x in [FilterMode::Lp, FilterMode::Bp, FilterMode::Hp] {
+                ch |= ui.selectable_value(m, x, format!("{x:?}")).changed();
+            }
+        });
+    ch
+}
+
+/// stage-2 generators: waveforms / algorithm / colour and filter choices
+fn g2_choices(ui: &mut egui::Ui, g: &mut GenPatch) -> bool {
+    use crate::gen2::{AWave, Color, ALGOS};
+    let mut ch = false;
+    let (glide, legato) = (&mut g.base.glide, &mut g.base.legato);
+    match &mut g.engine {
+        GenEngine::Analog(a) => {
+            for k in 0..3 {
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    ui.label(format!("Osc {}", k + 1));
+                    for w in AWave::ALL {
+                        ch |= ui.selectable_value(&mut a.waves[k], w, w.name()).changed();
+                    }
+                    ch |= choice_lock_ui(ui, &mut a.locks, k as u32);
+                });
+            }
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(14.0);
+                ch |= ui
+                    .checkbox(&mut a.sync, "Sync 2>1")
+                    .on_hover_text("hard-sync oscillator 2 to oscillator 1")
+                    .changed();
+                ch |= ui
+                    .checkbox(&mut a.vintage, "Vintage")
+                    .on_hover_text("saturated, 2x oversampled ladder (else clean)")
+                    .changed();
+                ch |= ui.checkbox(&mut a.pole4, "24 dB").changed();
+                ch |= mode_combo(ui, "an_mode", &mut a.mode);
+            });
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label("Glide");
+                let mut ms = *glide * 1000.0;
+                if ui
+                    .add(egui::Slider::new(&mut ms, 0.0..=1000.0).suffix(" ms"))
+                    .on_hover_text("portamento time (with Legato, or 3C in the pattern)")
+                    .changed()
+                {
+                    *glide = ms / 1000.0;
+                    ch = true;
+                }
+                ch |= ui
+                    .checkbox(legato, "Legato")
+                    .on_hover_text("overlapping notes glide instead of retriggering (mono)")
+                    .changed();
+            });
+        }
+        GenEngine::Fm(f) => {
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label("Algorithm");
+                egui::ComboBox::from_id_salt("fm_algo")
+                    .width(130.0)
+                    .selected_text(ALGOS[f.algo.min(7) as usize].2)
+                    .show_ui(ui, |ui| {
+                        for (i, a) in ALGOS.iter().enumerate() {
+                            ch |= ui.selectable_value(&mut f.algo, i as u8, a.2).changed();
+                        }
+                    });
+                ch |= choice_lock_ui(ui, &mut f.locks, 0);
+            });
+        }
+        GenEngine::Noise(n) => {
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                for c in Color::ALL {
+                    ch |= ui.selectable_value(&mut n.color, c, c.name()).changed();
+                }
+                ch |= choice_lock_ui(ui, &mut n.locks, 0);
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(14.0);
+                ch |= ui
+                    .checkbox(&mut n.ladder, "Ladder")
+                    .on_hover_text("Moog ladder (else the SVF)")
+                    .changed();
+                ch |= mode_combo(ui, "nz_mode", &mut n.mode);
+                ch |= ui
+                    .checkbox(&mut n.hold, "Hold")
+                    .on_hover_text(
+                        "stay at the peak while the note is held (wind, vinyl); else one-shot",
+                    )
+                    .changed();
+                ch |= ui
+                    .checkbox(&mut n.key_track, "Key track")
+                    .on_hover_text("the note moves the cutoff (C-4 = as set)")
+                    .changed();
+            });
+        }
+        _ => {}
+    }
+    ch
+}
+
+/// stage-2 generators: the eight macros, level, and every other knob
+fn g2_knobs(ui: &mut egui::Ui, g: &mut GenPatch) -> bool {
+    use crate::gen2::{fk, AN, ANALOG, FM, FN, NN, NOISE};
+    let mut ch = false;
+    let macros: Vec<usize> = (0..8).collect();
+    let (p, defs, locks, level, n, tag): (
+        &mut [f32],
+        &[crate::gen::MacroDef],
+        &mut u64,
+        &mut f32,
+        usize,
+        &str,
+    ) = match &mut g.engine {
+        GenEngine::Analog(a) => (&mut a.p, &ANALOG, &mut a.locks, &mut a.level, AN, "an"),
+        GenEngine::Fm(f) => (&mut f.p, &FM, &mut f.locks, &mut f.level, FN, "fm"),
+        GenEngine::Noise(x) => (&mut x.p, &NOISE, &mut x.locks, &mut x.level, NN, "nz"),
+        _ => return false,
+    };
+    ch |= knob_rows(ui, p, defs, locks, &macros, 4, tag);
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label("Level");
+        ch |= ui.add(egui::Slider::new(level, 0.0..=4.0)).changed();
+    });
+    egui::CollapsingHeader::new(if tag == "fm" {
+        "Operators"
+    } else {
+        "More knobs"
+    })
+    .id_salt((tag, "more"))
+    .show(ui, |ui| {
+        if tag == "fm" {
+            for o in 0..4 {
+                ui.label(
+                    egui::RichText::new(format!("Operator {}", o + 1))
+                        .small()
+                        .strong(),
+                );
+                let idx: Vec<usize> = (0..6).map(|j| fk(o, j)).collect();
+                ch |= knob_rows(ui, p, defs, locks, &idx, 3, tag);
+            }
+        } else {
+            let idx: Vec<usize> = (8..n).collect();
+            ch |= knob_rows(ui, p, defs, locks, &idx, 4, tag);
+        }
+    });
+    ch
 }
 
 /// Chip FX: category buttons, Randomize, waveform
@@ -675,6 +902,38 @@ impl App {
                 });
             }
         });
+        for (menu, tip, pick) in [
+            (
+                "Generator (analog)",
+                "Moog-style: 3 drifting oscillators, ladder, 2 envelopes, glide",
+                0u8,
+            ),
+            ("Generator (FM-4)", "4-operator FM, 8 algorithms", 1),
+            (
+                "Generator (noise)",
+                "risers, downlifters, impacts, wind, vinyl",
+                2,
+            ),
+        ] {
+            ui.menu_button(menu, |ui| {
+                ui.label(egui::RichText::new(tip).small().color(th().ink2));
+                for (name, tip, mut p) in crate::gen::presets() {
+                    let ok = match pick {
+                        0 => matches!(p.engine, GenEngine::Analog(_)),
+                        1 => matches!(p.engine, GenEngine::Fm(_)),
+                        _ => matches!(p.engine, GenEngine::Noise(_)),
+                    };
+                    if !ok {
+                        continue;
+                    }
+                    if ui.button(name).on_hover_text(tip).clicked() {
+                        p.base.name = name.into();
+                        self.add_instrument(name, InstrumentKind::Gen(p));
+                        ui.close();
+                    }
+                }
+            });
+        }
         ui.menu_button("Generator (chip FX)", |ui| {
             ui.label(
                 egui::RichText::new("sfxr-style game sounds: categories, Randomize, Mutate")
