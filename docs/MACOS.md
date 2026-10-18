@@ -2,7 +2,7 @@
 
 ChipWave Tracker has a **universal macOS build**: one `ChipWave.app` that runs natively on **Apple Silicon** (M1, M2, M3, M4…) and **Intel** Macs. It needs **macOS 11 Big Sur or later**.
 
-> **Status:** the Mac build is made by GitHub Actions and checked there automatically (both CPU halves start, render audio and pass the self-test). Nobody has tried it on a real Mac yet, so please report anything odd in an [issue](https://github.com/postmanpat-303/ChipWaveTracker/issues) and include your macOS version and chip. The Mac files go up with the **next GitHub release**. Until then, the link below gives a "Not Found" page.
+> **Status:** the Mac build is made by GitHub Actions and checked there automatically (both CPU halves start, render audio and pass the self-test). Nobody has tried it on a real Mac yet, so please report anything odd in an [issue](https://github.com/postmanpat-303/ChipWaveTracker/issues) and include your macOS version and chip. The first release with Mac files is **v0.2.3.14**.
 
 <p align="center"><img src="screenshots/macos-launch.png" alt="ChipWave 0.2.3.15 running on macOS (GitHub Actions macos-latest runner, Apple Silicon)" width="720"><br><sub>The universal build running on a GitHub Actions macOS machine (Apple Silicon, CoreAudio "Apple Virtual Sound Device"), captured by the workflow.</sub></p>
 
@@ -32,7 +32,7 @@ The app is **ad-hoc signed**, which is what Apple Silicon needs before it will r
 - Shortcuts written as **Ctrl** in the app and docs also work with **⌘ Command** (⌘S saves, ⌘Z undoes). Control works as well.
 - Sound goes through **CoreAudio** (Settings → Audio picks the output device). MIDI keyboards work through **CoreMIDI**.
 - Settings, recent files, crash recovery, the instrument library and keymaps are kept in `~/Library/Application Support/ChipWave/`.
-- **Help → Check for updates…** offers the Mac `.dmg` (from the first release that includes one).
+- **Help → Check for updates…** offers the Mac `.dmg` from 0.2.3.15 on. In 0.2.3.14 its "Download installer" button opens the Windows `.exe`, so use the release page or the link above instead.
 - The demo songs, presets and icon are built into the app, so nothing else needs installing.
 
 ## Known limits
@@ -58,6 +58,6 @@ Without a Mac, run the **macOS** workflow on GitHub: **Actions → macOS → Run
 Publishing needs Del's approval. Once approved:
 
 1. Bump the version and build the Windows files as usual (`scripts/package-windows.sh <ver>`).
-2. Run the macOS workflow on the release commit, with the same `version`.
+2. Run the macOS workflow with `source_ref` set to the release tag and the same `version` (e.g. `gh workflow run macos.yml -f source_ref=v0.2.3.14 -f version=0.2.3.14`), so the app is built from exactly the released source.
 3. Download the `ChipWave-<ver>-macos-universal` artifact and attach **all four** Mac files to the release: `ChipWave-<ver>-macos-universal.dmg`, `ChipWave-<ver>-macos-universal.zip`, `ChipWave-macos-universal.dmg` and `ChipWave-macos-universal.zip`. Merge their lines into the release's `SHA256SUMS.txt`.
-4. Check that `releases/latest/download/ChipWave-macos-universal.dmg` downloads, then remove the "coming with the next release" notes from the README and from this page.
+4. Check that `releases/latest/download/ChipWave-macos-universal.dmg` downloads, and that the README's Mac links still work.
