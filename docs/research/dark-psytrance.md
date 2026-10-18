@@ -113,30 +113,88 @@ E Phrygian, 147 BPM, 3:31 (34 blocks × 4 bars = 136 bars).
 | 105–120 | Final drop with the pad underneath, the acid at its brightest |
 | 121–136 | Outro: the filters close and the parts thin out |
 
-Final mix (as in the song file, master +6 dB):
+### Mix (v2, 18 Oct: reverb, echo and an effects/filter showcase)
+Master +6 dB. Sidechain key = kick, release 90 ms.
 
-| Ch | Fader | Pan | Send A (delay) | Send B (reverb) | Duck |
+| Ch | Fader | Pan | Send A (echo) | Send B (reverb) | Duck |
 |---|---|---|---|---|---|
 | 1 Kick | +3.0 dB | C | – | – | key |
-| 2 Bass | +1.5 dB | C | – | – | 80 % |
-| 3 Hats | -3.0 dB | R12 | – | 0.04 | – |
-| 4 Snare | -4.0 dB | L5 | – | 0.14 | 20 % |
-| 5 Acid | -5.0 dB | L15 | 0.12 (throws 0.6) | 0.08 | 45 % |
-| 6 Metal | -2.0 dB | R35 | 0.25 | 0.15 | 45 % |
-| 7 Pad | -6.0 dB | C (width 1.0) | – | 0.30 | 60 % |
-| 8 FX | -5.0 dB | L30 | 0.15 | 0.30 | 40 % |
+| 2 Bass | +1.5 dB | C | 0.15 | 0.06 | 80 % |
+| 3 Hats | -3.0 dB | R12 | 0.08 (0.5 in breakdown 2, 0.3 outro) | 0.12 | – |
+| 4 Snare | -4.0 dB | L5 | 0.12 (0.6 on rolls) | 0.40 | 20 % |
+| 5 Acid | -6.0 dB | L15 | 0.30 (throws 0.9, 1.0 into the pre-drop hole) | 0.30 (0.5 breakdown) | 45 % |
+| 6 Metal | +3.0 dB | R35 | 0.35 (throws 0.9, 0.8 in the build) | 0.45 | 45 % |
+| 7 Pad | -7.0 dB | C (width 1.0) | 0.10 | 0.50 → 0.7 breakdown | 60 % |
+| 8 FX | -5.0 dB | L30 | 0.30 | 0.45 | 40 % |
 
-- **Delay return A:** dotted 1/8, ping-pong, feedback 0.38, loop HP 400 Hz / LP 4.5 kHz, level 0.8.
-- **Reverb return B:** size 0.8, damping 0.65, pre-delay 20 ms, level 0.7.
-- **Sidechain release:** 90 ms.
+- **Return A (echo):** dotted 1/8, ping-pong, feedback 0.45, rising to 0.6 in the breakdown, 0.72 in the hole and 0.7 at the end. Loop HP 300 Hz and LP 4 kHz, so the echoes carry no sub. Level 1.5.
+- **Return B (reverb):** size 0.93, rising to 0.97 in the breakdown and outro. Damping 0.7 (dark), pre-delay 30 ms, width 1.0, level 1.5.
+- **No reverb low cut:** the reverb return has no filter, so the bass only sends 0.06 to it.
 
-Measured on the ChipWave export (`chipwave --render demos/dark_psy.cwt.toml out.wav`, `scripts/mix_check.py`):
+### Effects and filters
+- **Acid:**
+  - synth LP cutoff 200 Hz → 5 kHz, with resonance 0.6–0.92 automated.
+  - Insert chain:
+    1. HP 250 Hz, swept to 2.6 kHz into the breakdown, the drops and the cuts.
+    2. Band-pass 1.1 kHz, resonance 0.65, LFO 0.6 Hz ±1.6 oct, on as "band-pass sections" in the second half of groove A, breakdown 2 and the reset.
+    3. Drive (tanh): 0.1 → 0.35 → 0.45 → 0.65 wet by section.
+    4. Chorus, wet in the breakdown and build only.
+- **Metal:**
+  1. Bitcrusher at 8 bit / 12 kHz, 0.3 → 0.75 wet by section.
+  2. Foldback distortion, 100 % wet.
+  3. Band-pass 1.7 kHz with a slow LFO (0.12 Hz, ±1.4 oct).
+  4. HP sweep to 3 kHz.
+  5. Its own 1/4 ping-pong delay.
+- **Pad:**
+  - Synth LFO on the cutoff (8-beat sync).
+  - Insert chain:
+    1. HP 300 Hz, swept to 2.5 kHz in the build.
+    2. Resonant LP 1.3 kHz with a very slow LFO (0.08 Hz, ±1.8 oct).
+    3. Wide chorus.
+- **Hats:** LP 10 kHz, plus an HP sweep to 5 kHz before the breakdown, the final drop and the drop cut. The outro opens up to 3.5 kHz.
+- **Snare:** HP 220 Hz swept to 1.8 kHz on the rolls, and LP 8 kHz.
+- **Bass:**
+  - LP cuts to 60–130 Hz before groove B, the drop, every drop cut, the final drop and the reset roll.
+  - HP cuts from 70 to 450 Hz.
+  - The intro filter opens from 110 to 260 Hz.
+- **Zap:** 6-bit bitcrusher.
+- **Riser:** level and filter sweep.
+
+### Measurements
+The before/after renders were measured with `scripts/wet_check.py`, which renders the song as is and again with every send and return at zero:
+
+| | before (v1, 6315674) | after (v2) |
+|---|---|---|
+| wet/dry overall | -27.4 dB (inaudible) | **-10.3 dB** |
+| wet/dry, drops | -27 to -29 dB | -9 to -11 dB |
+| wet/dry, breakdown | -15 dB | **+3 to +4 dB** (wet louder than dry) |
+| echo in the 2-beat pre-drop hole | -42.7 dBFS | **-28.7 dBFS** (the dry hole is -40.6 dBFS) |
+| wet below 150 Hz | – | -36.7 dBFS vs dry -13.9 dBFS (low end stays dry) |
+
+v2 mix (`scripts/mix_check.py`):
 
 | Measure | Result |
 |---|---|
-| Loudness | -11.5 LUFS integrated, drop section -10.9 LUFS, LRA 6.4 LU |
-| Peaks | WAV true peak -1.1 dBTP and sample peak -1.36 dBFS (no clipped samples); MP3 -0.6 dBTP |
-| Low end | < 150 Hz L/R correlation 0.999 (mono) |
-| Solo loudness | kick -12.6, bass -18.6, acid about -20, metal -23, snare -24, hats -25.5, pad -28, FX -33 LUFS |
-| Bass under the kick | the bass's energy in the kick's 16th is -50 dB relative to its other 16ths |
-| Band balance (dB re total) | sub -5.7, bass -2.3, low-mid -9.7, mid -13.6, high-mid -20.2, high -21.8: dark and bottom-heavy on purpose |
+| Loudness | -11.1 LUFS integrated, drop -10.3 LUFS |
+| Peaks | WAV true peak -1.2 dBTP and sample peak -1.30 dBFS (no clipped samples); MP3 -0.4 dBTP (LAME overshoot) |
+| Low end | < 150 Hz L/R correlation 0.987 |
+| Solo loudness | kick -12.6, bass -18.0, acid -18.1, metal -23.0, snare -24.0, pad -24.5, hats -25.3, FX -30.1 LUFS |
+
+The sections differ in brightness. Spectral centroid above 200 Hz:
+
+| Section | Centroid |
+|---|---|
+| Intro | 360 Hz |
+| Groove A | 670 Hz |
+| Groove B | 770 Hz |
+| Breakdown | 2.0 kHz |
+| Build | 550 Hz |
+| Drop | 1.16 kHz |
+| Reset | 750 Hz |
+| Final drop | 1.18 kHz |
+| Outro | 630 Hz |
+
+### Engine findings (reported, not fixed: demo work doesn't change the app)
+- **The reverb and delay returns work in export.** A solo acid test with send 1.0 gives wet +1.7 dB (reverb) and -4.6 dB (delay) relative to dry. v1 was simply too dry: its sends were 0.04–0.3 and its return levels 0.7–0.8.
+- **Drive "fold" mode flips the polarity** for small signals (f(x) ≈ -x), so a dry/wet blend below 100 % partly cancels: a 35 % wet fold made the metal 12 dB quieter. The workaround is the fold at 100 % wet.
+- **The reverb return has no low cut.** The bass reverb send is kept small instead.

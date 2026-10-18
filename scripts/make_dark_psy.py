@@ -196,10 +196,10 @@ b = Block("Breakdown", "breakdown"); pad(b, vol=0x3C); acid(b, ACID_SPARSE, vol=
 b.put(0, CLAP, "C-5", I_CRASH, 0x2C); I6 = add(b)
 # 7 breakdown 2: full acid comes back under the pad, metallic calls echo (delay)
 b = Block("Breakdown 2", "breakdown"); pad(b, ("E-3", "E-3", "F-3", "G-3"), vol=0x3C); acid(b, vol=0x2A, acc=0x3A)
-metal(b, METAL_CALL2, bars=(2,), vol=0x30); I7 = add(b)
+metal(b, METAL_CALL2, bars=(2,), vol=0x30); hats(b, bars=(2, 3), soft=True); I7 = add(b)
 # 8 build: riser, kick for 2 bars, accelerating roll, then a 2-beat silence hole before the drop
 b = Block("Build", "build"); pad(b, ("F-3", "F-3", "F-3", "F-3"), vol=0x34); acid(b, ACID_B, bars=range(3))
-kick(b, bars=range(2)); roll(b, 2, bars=2, top=0x3C)
+kick(b, bars=range(2)); bass(b, bars=range(2), turns=False, vol=0x34); b.put(32, BASS, "==="); roll(b, 2, bars=2, top=0x3C)
 for r in range(56, 64):
     b.clear(r, CLAP)
 b.put(56, CLAP, "===")
@@ -309,7 +309,8 @@ cutoff = 3500.0
 resonance = 0.2
 metal = 0.45
 width = 0.8
-fx = [{ kind = "Filter", mode = 0.0, cutoff = 10000.0, resonance = 0.0 }]
+# fx 1 = LP 10 kHz (tames the noise peaks), fx 2 = HP sweep (automated)
+fx = [{ kind = "Filter", mode = 0.0, cutoff = 10000.0, resonance = 0.0 }, { kind = "Filter", mode = 1.0, cutoff = 300.0, resonance = 0.2 }]
 [[instrument]]
 slot = 4
 name = "Dark Snare"
@@ -335,7 +336,12 @@ sustain = 0.25
 release = 0.03
 drive = 0.45
 gain = 0.7
-fx = [{ kind = "Filter", mode = 1.0, cutoff = 250.0, resonance = 0.0 }]
+# fx 1 = HP (sweeps into breakdown / drops), fx 2 = band-pass section filter with its own LFO
+# (wet mix automated: 0 = off), fx 3 = drive (amount of grit per section), fx 4 = chorus (breakdown)
+fx = [{ kind = "Filter", mode = 1.0, cutoff = 250.0, resonance = 0.0 },
+      { kind = "Filter", mode = 2.0, cutoff = 1100.0, resonance = 0.65, lfo_rate = 0.6, lfo_depth = 1.6, mix = 0.0 },
+      { kind = "Drive", mode = 0.0, drive = 9.0, tone = 6500.0, output = -7.0, mix = 0.15 },
+      { kind = "Chorus", rate = 0.25, depth = 4.0, delay = 14.0, feedback = 0.3, mix = 0.0 }]
 [[instrument]]
 slot = 6
 name = "Metal Call"
@@ -354,7 +360,14 @@ sustain = 0.0
 release = 0.06
 drive = 0.3
 gain = 0.55
-fx = [{ kind = "Bitcrusher", bits = 9.0, rate = 16000.0, mix = 0.35 }, { kind = "Filter", mode = 1.0, cutoff = 400.0, resonance = 0.0 }]
+# fx 1 = bitcrusher (mix automated), fx 2 = foldback distortion (100 % wet: the fold flips polarity,
+# so a dry/wet blend cancels), fx 3 = slow-LFO band-pass,
+# fx 4 = HP sweep, fx 5 = its own 1/4 ping-pong echo
+fx = [{ kind = "Bitcrusher", bits = 8.0, rate = 12000.0, mix = 0.3 },
+      { kind = "Drive", mode = 2.0, drive = 12.0, tone = 6000.0, output = -6.0, mix = 1.0 },
+      { kind = "Filter", mode = 2.0, cutoff = 1700.0, resonance = 0.55, lfo_rate = 0.12, lfo_depth = 1.4, mix = 0.8 },
+      { kind = "Filter", mode = 1.0, cutoff = 400.0, resonance = 0.0 },
+      { kind = "Delay", sync = 4.0, feedback = 0.45, pingpong = 1.0, hp = 350.0, lp = 5000.0, mix = 0.3 }]
 [[instrument]]
 slot = 7
 name = "Hollow Pad"
@@ -372,7 +385,10 @@ sustain = 0.85
 release = 2.0
 gain = 0.55
 lfo = { shape = "sine", sync = 8.0, cutoff = 0.7 }
-fx = [{ kind = "Filter", mode = 1.0, cutoff = 300.0, resonance = 0.1 }, { kind = "Chorus", rate = 0.2, depth = 3.0, mix = 0.35 }]
+# fx 1 = HP (sweeps), fx 2 = resonant LP with a very slow LFO (about 12 s), fx 3 = wide chorus
+fx = [{ kind = "Filter", mode = 1.0, cutoff = 300.0, resonance = 0.1 },
+      { kind = "Filter", mode = 0.0, cutoff = 1300.0, resonance = 0.4, lfo_rate = 0.08, lfo_depth = 1.8, mix = 1.0 },
+      { kind = "Chorus", rate = 0.2, depth = 4.0, mix = 0.45 }]
 [[instrument]]
 slot = 8
 name = "Noise Riser"
@@ -411,7 +427,7 @@ decay = 0.12
 sustain = 0.0
 release = 0.02
 gain = 0.6
-fx = [{ kind = "Filter", mode = 1.0, cutoff = 400.0, resonance = 0.0 }]
+fx = [{ kind = "Filter", mode = 1.0, cutoff = 400.0, resonance = 0.0 }, { kind = "Bitcrusher", bits = 6.0, rate = 9000.0, mix = 0.5 }]
 [[instrument]]
 slot = 11
 name = "Crash"
@@ -438,68 +454,77 @@ duck_release_ms = 90
 print('''# gain staging (faders): kick +3 dB centre dry (it hits the master soft clipper a little, like a
 # clipped psy kick); bass +1.5 dB centre dry, gated off the kick (duck 80 %, 90 ms, so it is silent
 # under the kick and back for the next 16th); riffs / pad / FX below kick and bass, panned off
-# centre, light sidechain, sends to the delay (A) and reverb (B); kick and bass send nothing
+# centre, light sidechain. Sends: big dark reverb (B) on acid / metal / pad / snare / FX, dotted-1/8
+# ping-pong echo (A) on the riffs; the bass sends a little to both (its insert HP is 70 Hz, the echo
+# return loop is high-passed at 300 Hz; the reverb has no filter, so the bass reverb send stays small).
+# The kick sends nothing.
 [[mixer.channel]]
 name = "Kick"
 volume_db = 3.0
 [[mixer.channel]]
 name = "Bass"
 volume_db = 1.5
+send_a = 0.15
+send_b = 0.06
 duck = 0.8
 [[mixer.channel]]
 name = "Hats"
 volume_db = -3.0
 pan = 0.12
-send_b = 0.04
+send_a = 0.08
+send_b = 0.12
 [[mixer.channel]]
 name = "Snare"
 volume_db = -4.0
 pan = -0.05
-send_b = 0.14
+send_a = 0.12
+send_b = 0.4
 duck = 0.2
 [[mixer.channel]]
 name = "Acid"
-volume_db = -5.0
+volume_db = -6.0
 pan = -0.15
-send_a = 0.12
-send_b = 0.08
+send_a = 0.3
+send_b = 0.3
 duck = 0.45
 [[mixer.channel]]
 name = "Metal"
-volume_db = -2.0
+volume_db = 3.0
 pan = 0.35
-send_a = 0.25
-send_b = 0.15
+send_a = 0.35
+send_b = 0.45
 duck = 0.45
 [[mixer.channel]]
 name = "Pad"
-volume_db = -6.0
-send_b = 0.3
+volume_db = -7.0
+send_a = 0.1
+send_b = 0.5
 duck = 0.6
 [[mixer.channel]]
 name = "FX"
 volume_db = -5.0
 pan = -0.3
-send_a = 0.15
-send_b = 0.3
+send_a = 0.3
+send_b = 0.45
 duck = 0.4
 
-# A = dotted-1/8 ping-pong delay, loop high-passed at 400 Hz; B = dark hall
+# A = dotted-1/8 ping-pong echo, loop high-passed at 300 Hz (no sub in the echoes), dark loop LP;
+# B = big dark hall (long size, heavy damping, 30 ms pre-delay so the dry attack stays clear)
 [mixer.return_a]
 sync = 3.0
-feedback = 0.38
+feedback = 0.45
 pingpong = 1.0
-hp = 400.0
-lp = 4500.0
+hp = 300.0
+lp = 4000.0
 mix = 1.0
-level = 0.8
+level = 1.5
 [mixer.return_b]
-size = 0.8
-damping = 0.65
-predelay = 20.0
+size = 0.93
+damping = 0.7
+predelay = 30.0
 width = 1.0
 mix = 1.0
-level = 0.7
+level = 1.5
 ''')
 for i, bk in enumerate(blocks):
     print(f'[[block]]\nid = {i}\nname = "{bk.name}"\nlines = {ROWS}\nrole = "{bk.role}"')
@@ -523,40 +548,102 @@ def lane(target, label, pts, curve="smooth"):
     print("]\n")
 
 
-BAR = 16
+BAR = B = 16
 print("# Automation: positions in lines from the song start (64 lines = one block = 4 bars)")
 grA, grB, brk, bld = at(I2), at(I4), at(I6), at(I8)
 drp, rst, fin, out = at(I9), at(I12), at(I14), at(I16)
-# the main event: the acid filter evolves across every section
+cutA, rollB, cut1, cut2, rroll, cutF = at(I3), at(I5), at(I11, 0), at(I11, 1), at(I13), at(I15)
+hole = bld + 14 * B          # 2-beat silence hole before the drop
+
+
+def sweep(base, spans, top):
+    """HP sweep lanes: rise linearly over each (start, end) span, snap back to base at the end"""
+    pts = [(0, base)]
+    for a, e in spans:
+        pts += [(a, base, "linear"), (e - 1, top, "step"), (e, base, "linear")]
+    pts.append((total, base))
+    return pts
+
+
+# --- acid: the main event --------------------------------------------------------------
 lane("instrument.5.cutoff", "Acid - Filter cutoff", [
-    (0, 250), (grA, 260), (grA + 12 * BAR, 700), (grA + 16 * BAR - 2, 420, "step"), (grA + 16 * BAR, 520),
-    (grB + 8 * BAR, 1100), (grB + 12 * BAR, 700), (brk - 1, 1500, "step"),
-    (brk, 300), (bld, 1600), (bld + 12 * BAR, 3200, "step"), (drp, 900),
-    (drp + 8 * BAR, 1800), (drp + 16 * BAR, 1000), (drp + 24 * BAR, 2600), (drp + 32 * BAR - 1, 2600, "step"),
-    (rst, 450), (rst + 8 * BAR - 1, 1200, "step"), (fin, 1400), (fin + 12 * BAR, 3000), (out, 1800), (total, 260)])
+    (0, 200), (grA, 200), (grA + 12 * B, 900), (cutA + 4 * B - 2, 500, "step"), (grB, 600),
+    (grB + 8 * B, 1800), (grB + 12 * B, 900), (rollB + 3 * B, 2200), (brk - 1, 2200, "step"),
+    (brk, 200), (brk + 8 * B, 1400), (brk + 16 * B, 400), (bld, 600), (hole, 5000, "step"),
+    (drp, 1000), (drp + 8 * B, 2600), (drp + 12 * B, 700), (drp + 16 * B, 1200), (drp + 24 * B, 4200),
+    (drp + 32 * B - 1, 4200, "step"), (rst, 500), (rst + 8 * B - 1, 1500, "step"), (fin, 1600),
+    (fin + 12 * B, 5000), (out, 2000), (total, 220)])
 lane("instrument.5.resonance", "Acid - Resonance", [
-    (0, 0.6), (grA, 0.6), (grB, 0.68), (brk, 0.82), (bld + 8 * BAR, 0.88), (drp, 0.72),
-    (drp + 24 * BAR, 0.8), (rst, 0.86), (fin, 0.74), (out, 0.7), (total, 0.6)], curve="linear")
-# intro: the bass filter opens over 16 bars; HP "cuts" thin the bass before returns
-lane("instrument.2.cutoff", "Bass - Filter cutoff", [
-    (0, 120), (12 * BAR, 260), (grA, 260), (drp, 280), (rst, 240), (fin, 290), (out, 260), (total, 150)])
-hp_pts = [(0, 70)]
-for s in (at(I3, 0), at(I11, 0), at(I11, 1), at(I15, 0)):   # last 2 bars of these blocks: HP sweep up, snap back
-    hp_pts += [(s + 2 * BAR, 70, "linear"), (s + 4 * BAR - 1, 450, "step"), (s + 4 * BAR, 70)]
-hp_pts += [(at(I13) + 3 * BAR, 70, "linear"), (at(I13) + 4 * BAR - 1, 300, "step"), (at(I13) + 4 * BAR, 70), (total, 70)]
-lane("instrument.2.fx.1.cutoff", "Bass - High-pass cut", hp_pts, curve="linear")
+    (0, 0.6), (grA, 0.6), (grB, 0.7), (brk, 0.88), (bld + 8 * B, 0.92), (drp, 0.74),
+    (drp + 24 * B, 0.85), (rst, 0.9), (fin, 0.78), (out, 0.7), (total, 0.6)], curve="linear")
+lane("instrument.5.fx.1.cutoff", "Acid - HP sweep",
+     sweep(250, [(rollB + B, brk), (bld + 8 * B, drp), (rroll, fin), (cut1 + 3 * B, cut1 + 4 * B),
+                 (cut2 + 3 * B, cut2 + 4 * B)], 2600))
+lane("instrument.5.fx.2.mix", "Acid - Band-pass section", [
+    (0, 0.0), (grA + 8 * B, 0.8), (grB, 0.0), (brk + 8 * B, 0.6), (bld, 0.0), (rst, 1.0), (fin, 0.0),
+    (total, 0.0)], curve="step")
+lane("instrument.5.fx.3.mix", "Acid - Drive amount", [
+    (0, 0.1), (grB, 0.35), (brk, 0.1), (drp, 0.45), (rst, 0.25), (fin, 0.65), (out, 0.2), (total, 0.2)],
+    curve="step")
+lane("instrument.5.fx.4.mix", "Acid - Chorus", [
+    (0, 0.0), (brk, 0.55), (bld, 0.3), (drp, 0.0), (total, 0.0)], curve="step")
+# --- metal, hats, snare, pad: grit per section and HP sweep builds -----------------------
+lane("instrument.6.fx.1.mix", "Metal - Bitcrush amount", [
+    (0, 0.3), (drp, 0.5), (drp + 16 * B, 0.65), (rst, 0.4), (fin, 0.75), (out, 0.4), (total, 0.4)],
+    curve="step")
+lane("instrument.6.fx.4.cutoff", "Metal - HP sweep", sweep(400, [(rollB + B, brk), (bld + 8 * B, drp)], 3000))
+lane("instrument.3.fx.2.cutoff", "Hats - HP sweep",
+     sweep(300, [(rollB, rollB + 3 * B), (rroll, fin), (cut1 + 2 * B, cut1 + 4 * B)], 5000)[:-1]
+     + [(out, 300, "linear"), (total, 3500)])
+lane("instrument.4.fx.1.cutoff", "Snare - HP sweep",
+     sweep(220, [(rollB + 2 * B, brk), (bld + 8 * B, hole), (rroll + 2 * B, fin)], 1800))
+lane("instrument.7.fx.1.cutoff", "Pad - HP sweep", sweep(300, [(bld + 6 * B, hole), (out + 4 * B, total)], 2500))
 lane("instrument.7.cutoff", "Pad - Filter cutoff", [
-    (0, 300), (16 * BAR, 500), (brk, 500), (bld, 1800), (bld + 14 * BAR, 3000, "step"), (drp, 700), (fin, 900), (total, 300)])
+    (0, 300), (16 * B, 500), (brk, 500), (bld, 1800), (hole, 3000, "step"), (drp, 700), (fin, 900),
+    (total, 300)])
+# --- bass: the intro filter opens; LP and HP cuts before every return -------------------
+bass_lp = [(0, 110), (12 * B, 260), (cutA + 3 * B, 260), (cutA + 4 * B - 1, 110, "step"), (grB, 270),
+           (bld, 260), (bld + 2 * B - 1, 60, "step"), (drp, 290)]
+for c in (cut1, cut2, cutF):
+    bass_lp += [(c + 3 * B, 290), (c + 4 * B - 1, 130, "step"), (c + 4 * B, 290)]
+bass_lp += [(rst, 250), (rroll, 250), (rroll + 3 * B - 1, 70, "step"), (fin, 300), (out, 260), (total, 140)]
+lane("instrument.2.cutoff", "Bass - LP filter cuts", sorted(bass_lp), curve="linear")
+hp_pts = [(0, 70)]
+for c in (cutA, cut1, cut2, cutF):   # last 2 bars of these blocks: HP sweep up, snap back
+    hp_pts += [(c + 2 * B, 70, "linear"), (c + 4 * B - 1, 450, "step"), (c + 4 * B, 70)]
+hp_pts += [(rroll + 2 * B, 70, "linear"), (rroll + 3 * B - 1, 300, "step"), (rroll + 3 * B, 70), (total, 70)]
+lane("instrument.2.fx.1.cutoff", "Bass - HP cut", sorted(hp_pts), curve="linear")
 lane("instrument.8.level", "Riser - Level", [
-    (0, 0.0), (bld, 0.1), (bld + 14 * BAR - 1, 1.1, "step"), (bld + 14 * BAR, 0.0)], curve="linear")
+    (0, 0.0), (bld, 0.1), (hole - 1, 1.1, "step"), (hole, 0.0)], curve="linear")
 lane("instrument.8.cutoff", "Riser - Filter sweep", [
-    (0, 400), (bld, 400), (bld + 14 * BAR - 1, 9000, "step"), (bld + 14 * BAR, 400)])
-# delay throws: the acid send jumps up on the last beat before each cut
-thr = [(0, 0.12)]
-for s in sorted(at(I3, 0) for _ in [0]) + [at(I11, 0), at(I11, 1), at(I15, 0), at(I5, 0)]:
-    e = s + 4 * BAR
-    thr += [(e - 6, 0.12, "step"), (e - 5, 0.6, "step"), (e + 1, 0.12, "step")]
-thr.append((total, 0.12))
-lane("mixer.ch.5.send_a", "Acid - Delay throw", sorted(thr), curve="step")
-lane("mixer.return_a.feedback", "Delay feedback", [
-    (0, 0.38), (brk, 0.5), (bld, 0.38), (total - 4 * BAR, 0.38), (total, 0.6)], curve="linear")
+    (0, 400), (bld, 400), (hole - 1, 9000, "step"), (hole, 400)])
+# --- echo throws: the last notes before each cut fly into the echo ----------------------
+ends = [cutA + 4 * B, rollB + 4 * B, cut1 + 4 * B, cut2 + 4 * B, cutF + 4 * B, rroll + 3 * B]
+
+
+def throws(base, top, extra=()):
+    pts = [(0, base)]
+    for e in ends:
+        pts += [(e - 6, top), (e + 2, base)]
+    for a, e, v in extra:
+        pts += [(a, v), (e, base)]
+    pts.append((total, base))
+    return sorted(pts)
+
+
+lane("mixer.ch.5.send_a", "Acid - Echo throws", throws(0.3, 0.9, [(hole - 8, drp, 1.0)]), curve="step")
+lane("mixer.ch.6.send_a", "Metal - Echo throws", throws(0.35, 0.9, [(bld, drp, 0.8)]), curve="step")
+lane("mixer.ch.4.send_a", "Snare - Echo on rolls", [
+    (0, 0.12), (rollB + 3 * B, 0.6), (brk, 0.12), (bld + 8 * B, 0.6), (drp, 0.12), (rroll + 3 * B, 0.6),
+    (fin, 0.12), (total, 0.12)], curve="step")
+lane("mixer.ch.3.send_a", "Hats - Echo in breakdown", [
+    (0, 0.08), (brk + 8 * B, 0.5), (bld, 0.08), (out, 0.3), (total, 0.3)], curve="step")
+lane("mixer.ch.7.send_b", "Pad - Reverb", [
+    (0, 0.5), (brk, 0.7), (bld, 0.6), (drp, 0.45), (out, 0.6), (total, 0.7)], curve="linear")
+lane("mixer.ch.5.send_b", "Acid - Reverb", [
+    (0, 0.3), (brk, 0.5), (drp, 0.3), (out, 0.4), (total, 0.5)], curve="step")
+lane("mixer.return_a.feedback", "Echo feedback", [
+    (0, 0.45), (brk, 0.6), (bld, 0.45), (hole - 8, 0.72), (drp, 0.45), (rst, 0.55), (fin, 0.45),
+    (out, 0.5), (total, 0.7)], curve="step")
+lane("mixer.return_b.size", "Reverb size", [
+    (0, 0.9), (brk, 0.97), (drp, 0.93), (out, 0.97), (total, 0.97)], curve="linear")
