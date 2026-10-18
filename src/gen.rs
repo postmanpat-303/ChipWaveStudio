@@ -1506,3 +1506,266 @@ mod levels_dbg {
         }
     }
 }
+
+/// `scripts/make_features_02312.py` builds the 0.2.3.12 Generators demo
+#[cfg(test)]
+mod features {
+    use crate::model::{Cell, Instrument, InstrumentKind, Song};
+
+    fn note(s: &str) -> u8 {
+        let names = [
+            "C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-",
+        ];
+        let k = names.iter().position(|n| s.starts_with(n)).unwrap();
+        let o: u8 = s[2..].parse().unwrap();
+        o * 12 + k as u8 + 1
+    }
+
+    fn put(s: &mut Song, b: usize, r: usize, ch: usize, n: &str, ins: u8, fx: (u8, u8)) {
+        s.patterns[b].cells[r][ch] = Cell {
+            note: note(n),
+            instr: ins,
+            vol: 0,
+            fx: fx.0,
+            fxp: fx.1,
+        };
+    }
+
+    fn fxonly(s: &mut Song, b: usize, r: usize, ch: usize, fx: (u8, u8)) {
+        let c = &mut s.patterns[b].cells[r][ch];
+        c.fx = fx.0;
+        c.fxp = fx.1;
+    }
+
+    fn add(s: &mut Song, name: &str, vol: f32, kind: InstrumentKind) -> u8 {
+        let i = Instrument {
+            name: name.into(),
+            volume: vol,
+            transpose: 0,
+            fx: vec![],
+            kind,
+        };
+        s.add_instrument(i).unwrap() as u8 + 1
+    }
+
+    fn gen(s: &mut Song, name: &str, vol: f32) -> u8 {
+        add(
+            s,
+            name,
+            vol,
+            InstrumentKind::Gen(super::preset(name).unwrap()),
+        )
+    }
+
+    #[test]
+    #[ignore]
+    fn features_02312_demo() {
+        let inp = std::env::var("CW_F2312_IN").expect("CW_F2312_IN");
+        let out = std::env::var("CW_F2312_OUT").expect("CW_F2312_OUT");
+        let mut s = crate::fileio::load_text_song(std::path::Path::new(&inp)).unwrap();
+        let s = &mut s;
+        // block 0: the four kicks, two hits each
+        for (k, n) in ["Psy Zap Kick", "808 Boom", "909 Kick", "v0 Punch Kick"]
+            .iter()
+            .enumerate()
+        {
+            let i = gen(s, n, 0.85);
+            put(s, 0, k * 8, 0, "C-4", i, (0, 0));
+            put(s, 0, k * 8 + 4, 0, "C-4", i, (0, 0));
+        }
+        // block 1: snares and claps
+        for (k, n) in [
+            "808 Snare",
+            "909 Snare",
+            "Shell Snare",
+            "808 Clap",
+            "Tight Clap",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let i = gen(s, n, 0.8);
+            put(s, 1, k * 6, 2, "C-4", i, (0, 0));
+            put(s, 1, k * 6 + 3, 2, "C-4", i, (0, 0));
+        }
+        // block 2: hats
+        for (k, (n, step)) in [
+            ("Closed Hat", 1),
+            ("Open Hat", 4),
+            ("Ring Hat", 2),
+            ("Comb Hat", 2),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let i = gen(s, n, 0.8);
+            for r in (0..8).step_by(*step) {
+                put(s, 2, k * 8 + r, 1, "C-4", i, (0, 0));
+            }
+        }
+        // block 3: toms, then percussion
+        let t = gen(s, "808 Tom", 0.8);
+        for (r, n) in [(0, "C-4"), (2, "A-3"), (4, "F-3"), (6, "D-3")] {
+            put(s, 3, r, 3, n, t, (0, 0));
+        }
+        let c = gen(s, "Conga", 0.8);
+        for (r, n) in [(8, "C-4"), (10, "C-4"), (11, "G-3"), (12, "C-4")] {
+            put(s, 3, r, 3, n, c, (0, 0));
+        }
+        for (k, n) in ["Cowbell", "Claves", "Rimshot", "Cymbal", "Zap Perc"]
+            .iter()
+            .enumerate()
+        {
+            let i = gen(s, n, 0.75);
+            put(s, 3, 16 + k * 3, 3, "C-4", i, (0, 0));
+        }
+        // blocks 4-5: Dice. 8 dice rolls of the Psy Zap Kick (block 4), then
+        // 8 mutations (25 %) of the original (block 5); hats re-rolled every 2 beats
+        let kick = super::preset("Psy Zap Kick").unwrap();
+        let hat = super::preset("Closed Hat").unwrap();
+        for b in 4..6 {
+            for k in 0..8 {
+                let mut g = kick.clone();
+                if b == 4 {
+                    g.dice(0, 101 + k as u32);
+                } else {
+                    g.mutate = 0.25;
+                    g.mutate(0, 201 + k as u32);
+                }
+                let tag = if b == 4 { "Dice" } else { "Mutate" };
+                let i = add(
+                    s,
+                    &format!("{tag} kick {}", k + 1),
+                    0.85,
+                    InstrumentKind::Gen(g),
+                );
+                put(s, b, k * 4, 0, "C-4", i, (0, 0));
+                if k % 2 == 0 {
+                    let mut h = hat.clone();
+                    h.dice(0, 301 + (b * 8 + k) as u32);
+                    let j = add(
+                        s,
+                        &format!("Dice hat {}", b * 8 + k),
+                        0.7,
+                        InstrumentKind::Gen(h),
+                    );
+                    for r in [2, 3, 6, 7] {
+                        put(s, b, k * 4 + r, 1, "C-4", j, (0, 0));
+                    }
+                }
+            }
+        }
+        // block 6: 43xy on the Psy Zap Kick: decay (macro 4) grows, punch
+        // (macro 2) drops, then the closed hat's metal (macro 3)
+        let pk = gen(s, "Psy Zap Kick", 0.85);
+        let ch = gen(s, "Closed Hat", 0.75);
+        for beat in 0..8 {
+            let fx = if beat < 4 {
+                (0x43, 0x40 | (2 + beat as u8 * 4))
+            } else {
+                (0x43, 0x20 | (15 - (beat as u8 - 4) * 4))
+            };
+            put(s, 6, beat * 4, 0, "C-4", pk, fx);
+            put(
+                s,
+                6,
+                beat * 4 + 2,
+                1,
+                "C-4",
+                ch,
+                (0x43, 0x30 | (beat as u8 * 2)),
+            );
+        }
+        // blocks 7-9: one acid line through SVF, clean ladder, vintage ladder,
+        // with a 38xx cutoff sweep up and back
+        let line = [
+            "E-2", "E-2", "E-3", "E-2", "G-2", "E-2", "A#2", "E-2", "E-2", "D-3", "E-2", "E-2",
+            "G-2", "E-3", "E-2", "B-2",
+        ];
+        for (b, fm) in (7..10).zip(crate::ladder::FilterModel::ALL) {
+            let p = crate::synth::Patch {
+                name: fm.name().into(),
+                osc1: crate::synth::Wave::Saw,
+                cutoff: 300.0,
+                resonance: 0.82,
+                env_amount: 2.0,
+                fenv: crate::synth::Adsr {
+                    a: 0.001,
+                    d: 0.18,
+                    s: 0.0,
+                    r: 0.05,
+                },
+                amp: crate::synth::Adsr {
+                    a: 0.002,
+                    d: 0.2,
+                    s: 0.7,
+                    r: 0.04,
+                },
+                filter_model: fm,
+                drive: 0.2,
+                ..Default::default()
+            };
+            let i = add(s, fm.name(), 0.55, InstrumentKind::Synth(p));
+            for r in 0..32 {
+                let tri = if r < 16 { r } else { 31 - r } as u8;
+                put(s, b, r, 4, line[r % 16], i, (0x38, 0x50 + tri * 6));
+            }
+            for r in (0..32).step_by(4) {
+                put(s, b, r, 0, "C-4", pk, (0x43, 0x00));
+            }
+        }
+        // blocks 10-11: a psy groove on the Psy Kit (one kit, the note picks
+        // the drum), a vintage-ladder rolling bass; 43xy shortens the kick in 11
+        let kit = gen(s, "Psy Kit", 0.85);
+        let bp = crate::synth::Patch {
+            name: "Rolling bass".into(),
+            osc1: crate::synth::Wave::Saw,
+            cutoff: 500.0,
+            resonance: 0.55,
+            env_amount: 1.6,
+            fenv: crate::synth::Adsr {
+                a: 0.001,
+                d: 0.09,
+                s: 0.0,
+                r: 0.03,
+            },
+            amp: crate::synth::Adsr {
+                a: 0.001,
+                d: 0.1,
+                s: 0.5,
+                r: 0.02,
+            },
+            filter_model: crate::ladder::FilterModel::Vintage,
+            ..Default::default()
+        };
+        let bass = add(s, "Rolling bass", 0.6, InstrumentKind::Synth(bp));
+        for b in 10..12 {
+            for beat in 0..8 {
+                let r = beat * 4;
+                let kfx = if b == 11 {
+                    (0x43, 0x40 | ((beat as u8 % 4) * 3 + 3))
+                } else {
+                    (0, 0)
+                };
+                put(s, b, r, 0, "C-4", kit, kfx);
+                put(s, b, r + 2, 1, "A#4", kit, (0, 0));
+                put(s, b, r + 3, 1, "F#4", kit, (0, 0));
+                if b == 11 {
+                    put(s, b, r + 1, 1, "F#4", kit, (0, 0));
+                }
+                if beat % 2 == 1 {
+                    put(s, b, r, 2, "D#4", kit, (0, 0));
+                }
+                for k in 1..4 {
+                    let n = if beat == 7 && k == 3 { "G-2" } else { "E-2" };
+                    put(s, b, r + k, 4, n, bass, (0x38, 0x60 + (beat as u8) * 4));
+                }
+            }
+            put(s, b, 14, 3, "C#4", kit, (0, 0));
+            put(s, b, 27, 3, "B-4", kit, (0, 0));
+            put(s, b, 30, 3, "C#4", kit, (0, 0));
+            fxonly(s, b, 31, 0, (0x43, 0x00));
+        }
+        crate::fileio::save_cwt(s, std::path::Path::new(&out)).unwrap();
+    }
+}
