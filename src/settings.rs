@@ -73,6 +73,21 @@ pub struct Extra {
     /// snap typed and MIDI notes to the song key (chord helper)
     #[serde(default)]
     pub scale_lock: bool,
+    /// lower panel height in points (0 = automatic) (0.2.3.19)
+    #[serde(default)]
+    pub lower_h: f32,
+    /// the lower panel shows the instrument editor (else arranger / automation)
+    #[serde(default)]
+    pub lower_inst: bool,
+    /// Full-height pattern: the lower panel is hidden
+    #[serde(default)]
+    pub full_height: bool,
+    /// the pre-0.2.3.19 instrument editor in the sidebar
+    #[serde(default)]
+    pub classic_editor: bool,
+    /// collapsed instrument-editor cards, "Type/Card"
+    #[serde(default)]
+    pub cards_closed: Vec<String>,
 }
 
 fn two() -> u32 {
@@ -101,6 +116,11 @@ impl Default for Extra {
             update_skip: String::new(),
             library_dir: String::new(),
             scale_lock: false,
+            lower_h: 0.0,
+            lower_inst: false,
+            full_height: false,
+            classic_editor: false,
+            cards_closed: vec![],
         }
     }
 }

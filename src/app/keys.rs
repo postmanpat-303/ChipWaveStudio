@@ -27,7 +27,7 @@ impl App {
             }
         }
         let arr_visible =
-            self.view == View::Arranger || (self.view == View::Pattern && self.dock_arranger);
+            self.view == View::Arranger || (self.view == View::Pattern && self.arr_docked());
         for ev in events {
             // the Fill to length dialog owns plain keys while it is open
             if self.fill.is_some() && self.prompt.is_none() {
@@ -74,6 +74,7 @@ impl App {
                                 | Key::F8
                                 | Key::F9
                                 | Key::F10
+                                | Key::F11
                         );
                     if !allowed {
                         continue;
@@ -263,6 +264,17 @@ impl App {
                 Key::Period if cmd => self.panic(),
                 Key::E if cmd && m.shift => self.open_export(),
                 Key::F if cmd && m.shift => self.open_fill(),
+                Key::F if cmd => {
+                    if !(self.view == View::Pattern
+                        && self.lower_visible()
+                        && self.extra.lower_inst)
+                    {
+                        self.show_instrument_panel();
+                    }
+                    self.ip.focus_search = true;
+                }
+                Key::I if cmd => self.toggle_instrument_panel(),
+                Key::F11 => self.toggle_full_height(),
                 Key::F12 => self.show_help = !self.show_help,
                 Key::S if cmd => self.save(m.shift),
                 Key::O if cmd => self.request(crate::prompt::Pending::Open, ctx),

@@ -310,6 +310,21 @@ impl App {
 
     /// the side-panel editor of a plugin instrument (instrument `i`, 0-based)
     pub(super) fn plugin_panel(&mut self, ui: &mut egui::Ui, i: usize, p: &PluginPatch) {
+        if !self.plugin_status_ui(ui, i, p) {
+            return;
+        }
+        let params = self.plugin_param_infos(i);
+        self.plugin_macro_assign(ui, i, p, &params);
+        self.plugin_param_list(ui, i, p, &params);
+    }
+
+    /// plugin name, load status, Configure… / Close editor, Reload; true when loaded
+    pub(super) fn plugin_status_ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        i: usize,
+        p: &PluginPatch,
+    ) -> bool {
         let (loaded, n, err, has_ed, ed_open) = self.with(|s| {
             let r = &s.engine.plugins;
             let n = r.slots.iter().filter(|x| x.instr == i).count();
@@ -416,10 +431,11 @@ impl App {
             plugin::sync(&self.shared, extra);
             self.plug.params = None;
         }
-        if !loaded {
-            return;
-        }
-        // parameter list (refreshed now and then: plugins may rename them)
+        loaded
+    }
+
+    /// the loaded plugin's parameter list (refreshed now and then: plugins may rename them)
+    pub(super) fn plugin_param_infos(&mut self, i: usize) -> Vec<crate::plugin::ParamInfo> {
         if self.plug.params.as_ref().is_none_or(|x| x.0 != i) || self.plug.tick.is_multiple_of(120)
         {
             let list = self.with(|s| {
@@ -428,12 +444,21 @@ impl App {
             });
             self.plug.params = list.map(|l| (i, l));
         }
-        let params = self
-            .plug
+        self.plug
             .params
             .as_ref()
             .map(|x| x.1.clone())
-            .unwrap_or_default();
+            .unwrap_or_default()
+    }
+
+    /// macros 1-8: which parameter each one drives
+    pub(super) fn plugin_macro_assign(
+        &mut self,
+        ui: &mut egui::Ui,
+        i: usize,
+        p: &PluginPatch,
+        params: &[crate::plugin::ParamInfo],
+    ) {
         // macros 1-8 (43xy, automation lanes, MIDI learn)
         let mut macros = p.macros.clone();
         macros.resize(8, NO_PARAM);
@@ -475,7 +500,18 @@ impl App {
                 engine.plugins.refresh_macros(song);
             });
         }
-        // every parameter as a slider
+    }
+
+    /// every parameter as a slider (searchable; right-click puts one on a macro)
+    pub(super) fn plugin_param_list(
+        &mut self,
+        ui: &mut egui::Ui,
+        i: usize,
+        p: &PluginPatch,
+        params: &[crate::plugin::ParamInfo],
+    ) {
+        let mut macros = p.macros.clone();
+        macros.resize(8, NO_PARAM);
         ui.horizontal(|ui| {
             ui.add_space(14.0);
             ui.label(format!("Parameters ({})", params.len()));

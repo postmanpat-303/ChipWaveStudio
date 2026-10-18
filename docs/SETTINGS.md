@@ -45,5 +45,15 @@ Default song folder, autosave interval, number of backups and backup location, j
 
 **Updates (0.2.3.5):** "Check for updates at startup" (default on; quiet, at most once per 24 h, a menu-bar badge only when a newer non-skipped version exists), **Check now**, **Un-skip X**. See [UPDATES.md](UPDATES.md).
 
+### 2.7 Layout (0.2.3.19)
+These are set from the View menu and the lower panel, and saved in `settings.toml`:
+- the lower panel's height (`lower_h`, 0 = automatic)
+- whether it shows the instrument editor (`lower_inst`)
+- Full-height pattern (`full_height`)
+- the classic sidebar instrument editor (`classic_editor`)
+- the collapsed instrument-editor cards (`cards_closed`, as "Type/Card")
+
+Older settings files get the defaults.
+
 ## 3. Storage
 `settings.toml` in the per-OS config folder ([SAFETY.md](SAFETY.md) lists the paths), saved atomically. Only non-default values are written, unknown keys are preserved, and a `settings_version` allows migrations. The portable Windows build stores it next to the exe.

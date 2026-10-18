@@ -24,7 +24,10 @@ impl App {
             self.row = play_row;
         }
         let Some(pat) = song_snapshot else { return };
-        ui.horizontal_wrapped(|ui| {
+        // one line: block controls on the left, channels / chords / full height on
+        // the right, the order list in between (clipped when it does not fit)
+        let mut wrap = false;
+        ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Block").strong());
             if ui.button("<").clicked() && self.pattern > 0 {
                 self.pattern -= 1;
@@ -47,64 +50,22 @@ impl App {
                 self.add_block();
             }
             ui.separator();
-            let order = self.with(|s| s.song.order.clone());
-            ui.label(
-                egui::RichText::new(format!(
-                    "Order: {}",
-                    order
-                        .iter()
-                        .map(|o| format!("{o:02}"))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                ))
-                .monospace(),
-            );
-            if ui
-                .small_button("+cur")
-                .on_hover_text("append current block to the order list")
-                .clicked()
-            {
-                let p = self.pattern;
-                self.with(|s| s.song.order.push(p));
-                self.dirty = true;
-            }
-            if ui.small_button("-last").clicked() {
-                self.with(|s| {
-                    if s.song.order.len() > 1 {
-                        s.song.order.pop();
-                    }
+            // the right-hand group needs ~430 pt; narrower windows put it on a second line
+            if ui.available_width() >= 430.0 {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    self.block_bar_right(ui, channels);
                 });
-                self.dirty = true;
-            }
-            ui.separator();
-            let mut ch = channels;
-            ui.label("Channels");
-            if ui
-                .add(egui::DragValue::new(&mut ch).range(1..=MAX_CHANNELS))
-                .on_hover_text(super::CHANNELS_TIP)
-                .changed()
-            {
-                self.set_channels(ch);
-            }
-            ui.separator();
-            if ui
-                .button("Chords…")
-                .on_hover_text(
-                    "chord helper: song key, chord pads, progressions into this block, scale lock",
-                )
-                .clicked()
-            {
-                self.chords.open = !self.chords.open;
-            }
-            if let Some(k) = self.scale_lock_key() {
-                ui.label(
-                    egui::RichText::new(format!("lock {}", k.name()))
-                        .small()
-                        .color(th().accent),
-                )
-                .on_hover_text("scale lock: typed and MIDI notes snap to this key (Chord helper)");
+            } else {
+                wrap = true;
             }
         });
+        if wrap {
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    self.block_bar_right(ui, channels);
+                });
+            });
+        }
 
         let full = ui.available_rect_before_wrap();
         let font = FontId::monospace(14.0);
@@ -415,7 +376,7 @@ impl App {
                 self.sel = None;
             }
         }
-        if self.view == View::Pattern && self.dock_arranger && !self.arr_focus {
+        if self.view == View::Pattern && self.arr_docked() && !self.arr_focus {
             focus_ring(&ui.painter_at(avail.expand(6.0)), avail.expand(2.0));
         }
         if resp.drag_started() {
@@ -468,4 +429,82 @@ impl App {
     }
 
     // ---------------------------------------------------------------- arranger
+}
+
+impl App {
+    /// Block bar, right side (drawn right to left): Full height, Chords…,
+    /// Channels, -last / +cur and the order list (clipped)
+    fn block_bar_right(&mut self, ui: &mut egui::Ui, channels: usize) {
+        let full = !self.lower_visible();
+        if ui
+            .selectable_label(full, "Full height")
+            .on_hover_text(if full {
+                "show the lower panel again (F11)"
+            } else {
+                "Full-height pattern: hide the lower panel (F11)"
+            })
+            .clicked()
+        {
+            self.toggle_full_height();
+        }
+        ui.separator();
+        if let Some(k) = self.scale_lock_key() {
+            ui.label(
+                egui::RichText::new(format!("lock {}", k.name()))
+                    .small()
+                    .color(th().accent),
+            )
+            .on_hover_text("scale lock: typed and MIDI notes snap to this key (Chord helper)");
+        }
+        if ui
+            .button("Chords…")
+            .on_hover_text(
+                "chord helper: song key, chord pads, progressions into this block, scale lock",
+            )
+            .clicked()
+        {
+            self.chords.open = !self.chords.open;
+        }
+        ui.separator();
+        let mut ch = channels;
+        if ui
+            .add(egui::DragValue::new(&mut ch).range(1..=MAX_CHANNELS))
+            .on_hover_text(super::CHANNELS_TIP)
+            .changed()
+        {
+            self.set_channels(ch);
+        }
+        ui.label("Channels");
+        ui.separator();
+        if ui.small_button("-last").clicked() {
+            self.with(|s| {
+                if s.song.order.len() > 1 {
+                    s.song.order.pop();
+                }
+            });
+            self.dirty = true;
+        }
+        if ui
+            .small_button("+cur")
+            .on_hover_text("append current block to the order list")
+            .clicked()
+        {
+            let p = self.pattern;
+            self.with(|s| s.song.order.push(p));
+            self.dirty = true;
+        }
+        let order = self.with(|s| s.song.order.clone());
+        let txt = format!(
+            "Order: {}",
+            order
+                .iter()
+                .map(|o| format!("{o:02}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.add(egui::Label::new(egui::RichText::new(&txt).monospace()).truncate())
+                .on_hover_text(txt.clone());
+        });
+    }
 }

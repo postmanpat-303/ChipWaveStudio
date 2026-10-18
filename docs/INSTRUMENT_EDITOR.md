@@ -1,0 +1,134 @@
+# Instrument editor (lower panel, 0.2.3.19)
+
+Since 0.2.3.19 instruments are edited in the **lower panel** under the pattern editor, with
+knobs, tabs and cards, instead of the long slider list in the sidebar. The sidebar keeps the
+compact instrument list.
+
+![The Analog generator in the lower-panel instrument editor](screenshots/dark-instrument-editor.png)
+
+## 1. Sidebar
+
+- **Instrument list:** one row per instrument. The coloured bar and the **type tag** on the right
+  show what it is: Synth, Moog (a synth with the ladder filter), Sample, Voice, Drum, Kit, Chip FX,
+  Analog, FM-4, Noise or CLAP. The list search also matches the tags ("fm", "clap", "kit").
+- **Summary** under the list: number, name, type, volume, transpose, the number of FX devices and
+  the number of blocks that use the instrument.
+- **Edit in lower panel** (`Ctrl+I`) opens the editor. F3 was not free (F1–F8 set the octave),
+  so the shortcut is `Ctrl+I`.
+- **Classic editor:** **View › Classic sidebar instrument editor** brings back the pre-0.2.3.19
+  slider editor under the list. It is saved in settings.
+
+## 2. The lower panel
+
+- **Arranger | Instrument | Automation:** the switch bar at the top of the lower panel.
+  - **Arranger:** the docked arranger.
+  - **Automation:** the arranger with its automation lanes. This is the same as the arranger's
+    Automation checkbox.
+  - **Instrument:** this editor.
+- **Splitter:** the dotted bar between the pattern and the panel.
+  - Drag it to resize.
+  - Double-click it for the automatic height.
+  - Drag it to the bottom to hide the panel (Full-height pattern).
+  - The height is saved in settings.
+- **Full-height pattern** (`F11`, **View › Full-height pattern**, the **Full height** toggle at
+  the right of the Block bar, or the button on the switch bar) hides the whole lower panel.
+  - Press it again to bring the panel back at the height it had.
+  - `Ctrl+I` also brings it back, showing the instrument editor.
+  - The state is saved in settings.
+  - `F11` is not used for fullscreen by ChipWave. `Ctrl+Shift+F` was taken by Fill to length.
+- **View › Dock lower panel under pattern** (formerly "Dock arranger under pattern") turns the
+  docked panel off altogether.
+
+## 3. Header
+
+- `<` / `>`: the previous or next instrument.
+- The name and the type tag.
+- **Preset…** loads a preset of the same kind:
+  - **Synth:** the factory sounds, by folder. Only the sound is replaced; the name and FX chain
+    stay.
+  - **Voice:** the Voice presets.
+  - **Generators:** the presets of the same engine (an Analog only offers Analog presets).
+- **Save:** saves the instrument to the instrument library.
+- **Library…:** replaces the sound from the instrument library.
+- **A / B compare:** **B** starts as a copy of the sound. Edit either one and switch to hear the
+  other. A switch is an undo step. A/B is not offered for CLAP plugins (their state lives in the
+  plugin) and it resets when you pick another instrument.
+- **Search parameters… (`Ctrl+F`):**
+  - Matching knobs get a ring, matching dropdowns and toggles turn the FX colour, and tabs with
+    matches are tinted.
+  - The list under the box shows each hit as *name · Tab › Card*. Click one, or press Enter for
+    the first, to switch to its tab, expand and scroll to its card, and flash it.
+
+## 4. Tabs and cards
+
+There are four tabs: **Main**, **Modulation**, **FX** and **Advanced**. A tab only shows when it
+has something, and its label gives the number of parameters.
+
+Each tab holds side-by-side **cards**:
+
+- Click a card's title to collapse it to a narrow strip. This is remembered per instrument type
+  (collapse Oscillators on one Analog and every Analog shows it collapsed).
+- Cards fit their knobs to the panel height. When they don't fit across, the row scrolls
+  sideways.
+- Cards with something to show get a small picture: envelope (ADSR), filter curve, waveform,
+  sample peaks, or the FM algorithm.
+
+| Type | Main | Modulation | FX | Advanced |
+|---|---|---|---|---|
+| Synth / Moog | Oscillator, Filter, Envelope, Voice (stereo, glide, legato, volume, transpose) | LFO, Velocity & accent | Chain + one card per device | Timing & character |
+| Voice | Voice, Vowels, Words, Output, Filter, Envelope | LFO (incl. vowel / formant), Stutter & chop, Velocity & accent | Transform, Metallic resonance, Digital distortion, Sub bass, Chain + devices | Delay |
+| Drum Synth | Dice, Drum (kind, model, follow note, 8 macro knobs, level), Voice, Filter | – | Chain + devices | – |
+| Kit | Dice, Kit (piece buttons), Drum · *piece*, Voice, Filter | – | Chain + devices | – |
+| Chip FX | Dice, Sound (categories, wave, follow note, level), Macros, Voice, Filter | – | Chain + devices | Pitch, Duty, Vibrato, Envelope, Filters, Phaser, Repeat & arp |
+| Analog | Dice, Oscillators, Filter, Amp envelope, Voice | Filter envelope | Chain + devices | – |
+| FM-4 | Dice, Algorithm, Macros, Voice | Operator 1–4 | Chain + devices | – |
+| Noise | Dice, Noise, Filter, Shape, Voice | Gusts | Chain + devices | Thump & hiss |
+| Sample | Sample (file, length, base note, loop, **Open in Sample editor**), Voice | – | Chain + devices | – |
+| CLAP | Plugin (status, **Configure…**, Reload), Macros (8 knobs + assignments), Voice | – | Chain + devices | All parameters (searchable list) |
+
+Generator knobs that are also `43xy` macros carry a small **M1–M8** badge.
+
+## 5. Knobs
+
+| Action | Effect |
+|---|---|
+| Drag (up or right) | change the value |
+| `Ctrl`-drag (or `Shift`-drag) | fine: a tenth of the speed |
+| Double-click | reset to the default |
+| Hover or drag | show the value; the value is always written under the knob |
+| Right-click | Reset to default, **Add automation lane**, **MIDI learn** / Forget (on automatable parameters) |
+| The padlock (generators) | lock the knob so Dice and Mutate leave it alone |
+
+Stepped knobs (octave, unison voices, semitones) show a dot per step. Discrete settings are
+dropdowns (with a **lock** on generators) or checkboxes.
+
+Every drag is one undo step, the same as before.
+
+## 6. What is not in the new panel
+
+- **Not changed:** audio and the song format. The editor writes the same instrument fields the
+  sidebar editor wrote.
+- **Not automatable:** the generators' own sound-design knobs (only Volume is, as before),
+  because the engine has no automation target for generator macros. Plugin macros, synth level,
+  cutoff, resonance, drive and every FX parameter are automatable.
+- **Sample editing:** loop points, slicing and editing stay in the Sample view. The Sample card
+  links there.
+- **FX chain editing:** reordering devices and FX presets stay in the FX view. The FX tab edits
+  every device parameter and offers **+ Add effect**.
+
+## 7. Tests
+
+- `params.rs` enumerates every parameter per instrument type and checks it against the list of
+  properties of the 0.2.3.18 sidebar editor: Synth 49, Voice 92, Drum 38, Kit 38, Chip FX 53,
+  Analog 54, FM-4 53, Noise 40, Sample 19 and CLAP 21 entries, with two FX devices.
+- It checks that every parameter round-trips and changes the instrument, and that defaults are in
+  range.
+- `instpanel_tests.rs` draws every type and tab and finds each parameter's knob, dropdown or
+  checkbox. It also tests:
+  - knob drag + one undo, `Ctrl`-drag, and double-click reset
+  - search jump
+  - Full-height pattern (`F11`, the buttons, height restore, `Ctrl+I`)
+  - the splitter (resize, collapse at the bottom)
+  - the switch bar (Arranger / Automation still dock the arranger)
+  - card collapse, A/B, and the sidebar button
+  - old settings files

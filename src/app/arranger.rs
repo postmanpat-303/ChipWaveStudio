@@ -4,7 +4,7 @@ use super::*;
 impl App {
     pub(super) fn arr_focused(&self) -> bool {
         self.view == View::Arranger
-            || (self.view == View::Pattern && self.dock_arranger && self.arr_focus)
+            || (self.view == View::Pattern && self.arr_docked() && self.arr_focus)
     }
 
     pub(super) fn order_len(&self) -> usize {

@@ -217,6 +217,36 @@ impl App {
         ) {
             self.play(3);
         }
+        // the lower panel (0.2.3.19): CHIPWAVE_SHOT_LOWER=instrument | arranger |
+        // automation | full, CHIPWAVE_SHOT_TAB=main | modulation | fx | advanced,
+        // CHIPWAVE_SHOT_SEARCH=<query>, CHIPWAVE_SHOT_CLASSIC=1 (old sidebar editor)
+        if let Ok(m) = std::env::var("CHIPWAVE_SHOT_LOWER") {
+            match m.as_str() {
+                "instrument" => self.show_instrument_panel(),
+                "arranger" => self.set_lower(0),
+                "automation" => self.set_lower(2),
+                "full" => {
+                    self.set_lower(0);
+                    self.toggle_full_height();
+                }
+                _ => {}
+            }
+        }
+        if let Ok(tb) = std::env::var("CHIPWAVE_SHOT_TAB") {
+            self.ip.tab = match tb.as_str() {
+                "modulation" => super::params::Tab::Modulation,
+                "fx" => super::params::Tab::Fx,
+                "advanced" => super::params::Tab::Advanced,
+                _ => super::params::Tab::Main,
+            };
+        }
+        if let Ok(q) = std::env::var("CHIPWAVE_SHOT_SEARCH") {
+            self.ip.query = q;
+            self.ip.search_open = true;
+        }
+        if std::env::var_os("CHIPWAVE_SHOT_CLASSIC").is_some() {
+            self.extra.classic_editor = true;
+        }
         ctx.request_repaint();
     }
 

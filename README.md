@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.3.16-00d0ff" alt="Version 0.2.3.16">
+  <img src="https://img.shields.io/badge/version-0.2.3.19-00d0ff" alt="Version 0.2.3.19">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveTracker?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -72,6 +72,10 @@ All pictures on this page are real captures of the current build (no mockups). T
     <td width="34%" valign="top"><img src="docs/screenshots/instrument.gif" alt="Sound editor browsing the demo instruments"><br><b>Synth / sound editor</b>: oscillator, unison + detune, stereo width, LP/HP/BP filter (SVF or Moog ladder, clean / vintage, 12/24 dB) with envelope, ADSR, drive, an 808-style metallic source for hats, velocity → cutoff, start delay, 303 glide / legato and accent, and a tempo-syncable LFO to cutoff, amp and pitch. <a href="docs/screenshots/dark-instrument.png">Still</a>.</td>
     <td width="66%" valign="top"><img src="docs/screenshots/mixer-meters.gif" alt="Mixer meters moving while the demo plays"><br><b>Mixer while playing</b>: the pads and bass duck under the kick (sidechain), meters per channel and on the master.
     <br><br><img src="docs/screenshots/arranger.gif" alt="Arranger playhead moving through the song"><br><b>Arranger while playing</b>: the playhead runs through the clips and the automation curves.</td>
+  </tr>
+  <tr>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-instrument-editor.png" alt="Instrument editor in the lower panel"></td>
+    <td width="66%" valign="top"><b>Instrument editor</b> <sub>(0.2.3.19)</sub>: every instrument (synth, sample, Voice, generators, Chip FX, CLAP plugins) is edited under the pattern with <b>knobs</b> on side-by-side, collapsible cards in four tabs (Main, Modulation, FX, Advanced), small envelope / filter / wave pictures, presets, A/B compare and <b>parameter search</b> (<code>Ctrl+F</code>). Drag a knob, <code>Ctrl</code>-drag for fine steps, double-click for the default, right-click to automate or MIDI-learn. The lower panel switches between Arranger, Instrument and Automation, resizes with a splitter, and <b>Full-height pattern</b> (<code>F11</code>) hides it. See <a href="docs/INSTRUMENT_EDITOR.md">INSTRUMENT_EDITOR.md</a>.</td>
   </tr>
   <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/dark-voice.png" alt="Voice (glitch) instrument panel"></td>
@@ -224,6 +228,9 @@ On Linux, build it from source (below).
 | `Ctrl+E` / `Ctrl+Shift+E` | quick WAV export / export dialog |
 | `Ctrl+,` | settings |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | UI scale up / down / 100 % |
+| `Ctrl+I` | instrument editor in the lower panel (again: back to the arranger) |
+| `Ctrl+F` | search the instrument's parameters |
+| `F11` | Full-height pattern: hide / show the lower panel |
 | `F12` | the full key list (Help > Keys) |
 
 ```
@@ -269,6 +276,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [EXPORT.md](docs/EXPORT.md) — WAV/MP3 export
 - [FILE_FORMAT.md](docs/FILE_FORMAT.md) — the `.cwt` song format
 - [UI_SCALING.md](docs/UI_SCALING.md) — screen scaling and layouts
+- [INSTRUMENT_EDITOR.md](docs/INSTRUMENT_EDITOR.md) — the lower-panel instrument editor: knobs, tabs, cards, search, A/B, Full-height pattern (0.2.3.19)
 - [SAMPLES.md](docs/SAMPLES.md) — the instrument list, importer and chop / slice (0.2.3.10)
 - [INSTRUMENT_LIBRARY.md](docs/INSTRUMENT_LIBRARY.md) — instrument library, `.cwi` files, rename / reorder / swap (0.2.3.9)
 - [CHORDS.md](docs/CHORDS.md) — chord helper and scale lock (0.2.3.9)

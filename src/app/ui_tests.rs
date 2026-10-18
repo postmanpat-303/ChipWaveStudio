@@ -21,6 +21,12 @@ pub(super) fn harness_with(song: Song) -> Harness<'static, App> {
     h
 }
 
+/// the pre-0.2.3.19 sidebar instrument editor (View > Classic sidebar instrument editor)
+fn classic(h: &mut Harness<'static, App>) {
+    h.state_mut().extra.classic_editor = true;
+    frame(h);
+}
+
 fn harness() -> Harness<'static, App> {
     harness_with(fileio::demo_song())
 }
@@ -830,7 +836,7 @@ fn instrument_menu_copy_paste_effects_and_open_in_fx_view() {
 
 /// two quick clicks at one spot (frames 50 ms apart: the harness's default
 /// 250 ms step is too slow for egui to count a double-click)
-fn double_click(h: &mut Harness<'static, App>, p: Pos2) {
+pub(super) fn double_click(h: &mut Harness<'static, App>, p: Pos2) {
     h.input_mut().events.push(egui::Event::PointerMoved(p));
     frame(h);
     let mut t = h.ctx.input(|i| i.time);
@@ -996,6 +1002,7 @@ fn mixer_duck_amount_drags_and_undoes() {
 #[test]
 fn instrument_lfo_sync_and_shape_are_editable_and_undoable() {
     let mut h = harness();
+    classic(&mut h);
     h.state_mut().instr = 2;
     frames(&mut h, 2);
     let lfo = |h: &mut Harness<'static, App>| {
@@ -1202,6 +1209,7 @@ fn file_open_text_song_loads_unsaved() {
 #[test]
 fn new_voice_instrument_from_the_instrument_menu_edits_and_undoes() {
     let mut h = harness();
+    classic(&mut h);
     let n0 = song(&mut h, |s| s.instruments.len());
     instr_menu(&mut h, 1);
     click_exact(&mut h, "New instrument");
@@ -1267,6 +1275,7 @@ fn mixer_limiter_panel_toggles_edits_and_undoes() {
 #[test]
 fn instrument_glide_legato_and_accent_are_editable_and_undoable() {
     let mut h = harness();
+    classic(&mut h);
     h.state_mut().instr = 2;
     frames(&mut h, 2);
     let patch = |h: &mut Harness<'static, App>| {
@@ -1677,6 +1686,7 @@ fn last_voice(h: &mut Harness<'static, App>) -> crate::voice::VoicePatch {
 #[test]
 fn voice_words_and_throat_mode_from_the_voice_panel() {
     let mut h = harness();
+    classic(&mut h);
     instr_menu(&mut h, 1);
     click_exact(&mut h, "New instrument");
     click_exact(&mut h, "Voice (glitch)");
@@ -1824,6 +1834,7 @@ fn sample_editor_slices_selects_edits_and_makes_notes() {
 #[test]
 fn voice_transform_section_edits_and_undoes() {
     let mut h = harness();
+    classic(&mut h);
     instr_menu(&mut h, 1);
     click_exact(&mut h, "New instrument");
     click_exact(&mut h, "Voice (glitch)");
@@ -1882,6 +1893,7 @@ fn last_gen(h: &mut Harness<'static, App>) -> crate::gen::GenPatch {
 #[test]
 fn generator_dice_locks_history_and_bake() {
     let mut h = harness();
+    classic(&mut h);
     instr_menu(&mut h, 1);
     click_exact(&mut h, "New instrument");
     click_exact(&mut h, "Generator (drums)");
@@ -1946,6 +1958,7 @@ fn generator_dice_locks_history_and_bake() {
 #[test]
 fn synth_panel_offers_the_ladder_filter() {
     let mut h = harness();
+    classic(&mut h);
     instr_menu(&mut h, 1);
     click_exact(&mut h, "New instrument");
     click_exact(&mut h, "Synth (init)");
@@ -1972,6 +1985,7 @@ fn synth_panel_offers_the_ladder_filter() {
 fn chip_fx_categories_randomize_mutate_locks_and_bake() {
     use crate::chipfx::{BASE_FREQ, WAVE_LOCK};
     let mut h = harness();
+    classic(&mut h);
     instr_menu(&mut h, 1);
     click_exact(&mut h, "New instrument");
     click_exact(&mut h, "Generator (chip FX)");
@@ -2065,6 +2079,7 @@ fn stage2_generators_menu_dice_locks_history_and_bake() {
         ("Generator (noise)", "Impact", "GENERATOR · NOISE"),
     ] {
         let mut h = harness();
+        classic(&mut h);
         instr_menu(&mut h, 1);
         click_exact(&mut h, "New instrument");
         click_exact(&mut h, menu);
@@ -2283,6 +2298,7 @@ fn has_text(h: &Harness<'static, App>, prefix: &str) -> bool {
 #[test]
 fn plugin_instrument_loads_shows_its_panel_and_saves_its_state() {
     let mut h = harness_with(crate::plugin::tests::plugin_song());
+    classic(&mut h);
     frames(&mut h, 3);
     let loaded = h.state().with(|s| s.engine.plugins.slots.len());
     assert_eq!(loaded, 1, "the song's plugin note loads one instance");

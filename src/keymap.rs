@@ -36,6 +36,9 @@ pub enum Action {
     Panic,
     BlockLonger,
     BlockShorter,
+    FullHeight,
+    InstrumentPanel,
+    ParamSearch,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,7 +120,7 @@ mod key_name {
 }
 
 use Action as A;
-pub const DEFAULTS: [(Action, &str, Combo); 28] = [
+pub const DEFAULTS: [(Action, &str, Combo); 31] = [
     (
         A::PlayBlock,
         "Play / stop block",
@@ -209,6 +212,21 @@ pub const DEFAULTS: [(Action, &str, Combo); 28] = [
         A::BlockShorter,
         "Halve block length",
         Combo::new(Key::PageUp, true, true),
+    ),
+    (
+        A::FullHeight,
+        "Full-height pattern (hide the lower panel)",
+        Combo::new(Key::F11, false, false),
+    ),
+    (
+        A::InstrumentPanel,
+        "Edit instrument in the lower panel",
+        Combo::new(Key::I, true, false),
+    ),
+    (
+        A::ParamSearch,
+        "Search instrument parameters",
+        Combo::new(Key::F, true, false),
     ),
 ];
 

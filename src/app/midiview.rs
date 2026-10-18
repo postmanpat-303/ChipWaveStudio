@@ -294,6 +294,18 @@ impl App {
     /// Right-click menu on a knob / slider: MIDI learn / forget.
     pub(super) fn learn_menu(&mut self, r: &egui::Response, target: Target) {
         let id = target.id();
+        let waiting = self.midi.learn.as_deref() == Some(id.as_str());
+        // sliders only sense drags: add clicks so the right-click menu opens
+        let r = r.interact(egui::Sense::click());
+        r.context_menu(|ui| self.learn_items(ui, &id, waiting));
+        if waiting {
+            ui_ring(&r.ctx, r.rect);
+        }
+    }
+
+    /// the MIDI learn / forget items of a control's right-click menu
+    pub(super) fn learn_items(&mut self, ui: &mut egui::Ui, id: &str, waiting: bool) {
+        let id = id.to_string();
         let bound: Vec<u8> = self
             .extra
             .midi
@@ -302,40 +314,32 @@ impl App {
             .filter(|(_, t)| *t == id)
             .map(|(c, _)| *c)
             .collect();
-        let waiting = self.midi.learn.as_deref() == Some(id.as_str());
-        // sliders only sense drags: add clicks so the right-click menu opens
-        let r = r.interact(egui::Sense::click());
-        r.context_menu(|ui| {
-            if waiting {
-                if ui.button("Cancel MIDI learn").clicked() {
-                    self.midi.learn = None;
-                    ui.close();
-                }
-            } else if ui
-                .button("MIDI learn")
-                .on_hover_text("then move a knob, fader or the mod wheel on the MIDI keyboard")
-                .clicked()
-            {
-                self.midi.learn = Some(id.clone());
-                self.status = format!(
-                    "MIDI learn: move a knob or the mod wheel to control {}",
-                    target_text(&id)
-                );
+        if waiting {
+            if ui.button("Cancel MIDI learn").clicked() {
+                self.midi.learn = None;
                 ui.close();
             }
-            for cc in &bound {
-                if ui.button(format!("Forget MIDI CC {cc}")).clicked() {
-                    self.extra
-                        .midi
-                        .learn
-                        .retain(|(c, t)| !(c == cc && *t == id));
-                    self.save_settings();
-                    ui.close();
-                }
+        } else if ui
+            .button("MIDI learn")
+            .on_hover_text("then move a knob, fader or the mod wheel on the MIDI keyboard")
+            .clicked()
+        {
+            self.midi.learn = Some(id.clone());
+            self.status = format!(
+                "MIDI learn: move a knob or the mod wheel to control {}",
+                target_text(&id)
+            );
+            ui.close();
+        }
+        for cc in &bound {
+            if ui.button(format!("Forget MIDI CC {cc}")).clicked() {
+                self.extra
+                    .midi
+                    .learn
+                    .retain(|(c, t)| !(c == cc && *t == id));
+                self.save_settings();
+                ui.close();
             }
-        });
-        if waiting {
-            ui_ring(&r.ctx, r.rect);
         }
     }
 
@@ -536,7 +540,7 @@ impl App {
 }
 
 /// pulsing outline around a control that waits for MIDI learn
-fn ui_ring(ctx: &egui::Context, r: Rect) {
+pub(super) fn ui_ring(ctx: &egui::Context, r: Rect) {
     let p = ctx.layer_painter(egui::LayerId::debug());
     p.rect_stroke(
         r.expand(3.0),

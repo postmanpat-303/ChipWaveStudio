@@ -13,6 +13,9 @@ The defaults follow the conventions most trackers share (FastTracker 2, ProTrack
 - **Follow playback:** the playing row stays centred (`Scroll Lock` or the toolbar toggle). With follow off, a play marker moves and the cursor stays put.
 - **Edit step:** after a note is entered the cursor moves down *step* rows (0–16, default 1).
 
+- **Lower panel (0.2.3.19):** under the pattern, switched between **Arranger**, **Instrument** (the instrument editor, `Ctrl+I`) and **Automation**. Drag the splitter to resize it, or to the bottom to hide it. **Full-height pattern** (`F11`, **View › Full-height pattern**, or the **Full height** toggle at the right of the Block bar) hides the panel and gives the pattern the whole height; press it again to restore the height. See [INSTRUMENT_EDITOR.md](INSTRUMENT_EDITOR.md).
+- **Block bar (0.2.3.19):** one line. Block, Length and + New block are on the left; Channels, Chords… and Full height are on the right; the order list sits in between and is clipped when the window is narrow (its tooltip shows all of it). Very narrow windows put the right-hand group on a second line.
+
 ### Block length (0.2.3.17)
 Each block has its own length, from 1 to 256 rows (older files can hold up to 3200, and those stay editable). The **Block bar** has a **Length** field next to the block selector. Drag it or type a value, or use the ▾ dropdown for 16 / 32 / 48 / 64 / 96 / 128 / 192 / 256. The quick buttons are **/2**, **x2**, **-16** and **+16**. **Song → Block** has **Set length…**, **Double length**, **Halve length**, **Stretch x2** and **Squash /2**, and `Ctrl+Shift+PgDn` / `Ctrl+Shift+PgUp` double or halve the length.
 
@@ -108,6 +111,8 @@ Z X C V B N M , Q W E R T Y U I    Z = C (base octave), Q = C (base octave + 1)
 | New / Open / Save / Save as | `Ctrl+N` / `Ctrl+O` / `Ctrl+S` / `Ctrl+Shift+S` | `Cmd+…` |
 | Export WAV/MP3 | `Ctrl+E` | `Cmd+E` |
 | Quit | `Ctrl+Q` (Alt+F4 on Windows) | `Cmd+Q` |
+| Instrument editor in the lower panel / search its parameters | `Ctrl+I` / `Ctrl+F` | `Cmd+I` / `Cmd+F` |
+| Full-height pattern (hide / show the lower panel) | `F11` | `Fn+F11` |
 | **Panic**: stop all sound now (playback, held notes, plugin voices, delay/reverb tails, limiter) | `Ctrl+.` or the small **Panic** button at the far right of the toolbar | `Cmd+.` |
 | Command palette | `Ctrl+Shift+P` | `Cmd+Shift+P` |
 | Switch screen: pattern / arranger / sound / samples | `F2` / `F3` / `F4` / `F5` | `Fn+F…` or `Cmd+1…4` (set in prefs) |

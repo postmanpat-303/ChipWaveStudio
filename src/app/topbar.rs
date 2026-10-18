@@ -497,7 +497,37 @@ impl App {
                 }
                 ui.separator();
                 ui.checkbox(&mut self.show_auto, "Automation lanes");
-                ui.checkbox(&mut self.dock_arranger, "Dock arranger under pattern");
+                ui.checkbox(&mut self.dock_arranger, "Dock lower panel under pattern");
+                let full = !self.lower_visible();
+                if ui
+                    .add(egui::Button::selectable(full, "Full-height pattern").shortcut_text("F11"))
+                    .on_hover_text("hide the lower panel (arranger, automation, instrument editor)")
+                    .clicked()
+                {
+                    self.toggle_full_height();
+                    ui.close();
+                }
+                let inst_on = self.lower_visible() && self.extra.lower_inst;
+                if ui
+                    .add(
+                        egui::Button::selectable(inst_on, "Instrument editor in lower panel")
+                            .shortcut_text("Ctrl+I"),
+                    )
+                    .clicked()
+                {
+                    self.toggle_instrument_panel();
+                    ui.close();
+                }
+                if ui
+                    .checkbox(
+                        &mut self.extra.classic_editor,
+                        "Classic sidebar instrument editor",
+                    )
+                    .on_hover_text("the pre-0.2.3.19 slider editor under the instrument list")
+                    .changed()
+                {
+                    self.save_settings();
+                }
                 ui.checkbox(&mut self.follow, "Follow playback");
                 if ui
                     .checkbox(&mut self.extra.alt_columns, "Alternate column shading")

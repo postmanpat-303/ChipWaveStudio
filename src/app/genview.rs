@@ -185,29 +185,7 @@ pub(super) fn gen_panel(
         );
     });
     if is_kit {
-        ui.horizontal_wrapped(|ui| {
-            ui.add_space(14.0);
-            for i in 0..8 {
-                if ui
-                    .selectable_label(st.sel == i, KIT_NAMES[i])
-                    .on_hover_text(format!("plays on {}", KIT_KEYS[i]))
-                    .clicked()
-                {
-                    st.sel = i;
-                }
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.add_space(14.0);
-            ui.label(
-                egui::RichText::new(
-                    "the note picks the drum: C kick, D snare, D# clap,\n\
-                     F# closed / A# open hat, E F G A toms, C# B perc",
-                )
-                .small()
-                .color(th().ink2),
-            );
-        });
+        kit_piece_ui(ui, st);
     }
     let sel = st.sel;
     if is_fx {
@@ -249,103 +227,7 @@ pub(super) fn gen_panel(
             }
         });
     }
-    // Dice / Mutate / history
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        let before = g.clone();
-        if ui
-            .button("Dice")
-            .on_hover_text("roll the unlocked knobs inside sensible ranges (seeded)")
-            .clicked()
-        {
-            g.dice(sel, new_seed(g.seed));
-            st.record(&before, g);
-            out.changed = true;
-        }
-        if is_kit
-            && ui
-                .button("Dice kit")
-                .on_hover_text("roll every piece of the kit")
-                .clicked()
-        {
-            g.dice_all(new_seed(g.seed));
-            st.record(&before, g);
-            out.changed = true;
-        }
-        if ui
-            .button("Mutate")
-            .on_hover_text("nudge the unlocked knobs a little around the current sound")
-            .clicked()
-        {
-            g.mutate(sel, new_seed(g.seed));
-            st.record(&before, g);
-            out.changed = true;
-        }
-        let mut pct = g.mutate * 100.0;
-        if ui
-            .add(
-                egui::DragValue::new(&mut pct)
-                    .range(1.0..=50.0)
-                    .speed(0.5)
-                    .prefix("±")
-                    .suffix(" %"),
-            )
-            .on_hover_text("how far Mutate moves each knob")
-            .changed()
-        {
-            g.mutate = pct / 100.0;
-            out.changed = true;
-        }
-    });
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        let before = g.clone();
-        let n = st.hist.len();
-        if ui
-            .add_enabled(st.pos > 0, egui::Button::new("<"))
-            .on_hover_text("back to the previous roll")
-            .clicked()
-        {
-            st.pos -= 1;
-            *g = st.hist[st.pos].clone();
-            out.changed = true;
-        }
-        if ui
-            .add_enabled(st.pos + 1 < n, egui::Button::new(">"))
-            .on_hover_text("forward to the next roll")
-            .clicked()
-        {
-            st.pos += 1;
-            *g = st.hist[st.pos].clone();
-            out.changed = true;
-        }
-        ui.label(
-            egui::RichText::new(if n > 0 {
-                format!("roll {}/{}", st.pos, n - 1)
-            } else {
-                "no rolls yet".into()
-            })
-            .small()
-            .color(th().ink2),
-        );
-        let mut seed = g.seed;
-        if ui
-            .add(
-                egui::DragValue::new(&mut seed)
-                    .hexadecimal(8, false, true)
-                    .prefix("seed "),
-            )
-            .on_hover_text(
-                "the Dice seed: the same seed rolls the same sound (type one to recall it)",
-            )
-            .changed()
-        {
-            g.seed = seed;
-            g.dice(sel, seed);
-            st.record(&before, g);
-            out.changed = true;
-        }
-    });
+    dice_controls(ui, g, st, sel, &mut out);
     if is_fx {
         chipfx_knobs(ui, g, &mut out);
     }
@@ -673,43 +555,8 @@ fn g2_knobs(ui: &mut egui::Ui, g: &mut GenPatch) -> bool {
 
 /// Chip FX: category buttons, Randomize, waveform
 fn chipfx_buttons(ui: &mut egui::Ui, g: &mut GenPatch, st: &mut GenUi, out: &mut GenOut) {
-    use crate::chipfx::{Category, Wave, WAVE_LOCK};
-    let before = g.clone();
-    let seed = new_seed(g.seed);
-    let mut act: Option<Option<Category>> = None;
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        for c in Category::ALL {
-            if ui
-                .button(c.name())
-                .on_hover_text(format!(
-                    "a new {} sound (sfxr recipe; locked knobs stay)",
-                    c.name()
-                ))
-                .clicked()
-            {
-                act = Some(Some(c));
-            }
-        }
-        if ui
-            .button("Randomize")
-            .on_hover_text("sfxr's Randomize: any sound at all (locked knobs stay)")
-            .clicked()
-        {
-            act = Some(None);
-        }
-    });
-    if let Some(a) = act {
-        g.seed = seed;
-        if let GenEngine::ChipFx(s) = &mut g.engine {
-            match a {
-                Some(c) => s.category(c, seed),
-                None => s.randomize(seed),
-            }
-        }
-        st.record(&before, g);
-        out.changed = true;
-    }
+    use crate::chipfx::{Wave, WAVE_LOCK};
+    chipfx_categories(ui, g, st, out);
     let GenEngine::ChipFx(s) = &mut g.engine else {
         return;
     };
@@ -951,5 +798,185 @@ impl App {
                 }
             }
         });
+    }
+}
+
+/// Dice / Mutate / ±% and the roll history (< > roll n/m, seed)
+pub(super) fn dice_controls(
+    ui: &mut egui::Ui,
+    g: &mut GenPatch,
+    st: &mut GenUi,
+    sel: usize,
+    out: &mut GenOut,
+) {
+    let is_kit = matches!(g.engine, GenEngine::Kit(_));
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        let before = g.clone();
+        if ui
+            .button("Dice")
+            .on_hover_text("roll the unlocked knobs inside sensible ranges (seeded)")
+            .clicked()
+        {
+            g.dice(sel, new_seed(g.seed));
+            st.record(&before, g);
+            out.changed = true;
+        }
+        if is_kit
+            && ui
+                .button("Dice kit")
+                .on_hover_text("roll every piece of the kit")
+                .clicked()
+        {
+            g.dice_all(new_seed(g.seed));
+            st.record(&before, g);
+            out.changed = true;
+        }
+        if ui
+            .button("Mutate")
+            .on_hover_text("nudge the unlocked knobs a little around the current sound")
+            .clicked()
+        {
+            g.mutate(sel, new_seed(g.seed));
+            st.record(&before, g);
+            out.changed = true;
+        }
+        let mut pct = g.mutate * 100.0;
+        if ui
+            .add(
+                egui::DragValue::new(&mut pct)
+                    .range(1.0..=50.0)
+                    .speed(0.5)
+                    .prefix("±")
+                    .suffix(" %"),
+            )
+            .on_hover_text("how far Mutate moves each knob")
+            .changed()
+        {
+            g.mutate = pct / 100.0;
+            out.changed = true;
+        }
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        let before = g.clone();
+        let n = st.hist.len();
+        if ui
+            .add_enabled(st.pos > 0, egui::Button::new("<"))
+            .on_hover_text("back to the previous roll")
+            .clicked()
+        {
+            st.pos -= 1;
+            *g = st.hist[st.pos].clone();
+            out.changed = true;
+        }
+        if ui
+            .add_enabled(st.pos + 1 < n, egui::Button::new(">"))
+            .on_hover_text("forward to the next roll")
+            .clicked()
+        {
+            st.pos += 1;
+            *g = st.hist[st.pos].clone();
+            out.changed = true;
+        }
+        ui.label(
+            egui::RichText::new(if n > 0 {
+                format!("roll {}/{}", st.pos, n - 1)
+            } else {
+                "no rolls yet".into()
+            })
+            .small()
+            .color(th().ink2),
+        );
+        let mut seed = g.seed;
+        if ui
+            .add(
+                egui::DragValue::new(&mut seed)
+                    .hexadecimal(8, false, true)
+                    .prefix("seed "),
+            )
+            .on_hover_text(
+                "the Dice seed: the same seed rolls the same sound (type one to recall it)",
+            )
+            .changed()
+        {
+            g.seed = seed;
+            g.dice(sel, seed);
+            st.record(&before, g);
+            out.changed = true;
+        }
+    });
+}
+
+/// kit piece buttons (which piece the knobs edit) and the note map
+pub(super) fn kit_piece_ui(ui: &mut egui::Ui, st: &mut GenUi) {
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        for i in 0..8 {
+            if ui
+                .selectable_label(st.sel == i, KIT_NAMES[i])
+                .on_hover_text(format!("plays on {}", KIT_KEYS[i]))
+                .clicked()
+            {
+                st.sel = i;
+            }
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label(
+            egui::RichText::new(
+                "the note picks the drum: C kick, D snare, D# clap,\n\
+                 F# closed / A# open hat, E F G A toms, C# B perc",
+            )
+            .small()
+            .color(th().ink2),
+        );
+    });
+}
+
+/// Chip FX: the category buttons and Randomize
+pub(super) fn chipfx_categories(
+    ui: &mut egui::Ui,
+    g: &mut GenPatch,
+    st: &mut GenUi,
+    out: &mut GenOut,
+) {
+    use crate::chipfx::Category;
+    let before = g.clone();
+    let seed = new_seed(g.seed);
+    let mut act: Option<Option<Category>> = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        for c in Category::ALL {
+            if ui
+                .button(c.name())
+                .on_hover_text(format!(
+                    "a new {} sound (sfxr recipe; locked knobs stay)",
+                    c.name()
+                ))
+                .clicked()
+            {
+                act = Some(Some(c));
+            }
+        }
+        if ui
+            .button("Randomize")
+            .on_hover_text("sfxr's Randomize: any sound at all (locked knobs stay)")
+            .clicked()
+        {
+            act = Some(None);
+        }
+    });
+    if let Some(a) = act {
+        g.seed = seed;
+        if let GenEngine::ChipFx(s) = &mut g.engine {
+            match a {
+                Some(c) => s.category(c, seed),
+                None => s.randomize(seed),
+            }
+        }
+        st.record(&before, g);
+        out.changed = true;
     }
 }

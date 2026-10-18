@@ -22,6 +22,13 @@ impl App {
                 })
                 .collect()
         });
+        let tags: Vec<&'static str> = self.with(|s| {
+            s.song
+                .instruments
+                .iter()
+                .map(|i| super::params::type_tag(&i.kind))
+                .collect()
+        });
         // header: title, count and (for long lists) the search box on one row
         ui.horizontal(|ui| {
             ui.add_space(10.0);
@@ -40,6 +47,7 @@ impl App {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.instr_query)
                             .hint_text("search")
+                            .text_color(th().note)
                             .desired_width(ui.available_width().clamp(60.0, 130.0)),
                     )
                     .on_hover_text(
@@ -56,11 +64,13 @@ impl App {
         let row_h = (ui.text_style_height(&egui::TextStyle::Monospace) + 4.0).max(17.0);
         let visible = names
             .iter()
-            .filter(|(n, tag)| {
+            .zip(&tags)
+            .filter(|((n, tag), tt)| {
                 let kind = if tag.is_empty() { "synth" } else { tag.trim() };
+                let tt = tt.to_lowercase();
                 q.is_empty()
                     || q.split_whitespace()
-                        .all(|w| n.to_lowercase().contains(w) || kind.contains(w))
+                        .all(|w| n.to_lowercase().contains(w) || kind.contains(w) || tt.contains(w))
             })
             .count();
         let panel_h = ui.clip_rect().height();
@@ -94,10 +104,12 @@ impl App {
                     for (i, (n, tag)) in names.iter().enumerate() {
                         let slot = (i + 1) as u8;
                         let kind = if tag.is_empty() { "synth" } else { tag.trim() };
+                        let ttag = tags.get(i).copied().unwrap_or("");
+                        let ttl = ttag.to_lowercase();
                         if !q.is_empty()
-                            && !q
-                                .split_whitespace()
-                                .all(|w| n.to_lowercase().contains(w) || kind.contains(w))
+                            && !q.split_whitespace().all(|w| {
+                                n.to_lowercase().contains(w) || kind.contains(w) || ttl.contains(w)
+                            })
                         {
                             continue;
                         }
@@ -127,7 +139,7 @@ impl App {
                         }
                         let label = format!("{:02X}  {}{}", slot, n, tag);
                         let r =
-                            instrument_row(ui, row_h, slot, n, kind, self.instr == slot, &label);
+                            instrument_row(ui, row_h, slot, n, ttag, self.instr == slot, &label);
                         if r.clicked() {
                             self.instr = slot;
                         }
@@ -140,7 +152,7 @@ impl App {
                             self.instr_shown = slot;
                         }
                         let r = r.on_hover_text(format!(
-                            "{slot:02X} {n} ({kind})\ndouble-click: rename · right-click: more"
+                            "{slot:02X} {n} ({ttag})\ndouble-click: rename · right-click: more"
                         ));
                         r.context_menu(|ui| {
                             ui.menu_button("Add effect", |ui| {
@@ -294,6 +306,10 @@ impl App {
         }
         ui.add_space(2.0);
         ui.separator();
+        if !self.extra.classic_editor {
+            self.instrument_summary(ui);
+            return;
+        }
         // patch editor for the selected synth instrument
         let idx = self.instr as usize;
         let mut changed = false;
@@ -914,17 +930,6 @@ fn paint_glyph(p: &egui::Painter, r: Rect, g: Glyph, col: Color32) {
     }
 }
 
-/// colour tag of an instrument kind (functional, readable on both themes)
-fn kind_colour(kind: &str) -> Color32 {
-    match kind {
-        "(sample)" => hex(0xE8C35A),
-        "(voice)" => hex(0xD98AD0),
-        "(gen)" => hex(0x8FD9A3),
-        "(plugin)" => hex(0x9AA8F0),
-        _ => hex(0x4FC3D9),
-    }
-}
-
 /// One compact list row: kind tag, slot number, name (clipped with an
 /// ellipsis, never under the scroll bar). `label` is the accessible name.
 fn instrument_row(
@@ -954,7 +959,7 @@ fn instrument_row(
             Pos2::new(body.left() + 3.0, body.top() + 3.0),
             egui::vec2(3.0, body.height() - 6.0),
         );
-        p.rect_filled(tag, 1.0, kind_colour(kind));
+        p.rect_filled(tag, 1.0, super::instpanel::tag_colour(kind));
         let font = egui::TextStyle::Monospace.resolve(ui.style());
         let x0 = tag.right() + 6.0;
         p.text(
@@ -965,7 +970,31 @@ fn instrument_row(
             t.ink2,
         );
         let nx = x0 + font.size * 1.9;
-        let avail = body.right() - 4.0 - nx;
+        // type tag on the right (Drum, Analog, FM-4, Voice, CLAP...)
+        let tf = egui::FontId::proportional((font.size * 0.82).max(9.0));
+        let tg = ui.fonts_mut(|f| {
+            f.layout_no_wrap(
+                kind.to_string(),
+                tf,
+                super::instpanel::tag_text_colour(kind),
+            )
+        });
+        let tag_w = if body.width() > 150.0 {
+            tg.size().x + 8.0
+        } else {
+            0.0
+        };
+        if tag_w > 0.0 {
+            p.galley(
+                Pos2::new(
+                    body.right() - 4.0 - tg.size().x,
+                    body.center().y - tg.size().y / 2.0,
+                ),
+                tg,
+                t.ink2,
+            );
+        }
+        let avail = body.right() - 4.0 - tag_w - nx;
         let col = if selected { t.ink } else { t.value };
         let mut job = egui::text::LayoutJob::simple_singleline(name.to_string(), font, col);
         job.wrap = egui::text::TextWrapping::truncate_at_width(avail.max(8.0));
@@ -1055,5 +1084,88 @@ impl App {
             ui.close();
             self.open_library();
         }
+    }
+}
+
+impl App {
+    /// under the list: what the selected instrument is, and where to edit it
+    fn instrument_summary(&mut self, ui: &mut egui::Ui) {
+        let t = th();
+        let slot = self.instr;
+        let info = self.with(|s| {
+            s.song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .map(|i| {
+                    (
+                        i.name.clone(),
+                        super::params::type_tag(&i.kind),
+                        i.volume,
+                        i.transpose,
+                        i.fx.len(),
+                        s.song.instrument_uses(slot),
+                    )
+                })
+        });
+        let Some((name, tag, vol, tr, nfx, uses)) = info else {
+            return;
+        };
+        ui.horizontal(|ui| {
+            ui.add_space(10.0);
+            ui.add(
+                egui::Label::new(egui::RichText::new(format!("{slot:02X} {name}")).strong())
+                    .truncate(),
+            );
+            super::instpanel::tag_pill(ui, tag);
+        });
+        ui.horizontal(|ui| {
+            ui.add_space(10.0);
+            ui.label(
+                egui::RichText::new(format!(
+                    "vol {:.0} % · {:+} st · {} FX · in {} block{}",
+                    vol * 100.0,
+                    tr,
+                    nfx,
+                    uses,
+                    if uses == 1 { "" } else { "s" }
+                ))
+                .small()
+                .color(t.ink2),
+            );
+        });
+        ui.add_space(4.0);
+        let showing = self.view == View::Pattern && self.lower_visible() && self.extra.lower_inst;
+        ui.horizontal(|ui| {
+            ui.add_space(10.0);
+            let b = egui::Button::new(if showing {
+                "Editing in the lower panel"
+            } else {
+                "Edit in lower panel"
+            })
+            .shortcut_text("Ctrl+I")
+            .selected(showing)
+            .min_size(egui::vec2(ui.available_width() - 12.0, 24.0));
+            if ui
+                .add(b)
+                .on_hover_text("knobs, tabs and parameter search under the pattern editor")
+                .clicked()
+                && !showing
+            {
+                self.show_instrument_panel();
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.add_space(10.0);
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(
+                        "Ctrl+F searches its parameters · View › Classic sidebar instrument editor brings back the old layout",
+                    )
+                    .small()
+                    .color(t.ink2),
+                )
+                .wrap(),
+            );
+        });
     }
 }

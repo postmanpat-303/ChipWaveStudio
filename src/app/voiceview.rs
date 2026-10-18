@@ -62,63 +62,7 @@ pub(super) fn voice_panel(ui: &mut egui::Ui, vp: &mut VoicePatch) -> bool {
             .response
             .on_hover_text("replace every voice, envelope, filter and LFO setting with a preset");
     });
-    // vowel palette: click adds to the sequence
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        ui.label(egui::RichText::new("Add").small().color(t.ink2));
-        for v in Vowel::ALL {
-            let b = egui::Button::new(
-                egui::RichText::new(v.name())
-                    .monospace()
-                    .strong()
-                    .color(if t.light { Color32::WHITE } else { t.value }),
-            )
-            .fill(t.slate)
-            .min_size(egui::vec2(30.0, 20.0));
-            if ui
-                .add_enabled(vp.vowels.len() < 8, b)
-                .on_hover_text(format!("add {} to the vowel sequence (max 8)", v.hint()))
-                .clicked()
-            {
-                vp.vowels.push(v);
-                changed = true;
-            }
-        }
-    });
-    // the sequence: click a chip to remove it
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        ui.label(egui::RichText::new("Seq").small().color(t.ink2));
-        let mut remove = None;
-        for (i, v) in vp.vowels.iter().enumerate() {
-            let b = egui::Button::new(
-                egui::RichText::new(v.name())
-                    .monospace()
-                    .strong()
-                    .color(if t.light { Color32::WHITE } else { t.crt_bot }),
-            )
-            .fill(t.accent)
-            .min_size(egui::vec2(30.0, 20.0));
-            if ui
-                .add(b)
-                .on_hover_text(format!(
-                    "step {}: {} - click to remove (31{:02X} jumps here)",
-                    i + 1,
-                    v.hint(),
-                    i
-                ))
-                .clicked()
-            {
-                remove = Some(i);
-            }
-        }
-        if let Some(i) = remove {
-            if vp.vowels.len() > 1 {
-                vp.vowels.remove(i);
-                changed = true;
-            }
-        }
-    });
+    changed |= vowels_ui(ui, vp);
     // tract model
     ui.horizontal(|ui| {
         ui.add_space(14.0);
@@ -135,52 +79,7 @@ pub(super) fn voice_panel(ui: &mut egui::Ui, vp: &mut VoicePatch) -> bool {
             )
             .changed();
     });
-    // words: each note speaks the next word (3Exx picks one)
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        ui.label(egui::RichText::new("Words").small().color(t.ink2))
-            .on_hover_text(
-                "each note speaks the next word; 3Exx speaks word xx. Letters: vowels a e i o u er ae, \
-                 p b t d k g, s z sh f v h, m n ng; . = pause. Empty = vowels only.",
-            );
-        let mut remove = None;
-        for (i, w) in vp.words.iter_mut().enumerate() {
-            let r = ui.add(
-                egui::TextEdit::singleline(w)
-                    .desired_width(56.0)
-                    .char_limit(48)
-                    .hint_text("ka"),
-            );
-            r.clone().on_hover_text(format!(
-                "word {:02X} (3E{:02X}): {}",
-                i,
-                i,
-                crate::speech::describe(w)
-            ));
-            changed |= r.changed();
-            if r.secondary_clicked() {
-                remove = Some(i);
-            }
-        }
-        if let Some(i) = remove {
-            vp.words.remove(i);
-            changed = true;
-        }
-        if vp.words.len() < crate::speech::MAX_WORDS
-            && ui
-                .small_button("+ word")
-                .on_hover_text("add a word (right-click a word to remove it)")
-                .clicked()
-        {
-            let next = ["ka", "ta", "da", "ma", "sha", "pa", "na", "ga"];
-            vp.words.push(next[vp.words.len() % next.len()].to_string());
-            changed = true;
-        }
-        if !vp.words.is_empty() && ui.small_button("clear").clicked() {
-            vp.words.clear();
-            changed = true;
-        }
-    });
+    changed |= words_ui(ui, vp);
     egui::Grid::new("voice_grid")
         .num_columns(2)
         .spacing([8.0, 4.0])
@@ -649,4 +548,121 @@ impl App {
             }
         });
     }
+}
+
+/// vowel palette (click adds) and the sequence chips (click removes)
+pub(super) fn vowels_ui(ui: &mut egui::Ui, vp: &mut VoicePatch) -> bool {
+    let t = th();
+    let mut changed = false;
+    // vowel palette: click adds to the sequence
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("Add").small().color(t.ink2));
+        for v in Vowel::ALL {
+            let b = egui::Button::new(
+                egui::RichText::new(v.name())
+                    .monospace()
+                    .strong()
+                    .color(if t.light { Color32::WHITE } else { t.value }),
+            )
+            .fill(t.slate)
+            .min_size(egui::vec2(30.0, 20.0));
+            if ui
+                .add_enabled(vp.vowels.len() < 8, b)
+                .on_hover_text(format!("add {} to the vowel sequence (max 8)", v.hint()))
+                .clicked()
+            {
+                vp.vowels.push(v);
+                changed = true;
+            }
+        }
+    });
+    // the sequence: click a chip to remove it
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("Seq").small().color(t.ink2));
+        let mut remove = None;
+        for (i, v) in vp.vowels.iter().enumerate() {
+            let b = egui::Button::new(
+                egui::RichText::new(v.name())
+                    .monospace()
+                    .strong()
+                    .color(if t.light { Color32::WHITE } else { t.crt_bot }),
+            )
+            .fill(t.accent)
+            .min_size(egui::vec2(30.0, 20.0));
+            if ui
+                .add(b)
+                .on_hover_text(format!(
+                    "step {}: {} - click to remove (31{:02X} jumps here)",
+                    i + 1,
+                    v.hint(),
+                    i
+                ))
+                .clicked()
+            {
+                remove = Some(i);
+            }
+        }
+        if let Some(i) = remove {
+            if vp.vowels.len() > 1 {
+                vp.vowels.remove(i);
+                changed = true;
+            }
+        }
+    });
+    changed
+}
+
+/// the words list: each note speaks the next word
+pub(super) fn words_ui(ui: &mut egui::Ui, vp: &mut VoicePatch) -> bool {
+    let t = th();
+    let mut changed = false;
+    // words: each note speaks the next word (3Exx picks one)
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("Words").small().color(t.ink2))
+            .on_hover_text(
+                "each note speaks the next word; 3Exx speaks word xx. Letters: vowels a e i o u er ae, \
+                 p b t d k g, s z sh f v h, m n ng; . = pause. Empty = vowels only.",
+            );
+        let mut remove = None;
+        for (i, w) in vp.words.iter_mut().enumerate() {
+            let r = ui.add(
+                egui::TextEdit::singleline(w)
+                    .desired_width(56.0)
+                    .char_limit(48)
+                    .hint_text("ka"),
+            );
+            r.clone().on_hover_text(format!(
+                "word {:02X} (3E{:02X}): {}",
+                i,
+                i,
+                crate::speech::describe(w)
+            ));
+            changed |= r.changed();
+            if r.secondary_clicked() {
+                remove = Some(i);
+            }
+        }
+        if let Some(i) = remove {
+            vp.words.remove(i);
+            changed = true;
+        }
+        if vp.words.len() < crate::speech::MAX_WORDS
+            && ui
+                .small_button("+ word")
+                .on_hover_text("add a word (right-click a word to remove it)")
+                .clicked()
+        {
+            let next = ["ka", "ta", "da", "ma", "sha", "pa", "na", "ga"];
+            vp.words.push(next[vp.words.len() % next.len()].to_string());
+            changed = true;
+        }
+        if !vp.words.is_empty() && ui.small_button("clear").clicked() {
+            vp.words.clear();
+            changed = true;
+        }
+    });
+    changed
 }
