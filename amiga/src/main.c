@@ -294,6 +294,9 @@ int main(void)
 	raddnum("attnflags", SysBase->AttnFlags);
 	raddnum("vblank_hz", SysBase->VBlankFrequency);
 	raddnum("power_hz", SysBase->PowerSupplyFrequency);
+	raddnum("chip_free", AvailMem(MEMF_CHIP));
+	raddnum("chip_largest", AvailMem(MEMF_CHIP | MEMF_LARGEST));
+	raddnum("any_free", AvailMem(MEMF_ANY));
 
 	/* load into chip RAM: Paula can only read chip RAM */
 	fh = Open((CONST_STRPTR)args[A_FILE], MODE_OLDFILE);

@@ -1,0 +1,58 @@
+ChipWave Lite M1 tests, 2026-10-18 18:08 IST
+== 1. vamos (68000 and 68020 builds, tick log)
+  PASS  68000 and 68020 builds write identical tick logs (1230 ticks)
+== 2. libxmp reference
+        ticks compared: 1225 (ptplayer log 1230 incl. 5 lead-in, libxmp 1230)
+          per_ok  2817
+          per_round 808
+          per_bad 0
+          known   36
+          vol_ok  3690
+          vol_bad 0
+          ended   1207
+          bpm_ok  1225
+          bpm_bad 0
+        RESULT: MATCH
+  PASS  tick log matches libxmp (periods, volumes, tempo; known libxmp-vs-PT cells listed in test/ref_known_diffs.txt)
+== 3. FS-UAE a500 (A500, ChipWaveLite.000), finished in 88s
+  PASS  booted the test ADF and ran the startup-sequence to the end
+  PASS  tick log from the emulated Amiga is identical to the vamos/reference log
+        cpu attnflags=0, vblank=50 Hz, replay per tick: avg 1009 us, peak 1802 us
+  PASS  LOOPS 1: played the whole song through ptplayer in 24.36 s (libxmp: 24.34 s), E8 trigger=1
+  PASS  song length within 0.5 s of the reference
+  PASS  after the song: audio DMA off, INTENA restored (24620 -> 24620)
+        chip RAM free before loading: 496184 bytes (largest block 496184)
+  PASS  Ctrl-C stops playback cleanly (sent to CLI 1, after 6 s, audio DMA 0)
+  PASS  a second run gets the audio channels and CIA-B timers again
+== 3. FS-UAE a500-512k (A500, ChipWaveLite.000), finished in 70s
+  PASS  booted the test ADF and ran the startup-sequence to the end
+  PASS  tick log from the emulated Amiga is identical to the vamos/reference log
+        cpu attnflags=0, vblank=50 Hz, replay per tick: avg 1009 us, peak 1720 us
+  PASS  LOOPS 1: played the whole song through ptplayer in 24.36 s (libxmp: 24.34 s), E8 trigger=1
+  PASS  song length within 0.5 s of the reference
+  PASS  after the song: audio DMA off, INTENA restored (24620 -> 24620)
+        chip RAM free before loading: 175608 bytes (largest block 170712)
+  SKIP  Ctrl-C step: a 512K-only machine with the AROS ROM has no room for the background shell that sends it (covered by the other configs)
+  PASS  a second run gets the audio channels and CIA-B timers again
+== 3. FS-UAE a500-1mbchip (A500, ChipWaveLite.000), finished in 88s
+  PASS  booted the test ADF and ran the startup-sequence to the end
+  PASS  tick log from the emulated Amiga is identical to the vamos/reference log
+        cpu attnflags=0, vblank=50 Hz, replay per tick: avg 1009 us, peak 1723 us
+  PASS  LOOPS 1: played the whole song through ptplayer in 24.36 s (libxmp: 24.34 s), E8 trigger=1
+  PASS  song length within 0.5 s of the reference
+  PASS  after the song: audio DMA off, INTENA restored (24620 -> 24620)
+        chip RAM free before loading: 699896 bytes (largest block 695000)
+  PASS  Ctrl-C stops playback cleanly (sent to CLI 1, after 6 s, audio DMA 0)
+  PASS  a second run gets the audio channels and CIA-B timers again
+== 3. FS-UAE a1200 (A1200, ChipWaveLite), finished in 65s
+  PASS  booted the test ADF and ran the startup-sequence to the end
+  PASS  tick log from the emulated Amiga is identical to the vamos/reference log
+        cpu attnflags=3, vblank=50 Hz, replay per tick: avg 455 us, peak 837 us
+  PASS  LOOPS 1: played the whole song through ptplayer in 24.36 s (libxmp: 24.34 s), E8 trigger=1
+  PASS  song length within 0.5 s of the reference
+  PASS  after the song: audio DMA off, INTENA restored (24620 -> 24620)
+        chip RAM free before loading: 1748384 bytes (largest block 1743488)
+  PASS  Ctrl-C stops playback cleanly (sent to CLI 1, after 6 s, audio DMA 0)
+  PASS  a second run gets the audio channels and CIA-B timers again
+
+ALL TESTS PASSED

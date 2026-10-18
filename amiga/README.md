@@ -96,13 +96,17 @@ Everything runs headless on Linux. The tests use **vamos** and **xdftool** (amit
 
 **Results (18 Oct 2026):**
 
-| Check | A500 512K+512K | A500 512K | A500 1 MB chip | A1200 |
+| Check | A500 512K+512K | A500 512K only | A500 1 MB chip | A1200 2 MB |
 |---|---|---|---|---|
-| Tick log identical to vamos/reference (1230 ticks) | PASS | see `make test` | PASS | PASS |
-| `LOOPS 1` length (libxmp: 24.34 s) | 24.34 s | | 24.34 s | 24.34 s |
-| Audio DMA off and INTENA restored after exit | PASS | | PASS | PASS |
-| Ctrl-C stop, then a clean second run | PASS | | PASS | PASS |
-| Replay CPU per tick, average / peak (one tick = 20 ms at 125 BPM) | 1.01 / 1.72 ms (5.0 % / 8.6 %) | | 1.01 / 1.72 ms | 0.45 / 0.84 ms (2.3 % / 4.2 %) |
+| Tick log identical to vamos/reference (1230 ticks) | PASS | PASS | PASS | PASS |
+| `LOOPS 1` length (libxmp: 24.34 s) | 24.36 s | 24.36 s | 24.34 s | 24.34 s |
+| Audio DMA off and INTENA restored after exit | PASS | PASS | PASS | PASS |
+| Ctrl-C stop | PASS | skipped¹ | PASS | PASS |
+| Second run gets channels and timers again | PASS | PASS | PASS | PASS |
+| Chip RAM free under the AROS ROM | 496 KB | 175 KB | 700 KB | 1.75 MB |
+| Replay CPU per tick, average / peak (one tick = 20 ms at 125 BPM) | 1.01 / 1.8 ms (5 % / 9 %) | same | same | 0.45 / 0.83 ms (2.3 % / 4.2 %) |
+
+¹ With 512K chip only, the AROS ROM leaves 175 KB free, and the background shell that sends the Ctrl-C (`Run CWBreak`) takes about 160 KB of it. The player then correctly reports "Not enough chip RAM … largest free block 6832" and exits. Kickstart 3.1 uses much less RAM than AROS, so check this one in WinUAE.
 
 The CPU times were measured on FS-UAE's cycle-exact A500 and on the A1200 without fast RAM.
 
