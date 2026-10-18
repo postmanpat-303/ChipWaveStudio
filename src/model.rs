@@ -104,6 +104,7 @@ impl PartialEq for SampleData {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum InstrumentKind {
     Synth(Patch),
     /// mono f32 sample data at `rate`

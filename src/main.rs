@@ -27,6 +27,7 @@ mod settings;
 mod speech;
 mod synth;
 mod theme;
+mod transform;
 mod update;
 mod voice;
 

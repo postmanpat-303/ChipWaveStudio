@@ -13,10 +13,14 @@ pub enum FxKind {
     Filter,
     Bitcrusher,
     Compressor,
+    /// 0.2.3.11 Transform stages as devices (see crate::transform)
+    Resonator,
+    Digital,
+    Sub,
 }
 
 impl FxKind {
-    pub const ALL: [FxKind; 7] = [
+    pub const ALL: [FxKind; 10] = [
         FxKind::Delay,
         FxKind::Reverb,
         FxKind::Drive,
@@ -24,6 +28,9 @@ impl FxKind {
         FxKind::Filter,
         FxKind::Bitcrusher,
         FxKind::Compressor,
+        FxKind::Resonator,
+        FxKind::Digital,
+        FxKind::Sub,
     ];
     pub fn name(self) -> &'static str {
         match self {
@@ -34,6 +41,9 @@ impl FxKind {
             FxKind::Filter => "Filter",
             FxKind::Bitcrusher => "Bitcrusher",
             FxKind::Compressor => "Compressor",
+            FxKind::Resonator => "Metal resonator",
+            FxKind::Digital => "Digital distortion",
+            FxKind::Sub => "Sub bass",
         }
     }
     /// muted strip tint per device type
@@ -41,9 +51,11 @@ impl FxKind {
         match self {
             FxKind::Delay | FxKind::Chorus => 0x6B5E8A, // time-based: violet
             FxKind::Reverb => 0x5E5A86,
-            FxKind::Drive | FxKind::Bitcrusher => 0x8A5A4E, // warm
-            FxKind::Filter => 0x4E6A86,                     // cool
-            FxKind::Compressor => 0x5E6B7A,                 // neutral
+            FxKind::Drive | FxKind::Bitcrusher | FxKind::Digital => 0x8A5A4E, // warm
+            FxKind::Resonator => 0x7A6E4E,
+            FxKind::Sub => 0x4E5E7A,
+            FxKind::Filter => 0x4E6A86,     // cool
+            FxKind::Compressor => 0x5E6B7A, // neutral
         }
     }
 }
@@ -156,6 +168,41 @@ const COMP: [ParamInfo; 5] = [
     p("release", "Release", 10.0, 1000.0, 120.0, true, "ms"),
     p("makeup", "Makeup", 0.0, 24.0, 4.0, false, "dB"),
 ];
+const RESONATOR: [ParamInfo; 8] = [
+    p("mix", "Mix", 0.0, 1.0, 0.5, false, "%"),
+    c(
+        "ratios",
+        "Ratios",
+        &["harmonic", "metal", "bell", "bar", "odd"],
+        1.0,
+    ),
+    c("pitch", "Pitch", &["note", "fixed"], 0.0),
+    p("tune", "Tune", -24.0, 24.0, 0.0, false, "st"),
+    p("hz", "Fixed pitch", 30.0, 4000.0, 220.0, true, "Hz"),
+    p("decay", "Decay", 20.0, 4000.0, 400.0, true, "ms"),
+    p("damp", "Damping", 0.0, 1.0, 0.4, false, "%"),
+    p("spread", "Spread", 0.0, 1.0, 0.3, false, "%"),
+];
+const DIGITAL: [ParamInfo; 10] = [
+    p("mix", "Mix", 0.0, 1.0, 0.5, false, "%"),
+    p("drive", "Drive", 0.0, 36.0, 12.0, false, "dB"),
+    c("shape", "Shape", &["clip", "fold"], 0.0),
+    p("bits", "Bits", 1.0, 16.0, 8.0, false, "bit"),
+    p("rate", "Rate", 300.0, 48000.0, 12000.0, true, "Hz"),
+    c("alias", "Aliasing", &["off", "on"], 1.0),
+    p("ring", "Ring mod", 0.0, 1.0, 0.0, false, "%"),
+    p("ring_ratio", "Ring ratio", 0.25, 8.0, 1.5, true, "x"),
+    p("hp", "Pre HP", 20.0, 2000.0, 80.0, true, "Hz"),
+    p("lp", "Post LP", 1000.0, 20000.0, 12000.0, true, "Hz"),
+];
+const SUB: [ParamInfo; 6] = [
+    p("mix", "Level", 0.0, 1.0, 0.5, false, "%"),
+    c("mode", "Mode", &["sine", "divider", "sine + divider"], 0.0),
+    c("octave", "Octave", &["-1", "-2"], 0.0),
+    p("drive", "Drive", 0.0, 1.0, 0.3, false, "%"),
+    p("growl", "Growl", 0.0, 1.0, 0.3, false, "%"),
+    p("xover", "Crossover", 60.0, 250.0, 120.0, true, "Hz"),
+];
 
 pub fn params(k: FxKind) -> &'static [ParamInfo] {
     match k {
@@ -166,10 +213,13 @@ pub fn params(k: FxKind) -> &'static [ParamInfo] {
         FxKind::Filter => &FILTER,
         FxKind::Bitcrusher => &CRUSH,
         FxKind::Compressor => &COMP,
+        FxKind::Resonator => &RESONATOR,
+        FxKind::Digital => &DIGITAL,
+        FxKind::Sub => &SUB,
     }
 }
 
-pub const MAX_PARAMS: usize = 8;
+pub const MAX_PARAMS: usize = 10;
 
 impl ParamInfo {
     pub fn to_real(&self, n: f32) -> f32 {
@@ -403,6 +453,77 @@ pub fn presets(k: FxKind) -> &'static [(&'static str, &'static [(&'static str, f
                 &[("bits", 4.0), ("rate", 6000.0), ("mix", 0.7)],
             ),
         ],
+        FxKind::Resonator => &[
+            (
+                "Robot ring",
+                &[
+                    ("ratios", 0.0),
+                    ("decay", 250.0),
+                    ("damp", 0.3),
+                    ("mix", 0.5),
+                ],
+            ),
+            (
+                "Cyber metal",
+                &[
+                    ("ratios", 1.0),
+                    ("decay", 600.0),
+                    ("spread", 0.6),
+                    ("mix", 0.6),
+                ],
+            ),
+            (
+                "Temple bell",
+                &[
+                    ("ratios", 2.0),
+                    ("decay", 2500.0),
+                    ("damp", 0.2),
+                    ("mix", 0.4),
+                ],
+            ),
+        ],
+        FxKind::Digital => &[
+            (
+                "8-bit grit",
+                &[
+                    ("drive", 6.0),
+                    ("bits", 6.0),
+                    ("rate", 11025.0),
+                    ("mix", 0.7),
+                ],
+            ),
+            (
+                "Ring robot",
+                &[
+                    ("drive", 3.0),
+                    ("bits", 16.0),
+                    ("rate", 48000.0),
+                    ("ring", 0.8),
+                    ("ring_ratio", 1.0),
+                    ("mix", 0.8),
+                ],
+            ),
+            (
+                "Broken DAC",
+                &[
+                    ("drive", 24.0),
+                    ("shape", 1.0),
+                    ("bits", 4.0),
+                    ("rate", 4000.0),
+                    ("mix", 0.6),
+                ],
+            ),
+        ],
+        FxKind::Sub => &[
+            (
+                "Clean sine sub",
+                &[("mode", 0.0), ("drive", 0.0), ("growl", 0.0), ("mix", 0.6)],
+            ),
+            (
+                "Octaver growl",
+                &[("mode", 1.0), ("drive", 0.6), ("growl", 0.5), ("mix", 0.6)],
+            ),
+        ],
         FxKind::Compressor => &[
             (
                 "Glue",
@@ -439,6 +560,9 @@ pub fn from_preset(t: &toml::Value) -> Option<Device> {
         "filter" => FxKind::Filter,
         "bitcrush" | "bitcrusher" => FxKind::Bitcrusher,
         "compressor" => FxKind::Compressor,
+        "resonator" => FxKind::Resonator,
+        "digital" => FxKind::Digital,
+        "sub" | "subbass" => FxKind::Sub,
         _ => return None, // e.g. phaser: not yet
     };
     let num = |k: &str| {
@@ -647,6 +771,7 @@ enum Dsp {
     Comp {
         env: f32,
     },
+    Stage(Box<crate::transform::FxStage>),
 }
 
 /// realtime state for one device instance
@@ -663,6 +788,9 @@ pub struct FxState {
 
 pub struct Ctx {
     pub bpm: f32,
+    /// pitch of the note playing on this channel (0 = none); the
+    /// Resonator, Digital ring mod and Sub sine follow it
+    pub note: f32,
 }
 
 impl FxState {
@@ -714,6 +842,7 @@ impl FxState {
                 hold: [0.0; 2],
             },
             FxKind::Compressor => Dsp::Comp { env: 0.0 },
+            FxKind::Resonator | FxKind::Digital | FxKind::Sub => Dsp::Stage(Box::default()),
         };
         let mut s = Self {
             kind: d.kind,
@@ -786,6 +915,7 @@ impl FxState {
                 *hold = [0.0; 2];
             }
             Dsp::Comp { env } => *env = 0.0,
+            Dsp::Stage(st) => **st = crate::transform::FxStage::default(),
         }
         self.on_gain = if d.enabled { 1.0 } else { 0.0 };
         self.set_targets(d, |_| None);
@@ -1001,6 +1131,11 @@ impl FxState {
                 let g = db(p[4] - gr);
                 (l * g, r * g)
             }
+            Dsp::Stage(st) => match self.kind {
+                FxKind::Resonator => st.resonator(l, r, &p, ctx.note, sr),
+                FxKind::Digital => st.digital(l, r, &p, ctx.note, sr),
+                _ => st.sub(l, r, &p, ctx.note, sr),
+            },
         }
     }
 }
@@ -1125,7 +1260,10 @@ mod tests {
         for kind in FxKind::ALL {
             let d = Device::new(kind);
             let mut a = FxState::new(&d, 48000.0);
-            let ctx = Ctx { bpm: 140.0 };
+            let ctx = Ctx {
+                bpm: 140.0,
+                note: 0.0,
+            };
             for i in 0..20000 {
                 a.process((i as f32 * 0.37).sin(), (i as f32 * 0.21).cos(), &ctx);
             }
@@ -1163,7 +1301,10 @@ mod tests {
 
     fn run(d: &Device, input: &[f32]) -> Vec<(f32, f32)> {
         let mut s = FxState::new(d, 48000.0);
-        let ctx = Ctx { bpm: 145.0 };
+        let ctx = Ctx {
+            bpm: 145.0,
+            note: 0.0,
+        };
         input
             .iter()
             .map(|&x| s.process(x, -x * 0.5, &ctx))
@@ -1186,7 +1327,10 @@ mod tests {
             // defaults must not blow up either and must decay after input stops
             let d = Device::new(k);
             let mut s = FxState::new(&d, 48000.0);
-            let ctx = Ctx { bpm: 145.0 };
+            let ctx = Ctx {
+                bpm: 145.0,
+                note: 0.0,
+            };
             for &x in &input[..8000] {
                 s.process(x, x, &ctx);
             }
@@ -1223,7 +1367,10 @@ mod tests {
         d.set_real("lp", 18000.0);
         d.set_real("hp", 20.0);
         let mut s = FxState::new(&d, 48000.0);
-        let ctx = Ctx { bpm: 120.0 };
+        let ctx = Ctx {
+            bpm: 120.0,
+            note: 0.0,
+        };
         let mut peak_at = 0;
         let mut peak = 0.0;
         for i in 0..40000 {

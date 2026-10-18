@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 14] = [
+pub const VIEWS: [&str; 15] = [
     "pattern",
     "arranger",
     "mixer",
@@ -48,6 +48,7 @@ pub const VIEWS: [&str; 14] = [
     "chords",
     "speech",
     "slice",
+    "transform",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -93,6 +94,14 @@ impl App {
                 p.base.name = "Demon Words".into();
                 self.add_instrument("Demon Words", InstrumentKind::Voice(p));
                 self.dirty = false;
+            }
+            "transform" => {
+                // a Voice with the Transform section in use (0.2.3.11)
+                let mut p = crate::voice::preset("Metal Demon").unwrap_or_default();
+                p.base.name = "Metal Demon".into();
+                self.add_instrument("Metal Demon", InstrumentKind::Voice(p));
+                self.dirty = false;
+                super::voiceview::TF_SCROLL.with(|f| f.set(true));
             }
             "slice" => {
                 // a breakbeat in the sample editor, sliced at its transients

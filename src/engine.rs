@@ -36,6 +36,9 @@ struct Chan {
     spoke: bool,
     /// pattern filter overrides (38-3B); cleared by a different instrument
     fm: crate::synth::FiltMod,
+    /// Transform overrides 3F-42 (blend, resonance, digital, sub; < 0 =
+    /// instrument); cleared by a different instrument
+    tfo: crate::transform::Overrides,
     /// cutoff slide in octaves per tick (3A / 3B), this row only
     cut_slide: f32,
     /// note held (no note-off since it started): legato glide is possible
@@ -53,6 +56,15 @@ struct Tail {
     synth: SynthVoice,
     pos: f64,
     gain: f32,
+}
+
+/// 3F-42 value: 00 = the instrument's own setting (-1), 01-FF = 0..1
+pub fn tf_amount(x: u8) -> f32 {
+    if x == 0 {
+        -1.0
+    } else {
+        (x - 1) as f32 / 254.0
+    }
 }
 
 /// Effect 38xx: code 01..FF -> 20 Hz .. 20 kHz on a log scale.
@@ -162,6 +174,7 @@ impl Chan {
             word_next: 0,
             spoke: false,
             fm: Default::default(),
+            tfo: crate::transform::NO_OVERRIDES,
             cut_slide: 0.0,
             gate: false,
             glide_to: 0.0,
@@ -693,6 +706,7 @@ impl Engine {
             if c.instr != cell.instr as usize - 1 {
                 // filter commands belong to the instrument they were set for
                 c.fm = Default::default();
+                c.tfo = crate::transform::NO_OVERRIDES;
             }
             c.instr = cell.instr as usize - 1;
             c.vol = song.instruments[c.instr].volume;
@@ -841,6 +855,11 @@ impl Engine {
                 // 3Axx / 3Bxx cutoff slide up / down: xx/96 octave per tick
                 0x3A => c.cut_slide = cell.fxp as f32 / 96.0,
                 0x3B => c.cut_slide = -(cell.fxp as f32) / 96.0,
+                // 3Fxx Transform blend, 40xx resonance, 41xx digital, 42xx
+                // sub: 00 = instrument, 01-FF = 0 .. 100 %
+                0x3F..=0x42 => {
+                    c.tfo[(cell.fx - 0x3F) as usize] = tf_amount(cell.fxp);
+                }
                 // 3Dxx accent: 00 = instrument amount, 01-40 = amount
                 0x3D => {
                     c.synth.accent = if cell.fxp == 0 {
@@ -1122,8 +1141,19 @@ impl Engine {
                 .map(|x| x.fx.as_slice())
                 .unwrap_or(&[]);
             ch.sync(devs, owner, sr);
+            let tfo = c.tfo;
             for (d, (st, dev)) in ch.states.iter_mut().zip(devs).enumerate() {
+                // 40-42 set the mix of this channel's Resonator / Digital / Sub
+                let cmd = match dev.kind {
+                    crate::fx::FxKind::Resonator => tfo[1],
+                    crate::fx::FxKind::Digital => tfo[2],
+                    crate::fx::FxKind::Sub => tfo[3],
+                    _ => -1.0,
+                };
                 st.set_targets(dev, |p| {
+                    if p == 0 && cmd >= 0.0 {
+                        return Some(cmd);
+                    }
                     a.fx.iter()
                         .find(|o| o.0 == owner && o.1 == d && o.2 == p)
                         .map(|o| o.3)
@@ -1246,7 +1276,10 @@ impl Engine {
             let mut l = 0.0;
             let mut r = 0.0;
             let mut bus = [[0.0f32; 2]; 2];
-            let ctx = crate::fx::Ctx { bpm: self.bpm };
+            let ctx = crate::fx::Ctx {
+                bpm: self.bpm,
+                note: 0.0,
+            };
             let mg = 0.6 * master;
             let sr = self.sr;
             let bpm = self.bpm;
@@ -1277,7 +1310,12 @@ impl Engine {
                 let (fl, fr) = if lv.chain.states.is_empty() {
                     (s, s_r)
                 } else {
-                    lv.chain.process(s, s_r, &ctx)
+                    let note = lv.v.iter().find(|v| v.active).map(|v| v.freq * lv.bend);
+                    let lctx = crate::fx::Ctx {
+                        bpm,
+                        note: note.unwrap_or(0.0),
+                    };
+                    lv.chain.process(s, s_r, &lctx)
                 };
                 (fl * live_gain.0, fr * live_gain.1)
             } else {
@@ -1303,6 +1341,7 @@ impl Engine {
                     }
                 }
                 c.synth.fmod = c.fm;
+                c.synth.tfo = c.tfo;
                 if c.active {
                     let ((v, vr), alive) = voice(
                         song,
@@ -1342,7 +1381,11 @@ impl Engine {
                 let (fl, fr) = if chain.states.is_empty() {
                     (s, s_r)
                 } else {
-                    chain.process(s, s_r, &ctx)
+                    let cctx = crate::fx::Ctx {
+                        bpm,
+                        note: if c.active { c.freq } else { 0.0 },
+                    };
+                    chain.process(s, s_r, &cctx)
                 };
                 let duck = song.mixer.channels.get(i).map(|m| m.duck).unwrap_or(0.0);
                 let dg = 1.0 - duck.clamp(0.0, 1.0) * duck_env;
@@ -2224,6 +2267,240 @@ mod tests {
         eprintln!("8 throat voices: {x:.1}x realtime");
         assert!(x > 3.0, "8 throat voices at {x:.1}x realtime");
         assert!(buf.iter().all(|v| v.is_finite()));
+    }
+
+    // ------------------------------------------- 0.2.3.11: Voice Transform
+
+    const TF_PRESETS: [&str; 5] = [
+        "Metal Demon",
+        "Digital Ghost",
+        "Sub Beast",
+        "Cyber Choir",
+        "Ritual Growl",
+    ];
+
+    /// one held note per bar of a Transform preset (optionally dry)
+    fn tf_song(preset: &str, dry: bool) -> Song {
+        let mut song = voice_song(preset);
+        if let InstrumentKind::Voice(v) = &mut song.instruments[1].kind {
+            if dry {
+                v.transform.blend = 0.0;
+            }
+        }
+        for r in [0usize, 16, 32, 48] {
+            song.patterns[0].cells[r][0] = Cell {
+                note: 25 + (r / 16) as u8 * 3,
+                instr: 2,
+                ..Default::default()
+            };
+        }
+        song
+    }
+
+    fn rms_of(v: &[f32]) -> f32 {
+        (v.iter().map(|x| x * x).sum::<f32>() / v.len().max(1) as f32).sqrt()
+    }
+
+    #[test]
+    fn transform_presets_stay_near_the_dry_level() {
+        let mut bad = vec![];
+        for name in TF_PRESETS {
+            let wet = render_secs(&tf_song(name, false), 4.0);
+            let dry = render_secs(&tf_song(name, true), 4.0);
+            let db = 20.0 * (rms_of(&wet) / rms_of(&dry)).log10();
+            eprintln!("{name}: transformed {db:+.1} dB vs dry");
+            // each stage alone at the preset's blend
+            for st in 0..3 {
+                let mut song = tf_song(name, false);
+                if let InstrumentKind::Voice(v) = &mut song.instruments[1].kind {
+                    let t = &mut v.transform;
+                    if st != 0 {
+                        t.res.amount = 0.0;
+                    }
+                    if st != 1 {
+                        t.dig.amount = 0.0;
+                    }
+                    if st != 2 {
+                        t.sub.amount = 0.0;
+                    }
+                }
+                let one = render_secs(&song, 4.0);
+                eprintln!(
+                    "   stage {st}: {:+.1} dB",
+                    20.0 * (rms_of(&one) / rms_of(&dry)).log10()
+                );
+            }
+            assert!(wet.iter().all(|x| x.is_finite()));
+            bad.push((name, db));
+            assert_ne!(wet, dry, "{name}: the transform does something");
+        }
+        bad.retain(|(_, db)| !(-6.0..=6.0).contains(db));
+        assert!(bad.is_empty(), "{bad:?}");
+    }
+
+    #[test]
+    fn transform_blend_zero_is_bit_identical_to_no_transform() {
+        // blend 0 = the 0.2.3.10 voice exactly, whatever the stage settings
+        let a = render_secs(&tf_song("Metal Demon", true), 2.0);
+        let mut song = tf_song("Metal Demon", true);
+        if let InstrumentKind::Voice(v) = &mut song.instruments[1].kind {
+            v.transform = crate::transform::Transform::default();
+        }
+        assert_eq!(a, render_secs(&song, 2.0));
+    }
+
+    #[test]
+    fn transform_commands_3f_to_42_set_blend_and_amounts() {
+        assert_eq!(tf_amount(0), -1.0);
+        assert_eq!(tf_amount(1), 0.0);
+        assert_eq!(tf_amount(0xFF), 1.0);
+        // 3F01 on a Transform preset = dry; 3FFF on a dry patch = full
+        let dry = render_secs(&tf_song("Sub Beast", true), 2.0);
+        let mut song = tf_song("Sub Beast", false);
+        song.patterns[0].cells[0][0].fx = 0x3F;
+        song.patterns[0].cells[0][0].fxp = 0x01;
+        let off = render_secs(&song, 2.0);
+        let d = dry
+            .iter()
+            .zip(&off)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        assert!(d < 0.02, "3F01 sounds dry (max diff {d})");
+        let mut song = tf_song("Sub Beast", true);
+        song.patterns[0].cells[0][0].fx = 0x3F;
+        song.patterns[0].cells[0][0].fxp = 0xFF;
+        let full = render_secs(&song, 2.0);
+        let wet = render_secs(&tf_song("Sub Beast", false), 2.0);
+        let d2 = full
+            .iter()
+            .zip(&wet)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        assert!(d2 < 0.02, "3FFF = the preset's blend 1.0 (max diff {d2})");
+        // 40-42 land on the channel, a new instrument clears them
+        let mut song = tf_song("Metal Demon", false);
+        song.patterns[0].cells[1][0] = Cell {
+            fx: 0x40,
+            fxp: 0x80,
+            ..Default::default()
+        };
+        song.patterns[0].cells[2][0] = Cell {
+            fx: 0x41,
+            fxp: 0x01,
+            ..Default::default()
+        };
+        song.patterns[0].cells[3][0] = Cell {
+            fx: 0x42,
+            fxp: 0xFF,
+            ..Default::default()
+        };
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 2 * 6000 * 4];
+        e.render(&song, &mut buf);
+        let o = e.chans[0].tfo;
+        assert_eq!(o[0], -1.0);
+        assert!((o[1] - 127.0 / 254.0).abs() < 1e-6);
+        assert_eq!((o[2], o[3]), (0.0, 1.0));
+        assert_eq!(e.chans[0].synth.tfo, o, "handed to the voice");
+        assert!(buf.iter().all(|x| x.is_finite()));
+    }
+
+    #[test]
+    fn transform_sub_is_mono_below_120_hz_through_the_engine() {
+        // the Voice output of every preset with a sub: side vs mid < 120 Hz
+        for name in ["Metal Demon", "Sub Beast", "Ritual Growl", "Cyber Choir"] {
+            let mut song = tf_song(name, false);
+            song.instruments[1].fx.clear();
+            let out = render_secs(&song, 3.0);
+            let mut f = [[crate::synth::Svf::default(); 4]; 2];
+            let g = (std::f32::consts::PI * 100.0 / 48000.0).tan();
+            let (mut me, mut se) = (0.0f64, 0.0f64);
+            for (i, fr) in out.chunks(2).enumerate() {
+                let (mut m, mut s) = ((fr[0] + fr[1]) * 0.5, (fr[0] - fr[1]) * 0.5);
+                let [fm, fs] = &mut f;
+                for (a, b) in fm.iter_mut().zip(fs.iter_mut()) {
+                    m = a.process_gk(m, g, std::f32::consts::SQRT_2).0;
+                    s = b.process_gk(s, g, std::f32::consts::SQRT_2).0;
+                }
+                if i > 4800 {
+                    me += (m * m) as f64;
+                    se += (s * s) as f64;
+                }
+            }
+            let db = 10.0 * (se / me.max(1e-12)).log10();
+            eprintln!("{name}: side below 120 Hz {db:.1} dB re mid");
+            assert!(me > 1e-3, "{name} has low end");
+            assert!(db < -40.0, "{name}: side below 120 Hz at {db:.1} dB");
+        }
+    }
+
+    #[test]
+    fn transform_presets_true_peak_stays_under_the_limiter_ceiling() {
+        // all five presets at once, hot, through the master limiter (-1 dBTP)
+        let mut song = tf_song("Metal Demon", false);
+        song.channels = 5;
+        for (k, name) in TF_PRESETS.iter().enumerate() {
+            let mut inst = song.instruments[1].clone();
+            inst.kind = InstrumentKind::Voice(crate::voice::preset(name).unwrap());
+            inst.volume = 1.0;
+            song.instruments.push(inst);
+            let slot = song.instruments.len() as u8;
+            for r in (0..64).step_by(8) {
+                song.patterns[0].cells[r][k] = Cell {
+                    note: 13 + (k as u8) * 5 + (r as u8 / 8) % 3,
+                    instr: slot,
+                    ..Default::default()
+                };
+            }
+            song.mixer.channels[k].volume = 2.0;
+            song.mixer.channels[k].send = [0.0; 2];
+        }
+        song.mixer.master = 2.0;
+        let out = render_secs(&song, 4.0);
+        let tp = crate::master::true_peak(&out);
+        let db = 20.0 * tp.log10();
+        eprintln!("five Transform presets, hot: true peak {db:.2} dBTP");
+        assert!(
+            db <= -0.8,
+            "true peak {db:.2} dBTP over the -1 dBTP ceiling"
+        );
+        assert!(rms_of(&out) > 0.05, "it is actually loud");
+    }
+
+    #[test]
+    fn transform_fx_devices_follow_the_note_and_are_allocation_free() {
+        use crate::fx::{Device, FxKind};
+        let mut song = acid_song(crate::synth::Patch::default());
+        song.instruments[0].fx = vec![
+            Device::new(FxKind::Digital),
+            Device::new(FxKind::Resonator),
+            Device::new(FxKind::Sub),
+        ];
+        for r in (0..64).step_by(4) {
+            song.patterns[0].cells[r][0] = Cell {
+                note: 25 + (r % 12) as u8,
+                instr: 1,
+                fx: if r == 8 { 0x40 } else { 0 },
+                fxp: 0xFF,
+                ..Default::default()
+            };
+        }
+        let out = render_secs(&song, 3.0);
+        assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
+        assert!(rms_of(&out) > 0.01);
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 512];
+        for _ in 0..50 {
+            e.render(&song, &mut buf);
+        }
+        let n = alloc_count::count(|| {
+            for _ in 0..500 {
+                e.render(&song, &mut buf);
+            }
+        });
+        assert_eq!(n, 0, "render allocated {n} times");
     }
 
     // ------------------------------------------------ 0.2.3.7: acid commands

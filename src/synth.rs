@@ -425,6 +425,9 @@ pub struct SynthVoice {
     pub accent: f32,
     /// pattern filter overrides (38-3B), set by the engine every frame
     pub fmod: FiltMod,
+    /// Voice Transform state and its pattern overrides (3F-42)
+    pub tf: crate::transform::TransformState,
+    pub tfo: crate::transform::Overrides,
 }
 
 /// 808 hi-hat oscillator ratios (205.3, 304.4, 369.6, 522.7, 540, 800 Hz)
@@ -458,6 +461,8 @@ impl SynthVoice {
             vox: crate::voice::VoxState::new(),
             accent: 0.0,
             fmod: FiltMod::default(),
+            tf: crate::transform::TransformState::default(),
+            tfo: crate::transform::NO_OVERRIDES,
         }
     }
 
@@ -535,9 +540,25 @@ impl SynthVoice {
         };
         self.t += dt_s;
         let f = freq * 2f32.powf(p.osc1_oct as f32 + (pitch_semi + lv * p.lfo.pitch) / 12.0);
+        let mut sub = 0.0;
         let (sl, s, sr_, s_r, stereo) = if let Some(vp) = vp {
-            let v = self.vox.render(vp, f, sr, bpm, lv);
-            (v, 0.0, v, 0.0, false)
+            let t = &vp.transform;
+            if t.active(&self.tfo) || self.tf.running() {
+                // formant drop follows the blend target (the formants glide)
+                let b = if self.tfo[0] >= 0.0 {
+                    self.tfo[0]
+                } else {
+                    t.blend
+                };
+                self.vox.drop = 2f32.powf(-t.sub.formant_drop * b / 12.0);
+                let v = self.vox.render(vp, f, sr, bpm, lv);
+                let (l, r, sb) = self.tf.process(t, &self.tfo, v, f, sr);
+                sub = sb;
+                (l, 0.0, r, 0.0, true)
+            } else {
+                let v = self.vox.render(vp, f, sr, bpm, lv);
+                (v, 0.0, v, 0.0, false)
+            }
         } else {
             let n = p.unison.clamp(1, 8) as usize;
             // stereo: spread unison voices, or decorrelated noise for drums
@@ -643,6 +664,9 @@ impl SynthVoice {
             yl = (yl * g).tanh();
             yr = if stereo { (yr * g).tanh() } else { yl };
         }
+        // the Transform's sub joins after the filter and drive (clean, mono)
+        yl += sub;
+        yr += sub;
         // amp LFO: v = 1 -> full level, v = -1 -> 1 - depth
         let gate = 1.0 - p.lfo.amp.clamp(0.0, 1.0) * (1.0 - (lv + 1.0) * 0.5);
         let amp = if self.decay > 0.0 {

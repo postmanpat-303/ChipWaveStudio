@@ -26,6 +26,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::synth::{Adsr, FilterMode, Lfo, Patch, Svf, Wave};
+use crate::transform::{DigParams, Order, Ratios, ResParams, SubMode, SubParams, Transform};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Vowel {
@@ -365,6 +366,9 @@ pub struct VoicePatch {
     pub rate: f32,
     /// Throat mode: a waveguide vocal tract instead of the formant bank
     pub throat: bool,
+    /// Transform section (0.2.3.11): metallic resonance, digital
+    /// distortion, sub-bass; blend 0 (the default) = off
+    pub transform: crate::transform::Transform,
 }
 
 impl Default for VoicePatch {
@@ -405,6 +409,7 @@ impl Default for VoicePatch {
             words: vec![],
             rate: 1.0,
             throat: false,
+            transform: crate::transform::Transform::default(),
         }
     }
 }
@@ -441,6 +446,7 @@ impl VoicePatch {
                 w.truncate(n);
             }
         }
+        self.transform.fix();
         self.rate = if self.rate.is_finite() {
             self.rate.clamp(0.25, 3.0)
         } else {
@@ -507,6 +513,8 @@ pub struct VoxState {
     nf_k: f32,
     tract: crate::speech::Tract,
     ctl_cnt: u8,
+    /// formant ratio from the Transform's formant drop (1 = none)
+    pub drop: f32,
 }
 
 impl Default for VoxState {
@@ -572,6 +580,7 @@ impl VoxState {
             nf_k: 1.0,
             tract: crate::speech::Tract::new(),
             ctl_cnt: 0,
+            drop: 1.0,
         }
     }
 
@@ -709,7 +718,8 @@ impl VoxState {
         self.asp += (asp_t - self.asp) * k(3.0);
         // --- smoothed formant targets
         let tg = self.target(p, lfo);
-        let shift = self.fx.shift.unwrap_or(p.shift) * 2f32.powf(lfo * p.lfo_shift / 12.0);
+        let shift =
+            self.fx.shift.unwrap_or(p.shift) * 2f32.powf(lfo * p.lfo_shift / 12.0) * self.drop;
         let morph_ms = match (self.fx.vowel, self.babble_v) {
             _ if self.ctl.is_some() => self.ctl.map(|c| c.morph_ms).unwrap_or(35.0),
             (Some((_, ms)), _) => ms,
@@ -1169,6 +1179,216 @@ pub fn presets() -> Vec<(&'static str, &'static str, VoicePatch)> {
                 breath: 0.3,
                 tension: 0.7,
                 jitter: 0.45,
+                ..d()
+            },
+        ),
+        // ---- 0.2.3.11: Transform presets
+        (
+            "Metal Demon",
+            "Transform: Demon voice ringing through metal resonators, a little crush and a sub",
+            VoicePatch {
+                base: base("Metal Demon", 8000.0, 0.01, 0.5, 0.85, 0.3),
+                register: Register::Demon,
+                vowels: vec![A, O],
+                step: 1.0,
+                morph_ms: 150.0,
+                breath: 0.2,
+                tension: 0.7,
+                jitter: 0.35,
+                transform: Transform {
+                    blend: 0.8,
+                    res: ResParams {
+                        amount: 0.6,
+                        ratios: Ratios::Metal,
+                        decay_ms: 700.0,
+                        damp: 0.3,
+                        spread: 0.5,
+                        ..Default::default()
+                    },
+                    dig: DigParams {
+                        amount: 0.3,
+                        drive_db: 9.0,
+                        bits: 10.0,
+                        rate: 24000.0,
+                        ..Default::default()
+                    },
+                    sub: SubParams {
+                        amount: 0.4,
+                        formant_drop: 3.0,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..d()
+            },
+        ),
+        (
+            "Digital Ghost",
+            "Transform: a thin, whispery voice through a 5-bit, 6 kHz aliasing crusher and a ring modulator",
+            VoicePatch {
+                base: base("Digital Ghost", 10000.0, 0.02, 0.4, 0.7, 0.4),
+                register: Register::Soprano,
+                vowels: vec![E, I, U],
+                step: 0.5,
+                morph_ms: 80.0,
+                breath: 0.45,
+                tension: 0.3,
+                jitter: 0.3,
+                transform: Transform {
+                    blend: 0.85,
+                    res: ResParams {
+                        amount: 0.3,
+                        ratios: Ratios::Bar,
+                        decay_ms: 300.0,
+                        spread: 0.8,
+                        ..Default::default()
+                    },
+                    dig: DigParams {
+                        amount: 0.8,
+                        drive_db: 6.0,
+                        bits: 5.0,
+                        rate: 6000.0,
+                        alias: true,
+                        ring: 0.35,
+                        ring_ratio: 1.5,
+                        hp: 200.0,
+                        lp: 9000.0,
+                        ..Default::default()
+                    },
+                    sub: SubParams {
+                        amount: 0.0,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..d()
+            },
+        ),
+        (
+            "Sub Beast",
+            "Transform: formants dropped 7 semitones, a saturated sine + octave-divider sub, clipped grit",
+            VoicePatch {
+                base: base("Sub Beast", 7000.0, 0.005, 0.4, 0.85, 0.2),
+                register: Register::Bass,
+                vowels: vec![O],
+                words: vec!["dum".into(), "bom".into(), "gha".into(), "dum".into()],
+                rate: 0.9,
+                breath: 0.15,
+                tension: 0.65,
+                jitter: 0.25,
+                transform: Transform {
+                    blend: 1.0,
+                    res: ResParams {
+                        amount: 0.0,
+                        ..Default::default()
+                    },
+                    dig: DigParams {
+                        amount: 0.25,
+                        drive_db: 8.0,
+                        bits: 16.0,
+                        rate: 48000.0,
+                        ..Default::default()
+                    },
+                    sub: SubParams {
+                        amount: 0.9,
+                        mode: SubMode::Both,
+                        drive: 0.5,
+                        growl: 0.5,
+                        xover: 110.0,
+                        formant_drop: 7.0,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..d()
+            },
+        ),
+        (
+            "Cyber Choir",
+            "Transform: an Alto choir of A E I O through harmonic resonators an octave up, light crush",
+            VoicePatch {
+                base: base("Cyber Choir", 9000.0, 0.08, 0.6, 0.85, 0.6),
+                register: Register::Alto,
+                vowels: vec![A, E, I, O],
+                step: 1.0,
+                morph_ms: 200.0,
+                breath: 0.25,
+                tension: 0.4,
+                jitter: 0.2,
+                transform: Transform {
+                    blend: 0.7,
+                    res: ResParams {
+                        amount: 0.5,
+                        ratios: Ratios::Harmonic,
+                        tune: 12.0,
+                        decay_ms: 900.0,
+                        damp: 0.2,
+                        spread: 0.7,
+                        ..Default::default()
+                    },
+                    dig: DigParams {
+                        amount: 0.25,
+                        drive_db: 3.0,
+                        bits: 8.0,
+                        rate: 16000.0,
+                        alias: false,
+                        ..Default::default()
+                    },
+                    sub: SubParams {
+                        amount: 0.2,
+                        drive: 0.0,
+                        growl: 0.0,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..d()
+            },
+        ),
+        (
+            "Ritual Growl",
+            "Transform: Throat-mode Demon words, bell resonators then folded distortion, divider sub",
+            VoicePatch {
+                base: Patch {
+                    drive: 0.2,
+                    ..base("Ritual Growl", 6500.0, 0.005, 0.4, 0.8, 0.25)
+                },
+                register: Register::Demon,
+                throat: true,
+                vowels: vec![A],
+                words: vec!["gha".into(), "om".into(), "kar".into(), "osh".into()],
+                rate: 0.85,
+                breath: 0.3,
+                tension: 0.7,
+                jitter: 0.45,
+                transform: Transform {
+                    blend: 0.9,
+                    order: Order::ResDist,
+                    res: ResParams {
+                        amount: 0.4,
+                        ratios: Ratios::Bell,
+                        tune: -12.0,
+                        decay_ms: 1500.0,
+                        damp: 0.35,
+                        ..Default::default()
+                    },
+                    dig: DigParams {
+                        amount: 0.5,
+                        drive_db: 14.0,
+                        fold: true,
+                        bits: 12.0,
+                        rate: 20000.0,
+                        ..Default::default()
+                    },
+                    sub: SubParams {
+                        amount: 0.7,
+                        mode: SubMode::Divider,
+                        drive: 0.6,
+                        growl: 0.6,
+                        formant_drop: 4.0,
+                        ..Default::default()
+                    },
+                },
                 ..d()
             },
         ),

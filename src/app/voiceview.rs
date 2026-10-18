@@ -331,9 +331,258 @@ pub(super) fn voice_panel(ui: &mut egui::Ui, vp: &mut VoicePatch) -> bool {
             });
             ui.end_row();
         });
+    changed |= transform_panel(ui, &mut vp.transform);
     if changed {
         vp.fix();
     }
+    changed
+}
+
+fn slider(
+    ui: &mut egui::Ui,
+    label: &str,
+    v: &mut f32,
+    r: std::ops::RangeInclusive<f32>,
+    tip: &str,
+) -> bool {
+    ui.label(format!("   {label}"));
+    let c = ui.add(egui::Slider::new(v, r)).on_hover_text(tip).changed();
+    ui.end_row();
+    c
+}
+
+fn slider_u(
+    ui: &mut egui::Ui,
+    label: &str,
+    v: &mut f32,
+    r: std::ops::RangeInclusive<f32>,
+    suffix: &str,
+    log: bool,
+    tip: &str,
+) -> bool {
+    ui.label(format!("   {label}"));
+    let c = ui
+        .add(egui::Slider::new(v, r).suffix(suffix).logarithmic(log))
+        .on_hover_text(tip)
+        .changed();
+    ui.end_row();
+    c
+}
+
+// set by `--screenshot --view transform`: scroll the panel to the Transform
+thread_local! {
+    pub(super) static TF_SCROLL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The Transform section (0.2.3.11): blend, order and the three stages.
+fn transform_panel(ui: &mut egui::Ui, tf: &mut crate::transform::Transform) -> bool {
+    use crate::transform::{Order, Ratios, SubMode};
+    let t = th();
+    let mut changed = false;
+    ui.add_space(6.0);
+    // --screenshot --view transform scrolls the panel here once
+    if TF_SCROLL.with(|f| f.replace(false)) {
+        ui.scroll_to_cursor(Some(egui::Align::TOP));
+    }
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("TRANSFORM").strong().color(t.accent))
+            .on_hover_text(
+                "metallic resonance, digital distortion and a sub-bass layer after the voice. \
+                 Blend 0 = off. Pattern: 3Fxx blend, 40xx resonance, 41xx digital, 42xx sub \
+                 (00 = instrument, 01-FF = 0-100 %)",
+            );
+    });
+    egui::Grid::new("tf_grid")
+        .num_columns(2)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            changed |= slider(
+                ui,
+                "Blend",
+                &mut tf.blend,
+                0.0..=1.0,
+                "dry voice (0) .. fully transformed (1); 3Fxx per row",
+            );
+            ui.label("   Order");
+            ui.horizontal(|ui| {
+                changed |= ui
+                    .selectable_value(&mut tf.order, Order::DistRes, "Dist > Res")
+                    .on_hover_text("distortion first, the resonators ring on the grit")
+                    .changed();
+                changed |= ui
+                    .selectable_value(&mut tf.order, Order::ResDist, "Res > Dist")
+                    .on_hover_text("resonators first, then the ringing gets crushed")
+                    .changed();
+            });
+            ui.end_row();
+        });
+    egui::CollapsingHeader::new("Metallic resonance")
+        .id_salt("tf_res")
+        .default_open(true)
+        .show(ui, |ui| {
+            let r = &mut tf.res;
+            egui::Grid::new("tf_res_grid").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+                changed |= slider(ui, "Amount", &mut r.amount, 0.0..=1.0, "resonator mix (40xx per row)");
+                ui.label("   Ratios");
+                egui::ComboBox::from_id_salt("tf_ratios")
+                    .selected_text(r.ratios.name())
+                    .show_ui(ui, |ui| {
+                        for x in Ratios::ALL {
+                            changed |= ui.selectable_value(&mut r.ratios, x, x.name()).changed();
+                        }
+                    })
+                    .response
+                    .on_hover_text(
+                        "mode ratios: harmonic = robotic comb, metal = 808 cymbal, bell = church bell, \
+                         bar = struck bar (glassy), odd = hollow square",
+                    );
+                ui.end_row();
+                ui.label("   Pitch");
+                ui.horizontal(|ui| {
+                    changed |= ui.selectable_value(&mut r.keyed, true, "Note").on_hover_text("tuned to the note played").changed();
+                    changed |= ui.selectable_value(&mut r.keyed, false, "Fixed").on_hover_text("always the fixed pitch below").changed();
+                });
+                ui.end_row();
+                if r.keyed {
+                    changed |= slider_u(ui, "Tune", &mut r.tune, -24.0..=24.0, " st", false, "semitones from the note");
+                } else {
+                    changed |= slider_u(ui, "Fixed pitch", &mut r.hz, 30.0..=4000.0, " Hz", true, "resonator base pitch");
+                }
+                changed |= slider_u(ui, "Decay", &mut r.decay_ms, 20.0..=4000.0, " ms", true, "ring time (feedback): long = singing metal");
+                changed |= slider(ui, "Damping", &mut r.damp, 0.0..=1.0, "higher modes die faster and the ring gets darker");
+                changed |= slider(ui, "Spread", &mut r.spread, 0.0..=1.0, "detunes the modes apart, left vs right (stereo shimmer)");
+            });
+        });
+    egui::CollapsingHeader::new("Digital distortion")
+        .id_salt("tf_dig")
+        .default_open(true)
+        .show(ui, |ui| {
+            let d = &mut tf.dig;
+            egui::Grid::new("tf_dig_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    changed |= slider(
+                        ui,
+                        "Amount",
+                        &mut d.amount,
+                        0.0..=1.0,
+                        "distortion mix (41xx per row)",
+                    );
+                    changed |= slider_u(
+                        ui,
+                        "Drive",
+                        &mut d.drive_db,
+                        0.0..=36.0,
+                        " dB",
+                        false,
+                        "gain into the clipper / folder",
+                    );
+                    ui.label("   Shape");
+                    ui.horizontal(|ui| {
+                        changed |= ui
+                            .selectable_value(&mut d.fold, false, "Clip")
+                            .on_hover_text("hard clip")
+                            .changed();
+                        changed |= ui
+                            .selectable_value(&mut d.fold, true, "Fold")
+                            .on_hover_text("wavefold (in phase with the input)")
+                            .changed();
+                    });
+                    ui.end_row();
+                    changed |= slider_u(
+                        ui,
+                        "Bits",
+                        &mut d.bits,
+                        1.0..=16.0,
+                        " bit",
+                        false,
+                        "bit depth (16 = off)",
+                    );
+                    changed |= slider_u(
+                        ui,
+                        "Rate",
+                        &mut d.rate,
+                        300.0..=48000.0,
+                        " Hz",
+                        true,
+                        "sample-rate reduction",
+                    );
+                    ui.label("   Aliasing");
+                    changed |= ui
+                        .checkbox(&mut d.alias, "raw (aliasing)")
+                        .on_hover_text(
+                            "on: plain sample-and-hold, metallic aliasing; off: filtered, cleaner",
+                        )
+                        .changed();
+                    ui.end_row();
+                    changed |= slider(
+                        ui,
+                        "Ring mod",
+                        &mut d.ring,
+                        0.0..=1.0,
+                        "ring modulator depth (robot / bell tone)",
+                    );
+                    changed |= slider_u(
+                        ui,
+                        "Ring ratio",
+                        &mut d.ring_ratio,
+                        0.25..=8.0,
+                        " x",
+                        true,
+                        "ring frequency = note x ratio",
+                    );
+                    changed |= slider_u(
+                        ui,
+                        "Pre HP",
+                        &mut d.hp,
+                        20.0..=2000.0,
+                        " Hz",
+                        true,
+                        "high-pass before the distortion (less mud)",
+                    );
+                    changed |= slider_u(
+                        ui,
+                        "Post LP",
+                        &mut d.lp,
+                        1000.0..=20000.0,
+                        " Hz",
+                        true,
+                        "low-pass after it (tames fizz)",
+                    );
+                });
+        });
+    egui::CollapsingHeader::new("Sub bass")
+        .id_salt("tf_sub")
+        .default_open(true)
+        .show(ui, |ui| {
+            let b = &mut tf.sub;
+            egui::Grid::new("tf_sub_grid").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+                changed |= slider(ui, "Level", &mut b.amount, 0.0..=1.0, "sub layer level (42xx per row)");
+                ui.label("   Mode");
+                egui::ComboBox::from_id_salt("tf_submode")
+                    .selected_text(b.mode.name())
+                    .show_ui(ui, |ui| {
+                        for x in SubMode::ALL {
+                            changed |= ui.selectable_value(&mut b.mode, x, x.name()).changed();
+                        }
+                    })
+                    .response
+                    .on_hover_text("sine = follows the note pitch; divider = octave divider on the voice itself");
+                ui.end_row();
+                ui.label("   Octave");
+                ui.horizontal(|ui| {
+                    changed |= ui.selectable_value(&mut b.octave, 1, "-1").changed();
+                    changed |= ui.selectable_value(&mut b.octave, 2, "-2").changed();
+                });
+                ui.end_row();
+                changed |= slider(ui, "Drive", &mut b.drive, 0.0..=1.0, "sub saturation (harmonics, not level)");
+                changed |= slider(ui, "Growl", &mut b.growl, 0.0..=1.0, "level of the saturation harmonics above the crossover");
+                changed |= slider_u(ui, "Crossover", &mut b.xover, 60.0..=250.0, " Hz", true, "below this the sub is clean and everything is mono");
+                changed |= slider_u(ui, "Formant drop", &mut b.formant_drop, 0.0..=12.0, " st", false, "lowers the formants with the blend: a monster voice");
+            });
+        });
     changed
 }
 

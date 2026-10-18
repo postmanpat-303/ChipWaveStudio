@@ -1804,3 +1804,54 @@ fn sample_editor_slices_selects_edits_and_makes_notes() {
     assert_eq!(song(&mut h, |s| s.instruments.len()), n0);
     assert!(song(&mut h, |s| s.patterns[p].cells[0][6].instr as usize) <= n0);
 }
+
+#[test]
+fn voice_transform_section_edits_and_undoes() {
+    let mut h = harness();
+    instr_menu(&mut h, 1);
+    click_exact(&mut h, "New instrument");
+    click_exact(&mut h, "Voice (glitch)");
+    click_exact(&mut h, "Init voice");
+    frames(&mut h, 2);
+    let d = crate::transform::Transform::default();
+    assert_eq!(
+        last_voice(&mut h).transform,
+        d,
+        "a new voice has the transform off"
+    );
+    // scroll the instrument panel down to the section
+    super::voiceview::TF_SCROLL.with(|f| f.set(true));
+    frames(&mut h, 3);
+    exact(&h, "TRANSFORM");
+    exact(&h, "Metallic resonance");
+    exact(&h, "Digital distortion");
+    exact(&h, "Sub bass");
+    click_exact(&mut h, "Res > Dist");
+    click_exact(&mut h, "Fold");
+    click_exact(&mut h, "Fixed");
+    click_exact(&mut h, "-2");
+    let t = last_voice(&mut h).transform;
+    assert_eq!(t.order, crate::transform::Order::ResDist);
+    assert!(t.dig.fold && !t.res.keyed && t.sub.octave == 2, "{t:?}");
+    // the fixed-pitch slider replaces Tune
+    exact(&h, "   Fixed pitch");
+    for _ in 0..4 {
+        ctrl_z(&mut h);
+    }
+    assert_eq!(last_voice(&mut h).transform, d, "four undos restore it");
+    // the presets are there and load a transform
+    let names: Vec<&str> = crate::voice::presets().iter().map(|p| p.0).collect();
+    for p in [
+        "Metal Demon",
+        "Digital Ghost",
+        "Sub Beast",
+        "Cyber Choir",
+        "Ritual Growl",
+    ] {
+        assert!(names.contains(&p), "{p} preset");
+        assert!(
+            crate::voice::preset(p).unwrap().transform.blend > 0.5,
+            "{p} uses it"
+        );
+    }
+}
