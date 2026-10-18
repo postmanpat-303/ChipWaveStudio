@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://postmanpat-303.github.io/ChipWaveTracker/sitemap.xml

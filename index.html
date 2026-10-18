@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChipWave Tracker – Free Music Tracker &amp; DAW for Windows and Linux</title>
+<meta name="description" content="ChipWave Tracker is a free, open-source music tracker and DAW for Windows and Linux, inspired by OctaMED and the Amiga. Built-in synth, visual arranger, mixer with sidechain ducking, MIDI input and WAV/MP3 export.">
+<meta name="keywords" content="ChipWave Tracker, free music DAW, free DAW, music tracker, OctaMED, Amiga tracker, chiptune, synthesizer, MIDI, music production, Windows, Linux, open source">
+<link rel="canonical" href="https://postmanpat-303.github.io/ChipWaveTracker/">
+<meta name="theme-color" content="#409cff">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="The Wave Family">
+<meta property="og:title" content="ChipWave Tracker – Free Music Tracker &amp; DAW for Windows and Linux">
+<meta property="og:description" content="ChipWave Tracker is a free, open-source music tracker and DAW for Windows and Linux, inspired by OctaMED and the Amiga. Built-in synth, visual arranger, mixer with sidechain ducking, MIDI input and WAV/MP3 export.">
+<meta property="og:url" content="https://postmanpat-303.github.io/ChipWaveTracker/">
+<meta property="og:image" content="https://postmanpat-303.github.io/ChipWaveTracker/assets/og.png">
+<meta property="og:image:alt" content="ChipWave Tracker: free music tracker and DAW for Windows and Linux">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ChipWave Tracker – Free Music Tracker &amp; DAW for Windows and Linux">
+<meta name="twitter:description" content="ChipWave Tracker is a free, open-source music tracker and DAW for Windows and Linux, inspired by OctaMED and the Amiga. Built-in synth, visual arranger, mixer with sidechain ducking, MIDI input and WAV/MP3 export.">
+<meta name="twitter:image" content="https://postmanpat-303.github.io/ChipWaveTracker/assets/og.png">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "ChipWave Tracker", "description": "ChipWave Tracker is a free, open-source music tracker and DAW for Windows and Linux, inspired by OctaMED and the Amiga. Built-in synth, visual arranger, mixer with sidechain ducking, MIDI input and WAV/MP3 export.", "applicationCategory": "MultimediaApplication", "applicationSubCategory": "Music tracker / DAW", "operatingSystem": "Windows, Linux", "softwareVersion": "v0.2.3.5", "url": "https://postmanpat-303.github.io/ChipWaveTracker/", "downloadUrl": "https://github.com/postmanpat-303/ChipWaveTracker/releases/latest", "image": "https://postmanpat-303.github.io/ChipWaveTracker/assets/og.png", "screenshot": ["https://postmanpat-303.github.io/ChipWaveTracker/assets/dark-pattern.webp", "https://postmanpat-303.github.io/ChipWaveTracker/assets/dark-arranger.webp", "https://postmanpat-303.github.io/ChipWaveTracker/assets/dark-mixer.webp"], "license": "https://www.gnu.org/licenses/gpl-3.0.html", "isAccessibleForFree": true, "codeRepository": "https://github.com/postmanpat-303/ChipWaveTracker", "programmingLanguage": "Rust", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}, "author": {"@type": "Person", "name": "Derek Heasley", "url": "https://github.com/postmanpat-303"}}</script>
+<style>
+:root{--bg:#07090f;--card:#0f141d;--line:#1e2633;--text:#e8edf5;--mute:#9aa6b8;--acc:#409cff;--acc2:#7c4dff;--accink:#06101f}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",Ubuntu,sans-serif}
+a{color:var(--acc)}img{max-width:100%;height:auto;display:block}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+header.nav{position:sticky;top:0;z-index:10;background:rgba(7,9,15,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header.nav .wrap{display:flex;align-items:center;gap:14px;height:60px}
+header.nav img{width:34px;height:34px;border-radius:8px}header.nav b{font-size:18px}
+header.nav nav{margin-left:auto;display:flex;gap:18px;flex-wrap:wrap}header.nav nav a{color:var(--mute);text-decoration:none;font-size:15px}header.nav nav a:hover{color:var(--text)}
+.hero{padding:64px 0 40px;background:radial-gradient(900px 420px at 15% 0%,color-mix(in srgb,var(--acc) 22%,transparent),transparent 70%)}
+.hero .wrap{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center}
+.badge{display:inline-block;background:var(--acc);color:var(--accink);font-weight:800;border-radius:999px;padding:4px 14px;font-size:14px;letter-spacing:.04em}
+h1{font-size:clamp(32px,4.6vw,52px);line-height:1.1;margin:16px 0}
+h1 span{color:var(--acc)}
+.lead{font-size:19px;color:#cfd7e3;margin:0 0 22px}
+.btns{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:12px;font-weight:700;text-decoration:none;border:1px solid var(--line);color:var(--text);background:var(--card)}
+.btn.primary{background:var(--acc);color:var(--accink);border-color:transparent}
+.btn:hover{filter:brightness(1.12)}
+.small{color:var(--mute);font-size:14px}
+.shot{border-radius:14px;border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+section{padding:48px 0;border-top:1px solid var(--line)}
+h2{font-size:clamp(26px,3vw,34px);margin:0 0 8px}h2+p{color:var(--mute);margin-top:0}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+.f{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.f h3{margin:0 0 6px;font-size:17px}.f p{margin:0;color:#c3ccd9;font-size:15px}
+.gallery{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:24px}
+figure{margin:0}figcaption{color:var(--mute);font-size:14px;margin-top:6px}
+.dl{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+.dl .f .btn{margin-top:10px;width:100%;justify-content:center}
+.video{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#000;cursor:pointer;max-width:880px;margin:24px auto 0}
+.video img{width:100%;height:100%;object-fit:cover;opacity:.85}
+.video .play{position:absolute;inset:0;display:grid;place-items:center}
+.video .play i{width:86px;height:60px;border-radius:16px;background:var(--acc);display:grid;place-items:center;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.video .play i:after{content:"";border-left:24px solid var(--accink);border-top:15px solid transparent;border-bottom:15px solid transparent;margin-left:6px}
+.video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.cta{text-align:center}
+footer{padding:30px 0 50px;color:var(--mute);font-size:14px;border-top:1px solid var(--line)}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between}
+code{background:#151b26;border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+pre{background:#0b1018;border:1px solid var(--line);border-radius:12px;padding:14px;overflow:auto;font-size:14px}
+@media(max-width:860px){.hero .wrap,.gallery,.dl{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}header.nav nav a.hide-sm{display:none}}
+@media(max-width:560px){.grid{grid-template-columns:1fr}header.nav nav a:not(.keep){display:none}header.nav b{white-space:nowrap}}
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap"><img src="assets/icon-256.png" alt="" width="34" height="34"><b>ChipWave Tracker</b>
+<nav><a href="#features">Features</a><a href="#screenshots" class="hide-sm">Screenshots</a><a href="#video" class="hide-sm">Video</a><a href="#download" class="keep">Download</a><a href="#community">Community</a><a href="https://github.com/postmanpat-303/ChipWaveTracker">GitHub</a></nav></div></header>
+<main>
+<div class="hero"><div class="wrap"><div>
+<span class="badge">100% FREE · OPEN SOURCE</span>
+<h1>ChipWave Tracker: a <span>free music DAW</span> and OctaMED-inspired tracker</h1>
+<p class="lead">The fast, keyboard-driven pattern workflow of the classic Amiga trackers, with a built-in synth, a visual arranger, a mixer with sidechain ducking, MIDI input and WAV/MP3 export. For Windows and Linux.</p>
+<div class="btns"><a class="btn primary" href="#download">⬇ Download free</a><a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker">★ View on GitHub</a></div>
+<p class="small">Free and open source (GPL-3.0) · written in Rust · early version in active development</p>
+</div><img src="assets/dark-pattern.webp" alt="The pattern editor in the Dark Circuit theme" width="1200" height="675" class="shot" fetchpriority="high"></div></div>
+<section id="features"><div class="wrap"><h2>A music tracker with a modern DAW inside</h2><p>Everything here is in the current release. The screenshots are real captures.</p><div class="grid"><div class="f"><h3>🎼 Pattern editor</h3><p>OctaMED-style blocks of 64 rows with note, instrument, volume and effect columns, the classic Z–M keyboard layout, transpose and undo.</p></div><div class="f"><h3>🎹 Built-in synth</h3><p>Oscillators with unison and detune, a filter with its own envelope, ADSR, drive, an 808-style metallic source and a tempo-syncable LFO.</p></div><div class="f"><h3>🧱 Visual arranger</h3><p>Your song as coloured clips with section badges, drag to reorder, plus automation lanes for filter sweeps, levels and delay.</p></div><div class="f"><h3>🎚️ Mixer with sidechain ducking</h3><p>Faders, pan, mute/solo, meters, delay and reverb sends, and sidechain ducking for that trance pump.</p></div><div class="f"><h3>🎛️ FX chain</h3><p>Filter, chorus/flanger, delay, reverb, drive, bitcrusher and compressor per instrument, with presets.</p></div><div class="f"><h3>🎹 MIDI keyboard</h3><p>Play with velocity, sustain and pitch bend, record step or live into the pattern, and MIDI-learn faders and knobs.</p></div><div class="f"><h3>📼 WAV & MP3 export</h3><p>Export the whole song, a block or an arranger selection, with ID3 tags.</p></div><div class="f"><h3>🪄 Fill to length</h3><p>Auto-arrange a song to a target length from a style, with an editable energy curve.</p></div><div class="f"><h3>🖥️ Amiga Workbench theme</h3><p>Switch from the Dark Circuit theme to a light Amiga Workbench look with blue headers and an orange cursor.</p></div></div><p class="small" style="margin-top:18px">Also included: WAV sample import with loop points, autosave, backups and crash recovery, an original 140 BPM demo song (“Lumen Drift”), UI scaling and an update check.</p></div></section>
+<section id="screenshots"><div class="wrap"><h2>Screenshots</h2><p>Real captures of the app, no mock-ups.</p><div class="gallery"><figure><img src="assets/dark-arranger.webp" alt="The visual arranger with automation lanes" width="1200" height="675" loading="lazy" class="shot"><figcaption>The visual arranger with automation lanes</figcaption></figure><figure><img src="assets/dark-mixer.webp" alt="The mixer with sidechain ducking and send buses" width="1200" height="675" loading="lazy" class="shot"><figcaption>The mixer with sidechain ducking and send buses</figcaption></figure><figure><img src="assets/dark-fx.webp" alt="The per-instrument FX chain" width="1200" height="675" loading="lazy" class="shot"><figcaption>The per-instrument FX chain</figcaption></figure><figure><img src="assets/amiga-pattern.webp" alt="The Amiga Workbench theme" width="1200" height="675" loading="lazy" class="shot"><figcaption>The Amiga Workbench theme</figcaption></figure><figure><img src="assets/dark-fill.webp" alt="Fill to length: auto-arrange a song from a style" width="1200" height="675" loading="lazy" class="shot"><figcaption>Fill to length: auto-arrange a song from a style</figcaption></figure></div></div></section>
+<section id="video"><div class="wrap"><h2>Watch the cicada film</h2><p>A cicada finds its rhythm, with a little nod to the Amiga days.</p>
+<div class="video" data-id="6VWhFZxexIc" data-title="ChipWave Tracker promo video" role="button" aria-label="Play the ChipWave Tracker promo video"><img src="https://i.ytimg.com/vi/6VWhFZxexIc/hqdefault.jpg" alt="ChipWave Tracker promo video" width="480" height="360" loading="lazy"><div class="play"><i></i></div></div>
+<p class="small" style="text-align:center">Or watch it <a href="https://youtu.be/6VWhFZxexIc">on YouTube</a> · more on <a href="https://www.youtube.com/@whatgoesaround1551">the channel</a></p></div></section>
+<section id="download"><div class="wrap"><h2>Download ChipWave Tracker free</h2><p>Latest release: <b data-ver>v0.2.3.5</b> · <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest">all files and checksums</a> · GPL-3.0 licence</p><div class="dl"><div class="f"><h3>🪟 Windows</h3><p>64-bit Windows 10 and later. Installer or portable zip. Opens with the demo song: press Space to play.</p><a class="btn primary" data-asset="setup-x64\.exe$" href="https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.5/ChipWave-0.2.3.5-setup-x64.exe">Installer (.exe)</a><a class="btn" data-asset="windows-x64\.zip$" href="https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.5/ChipWave-0.2.3.5-windows-x64.zip">Portable .zip</a></div><div class="f"><h3>🐧 Linux</h3><p>Build it from source with Rust. On Debian/Ubuntu you also need <code>libasound2-dev</code>.</p><pre>git clone https://github.com/postmanpat-303/ChipWaveTracker
+cd ChipWaveTracker
+cargo run --release</pre></div><div class="f"><h3>📖 Learn</h3><p>Keys, effects, the file format and more are in the README and docs.</p><a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker#keys">Key list</a><a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker/tree/main/docs">Documentation</a></div></div><p class="small">The Windows installer isn't code-signed yet, so if SmartScreen warns you, click “More info” then “Run anyway”.</p></div></section>
+<section id="community"><div class="wrap"><h2>Join the community</h2><p>ChipWave Tracker is built with its users. Ideas, questions, bug reports and show-and-tell are all welcome.</p>
+<div class="grid">
+<div class="f"><h3>💬 Discussions</h3><p>Share ideas, ask questions and show what you made.</p><a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker/discussions">Open Discussions</a></div>
+<div class="f"><h3>🐞 Feedback</h3><p>Found a bug or have a feature request? Open an issue.</p><a class="btn" href="https://github.com/postmanpat-303/ChipWaveTracker/issues/new">Open an issue</a></div>
+<div class="f"><h3>☕ Support it</h3><p>It's free and always will be. If you enjoy it, a coffee keeps it going.</p><a class="btn primary" href="https://buymeacoffee.com/postmanpat">Buy me a coffee</a> <a class="btn" href="https://paypal.me/derekh100">PayPal</a></div>
+</div></div></section>
+<section class="cta"><div class="wrap"><h2>Find your rhythm.</h2><p>ChipWave Tracker is a free music tracker and DAW for Windows and Linux.</p><div class="btns" style="justify-content:center"><a class="btn primary" href="#download">⬇ Download free</a></div>
+<p class="small">Part of the Wave family: <a href="https://github.com/postmanpat-303/BigWaveRadio">BigWave Radio</a> · <a href="https://github.com/postmanpat-303/ChipWaveTracker">ChipWave Tracker</a> · <a href="https://github.com/postmanpat-303/StreamWave">StreamWave</a></p></div></section>
+</main>
+<footer><div class="wrap"><span>© 2026 Derek Heasley (postmanpat-303) · GPL-3.0 licence</span><span><a href="https://github.com/postmanpat-303/ChipWaveTracker">GitHub</a> · <a href="https://github.com/postmanpat-303/ChipWaveTracker/releases/latest">Releases</a> · <a href="https://buymeacoffee.com/postmanpat">Buy me a coffee</a></span></div></footer>
+<script>
+document.querySelectorAll('.video').forEach(v=>v.addEventListener('click',()=>{v.innerHTML='<iframe src="https://www.youtube-nocookie.com/embed/'+v.dataset.id+'?autoplay=1&rel=0" title="'+v.dataset.title+'" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>'},{once:true}));
+// Keep download buttons pointing at the newest release (falls back to the static links).
+fetch('https://api.github.com/repos/postmanpat-303/ChipWaveTracker/releases/latest').then(r=>r.ok?r.json():null).then(j=>{if(!j)return;
+ document.querySelectorAll('[data-asset]').forEach(a=>{const re=new RegExp(a.dataset.asset);const m=(j.assets||[]).find(x=>re.test(x.name));if(m)a.href=m.browser_download_url});
+ document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=j.tag_name)}).catch(()=>{});
+</script>
+</body></html>
