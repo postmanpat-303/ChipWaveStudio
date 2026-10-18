@@ -578,6 +578,7 @@ mod features {
         s.add_instrument(i).unwrap() as u8 + 1
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn put(s: &mut Song, b: usize, r: usize, ch: usize, n: &str, ins: u8, fx: u8, fxp: u8) {
         s.patterns[b].cells[r][ch] = Cell {
             note: match n {
