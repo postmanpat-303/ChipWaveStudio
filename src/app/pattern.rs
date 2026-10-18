@@ -24,9 +24,13 @@ impl App {
             self.row = play_row;
         }
         let Some(pat) = song_snapshot else { return };
-        // one line: block controls on the left, channels / chords / full height on
-        // the right, the order list in between (clipped when it does not fit)
-        let mut wrap = false;
+        // one line: block controls and transpose on the left, channels / chords /
+        // full height on the right, the order list in between (clipped when it
+        // does not fit). Narrower windows move the right group to a second
+        // line, then transpose too (a third line only in very narrow windows).
+        const RIGHT_W: f32 = 430.0; // the right-hand group
+        const TRANSPOSE_W: f32 = 270.0; // separator, "Transpose", -12 -1 +1 +12
+        let (mut wrap, mut tr_later) = (false, false);
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Block").strong());
             if ui.button("<").clicked() && self.pattern > 0 {
@@ -50,8 +54,14 @@ impl App {
                 self.add_block();
             }
             ui.separator();
-            // the right-hand group needs ~430 pt; narrower windows put it on a second line
-            if ui.available_width() >= 430.0 {
+            let w = ui.available_width();
+            if w >= TRANSPOSE_W {
+                self.transpose_bar(ui);
+                ui.separator();
+            } else {
+                tr_later = true;
+            }
+            if !tr_later && ui.available_width() >= RIGHT_W {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     self.block_bar_right(ui, channels);
                 });
@@ -59,8 +69,16 @@ impl App {
                 wrap = true;
             }
         });
+        if tr_later && ui.available_width() < TRANSPOSE_W + RIGHT_W {
+            ui.horizontal(|ui| self.transpose_bar(ui));
+            tr_later = false;
+        }
         if wrap {
             ui.horizontal(|ui| {
+                if tr_later {
+                    self.transpose_bar(ui);
+                    ui.separator();
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     self.block_bar_right(ui, channels);
                 });

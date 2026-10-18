@@ -14,7 +14,8 @@ The defaults follow the conventions most trackers share (FastTracker 2, ProTrack
 - **Edit step:** after a note is entered the cursor moves down *step* rows (0–16, default 1).
 
 - **Lower panel (0.2.3.19):** under the pattern, switched between **Arranger**, **Instrument** (the instrument editor, `Ctrl+I`) and **Automation**. Drag the splitter to resize it, or to the bottom to hide it. **Full-height pattern** (`F11`, **View › Full-height pattern**, or the **Full height** toggle at the right of the Block bar) hides the panel and gives the pattern the whole height; press it again to restore the height. See [INSTRUMENT_EDITOR.md](INSTRUMENT_EDITOR.md).
-- **Block bar (0.2.3.19):** one line. Block, Length and + New block are on the left; Channels, Chords… and Full height are on the right; the order list sits in between and is clipped when the window is narrow (its tooltip shows all of it). Very narrow windows put the right-hand group on a second line.
+- **Block bar (0.2.3.19):** one line. Block, Length, + New block and **Transpose** are on the left; Channels, Chords… and Full height are on the right; the order list sits in between and is clipped when the window is narrow (its tooltip shows all of it). It all fits on one line in a window about 1600 px wide or more (a maximised 1920×1080 window, for example). Narrower windows put the right-hand group on a second line, and very narrow ones move Transpose down too; nothing overlaps.
+- **Transpose buttons (next update):** **-12**, **-1**, **+1** and **+12** on the Block bar move notes by an octave or a semitone. They work on the selection (green box) when there is one, otherwise on the whole cursor channel of the current block, exactly like `Alt+=` / `Alt+-` (add `Shift` for octaves). The tooltip says what will move ("selection (rows 04–07, channel 2)" or "channel 3 (whole block 06)") and shows the shortcut. **Edit › Transpose** has **Up semitone**, **Down semitone**, **Up octave**, **Down octave** and **Transpose by…** (any amount from -24 to +24). Every press is one undo step (`Ctrl+Z`) and the status bar confirms it ("Transposed selection by +1 semitones").
 
 ### Block length (0.2.3.17)
 Each block has its own length, from 1 to 256 rows (older files can hold up to 3200, and those stay editable). The **Block bar** has a **Length** field next to the block selector. Drag it or type a value, or use the ▾ dropdown for 16 / 32 / 48 / 64 / 96 / 128 / 192 / 256. The quick buttons are **/2**, **x2**, **-16** and **+16**. **Song → Block** has **Set length…**, **Double length**, **Halve length**, **Stretch x2** and **Squash /2**, and `Ctrl+Shift+PgDn` / `Ctrl+Shift+PgUp` double or halve the length.
@@ -95,8 +96,9 @@ Z X C V B N M , Q W E R T Y U I    Z = C (base octave), Q = C (base octave + 1)
 | Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | `Cmd+C/X/V` |
 | Mix-paste (only into empty cells) | `Ctrl+Shift+V` | `Cmd+Shift+V` |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (also `Ctrl+Shift+Z`) | `Cmd+Z` / `Cmd+Shift+Z` |
-| Transpose selection ±1 semitone | `Alt+=` / `Alt+-` | `Option+=/-` |
-| Transpose ±1 octave | `Alt+Shift+=` / `Alt+Shift+-` | `Option+Shift+=/-` |
+| Transpose selection (or channel) ±1 semitone | `Alt+=` / `Alt+-`, or the Block bar **+1** / **-1**, or **Edit › Transpose** | `Option+=/-` |
+| Transpose ±1 octave | `Alt+Shift+=` / `Alt+Shift+-`, or the Block bar **+12** / **-12** | `Option+Shift+=/-` |
+| Transpose by any amount (-24…+24) | **Edit › Transpose › Transpose by…** | same |
 | Double / halve block length | `Ctrl+Shift+PgDn` / `Ctrl+Shift+PgUp` (rebindable) | `Cmd+Shift+Fn+↓/↑` |
 | Interpolate (volume or effect arg, first→last row) | `Ctrl+I` | `Cmd+Shift+I` (since `Cmd+I` is insert row on Mac) |
 | Humanise (random ±volume / micro-delay) | `Ctrl+H` | `Cmd+Option+H` (Cmd+H hides the app) |
@@ -217,7 +219,7 @@ The two letters are display mnemonics. Internally each is `(target id, value)`, 
 ## 7. Advanced edits
 - **Interpolate:** linear (default) or curved, on volume or effect arguments; it keeps the command code from the first row.
 - **Humanise:** volume ±n and/or 1–3 tick note delay (`1F`) with a seed, so it can be undone or rerolled.
-- **Transpose:** skips drum channels marked "no transpose" and clamps to the sample range, with a status message.
+- **Transpose:** moves notes only (note-offs and empty cells stay), clamps to the note range, and leaves a status message. Keys, Block bar buttons and Edit › Transpose all share one code path. (Planned, not built yet: skipping drum channels marked "no transpose". Today the pattern editor transposes drum notes too; only the arranger's key-change variations skip drum channels.)
 - **Chord entry:** with `Shift` held, notes spread across the next channels (OctaMED "spread" mode).
 
 ## 8. Mute / solo

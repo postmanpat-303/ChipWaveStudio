@@ -229,7 +229,8 @@ impl App {
         } else if !matches!(
             view,
             "fill" | "settings" | "about" | "library" | "chords" | "slice"
-        ) {
+        ) && std::env::var_os("CHIPWAVE_SHOT_NOPLAY").is_none()
+        {
             self.play(3);
         }
         // the lower panel (0.2.3.19): CHIPWAVE_SHOT_LOWER=instrument | arranger |
@@ -261,6 +262,16 @@ impl App {
         }
         if std::env::var_os("CHIPWAVE_SHOT_CLASSIC").is_some() {
             self.extra.classic_editor = true;
+        }
+        // CHIPWAVE_SHOT_SEL=r0,c0,r1,c1: a pattern selection (0-based rows and
+        // channels), e.g. for the Block bar transpose buttons; add
+        // CHIPWAVE_SHOT_NOPLAY=1 so the view stays at the top of the block
+        if let Ok(v) = std::env::var("CHIPWAVE_SHOT_SEL") {
+            let n: Vec<usize> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+            if let [r0, c0, r1, c1] = n[..] {
+                self.sel = Some(((r0, c0), (r1, c1)));
+                self.ch = c0;
+            }
         }
         ctx.request_repaint();
     }

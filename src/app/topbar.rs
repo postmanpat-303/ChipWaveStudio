@@ -475,6 +475,7 @@ impl App {
                 if item(ui, "Select all", "Ctrl+A") {
                     self.synth_key(&ctx, Key::A, cmd);
                 }
+                ui.menu_button("Transpose", |ui| self.transpose_menu(ui));
                 ui.separator();
                 let mut e = self.edit;
                 if ui

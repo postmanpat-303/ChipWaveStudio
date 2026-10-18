@@ -54,7 +54,7 @@ All pictures on this page are real captures of the current build (no mockups). T
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/dark-pattern.png" alt="Pattern editor playing the Velvet Mirrorball disco demo, with the Cyber Choir voice open in the lower-panel instrument editor"><br><b>Pattern editor</b>: OctaMED-style blocks (64 rows by default; set the length on the one-line Block bar), note / instrument / volume / effect columns, decimal row numbers (hex in Settings › Look), the classic Z–M keyboard layout, selection, copy/paste, transpose and undo. The cursor follows the playing row. Shown: the “Velvet Mirrorball” disco demo with its Cyber Choir voice in the instrument editor below.</td>
+    <td width="50%"><img src="docs/screenshots/dark-pattern.png" alt="Pattern editor playing the Velvet Mirrorball disco demo, with the Cyber Choir voice open in the lower-panel instrument editor"><br><b>Pattern editor</b>: OctaMED-style blocks (64 rows by default; set the length on the one-line Block bar), note / instrument / volume / effect columns, decimal row numbers (hex in Settings › Look), the classic Z–M keyboard layout, selection, copy/paste, transpose (keys, the Block bar’s -12 / -1 / +1 / +12 buttons or Edit › Transpose) and undo. The cursor follows the playing row. Shown: the “Velvet Mirrorball” disco demo with its Cyber Choir voice in the instrument editor below.</td>
     <td width="50%"><img src="docs/screenshots/dark-arranger.png" alt="Arranger view of the Velvet Mirrorball demo with clips and automation lanes"><br><b>Arranger</b>: the song order as coloured clips with role badges (Intro, Verse, Chorus, Bridge, Breakdown, Outro), drag to reorder, duplicate, zoom, plus <b>automation lanes</b> for filter sweeps, levels and delay feedback.</td>
   </tr>
   <tr>
@@ -227,7 +227,7 @@ On Linux, build it from source (below).
 | `Shift`+arrows, mouse drag, `Ctrl+A` | select (again = whole block) |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | copy / cut / paste |
 | `Ctrl+Z` / `Ctrl+Y` | undo / redo |
-| `Alt +` / `Alt -` (Shift = octave) | transpose selection or channel |
+| `Alt +` / `Alt -` (Shift = octave) | transpose selection or channel (also the Block bar **-12 -1 +1 +12** buttons and **Edit › Transpose**, which has *Transpose by…* for -24…+24) |
 | `F9` / `F10` | mute / solo channel |
 | `Ctrl+1`…`5`, `Ctrl+Tab` | Pattern / Arranger / Mixer / FX / Sample view |
 | `Ctrl+Shift+F` | Fill to length |

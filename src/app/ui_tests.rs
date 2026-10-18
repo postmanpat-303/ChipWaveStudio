@@ -2620,3 +2620,190 @@ fn odd_block_length_maps_in_the_arranger_seeks_and_saves() {
     let ts = crate::fileio::song_from_text(t).unwrap();
     assert_eq!(ts.patterns[0].rows, 37);
 }
+
+// ---- on-screen transpose (Block bar buttons, Edit > Transpose) ----
+
+/// the button with exactly this label (prefix matching would mix up -1 / -16)
+fn click_button(h: &mut Harness<'static, App>, label: &str) {
+    let r = *rects(h, Role::Button, Some(label))
+        .first()
+        .unwrap_or_else(|| panic!("no button {label:?}"));
+    click_at(h, r.center());
+}
+
+/// hover a button (opens a submenu)
+fn hover_button(h: &mut Harness<'static, App>, label: &str) {
+    let r = *rects(h, Role::Button, Some(label))
+        .first()
+        .unwrap_or_else(|| panic!("no button {label:?}"));
+    h.input_mut()
+        .events
+        .push(egui::Event::PointerMoved(r.center()));
+    frames(h, 3);
+}
+
+/// block 0, channel 0: C-4 on rows 0..4, channel 1: E-4 on row 0
+fn transpose_song(h: &mut Harness<'static, App>) {
+    h.state_mut().view = View::Pattern;
+    h.state_mut().pattern = 0;
+    h.state_mut().follow = false;
+    h.state().with(|s| {
+        for r in 0..4 {
+            s.song.patterns[0].cells[r][0] = Cell {
+                note: 49,
+                instr: 1,
+                ..Default::default()
+            };
+        }
+        s.song.patterns[0].cells[0][1] = Cell {
+            note: 53,
+            instr: 1,
+            ..Default::default()
+        };
+    });
+    frames(h, 2);
+}
+
+fn note(h: &mut Harness<'static, App>, r: usize, c: usize) -> u8 {
+    song(h, |s| s.patterns[0].cells[r][c].note)
+}
+
+#[test]
+fn block_bar_transpose_buttons_selection_channel_and_undo() {
+    let mut h = harness();
+    transpose_song(&mut h);
+    for l in ["-12", "-1", "+1", "+12"] {
+        assert_eq!(rects(&h, Role::Button, Some(l)).len(), 1, "one {l} button");
+    }
+    // selection rows 0-1 of channel 0: only those move
+    h.state_mut().sel = Some(((0, 0), (1, 0)));
+    h.state_mut().ch = 0;
+    frames(&mut h, 2);
+    assert!(h
+        .state()
+        .transpose_target()
+        .starts_with("selection (rows 00–01, channel 1"));
+    click_button(&mut h, "+1");
+    assert_eq!((note(&mut h, 0, 0), note(&mut h, 1, 0)), (50, 50));
+    assert_eq!(note(&mut h, 2, 0), 49, "outside the selection");
+    assert_eq!(note(&mut h, 0, 1), 53, "other channel");
+    assert_eq!(h.state().status, "Transposed selection by +1 semitones");
+    click_button(&mut h, "+12");
+    assert_eq!(note(&mut h, 0, 0), 62);
+    click_button(&mut h, "-12");
+    click_button(&mut h, "-1");
+    assert_eq!(note(&mut h, 0, 0), 49, "-12 and -1 undo it by hand");
+    ctrl_z(&mut h);
+    ctrl_z(&mut h);
+    assert_eq!(note(&mut h, 0, 0), 62, "each button press is one undo step");
+    ctrl_z(&mut h);
+    ctrl_z(&mut h);
+    assert_eq!(note(&mut h, 0, 0), 49);
+    // no selection: the whole cursor channel
+    h.state_mut().sel = None;
+    h.state_mut().ch = 0;
+    frames(&mut h, 2);
+    assert!(h.state().transpose_target().starts_with("channel 1"));
+    click_button(&mut h, "-12");
+    assert!((0..4).all(|r| note(&mut h, r, 0) == 37));
+    assert_eq!(note(&mut h, 0, 1), 53);
+    assert_eq!(h.state().status, "Transposed channel 1 by -12 semitones");
+    ctrl_z(&mut h);
+    assert!((0..4).all(|r| note(&mut h, r, 0) == 49));
+}
+
+/// the transpose buttons share the Block bar's line when there's room; narrower
+/// windows move the right-hand group (then transpose) to the next line, and
+/// nothing overlaps at any width
+#[test]
+fn block_bar_transpose_buttons_fit_one_line_and_wrap_without_overlap() {
+    let mut h = harness();
+    transpose_song(&mut h);
+    // (width, transpose on the first line, Full height on the transpose line)
+    for (w, first, with_full) in [
+        (1700.0, true, true),
+        (1360.0, true, false),
+        (1100.0, false, true),
+        (1000.0, false, false),
+    ] {
+        h.set_size(egui::vec2(w, 800.0));
+        frames(&mut h, 3);
+        let y = |r: Rect| r.center().y;
+        let plus = rects(&h, Role::Button, Some("+12"))[0];
+        let block = rects(&h, Role::Button, Some("+ New block"))[0];
+        let full = h
+            .query_all_by(|n| n.label().as_deref() == Some("Full height"))
+            .next()
+            .expect("Full height toggle")
+            .rect();
+        assert_eq!(
+            (y(plus) - y(block)).abs() < 2.0,
+            first,
+            "{w}: transpose line"
+        );
+        assert_eq!(
+            (y(plus) - y(full)).abs() < 2.0,
+            with_full,
+            "{w}: Full height"
+        );
+        assert!(
+            y(full) >= y(plus) - 2.0,
+            "{w}: the right group never goes above"
+        );
+        // nothing overlaps the transpose buttons, and they stay in the window
+        let all: Vec<Rect> = h
+            .query_all_by(|n| n.label().is_some())
+            .map(|n| n.rect())
+            .filter(|r| r.height() < 40.0 && r.width() < 600.0)
+            .collect();
+        for l in ["-12", "-1", "+1", "+12"] {
+            let b = rects(&h, Role::Button, Some(l))[0];
+            assert!(b.right() <= w, "{w}: {l} inside the window");
+            for o in &all {
+                if *o != b && !o.contains_rect(b) {
+                    assert!(
+                        !b.shrink(1.0).intersects(o.shrink(1.0)),
+                        "{w}: {l} {b:?} overlaps {o:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn edit_menu_transpose_items_and_transpose_by() {
+    let mut h = harness();
+    transpose_song(&mut h);
+    h.state_mut().sel = Some(((0, 0), (0, 1)));
+    frames(&mut h, 2);
+    let open = |h: &mut Harness<'static, App>| {
+        click_button(h, "Edit");
+        hover_button(h, "Transpose");
+    };
+    open(&mut h);
+    click_label(&mut h, "Up octave");
+    assert_eq!((note(&mut h, 0, 0), note(&mut h, 0, 1)), (61, 65));
+    assert_eq!(note(&mut h, 1, 0), 49, "row 1 not selected");
+    open(&mut h);
+    click_label(&mut h, "Down semitone");
+    assert_eq!(note(&mut h, 0, 0), 60);
+    open(&mut h);
+    click_label(&mut h, "Up semitone");
+    open(&mut h);
+    click_label(&mut h, "Down octave");
+    assert_eq!(note(&mut h, 0, 0), 49);
+    assert_eq!(h.state().status, "Transposed selection by -12 semitones");
+    // Transpose by…: any amount from -24 to +24
+    h.ctx
+        .data_mut(|d| d.insert_temp(egui::Id::unique("transpose_by_amount"), -7i32));
+    open(&mut h);
+    hover_button(&mut h, "Transpose by…");
+    click_button(&mut h, "Transpose -7");
+    assert_eq!((note(&mut h, 0, 0), note(&mut h, 0, 1)), (42, 46));
+    assert_eq!(h.state().status, "Transposed selection by -7 semitones");
+    ctrl_z(&mut h);
+    assert_eq!(note(&mut h, 0, 0), 49, "undoable");
+    assert_eq!(*super::transpose::BY_RANGE.start(), -24);
+    assert_eq!(*super::transpose::BY_RANGE.end(), 24);
+}
