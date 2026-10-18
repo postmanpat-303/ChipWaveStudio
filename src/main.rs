@@ -524,6 +524,9 @@ fn screenshot(args: &[String], i: usize) -> i32 {
     let tmp = std::env::temp_dir().join(format!("chipwave-shot-{}", std::process::id()));
     std::env::set_var("XDG_CONFIG_HOME", &tmp);
     std::env::set_var("APPDATA", &tmp);
+    // macOS keeps settings under $HOME/Library/Application Support
+    #[cfg(target_os = "macos")]
+    std::env::set_var("HOME", &tmp);
     let mut st = settings::Settings {
         theme: if amiga {
             theme::AMIGA.name

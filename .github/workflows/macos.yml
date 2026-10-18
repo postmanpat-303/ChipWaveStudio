@@ -1,0 +1,106 @@
+name: macOS
+
+# Universal (Apple Silicon + Intel) ChipWave.app, ad-hoc signed (not notarised), as a .dmg and a .zip.
+# Run it by hand: Actions > macOS > Run workflow (or `gh workflow run macos.yml`).
+# Output is uploaded as a workflow artifact only. It is NOT attached to any release:
+# publishing is a separate, approved step (docs/MACOS.md, "Publishing").
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Display version for the file names, e.g. 0.2.3.15 (empty = from Cargo.toml; must match it)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Version
+        id: ver
+        run: |
+          CARGO_VER=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          VER=$(echo "$CARGO_VER" | sed 's/+fix\./\./')
+          if [ -n "${{ inputs.version }}" ] && [ "${{ inputs.version }}" != "$VER" ]; then
+            echo "::error::version input ${{ inputs.version }} does not match Cargo.toml ($CARGO_VER = $VER)"; exit 1
+          fi
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          echo "ChipWave $VER (Cargo $CARGO_VER)"
+
+      - name: Build and package (universal .app, dmg, zip, SHA256SUMS.txt)
+        run: scripts/package-macos.sh "${{ steps.ver.outputs.ver }}"
+
+      - name: Smoke test (both halves of the universal binary)
+        run: |
+          BIN="dist/mac/ChipWave.app/Contents/MacOS/ChipWave"
+          lipo -archs "$BIN"
+          file "$BIN"
+          "$BIN" --version
+          "$BIN" --self-test "$RUNNER_TEMP/smoke.wav"
+          "$BIN" --render demo "$RUNNER_TEMP/smoke-render.wav"
+          test -s "$RUNNER_TEMP/smoke.wav" && test -s "$RUNNER_TEMP/smoke-render.wav"
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            arch -x86_64 "$BIN" --version
+            arch -x86_64 "$BIN" --self-test "$RUNNER_TEMP/smoke-x86.wav"
+          else
+            echo "::warning::Rosetta not available, x86_64 half not run"
+          fi
+
+      - name: Check the dmg (mount, contents, plist, signature)
+        run: |
+          VER=${{ steps.ver.outputs.ver }}
+          MNT=$(mktemp -d)
+          for i in 1 2 3 4 5; do
+            hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "dist/mac/ChipWave-$VER-macos-universal.dmg" && break
+            echo "attach failed (try $i), retrying"; sleep $((i * 5))
+          done
+          ls -la "$MNT"
+          test -L "$MNT/Applications"
+          test -f "$MNT/Read me first.txt"
+          plutil -p "$MNT/ChipWave.app/Contents/Info.plist"
+          test -f "$MNT/ChipWave.app/Contents/Resources/ChipWave.icns"
+          codesign --verify --deep --strict "$MNT/ChipWave.app"
+          "$MNT/ChipWave.app/Contents/MacOS/ChipWave" --version
+          for i in 1 2 3 4 5; do hdiutil detach "$MNT" && break; sleep $((i * 3)); done
+
+      - name: GUI screenshot and 10 s launch (best effort on a CI display)
+        continue-on-error: true
+        run: |
+          APPBIN="dist/mac/ChipWave.app/Contents/MacOS/ChipWave"
+          "$APPBIN" --screenshot "$RUNNER_TEMP/macos-pattern.png" --view pattern || echo "::warning::--screenshot failed"
+          "$APPBIN" > "$RUNNER_TEMP/run.log" 2>&1 &
+          PID=$!
+          sleep 10
+          screencapture -x "$RUNNER_TEMP/macos-launch.png" || true
+          if kill -0 $PID; then echo "still running after 10 s"; kill $PID; else echo "app exited early"; cat "$RUNNER_TEMP/run.log"; exit 1; fi
+          cat "$RUNNER_TEMP/run.log"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChipWave-${{ steps.ver.outputs.ver }}-macos-universal
+          path: |
+            dist/mac/ChipWave-*-macos-universal.dmg
+            dist/mac/ChipWave-*-macos-universal.zip
+            dist/mac/ChipWave-macos-universal.dmg
+            dist/mac/ChipWave-macos-universal.zip
+            dist/mac/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-screenshots
+          path: |
+            ${{ runner.temp }}/macos-*.png
+            ${{ runner.temp }}/run.log
+          if-no-files-found: ignore

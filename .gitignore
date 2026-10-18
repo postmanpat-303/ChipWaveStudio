@@ -2,3 +2,4 @@ target/
 dist/pkg/
 dist/*.zip
 dist/*.exe
+dist/mac/

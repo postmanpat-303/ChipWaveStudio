@@ -26,14 +26,14 @@ pub struct Release {
     pub body: String,
     /// release page
     pub page: String,
-    /// the Windows setup .exe asset, if the release has one
+    /// the installer asset for this OS (Windows setup .exe; macOS .dmg), if the release has one
     pub installer: Option<String>,
     pub draft: bool,
     pub prerelease: bool,
 }
 
 impl Release {
-    /// where "Download installer" goes: the setup .exe, else the release page
+    /// where "Download installer" goes: the installer asset, else the release page
     pub fn download_url(&self) -> &str {
         self.installer.as_deref().unwrap_or(&self.page)
     }
@@ -86,8 +86,14 @@ pub fn parse_release(json: &str) -> Result<Release, String> {
             })
         })
     };
-    let installer = url_of(&|n| n.ends_with(".exe") && n.contains("setup"))
-        .or_else(|| url_of(&|n| n.ends_with(".exe")));
+    // macOS: the universal .dmg; elsewhere: the Windows setup .exe
+    let installer = if cfg!(target_os = "macos") {
+        url_of(&|n| n.ends_with(".dmg") && n.contains("macos"))
+            .or_else(|| url_of(&|n| n.ends_with(".dmg")))
+    } else {
+        url_of(&|n| n.ends_with(".exe") && n.contains("setup"))
+            .or_else(|| url_of(&|n| n.ends_with(".exe")))
+    };
     let page = s("html_url");
     Ok(Release {
         version: tag.trim_start_matches(['v', 'V']).to_string(),
@@ -248,6 +254,14 @@ pub fn notes_lines(md: &str) -> Vec<Line> {
     lines
 }
 
+/// the installer `SAMPLE_JSON` offers on this OS
+#[cfg(test)]
+pub(crate) const SAMPLE_INSTALLER: &str = if cfg!(target_os = "macos") {
+    "/ChipWave-0.2.3.9-macos-universal.dmg"
+} else {
+    "/ChipWave-0.2.3.9-setup-x64.exe"
+};
+
 #[cfg(test)]
 pub(crate) const SAMPLE_JSON: &str = r###"{
   "url": "https://api.github.com/repos/postmanpat-303/ChipWaveTracker/releases/1",
@@ -262,6 +276,8 @@ pub(crate) const SAMPLE_JSON: &str = r###"{
      "browser_download_url": "https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9/ChipWave-0.2.3.9-windows-x64.zip"},
     {"name": "ChipWave-0.2.3.9-setup-x64.exe",
      "browser_download_url": "https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9/ChipWave-0.2.3.9-setup-x64.exe"},
+    {"name": "ChipWave-0.2.3.9-macos-universal.dmg",
+     "browser_download_url": "https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9/ChipWave-0.2.3.9-macos-universal.dmg"},
     {"name": "demo-0.2.3.9.mp3",
      "browser_download_url": "https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9/demo-0.2.3.9.mp3"}
   ]
@@ -300,12 +316,12 @@ mod tests {
         assert_eq!(r.version, "0.2.3.9");
         assert_eq!(r.name, "ChipWave Tracker 0.2.3.9");
         assert!(r.page.ends_with("/releases/tag/v0.2.3.9"));
-        assert!(r
-            .download_url()
-            .ends_with("/ChipWave-0.2.3.9-setup-x64.exe"));
+        assert!(r.download_url().ends_with(SAMPLE_INSTALLER));
         assert!(!r.draft && !r.prerelease);
         // no installer asset -> the download button goes to the release page
-        let no_exe = SAMPLE_JSON.replace("setup-x64.exe", "setup-x64.msi");
+        let no_exe = SAMPLE_JSON
+            .replace("setup-x64.exe", "setup-x64.msi")
+            .replace("macos-universal.dmg", "macos-universal.pkg");
         let r = parse_release(&no_exe).unwrap();
         assert_eq!(r.installer, None);
         assert_eq!(r.download_url(), r.page);
@@ -324,9 +340,14 @@ mod tests {
             (r.tag.as_str(), r.version.as_str()),
             ("v0.2.3.4", "0.2.3.4")
         );
-        assert!(r
-            .download_url()
-            .ends_with("/ChipWave-0.2.3.4-setup-x64.exe"));
+        if cfg!(target_os = "macos") {
+            // that release had no Mac build: the button opens the release page
+            assert_eq!(r.download_url(), r.page);
+        } else {
+            assert!(r
+                .download_url()
+                .ends_with("/ChipWave-0.2.3.4-setup-x64.exe"));
+        }
         assert!(!notes_lines(&r.body).is_empty());
         assert!(is_newer("0.2.3.5", &r.version));
     }

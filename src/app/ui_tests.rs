@@ -1078,7 +1078,10 @@ fn update_check_newer_version_dialog_opens_links_only_on_click() {
     // nothing was opened just by showing the dialog; the installer opens on click
     assert_eq!(
         click_urls(&mut h, "Download installer"),
-        ["https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9/ChipWave-0.2.3.9-setup-x64.exe"]
+        [format!(
+            "https://github.com/postmanpat-303/ChipWaveTracker/releases/download/v0.2.3.9{}",
+            crate::update::SAMPLE_INSTALLER
+        )]
     );
     assert_eq!(h.state().upd.win, None, "dialog closed");
     manual_check(&mut h, Outcome::Newer(sample_release()));
