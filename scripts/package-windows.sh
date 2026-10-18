@@ -12,9 +12,12 @@
 set -euo pipefail
 VER="${1:?version}"
 cd "$(dirname "$0")/.."
+# Small icon frames must be BMP, or Explorer/Edge show the generic program icon.
+python3 scripts/check-ico.py assets/icon/chipwave_tracker.ico
 cargo build --release --target x86_64-pc-windows-gnu
 rm -rf dist/pkg && mkdir -p dist/pkg
 cp target/x86_64-pc-windows-gnu/release/chipwave.exe dist/pkg/ChipWave.exe
+python3 scripts/check-ico.py dist/pkg/ChipWave.exe
 sed "1s/.*/ChipWave Tracker $VER - Windows x64/" dist/README.txt > dist/pkg/README.txt
 cp LICENSE dist/pkg/LICENSE.txt
 python3 scripts/third_party_licenses.py x86_64-pc-windows-gnu > dist/pkg/THIRD_PARTY_LICENSES.txt
@@ -32,6 +35,7 @@ if command -v makensis >/dev/null; then
   VI=$(echo "$VER" | awk -F. '{printf "%d.%d.%d.%d", $1, $2, $3, $4}')
   (cd installer && makensis -V2 -DVERSION="$VER" -DVIVERSION="$VI" -DPKGDIR=../dist/pkg \
     -DOUTFILE="../dist/ChipWave-$VER-setup-x64.exe" chipwave.nsi)
+  python3 scripts/check-ico.py "dist/ChipWave-$VER-setup-x64.exe"
   echo "dist/ChipWave-$VER-setup-x64.exe"
   cp "dist/ChipWave-$VER-setup-x64.exe" dist/ChipWave-setup-x64.exe
   echo "dist/ChipWave-setup-x64.exe"

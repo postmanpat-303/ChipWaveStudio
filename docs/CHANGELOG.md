@@ -2,6 +2,10 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## Unreleased
+
+- **Windows icon:** ChipWave.exe and the setup exe showed the generic program icon in Explorer and Edge's download list on some PCs. The embedded `assets/icon/chipwave_tracker.ico` stored every size (16 to 256 px) as PNG, and Windows often can't draw small PNG frames. It is now a standard ICO: 256 px as PNG, and 128, 64, 48, 32, 24 and 16 px as 32-bit BMP with alpha (fixed icon made by the imagine assistant). Both the app exe resource and the NSIS installer/uninstaller icon use it. The committed `.ico` is the source of truth (nothing regenerates it); `scripts/check-ico.py` checks the file before the build and the icons embedded in `ChipWave.exe` and the setup exe after, and `scripts/package-windows.sh` fails if a small frame is PNG. The window/taskbar icon at runtime still comes from the 256 px PNG.
+
 v0.2.3.19 moves instrument editing into the **lower panel**, with knobs. Details: [INSTRUMENT_EDITOR.md](INSTRUMENT_EDITOR.md).
 
 - **Sidebar:**
