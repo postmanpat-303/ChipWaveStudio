@@ -668,6 +668,13 @@ impl App {
                  an arpeggio or a bass line. Scale lock snaps typed and MIDI notes to the key.",
             );
             ui.label(
+                "Slicing (Sample editor): Transients cuts the sample at its hits (sens = sensitivity, gap = shortest slice), \
+                 Grid cuts it into 2-64 equal parts. Click a slice to select it (Prev / Next step through them); Normalise, \
+                 Reverse, Fade, Gain then work on that slice. Alt+click adds a slice, right-click a marker removes it. \
+                 To instruments makes one sample instrument per slice; To notes also writes them into the block on the \
+                 cursor channel at the song tempo. One undo step.",
+            );
+            ui.label(
                 "Master: Mixer > Limiter & loudness (true-peak limiter, LUFS meter); exports use the same limiter.",
             );
         });

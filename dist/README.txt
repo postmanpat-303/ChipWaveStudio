@@ -157,6 +157,17 @@ rename, Up / Down to reorder (notes follow), right-click > Use this instead
 of to swap instruments in the song or one block, Save to library, Export
 .cwi. Drop a .cwi file on the window to import it.
 
+Voice words and Throat mode (0.2.3.10): a Voice instrument's Words row
+holds short words (ka, ta, sha, dum ...); each note speaks the next one and
+3Exx speaks word xx. Tract: Throat swaps the formant filters for a simulated
+vocal tract inspired by Pink Trombone by Neil Thapen (MIT). Presets: Talk
+Ka-Ta, Throat Ahh, Throat Speech, Demon Words.
+
+Chop / slice (0.2.3.10): in the Sample editor, Transients or Grid cuts the
+sample into numbered slices; click one (or Prev / Next) to edit just that
+slice; To instruments makes one instrument per slice, To notes also writes
+them into the block on the cursor channel at the song tempo.
+
 Chord helper (0.2.3.9): Song > Chord helper... or Chords... in the block bar.
 Pick or detect the song key, click chord pads to hear them and build a
 progression (or pick a preset), then Write into block as chords, arp or

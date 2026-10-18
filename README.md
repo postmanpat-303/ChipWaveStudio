@@ -86,6 +86,14 @@ All pictures on this page are real captures of the current build (no mockups). T
     <td width="34%" valign="top"><img src="docs/screenshots/dark-instrument-library.png" alt="Instrument library window"></td>
     <td width="66%" valign="top"><b>Instrument library</b> <sub>(0.2.3.9)</sub>: the song's instruments, your own library folder of <code>.cwi</code> files and the factory sounds side by side, with search, audition, add, and “replace this slot's sound but keep its notes”. In the instrument list: rename (double-click), reorder (notes follow), search, and “use this instead of” to swap instruments across the song or one block. See <a href="docs/INSTRUMENT_LIBRARY.md">INSTRUMENT_LIBRARY.md</a>.</td>
   </tr>
+  <tr>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-voice-words.png" alt="Voice panel with Throat mode and words"></td>
+    <td width="66%" valign="top"><b>Voice words and Throat mode</b> <sub>(0.2.3.10)</sub>: the Voice instrument speaks short words (<code>gha dum osh kar</code>), one per note or picked with <code>3Exx</code>: plosives, fricatives and nasals built from noise bursts and formant transitions. <b>Throat</b> swaps the formant filters for a simulated vocal tract inspired by <a href="https://dood.al/pinktrombone/">Pink Trombone</a> by Neil Thapen (MIT). See <a href="docs/VOICE.md">VOICE.md</a>.</td>
+  </tr>
+  <tr>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-sample-slicing.png" alt="Sample editor slicing a breakbeat"></td>
+    <td width="66%" valign="top"><b>Chop / slice</b> <sub>(0.2.3.10)</sub>: a synthesised breakbeat cut at its transients (or on a grid) into numbered slices. Select a slice to normalise, reverse or fade just that part; <b>To instruments</b> makes one instrument per slice and <b>To notes</b> writes them into the block at the song tempo, ready to rearrange. See <a href="docs/SAMPLES.md">SAMPLES.md</a>.</td>
+  </tr>
 </table>
 
 **Also in the box**

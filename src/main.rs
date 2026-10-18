@@ -2,7 +2,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 /// Display version (Cargo: 0.2.3+fix.1).
-pub const VERSION: &str = "0.2.3.9";
+pub const VERSION: &str = "0.2.3.10";
 
 mod app;
 mod arrange;
@@ -231,8 +231,65 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         ok
     };
+    // 0.2.3.10: spoken words (formant + throat tract) and sample slicing
+    let speech_ok = {
+        let mut s = song.clone();
+        for row in s.patterns[0].cells.iter_mut() {
+            row.iter_mut().for_each(|c| *c = model::Cell::default());
+        }
+        s.order = vec![0];
+        let base = s.instruments.len() as u8;
+        for name in ["Talk Ka-Ta", "Throat Speech"] {
+            if let Some(p) = voice::preset(name) {
+                s.instruments.push(model::Instrument {
+                    name: name.into(),
+                    volume: 1.0,
+                    transpose: 0,
+                    fx: vec![],
+                    kind: model::InstrumentKind::Voice(p),
+                });
+            }
+        }
+        for (r, ch, i) in [(0usize, 0usize, 1u8), (8, 0, 1), (16, 1, 2), (24, 1, 2)] {
+            s.patterns[0].cells[r][ch] = model::Cell {
+                note: 37,
+                instr: base + i,
+                ..Default::default()
+            };
+        }
+        let pcm = engine::render_song(&s, 44100);
+        let fin = pcm.iter().all(|x| x.is_finite());
+        let half = pcm.len() / 2;
+        let rms = |v: &[f32]| (v.iter().map(|x| x * x).sum::<f32>() / v.len().max(1) as f32).sqrt();
+        let (a, b) = (rms(&pcm[..half]), rms(&pcm[half..]));
+        // a 2 s loop of 8 hits must slice into 8
+        let mut n = 0x2545_F491u32;
+        let mut d = vec![0.0f32; 96000];
+        for h in 0..8 {
+            for k in 0..6000 {
+                n ^= n << 13;
+                n ^= n >> 17;
+                n ^= n << 5;
+                d[h * 12000 + k] +=
+                    (n as f32 / u32::MAX as f32 - 0.5) * (-(k as f32) / 900.0).exp();
+            }
+        }
+        let sl = sample::transient_slices(&d, 48000, 0.5, 50.0);
+        let ok = fin
+            && a > 0.003
+            && b > 0.003
+            && sl.len() == 8
+            && s.instruments.len() == base as usize + 2;
+        report.push_str(&format!(
+            "  voice words + slicing: formant rms {a:.4}, throat rms {b:.4}, {} slice(s) ({})\n",
+            sl.len(),
+            if ok { "ok" } else { "FAILED" }
+        ));
+        ok
+    };
     let ok = fill_ok
         && inst_ok
+        && speech_ok
         && midi_ok
         && peak > 0.05
         && rms > 0.005

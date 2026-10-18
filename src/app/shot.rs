@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 12] = [
+pub const VIEWS: [&str; 14] = [
     "pattern",
     "arranger",
     "mixer",
@@ -46,6 +46,8 @@ pub const VIEWS: [&str; 12] = [
     "voice",
     "library",
     "chords",
+    "speech",
+    "slice",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -85,6 +87,31 @@ impl App {
                 self.add_instrument("Glitch Babble", InstrumentKind::Voice(p));
                 self.dirty = false;
             }
+            "speech" => {
+                // a Throat-mode Voice that speaks words (0.2.3.10)
+                let mut p = crate::voice::preset("Demon Words").unwrap_or_default();
+                p.base.name = "Demon Words".into();
+                self.add_instrument("Demon Words", InstrumentKind::Voice(p));
+                self.dirty = false;
+            }
+            "slice" => {
+                // a breakbeat in the sample editor, sliced at its transients
+                self.add_instrument(
+                    "Break",
+                    InstrumentKind::Sample {
+                        file: "break.wav".into(),
+                        rate: 48000,
+                        data: crate::sample::demo_break(48000).into(),
+                        base_note: 49,
+                        lp: Default::default(),
+                    },
+                );
+                let idx = self.instr as usize - 1;
+                self.view = View::Sample;
+                self.slice_sample(idx, None);
+                self.select_slice(idx, 5);
+                self.dirty = false;
+            }
             "settings" => {
                 self.view = View::Settings;
                 self.set_card = 1; // Look (themes, scale, accent)
@@ -114,7 +141,10 @@ impl App {
                 let pos = 13.min(song.order.len().saturating_sub(1));
                 engine.start(song, pos, 32, false, 0);
             });
-        } else if !matches!(view, "fill" | "settings" | "about" | "library" | "chords") {
+        } else if !matches!(
+            view,
+            "fill" | "settings" | "about" | "library" | "chords" | "slice"
+        ) {
             self.play(3);
         }
         ctx.request_repaint();

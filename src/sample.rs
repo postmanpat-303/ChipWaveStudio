@@ -318,6 +318,55 @@ pub fn slice_bounds(slices: &[usize], len: usize) -> Vec<(usize, usize)> {
         .collect()
 }
 
+/// A synthesised 2-bar breakbeat at 120 BPM (kick, snare, hats): used by
+/// the slicing screenshot and the features demo. Nothing sampled.
+pub fn demo_break(rate: u32) -> Vec<f32> {
+    let sr = rate as f32;
+    let step = (sr * 0.125) as usize; // 16ths at 120 BPM
+    let mut d = vec![0.0f32; step * 32];
+    let mut n = 0x1234_5678u32;
+    let mut rnd = move || {
+        n ^= n << 13;
+        n ^= n >> 17;
+        n ^= n << 5;
+        n as f32 / u32::MAX as f32 * 2.0 - 1.0
+    };
+    // per bar: K = kick, S = snare, h = hat, g = ghost snare
+    let bars = ["K.h.S.hKh.KhS.hg", "K.h.S.h.hKK.S.hS"];
+    for (b, pat) in bars.iter().enumerate() {
+        for (i, c) in pat.chars().enumerate() {
+            let at = (b * 16 + i) * step;
+            let len = (step * 4).min(d.len() - at);
+            let mut ph = 0.0f32;
+            let mut hp = 0.0f32;
+            for k in 0..len {
+                let t = k as f32 / sr;
+                let v = match c {
+                    'K' => {
+                        let f = 50.0 + 110.0 * (-t * 28.0).exp();
+                        ph += std::f32::consts::TAU * f / sr;
+                        ph.sin() * (-t * 9.0).exp() * 0.9
+                    }
+                    'S' | 'g' => {
+                        ph += std::f32::consts::TAU * 185.0 / sr;
+                        let amp = if c == 'S' { 0.6 } else { 0.18 };
+                        (rnd() * 0.8 + ph.sin() * 0.5) * (-t * 22.0).exp() * amp
+                    }
+                    'h' => {
+                        let x = rnd();
+                        let y = x - hp;
+                        hp = x;
+                        y * (-t * 70.0).exp() * 0.18
+                    }
+                    _ => 0.0,
+                };
+                d[at + k] += v;
+            }
+        }
+    }
+    d
+}
+
 /// copy frames `a..b` with short declick fades (1 ms in, 3 ms out)
 pub fn extract(data: &[f32], a: usize, b: usize, rate: u32) -> Vec<f32> {
     let b = b.min(data.len());

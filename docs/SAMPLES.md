@@ -90,3 +90,33 @@ All decoding runs on a worker thread; large files show progress and can be cance
 ## 7. Roadmap placement
 - **MVP:** instrument list (all columns except MIDI/plugin types), browser with preview and keyboard audition, OS drag-and-drop, batch import into free slots, WAV/AIFF/FLAC/MP3/OGG/8SVX, swap/move/clear with remap, find unused. You can't make music without loading samples.
 - **Phase 1.5:** import options (normalise, mono, resample, Paula crunch, trim, auto loop, naming), favourites, module sample extraction, raw import, purge/compact.
+
+## 8. Chop / slice (0.2.3.10)
+The sample editor has a **Slice** row under the edit buttons.
+
+- **Transients** cuts at the hits. The level is measured in 5 ms frames
+  (10 ms windows); a slice starts where the level rises by
+  `12 - 9 x sensitivity` dB above the loudest of the previous 15 ms and is
+  within 40 dB of the loudest frame. The cut goes to the first sample above
+  25 % of the local peak, then back to the zero crossing before it.
+  **gap** (5-1000 ms, default 50) is the shortest slice. **sens** defaults to 50 %.
+- **Grid** cuts into 2, 3, 4, 6, 8, 12, 16, 24, 32 or 64 equal parts (snapped to zero
+  crossings within 64 frames).
+- Slices are numbered on the waveform. Click a slice, or step with **Prev** /
+  **Next**, to select it: Normalise, Reverse, Fade in/out and Gain then work on
+  that slice only. **Alt+click** adds a slice point; **right-click** near a
+  marker removes it; **Clear** removes them all (max 64).
+- **To instruments** makes one sample instrument per slice, named
+  `<name> 01`, `<name> 02`, …, with 1 ms fade-in / 3 ms fade-out declicks and
+  the source's base note.
+- **To notes** does the same, then clears the cursor channel in the current
+  block and writes one note per slice at the row where it falls at the song
+  tempo (a 120 BPM loop with 4 rows per beat: an 8th-note hit every 2 rows),
+  and switches to the pattern. Rearrange the notes to re-sequence the loop.
+- Each of those is one undo step (Ctrl+Z in the pattern view; inside the sample
+  editor Ctrl+Z undoes sample edits).
+- Slice points live in the editor only: they are not saved in the song, and are
+  cleared after Crop / Delete / Trim, a sample undo or switching instrument.
+
+The workflow follows the usual slicer tools (ReCycle, Renoise's slice markers,
+OpenMPT's "Slice at cue points"); no code from them is used.
