@@ -28,6 +28,9 @@ pub struct Extra {
     /// extra plugin folders to scan (CLAP / VST3), besides the standard ones (0.2.3.16)
     #[serde(default)]
     pub plugin_dirs: Vec<String>,
+    /// pattern editor: tint every other channel column (0.2.3.16)
+    #[serde(default = "yes")]
+    pub alt_columns: bool,
     /// output device name, "" = system default
     #[serde(default)]
     pub device: String,
@@ -80,6 +83,7 @@ impl Default for Extra {
     fn default() -> Self {
         Self {
             plugin_dirs: vec![],
+            alt_columns: true,
             device: String::new(),
             rate: 0,
             accent: String::new(),

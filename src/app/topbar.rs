@@ -499,6 +499,13 @@ impl App {
                 ui.checkbox(&mut self.show_auto, "Automation lanes");
                 ui.checkbox(&mut self.dock_arranger, "Dock arranger under pattern");
                 ui.checkbox(&mut self.follow, "Follow playback");
+                if ui
+                    .checkbox(&mut self.extra.alt_columns, "Alternate column shading")
+                    .on_hover_text("tint every other channel column in the pattern editor")
+                    .changed()
+                {
+                    self.save_settings();
+                }
                 ui.separator();
                 if item(ui, "Settings…", "Ctrl+,") {
                     self.toggle_settings();

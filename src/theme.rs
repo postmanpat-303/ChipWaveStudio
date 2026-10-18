@@ -247,6 +247,40 @@ pub fn cartridge(painter: &egui::Painter, r: Rect, spine: Color32) {
     );
 }
 
+/// relative luminance (Rec. 709 weights on the 0..1 sRGB values)
+pub fn luma(c: Color32) -> f32 {
+    (0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32) / 255.0
+}
+
+/// An overlay that moves the pattern background's luminance by `amount`
+/// (0.05 = 5 %): the theme's own light ink on dark backgrounds, its dark ink
+/// on light ones (and on the Workbench blue, which reads as "light theme
+/// darker"). Theme-derived, so a new theme gets a matching stripe for free.
+pub fn shade(t: &Theme, amount: f32) -> Color32 {
+    let bg = mid(t.crt_top, t.crt_bot);
+    let lighten = !t.light;
+    let ink = if lighten {
+        if luma(t.note) > luma(t.ink) {
+            t.note
+        } else {
+            t.ink
+        }
+    } else {
+        // the theme's dark ink taken well below the background, so a light
+        // wash of it darkens without shifting the hue
+        let k = |c: u8| (c as f32 * 0.3) as u8;
+        Color32::from_rgb(k(t.ink.r()), k(t.ink.g()), k(t.ink.b()))
+    };
+    let gap = (luma(ink) - luma(bg)).abs().max(0.1);
+    let a = (amount / gap).clamp(0.0, 1.0);
+    Color32::from_rgba_unmultiplied(ink.r(), ink.g(), ink.b(), (a * 255.0).round() as u8)
+}
+
+fn mid(a: Color32, b: Color32) -> Color32 {
+    let m = |x: u8, y: u8| ((x as u16 + y as u16) / 2) as u8;
+    Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
+}
+
 pub fn crt(painter: &egui::Painter, r: Rect) {
     let t = th();
     painter.rect_filled(r, CornerRadius::same(6), t.crt_bot);
@@ -289,4 +323,36 @@ pub fn with_accent(mut t: Theme, accent: &str) -> Theme {
         t.accent = hex(*c);
     }
     t
+}
+
+#[cfg(test)]
+mod shade_tests {
+    use super::*;
+
+    fn over(bg: Color32, o: Color32) -> Color32 {
+        let a = o.a() as f32 / 255.0;
+        // Color32 is premultiplied: out = bg * (1 - a) + c
+        let f = |b: u8, c: u8| (b as f32 * (1.0 - a) + c as f32).round() as u8;
+        Color32::from_rgb(f(bg.r(), o.r()), f(bg.g(), o.g()), f(bg.b(), o.b()))
+    }
+
+    #[test]
+    fn column_stripe_is_4_to_6_percent_lighter_on_dark_and_darker_on_workbench() {
+        for t in THEMES {
+            let bg = mid(t.crt_top, t.crt_bot);
+            let d = luma(over(bg, shade(&t, 0.05))) - luma(bg);
+            assert!((0.04..=0.06).contains(&d.abs()), "{}: {d}", t.name);
+            assert!(
+                shade(&t, 0.05).a() < 128,
+                "{}: a light wash, not a fill",
+                t.name
+            );
+            assert_eq!(
+                d > 0.0,
+                !t.light,
+                "{}: lighter on dark, darker on light",
+                t.name
+            );
+        }
+    }
 }

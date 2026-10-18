@@ -174,6 +174,34 @@ impl App {
         let start = (self.row as isize - visible as isize / 2)
             .clamp(0, (pat.rows as isize - visible as isize).max(0)) as usize;
 
+        // column backgrounds under everything row-based: every other channel
+        // (by channel index, so the stagger stays put while scrolling) gets
+        // a theme-derived tint, a 1 px divider between columns, and a faint
+        // accent wash on the cursor's channel
+        let alt = self.extra.alt_columns;
+        let tint = theme::shade(&th(), 0.05);
+        let line = theme::shade(&th(), 0.12);
+        let rows_vis = visible.min(pat.rows.saturating_sub(start));
+        let grid_bot = (top + rows_vis as f32 * rh).min(avail.bottom() - 2.0);
+        for (vi, ch) in (first_ch..channels).enumerate() {
+            let x = x0 + vi as f32 * chan_w - 5.0;
+            if x > avail.right() {
+                break;
+            }
+            let col = Rect::from_min_max(
+                Pos2::new(x, top),
+                Pos2::new((x + chan_w).min(avail.right() - 2.0), grid_bot),
+            );
+            if alt && ch % 2 == 1 {
+                painter.rect_filled(col, 0, tint);
+            }
+            if ch == self.ch {
+                painter.rect_filled(col, 0, th().accent.gamma_multiply(0.07));
+            }
+            if alt && vi > 0 {
+                painter.vline(x.round() + 0.5, top..=grid_bot, Stroke::new(1.0, line));
+            }
+        }
         for (vi, ch) in (first_ch..channels).enumerate() {
             let x = x0 + vi as f32 * chan_w;
             if x > avail.right() {
@@ -189,6 +217,9 @@ impl App {
                     th().slate
                 },
             );
+            if alt && ch % 2 == 1 {
+                painter.rect_filled(hr, 6, tint);
+            }
             painter.text(
                 hr.left_center() + egui::vec2(6.0, 0.0),
                 egui::Align2::LEFT_CENTER,
@@ -196,6 +227,14 @@ impl App {
                 FontId::proportional(13.0),
                 Color32::WHITE,
             );
+            if ch == self.ch {
+                // current channel: an accent underline on its header
+                painter.hline(
+                    hr.x_range().shrink(4.0),
+                    hr.bottom() + 1.0,
+                    Stroke::new(2.0, th().accent),
+                );
+            }
             painter.text(
                 hr.right_center() - egui::vec2(6.0, 0.0),
                 egui::Align2::RIGHT_CENTER,
@@ -316,13 +355,15 @@ impl App {
                         10,
                     ),
                 ];
+                // muted / not-soloed channels: dimmed cells
+                let dim = !mixer.audible(ch);
                 for (t, col, off) in parts {
                     painter.text(
                         Pos2::new(x + off as f32 * cw, y + 2.0),
                         egui::Align2::LEFT_TOP,
                         t,
                         font.clone(),
-                        col,
+                        if dim { col.gamma_multiply(0.45) } else { col },
                     );
                 }
                 if r == self.row && ch == self.ch {

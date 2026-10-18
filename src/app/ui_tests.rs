@@ -2422,3 +2422,29 @@ fn instrument_list_is_compact_one_toolbar_row_and_the_bar_never_covers_names() {
     assert_eq!(n, 2, "toolbar icon + menu item");
     assert!(labelled(&h, "Instrument library…").width() > 0.0);
 }
+
+/// 0.2.3.16: alternate column shading is on by default, View > Alternate
+/// column shading turns it off, and the pattern view draws with 32
+/// channels scrolled sideways (stagger follows the channel index)
+#[test]
+fn alternate_column_shading_toggles_from_the_view_menu_and_scrolls() {
+    let mut h = harness();
+    assert!(h.state().extra.alt_columns, "on by default");
+    assert!(crate::settings::Extra::default().alt_columns);
+    let v = rects(&h, Role::Button, Some("View"))[0];
+    click_at(&mut h, v.center());
+    let c = rects(&h, Role::CheckBox, Some("Alternate column shading"))[0];
+    click_at(&mut h, c.center());
+    assert!(!h.state().extra.alt_columns, "View menu turns it off");
+    // old settings files without the key load with it on
+    let e: crate::settings::Extra = toml::from_str("").unwrap();
+    assert!(e.alt_columns);
+    let st = h.state_mut();
+    st.extra.alt_columns = true;
+    st.view = View::Pattern;
+    st.set_channels(32);
+    st.ch = 31;
+    frames(&mut h, 3);
+    assert!(h.state().ch_view > 0, "scrolled to the last channel");
+    assert_eq!(h.state().ch, 31);
+}

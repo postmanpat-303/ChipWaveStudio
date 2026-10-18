@@ -421,6 +421,17 @@ impl App {
                     }
                 });
                 ui.end_row();
+                ui.label("Pattern");
+                if ui
+                    .checkbox(&mut self.extra.alt_columns, "Alternate column shading")
+                    .on_hover_text(
+                        "tint every other channel column, with a thin divider between columns",
+                    )
+                    .changed()
+                {
+                    changed = true;
+                }
+                ui.end_row();
             });
         if changed {
             self.apply_theme(ui.ctx());

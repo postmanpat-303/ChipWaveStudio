@@ -16,6 +16,8 @@ The defaults follow the conventions most trackers share (FastTracker 2, ProTrack
 ## 2. Colours and readability (A2 rules)
 On the dark CRT display: notes white `#FFFFFF`, instrument green `#7CFF9B`, volume cyan `#22E3FF`, effects yellow `#FFD400`, empty cells dim blue `#4F6FA0`, beat rows `#24477F`. The cursor is a yellow outline and the current row a blue bar. Yellow appears only on the dark display. Every colour pair meets WCAG AA (4.5:1) against `#0A1F45`, and a high-contrast theme and a colour-blind palette (effects in orange, instruments in light blue) are included.
 
+**Alternate column shading (0.2.3.16).** Every other channel column (channels 2, 4, 6 …) has a faint tint, about 5 % luminance away from the background: lighter on the dark theme, darker on the Amiga Workbench theme. The tint is worked out from the theme's own background and ink colours, so any theme gets a matching stripe. A 1 px divider separates the columns, and the channel header buttons follow the same stagger. The stripe belongs to the channel number, not the screen position, so it stays put when you scroll sideways through 16–32 channels. Beat and bar rows, the cursor row, the selection and the play line are drawn on top of it. The channel under the cursor gets a faint accent wash and an accent underline on its header. Muted or not-soloed channels show dimmed cells as well as the grey header. Turn it off with **View → Alternate column shading** or **Settings → Look → Pattern**. It's on by default and saved in settings.
+
 ## 3. Scaling
 Uses [UI_SCALING.md](UI_SCALING.md). The font is monospace (bundled **JetBrains Mono** or **DejaVu Sans Mono**; both are open licences, to be confirmed at bundling). Font size scales with `pixels_per_point` and `Ctrl + mouse wheel` changes pattern zoom only. Channels that don't fit scroll horizontally, and the cursor channel is always kept visible.
 
@@ -200,7 +202,7 @@ The two letters are display mnemonics. Internally each is `(target id, value)`, 
 - **Chord entry:** with `Shift` held, notes spread across the next channels (OctaMED "spread" mode).
 
 ## 8. Mute / solo
-Mute affects playback and export (with an export option "ignore mutes"). Solo is exclusive; `Ctrl+click` adds to the solo set. The state is saved in `.cwt` but not in MMD.
+Mute affects playback and export (with an export option "ignore mutes"). Solo is exclusive; `Ctrl+click` adds to the solo set. The state is saved in `.cwt` but not in MMD. In the pattern editor, a muted (or not-soloed) channel has a grey header and dimmed cells.
 
 ## 9. Remappable keymap
 `~/.config/chipwave/keymap.toml` (`%APPDATA%\ChipWave\keymap.toml` on Windows, `~/Library/Application Support/ChipWave/keymap.toml` on macOS). Only overrides are stored; defaults are built in. Presets: *ChipWave* (default), *FastTracker 2*, *ProTracker*, *OpenMPT*, *OctaMED*.
