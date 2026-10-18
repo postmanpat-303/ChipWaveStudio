@@ -114,6 +114,12 @@ pub struct Patch {
     /// 0 = only by pattern command 3D
     #[serde(default)]
     pub accent_vel: f32,
+    /// filter model: the 12 dB SVF (old songs) or the Moog-style ladder
+    #[serde(default)]
+    pub filter_model: crate::ladder::FilterModel,
+    /// ladder slope: 12 dB/oct instead of 24 (the SVF is always 12 dB)
+    #[serde(default)]
+    pub ladder_12db: bool,
 }
 
 pub fn default_glide() -> f32 {
@@ -179,6 +185,8 @@ impl Patch {
             legato,
             accent,
             accent_vel,
+            filter_model,
+            ladder_12db,
         } = o;
         *self = Patch {
             name: std::mem::take(&mut self.name),
@@ -210,6 +218,8 @@ impl Patch {
             legato: *legato,
             accent: *accent,
             accent_vel: *accent_vel,
+            filter_model: *filter_model,
+            ladder_12db: *ladder_12db,
         };
     }
 }
@@ -256,6 +266,8 @@ impl Default for Patch {
             legato: false,
             accent: default_accent(),
             accent_vel: 0.0,
+            filter_model: Default::default(),
+            ladder_12db: false,
         }
     }
 }
@@ -428,6 +440,12 @@ pub struct SynthVoice {
     /// Voice Transform state and its pattern overrides (3F-42)
     pub tf: crate::transform::TransformState,
     pub tfo: crate::transform::Overrides,
+    /// ladder filter state (left / right)
+    pub lad: crate::ladder::Ladder,
+    pub lad_r: crate::ladder::Ladder,
+    /// Generator state and its pattern macro overrides (43xy)
+    pub gen: crate::gen::GenState,
+    pub gmo: [f32; 8],
 }
 
 /// 808 hi-hat oscillator ratios (205.3, 304.4, 369.6, 522.7, 540, 800 Hz)
@@ -463,6 +481,10 @@ impl SynthVoice {
             fmod: FiltMod::default(),
             tf: crate::transform::TransformState::default(),
             tfo: crate::transform::NO_OVERRIDES,
+            lad: Default::default(),
+            lad_r: Default::default(),
+            gen: Default::default(),
+            gmo: [-1.0; 8],
         }
     }
 
@@ -473,7 +495,49 @@ impl SynthVoice {
         v.noise = seed | 1;
         v.noise_r = seed.rotate_left(16) ^ 0x9E37_79B9 | 1;
         v.vox.seed(seed.rotate_left(7) ^ 0x3C6E_F372);
+        v.gen.seed(seed.rotate_left(3) ^ 0xBB67_AE85);
         v
+    }
+
+    /// Generator instrument: the generator makes the sound (with its own
+    /// envelopes); `p` (normally `gp.base`, or its automated copy) adds the
+    /// optional filter (SVF / ladder, pattern 38-3B work), the amp envelope
+    /// for note-offs and the gain. Allocation-free.
+    pub fn render_gen(
+        &mut self,
+        p: &Patch,
+        gp: &crate::gen::GenPatch,
+        freq: f32,
+        sr: f32,
+        _bpm: f32,
+    ) -> (f32, f32) {
+        let dt_s = 1.0 / sr;
+        if self.waited < p.start_delay {
+            self.waited += dt_s;
+            return (0.0, 0.0);
+        }
+        let gmo = self.gmo;
+        let (l, r, stereo) = self.gen.render(gp, &gmo, freq, sr);
+        let fe = self.fenv.next(&p.fenv, dt_s);
+        let (yl, yr) = if gp.filter_on {
+            let fm = self.fmod;
+            let base = if fm.cut_abs > 0.0 {
+                fm.cut_abs
+            } else {
+                p.cutoff
+            };
+            let res = if fm.res >= 0.0 { fm.res } else { p.resonance };
+            let kt = (freq.max(1.0) / 261.63).powf(p.key_track);
+            let cutoff = base
+                * kt
+                * 2f32.powf(p.env_amount * fe * 6.0 + p.vel_cutoff * (self.vel - 1.0) + fm.cut_oct);
+            self.filter(p, l, r, stereo, cutoff, res, sr)
+        } else {
+            (l, r)
+        };
+        let acc = self.accent.clamp(0.0, 1.0);
+        let g = self.amp.next(&p.amp, dt_s) * p.gain * (1.0 + 0.5 * acc);
+        (yl * g, yr * g)
     }
 
     /// stereo render; `bpm` drives tempo-synced LFOs. Allocation-free.
@@ -493,6 +557,44 @@ impl SynthVoice {
         bpm: f32,
     ) -> (f32, f32) {
         self.render_with(p, Some(vp), freq, sr, bpm)
+    }
+
+    /// the patch filter (SVF or ladder) on one or two channels
+    #[allow(clippy::too_many_arguments)]
+    #[inline]
+    fn filter(
+        &mut self,
+        p: &Patch,
+        l: f32,
+        r: f32,
+        stereo: bool,
+        cutoff: f32,
+        res: f32,
+        sr: f32,
+    ) -> (f32, f32) {
+        use crate::ladder::FilterModel;
+        match p.filter_model {
+            FilterModel::Svf => {
+                let yl = self.filt.process(l, cutoff, res, sr, p.filter);
+                let yr = if stereo {
+                    self.filt_r.process(r, cutoff, res, sr, p.filter)
+                } else {
+                    yl
+                };
+                (yl, yr)
+            }
+            m => {
+                let v = m == FilterModel::Vintage;
+                let p4 = !p.ladder_12db;
+                let yl = self.lad.process(l, cutoff, res, sr, p.filter, p4, v);
+                let yr = if stereo {
+                    self.lad_r.process(r, cutoff, res, sr, p.filter, p4, v)
+                } else {
+                    yl
+                };
+                (yl, yr)
+            }
+        }
     }
 
     fn render_with(
@@ -653,12 +755,7 @@ impl SynthVoice {
                     + fm.cut_oct
                     + acc * (0.6 + 1.6 * fe),
             );
-        let mut yl = self.filt.process(sl + s, cutoff, res, sr, p.filter);
-        let mut yr = if stereo {
-            self.filt_r.process(sr_ + s_r, cutoff, res, sr, p.filter)
-        } else {
-            yl
-        };
+        let (mut yl, mut yr) = self.filter(p, sl + s, sr_ + s_r, stereo, cutoff, res, sr);
         if p.drive > 0.0 {
             let g = 1.0 + p.drive * 4.0;
             yl = (yl * g).tanh();

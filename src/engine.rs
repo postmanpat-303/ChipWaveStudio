@@ -39,6 +39,8 @@ struct Chan {
     /// Transform overrides 3F-42 (blend, resonance, digital, sub; < 0 =
     /// instrument); cleared by a different instrument
     tfo: crate::transform::Overrides,
+    /// Generator macro overrides from 43xy (-1 = the instrument's value)
+    gmo: [f32; 8],
     /// cutoff slide in octaves per tick (3A / 3B), this row only
     cut_slide: f32,
     /// note held (no note-off since it started): legato glide is possible
@@ -133,6 +135,15 @@ fn voice_raw(
             let v = synth.render_voice(p, vp, freq, sr, bpm);
             (v, !synth.amp.done())
         }
+        InstrumentKind::Gen(gp) => {
+            let p = ov
+                .patches
+                .get(instr)
+                .and_then(|o| o.as_ref())
+                .unwrap_or(&gp.base);
+            let v = synth.render_gen(p, gp, freq, sr, bpm);
+            (v, !synth.amp.done() && !synth.gen.done)
+        }
         InstrumentKind::Sample {
             data,
             rate,
@@ -175,6 +186,7 @@ impl Chan {
             spoke: false,
             fm: Default::default(),
             tfo: crate::transform::NO_OVERRIDES,
+            gmo: [-1.0; 8],
             cut_slide: 0.0,
             gate: false,
             glide_to: 0.0,
@@ -707,6 +719,7 @@ impl Engine {
                 // filter commands belong to the instrument they were set for
                 c.fm = Default::default();
                 c.tfo = crate::transform::NO_OVERRIDES;
+                c.gmo = [-1.0; 8];
             }
             c.instr = cell.instr as usize - 1;
             c.vol = song.instruments[c.instr].volume;
@@ -860,6 +873,13 @@ impl Engine {
                 0x3F..=0x42 => {
                     c.tfo[(cell.fx - 0x3F) as usize] = tf_amount(cell.fxp);
                 }
+                // 43xy Generator macro x (1-8) = y (0-F = 0 .. 100 %); 4300 =
+                // back to the instrument's knobs
+                0x43 => match cell.fxp >> 4 {
+                    0 => c.gmo = [-1.0; 8],
+                    x @ 1..=8 => c.gmo[x as usize - 1] = (cell.fxp & 15) as f32 / 15.0,
+                    _ => {}
+                },
                 // 3Dxx accent: 00 = instrument amount, 01-40 = amount
                 0x3D => {
                     c.synth.accent = if cell.fxp == 0 {
@@ -1342,6 +1362,7 @@ impl Engine {
                 }
                 c.synth.fmod = c.fm;
                 c.synth.tfo = c.tfo;
+                c.synth.gmo = c.gmo;
                 if c.active {
                     let ((v, vr), alive) = voice(
                         song,
@@ -2537,6 +2558,137 @@ mod tests {
             }
         });
         assert_eq!(n, 0, "render allocated {n} times");
+    }
+
+    // ------------------------------------------------ 0.2.3.12: generators
+
+    /// a generator on instrument 2, hits every 4 rows on channel 0
+    fn gen_song(preset: &str, notes: &[u8]) -> Song {
+        let mut song = voice_song("Demon Ahh");
+        song.instruments[1].kind = InstrumentKind::Gen(crate::gen::preset(preset).expect("preset"));
+        for (k, r) in (0..64).step_by(4).enumerate() {
+            song.patterns[0].cells[r][0] = Cell {
+                note: notes[k % notes.len()],
+                instr: 2,
+                ..Default::default()
+            };
+        }
+        song
+    }
+
+    #[test]
+    fn generators_render_through_the_engine_allocation_free() {
+        // C-4 = 49: the kit's kick, snare, clap, hats, toms, percs
+        let kit = gen_song("Psy Kit", &[49, 51, 52, 55, 59, 53, 56, 50, 60, 58]);
+        for (name, song) in [
+            ("Psy Kit", kit),
+            ("Psy Zap Kick", gen_song("Psy Zap Kick", &[49, 45])),
+            ("Comb Hat", gen_song("Comb Hat", &[49])),
+            ("Cymbal", gen_song("Cymbal", &[49])),
+        ] {
+            let mut song = song;
+            // and through the ladder (vintage) with pattern filter + macro commands
+            if let InstrumentKind::Gen(g) = &mut song.instruments[1].kind {
+                g.filter_on = name == "Psy Kit";
+                g.base.filter_model = crate::ladder::FilterModel::Vintage;
+            }
+            song.patterns[0].cells[8][0].fx = 0x43;
+            song.patterns[0].cells[8][0].fxp = 0x2F;
+            song.patterns[0].cells[16][0].fx = 0x38;
+            song.patterns[0].cells[16][0].fxp = 0x60;
+            let out = render_secs(&song, 3.0);
+            assert!(
+                out.iter().all(|x| x.is_finite() && x.abs() <= 1.0),
+                "{name}"
+            );
+            assert!(rms_of(&out) > 0.005, "{name} silent");
+            let mut e = Engine::new(48000.0);
+            e.start(&song, 0, 0, false, 0);
+            let mut buf = vec![0.0f32; 512];
+            for _ in 0..50 {
+                e.render(&song, &mut buf);
+            }
+            let n = alloc_count::count(|| {
+                for _ in 0..500 {
+                    e.render(&song, &mut buf);
+                }
+            });
+            assert_eq!(n, 0, "{name}: render allocated {n} times");
+        }
+    }
+
+    #[test]
+    fn command_43_sets_generator_macros_per_channel() {
+        let mut song = gen_song("Psy Zap Kick", &[49]);
+        song.patterns[0].cells[0][0].fx = 0x43;
+        song.patterns[0].cells[0][0].fxp = 0x40; // macro 4 (decay) = 0
+        let short = render_secs(&song, 0.4);
+        let long = render_secs(&gen_song("Psy Zap Kick", &[49]), 0.4);
+        // 120 BPM speed 6: row 4 at 0.5 s, so 0.25-0.4 s is the first kick's tail
+        let tail = |o: &[f32]| rms_of(&o[24000..38400]);
+        assert!(
+            tail(&short) < tail(&long) * 0.2,
+            "{} vs {}",
+            tail(&short),
+            tail(&long)
+        );
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 1024];
+        e.render(&song, &mut buf);
+        assert_eq!(e.chans[0].gmo[3], 0.0);
+        assert_eq!(e.chans[0].synth.gmo, e.chans[0].gmo, "handed to the voice");
+        // 4300 clears
+        song.patterns[0].cells[4][0].fx = 0x43;
+        song.patterns[0].cells[4][0].fxp = 0x00;
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 2 * 30000];
+        e.render(&song, &mut buf);
+        assert_eq!(e.chans[0].gmo, [-1.0; 8]);
+    }
+
+    #[test]
+    fn ladder_synth_patches_render_and_old_patches_are_unchanged() {
+        // the default (SVF) patch is bit-identical to a patch without the new fields
+        let p = crate::synth::Patch::default();
+        assert_eq!(p.filter_model, crate::ladder::FilterModel::Svf);
+        for m in [
+            crate::ladder::FilterModel::Ladder,
+            crate::ladder::FilterModel::Vintage,
+        ] {
+            let mut lp = crate::synth::Patch {
+                filter_model: m,
+                cutoff: 600.0,
+                resonance: 0.9,
+                env_amount: 0.6,
+                ..Default::default()
+            };
+            for slope12 in [false, true] {
+                lp.ladder_12db = slope12;
+                let mut song = acid_song(lp.clone());
+                for r in (0..64).step_by(4) {
+                    song.patterns[0].cells[r][0] = Cell {
+                        note: 25 + (r % 7) as u8,
+                        instr: 1,
+                        ..Default::default()
+                    };
+                }
+                let out = render_secs(&song, 2.0);
+                assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0), "{m:?}");
+                assert!(rms_of(&out) > 0.01, "{m:?} silent");
+                let mut e = Engine::new(48000.0);
+                e.start(&song, 0, 0, false, 0);
+                let mut buf = vec![0.0f32; 512];
+                e.render(&song, &mut buf);
+                let n = alloc_count::count(|| {
+                    for _ in 0..300 {
+                        e.render(&song, &mut buf);
+                    }
+                });
+                assert_eq!(n, 0, "{m:?} allocated");
+            }
+        }
     }
 
     // ------------------------------------------------ 0.2.3.7: acid commands

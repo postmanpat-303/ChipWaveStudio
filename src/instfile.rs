@@ -145,6 +145,9 @@ fn fix(inst: &mut Instrument) {
     if let InstrumentKind::Voice(v) = &mut inst.kind {
         v.fix();
     }
+    if let InstrumentKind::Gen(g) = &mut inst.kind {
+        g.fix();
+    }
 }
 
 /// short kind label
@@ -153,6 +156,7 @@ pub fn kind_name(k: &InstrumentKind) -> &'static str {
         InstrumentKind::Synth(_) => "synth",
         InstrumentKind::Sample { .. } => "sample",
         InstrumentKind::Voice(_) => "voice",
+        InstrumentKind::Gen(_) => "generator",
     }
 }
 
@@ -214,6 +218,8 @@ pub enum Source {
     Builtin(String),
     /// Voice preset name
     Voice(String),
+    /// Generator preset name (drum synth, kits)
+    Gen(String),
 }
 
 /// Built-in sounds: factory presets, built-in drum/synth patches, Voice presets.
@@ -250,6 +256,14 @@ pub fn factory_entries() -> Vec<Entry> {
             kind: "voice",
             category: "voice".into(),
             source: Source::Voice(name.into()),
+        });
+    }
+    for (name, _, _) in crate::gen::presets() {
+        v.push(Entry {
+            name: name.into(),
+            kind: "generator",
+            category: "generator".into(),
+            source: Source::Gen(name.into()),
         });
     }
     // show the name the instrument gets in the song ("Punchy psy kick")
@@ -339,6 +353,16 @@ pub fn instantiate(e: &Entry) -> Result<Instrument, String> {
                 kind: InstrumentKind::Voice(vp),
             })
         }
+        Source::Gen(g) => {
+            let gp = crate::gen::preset(g).ok_or("unknown generator preset")?;
+            Ok(Instrument {
+                name: g.clone(),
+                volume: 1.0,
+                transpose: 0,
+                fx: vec![],
+                kind: InstrumentKind::Gen(gp),
+            })
+        }
     }
 }
 
@@ -417,6 +441,17 @@ mod tests {
             )
             .unwrap(),
         );
+        for name in ["Psy Kit", "Comb Hat"] {
+            insts.push(
+                instantiate(
+                    &factory_entries()
+                        .into_iter()
+                        .find(|e| e.kind == "generator" && e.name == name)
+                        .unwrap(),
+                )
+                .unwrap(),
+            );
+        }
         let wav: Vec<f32> = (0..2000).map(|i| (i as f32 * 0.05).sin() * 0.5).collect();
         insts.push(Instrument {
             name: "Saw/sample: odd*name".into(),
@@ -443,6 +478,7 @@ mod tests {
             match (&back.kind, &i.kind) {
                 (InstrumentKind::Synth(a), InstrumentKind::Synth(b)) => assert_eq!(a, b),
                 (InstrumentKind::Voice(a), InstrumentKind::Voice(b)) => assert_eq!(a, b),
+                (InstrumentKind::Gen(a), InstrumentKind::Gen(b)) => assert_eq!(a, b),
                 (
                     InstrumentKind::Sample {
                         data: a, rate: ra, ..

@@ -587,6 +587,18 @@ fn patch_overrides(p: &mut crate::synth::Patch, t: &toml::Value) {
         p.lfo.amp = n("amp").unwrap_or(p.lfo.amp);
         p.lfo.pitch = n("pitch").unwrap_or(p.lfo.pitch);
     }
+    // filter_model = "svf" | "ladder" | "vintage"; slope = 12 | 24 (ladder)
+    if let Some(m) = t.get("filter_model").and_then(|x| x.as_str()) {
+        use crate::ladder::FilterModel;
+        p.filter_model = match m.to_ascii_lowercase().as_str() {
+            "ladder" | "moog" => FilterModel::Ladder,
+            "vintage" => FilterModel::Vintage,
+            _ => FilterModel::Svf,
+        };
+    }
+    if let Some(v) = r("slope") {
+        p.ladder_12db = v < 18.0;
+    }
     if let Some(f) = t.get("filter").and_then(|x| x.as_str()) {
         use crate::synth::FilterMode;
         p.filter = match f.to_ascii_lowercase().as_str() {
@@ -696,6 +708,41 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
                 transpose: int(i, "transpose", 0) as i8,
                 fx,
                 kind: InstrumentKind::Voice(vp),
+            });
+            continue;
+        }
+        // patch = "gen:<preset>": a Generator (drum synth / kit); an optional
+        // [instrument.gen] table overrides its fields (deep merge)
+        if let Some(gname) = src.strip_prefix("gen:") {
+            let mut gp = crate::gen::preset(gname)
+                .ok_or_else(|| format!("instrument {name}: unknown generator preset {gname:?}"))?;
+            if let Some(t) = i.get("gen") {
+                let mut merged = toml::Value::try_from(&gp).map_err(|e| e.to_string())?;
+                merge_toml(&mut merged, t);
+                gp = merged
+                    .try_into()
+                    .map_err(|e| format!("instrument {name}: gen: {e}"))?;
+            }
+            gp.base.name = name.into();
+            patch_overrides(&mut gp.base, i);
+            gp.fix();
+            let mut fx = vec![];
+            for f in i.get("fx").and_then(|x| x.as_array()).into_iter().flatten() {
+                let kind = f
+                    .get("kind")
+                    .and_then(|x| x.as_str())
+                    .and_then(fx_kind)
+                    .ok_or_else(|| format!("instrument {name}: unknown fx kind"))?;
+                let mut d = crate::fx::Device::new(kind);
+                apply_fx_params(&mut d, f);
+                fx.push(d);
+            }
+            song.instruments.push(Instrument {
+                name: name.into(),
+                volume: real(i, "volume").unwrap_or(1.0),
+                transpose: int(i, "transpose", 0) as i8,
+                fx,
+                kind: InstrumentKind::Gen(gp),
             });
             continue;
         }
@@ -1338,6 +1385,75 @@ mix = 0.7
         };
         assert_eq!(d.transform, crate::transform::Transform::default());
         assert_eq!(s.instruments[1].fx[0].kind, crate::fx::FxKind::Resonator);
+    }
+
+    #[test]
+    fn text_song_generators_and_ladder_filters() {
+        let t = r#"
+[song]
+title = "gen"
+[[instrument]]
+name = "Zap"
+patch = "gen:Psy Zap Kick"
+[instrument.gen.engine.Drum]
+model = 0
+level = 0.7
+[[instrument]]
+name = "Kit"
+patch = "gen:Psy Kit"
+filter_model = "vintage"
+cutoff = 3000
+[instrument.gen]
+filter_on = true
+[[instrument]]
+name = "Bass"
+patch = "builtin:init"
+filter_model = "ladder"
+slope = 12
+"#;
+        let s = song_from_text(t).unwrap();
+        let InstrumentKind::Gen(g) = &s.instruments[0].kind else {
+            panic!("not a generator")
+        };
+        let crate::gen::GenEngine::Drum(d) = &g.engine else {
+            panic!("not a drum")
+        };
+        let pre = crate::gen::preset("Psy Zap Kick").unwrap();
+        let crate::gen::GenEngine::Drum(pd) = &pre.engine else {
+            panic!()
+        };
+        assert_eq!((d.model, d.level), (0, 0.7));
+        assert_eq!(d.macros, pd.macros, "the rest stays the preset's");
+        let InstrumentKind::Gen(k) = &s.instruments[1].kind else {
+            panic!()
+        };
+        assert!(k.filter_on && matches!(k.engine, crate::gen::GenEngine::Kit(_)));
+        assert_eq!(k.base.filter_model, crate::ladder::FilterModel::Vintage);
+        assert_eq!(k.base.cutoff, 3000.0);
+        let InstrumentKind::Synth(p) = &s.instruments[2].kind else {
+            panic!()
+        };
+        assert_eq!(p.filter_model, crate::ladder::FilterModel::Ladder);
+        assert!(p.ladder_12db);
+        // and the whole song survives a .cwt save / load
+        let path = std::env::temp_dir().join(format!("cw_gen_{}.cwt", std::process::id()));
+        save_cwt(&s, &path).unwrap();
+        let back = load_cwt(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.instruments[0].kind, s.instruments[0].kind);
+        assert_eq!(back.instruments[1].kind, s.instruments[1].kind);
+        assert_eq!(back.instruments[2].kind, s.instruments[2].kind);
+        // old synth patches (no filter_model) keep the SVF
+        let old: crate::synth::Patch = toml::from_str(
+            &toml::to_string(&crate::synth::Patch::default())
+                .unwrap()
+                .lines()
+                .filter(|l| !l.starts_with("filter_model") && !l.starts_with("ladder_12db"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .unwrap();
+        assert_eq!(old.filter_model, crate::ladder::FilterModel::Svf);
     }
 
     #[test]

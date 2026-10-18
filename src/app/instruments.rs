@@ -18,6 +18,7 @@ impl App {
                         match i.kind {
                             InstrumentKind::Sample { .. } => "  (sample)",
                             InstrumentKind::Voice(_) => "  (voice)",
+                            InstrumentKind::Gen(_) => "  (gen)",
                             InstrumentKind::Synth(_) => "",
                         },
                     )

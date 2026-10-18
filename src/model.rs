@@ -120,6 +120,8 @@ pub enum InstrumentKind {
     },
     /// Voice (glitch): synthetic vowel generator (src/voice.rs)
     Voice(crate::voice::VoicePatch),
+    /// Generator (drum synth, kit; src/gen.rs)
+    Gen(crate::gen::GenPatch),
 }
 
 impl InstrumentKind {
@@ -128,6 +130,7 @@ impl InstrumentKind {
         match self {
             InstrumentKind::Synth(p) => Some(p),
             InstrumentKind::Voice(v) => Some(&v.base),
+            InstrumentKind::Gen(g) => Some(&g.base),
             InstrumentKind::Sample { .. } => None,
         }
     }
