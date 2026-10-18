@@ -342,7 +342,11 @@ mod tests {
         // the Cargo version string, written the way the app displays it
         let cargo = env!("CARGO_PKG_VERSION"); // "0.2.4+fix.0"
         let display = cargo.replace("+fix.", ".");
-        assert_eq!(display, crate::VERSION, "Cargo.toml and main.rs VERSION agree");
+        assert_eq!(
+            display,
+            crate::VERSION,
+            "Cargo.toml and main.rs VERSION agree"
+        );
         assert!(is_newer(&display, "0.2.3.19"));
         // a 0.2.3.19 install asking the new release sees it as newer
         assert!(matches!(
@@ -357,7 +361,10 @@ mod tests {
             LATEST_URL,
             "https://api.github.com/repos/postmanpat-303/ChipWaveStudio/releases/latest"
         );
-        assert_eq!(RELEASES_PAGE, "https://github.com/postmanpat-303/ChipWaveStudio/releases");
+        assert_eq!(
+            RELEASES_PAGE,
+            "https://github.com/postmanpat-303/ChipWaveStudio/releases"
+        );
         assert_eq!(
             LEGACY_LATEST_URL,
             "https://api.github.com/repos/postmanpat-303/ChipWaveTracker/releases/latest"
@@ -392,7 +399,12 @@ mod tests {
         hb.join().unwrap();
         // the new address answers -> the old one is never asked
         let (a, ha) = mock("200 OK", SAMPLE_JSON);
-        assert_eq!(fetch_first(&[&a, "http://127.0.0.1:9/never"]).unwrap().version, "0.2.3.9");
+        assert_eq!(
+            fetch_first(&[&a, "http://127.0.0.1:9/never"])
+                .unwrap()
+                .version,
+            "0.2.3.9"
+        );
         ha.join().unwrap();
         // rate limiting is not a reason to ask again
         let (a, ha) = mock("403 Forbidden", "{}");

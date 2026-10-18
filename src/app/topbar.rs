@@ -1008,8 +1008,7 @@ impl App {
                 .collapsible(false)
                 .show(ctx, |ui| {
                     ui.label(
-                        egui::RichText::new(format!("ChipWave Studio {}", crate::VERSION))
-                            .strong(),
+                        egui::RichText::new(format!("ChipWave Studio {}", crate::VERSION)).strong(),
                     );
                     ui.label("A tracker for chip and psytrance sounds.");
                     ui.label("Created by Del (postmanpat)");
