@@ -220,6 +220,14 @@ pub fn build_auto(song: &Song, tl: &Timeline) -> AutoPlan {
 /// a curve or clip changes it, then straight runs are merged. Song lanes
 /// with the same target are replaced by the combined (innermost) value.
 pub fn bake_into_song(song: &mut Song, tl: &Timeline) {
+    // A track lane that is the only lane for its target (no clip lane, no
+    // other track lane, no song lane) goes back verbatim: the consolidated
+    // order list plays timeline rows 1:1, so its points keep their meaning,
+    // and curves, disabled lanes and labels survive. Old songs therefore
+    // play bit-identically after entering and leaving timeline mode.
+    let simple = verbatim_lanes(song, tl);
+    let kept: Vec<Target> = simple.iter().map(|(t, _)| *t).collect();
+    song.automation.extend(simple.into_iter().map(|(_, l)| l));
     let plan = build_auto(song, tl);
     if plan.is_empty() {
         return;
@@ -233,6 +241,9 @@ pub fn bake_into_song(song: &mut Song, tl: &Timeline) {
         .unwrap_or(0);
     let end = super::play_end(tl).max(last).max(ROW);
     for (k, &t) in plan.targets.iter().enumerate() {
+        if kept.contains(&t) {
+            continue;
+        }
         let id = t.id();
         // the song lane (if any) is the outermost layer
         let song_lane = song
@@ -308,4 +319,31 @@ pub fn bake_into_song(song: &mut Song, tl: &Timeline) {
             None => song.automation.push(lane),
         }
     }
+}
+
+/// The track lanes [`bake_into_song`] can move back unchanged, with their
+/// targets: one lane per target across tracks, clips and the song.
+fn verbatim_lanes(song: &Song, tl: &Timeline) -> Vec<(Target, Lane)> {
+    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let parse = |l: &Lane| Target::parse_in(&l.target, song);
+    let track_lanes: Vec<(Target, &Lane)> = tl
+        .tracks
+        .iter()
+        .enumerate()
+        .filter(|(i, t)| *i < nch || t.kind == crate::timeline::TrackKind::Master)
+        .flat_map(|(_, t)| t.auto.iter())
+        .filter_map(|l| parse(l).map(|t| (t, l)))
+        .collect();
+    let elsewhere = |t: Target| {
+        tl.clips
+            .iter()
+            .flat_map(|c| c.auto.iter())
+            .chain(song.automation.iter())
+            .any(|l| parse(l) == Some(t))
+    };
+    track_lanes
+        .iter()
+        .filter(|(t, _)| track_lanes.iter().filter(|(u, _)| u == t).count() == 1 && !elsewhere(*t))
+        .map(|(t, l)| (*t, (*l).clone()))
+        .collect()
 }
