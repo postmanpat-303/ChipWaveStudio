@@ -728,13 +728,18 @@ impl App {
         let cur_slot = self.instr;
         let view_tl = self.view == View::Timeline;
         let ch = self.ch;
+        let mut row_rects: Vec<(String, Rect)> = vec![];
         let out = sa.show_rows(ui, row_h, n, |ui, range| {
             ui.spacing_mut().item_spacing.y = 0.0;
             for k in range {
                 let it = &items[results[k]];
+                row_rects.push((it.key.clone(), Rect::NOTHING));
                 let w = ui.available_width();
                 let (r, resp) =
                     ui.allocate_exact_size(egui::vec2(w, row_h), Sense::click_and_drag());
+                if let Some(last) = row_rects.last_mut() {
+                    last.1 = r.intersect(ui.clip_rect());
+                }
                 let p = ui.painter();
                 let on = sel.as_deref() == Some(it.key.as_str());
                 if on {
@@ -941,6 +946,7 @@ impl App {
             }
         });
         self.br.list_off = out.state.clamped_offset().y;
+        self.br.row_rects = row_rects;
         if n == 0 {
             let msg = match tab {
                 Tab::Samples | Tab::Midi | Tab::Songs if self.extra.browser_dirs.is_empty() => {

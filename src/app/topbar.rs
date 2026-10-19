@@ -789,6 +789,11 @@ impl App {
                     self.view = VIEWS[i].0;
                     self.arr_focus = false;
                 }
+                // the Browser panel on the right (docs/BROWSER.md)
+                let on = if self.extra.browser_open { 0 } else { usize::MAX };
+                if segmented(ui, &[("Browser", "show / hide the Browser on the right (Ctrl+B)")], on).is_some() {
+                    self.toggle_browser();
+                }
             });
             let (lit, midi_tip) = self.midi_light(ui.input(|i| i.time));
             if lit {

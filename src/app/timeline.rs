@@ -2613,16 +2613,7 @@ impl App {
                 return;
             }
             HeadOp::AddWith(at) => {
-                if self.with(|s| s.song.channels) >= MAX_CHANNELS {
-                    self.status = "All 32 tracks are used (the channel limit)".into();
-                } else {
-                    self.br.new_track_at = Some(at);
-                    self.open_browser_tab(crate::browser::Tab::Instruments);
-                    self.status = format!(
-                        "Pick an instrument in the Browser (double-click or Enter) for the new track {:02}",
-                        at + 1
-                    );
-                }
+                self.track_add_with(at);
                 return;
             }
             _ => {}

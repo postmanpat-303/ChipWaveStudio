@@ -63,4 +63,19 @@ impl App {
         crate::plugin::sync(&self.shared, None);
         self.status = format!("Moved track {:02} to {:02}", from + 1, to + 1);
     }
+
+    /// "Add track with instrument…": the Browser's Instruments tab opens;
+    /// the next instrument loaded there makes the track at `at`
+    pub(super) fn track_add_with(&mut self, at: usize) {
+        if self.with(|s| s.song.channels) >= MAX_CHANNELS {
+            self.status = "All 32 tracks are used (the channel limit)".into();
+            return;
+        }
+        self.br.new_track_at = Some(at);
+        self.open_browser_tab(crate::browser::Tab::Instruments);
+        self.status = format!(
+            "Pick an instrument in the Browser (double-click or Enter) for the new track {:02}",
+            at + 1
+        );
+    }
 }

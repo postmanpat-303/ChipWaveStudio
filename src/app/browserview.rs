@@ -86,6 +86,8 @@ pub(crate) struct BrowserUi {
     pub(crate) search_focus: bool,
     /// the result list's scroll offset as last drawn
     pub(crate) list_off: f32,
+    /// result rows as last drawn (item key, rect), for tests
+    pub(crate) row_rects: Vec<(String, Rect)>,
 }
 
 impl Default for BrowserUi {
@@ -115,6 +117,7 @@ impl Default for BrowserUi {
             scroll_sel: false,
             search_focus: false,
             list_off: 0.0,
+            row_rects: vec![],
         }
     }
 }
