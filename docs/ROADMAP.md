@@ -147,8 +147,8 @@ Each item has a size, **[easy]** (an evening or two), **[medium]** (a few days) 
 
 ## Look and feel
 
-- MorningDAW-inspired radial menus beyond the chord pie (an idea, not picked yet). [medium] start: `src/app/radial.rs`
-- A MorningDAW-inspired navy theme (an idea, not picked yet). [medium] start: `src/theme.rs`
+- More radial menus beyond the chord and track pies, e.g. for clips (an idea, not picked yet). [medium] start: `src/app/radial.rs`
+- A navy colour theme (an idea, not picked yet). [medium] start: `src/theme.rs`
 
 ## ChipWave Lite (Amiga)
 
