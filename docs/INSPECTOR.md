@@ -39,7 +39,7 @@ read-only and says so; switch the song to timeline mode to edit clips.
 
 | Section | Controls |
 |---|---|
-| **Track NN** | **Name** (commits when you click away or press Enter; **Esc** cancels), **Colour** (Pick… → 12 track colours or Automatic; timeline mode, saved with the song), **Volume** (dB), **Pan** (C button centres), **M** / **S** |
+| **Track NN** | **Name** (commits when you click away or press Enter; **Esc** cancels), **Colour** (Pick… → 12 track colours or Automatic; timeline mode, saved with the song), **Icon** (the header icon: Pick… → Auto or one of 16 icons; timeline mode, saved with the song; also in the track pie), **Volume** (dB), **Pan** (C button centres), **M** / **S** |
 | **Sends** | the two returns (Delay, Reverb by default; their names come from the Mixer) and the sidechain **Duck** depth |
 | **Instrument** | the slot the track plays with its type and icon, **Edit** (instrument editor in the lower panel), **Browse…** (the Browser's Instruments tab). Drop an instrument from the Browser on the track header to swap it |
 

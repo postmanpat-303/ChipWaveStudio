@@ -109,6 +109,10 @@ pub struct Extra {
     /// timeline edit asks, as before.
     #[serde(default = "yes")]
     pub open_in_timeline: bool,
+    /// Settings › Look › Reduce motion: pie menus (the track pie) appear
+    /// and close without animation
+    #[serde(default)]
+    pub reduce_motion: bool,
     /// Timeline: double-clicking a clip opens it in the piano roll (Del's
     /// choice, 19 Oct 2026). Off: the block in the pattern editor, as
     /// before. Alt+double-click does the other one; Enter always opens the
@@ -211,6 +215,7 @@ impl Default for Extra {
             cards_closed: vec![],
             new_in_timeline: true,
             open_in_timeline: true,
+            reduce_motion: false,
             dblclick_roll: true,
             flat_ui: false,
             chord_list_menu: false,

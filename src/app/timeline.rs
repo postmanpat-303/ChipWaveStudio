@@ -587,7 +587,7 @@ fn bar_step(bar_px: f32, min_px: f32) -> i64 {
 }
 
 /// readable text on a clip title bar of colour `c`
-fn title_ink(c: Color32) -> Color32 {
+pub(super) fn title_ink(c: Color32) -> Color32 {
     if theme::luma(c) > 0.58 {
         Color32::from_rgb(0x14, 0x16, 0x19)
     } else {
@@ -1618,6 +1618,8 @@ impl App {
         // ---- track headers
         let hp = ui.painter_at(heads);
         let mut head_ops: Vec<HeadOp> = vec![];
+        let mut rename_at: Option<Rect> = None;
+        let mut pie_at: Option<(usize, Pos2)> = None;
         let mut hd = self.tlv.head_drag;
         // the subtitle: the instrument the track mostly plays, else the one
         // it was given (Browser drop, Add track with instrument)
@@ -1710,7 +1712,7 @@ impl App {
             super::glyphs::tile(
                 &hp,
                 tile_r,
-                super::glyphs::glyph_for(kind),
+                super::glyphs::track_glyph(c.tl.tracks[tr].icon, kind),
                 colr,
                 title_ink(colr),
                 pol,
@@ -1731,13 +1733,20 @@ impl App {
             );
             let nw = num.size().x;
             np.galley(Pos2::new(tx, ty - num.size().y / 2.0), num, t.ink2);
-            np.text(
-                Pos2::new(tx + nw + 5.0, ty),
-                egui::Align2::LEFT_CENTER,
-                name,
-                FontId::proportional(13.0),
-                t.ink,
-            );
+            if self.track_rename.as_ref().is_some_and(|r| r.0 == tr) && !self.pie_open() {
+                rename_at = Some(Rect::from_min_max(
+                    Pos2::new(tx + nw + 2.0, ty - 10.0),
+                    Pos2::new((hr.right() - 136.0).max(tx + nw + 60.0), ty + 10.0),
+                ));
+            } else {
+                np.text(
+                    Pos2::new(tx + nw + 5.0, ty),
+                    egui::Align2::LEFT_CENTER,
+                    name,
+                    FontId::proportional(13.0),
+                    t.ink,
+                );
+            }
             if !one_line {
                 np.text(
                     Pos2::new(tx, hr.top() + 28.0),
@@ -1909,8 +1918,17 @@ impl App {
             let nresp = ui
                 .interact(nr, ui.scope_id().with(("tl_head", tr)), Sense::click_and_drag())
                 .on_hover_text(
-                    "select this track (the pattern editor's cursor channel) · drag up or down: reorder · right-click: add track, track speed",
+                    "select this track (the pattern editor's cursor channel) · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, devices, routing, organize, delete)",
                 );
+            let is_master = c.tl.tracks[tr].kind == tl::TrackKind::Master;
+            if !is_master
+                && nresp.hovered()
+                && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Secondary))
+            {
+                if let Some(p) = ui.input(|i| i.pointer.interact_pos()) {
+                    pie_at = Some((tr, p));
+                }
+            }
             if nresp.clicked() {
                 head_ops.push(HeadOp::Select(tr));
             }
@@ -1928,6 +1946,10 @@ impl App {
                 }
             }
             let ntracks = c.tl.tracks.len();
+            if !is_master {
+                continue;
+            }
+            // the Song / Master row keeps the small menu (add a track)
             nresp.context_menu(|ui| {
                 ui.label(egui::RichText::new(format!("Track {:02}", tr + 1)).strong());
                 let full = ntracks >= MAX_CHANNELS;
@@ -2770,6 +2792,13 @@ impl App {
         for op in head_ops {
             self.timeline_head_op(op);
         }
+        if let Some(r) = rename_at {
+            self.rename_field(ui, r);
+        }
+        if let Some((tr, p)) = pie_at {
+            let ctx = ui.ctx().clone();
+            self.open_track_pie(tr, p, true, &ctx);
+        }
         if let Some(tgt) = seek {
             self.seek_to(tgt);
         }
@@ -2783,6 +2812,11 @@ impl App {
             ui.ctx().request_repaint();
         }
         self.tlv.frame_us = t_start.elapsed().as_micros();
+    }
+
+    /// a track's effect speed (track pie › Organize; header menu)
+    pub(super) fn track_speed(&mut self, tr: usize, v: u8) {
+        self.tl_apply(TlOp::Speed(tr, v));
     }
 
     fn timeline_head_op(&mut self, op: HeadOp) {

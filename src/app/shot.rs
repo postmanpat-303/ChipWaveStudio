@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 53] = [
+pub const VIEWS: [&str; 55] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -90,6 +90,8 @@ pub const VIEWS: [&str; 53] = [
     "showcase-progress",
     "devices",
     "devices-drop",
+    "trackpie",
+    "trackpie-icons",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -358,6 +360,13 @@ impl App {
                 }
             }
             "arranger" | "cue" => self.view = View::Arranger,
+            "trackpie" | "trackpie-icons" => {
+                // the default layout on the timeline-mode demo; the pie
+                // opens a few frames later (shot_pie)
+                self.enter_timeline();
+                self.default_layout();
+                self.dirty = false;
+            }
             "timeline"
             | "timeline-mode"
             | "timeline-notes"
@@ -921,6 +930,9 @@ impl App {
                 self.shot_pr(ctx, &m);
             }
         }
+        if view.starts_with("trackpie") && f == SETUP_AT + 12 {
+            self.shot_pie(ctx, &view);
+        }
         // no audio device: advance the engine from the UI at real-time speed
         let now = std::time::Instant::now();
         let Some(sh) = &mut self.shot else { return };
@@ -1483,6 +1495,37 @@ impl App {
         }
         if let Some(sh) = &mut self.shot {
             sh.script = sc;
+        }
+    }
+}
+
+impl App {
+    /// `--view trackpie[-icons]`: the track pie on track 2's header, Icon
+    /// highlighted (trackpie-icons: its TRACK ICON grid popped out).
+    /// CHIPWAVE_SHOT_PIE_T=<s> freezes the open animation at that time
+    /// (frames for the animation GIF); CHIPWAVE_SHOT_PIE_KEY=<n|none> picks
+    /// the highlighted segment (default 2 = Icon).
+    fn shot_pie(&mut self, ctx: &egui::Context, view: &str) {
+        let lanes = self.tlv.lanes;
+        let tr = 1usize.min(self.with(|s| s.song.channels.saturating_sub(1)));
+        let at = Pos2::new(lanes.left() - 120.0, lanes.top() + 175.0);
+        self.open_track_pie(tr, at, false, ctx);
+        let key = match std::env::var("CHIPWAVE_SHOT_PIE_KEY").ok().as_deref() {
+            Some("none") => None,
+            Some(k) => k.parse::<usize>().ok(),
+            None => Some(2),
+        };
+        let frozen = std::env::var("CHIPWAVE_SHOT_PIE_T")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok());
+        let now = ctx.input(|i| i.time);
+        if let Some(p) = &mut self.pie {
+            p.key = key;
+            p.frozen = frozen;
+            if view == "trackpie-icons" {
+                p.sub = Some((2, now));
+                p.sub_key = Some(6);
+            }
         }
     }
 }

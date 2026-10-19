@@ -391,6 +391,14 @@ impl App {
                     changed |= a.changed() || b.changed();
                 });
                 ui.end_row();
+                ui.label("Motion");
+                changed |= ui
+                    .checkbox(&mut self.extra.reduce_motion, "Reduce motion")
+                    .on_hover_text(
+                        "menus such as the track pie appear and close at once, without animation",
+                    )
+                    .changed();
+                ui.end_row();
                 ui.label("Scale");
                 ui.horizontal(|ui| {
                     let mut z = self.zoom;

@@ -223,5 +223,164 @@ pub fn assign_track_instrument(song: &mut Song, tr: usize, slot: u8) -> usize {
     n
 }
 
+/// the channel an automation / modulation target id belongs to
+fn target_channel(id: &str) -> Option<usize> {
+    match Target::parse(id)? {
+        Target::ChanVolume(c) | Target::ChanPan(c) | Target::Send(c, _) => Some(c),
+        _ => None,
+    }
+}
+
+/// Delete channel (track) `at` with everything that belongs to it: its
+/// pattern column in every block, mixer strip, name, timeline track (clips,
+/// lanes) and the lanes / modulation routes that target it. The others keep
+/// their order. Errors (the song unchanged): no such channel, the last
+/// channel of a tracker-mode song, or another track's clip plays this
+/// track's block column.
+pub fn remove_channel(song: &mut Song, at: usize) -> Result<(), String> {
+    let n = song.channels;
+    if at >= n {
+        return Err("no such track".into());
+    }
+    if song.timeline.is_none() && n <= 1 {
+        return Err("a tracker-mode song keeps at least one channel".into());
+    }
+    if let Some(tl) = song.timeline.as_deref() {
+        let shared = tl.clips.iter().any(|c| {
+            c.track as usize != at
+                && matches!(c.kind, crate::timeline::ClipKind::Block { col, .. } if col as usize == at)
+        });
+        if shared {
+            return Err("another track's clip plays this track's block column".into());
+        }
+    }
+    if at != n - 1 {
+        move_channel(song, at, n - 1);
+    }
+    let k = n - 1;
+    // lanes and routes on the channel
+    for lanes in song.lane_lists_mut() {
+        lanes.retain(|l| target_channel(&l.target) != Some(k));
+    }
+    let gone: Vec<usize> = (0..song.modulation.routes.len())
+        .filter(|&i| target_channel(&song.modulation.routes[i].target) == Some(k))
+        .collect();
+    for i in gone.into_iter().rev() {
+        song.remove_route(i);
+    }
+    for p in &mut song.patterns {
+        for row in &mut p.cells {
+            row.truncate(k);
+        }
+    }
+    if let Some(m) = song.mixer.channels.get_mut(k) {
+        *m = ChanMix::default();
+    }
+    if song.mixer.duck_key == k {
+        song.mixer.duck_key = 0;
+    }
+    song.channel_names.truncate(k);
+    if let Some(tl) = song.timeline.as_deref_mut() {
+        if tl
+            .tracks
+            .get(k)
+            .is_some_and(|t| t.kind != crate::timeline::TrackKind::Master)
+        {
+            tl.tracks.remove(k);
+        }
+        tl.clips.retain(|c| c.track as usize != k);
+        // auto_open bits above k move down one (the Song / Master track)
+        let b = tl.view.auto_open;
+        let low = if k == 0 { 0 } else { b & ((1u64 << k) - 1) };
+        let high = if k >= 63 { 0 } else { (b >> (k + 1)) << k };
+        tl.view.auto_open = low | high;
+    }
+    song.channels = k;
+    Ok(())
+}
+
+/// Duplicate channel (track) `tr` just below it: the new track gets a copy
+/// of its block column in every block, its mixer strip, its track settings
+/// (colour, icon, instrument, speed, lanes) and a copy of each of its clips
+/// (note clips get their own notes). False when all channels are used.
+pub fn duplicate_channel(song: &mut Song, tr: usize) -> bool {
+    if tr >= song.channels || !insert_channel(song, tr + 1, "Ch") {
+        return false;
+    }
+    let new = tr + 1;
+    for p in &mut song.patterns {
+        for row in &mut p.cells {
+            if let Some(c) = row.get(tr).copied() {
+                if let Some(d) = row.get_mut(new) {
+                    *d = c;
+                }
+            }
+        }
+    }
+    if let Some(m) = song.mixer.channels.get(tr).copied() {
+        if let Some(d) = song.mixer.channels.get_mut(new) {
+            *d = m;
+        }
+    }
+    let name = song.channel_names.get(tr).cloned().unwrap_or_default();
+    let copy = format!("{} copy", name.trim());
+    if let Some(d) = song.channel_names.get_mut(new) {
+        *d = copy.clone();
+    }
+    let retarget = |id: &str| -> Option<String> {
+        match Target::parse(id)? {
+            Target::ChanVolume(c) if c == tr => Some(Target::ChanVolume(new).id()),
+            Target::ChanPan(c) if c == tr => Some(Target::ChanPan(new).id()),
+            Target::Send(c, r) if c == tr => Some(Target::Send(new, r).id()),
+            _ => None,
+        }
+    };
+    if let Some(tl) = song.timeline.as_deref_mut() {
+        if let Some(src) = tl.tracks.get(tr).cloned() {
+            let mut t = src;
+            t.name = copy;
+            for l in &mut t.auto {
+                if let Some(x) = retarget(&l.target) {
+                    l.target = x;
+                }
+            }
+            if let Some(d) = tl.tracks.get_mut(new) {
+                *d = t;
+            }
+        }
+        let src: Vec<crate::timeline::Clip> = tl
+            .clips
+            .iter()
+            .filter(|c| c.track as usize == tr)
+            .cloned()
+            .collect();
+        for mut c in src {
+            c.id = tl.new_id();
+            c.track = new as u16;
+            match &mut c.kind {
+                crate::timeline::ClipKind::Block { col, .. } if *col as usize == tr => {
+                    *col = new as u8;
+                }
+                crate::timeline::ClipKind::Notes { data } => {
+                    if let Some(nd) = tl.notes.get(*data as usize) {
+                        let copy = crate::timeline::Shared::new((**nd).clone());
+                        tl.notes.push(copy);
+                        *data = (tl.notes.len() - 1) as u32;
+                    }
+                }
+                _ => {}
+            }
+            for l in &mut c.auto {
+                if let Some(x) = retarget(&l.target) {
+                    l.target = x;
+                }
+            }
+            tl.clips.push(c);
+        }
+        tl.clips.sort_by_key(|c| (c.track, c.start, c.id));
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests;

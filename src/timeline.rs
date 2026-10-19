@@ -212,6 +212,123 @@ pub struct Track {
     /// track is empty and selecting the track makes it the current one
     #[serde(skip_serializing_if = "is_default")]
     pub instr: u8,
+    /// the header icon picked in the track pie menu (Icon); Auto (the
+    /// default, not written) picks one from the instrument type. Display
+    /// only: playback never reads it.
+    #[serde(skip_serializing_if = "is_default")]
+    pub icon: TrackIcon,
+}
+
+/// A track's header icon (track pie › Icon). Saved by name; an unknown name
+/// (from a newer version) reads as `Auto`, so files stay openable.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum TrackIcon {
+    #[default]
+    Auto,
+    Keys,
+    Synth,
+    Sine,
+    Square,
+    Drums,
+    HiHat,
+    Guitar,
+    Bass,
+    Mic,
+    Violin,
+    Brass,
+    Voice,
+    Sparkle,
+    Waveform,
+    Noise,
+    Pad,
+}
+
+impl TrackIcon {
+    /// every icon after Auto, in the picker's order
+    pub const ALL: [TrackIcon; 16] = [
+        TrackIcon::Keys,
+        TrackIcon::Synth,
+        TrackIcon::Sine,
+        TrackIcon::Square,
+        TrackIcon::Drums,
+        TrackIcon::HiHat,
+        TrackIcon::Guitar,
+        TrackIcon::Bass,
+        TrackIcon::Mic,
+        TrackIcon::Violin,
+        TrackIcon::Brass,
+        TrackIcon::Voice,
+        TrackIcon::Sparkle,
+        TrackIcon::Waveform,
+        TrackIcon::Noise,
+        TrackIcon::Pad,
+    ];
+
+    /// the name in the song file
+    pub fn key(self) -> &'static str {
+        match self {
+            TrackIcon::Auto => "auto",
+            TrackIcon::Keys => "keys",
+            TrackIcon::Synth => "synth",
+            TrackIcon::Sine => "sine",
+            TrackIcon::Square => "square",
+            TrackIcon::Drums => "drums",
+            TrackIcon::HiHat => "hihat",
+            TrackIcon::Guitar => "guitar",
+            TrackIcon::Bass => "bass",
+            TrackIcon::Mic => "mic",
+            TrackIcon::Violin => "violin",
+            TrackIcon::Brass => "brass",
+            TrackIcon::Voice => "voice",
+            TrackIcon::Sparkle => "sparkle",
+            TrackIcon::Waveform => "waveform",
+            TrackIcon::Noise => "noise",
+            TrackIcon::Pad => "pad",
+        }
+    }
+
+    /// a readable name (tooltips)
+    pub fn label(self) -> &'static str {
+        match self {
+            TrackIcon::Auto => "Auto (from the instrument)",
+            TrackIcon::Keys => "Keys",
+            TrackIcon::Synth => "Synth wave",
+            TrackIcon::Sine => "Sine",
+            TrackIcon::Square => "Square",
+            TrackIcon::Drums => "Drums",
+            TrackIcon::HiHat => "Hi-hat",
+            TrackIcon::Guitar => "Guitar",
+            TrackIcon::Bass => "Bass clef",
+            TrackIcon::Mic => "Mic",
+            TrackIcon::Violin => "Violin",
+            TrackIcon::Brass => "Brass",
+            TrackIcon::Voice => "Voice",
+            TrackIcon::Sparkle => "Sparkle",
+            TrackIcon::Waveform => "Waveform",
+            TrackIcon::Noise => "Noise",
+            TrackIcon::Pad => "Pad",
+        }
+    }
+
+    pub fn from_key(k: &str) -> TrackIcon {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|i| i.key() == k)
+            .unwrap_or(TrackIcon::Auto)
+    }
+}
+
+impl Serialize for TrackIcon {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.key())
+    }
+}
+impl<'de> Deserialize<'de> for TrackIcon {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let k = String::deserialize(d)?;
+        Ok(TrackIcon::from_key(&k))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
