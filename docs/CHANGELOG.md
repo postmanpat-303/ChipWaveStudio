@@ -4,6 +4,15 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+- **Audio clips (Timeline M4):** WAV, FLAC, MP3 and Ogg Vorbis files on the timeline. Guide: [TIMELINE.md › Audio clips](TIMELINE.md#audio-clips).
+  - **Drop files on a track** (or right-click › **Import audio file here…**); decoding runs in the background. Clips draw their waveform.
+  - Move, copy, trim, **loop** (drag past the end), **split**, mute; **fades** by dragging the top-corner handles (equal power, linear or S-curve) and **clip gain** (right-click). Overlapping clips crossfade.
+  - Files play at their own speed: the sample rate is converted while playing, so live playback and **export** at any rate sound the same. Sample-accurate starts, seeks into a clip, seamless splits.
+  - **Saved with the song:** stored inside the `.cwt` (the original bytes) or referenced by path (files over 64 MB, or by choice). A missing file opens with a warning; its clips stay, silent, and **Locate audio file…** relinks them. Songs with audio clips need reader version 3.
+  - The audio thread stays allocation-free and songs without audio clips render exactly as before (tested). New dependency: Symphonia 0.5 (MPL-2.0, listed with its licence in THIRD_PARTY_LICENSES).
+  - Limits: no time-stretch / repitch, reverse, clip FX or streaming yet; files are held in memory (warning above 5 minutes, refused above 20).
+  - Tests: decoding (WAV exact, FLAC/MP3/Ogg fixtures), engine (frame-exact start, own speed at three output rates, trim/loop/split/fades/gain, seek, crossfade, allocation, export tail), files (embedded, referenced, moved, missing), UI (drop, fade handles, menu, tracker-mode drop). `--self-test` plays and round-trips an audio clip.
+
 - **Drag-to-modulate:** Bitwig-style modulators. Guide: [MODULATION.md](MODULATION.md).
   - **+ Modulator** (above the instrument editor's cards, and in the FX view) adds an LFO, envelope, random, velocity, keytrack, mod wheel, macro or the instrument's own LFO. Each is a chip with a live meter.
   - **Drag a chip onto any knob** (synth, Voice, generator, built-in FX, plugin FX parameters) to route it. The knob shows a coloured depth ring and a live dot; drag the ring's dot or **Alt-drag** the knob to set the depth. Right-click › **Modulate with ›** / **Remove**.
