@@ -61,6 +61,29 @@ The **snap** menu in the toolbar: **Auto** (bar, beat or row, whichever is at le
 ### File › Export tracker-compatible copy…
 Timeline-mode songs save a `timeline.toml` and need this version to open (older versions refuse them cleanly, see below). **File › Export tracker-compatible copy…** saves a tracker-mode copy (blocks + order list, reader version 1) that ChipWave Studio 0.2.4.0 and older open and play the same. Your song stays as it is.
 
+## Piano roll and note clips
+
+The lower panel has a **Piano roll** tab (next to Arranger / Instrument / Automation). It edits the clip selected on the Timeline, or the current block column in the pattern editor. Clicking into it gives it the keyboard; clicking elsewhere gives it back.
+
+**Block clips and block columns (M3a)** are shown as notes on the row grid, one at a time, as the tracker plays them:
+- Click to draw a note (current instrument, a note-off at its end). Drag while drawing to set its length.
+- Drag a note to move it (time and pitch), and drag its right edge to resize it (this moves the note-off).
+- Right-click deletes a note. Ctrl+click adds to the selection, and Shift-drag selects with a box.
+- The **velocity lane** sets the volume column.
+- Effect commands show as badges above the grid. Edit the selected note's instrument, velocity and effect in the bar at the top.
+- Keys: **Del** deletes, **arrows** move (Shift+Up/Down = octave), **Ctrl+A** selects all, **+/−** zooms, **Esc** clears the selection. Ctrl+wheel zooms; wheel and Shift+wheel scroll.
+- Only the cells of the notes you touch change. Drawing a note into silence and deleting it again leaves identical cells.
+
+**Note clips (M3b)** are polyphonic, with free timing:
+- To make one: right-click empty space › **New note clip here**, or **Shift+double-click** empty space. Double-click or **Enter** on a note clip opens it in the roll.
+- **Grid** sets the snap (1/4 … 1/32, 1/16T, off), and **Q** / **Quantise** snaps the selection (or every note).
+- **Chord** draws the song key's chord on the clicked scale degree (set the key in the Chords window). Notes in the song key are highlighted.
+- Dragging the edge of a note resizes the whole selection.
+- Note clips loop, trim, split, duplicate (linked) and **make unique** like block clips. They play **on top of** block clips on the same track; they don't replace them.
+- **Playback:** each track has 8 voices for its note clips. When more notes sound, the oldest released voice is stolen, then the oldest. Notes start at sample accuracy on the row clock and play through the track's insert chain and mixer channel. A note with instrument 00 uses the track's current instrument. Chance draws from the clip seed, so playback, seeks and exports repeat exactly. A seek re-strikes held notes of sustaining instruments. Plugin instruments get the notes too.
+- **MIDI recording:** with **Edit mode** on, **Rec live** on and the timeline playing, keys played on the Timeline view go into a note clip on the cursor track. The clip starts on the bar and grows as you play. Each note is placed at the time it was heard, with the output latency taken off.
+- **Capture:** right-click › **Capture played MIDI here** turns the last phrase you played (recorded or not; a 4 s gap ends a phrase) into a note clip, timed at the song tempo.
+
 ## Finding your way around
 
 | Do | How |
@@ -137,6 +160,9 @@ Everything uses `serde(default)` and leaves out fields that are at their default
 - `Timeline::fix(&song)` repairs a loaded `timeline.toml` (drops clips on missing tracks or blocks, clamps values, matches the track count) and returns warnings.
 - Tests (`src/timeline/m2_tests.rs`, `src/app/timeline_m2_tests.rs`): a moved clip plays exactly a bar later; split, glue and make unique render the same samples; resize loops and trim; mute; the loop region wraps; a seek chases tempo and held notes; per-track speed changes effects, not timing; the tracker copy renders the same as the edited timeline; the switch prompt and its two undo steps; drag, Alt-drag, edges, S, Ctrl+D, Delete, Ctrl+Shift+D, ruler seek, Shift-drag loop and L.
 
+### Note clips in the engine (M3b)
+`build_plan` also resolves the unmuted note clips into per-track `NoteSpan`s (absolute ticks, sorted). It handles loops, left trims and clip ends, and draws chance from `ClipRng(seed, pass)`. The plan key hashes the notes, so edits during playback take effect. `src/engine/notes.rs` keeps a preallocated pool of 8 voices per track. Once per sample it compares the row clock (`tl_clock`) with the spans' cursors, and mixes the voices into the track before its stutter / insert chain. Seeks, loop wraps and Stop release the voices; a seek re-strikes sustained notes. Plugin notes use tagged live notes in the plugin rack. None of this runs unless the plan has notes, so tracker songs and block-only timelines render the same samples as before (tested).
+
 ### File format and older versions
 Tracker-mode songs are written exactly as before, byte for byte, with `min_reader_version = 1`. A timeline-mode song adds **`timeline.toml`** (the `Timeline`, see the model above) to the `.cwt` and writes **`min_reader_version = 2`** in `manifest.toml` (a `.cwt.toml` text song takes an optional `[timeline]` table). This version reads version 2. Since M0, ChipWave reads `min_reader_version` (in `manifest.toml` of a `.cwt`, or the top level / `[song]` table of a `.cwt.toml`) and refuses files that need a newer reader. You get *"This song was made with a newer ChipWave Studio … Please update"* and a **Check for updates** button, rather than a wrong-sounding song. So 0.2.4.0 and older (which read version 1 or don't check) are told to update instead of opening a timeline-mode song wrongly, and **File › Export tracker-compatible copy…** saves a consolidated version 1 song for them.
 
@@ -150,4 +176,6 @@ Tracker-mode songs are written exactly as before, byte for byte, with `min_reade
 - **Tempo:** the ruler's time and the readout use the song's BPM and the tempo map. `0Fxx` tempo commands inside blocks still play, but the ruler doesn't show their effect on time.
 - **Song automation after a pattern break:** positions are moved to timeline rows on the switch, but a song that has both automation and `0F00` breaks may not consolidate back bit-exactly.
 - **New songs** keep their empty block 00 (unused) next to the blocks you create.
-- Note clips, audio clips, per-track automation lanes and the arm button are in the model but not used yet (M3b, M4, M5). A timeline with note clips can't go back to tracker mode.
+- **Note clips:** a timeline with note clips can't go back to tracker mode or export a tracker copy (no conversion to blocks yet). Note expressions and release velocity aren't played yet. Plugin notes go out at plugin-block boundaries (up to one engine tick, about 20 ms, late) and without CLAP note ids. There is no MIDI file import. Tempo-map ramps aren't used for recording or Capture timing (the current tempo is). The track's insert chain follows its tracker instrument (or the first note-clip instrument on a note-only track).
+- **Piano roll on blocks:** moving several notes in time moves only the grabbed one (arrow keys move the whole selection). Block notes are monophonic per column.
+- Audio clips, per-track automation lanes and the arm button are in the model but not used yet (M4, M5).

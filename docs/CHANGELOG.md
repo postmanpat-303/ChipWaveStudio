@@ -4,6 +4,13 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+- **Piano roll and note clips (Timeline M3a/M3b):** a new lower-panel tab, **Piano roll**. Guide: [TIMELINE.md › Piano roll and note clips](TIMELINE.md#piano-roll-and-note-clips).
+  - **Blocks:** it edits the selected clip's block column (or the pattern editor's current column) as bars on the row grid. Draw, move, resize (moves the note-off), right-click to delete, velocity lane = volume column, effect badges and an inspector (instrument, velocity, effect), plus keys (Del, arrows, Ctrl+A). Only the touched cells change.
+  - **Note clips:** polyphonic clips with free timing. Make one with **New note clip here** or Shift+double-click, and open it with a double-click or Enter. In the roll: snap grid, **Q** quantise, chord stamp in the song key, scale highlight, playhead. Timeline clips show note previews, and make unique copies the notes.
+  - **Playback:** 8 voices per track with voice stealing, sample-accurate starts, loops, trims, chance (repeatable), seek re-strike, and plugin instruments.
+  - **MIDI:** live recording into a note clip on the cursor track while the timeline plays (time stamped, latency compensated), and **Capture played MIDI here** for the phrase you just played.
+  - Songs without note clips play exactly as before (tested). Limits: no tracker conversion of note clips, no MIDI file import, no CLAP note ids or expressions yet, and plugin notes are tick-quantised.
+  - Tests: cell round trips; UI tests for drawing, dragging, the velocity lane, keys, chords, quantise, recording and Capture; engine tests for chords, stealing, sample timing, seeks, loops and chance, and bit-exact block timelines. `--self-test` plays a note-clip chord.
 - **Plugin effects (CLAP FX):** any installed CLAP audio effect can go into an instrument's FX chain. Guide: [FX.md › Plugin effects](FX.md#plugin-effects-clap-unreleased).
   - Every add-effect menu (FX view **+ Device**, the FX tab's **+ Add effect**, right-click an instrument › **Add effect**) has a **Plugin effect ›** list from the plugin scan, with **Scan for plugins**.
   - The device panel shows the plugin's status and latency, **Editor…** (its own window), **Reload** and every parameter as a slider. Bypass, reorder, duplicate and remove work like built-in devices.

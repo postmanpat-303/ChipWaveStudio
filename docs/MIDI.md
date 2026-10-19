@@ -59,6 +59,8 @@ Recording needs **edit mode** (Esc) and the **Pattern** view. Each note writes:
 - The cursor isn't moved for you. With Follow on it tracks playback as usual.
 - Note-offs are not recorded.
 
+**On the Timeline view in timeline mode** (unreleased): live record writes into a **note clip** on the cursor track. Notes keep their exact time, length and velocity, and nothing is rounded to rows. Right-click empty space › **Capture played MIDI here** turns the phrase you just played into a note clip, even if you weren't recording. See [TIMELINE.md › Piano roll and note clips](TIMELINE.md#piano-roll-and-note-clips).
+
 **Undo:** every recorded note is its own undo step (Ctrl+Z removes the last note).
 
 Edit mode off means play only: nothing is written.
