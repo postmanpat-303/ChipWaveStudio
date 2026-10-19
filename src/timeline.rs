@@ -888,10 +888,12 @@ pub fn consolidate(song: &Song, tl: &Timeline) -> Result<(Vec<Pattern>, Vec<usiz
         clips.push(c);
     }
     clips.sort_by_key(|c| (c.track, c.start, c.id));
-    let end = clips.iter().map(|c| c.end()).max().unwrap_or(0);
+    // the song ends where timeline-mode playback ends (the last clip, or
+    // the song's own end mark if later)
+    let end = play_end(tl);
     let mut cuts: BTreeSet<Tick> = BTreeSet::new();
     cuts.insert(0);
-    cuts.insert(end.max(rows_to_ticks(ROWS)));
+    cuts.insert(end);
     for c in &clips {
         cuts.insert(c.start);
         cuts.insert(c.end());
@@ -1114,5 +1116,7 @@ mod plan;
 pub use edit::*;
 pub use plan::*;
 
+#[cfg(test)]
+mod m2_tests;
 #[cfg(test)]
 mod tests;

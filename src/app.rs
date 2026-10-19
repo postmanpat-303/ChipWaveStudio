@@ -644,6 +644,7 @@ impl App {
     fn play(&mut self, mode: u8) {
         let (pattern, row) = (self.pattern, self.row);
         let cue = self.cue;
+        let tl_cue = (self.tlv.cue.max(0) / crate::timeline::ROW) as usize;
         if let Some(f) = &mut self.fill {
             f.previewing = false;
         }
@@ -657,6 +658,10 @@ impl App {
                 return;
             }
             match mode {
+                0 if song.timeline.is_some() => {
+                    // timeline mode: from the timeline's play marker
+                    engine.start(song, 0, tl_cue, false, 0)
+                }
                 0 => {
                     // song: from the arranger play marker (bar 1 unless moved)
                     let op = cue.0.min(song.order.len().saturating_sub(1));
@@ -866,6 +871,7 @@ impl eframe::App for App {
         self.poll_save();
         self.load_warnings_window(ui.ctx());
         self.too_new_window(ui.ctx());
+        self.timeline_prompts(ui.ctx());
         self.instr_delete_dialog(ui.ctx());
         self.block_len_dialog(ui.ctx());
         self.chord_window(ui.ctx());
@@ -1081,6 +1087,12 @@ impl eframe::App for App {
         }
         // record this frame's edits as an undo step (drags: on release)
         self.undo_commit(ui.ctx());
+        // timeline mode: the engine's playback plan follows the song (cheap
+        // when nothing changed; edits rebuild it at once themselves)
+        self.with(|s| {
+            let Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
+        });
         if self.with(|s| s.engine.playing || s.engine.peak > 0.001) {
             ctx.request_repaint();
         }

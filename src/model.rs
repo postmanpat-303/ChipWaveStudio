@@ -439,11 +439,6 @@ impl Song {
         }
     }
 
-    /// the song plays its timeline (clips), not the order list
-    pub fn is_timeline(&self) -> bool {
-        self.timeline.is_some()
-    }
-
     /// seconds per row: 4 rows per beat at the given BPM, as the engine plays
     /// it (speed only subdivides ticks; `lines_per_beat` does not count)
     pub fn row_seconds(&self) -> f64 {

@@ -293,6 +293,19 @@ impl App {
                 if item(ui, "Quick export WAV…", "Ctrl+E") {
                     self.export_wav();
                 }
+                let tl_mode = self.with(|s| s.song.timeline.is_some());
+                if ui
+                    .add_enabled(tl_mode, egui::Button::new("Export tracker-compatible copy…"))
+                    .on_hover_text(
+                        "save a tracker-mode copy of this timeline-mode song (blocks + order list) \
+                         that ChipWave Studio 0.2.4.0 and older can open; it plays the same",
+                    )
+                    .on_disabled_hover_text("the song is in tracker mode already: Save is compatible")
+                    .clicked()
+                {
+                    self.export_tracker_copy();
+                    ui.close();
+                }
                 ui.separator();
                 if item(ui, "Instrument library…", "") {
                     self.open_library();

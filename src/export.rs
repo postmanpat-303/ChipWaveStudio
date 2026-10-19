@@ -25,8 +25,10 @@ pub enum Scope {
     Song,
     /// one block (pattern index), played once
     Block(usize),
-    /// order positions a..=b (arranger selection)
+    /// order positions a..=b (arranger selection; tracker mode)
     Range(usize, usize),
+    /// timeline mode: the loop region, once
+    Loop,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -83,10 +85,35 @@ pub const CANCELLED: &str = "cancelled";
 const CEIL: f32 = 0.966; // -0.3 dBFS
 
 /// The song as it should be rendered for a scope.
+/// Timeline mode: the whole song plays once (the loop region is a playback
+/// aid, never exported as a loop); `Loop` ends at the loop region's end and
+/// starts at its start (see [`start_row`]).
 pub fn scoped(song: &Song, scope: Scope) -> Song {
     let mut s = song.clone();
+    if let Some(t) = s.timeline.as_deref_mut() {
+        t.loop_on = false;
+        match scope {
+            Scope::Block(p) => {
+                // a block on its own: as the tracker plays it
+                s.timeline = None;
+                s.order = vec![p.min(s.patterns.len().saturating_sub(1))];
+            }
+            Scope::Loop => {
+                if let Some((_, b)) = t.loop_range {
+                    t.clips.retain(|c| c.start < b);
+                    for c in &mut t.clips {
+                        c.len = c.len.min(b - c.start);
+                    }
+                    t.end = b;
+                }
+            }
+            // the order list does not play in timeline mode
+            Scope::Song | Scope::Range(..) => {}
+        }
+        return s;
+    }
     match scope {
-        Scope::Song => {}
+        Scope::Song | Scope::Loop => {}
         Scope::Block(p) => s.order = vec![p.min(s.patterns.len().saturating_sub(1))],
         Scope::Range(a, b) => {
             let n = s.order.len();
@@ -97,6 +124,17 @@ pub fn scoped(song: &Song, scope: Scope) -> Song {
     s
 }
 
+/// The row a scoped render starts on (timeline rows; 0 except `Loop`). The
+/// engine chases tempo, instruments and effects up to it.
+pub fn start_row(song: &Song, scope: Scope) -> usize {
+    match (scope, song.timeline.as_deref()) {
+        (Scope::Loop, Some(t)) => t
+            .loop_range
+            .map_or(0, |(a, _)| (a.max(0) / crate::timeline::ROW) as usize),
+        _ => 0,
+    }
+}
+
 /// Render interleaved stereo for the options (progress 0..0.8).
 pub fn render(song: &Song, o: &Opts, pr: &Progress) -> Result<Vec<f32>, String> {
     let s = scoped(song, o.scope);
@@ -104,7 +142,7 @@ pub fn render(song: &Song, o: &Opts, pr: &Progress) -> Result<Vec<f32>, String> 
     let mut e = crate::engine::Engine::new(sr as f32);
     // plugin instruments: fresh instances with the song's saved state
     crate::plugin::prepare(&mut e.plugins, &s, sr as f32);
-    e.start(&s, 0, 0, false, 0);
+    e.start(&s, 0, start_row(&s, o.scope), false, 0);
     let est = (s.length_seconds() + o.tail_secs as f64).max(0.1) * sr as f64 * 2.0;
     let max =
         ((s.length_seconds() + 30.0) * sr as f64 * 2.0).min(60.0 * 60.0 * sr as f64 * 2.0) as usize;

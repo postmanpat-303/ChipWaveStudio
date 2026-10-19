@@ -273,6 +273,21 @@ impl App {
 
     #[allow(clippy::type_complexity)]
     pub(super) fn arranger_view(&mut self, ui: &mut egui::Ui) {
+        if self.with(|s| s.song.timeline.is_some()) {
+            // timeline mode: the order list does not play; say so
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(
+                        "This song is in timeline mode: the Timeline (Ctrl+T) decides what plays, \
+                         not this order list.",
+                    )
+                    .color(th().ochre),
+                );
+                if ui.small_button("Open the Timeline").clicked() {
+                    self.view = View::Timeline;
+                }
+            });
+        }
         let (order, blocks, zoom, playing, loop_pat, opos, prow, ppat) = self.with(|s| {
             #[allow(clippy::type_complexity)]
             let blocks: Vec<(

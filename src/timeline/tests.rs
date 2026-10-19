@@ -453,8 +453,9 @@ fn consolidate_handles_offsets_loops_overlaps_gaps_and_other_columns() {
     tl.sort();
     let c = consolidated_song(&s, &tl).unwrap();
     let st = row_stream(&c);
-    // timeline is 24 rows long, padded to one 64-row block minimum
-    assert_eq!(st.len(), 64);
+    // the timeline is 24 rows long: so is the song (it ends where
+    // timeline-mode playback ends)
+    assert_eq!(st.len(), 24);
     let a = &s.patterns[0].cells;
     for r in 0..20 {
         assert_eq!(st[r][0], a[(r + 4) % 16][0], "track 0 row {r}");

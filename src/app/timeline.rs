@@ -12,6 +12,9 @@ use super::*;
 use crate::timeline::{self as tl, Tick, PPQ, ROW};
 use std::collections::HashMap;
 
+mod edit;
+use edit::DragEdit;
+
 /// track header column width
 pub(crate) const HEAD_W: f32 = 232.0;
 const MARK_H: f32 = 16.0;
@@ -102,8 +105,8 @@ struct Drag {
     before: Option<tl::Timeline>,
     grab_tick: f64,
     grab_y: f32,
-    /// the clip under the mouse at the start (moves snap by its start)
-    anchor: Option<u32>,
+    /// start of the clip under the mouse (moves snap by it)
+    anchor: Tick,
     moved: bool,
 }
 
@@ -151,6 +154,11 @@ pub(crate) struct TimelineUi {
     rename: Option<(usize, String)>,
     /// mouse position in timeline terms (S splits here)
     hover_at: Option<(usize, Tick)>,
+    /// right-click spot (track, tick) and marker for the context menus
+    menu_at: Option<(usize, Tick)>,
+    menu_marker: Option<usize>,
+    /// snap grid as last drawn (keys use it)
+    grid_now: Tick,
     /// the ruler shows minutes:seconds instead of bars
     time_ruler: bool,
     ruler_drag: bool,
@@ -183,6 +191,9 @@ impl Default for TimelineUi {
             ask_leave: false,
             rename: None,
             hover_at: None,
+            menu_at: None,
+            menu_marker: None,
+            grid_now: PPQ,
             time_ruler: false,
             ruler_drag: false,
             overview_drag: false,
@@ -206,12 +217,6 @@ impl TimelineUi {
         self.sels.clear();
         self.cue = 0;
         self.drag = None;
-    }
-
-    /// select exactly `id` (or nothing)
-    pub(crate) fn select_only(&mut self, id: Option<u32>) {
-        self.sel = id;
-        self.sels = id.into_iter().collect();
     }
 
     /// snap grid in ticks at pixels-per-tick `ppt` (`fine`: Shift = rows)
@@ -526,16 +531,25 @@ impl App {
         let t_start = std::time::Instant::now();
         let live = self.timeline_refresh();
         let t = th();
+        let mode = self.tlv.cache.as_ref().unwrap().mode;
         let cue_tick = {
             let c = self.tlv.cache.as_ref().unwrap();
-            c.map.tick_of(self.cue.0, self.cue.1)
+            if mode {
+                self.tlv.cue
+            } else {
+                c.map.tick_of(self.cue.0, self.cue.1)
+            }
         };
         let (n_tracks, n_clips, end) = {
             let c = self.tlv.cache.as_ref().unwrap();
             (
                 c.tl.tracks.len(),
                 c.tl.clips.len(),
-                c.map.end().max(c.tl.end()),
+                if mode {
+                    c.end
+                } else {
+                    c.map.end().max(c.tl.end())
+                },
             )
         };
         // ---- toolbar
@@ -548,12 +562,37 @@ impl App {
                     .color(Color32::from_rgb(0x1A, 0x1C, 0x1F))
                     .background_color(t.accent),
             );
-            ui.label(egui::RichText::new("Tracker mode · from the order list").color(t.ink2))
-                .on_hover_text(
-                    "The timeline shows this song's order list as clips per track (track = mixer channel). \
-                     It is read-only for now: moving and resizing clips comes with timeline mode. \
-                     Double-click a clip to edit its block in the pattern editor.",
-                );
+            if mode {
+                ui.label(egui::RichText::new("Timeline mode").color(t.ink))
+                    .on_hover_text(
+                        "This song is arranged here: clips on tracks (track = mixer channel). \
+                         Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
+                         S split, Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
+                         Ctrl+Shift+D make unique. Double-click a clip to edit its block, \
+                         empty space to write a new one. The order list is not used.",
+                    );
+                if ui
+                    .small_button("Back to tracker mode…")
+                    .on_hover_text("turn the timeline back into blocks and an order list (asks first)")
+                    .clicked()
+                {
+                    self.tlv.ask_leave = true;
+                }
+            } else {
+                ui.label(egui::RichText::new("Tracker mode · from the order list").color(t.ink2))
+                    .on_hover_text(
+                        "The timeline shows this song's order list as clips per track (track = mixer channel). \
+                         To move, loop and split clips here, switch the song to timeline mode. \
+                         Double-click a clip to edit its block in the pattern editor.",
+                    );
+                if ui
+                    .small_button("Switch to timeline mode")
+                    .on_hover_text("arrange this song with clips (asks first; Undo puts it back)")
+                    .clicked()
+                {
+                    self.tlv.ask_switch = Some(None);
+                }
+            }
             ui.separator();
             ui.checkbox(&mut self.follow, "Follow")
                 .on_hover_text("keep the playhead in view while playing");
@@ -585,6 +624,51 @@ impl App {
                 .clicked()
             {
                 self.tlv.time_ruler = true;
+            }
+            ui.separator();
+            ui.label(egui::RichText::new("snap").color(t.ink2));
+            egui::ComboBox::from_id_salt("tl_snap")
+                .width(74.0)
+                .selected_text(match self.tlv.snap {
+                    Snap::Adaptive => "Auto",
+                    Snap::Bar => "Bar",
+                    Snap::Beat => "Beat",
+                    Snap::Row => "Row",
+                })
+                .show_ui(ui, |ui| {
+                    for (v, l) in [
+                        (Snap::Adaptive, "Auto (bar, beat or row by zoom)"),
+                        (Snap::Bar, "Bar"),
+                        (Snap::Beat, "Beat"),
+                        (Snap::Row, "Row"),
+                    ] {
+                        ui.selectable_value(&mut self.tlv.snap, v, l);
+                    }
+                })
+                .response
+                .on_hover_text("grid for moving and resizing clips (hold Shift: rows)");
+            let (has_loop, loop_on) = {
+                let c = self.tlv.cache.as_ref().unwrap();
+                (c.tl.loop_range.is_some(), c.tl.loop_on)
+            };
+            if ui
+                .selectable_label(mode && loop_on, "Loop")
+                .on_hover_text(if has_loop {
+                    "play the loop region over and over (L) · Shift-drag the ruler to set it · Ctrl+L: around the selection"
+                } else {
+                    "no loop region yet: Shift-drag the ruler, or select clips and press Ctrl+L"
+                })
+                .clicked()
+            {
+                self.tl_apply(TlOp::ToggleLoop);
+            }
+            if ui
+                .small_button("+ Marker")
+                .on_hover_text("add a marker at the play marker (Shift+M)")
+                .clicked()
+            {
+                let at = live.head.map_or(cue_tick, |h| tl::snap(h as Tick, ROW));
+                self.tl_apply(TlOp::AddMarker(at));
             }
             ui.separator();
             let pos = live.head.unwrap_or(cue_tick as f64) as Tick;
@@ -809,6 +893,35 @@ impl App {
             }
         }
         lp.add(egui::Shape::mesh(grid));
+        // loop region: a band on the ruler, a tint over the lanes
+        if let Some((a, b)) = c.tl.loop_range {
+            let (xa, xb) = (x_of(a as f64), x_of(b as f64));
+            if xb > ruler.left() && xa < ruler.right() {
+                let on = c.tl.loop_on && mode;
+                let lc = if on { t.accent } else { crt_ink };
+                rp.rect_filled(
+                    Rect::from_min_max(
+                        Pos2::new(xa, ruler.bottom() - 6.0),
+                        Pos2::new(xb, ruler.bottom()),
+                    ),
+                    1,
+                    lc.gamma_multiply(if on { 0.85 } else { 0.35 }),
+                );
+                if on {
+                    lp.rect_filled(
+                        Rect::from_min_max(
+                            Pos2::new(xa, lanes.top()),
+                            Pos2::new(xb, lanes.bottom()),
+                        ),
+                        0,
+                        lc.gamma_multiply(0.05),
+                    );
+                    for x in [xa, xb] {
+                        lp.vline(x, lanes.y_range(), Stroke::new(1.0, lc.gamma_multiply(0.5)));
+                    }
+                }
+            }
+        }
         // ---- lanes: alternate shading, then clips (one mesh for bodies + notes)
         let mut bodies = egui::Mesh::default();
         let mut notes = egui::Mesh::default();
@@ -833,7 +946,7 @@ impl App {
         let k1 = c.map.starts.partition_point(|&s| s < v1);
         // (only while the song is nearly empty: in a full song they'd be noise;
         // double-click on an empty spot opens the block there either way)
-        if n_clips < 8 && (k1.saturating_sub(k0)) * (last_tr - first_tr) <= 4000 {
+        if !mode && n_clips < 8 && (k1.saturating_sub(k0)) * (last_tr - first_tr) <= 4000 {
             for k in k0..k1 {
                 let b = c.order[k];
                 for tr in first_tr..last_tr {
@@ -890,9 +1003,15 @@ impl App {
                     Pos2::new(x0 + 0.5, lr.top() + 2.0),
                     Pos2::new((x1 - 0.5).max(x0 + 1.5), lr.bottom() - 2.0),
                 );
-                let sel = self.tlv.sel == Some(clip.id);
+                let sel = self.tlv.sels.contains(&clip.id);
                 let hot = hover_clip == Some(i);
-                let k = if muted { 0.35 } else { 1.0 };
+                let k = if clip.muted {
+                    0.22
+                } else if muted {
+                    0.35
+                } else {
+                    1.0
+                };
                 let body_c = col.gamma_multiply(0.42 * k).to_opaque();
                 let head_c = col
                     .gamma_multiply(if hot { 1.0 } else { 0.85 } * k)
@@ -940,7 +1059,10 @@ impl App {
                 };
                 if r.width() > 26.0 {
                     let vis_l = r.left().max(lanes.left()) + 4.0;
-                    let name = c.names.get(b).cloned().unwrap_or_default();
+                    let mut name = c.names.get(b).cloned().unwrap_or_default();
+                    if clip.muted {
+                        name.push_str(" · muted");
+                    }
                     texts.push((
                         r,
                         Pos2::new(vis_l, hr.center().y),
@@ -1069,7 +1191,7 @@ impl App {
             ));
         }
         // end of song
-        let ex = x_of(c.map.end() as f64);
+        let ex = x_of(if mode { c.end } else { c.map.end() } as f64);
         if ex < lanes.right() {
             lp.rect_filled(
                 Rect::from_min_max(Pos2::new(ex, lanes.top()), lanes.max),
@@ -1294,54 +1416,407 @@ impl App {
             }
             // the rest of the header selects the track (cursor channel)
             let nr = Rect::from_min_max(hr.min, Pos2::new(mr.left() - 2.0, hr.bottom()));
-            if ui
+            let speed = c.tl.tracks[tr].speed;
+            if speed > 0 {
+                hp.text(
+                    Pos2::new(mr.left() - 4.0, hr.bottom() - 9.0),
+                    egui::Align2::RIGHT_CENTER,
+                    format!("speed {speed}"),
+                    FontId::proportional(10.0),
+                    t.ochre,
+                );
+            }
+            let nresp = ui
                 .interact(nr, ui.scope_id().with(("tl_head", tr)), Sense::click())
-                .on_hover_text("select this track (the pattern editor's cursor channel)")
-                .clicked()
-            {
+                .on_hover_text(
+                    "select this track (the pattern editor's cursor channel) · right-click: track speed",
+                );
+            if nresp.clicked() {
                 head_ops.push(HeadOp::Select(tr));
             }
+            nresp.context_menu(|ui| {
+                ui.label(egui::RichText::new(format!("Track {:02} speed", tr + 1)).strong());
+                ui.label(
+                    egui::RichText::new("ticks per row for this track's effects (timeline mode)")
+                        .small(),
+                );
+                for (v, l) in [
+                    (0u8, "Follow the song"),
+                    (2, "2"),
+                    (3, "3"),
+                    (4, "4"),
+                    (6, "6"),
+                    (8, "8"),
+                    (12, "12"),
+                ] {
+                    if ui.radio(speed == v, l).clicked() {
+                        head_ops.push(HeadOp::Speed(tr, v));
+                        ui.close();
+                    }
+                }
+            });
         }
-        // ---- input: ruler seek, clips, scroll bars
+        // ---- input: ruler seek / loop, markers, clips, scroll bars
+        let mods = ui.input(|i| i.modifiers);
+        let grid = self.tlv.grid(ppt, bar_ticks, mods.shift);
+        self.tlv.grid_now = self.tlv.grid(ppt, bar_ticks, false);
+        let snap_t = |x: f32| tl::snap(tick_of(x).max(0.0) as Tick, grid);
         let rresp = ui
-            .interact(ruler.union(marks), ui.scope_id().with("tl_ruler"), Sense::click_and_drag())
-            .on_hover_text("click: move the play marker here (jumps while playing) · drag: scrub · Alt: exact row");
+            .interact(ruler, ui.scope_id().with("tl_ruler"), Sense::click_and_drag())
+            .on_hover_text(if mode {
+                "click: move the play marker here (snaps; jumps while playing) · drag: scrub · Shift-drag: set the loop region · Alt: exact row"
+            } else {
+                "click: move the play marker here (jumps while playing) · drag: scrub · Alt: exact row"
+            });
+        let mresp = ui
+            .interact(marks, ui.scope_id().with("tl_marks"), Sense::click_and_drag())
+            .on_hover_text(if mode {
+                "markers · click: jump there · drag: move · double-click: rename · right-click: rename / delete · Shift+M: add one"
+            } else {
+                "markers (from the blocks' roles) · click: jump there"
+            });
         if rresp.hovered() || rresp.dragged() {
             rp.rect_filled(ruler, 2, t.ink2.gamma_multiply(0.10));
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            ui.ctx().set_cursor_icon(if mods.shift && mode {
+                egui::CursorIcon::ResizeHorizontal
+            } else {
+                egui::CursorIcon::PointingHand
+            });
         }
-        self.tlv.ruler_drag = rresp.dragged();
+        // the marker under x (its flag or its label)
+        let marker_at = |x: f32| {
+            c.tl.markers.iter().rposition(|m| {
+                let mx = x_of(m.tick as f64);
+                x >= mx - 4.0 && x <= mx + 10.0 + m.name.chars().count() as f32 * 6.5
+            })
+        };
         let mut seek: Option<(usize, usize)> = None;
-        if rresp.clicked() || rresp.dragged() || rresp.drag_started() {
+        let mut seek_tl: Option<Tick> = None;
+        let mut edit: Option<DragEdit> = None;
+        let mut start_drag: Option<Drag> = None;
+        let mut end_drag = false;
+        let mut ops: Vec<TlOp> = vec![];
+        let mut ask = false;
+        let origin = || c.tl.clone();
+        let new_drag = |kind: DragKind, p: Pos2, anchor: Tick| Drag {
+            kind,
+            origin: origin(),
+            before: None,
+            grab_tick: tick_of(p.x),
+            grab_y: p.y,
+            anchor,
+            moved: false,
+        };
+        // ruler: seek, or Shift-drag the loop region
+        let looping = matches!(
+            self.tlv.drag.as_ref().map(|d| &d.kind),
+            Some(DragKind::Loop(_))
+        );
+        if rresp.drag_started() && mods.shift {
+            if mode {
+                if let Some(p) = rresp.interact_pointer_pos() {
+                    start_drag = Some(new_drag(DragKind::Loop(snap_t(p.x)), p, 0));
+                }
+            } else {
+                ask = true;
+            }
+        } else if looping {
+            if let (Some(p), Some(DragKind::Loop(a))) = (
+                rresp.interact_pointer_pos(),
+                self.tlv.drag.as_ref().map(|d| d.kind.clone()),
+            ) {
+                edit = Some(DragEdit::Loop(a, snap_t(p.x)));
+            }
+        } else if rresp.clicked() || rresp.dragged() || rresp.drag_started() {
             if let Some(p) = rresp.interact_pointer_pos() {
-                let abs = (tick_of(p.x).max(0.0) / ROW as f64) as usize;
-                let alt = ui.input(|i| i.modifiers.alt);
-                let tgt = super::arranger::ruler_target(&c.map.lens, abs, !alt);
-                if rresp.clicked() || rresp.drag_started() || tgt != self.cue {
-                    seek = Some(tgt);
+                if mode {
+                    let tk = tick_of(p.x).max(0.0) as Tick;
+                    let tgt = if mods.alt {
+                        tk / ROW * ROW
+                    } else {
+                        tl::snap(tk, self.tlv.grid_now).max(0) / ROW * ROW
+                    };
+                    if rresp.clicked() || rresp.drag_started() || tgt != self.tlv.cue {
+                        seek_tl = Some(tgt);
+                    }
+                } else {
+                    let abs = (tick_of(p.x).max(0.0) / ROW as f64) as usize;
+                    let tgt = super::arranger::ruler_target(&c.map.lens, abs, !mods.alt);
+                    if rresp.clicked() || rresp.drag_started() || tgt != self.cue {
+                        seek = Some(tgt);
+                    }
                 }
             }
         }
+        if rresp.drag_stopped() && looping {
+            end_drag = true;
+        }
+        self.tlv.ruler_drag = rresp.dragged() && !looping;
+        // markers: jump, drag, rename, delete
+        let marking = matches!(
+            self.tlv.drag.as_ref().map(|d| &d.kind),
+            Some(DragKind::Marker(_))
+        );
+        if mresp.clicked() {
+            if let Some(p) = mresp.interact_pointer_pos() {
+                match marker_at(p.x) {
+                    Some(i) if mode => seek_tl = Some(c.tl.markers[i].tick / ROW * ROW),
+                    Some(i) => seek = Some(c.map.entry_at(c.tl.markers[i].tick)),
+                    None if mode => seek_tl = Some(snap_t(p.x) / ROW * ROW),
+                    None => {
+                        let abs = (tick_of(p.x).max(0.0) / ROW as f64) as usize;
+                        seek = Some(super::arranger::ruler_target(&c.map.lens, abs, !mods.alt));
+                    }
+                }
+            }
+        }
+        if mresp.drag_started() {
+            if let Some(p) = ui.input(|i| i.pointer.press_origin()) {
+                if let Some(i) = marker_at(p.x) {
+                    if mode {
+                        start_drag = Some(new_drag(DragKind::Marker(i), p, c.tl.markers[i].tick));
+                    } else {
+                        ask = true;
+                    }
+                }
+            }
+        } else if marking && mresp.dragged() {
+            if let (Some(p), Some(d)) = (mresp.interact_pointer_pos(), self.tlv.drag.as_ref()) {
+                if let DragKind::Marker(i) = d.kind {
+                    let dt = tick_of(p.x) - d.grab_tick;
+                    edit = Some(DragEdit::Marker(
+                        i,
+                        tl::snap((d.anchor as f64 + dt).max(0.0) as Tick, grid),
+                    ));
+                }
+            }
+        }
+        if mresp.drag_stopped() && marking {
+            end_drag = true;
+        }
+        if mresp.double_clicked() {
+            if let Some(i) = mresp.interact_pointer_pos().and_then(|p| marker_at(p.x)) {
+                if mode {
+                    self.tlv.rename = Some((i, c.tl.markers[i].name.clone()));
+                } else {
+                    ask = true;
+                }
+            }
+        }
+        if mresp.secondary_clicked() {
+            self.tlv.menu_marker = mresp.interact_pointer_pos().and_then(|p| marker_at(p.x));
+        }
+        let menu_marker = self.tlv.menu_marker;
+        let mut marker_op: Option<(usize, bool)> = None; // (index, delete?)
+        if mode {
+            mresp.context_menu(|ui| match menu_marker {
+                Some(i) => {
+                    if ui.button("Rename…").clicked() {
+                        marker_op = Some((i, false));
+                        ui.close();
+                    }
+                    if ui.button("Delete marker").clicked() {
+                        marker_op = Some((i, true));
+                        ui.close();
+                    }
+                }
+                None => {
+                    if ui.button("Add marker here").clicked() {
+                        ui.close();
+                        if let Some(p) = ui.ctx().input(|i| i.pointer.press_origin()) {
+                            ops.push(TlOp::AddMarker(tl::snap(
+                                tick_of(p.x).max(0.0) as Tick,
+                                ROW,
+                            )));
+                        }
+                    }
+                }
+            });
+        }
+        // lanes: select, move, trim / loop, rubber band, double-click
         let cresp = ui.interact(
             lanes,
             ui.scope_id().with("tl_lanes"),
             Sense::click_and_drag(),
         );
+        // which part of a clip is under p: 0 body, 1 left edge, 2 right edge
+        let part = |i: usize, p: Pos2| {
+            let cl = &c.tl.clips[i];
+            let (x0, x1) = (x_of(cl.start as f64), x_of(cl.end() as f64));
+            let e = if x1 - x0 > 24.0 {
+                6.0
+            } else {
+                ((x1 - x0) / 4.0).max(2.0)
+            };
+            if p.x >= x1 - e {
+                2
+            } else if p.x <= x0 + e {
+                1
+            } else {
+                0
+            }
+        };
+        let tr_of = |y: f32| ((y - lanes.top() + sy) / lane_h).floor();
+        self.tlv.hover_at = hover
+            .filter(|p| lanes.contains(*p))
+            .map(|p| (tr_of(p.y).max(0.0) as usize, tick_of(p.x).max(0.0) as Tick));
+        if let (Some(i), Some(p), None) = (hover_clip, hover, self.tlv.drag.as_ref()) {
+            if mode {
+                ui.ctx().set_cursor_icon(match part(i, p) {
+                    0 => egui::CursorIcon::Grab,
+                    _ => egui::CursorIcon::ResizeHorizontal,
+                });
+            }
+        }
+        let add_mod = mods.command || mods.shift;
+        if cresp.drag_started() {
+            if let Some(p) = ui.input(|i| i.pointer.press_origin()) {
+                let hit = clip_at(c, p, lanes, lane_h, sy, tick_of(p.x));
+                match (hit, mode) {
+                    (Some(_), false) => ask = true,
+                    (Some(i), true) => {
+                        let cl = &c.tl.clips[i];
+                        let id = cl.id;
+                        let mut sels = self.tlv.sels.clone();
+                        if !sels.contains(&id) {
+                            if !add_mod {
+                                sels.clear();
+                            }
+                            sels.push(id);
+                        }
+                        let kind = match part(i, p) {
+                            1 => {
+                                sels = vec![id];
+                                DragKind::Start(id)
+                            }
+                            2 => {
+                                sels = vec![id];
+                                DragKind::End(id)
+                            }
+                            _ => DragKind::Move { dup: mods.alt },
+                        };
+                        let mut d = new_drag(kind.clone(), p, cl.start);
+                        if let DragKind::End(_) = kind {
+                            d.anchor = cl.end();
+                        }
+                        if mods.alt && matches!(kind, DragKind::Move { .. }) {
+                            // Alt-drag: copies (linked: same blocks) follow the mouse
+                            d.before = Some(d.origin.clone());
+                            let sel: Vec<tl::Clip> = d
+                                .origin
+                                .clips
+                                .iter()
+                                .filter(|x| sels.contains(&x.id))
+                                .cloned()
+                                .collect();
+                            sels = tl::copies_at(&mut d.origin, &sel, 0);
+                            edit = Some(DragEdit::Move(0, 0));
+                        }
+                        self.tlv.sel = Some(*sels.last().unwrap_or(&id));
+                        self.tlv.sels = sels;
+                        start_drag = Some(d);
+                    }
+                    (None, _) => {
+                        if !add_mod {
+                            {
+                                let x: Option<u32> = None;
+                                self.tlv.sel = x;
+                                self.tlv.sels = x.into_iter().collect();
+                            }
+                        }
+                        start_drag = Some(new_drag(DragKind::Band(p), p, 0));
+                    }
+                }
+            }
+        } else if cresp.dragged() {
+            if let (Some(p), Some(d)) = (cresp.interact_pointer_pos(), self.tlv.drag.as_ref()) {
+                let raw = tick_of(p.x) - d.grab_tick;
+                let at = |base: Tick| tl::snap((base as f64 + raw).max(0.0) as Tick, grid);
+                edit = match d.kind {
+                    DragKind::Move { .. } => {
+                        let dtr = ((p.y - d.grab_y) / lane_h).round() as i32;
+                        Some(DragEdit::Move(at(d.anchor) - d.anchor, dtr))
+                    }
+                    DragKind::End(id) => Some(DragEdit::End(id, at(d.anchor))),
+                    DragKind::Start(id) => Some(DragEdit::Start(id, at(d.anchor))),
+                    DragKind::Band(p0) => {
+                        let band = Rect::from_two_pos(p0, p);
+                        lp.rect(
+                            band,
+                            0,
+                            t.selection_outline.gamma_multiply(0.08),
+                            Stroke::new(1.0, t.selection_outline),
+                            egui::StrokeKind::Inside,
+                        );
+                        let (t0, t1) =
+                            (tick_of(band.left()) as Tick, tick_of(band.right()) as Tick);
+                        let (r0, r1) = (
+                            tr_of(band.top()).max(0.0) as usize,
+                            tr_of(band.bottom()).max(0.0) as usize,
+                        );
+                        let mut sels: Vec<u32> = if add_mod {
+                            self.tlv.sels.clone()
+                        } else {
+                            vec![]
+                        };
+                        for tr in r0..=r1.min(n_tracks.saturating_sub(1)) {
+                            for i in c.idx.visible(&c.tl, tr, t0, t1 + 1) {
+                                let id = c.tl.clips[i].id;
+                                if !sels.contains(&id) {
+                                    sels.push(id);
+                                }
+                            }
+                        }
+                        self.tlv.sel = sels.last().copied();
+                        self.tlv.sels = sels;
+                        None
+                    }
+                    _ => None,
+                };
+            }
+        }
+        if cresp.drag_stopped() {
+            end_drag = true;
+        }
         let mut open: Option<(usize, usize, usize, usize)> = None; // block, col, row, entry
-        let mut select: Option<Option<u32>> = None;
         if cresp.clicked() || cresp.double_clicked() {
             if let Some(p) = cresp.interact_pointer_pos() {
                 let tk = tick_of(p.x);
-                let tr = ((p.y - lanes.top() + sy) / lane_h).floor() as usize;
+                let tr = tr_of(p.y) as usize;
                 let hit = clip_at(c, p, lanes, lane_h, sy, tk);
-                select = Some(hit.map(|i| c.tl.clips[i].id));
+                let id = hit.map(|i| c.tl.clips[i].id);
+                match id {
+                    Some(id) if add_mod && cresp.clicked() => {
+                        if let Some(k) = self.tlv.sels.iter().position(|x| *x == id) {
+                            self.tlv.sels.remove(k);
+                            self.tlv.sel = self.tlv.sels.last().copied();
+                        } else {
+                            self.tlv.sels.push(id);
+                            self.tlv.sel = Some(id);
+                        }
+                    }
+                    None if add_mod => {}
+                    _ => {
+                        self.tlv.sel = id;
+                        self.tlv.sels = id.into_iter().collect();
+                    }
+                }
                 if cresp.double_clicked() && tr < n_tracks && tk >= 0.0 {
                     let tk = tk as Tick;
-                    let entry = c.map.entry_at(tk).0;
+                    let entry = if mode {
+                        usize::MAX
+                    } else {
+                        c.map.entry_at(tk).0
+                    };
                     open = match hit.map(|i| &c.tl.clips[i]) {
                         Some(cl) => cl
                             .block()
                             .map(|(b, col)| (b, col, (cl.source_at(tk) / ROW) as usize, entry)),
+                        None if mode => {
+                            // empty space: a new block, starting on the bar
+                            ops.push(TlOp::NewClip(tr, tk / bar_ticks * bar_ticks));
+                            None
+                        }
                         None if tk < c.map.end() => {
                             let (e, row) = c.map.entry_at(tk);
                             c.order.get(e).map(|&b| (b, tr, row, e))
@@ -1351,7 +1826,94 @@ impl App {
                 }
             }
         }
-        if let Some(i) = hover_clip {
+        // right-click: the clip menu (also offers to switch in tracker mode)
+        if cresp.secondary_clicked() {
+            if let Some(p) = cresp.interact_pointer_pos() {
+                let tk = tick_of(p.x).max(0.0) as Tick;
+                self.tlv.menu_at = Some((tr_of(p.y).max(0.0) as usize, tk));
+                let id = clip_at(c, p, lanes, lane_h, sy, tick_of(p.x)).map(|i| c.tl.clips[i].id);
+                if id.is_none_or(|id| !self.tlv.sels.contains(&id)) {
+                    {
+                        let x: Option<u32> = id;
+                        self.tlv.sel = x;
+                        self.tlv.sels = x.into_iter().collect();
+                    }
+                }
+            }
+        }
+        let n_sel = self.tlv.sels.len();
+        let menu_at = self.tlv.menu_at;
+        let menu_open: Option<(usize, usize, usize)> = self
+            .tlv
+            .sel
+            .and_then(|id| c.tl.clips.iter().find(|x| x.id == id))
+            .and_then(|cl| {
+                let (b, col) = cl.block()?;
+                let at = menu_at.map_or(cl.start, |m| m.1.clamp(cl.start, cl.end() - 1));
+                Some((b, col, (cl.source_at(at) / ROW) as usize))
+            });
+        let mut menu_open_now = false;
+        cresp.context_menu(|ui| {
+            let snap_at = menu_at.map_or(0, |m| tl::snap(m.1, ROW));
+            if !mode {
+                ui.label("Clip editing needs timeline mode.");
+                if ui.button("Switch to timeline mode…").clicked() {
+                    ops.push(TlOp::SelectAll);
+                    ui.close();
+                }
+                return;
+            }
+            if n_sel > 0 {
+                if ui
+                    .add(egui::Button::new("Open in the pattern editor").shortcut_text("Enter"))
+                    .clicked()
+                {
+                    menu_open_now = true;
+                    ui.close();
+                }
+                ui.separator();
+                let items: [(&str, &str, TlOp); 6] = [
+                    ("Split here", "S", TlOp::Split(snap_at)),
+                    ("Duplicate", "Ctrl+D", TlOp::Duplicate),
+                    ("Make unique", "Ctrl+Shift+D", TlOp::MakeUnique),
+                    ("Glue", "Ctrl+J", TlOp::Glue),
+                    ("Mute / unmute", "M", TlOp::Mute),
+                    ("Delete", "Del", TlOp::Delete),
+                ];
+                for (l, k, op) in items {
+                    if ui.add(egui::Button::new(l).shortcut_text(k)).clicked() {
+                        ops.push(op);
+                        ui.close();
+                    }
+                }
+                ui.separator();
+                if ui
+                    .add(egui::Button::new("Loop around the selection").shortcut_text("Ctrl+L"))
+                    .clicked()
+                {
+                    ops.push(TlOp::LoopFromSelection);
+                    ui.close();
+                }
+            } else if let Some((tr, tk)) = menu_at {
+                if ui.button("New clip here").clicked() {
+                    ops.push(TlOp::NewClip(tr, tk / bar_ticks * bar_ticks));
+                    ui.close();
+                }
+            }
+            if ui
+                .add(egui::Button::new("Add marker here").shortcut_text("Shift+M"))
+                .clicked()
+            {
+                ops.push(TlOp::AddMarker(snap_at));
+                ui.close();
+            }
+        });
+        if menu_open_now {
+            if let Some((b, col, row)) = menu_open {
+                open = Some((b, col, row, usize::MAX));
+            }
+        }
+        if let Some(i) = hover_clip.filter(|_| self.tlv.drag.is_none()) {
             let cl = &c.tl.clips[i];
             if let Some((b, col)) = cl.block() {
                 let bp = c.tl.bar_pos(cl.start);
@@ -1359,13 +1921,19 @@ impl App {
                     .loop_len
                     .map(|l| format!(" · loops {}x", (cl.len + l - 1) / l))
                     .unwrap_or_default();
+                let how = if mode {
+                    "drag: move (Alt: copy) · edges: trim / loop · double-click: edit · right-click: more"
+                } else {
+                    "double-click: edit in the pattern editor"
+                };
                 cresp.clone().on_hover_text(format!(
-                    "{} · column {} · bar {}.{} · {} rows{passes}\ndouble-click: edit in the pattern editor",
+                    "{} · column {} · bar {}.{} · {} rows{passes}{}\n{how}",
                     c.names.get(b).cloned().unwrap_or_default(),
                     col + 1,
                     bp.bar,
                     bp.beat,
-                    cl.len / ROW
+                    cl.len / ROW,
+                    if cl.muted { " · muted" } else { "" },
                 ));
             }
         }
@@ -1391,9 +1959,52 @@ impl App {
             }
         }
         // ---- apply
-        if let Some(s) = select {
-            self.tlv.sel = s;
+        if ops.contains(&TlOp::SelectAll) && !mode {
+            // the tracker-mode menu's "Switch to timeline mode…"
+            ops.clear();
+            ask = true;
         }
+        if ask && self.tlv.ask_switch.is_none() {
+            self.tlv.ask_switch = Some(None);
+        }
+        if let Some(d) = start_drag {
+            self.tlv.drag = Some(d);
+        }
+        if let Some(e) = edit {
+            self.timeline_drag_edit(e);
+        }
+        if end_drag {
+            self.timeline_drag_end();
+        }
+        if let Some(t) = seek_tl {
+            self.timeline_seek(t);
+        }
+        for op in ops {
+            self.tl_apply(op);
+        }
+        if let Some((i, del)) = marker_op {
+            if del {
+                self.with(|s| {
+                    if let Some(t) = s.song.timeline.as_deref_mut() {
+                        if i < t.markers.len() {
+                            t.markers.remove(i);
+                        }
+                    }
+                });
+                self.status = "Marker deleted (Ctrl+Z brings it back)".into();
+            } else {
+                let name = self
+                    .tlv
+                    .cache
+                    .as_ref()
+                    .and_then(|c| c.tl.markers.get(i))
+                    .map(|m| m.name.clone());
+                if let Some(n) = name {
+                    self.tlv.rename = Some((i, n));
+                }
+            }
+        }
+        self.timeline_rename(ui.ctx());
         for op in head_ops {
             self.timeline_head_op(op);
         }
@@ -1416,9 +2027,13 @@ impl App {
                 HeadOp::Mute(i) => mx[i].mute = !mx[i].mute,
                 HeadOp::Solo(i) => mx[i].solo = !mx[i].solo,
                 HeadOp::Volume(i, v) => mx[i].volume = v.clamp(0.0, 2.0),
-                HeadOp::Select(_) => {}
+                HeadOp::Select(_) | HeadOp::Speed(..) => {}
             }
         });
+        if let HeadOp::Speed(i, v) = op {
+            self.tl_apply(TlOp::Speed(i, v));
+            return;
+        }
         if let HeadOp::Select(i) = op {
             self.ch = i;
             self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
@@ -1455,8 +2070,48 @@ impl App {
 
     /// keys while the Timeline view is showing; true = used
     pub(super) fn timeline_key(&mut self, key: Key, m: egui::Modifiers) -> bool {
-        if m.command || m.alt {
-            return false;
+        // the prompts: Enter = yes, Esc = no; nothing else gets through
+        if self.tlv.ask_switch.is_some() || self.tlv.ask_leave {
+            if matches!(key, Key::Enter | Key::Escape) {
+                let yes = key == Key::Enter;
+                if self.tlv.ask_leave {
+                    self.answer_leave(yes);
+                } else {
+                    self.answer_switch(yes);
+                }
+            }
+            return true;
+        }
+        if self.tlv.rename.is_some() {
+            return true;
+        }
+        // clip edits (in tracker mode they ask to switch first)
+        let at_mouse = || {
+            self.tlv
+                .hover_at
+                .map(|(_, t)| tl::snap(t, self.tlv.grid_now.max(ROW)))
+        };
+        let play_marker = self.tlv.cue;
+        let op = match key {
+            Key::D if m.command && m.shift => Some(TlOp::MakeUnique),
+            Key::D if m.command => Some(TlOp::Duplicate),
+            Key::J if m.command => Some(TlOp::Glue),
+            Key::L if m.command => Some(TlOp::LoopFromSelection),
+            Key::A if m.command => Some(TlOp::SelectAll),
+            _ if m.command || m.alt => return false,
+            Key::S if !m.shift => Some(TlOp::Split(at_mouse().unwrap_or(play_marker))),
+            Key::M if m.shift => Some(TlOp::AddMarker(play_marker)),
+            Key::M => Some(TlOp::Mute),
+            Key::L => Some(TlOp::ToggleLoop),
+            Key::Delete | Key::Backspace => Some(TlOp::Delete),
+            _ => None,
+        };
+        if let Some(op) = op {
+            if op == TlOp::SelectAll && self.tlv.cache.as_ref().is_some_and(|c| !c.mode) {
+                return false;
+            }
+            self.tl_apply(op);
+            return true;
         }
         let bar = (4 * PPQ) as f64;
         match key {
@@ -1469,7 +2124,10 @@ impl App {
             Key::ArrowRight => self.tlv.scroll += bar,
             Key::ArrowUp => self.tlv.scroll_y -= self.tlv.th(),
             Key::ArrowDown => self.tlv.scroll_y += self.tlv.th(),
-            Key::Escape => self.tlv.sel = None,
+            Key::Escape => {
+                self.tlv.sel = None;
+                self.tlv.sels.clear();
+            }
             Key::Enter => {
                 let hit = self.tlv.sel.and_then(|id| {
                     let c = self.tlv.cache.as_ref()?;
@@ -1499,6 +2157,7 @@ enum HeadOp {
     Solo(usize),
     Volume(usize, f32),
     Select(usize),
+    Speed(usize, u8),
 }
 
 /// the clip under `p` (index into `tl.clips`)

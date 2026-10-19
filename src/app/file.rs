@@ -140,9 +140,15 @@ impl App {
         self.status = "New song (instruments kept)".into();
         // new songs start on the Timeline view (Settings > Look > New songs)
         if self.extra.new_in_timeline {
+            // ... in timeline mode (Del's call): arranged with clips from the start
+            self.with(|s| {
+                crate::timeline::enter_timeline_mode(&mut s.song);
+                let Shared { song, engine, .. } = s;
+                engine.ensure_plan(song);
+            });
             self.view = View::Timeline;
             self.tlv.start_new_song();
-            self.status = "New song on the Timeline (instruments kept) · double-click a track to write its block".into();
+            self.status = "New song in timeline mode (instruments kept) · double-click a track to write a block".into();
         }
     }
 
@@ -168,6 +174,9 @@ impl App {
         self.with(|s| {
             s.song.channels = ch;
             s.song.channel_names.resize(ch, "Ch".into());
+            if let Some(t) = s.song.timeline.as_deref_mut() {
+                t.tracks.resize_with(ch, Default::default);
+            }
             for p in &mut s.song.patterns {
                 for r in &mut p.cells {
                     r.resize(ch, Cell::default());

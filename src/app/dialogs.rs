@@ -317,6 +317,10 @@ impl App {
         let _ = npat;
         let ml = self.with(|s| s.song.mixer.limiter);
         let (sa, sb) = self.selection_range();
+        let (tl_mode, tl_loop) = self.with(|s| {
+            let t = s.song.timeline.as_deref();
+            (t.is_some(), t.is_some_and(|t| t.loop_range.is_some()))
+        });
         let mut open = true;
         let mut close_btn = false;
         let mut go = false;
@@ -428,12 +432,28 @@ impl App {
                                     format!("Block {cur_pat:02}"),
                                 )
                                 .on_hover_text("the block open in the pattern editor, once");
-                                ui.selectable_value(
-                                    &mut d.opts.scope,
-                                    Scope::Range(sa, sb),
-                                    format!("Arranger selection {}–{}", sa + 1, sb + 1),
-                                )
-                                .on_hover_text("the clips selected in the arranger");
+                                if tl_mode {
+                                    ui.add_enabled(
+                                        tl_loop,
+                                        egui::Button::selectable(
+                                            d.opts.scope == Scope::Loop,
+                                            "Loop region",
+                                        ),
+                                    )
+                                    .on_hover_text("the timeline's loop region, once")
+                                    .on_disabled_hover_text(
+                                        "no loop region: Shift-drag the timeline ruler to set one",
+                                    )
+                                    .clicked()
+                                    .then(|| d.opts.scope = Scope::Loop);
+                                } else {
+                                    ui.selectable_value(
+                                        &mut d.opts.scope,
+                                        Scope::Range(sa, sb),
+                                        format!("Arranger selection {}–{}", sa + 1, sb + 1),
+                                    )
+                                    .on_hover_text("the clips selected in the arranger");
+                                }
                             });
                             ui.end_row();
                             ui.label("Level");

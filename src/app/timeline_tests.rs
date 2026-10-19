@@ -54,14 +54,20 @@ fn new_songs_open_on_the_timeline_unless_switched_off() {
     frame(&mut h);
     frame(&mut h);
     assert_eq!(h.state().view, View::Timeline);
+    assert!(
+        h.state().with(|s| s.song.timeline.is_some()),
+        "new songs are in timeline mode"
+    );
     let c = h.state().tlv.cache.as_ref().unwrap();
+    assert!(c.mode);
     assert_eq!(c.tl.clips.len(), 0, "an empty block has no clips");
     assert_eq!(c.map.lens, vec![64]);
     // 16 bars across: the empty block takes a quarter of the width
     let w = h.state().tlv.x_of(rows_to_ticks(64)) - h.state().tlv.x_of(0);
     let lw = h.state().tlv.lanes.width();
     assert!((w / lw - 0.25).abs() < 0.02, "{w} of {lw}");
-    // double-click an empty track opens block 00 at that channel
+    // double-click an empty track: a new block as a clip there (on the bar),
+    // opened in the pattern editor on that channel
     let lanes = h.state().tlv.lanes;
     let p = Pos2::new(
         h.state().tlv.x_of(rows_to_ticks(8)) + 2.0,
@@ -69,7 +75,15 @@ fn new_songs_open_on_the_timeline_unless_switched_off() {
     );
     double_click(&mut h, p);
     assert_eq!(h.state().view, View::Pattern);
-    assert_eq!((h.state().pattern, h.state().ch, h.state().row), (0, 2, 8));
+    assert_eq!((h.state().pattern, h.state().ch, h.state().row), (1, 2, 0));
+    let clips = h
+        .state()
+        .with(|s| s.song.timeline.as_ref().unwrap().clips.clone());
+    assert_eq!(clips.len(), 1);
+    assert_eq!(
+        (clips[0].track, clips[0].start, clips[0].block()),
+        (2, 0, Some((1, 2)))
+    );
     // the setting off: File > New stays on the pattern editor
     h.state_mut().extra.new_in_timeline = false;
     h.state_mut().new_song();
@@ -140,9 +154,16 @@ fn plain_keys_do_not_type_notes_and_zoom_keys_work() {
     let mut h = on_timeline(fileio::demo_song());
     let before = h.state().with(|s| s.song.patterns.clone());
     let z0 = h.state().tlv.zoom;
-    for k in [Key::Q, Key::W, Key::Num2, Key::Delete, Key::Backspace] {
+    for k in [Key::Q, Key::W, Key::Num2] {
         key(&mut h, k, egui::Modifiers::NONE);
     }
+    assert_eq!(h.state().with(|s| s.song.patterns.clone()), before);
+    // Delete is a clip edit: in tracker mode it asks to switch; Esc says no
+    key(&mut h, Key::Delete, egui::Modifiers::NONE);
+    assert!(h.state().tlv.ask_switch.is_some());
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().tlv.ask_switch.is_none());
+    assert!(h.state().with(|s| s.song.timeline.is_none()));
     assert_eq!(h.state().with(|s| s.song.patterns.clone()), before);
     key(&mut h, Key::Plus, egui::Modifiers::NONE);
     assert!(h.state().tlv.zoom > z0);
