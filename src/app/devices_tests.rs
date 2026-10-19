@@ -1,7 +1,7 @@
 //! The lower panel's Devices tab (0.2.4): showing the selected track's
 //! chain, Browser › Effects drops at a position, reorder by dragging a
 //! card's title, undo, and every device body drawing
-use super::ui_tests::{drag, frame, harness_with, key};
+use super::ui_tests::{self, drag, frame, harness_with, key};
 use super::*;
 use crate::browser::{Item, Tab};
 use crate::fx::{Device, FxKind};
@@ -51,7 +51,7 @@ fn ctrl_7_shows_devices_and_timeline_piano_comes_back() {
     );
     assert!(!h.state().pr.open && !h.state().extra.lower_inst);
     // the instrument card and one card per device were drawn
-    assert!(h.state().dev.inst.width() > 300.0);
+    assert_eq!(h.state().dev.inst.width(), h.state().dev.card_w);
     assert_eq!(h.state().dev.cards.len(), chain(&h, 7).len());
     key(&mut h, Key::Num6, egui::Modifiers::COMMAND);
     frames(&mut h, 2);
@@ -150,6 +150,21 @@ fn every_device_kind_draws_in_the_row() {
     });
     frames(&mut h, 3);
     assert_eq!(h.state().dev.cards.len(), FxKind::ALL.len());
+    // and every kind with its "…" open
+    let all = chain(&h, 7);
+    let devs = h.state().with(|s| s.song.instruments[6].fx.clone());
+    for i in 0..all.len() {
+        let k = devcards::open_key(&devs, i);
+        h.state_mut().dev.open.insert((6, k));
+    }
+    frames(&mut h, 2);
+    let w = h.state().dev.card_w;
+    assert!(h
+        .state()
+        .dev
+        .cards
+        .iter()
+        .all(|r| r.width() == w + devcards::MORE_W));
     // collapsed cards are slim
     h.state().with(|s| {
         for d in &mut s.song.instruments[6].fx {
@@ -180,4 +195,118 @@ fn an_eq_device_saves_and_loads_with_the_song() {
     let back = fileio::load_cwt(&p).unwrap();
     assert_eq!(back.instruments[0].fx[0], eq);
     let _ = std::fs::remove_dir_all(&d);
+}
+
+/// header button centres of a card: power, "…", remove
+fn power_at(c: egui::Rect) -> Pos2 {
+    Pos2::new(c.left() + 14.0, c.top() + 12.0)
+}
+fn more_at(c: egui::Rect) -> Pos2 {
+    Pos2::new(c.right() - 36.0, c.top() + 12.0)
+}
+fn remove_at(c: egui::Rect) -> Pos2 {
+    Pos2::new(c.right() - 13.0, c.top() + 12.0)
+}
+
+#[test]
+fn every_card_is_the_same_size_and_six_fit_with_the_drop_slot() {
+    let mut h = devices();
+    h.set_size(egui::vec2(1920.0, 1080.0));
+    h.state_mut().extra.browser_open = false;
+    let kinds = [
+        FxKind::Eq,
+        FxKind::Filter,
+        FxKind::Chorus,
+        FxKind::Compressor,
+        FxKind::Reverb,
+        FxKind::Delay,
+    ];
+    h.state().with(|s| {
+        s.song.instruments[6].fx = kinds.iter().map(|k| Device::new(*k)).collect();
+    });
+    frames(&mut h, 3);
+    let w = h.state().dev.card_w;
+    assert!(
+        (devcards::CARD_MIN_W..=devcards::CARD_W).contains(&w),
+        "{w}"
+    );
+    assert_eq!(h.state().dev.inst.width(), w);
+    let cards = h.state().dev.cards.clone();
+    assert_eq!(cards.len(), 6);
+    for c in &cards {
+        assert_eq!(c.width(), w);
+        assert_eq!(c.height(), cards[0].height());
+    }
+    // the instrument, six effects and the + slot after them are on screen
+    // at 1920 px, none overlapping
+    let last = cards[5];
+    assert!(last.right() + devcards::GAP + 56.0 <= 1920.0, "{last:?}");
+    assert!(h.state().dev.inst.right() < cards[0].left());
+    for p in cards.windows(2) {
+        assert_eq!(p[1].left() - p[0].right(), devcards::GAP);
+    }
+}
+
+#[test]
+fn the_more_toggle_widens_one_card_and_is_remembered() {
+    let mut h = devices();
+    let c0 = h.state().dev.cards[0];
+    let c1 = h.state().dev.cards[1];
+    ui_tests::click_at(&mut h, more_at(c0));
+    frames(&mut h, 2);
+    let w = h.state().dev.card_w;
+    let c0b = h.state().dev.cards[0];
+    assert_eq!(c0b.width(), w + devcards::MORE_W);
+    assert_eq!(h.state().dev.cards[1].width(), w);
+    let _ = c1;
+    // away to another track and back: still open
+    let cur = h.state().ch;
+    let other = (0..h.state().with(|s| s.song.channels))
+        .find(|&c| {
+            let s = h.state().track_slot(c);
+            c != cur && s > 0 && s != 7
+        })
+        .expect("another track");
+    h.state_mut().ch = other;
+    frames(&mut h, 2);
+    h.state_mut().ch = cur;
+    frames(&mut h, 2);
+    h.state_mut().instr = 7;
+    frames(&mut h, 2);
+    assert_eq!(
+        h.state().dev.cards[0].width(),
+        h.state().dev.card_w + devcards::MORE_W
+    );
+    // and closes again
+    let c0 = h.state().dev.cards[0];
+    ui_tests::click_at(&mut h, more_at(c0));
+    frames(&mut h, 2);
+    assert_eq!(h.state().dev.cards[0].width(), h.state().dev.card_w);
+}
+
+#[test]
+fn power_bypasses_and_the_cross_removes() {
+    let mut h = devices();
+    let before = chain(&h, 7);
+    let c0 = h.state().dev.cards[0];
+    ui_tests::click_at(&mut h, power_at(c0));
+    frames(&mut h, 2);
+    let on = h.state().with(|s| s.song.instruments[6].fx[0].enabled);
+    assert!(!on);
+    let c0 = h.state().dev.cards[0];
+    ui_tests::click_at(&mut h, remove_at(c0));
+    frames(&mut h, 2);
+    assert_eq!(chain(&h, 7), before[1..].to_vec());
+}
+
+#[test]
+fn advanced_on_the_instrument_card_opens_the_full_editor() {
+    let mut h = devices();
+    let r = h.state().dev.inst;
+    ui_tests::click_at(&mut h, Pos2::new(r.right() - 50.0, r.bottom() - 17.0));
+    frames(&mut h, 2);
+    assert!(
+        h.state().extra.lower_inst,
+        "Advanced › shows the Instrument tab"
+    );
 }

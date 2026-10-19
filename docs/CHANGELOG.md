@@ -12,6 +12,13 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 - **Track icons** are new: saved per track (Auto by default, picked from the instrument type), shown in the track header, the channel header and the Inspector (Icon › Pick…). Old songs open with Auto and play bit-identically; songs without icons save as before.
 - Not yet: **Save CPU** (freeze / deactivate) and **FX track** are greyed out with "coming soon" and are on the roadmap. There are no track groups yet, so Organize has no Group.
 
+### Devices: compact cards
+- **Every card in the Devices row is the same size** and shows **one graph and 2–4 key knobs**: EQ curve (drag the band dots), filter response, chorus waves, compressor curve with a live **gain-reduction meter**, reverb decay, delay taps, and a graph for every other device. The width adapts (256 px down to 196 px), so the instrument, six effects and the + drop slot fit at 1920 px.
+- **…** on a card opens a column with the rest of its parameters, Presets and Reset (one undo step). It's remembered per device while ChipWave runs.
+- **The instrument card is compact too:** its picture, four key knobs and **Advanced ›** for the full editor.
+- **Plugin cards** show the plugin's thumbnail and **Open** (its own editor); the parameters are under **…**.
+- The how-to line moved into tooltips. Drag-to-reorder, bypass, remove, drop insertion between cards, automation / modulation right-click and the real-time safety are unchanged. No song format change.
+
 ## 0.2.4.1: Timeline, Browser, Devices and a faster engine
 
 ### Timeline mode is the default for opened songs

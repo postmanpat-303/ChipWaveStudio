@@ -25,19 +25,42 @@ the DSP never allocates in the audio thread: buffers are built once when a chain
 
 The lower panel's **Devices** tab (next to Piano roll; **DEVICES** in the view tab bar, **Ctrl+7**)
 shows the selected track's chain left to right, the way Del (postmanpat) picked from a reference
-screenshot: the **instrument card** (the lower-panel instrument editor; the chevron folds it to a
-slim strip), an arrow, then a **card per device** and a **+** card at the end (opens Browser ›
-Effects).
+screenshot: the **instrument card**, then a **card per device** and a **+** drop slot at the end
+(click it for Browser › Effects). Every card is **the same size**: as wide as fits the row
+(256 px, down to 196 px when the chain is long), so a typical chain fits on screen; past that the
+row scrolls sideways. How-to text is in the tooltips (hover the **Devices** label or a card's name).
 
-- **Cards:** power (bypass), the name (drag it to move the card; double-click collapses), collapse
-  and **×** (remove, Ctrl+Z brings it back). Right-click: bypass, collapse, duplicate, move left /
-  right, remove, presets.
-- **Inline controls:** EQ (curve + a draggable dot per band: drag = frequency and gain,
-  double-click = 0 dB; the band chips pick which band's knobs show), Compressor (transfer curve),
-  Filter (response curve, mode chips), Delay (echo taps, sync and ping-pong chips), Reverb (decay
-  shape), knobs for every other device. Knobs right-click for automation lanes and modulation like
-  everywhere else. Plugin effects: thumbnail (Browser › Plugin thumbnails), **Editor…**, status
-  and parameter sliders.
+- **Instrument card:** its picture (waveform, filter, envelope… whichever the instrument's first
+  card shows), its key knobs (Synth / Moog / Voice: cutoff, detune, attack, release; others:
+  cutoff, attack, release or the first main controls) and **Advanced ›**, which opens the full
+  editor (the Instrument tab). The chevron folds it to a slim strip.
+- **Effect cards:** power (bypass), the name (drag it to move the card; double-click collapses
+  it to a slim strip), **…** and **×** (remove, Ctrl+Z brings it back). Right-click the name for
+  bypass, collapse, duplicate, move left / right, remove and presets.
+- **One graph and 2–4 key knobs per card:**
+
+  | Device | Graph | Key knobs |
+  |---|---|---|
+  | EQ | response curve, a draggable dot per band (frequency + gain; double-click = 0 dB) | Low gain, Mid 1 gain, High gain |
+  | Filter | response curve | Cutoff, Resonance, Mix |
+  | Chorus / Flanger | the two modulated delay lines | Rate, Depth, Mix |
+  | Compressor | transfer curve + **gain-reduction meter** (live while playing) | Threshold, Ratio, Makeup |
+  | Reverb | decay | Size, Damping, Mix |
+  | Delay | echo taps | Time, Feedback, Mix (synced: Feedback, Loop LP, Mix) |
+  | Drive | shaping curve | Drive, Tone, Mix |
+  | Bitcrusher / Digital | quantised steps | Bits, Rate, Mix / Drive, Bits, Mix |
+  | Phaser | notch sweep | Rate, Depth, Mix (synced: Depth, Feedback, Mix) |
+  | Frequency shifter | shifted spectrum | Coarse, Feedback, Mix |
+  | Resonator | ringing decay | Decay, Damp, Mix |
+  | Sub | the added octave | Drive, Growl, Mix |
+  | Grid FX | the patch's modules + **Edit patch…** | Macro 1–4 (3 on a narrow card) |
+  | Plugin | its thumbnail (Browser › Plugin thumbnails) + **Open** (its own editor) | – |
+
+- **…** opens a column beside the card with every other parameter (one row each: drag,
+  Ctrl-drag fine, double-click default; choices as a menu; right-click a row for automation and
+  modulation), **Presets** and **Reset** (every parameter to its default, one undo step). Plugin
+  cards show their status and parameter sliders there. Which cards have **…** open is
+  remembered per device while ChipWave runs (also across track switches).
 - **Adding:** Browser › **Effects** lists the built-ins, the Grid FX patches and the effect
   plugins; its header says **Adds to: …**. Double-click adds at the end; drag into the row to
   insert between two cards (an accent insertion marker shows where); drop on a timeline track to
