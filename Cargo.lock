@@ -609,6 +609,7 @@ dependencies = [
  "hound",
  "id3",
  "libloading 0.9.0",
+ "libm",
  "midir",
  "mp3lame-encoder",
  "png",

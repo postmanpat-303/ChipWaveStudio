@@ -1244,6 +1244,39 @@ enum Dsp {
     Grid(Box<(crate::grid::GridP, crate::grid::GridState)>),
 }
 
+/// Cache of pure per-parameter maths (`f(x)` with `sr` fixed per state),
+/// keyed on the input's bits: an unchanged parameter skips the libm call.
+#[derive(Default, Clone, Copy)]
+struct Memo {
+    key: [u32; MEMO_SLOTS],
+    val: [f32; MEMO_SLOTS],
+    set: u16,
+    /// tests: always recompute (the reference the cache must match)
+    #[cfg(test)]
+    off: bool,
+}
+
+const MEMO_SLOTS: usize = 6;
+
+impl Memo {
+    #[inline]
+    fn get(&mut self, slot: usize, x: f32, f: impl FnOnce(f32) -> f32) -> f32 {
+        #[cfg(test)]
+        if self.off {
+            return f(x);
+        }
+        let b = x.to_bits();
+        if self.set & (1 << slot) != 0 && self.key[slot] == b {
+            return self.val[slot];
+        }
+        let v = f(x);
+        self.key[slot] = b;
+        self.val[slot] = v;
+        self.set |= 1 << slot;
+        v
+    }
+}
+
 /// realtime state for one device instance
 pub struct FxState {
     pub kind: FxKind,
@@ -1254,6 +1287,10 @@ pub struct FxState {
     cur: [f32; MAX_PARAMS],
     k: f32,
     dsp: Dsp,
+    /// last inputs/outputs of the per-sample coefficient maths (tan, exp,
+    /// powf of a parameter). A parameter that holds still reuses its value:
+    /// same bits in, same bits out, so the sound is unchanged.
+    memo: Memo,
     /// plugin effects: the device uid and its slot in the engine's
     /// `FxRack` (`u16::MAX` = no running instance: passed through)
     pub uid: u32,
@@ -1343,6 +1380,7 @@ impl FxState {
             cur: [0.0; MAX_PARAMS],
             k: 1.0 - (-1.0 / (0.01 * sr)).exp(),
             dsp,
+            memo: Memo::default(),
             uid: d.uid,
             plug: u16::MAX,
         };
@@ -1482,6 +1520,7 @@ impl FxState {
     fn wet(&mut self, l: f32, r: f32, ctx: &Ctx) -> (f32, f32) {
         let p = self.cur;
         let sr = self.sr;
+        let memo = &mut self.memo;
         match &mut self.dsp {
             Dsp::Plugin => (l, r),
             Dsp::Eq { c, z, last, n } => {
@@ -1522,7 +1561,8 @@ impl FxState {
                 *d += (target - *d) * 0.0008;
                 let dl = read(bl, *w, *d);
                 let dr = read(br, *w, *d);
-                let (alp, ahp) = (pole_coef(p[5], sr), pole_coef(p[4], sr));
+                let alp = memo.get(0, p[5], |f| pole_coef(f, sr));
+                let ahp = memo.get(1, p[4], |f| pole_coef(f, sr));
                 let fl = lp[0].lp(dl, alp);
                 let fl = fl - hp[0].lp(fl, ahp);
                 let fr = lp[1].lp(dr, alp);
@@ -1565,8 +1605,12 @@ impl FxState {
                 let (w1, w2) = ((wid / 2.0 + 0.5) * 3.0, ((1.0 - wid) / 2.0) * 3.0);
                 let (yl, yr) = (ol * w1 + or * w2, or * w1 + ol * w2);
                 // wet-only low cut / high cut (Butterworth, k = sqrt 2)
-                let gl = (std::f32::consts::PI * p[5].clamp(10.0, sr * 0.45) / sr).tan();
-                let gh = (std::f32::consts::PI * p[6].clamp(10.0, sr * 0.45) / sr).tan();
+                let gl = memo.get(0, p[5], |f| {
+                    (std::f32::consts::PI * f.clamp(10.0, sr * 0.45) / sr).tan()
+                });
+                let gh = memo.get(1, p[6], |f| {
+                    (std::f32::consts::PI * f.clamp(10.0, sr * 0.45) / sr).tan()
+                });
                 let k = std::f32::consts::SQRT_2;
                 let hl = cut[0][0].run(yl, gl, k).2;
                 let hr = cut[0][1].run(yr, gl, k).2;
@@ -1576,7 +1620,7 @@ impl FxState {
                 (l * (1.0 - m) + yl * m, r * (1.0 - m) + yr * m)
             }
             Dsp::Drive { tone } => {
-                let g = db(p[1]);
+                let g = memo.get(0, p[1], db);
                 let shape = |x: f32| match p[0] as usize {
                     0 => (x * g).tanh(),
                     1 => (x * g).clamp(-1.0, 1.0),
@@ -1588,8 +1632,8 @@ impl FxState {
                         1.0 - ((y + 1.0).rem_euclid(4.0) - 2.0).abs()
                     }
                 };
-                let a = pole_coef(p[2], sr);
-                let out = db(p[3]);
+                let a = memo.get(1, p[2], |f| pole_coef(f, sr));
+                let out = memo.get(2, p[3], db);
                 let yl = tone[0].lp(shape(l), a) * out;
                 let yr = tone[1].lp(shape(r), a) * out;
                 let m = p[4];
@@ -1617,9 +1661,14 @@ impl FxState {
             }
             Dsp::Filter { s, ph } => {
                 *ph = (*ph + p[3] / sr).fract();
-                let fc = (p[1] * 2f32.powf(p[4] * (*ph * std::f32::consts::TAU).sin()))
-                    .clamp(20.0, sr * 0.45);
-                let g = (std::f32::consts::PI * fc / sr).tan();
+                // no sweep: 2^(0 * sin) is exactly 1, skip the sin/powf
+                let sweep = if p[4] == 0.0 {
+                    1.0
+                } else {
+                    2f32.powf(p[4] * (*ph * std::f32::consts::TAU).sin())
+                };
+                let fc = (p[1] * sweep).clamp(20.0, sr * 0.45);
+                let g = memo.get(0, fc, |fc| (std::f32::consts::PI * fc / sr).tan());
                 let k = (2.0 - 2.0 * p[2]).max(0.05);
                 let pick = |o: (f32, f32, f32)| match p[0] as usize {
                     0 => o.0,
@@ -1645,9 +1694,9 @@ impl FxState {
             Dsp::Comp { env } => {
                 let x = l.abs().max(r.abs());
                 let a = if x > *env {
-                    1.0 - (-1.0 / (p[2] / 1000.0 * sr)).exp()
+                    memo.get(0, p[2], |ms| 1.0 - (-1.0 / (ms / 1000.0 * sr)).exp())
                 } else {
-                    1.0 - (-1.0 / (p[3] / 1000.0 * sr)).exp()
+                    memo.get(1, p[3], |ms| 1.0 - (-1.0 / (ms / 1000.0 * sr)).exp())
                 };
                 *env += (x - *env) * a;
                 let lvl = 20.0 * env.max(1e-6).log10();
@@ -1657,7 +1706,7 @@ impl FxState {
                 } else {
                     0.0
                 };
-                let g = db(p[4] - gr);
+                let g = memo.get(2, p[4] - gr, db);
                 (l * g, r * g)
             }
             Dsp::Phaser(ph) => {
@@ -1861,6 +1910,56 @@ impl ChainState {
 
 #[cfg(test)]
 mod tests {
+    /// the coefficient cache changes nothing: same bits with and without it,
+    /// for still and for moving (automated) parameters
+    #[test]
+    fn coefficient_memo_is_bit_identical() {
+        let kinds = [
+            FxKind::Filter,
+            FxKind::Compressor,
+            FxKind::Delay,
+            FxKind::Drive,
+            FxKind::Reverb,
+        ];
+        for kind in kinds {
+            for sweep in [0.0f32, 0.6] {
+                let mut d = Device::new(kind);
+                for (i, v) in d.params.iter_mut().enumerate() {
+                    *v = (0.3 + 0.13 * i as f32).fract();
+                }
+                if kind == FxKind::Filter {
+                    d.params[4] = sweep;
+                }
+                let mut a = FxState::new(&d, 48000.0);
+                let mut b = FxState::new(&d, 48000.0);
+                b.memo.off = true;
+                let ctx = Ctx {
+                    bpm: 140.0,
+                    note: 220.0,
+                };
+                let mut seed = 0x1234_5678u32;
+                for n in 0..30_000 {
+                    if n % 7_000 == 3_500 {
+                        // automation: a parameter moves for a while
+                        let m = (n / 7_000) as f32 * 0.21;
+                        let over = |i: usize| (i == 1).then_some((0.2 + m).fract());
+                        a.set_targets(&d, over);
+                        b.set_targets(&d, over);
+                    }
+                    seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    let x = (seed >> 8) as f32 / (1u32 << 24) as f32 - 0.5;
+                    let (al, ar) = a.process(x, -x * 0.5, &ctx);
+                    let (bl, br) = b.process(x, -x * 0.5, &ctx);
+                    assert_eq!(
+                        (al.to_bits(), ar.to_bits()),
+                        (bl.to_bits(), br.to_bits()),
+                        "{kind:?} sweep {sweep} sample {n}"
+                    );
+                }
+            }
+        }
+    }
+
     use super::*;
 
     #[test]

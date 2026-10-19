@@ -44,9 +44,14 @@ impl App {
                         vec![
                             a.device_name.clone(),
                             format!("{} Hz · buffer {}", a.sample_rate, a.buffer),
-                            format!("latency {:.0} ms · {} underruns", a.latency_ms(), u),
+                            format!(
+                                "latency {:.0} ms · {} underruns · load {:.0} %",
+                                a.latency_ms(),
+                                u,
+                                a.load_pct()
+                            ),
                         ],
-                        (u > 20).then(|| "many underruns: try a bigger buffer".to_string()),
+                        a.advice(),
                     )
                 }
                 None => (
@@ -318,13 +323,14 @@ impl App {
                         let st = &a.stats;
                         ui.label(
                             egui::RichText::new(format!(
-                                "{} @ {} Hz · callback {} frames · latency {:.1} ms · underruns {}",
+                                "{} @ {} Hz · callback {} frames · latency {:.1} ms · underruns {} · engine load {:.0} %",
                                 a.device_name,
                                 a.sample_rate,
                                 st.callback_frames
                                     .load(std::sync::atomic::Ordering::Relaxed),
                                 a.latency_ms(),
-                                st.underruns.load(std::sync::atomic::Ordering::Relaxed)
+                                st.underruns.load(std::sync::atomic::Ordering::Relaxed),
+                                a.load_pct()
                             ))
                             .monospace(),
                         );

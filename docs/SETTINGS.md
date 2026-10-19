@@ -26,6 +26,9 @@ Six cards in a grid (3×2, reflowing to 2 or 1 columns on narrow screens, [UI_SC
 Each section has the common options first, then a collapsed **Advanced** group, and buttons **Apply** (for audio device changes, which restart the stream) and **Reset section**. Other settings apply instantly.
 
 ### 2.1 Audio
+**Today (0.2.4.1):** Output device, Sample rate, Buffer (Auto = device default, 256, 512, 1024, 2048 frames) and a Status line: device, rate, callback size, **latency** (what the engine queues ahead of the device: it starts at twice the buffer and grows after each underrun, up to 331 ms at 48 kHz, shown as `(max)` in the status bar), **underruns** and **engine load** (render time as % of real time). Windows uses WASAPI shared mode. If the load is near or above 100 %, the song is too heavy for the computer and a bigger buffer won't help: close other programs, mute or bounce heavy tracks. If the load is low but underruns keep counting, try a bigger buffer.
+
+**Planned:**
 Host/API (PipeWire, ALSA or JACK on Linux; WASAPI or ASIO on Windows; CoreAudio on macOS), output and input device, sample rate, buffer size, channels. There's a live panel with round-trip latency, engine CPU, xruns and a test tone. **Advanced:** WASAPI exclusive mode, ASIO (only if built with it, see [MIDI_VST.md §6](MIDI_VST.md)), export dither, multi-thread engine (experimental), stop audio when unfocused.
 
 ### 2.2 MIDI

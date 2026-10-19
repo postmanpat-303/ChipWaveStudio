@@ -34,6 +34,9 @@ pub struct Stats {
     /// target ring fill in frames (latency)
     pub target_frames: AtomicUsize,
     pub callback_frames: AtomicUsize,
+    /// engine render time per chunk as ‰ of the chunk's real time (smoothed);
+    /// above 1000 the song is too heavy to play live on this machine
+    pub load_permille: AtomicU32,
 }
 
 pub struct Audio {
@@ -56,13 +59,60 @@ impl Drop for Audio {
 }
 
 impl Audio {
+    /// The latency the engine keeps queued ahead of the device: the ring's
+    /// target fill (it starts at 2x the buffer and grows by a device buffer
+    /// on each underrun), not including the device's own buffer.
     pub fn latency_ms(&self) -> f32 {
         self.stats.target_frames.load(Ordering::Relaxed) as f32 * 1000.0 / self.sample_rate as f32
+    }
+
+    /// the latency has grown to its ceiling (`MAX_TARGET`, 331 ms at 48 kHz):
+    /// more buffering cannot help, the engine is not keeping up
+    pub fn latency_maxed(&self) -> bool {
+        self.stats.target_frames.load(Ordering::Relaxed) >= MAX_TARGET
+    }
+
+    /// smoothed engine load in % of real time
+    pub fn load_pct(&self) -> f32 {
+        self.stats.load_permille.load(Ordering::Relaxed) as f32 / 10.0
+    }
+
+    /// one line for the status bar / Settings when playback is in trouble
+    pub fn advice(&self) -> Option<String> {
+        let load = self.load_pct();
+        if load >= 90.0 || (self.latency_maxed() && load >= 60.0) {
+            Some(format!(
+                "audio engine at {load:.0} % of real time: this song is too heavy for this \
+                 computer. Close other programs, or freeze/mute heavy tracks (voices, many FX)"
+            ))
+        } else if self.stats.underruns.load(Ordering::Relaxed) > 20 {
+            Some("many underruns: try a bigger buffer in Settings › Audio".into())
+        } else {
+            None
+        }
     }
 }
 
 const RING_FRAMES: usize = 16384;
 const CHUNK: usize = 256;
+/// most frames the engine keeps queued (the latency ceiling)
+pub const MAX_TARGET: usize = RING_FRAMES - CHUNK * 2;
+
+/// smoothed load update: `prev` and the result in ‰, `secs` the render time
+/// of one chunk of `frames` at `sr`
+pub(crate) fn load_step(prev: u32, secs: f64, frames: usize, sr: f32) -> u32 {
+    let now = secs * sr as f64 / frames as f64 * 1000.0;
+    // ~0.25 s time constant at 48 kHz / 256 frames
+    let k = 0.02;
+    let next = prev as f64 + (now - prev as f64) * k;
+    // round towards the new value so the integer ‰ settles on it
+    let next = if now > prev as f64 {
+        next.ceil()
+    } else {
+        next.floor()
+    };
+    next.clamp(0.0, 100_000.0) as u32
+}
 
 fn dev_name(d: &cpal::Device) -> String {
     d.description()
@@ -200,7 +250,15 @@ pub fn start_with(
                     let target = stats.target_frames.load(Ordering::Relaxed) * 2;
                     let filled = RING_FRAMES * 2 - prod.slots();
                     if filled + CHUNK * 2 <= target {
+                        let t0 = std::time::Instant::now();
                         render_chunk(&shared, &mut buf, sample_rate as f32);
+                        let l = load_step(
+                            stats.load_permille.load(Ordering::Relaxed),
+                            t0.elapsed().as_secs_f64(),
+                            CHUNK,
+                            sample_rate as f32,
+                        );
+                        stats.load_permille.store(l, Ordering::Relaxed);
                         if let Ok(chunk) = prod.write_chunk_uninit(buf.len()) {
                             chunk.fill_from_iter(buf.iter().copied());
                         }
@@ -223,10 +281,8 @@ pub fn start_with(
         // keep at least two device buffers queued (not an underrun, just sizing)
         let t = st.target_frames.load(Ordering::Relaxed);
         if t < n_frames * 2 {
-            st.target_frames.store(
-                (n_frames * 2).min(RING_FRAMES - CHUNK * 2),
-                Ordering::Relaxed,
-            );
+            st.target_frames
+                .store((n_frames * 2).min(MAX_TARGET), Ordering::Relaxed);
         }
         let mut under = false;
         for i in 0..n_frames {
@@ -248,7 +304,7 @@ pub fn start_with(
                 st.underruns.fetch_add(1, Ordering::Relaxed);
             }
             let t = st.target_frames.load(Ordering::Relaxed);
-            let grow = (t + n_frames.max(256)).min(RING_FRAMES - CHUNK * 2);
+            let grow = (t + n_frames.max(256)).min(MAX_TARGET);
             st.target_frames.store(grow, Ordering::Relaxed);
         }
     };
@@ -384,5 +440,72 @@ mod tests {
         let mut buf = vec![1.0f32; 64];
         render_chunk(&shared, &mut buf, 48000.0);
         assert!(buf.iter().all(|x| x.is_finite()));
+    }
+
+    /// the "331 ms" in the status bar is the ring ceiling at 48 kHz
+    #[test]
+    fn latency_ceiling_is_331_ms_at_48k() {
+        let ms = MAX_TARGET as f32 * 1000.0 / 48000.0;
+        assert_eq!(format!("{ms:.0}"), "331");
+    }
+
+    #[test]
+    fn load_follows_render_time() {
+        let mut l = 0;
+        // a chunk of 256 @ 48 kHz is 5.33 ms; rendering it in 8 ms = 150 %
+        for _ in 0..1000 {
+            l = load_step(l, 0.008, 256, 48000.0);
+        }
+        assert!((1490..=1500).contains(&l), "{l}");
+        for _ in 0..1000 {
+            l = load_step(l, 0.0016, 256, 48000.0);
+        }
+        assert!((300..=310).contains(&l), "{l}");
+    }
+}
+
+#[cfg(test)]
+mod rt_bench {
+    /// per-chunk render cost of each demo (256-frame chunks @ 48 kHz, budget 5.33 ms)
+    #[test]
+    #[ignore]
+    fn rt_bench_demos() {
+        let secs: f64 = std::env::var("RT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(60.0);
+        for (name, _, text) in crate::fileio::DEMOS {
+            if std::env::var("RT_ONLY").is_ok_and(|o| !name.contains(o.as_str())) {
+                continue;
+            }
+            let s = crate::fileio::song_from_text(text).unwrap();
+            let mut e = crate::engine::Engine::new(48000.0);
+            e.start(&s, 0, 0, false, 0);
+            let mut buf = vec![0.0f32; 512];
+            let n = (secs * 48000.0 / 256.0) as usize;
+            let mut t = Vec::with_capacity(n);
+            let mut h: u64 = 0xcbf29ce484222325;
+            for _ in 0..n {
+                let t0 = std::time::Instant::now();
+                e.render(&s, &mut buf);
+                t.push(t0.elapsed().as_secs_f64() * 1e6);
+                for v in &buf {
+                    h = (h ^ v.to_bits() as u64).wrapping_mul(0x100000001b3);
+                }
+            }
+            let tot: f64 = t.iter().sum();
+            let mut so = t.clone();
+            so.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let p = |q: f64| so[((so.len() as f64 - 1.0) * q) as usize];
+            println!(
+                "RTB {name:20} ch {:2} avg {:7.1} us p50 {:7.1} p99 {:7.1} max {:8.1} | {:5.1}% of RT | hash {h:016x}",
+                s.channels,
+                tot / n as f64,
+                p(0.5),
+                p(0.99),
+                so[so.len() - 1],
+                tot / (n as f64 * 256.0 / 48000.0 * 1e6) * 100.0
+            );
+        }
     }
 }

@@ -50,6 +50,8 @@ mod transform;
 mod update;
 mod voice;
 mod wavetable;
+#[cfg(windows)]
+mod winmath;
 
 use std::path::PathBuf;
 

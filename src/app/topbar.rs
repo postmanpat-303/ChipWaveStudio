@@ -894,7 +894,12 @@ impl App {
                 ui.add_space(6.0);
                 if let Some(a) = &self.audio {
                     let u = a.stats.underruns.load(std::sync::atomic::Ordering::Relaxed);
-                    let txt = format!("{:.0} ms · {} underruns", a.latency_ms(), u);
+                    let txt = format!(
+                        "{:.0} ms{} · {} underruns",
+                        a.latency_ms(),
+                        if a.latency_maxed() { " (max)" } else { "" },
+                        u
+                    );
                     let col = match (u > 0, t.light) {
                         (true, true) => Color32::from_rgb(255, 200, 160),
                         (true, false) => t.brick,
@@ -902,8 +907,15 @@ impl App {
                     };
                     ui.label(egui::RichText::new(txt).small().monospace().color(col))
                         .on_hover_text(format!(
-                            "audio: {} @ {} Hz, latency and buffer underruns",
-                            a.device_name, a.sample_rate
+                            "audio: {} @ {} Hz · buffer {}\nlatency queued ahead of the device \
+                             (grows after underruns, up to {:.0} ms) and buffer underruns\n\
+                             engine load {:.0} % of real time{}",
+                            a.device_name,
+                            a.sample_rate,
+                            a.buffer,
+                            audio::MAX_TARGET as f32 * 1000.0 / a.sample_rate as f32,
+                            a.load_pct(),
+                            a.advice().map(|s| format!("\n{s}")).unwrap_or_default()
                         ));
                 }
                 // MIDI quick toggles (laid out right to left: shown as light, Chord, Rec)

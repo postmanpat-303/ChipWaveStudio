@@ -3097,3 +3097,69 @@ fn plugin_effect_device_missing_notice_duplicate_and_paste_get_new_uids() {
     assert_eq!(uids.len(), 4, "pasted devices are new instances");
     assert_eq!(fx[3].plugin.as_ref().unwrap().state, "c3RhdGU=");
 }
+
+/// UI frames vs the engine thread: how long the engine waits for the shared
+/// lock while the UI draws Chrome Throat playing (timeline + Browser > Plugins).
+#[test]
+#[ignore]
+fn rt_lock_wait_chrome_throat() {
+    let i = fileio::DEMOS
+        .iter()
+        .position(|d| d.0 == "Chrome Throat")
+        .unwrap();
+    let mut h = harness_with(fileio::demo_song_n(i));
+    h.state_mut().play(0);
+    frame(&mut h);
+    let shared = h.state().shared.clone();
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let st = stop.clone();
+    let eng = std::thread::spawn(move || {
+        let mut buf = vec![0.0f32; 512];
+        let (mut waits, mut renders) = (Vec::new(), Vec::new());
+        while !st.load(std::sync::atomic::Ordering::Relaxed) {
+            let t0 = std::time::Instant::now();
+            let mut s = crate::audio::lock(&shared);
+            let t1 = std::time::Instant::now();
+            let Shared {
+                song,
+                engine,
+                preview,
+            } = &mut *s;
+            engine.render(preview.as_ref().unwrap_or(song), &mut buf);
+            drop(s);
+            waits.push((t1 - t0).as_secs_f64() * 1e6);
+            renders.push(t1.elapsed().as_secs_f64() * 1e6);
+            // real time pacing of 256 frames is 5.3 ms; poll faster to see waits
+            std::thread::sleep(std::time::Duration::from_micros(500));
+        }
+        (waits, renders)
+    });
+    let mut ft = Vec::new();
+    for n in 0..240 {
+        if n == 120 {
+            h.state_mut().extra.browser_open = true;
+            h.state_mut().br.filter.tab = crate::browser::Tab::Plugins;
+        }
+        let t = std::time::Instant::now();
+        frame(&mut h);
+        ft.push(t.elapsed().as_secs_f64() * 1e3);
+    }
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    let (mut w, mut r) = eng.join().unwrap();
+    let pct = |v: &mut Vec<f64>, q: f64| {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v[((v.len() - 1) as f64 * q) as usize]
+    };
+    println!(
+        "RTL frames {} ms p50 {:.1} p99 {:.1} max {:.1} | lock wait us p50 {:.0} p99 {:.0} max {:.0} | render us p50 {:.0} p99 {:.0}",
+        ft.len(),
+        pct(&mut ft.clone(), 0.5),
+        pct(&mut ft.clone(), 0.99),
+        pct(&mut ft, 1.0),
+        pct(&mut w.clone(), 0.5),
+        pct(&mut w.clone(), 0.99),
+        pct(&mut w, 1.0),
+        pct(&mut r.clone(), 0.5),
+        pct(&mut r, 0.99),
+    );
+}
