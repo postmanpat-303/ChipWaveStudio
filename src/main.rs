@@ -207,7 +207,55 @@ fn self_test(out: Option<PathBuf>) -> i32 {
             ));
             ok
         };
-        let same = same && mode_same && mode_saved && notes_ok && audio_ok;
+        // automation lanes (M5): track lanes turn every fader down, a clip
+        // lane wins inside its clip, and both survive a save and load
+        let lanes_ok = {
+            let lane = |ch: usize, v: f32| automation::Lane {
+                target: format!("mixer.ch.{}.volume", ch + 1),
+                label: String::new(),
+                points: vec![automation::Point {
+                    pos: 0.0,
+                    value: v,
+                    shape: automation::Shape::Linear,
+                    curve: 0.0,
+                }],
+                enabled: true,
+            };
+            let peak = |a: &[f32]| a.iter().fold(0.0f32, |p, x| p.max(x.abs()));
+            let mut n = m.clone();
+            if let Some(t) = n.timeline.as_deref_mut() {
+                for (i, tr) in t.tracks.iter_mut().enumerate() {
+                    tr.auto.push(lane(i, 0.0));
+                }
+            }
+            let quiet = engine::render_song(&n, 22050);
+            if let Some(t) = n.timeline.as_deref_mut() {
+                for c in t.clips.iter_mut() {
+                    c.auto.push(lane(c.track as usize, 0.8));
+                }
+            }
+            let loud = engine::render_song(&n, 22050);
+            let (pq, pl, pw) = (peak(&quiet), peak(&loud), peak(&want));
+            // (sends and their returns keep some level when the faders are down)
+            let plays = pq < pw * 0.9 && pl > pq * 1.1 && loud.iter().all(|x| x.is_finite());
+            let tmp = std::env::temp_dir().join("chipwave_selftest_lanes.cwt");
+            let saved = fileio::save_cwt(&n, &tmp)
+                .and_then(|_| fileio::load_cwt_warn(&tmp))
+                .is_ok_and(|(b, w)| w.is_empty() && engine::render_song(&b, 22050) == loud);
+            std::fs::remove_file(&tmp).ok();
+            let ok = plays && saved;
+            report.push_str(&format!(
+                "  automation lanes: track and clip lanes play {} (peak {:.3} -> {:.3}, song {:.3}), round trip {} ({})\n",
+                if plays { "yes" } else { "NO" },
+                pq,
+                pl,
+                pw,
+                if saved { "yes" } else { "NO" },
+                if ok { "ok" } else { "FAILED" }
+            ));
+            ok
+        };
+        let same = same && mode_same && mode_saved && notes_ok && audio_ok && lanes_ok;
         let refused = fileio::song_from_text("min_reader_version = 999\n")
             .err()
             .is_some_and(|e| fileio::is_too_new(&e));

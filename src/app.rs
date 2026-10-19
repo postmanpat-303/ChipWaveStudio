@@ -14,6 +14,8 @@ mod about;
 mod arranger;
 #[cfg(test)]
 mod audioclip_tests;
+#[cfg(test)]
+mod autolanes_tests;
 mod blocklen;
 mod chordview;
 mod dialogs;

@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 33] = [
+pub const VIEWS: [&str; 34] = [
     "pattern",
     "arranger",
     "timeline",
@@ -42,6 +42,7 @@ pub const VIEWS: [&str; 33] = [
     "timeline-switch",
     "timeline-notes",
     "timeline-audio",
+    "timeline-automation",
     "mixer",
     "fx",
     "fill",
@@ -99,9 +100,11 @@ impl App {
         self.row = 0;
         match view {
             "arranger" | "cue" => self.view = View::Arranger,
-            "timeline" | "timeline-mode" | "timeline-notes" | "timeline-audio" => {
-                self.view = View::Timeline
-            }
+            "timeline"
+            | "timeline-mode"
+            | "timeline-notes"
+            | "timeline-audio"
+            | "timeline-automation" => self.view = View::Timeline,
             "timeline-switch" => {
                 self.view = View::Timeline;
                 self.tlv.ask_switch = Some(None);
@@ -304,7 +307,11 @@ impl App {
             });
             // the play marker (where Play song started) stays behind it
             self.cue = (13.min(self.order_len().saturating_sub(1)), 32);
-        } else if view == "timeline-mode" || view == "timeline-notes" || view == "timeline-audio" {
+        } else if view == "timeline-mode"
+            || view == "timeline-notes"
+            || view == "timeline-audio"
+            || view == "timeline-automation"
+        {
             // timeline mode with a few edits: a loop region, a marker, a
             // muted clip, a track speed, two selected clips; playing from
             // order entry CHIPWAVE_SHOT_POS (default 8)
@@ -350,6 +357,9 @@ impl App {
             }
             if view == "timeline-audio" {
                 self.shot_audio_clips(row);
+            }
+            if view == "timeline-automation" {
+                self.shot_automation(row);
             }
         } else if view == "timeline" {
             // play the song from order entry CHIPWAVE_SHOT_POS (default 8)
@@ -723,6 +733,91 @@ impl App {
         self.tlv.zoom = 30.0;
         self.tlv.scroll = (at - bar) as f64;
         self.tlv.track_h = 62.0;
+    }
+
+    /// timeline-automation: the Bass track unfolded with a volume lane
+    /// (a curved swell), a filter lane with a looping clip lane on one
+    /// clip (it wins inside the clip), and a pan lane on the Hats track
+    fn shot_automation(&mut self, row: usize) {
+        use crate::automation::{Lane, Point, Shape, Target};
+        use crate::timeline::{self as tl, PPQ};
+        let bar = 4 * PPQ;
+        let at = (row as i64 * tl::ROW / bar) * bar;
+        let r0 = (at / tl::ROW) as f32;
+        let pt = |pos: f32, value: f32, shape: Shape, curve: f32| Point {
+            pos,
+            value,
+            shape,
+            curve,
+        };
+        let sel = self.with(|s| {
+            let t = s.song.timeline.as_deref_mut()?;
+            let bass = 1.min(t.tracks.len() - 1);
+            let hats = 2.min(t.tracks.len() - 1);
+            let mut vol = Lane::new(Target::ChanVolume(bass), "Bass - Volume".into());
+            let v = |g: f32| Target::ChanVolume(bass).to_norm(g);
+            vol.points = vec![
+                pt(0.0, v(0.9), Shape::Linear, 0.0),
+                pt(r0, v(0.9), Shape::Linear, 0.0),
+                pt(r0 + 16.0, v(0.35), Shape::Linear, -0.55),
+                pt(r0 + 64.0, v(1.2), Shape::Linear, 0.0),
+                pt(r0 + 80.0, v(1.2), Shape::Step, 0.0),
+                pt(r0 + 96.0, v(0.8), Shape::Smooth, 0.0),
+                pt(r0 + 128.0, v(1.0), Shape::Linear, 0.0),
+            ];
+            let cut = Target::Cutoff(1);
+            let mut flt = Lane::new(cut, "02 Octave Bass - Filter cutoff".into());
+            flt.points = vec![
+                pt(0.0, cut.to_norm(900.0), Shape::Linear, 0.0),
+                pt(r0 + 32.0, cut.to_norm(600.0), Shape::Smooth, 0.0),
+                pt(r0 + 100.0, cut.to_norm(4000.0), Shape::Linear, 0.0),
+            ];
+            t.tracks[bass].auto = vec![vol, flt];
+            let mut pan = Lane::new(Target::ChanPan(hats), "Hats - Pan".into());
+            pan.points = (0..17)
+                .map(|k| {
+                    pt(
+                        r0 + k as f32 * 8.0,
+                        if k % 2 == 0 { 0.2 } else { 0.8 },
+                        Shape::Smooth,
+                        0.0,
+                    )
+                })
+                .collect();
+            t.tracks[hats].auto = vec![pan];
+            // a clip lane: a filter wobble that loops with the clip
+            let id = t
+                .clips
+                .iter()
+                .filter(|c| c.track as usize == bass && c.start >= at + 2 * bar)
+                .min_by_key(|c| c.start)
+                .map(|c| c.id);
+            if let Some(c) = id.and_then(|id| t.clips.iter_mut().find(|c| c.id == id)) {
+                let src = (c.offset / tl::ROW) as f32;
+                let rows = (c.loop_len.unwrap_or(c.len) / tl::ROW) as usize;
+                let mut w = Lane::new(cut, "02 Octave Bass - Filter cutoff".into());
+                w.points = (0..=rows / 4)
+                    .map(|k| {
+                        pt(
+                            src + k as f32 * 4.0,
+                            cut.to_norm(if k % 2 == 0 { 300.0 } else { 5000.0 }),
+                            Shape::Linear,
+                            if k % 2 == 0 { 0.5 } else { -0.5 },
+                        )
+                    })
+                    .collect();
+                c.auto = vec![w];
+            }
+            t.view.auto_open = 1 << bass | 1 << hats;
+            let crate::audio::Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
+            id
+        });
+        self.tlv.sel = sel;
+        self.tlv.sels = sel.into_iter().collect();
+        self.tlv.zoom = 9.0;
+        self.tlv.scroll = (at - bar) as f64;
+        self.tlv.track_h = 46.0;
     }
 
     fn shot_note_clip(&mut self, row: usize) {

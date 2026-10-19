@@ -13,6 +13,7 @@ use crate::timeline::{self as tl, Tick, PPQ, ROW};
 use std::collections::HashMap;
 
 pub(crate) mod audioclip;
+pub(crate) mod autolanes;
 mod edit;
 use edit::DragEdit;
 
@@ -182,6 +183,11 @@ pub(crate) struct TimelineUi {
     /// audio files being decoded, and decoded ones waiting to be placed
     pub(crate) imports: Vec<audioclip::Import>,
     pub(crate) ready_audio: Vec<(tl::AudioAsset, usize, Tick)>,
+    /// track rows and unfolded automation lanes as last drawn (M5)
+    pub(crate) layout: autolanes::Layout,
+    pub(crate) auto_drag: Option<autolanes::AutoDrag>,
+    pub(crate) auto_menu: Option<autolanes::AutoMenu>,
+    pub(crate) lane_menu: Option<(std::time::Instant, super::lanes::LaneMenu)>,
 }
 
 impl Default for TimelineUi {
@@ -216,6 +222,10 @@ impl Default for TimelineUi {
             frame_us: 0,
             imports: vec![],
             ready_audio: vec![],
+            layout: Default::default(),
+            auto_drag: None,
+            auto_menu: None,
+            lane_menu: None,
         }
     }
 }
@@ -297,6 +307,20 @@ fn fingerprint(song: &Song) -> u64 {
         }
         for c in t.clips.iter().filter(|c| c.audio().is_some()) {
             put(c.gain.to_bits() as u64 | (c.fade_shape as u64) << 32);
+        }
+        // automation lanes (M5): points, labels, which tracks are unfolded
+        put(tl::auto_key(song, t));
+        put(t.view.auto_open as u64);
+        for l in t
+            .tracks
+            .iter()
+            .flat_map(|x| x.auto.iter())
+            .chain(t.clips.iter().flat_map(|c| c.auto.iter()))
+        {
+            put(l.enabled as u64 | (l.points.len() as u64) << 1);
+            for b in l.label.bytes().chain(l.target.bytes()) {
+                put(b as u64);
+            }
         }
     }
     put(u64::MAX - 1);
@@ -767,7 +791,8 @@ impl App {
             self.tlv.scroll = 0.0;
         }
         let lane_h = self.tlv.th();
-        let total_h = n_tracks as f32 * lane_h;
+        let lay = autolanes::Layout::build(&self.tlv.cache.as_ref().unwrap().tl, mode, lane_h);
+        let total_h = lay.total();
         let max_sy = (total_h - lanes.height()).max(0.0);
         // ---- wheel: tracks / Shift: time / Ctrl: zoom at the mouse / Alt: track height
         let hover = ui.input(|i| i.pointer.hover_pos());
@@ -831,15 +856,21 @@ impl App {
         let tick_of = |x: f32| scroll + (x - lanes.left()) as f64 / ppt;
         let v0 = scroll.floor() as Tick;
         let v1 = (scroll + vis_ticks).ceil() as Tick + 1;
-        let first_tr = (sy / lane_h).floor().max(0.0) as usize;
-        let last_tr = (((sy + lanes.height()) / lane_h).ceil() as usize).min(n_tracks);
+        let first_tr = lay.track_at(sy).min(n_tracks);
+        let last_tr = (lay.track_at(sy + lanes.height()) + 1).min(n_tracks);
         let lane_rect = |tr: usize| {
-            let y = lanes.top() + tr as f32 * lane_h - sy;
+            let y = lanes.top() + lay.top[tr] - sy;
             Rect::from_min_max(
                 Pos2::new(lanes.left(), y),
                 Pos2::new(lanes.right(), y + lane_h),
             )
         };
+        let (song_lanes, units) = if lay.open.iter().any(|o| *o) {
+            self.lanes_view_data()
+        } else {
+            (vec![], vec![])
+        };
+        let mut auto_ops: Vec<autolanes::AutoOp> = vec![];
         let painter = ui.painter_at(full);
         // text on the dark CRT areas (ruler, lanes, overview): the theme inks
         // are dark in light themes (Amiga), so lift them there
@@ -971,7 +1002,7 @@ impl App {
         }
         let hover_clip = hover
             .filter(|p| lanes.contains(*p))
-            .and_then(|p| clip_at(c, p, lanes, lane_h, sy, tick_of(p.x)));
+            .and_then(|p| clip_at(c, &lay, p, lanes, sy, tick_of(p.x)));
         // empty block columns of the order list: faint slots (new songs start here)
         let k0 = c.map.starts.partition_point(|&s| s <= v0).saturating_sub(1);
         let k1 = c.map.starts.partition_point(|&s| s < v1);
@@ -1420,7 +1451,7 @@ impl App {
         let hp = ui.painter_at(heads);
         let mut head_ops: Vec<HeadOp> = vec![];
         for tr in first_tr..last_tr {
-            let y = heads.top() + tr as f32 * lane_h - sy;
+            let y = heads.top() + lay.top[tr] - sy;
             let hr = Rect::from_min_max(
                 Pos2::new(heads.left(), y + 1.0),
                 Pos2::new(heads.right(), y + lane_h - 1.0),
@@ -1463,7 +1494,7 @@ impl App {
             );
             let np = hp.with_clip_rect(Rect::from_min_max(
                 Pos2::new(hr.left() + 30.0, hr.top()),
-                Pos2::new(hr.right() - 112.0, hr.bottom()),
+                Pos2::new(hr.right() - 132.0, hr.bottom()),
             ));
             np.text(
                 Pos2::new(hr.left() + 32.0, ty),
@@ -1522,6 +1553,52 @@ impl App {
                 );
                 if resp.clicked() {
                     head_ops.push(op_);
+                }
+            }
+            // automation lanes: fold / unfold (M5)
+            {
+                let ar =
+                    Rect::from_min_size(Pos2::new(mr.left() - bs - 3.0, by), egui::vec2(bs, bs));
+                let open = lay.open.get(tr).copied().unwrap_or(false);
+                let nl = autolanes::track_targets(&c.tl, tr).len();
+                let resp = ui
+                    .interact(ar, ui.scope_id().with(("tl_auto_fold", tr)), Sense::click())
+                    .on_hover_text(if !mode {
+                        "automation lanes on this track (needs timeline mode; asks first)"
+                            .to_string()
+                    } else if open {
+                        "hide this track's automation lanes".to_string()
+                    } else if nl > 0 {
+                        format!("show this track's automation lanes ({nl})")
+                    } else {
+                        "automation lanes: show them, then + lane".to_string()
+                    });
+                hp.rect_filled(
+                    ar,
+                    3,
+                    if open {
+                        t.sage
+                    } else if resp.hovered() {
+                        t.pill.gamma_multiply(1.4)
+                    } else {
+                        t.pill
+                    },
+                );
+                hp.text(
+                    ar.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "A",
+                    FontId::proportional(11.0),
+                    if open {
+                        Color32::from_rgb(0x16, 0x18, 0x1B)
+                    } else if nl > 0 {
+                        t.sage
+                    } else {
+                        t.ink2
+                    },
+                );
+                if resp.clicked() {
+                    auto_ops.push(autolanes::AutoOp::Toggle(tr));
                 }
             }
             // volume mini-fader (0..2 linear, unity marked) and meter
@@ -1583,11 +1660,11 @@ impl App {
                 );
             }
             // the rest of the header selects the track (cursor channel)
-            let nr = Rect::from_min_max(hr.min, Pos2::new(mr.left() - 2.0, hr.bottom()));
+            let nr = Rect::from_min_max(hr.min, Pos2::new(mr.left() - bs - 5.0, hr.bottom()));
             let speed = c.tl.tracks[tr].speed;
             if speed > 0 {
                 hp.text(
-                    Pos2::new(mr.left() - 4.0, hr.bottom() - 9.0),
+                    Pos2::new(mr.left() - bs - 7.0, hr.bottom() - 9.0),
                     egui::Align2::RIGHT_CENTER,
                     format!("speed {speed}"),
                     FontId::proportional(10.0),
@@ -1812,6 +1889,33 @@ impl App {
             ui.scope_id().with("tl_lanes"),
             Sense::click_and_drag(),
         );
+        // automation lane rows (on top of the clip area's input)
+        {
+            let geo = autolanes::Geo {
+                lanes,
+                heads,
+                sy,
+                x_of: &x_of,
+                tick_of: &tick_of,
+                v0,
+                v1,
+                at: live.head.unwrap_or(cue_tick as f64),
+                mode,
+            };
+            autolanes::lanes_ui(
+                ui,
+                c,
+                &lay,
+                &geo,
+                first_tr..last_tr,
+                self.tlv.auto_drag.as_ref(),
+                self.tlv.auto_menu.as_ref(),
+                self.tlv.lane_menu.as_ref().map(|m| &m.1),
+                &song_lanes,
+                &units,
+                &mut auto_ops,
+            );
+        }
         // which part of a clip is under p: 0 body, 1 left edge, 2 right
         // edge, 3 fade-in handle, 4 fade-out handle (audio clips)
         let part = |i: usize, p: Pos2| {
@@ -1843,7 +1947,19 @@ impl App {
                 0
             }
         };
-        let tr_of = |y: f32| ((y - lanes.top() + sy) / lane_h).floor();
+        // the track at screen y (-1 above, n_tracks below the tracks)
+        let tr_of = |y: f32| {
+            let cy = y - lanes.top() + sy;
+            if cy < 0.0 {
+                -1.0
+            } else if cy >= lay.total() {
+                n_tracks as f32
+            } else {
+                lay.track_at(cy) as f32
+            }
+        };
+        // a clip row (not an automation lane or strip) at screen y
+        let in_clip_row = |y: f32| matches!(lay.part_at(y - lanes.top() + sy), Some((_, None)));
         self.tlv.hover_at = hover
             .filter(|p| lanes.contains(*p))
             .map(|p| (tr_of(p.y).max(0.0) as usize, tick_of(p.x).max(0.0) as Tick));
@@ -1859,7 +1975,7 @@ impl App {
         let add_mod = mods.command || mods.shift;
         if cresp.drag_started() {
             if let Some(p) = ui.input(|i| i.pointer.press_origin()) {
-                let hit = clip_at(c, p, lanes, lane_h, sy, tick_of(p.x));
+                let hit = clip_at(c, &lay, p, lanes, sy, tick_of(p.x));
                 match (hit, mode) {
                     (Some(_), false) => ask = true,
                     (Some(i), true) => {
@@ -1926,7 +2042,7 @@ impl App {
                 let at = |base: Tick| tl::snap((base as f64 + raw).max(0.0) as Tick, grid);
                 edit = match d.kind {
                     DragKind::Move { .. } => {
-                        let dtr = ((p.y - d.grab_y) / lane_h).round() as i32;
+                        let dtr = (tr_of(p.y) - tr_of(d.grab_y)) as i32;
                         Some(DragEdit::Move(at(d.anchor) - d.anchor, dtr))
                     }
                     DragKind::End(id) => Some(DragEdit::End(id, at(d.anchor))),
@@ -1982,7 +2098,7 @@ impl App {
             if let Some(p) = cresp.interact_pointer_pos() {
                 let tk = tick_of(p.x);
                 let tr = tr_of(p.y) as usize;
-                let hit = clip_at(c, p, lanes, lane_h, sy, tk);
+                let hit = clip_at(c, &lay, p, lanes, sy, tk);
                 let id = hit.map(|i| c.tl.clips[i].id);
                 match id {
                     Some(id) if add_mod && cresp.clicked() => {
@@ -2000,7 +2116,7 @@ impl App {
                         self.tlv.sels = id.into_iter().collect();
                     }
                 }
-                if cresp.double_clicked() && tr < n_tracks && tk >= 0.0 {
+                if cresp.double_clicked() && tr < n_tracks && tk >= 0.0 && in_clip_row(p.y) {
                     let tk = tk as Tick;
                     let entry = if mode {
                         usize::MAX
@@ -2040,7 +2156,7 @@ impl App {
             if let Some(p) = cresp.interact_pointer_pos() {
                 let tk = tick_of(p.x).max(0.0) as Tick;
                 self.tlv.menu_at = Some((tr_of(p.y).max(0.0) as usize, tk));
-                let id = clip_at(c, p, lanes, lane_h, sy, tick_of(p.x)).map(|i| c.tl.clips[i].id);
+                let id = clip_at(c, &lay, p, lanes, sy, tick_of(p.x)).map(|i| c.tl.clips[i].id);
                 if id.is_none_or(|id| !self.tlv.sels.contains(&id)) {
                     {
                         let x: Option<u32> = id;
@@ -2253,6 +2369,14 @@ impl App {
         for op in audio_ops {
             self.audio_op(op);
         }
+        for op in auto_ops {
+            self.auto_op(op);
+        }
+        if self.tlv.auto_drag.is_some() && !ui.input(|i| i.pointer.any_down()) {
+            // released outside its row
+            self.auto_op(autolanes::AutoOp::EndDrag);
+        }
+        self.tlv.layout = lay;
         if let Some((i, del)) = marker_op {
             if del {
                 self.with(|s| {
@@ -2441,17 +2565,23 @@ enum HeadOp {
     Speed(usize, u8),
 }
 
-/// the clip under `p` (index into `tl.clips`)
-fn clip_at(c: &Cache, p: Pos2, lanes: Rect, lane_h: f32, sy: f32, tk: f64) -> Option<usize> {
+/// the clip under `p` (index into `tl.clips`; clip rows only)
+fn clip_at(
+    c: &Cache,
+    lay: &autolanes::Layout,
+    p: Pos2,
+    lanes: Rect,
+    sy: f32,
+    tk: f64,
+) -> Option<usize> {
     if tk < 0.0 {
         return None;
     }
-    let tr = ((p.y - lanes.top() + sy) / lane_h).floor();
-    if tr < 0.0 {
+    let (tr, None) = lay.part_at(p.y - lanes.top() + sy)? else {
         return None;
-    }
+    };
     let tk = tk as Tick;
-    c.idx.visible(&c.tl, tr as usize, tk, tk + 1).last()
+    c.idx.visible(&c.tl, tr, tk, tk + 1).last()
 }
 
 impl TimelineUi {
@@ -2462,7 +2592,14 @@ impl TimelineUi {
         let cl = c.tl.clips.iter().find(|x| x.id == id)?;
         let ppt = self.zoom as f64 / PPQ as f64;
         let x = |t: Tick| self.lanes.left() + ((t as f64 - self.scroll) * ppt) as f32;
-        let y = self.lanes.top() + cl.track as f32 * self.th() - self.scroll_y;
+        let y = self.lanes.top()
+            + self
+                .layout
+                .top
+                .get(cl.track as usize)
+                .copied()
+                .unwrap_or(cl.track as f32 * self.th())
+            - self.scroll_y;
         Some(Rect::from_min_max(
             Pos2::new(x(cl.start), y + 2.0),
             Pos2::new(x(cl.end()), y + self.th() - 2.0),
