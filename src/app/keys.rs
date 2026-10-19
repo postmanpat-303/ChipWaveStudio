@@ -127,6 +127,10 @@ impl App {
             if self.pr_active() && self.pr_key(key, m) {
                 continue;
             }
+            // the Browser has the keyboard (clicked into last)
+            if self.br_active() && self.br_key(key, m, ctx) {
+                continue;
+            }
             // Timeline view: its own keys; plain keys never type into the pattern
             if self.view == View::Timeline {
                 if self.timeline_key(key, m) {
@@ -308,6 +312,7 @@ impl App {
                     self.ip.focus_search = true;
                 }
                 Key::I if cmd => self.toggle_instrument_panel(),
+                Key::B if cmd && !m.shift => self.toggle_browser(),
                 Key::F11 => self.toggle_full_height(),
                 Key::F12 => self.show_help = !self.show_help,
                 Key::S if cmd => self.save(m.shift),

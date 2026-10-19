@@ -40,6 +40,7 @@ pub enum Action {
     FullHeight,
     InstrumentPanel,
     ParamSearch,
+    Browser,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,7 +122,7 @@ mod key_name {
 }
 
 use Action as A;
-pub const DEFAULTS: [(Action, &str, Combo); 32] = [
+pub const DEFAULTS: [(Action, &str, Combo); 33] = [
     (
         A::PlayBlock,
         "Play / stop block",
@@ -233,6 +234,11 @@ pub const DEFAULTS: [(Action, &str, Combo); 32] = [
         A::ParamSearch,
         "Search instrument parameters",
         Combo::new(Key::F, true, false),
+    ),
+    (
+        A::Browser,
+        "Show / hide the Browser",
+        Combo::new(Key::B, true, false),
     ),
 ];
 

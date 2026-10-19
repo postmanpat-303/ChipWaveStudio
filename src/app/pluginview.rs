@@ -97,7 +97,7 @@ impl App {
     }
 
     /// a fresh plugin instrument maps its first 8 parameters to macros 1-8
-    fn default_macros(&mut self) {
+    pub(super) fn default_macros(&mut self) {
         self.with(|s| {
             let crate::audio::Shared { song, engine, .. } = s;
             let mut changed = false;
@@ -715,6 +715,13 @@ impl App {
                 .clicked()
             {
                 self.start_plugin_scan(true);
+            }
+            if ui
+                .button("Find plugins…")
+                .on_hover_text("search the standard folders (and optionally the whole drive) for VST3 / CLAP plugin folders, or pick them yourself")
+                .clicked()
+            {
+                self.open_plugin_setup(false);
             }
         });
         self.scan_progress_ui(ui);

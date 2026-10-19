@@ -17,6 +17,10 @@ mod audioclip_tests;
 #[cfg(test)]
 mod autolanes_tests;
 mod blocklen;
+#[cfg(test)]
+mod browser_tests;
+mod browserpanel;
+mod browserview;
 mod chordview;
 mod dialogs;
 mod edit;
@@ -45,6 +49,7 @@ mod pattern;
 mod piano_tests;
 mod pianoview;
 mod pluginview;
+mod plugsetup;
 mod sampleview;
 mod settingsview;
 pub mod shot;
@@ -54,6 +59,7 @@ mod timeline_m2_tests;
 #[cfg(test)]
 mod timeline_tests;
 mod topbar;
+mod trackops;
 mod transpose;
 #[cfg(test)]
 mod ui_tests;
@@ -159,6 +165,10 @@ pub struct App {
     chords: chordview::ChordHelper,
     /// instrument library window (0.2.3.9)
     library: library::Library,
+    /// the Browser panel (docs/BROWSER.md)
+    br: browserview::BrowserUi,
+    /// Find plugins dialog (first run, Settings › Plugins, Browser)
+    psetup: Option<plugsetup::PlugSetup>,
     /// instrument list search
     instr_query: String,
     /// Generator editor state: kit piece, Dice history (0.2.3.12)
@@ -473,6 +483,8 @@ impl App {
             fill: None,
             chords: Default::default(),
             library: Default::default(),
+            br: Default::default(),
+            psetup: None,
             instr_query: String::new(),
             gen_ui: Default::default(),
             ip: Default::default(),
@@ -536,6 +548,13 @@ impl App {
         };
         let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
         app.midi_apply(connect);
+        if cfg!(test) {
+            // tests open the Browser themselves (layouts stay as they were)
+            app.extra.browser_open = false;
+        } else if !app.extra.plugin_setup_done {
+            // first run, or once for users from before the Browser
+            app.open_plugin_setup(true);
+        }
         app
     }
 }
@@ -989,6 +1008,8 @@ impl eframe::App for App {
             }
         }
         self.midi_frame(&ctx);
+        self.br_poll(&ctx);
+        self.br.slot_rects.clear();
         self.handle_keys(&ctx);
         self.tick_safety();
         self.tick_derived();
@@ -1046,6 +1067,11 @@ impl eframe::App for App {
                     .id_salt("side_scroll")
                     .show(ui, |ui| self.side_panel(ui));
             });
+        if self.extra.browser_open {
+            self.browser_side(ui);
+        } else {
+            self.br.rect = Rect::NOTHING;
+        }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.inner_margin(egui::Margin {
                 left: 4,
@@ -1055,6 +1081,7 @@ impl eframe::App for App {
             }))
             .show(ui, |ui| {
                 let r = ui.max_rect();
+                self.br.central = r;
                 theme::cartridge(ui.painter(), r, th().ochre);
                 let inner = r.shrink2(egui::vec2(12.0, 8.0));
                 let inner =
@@ -1112,6 +1139,8 @@ impl eframe::App for App {
         self.modal_dialogs(&ctx);
         self.fill_dialog(&ctx);
         self.plugin_browser(&ctx);
+        self.plugin_setup_window(&ctx);
+        self.browser_drag(&ctx);
         // window close button: ask first when there are unsaved changes
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
             if self.dirty {

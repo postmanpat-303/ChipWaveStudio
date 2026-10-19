@@ -192,6 +192,9 @@ impl App {
                         let label = format!("{:02X}  {}{}", slot, n, tag);
                         let r =
                             instrument_row(ui, row_h, slot, n, ttag, self.instr == slot, &label);
+                        self.br
+                            .slot_rects
+                            .push((slot, r.rect.intersect(ui.clip_rect())));
                         if r.clicked() {
                             self.instr = slot;
                         }

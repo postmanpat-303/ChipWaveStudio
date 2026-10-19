@@ -188,6 +188,8 @@ pub(crate) struct TimelineUi {
     pub(crate) auto_drag: Option<autolanes::AutoDrag>,
     pub(crate) auto_menu: Option<autolanes::AutoMenu>,
     pub(crate) lane_menu: Option<(std::time::Instant, super::lanes::LaneMenu)>,
+    /// a track header being dragged (reorder): the track
+    pub(crate) head_drag: Option<usize>,
 }
 
 impl Default for TimelineUi {
@@ -226,6 +228,7 @@ impl Default for TimelineUi {
             auto_drag: None,
             auto_menu: None,
             lane_menu: None,
+            head_drag: None,
         }
     }
 }
@@ -1483,6 +1486,30 @@ impl App {
         // ---- track headers
         let hp = ui.painter_at(heads);
         let mut head_ops: Vec<HeadOp> = vec![];
+        let mut hd = self.tlv.head_drag;
+        // the subtitle: the instrument the track mostly plays, else the one
+        // it was given (Browser drop, Add track with instrument)
+        let given: Vec<String> = {
+            let names: Vec<String> =
+                self.with(|s| s.song.instruments.iter().map(|i| i.name.clone()).collect());
+            c.tl.tracks
+                .iter()
+                .map(|t| match t.instr {
+                    0 => String::new(),
+                    k => names
+                        .get(k as usize - 1)
+                        .map(|n| format!("{k:02X} {n}"))
+                        .unwrap_or_default(),
+                })
+                .collect()
+        };
+        let sub = |tr: usize| -> String {
+            if c.instr[tr].is_empty() {
+                given.get(tr).cloned().unwrap_or_default()
+            } else {
+                c.instr[tr].clone()
+            }
+        };
         for tr in first_tr..last_tr {
             let y = heads.top() + lay.top[tr] - sy;
             let hr = Rect::from_min_max(
@@ -1540,7 +1567,7 @@ impl App {
                 np.text(
                     Pos2::new(hr.left() + 32.0, hr.top() + 28.0),
                     egui::Align2::LEFT_CENTER,
-                    &c.instr[tr],
+                    sub(tr),
                     FontId::proportional(10.5),
                     t.ink2,
                 );
@@ -1705,14 +1732,59 @@ impl App {
                 );
             }
             let nresp = ui
-                .interact(nr, ui.scope_id().with(("tl_head", tr)), Sense::click())
+                .interact(nr, ui.scope_id().with(("tl_head", tr)), Sense::click_and_drag())
                 .on_hover_text(
-                    "select this track (the pattern editor's cursor channel) · right-click: track speed",
+                    "select this track (the pattern editor's cursor channel) · drag up or down: reorder · right-click: add track, track speed",
                 );
             if nresp.clicked() {
                 head_ops.push(HeadOp::Select(tr));
             }
+            if nresp.drag_started() {
+                hd = Some(tr);
+            }
+            if nresp.drag_stopped() && hd == Some(tr) {
+                hd = None;
+                if let Some(p) = ui.ctx().input(|i| i.pointer.latest_pos()) {
+                    let ins = insert_index(&lay, p.y - heads.top() + sy);
+                    let to = if ins > tr { ins - 1 } else { ins };
+                    if to != tr {
+                        head_ops.push(HeadOp::Move(tr, to));
+                    }
+                }
+            }
+            let ntracks = c.tl.tracks.len();
             nresp.context_menu(|ui| {
+                ui.label(egui::RichText::new(format!("Track {:02}", tr + 1)).strong());
+                let full = ntracks >= MAX_CHANNELS;
+                let tip = "all 32 tracks are used (the channel limit)";
+                if ui
+                    .add_enabled(!full, egui::Button::new("Add track above"))
+                    .on_disabled_hover_text(tip)
+                    .clicked()
+                {
+                    head_ops.push(HeadOp::Add(tr));
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(!full, egui::Button::new("Add track below"))
+                    .on_disabled_hover_text(tip)
+                    .clicked()
+                {
+                    head_ops.push(HeadOp::Add(tr + 1));
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(!full, egui::Button::new("Add track with instrument…"))
+                    .on_hover_text(
+                        "opens the Browser's Instruments tab: double-click one to make the track",
+                    )
+                    .on_disabled_hover_text(tip)
+                    .clicked()
+                {
+                    head_ops.push(HeadOp::AddWith(tr + 1));
+                    ui.close();
+                }
+                ui.separator();
                 ui.label(egui::RichText::new(format!("Track {:02} speed", tr + 1)).strong());
                 ui.label(
                     egui::RichText::new("ticks per row for this track's effects (timeline mode)")
@@ -1733,6 +1805,53 @@ impl App {
                     }
                 }
             });
+        }
+        // ---- header drag: the insertion line
+        if let (Some(from), Some(p)) = (hd, ui.ctx().input(|i| i.pointer.latest_pos())) {
+            let ins = insert_index(&lay, p.y - heads.top() + sy);
+            let y = heads.top() + lay.top.get(ins).copied().unwrap_or(lay.total()) - sy;
+            let lp = ui.painter_at(Rect::from_min_max(
+                heads.min,
+                Pos2::new(lanes.right(), heads.bottom()),
+            ));
+            if ins != from && ins != from + 1 {
+                lp.line_segment(
+                    [Pos2::new(heads.left(), y), Pos2::new(lanes.right(), y)],
+                    egui::Stroke::new(2.5, t.accent),
+                );
+            }
+            lp.text(
+                Pos2::new(p.x + 14.0, p.y),
+                egui::Align2::LEFT_CENTER,
+                format!("move track {:02}", from + 1),
+                FontId::proportional(11.0),
+                t.accent,
+            );
+            if !ui.ctx().input(|i| i.pointer.primary_down()) {
+                hd = None;
+            }
+        }
+        // ---- "+ Add track" below the last header
+        {
+            let y = heads.top() + lay.total() - sy + 4.0;
+            if y + 20.0 < heads.bottom() {
+                let br =
+                    Rect::from_min_size(Pos2::new(heads.left() + 6.0, y), egui::vec2(110.0, 20.0));
+                let n = c.tl.tracks.len();
+                let full = n >= MAX_CHANNELS;
+                let r = ui.put(
+                    br,
+                    egui::Button::new(egui::RichText::new("+ Add track").size(11.5)).small(),
+                );
+                let r = if full {
+                    r.on_hover_text("all 32 tracks are used (the channel limit)")
+                } else {
+                    r.on_hover_text("a new empty track below the last one · drop an instrument from the Browser here for a track that plays it")
+                };
+                if r.clicked() {
+                    head_ops.push(HeadOp::Add(n));
+                }
+            }
         }
         // ---- input: ruler seek / loop, markers, clips, scroll bars
         let mods = ui.input(|i| i.modifiers);
@@ -2449,6 +2568,7 @@ impl App {
             }
         }
         self.timeline_rename(ui.ctx());
+        self.tlv.head_drag = hd;
         for op in head_ops {
             self.timeline_head_op(op);
         }
@@ -2474,15 +2594,56 @@ impl App {
                 HeadOp::Mute(i) => mx[i].mute = !mx[i].mute,
                 HeadOp::Solo(i) => mx[i].solo = !mx[i].solo,
                 HeadOp::Volume(i, v) => mx[i].volume = v.clamp(0.0, 2.0),
-                HeadOp::Select(_) | HeadOp::Speed(..) => {}
+                HeadOp::Select(_)
+                | HeadOp::Speed(..)
+                | HeadOp::Move(..)
+                | HeadOp::Add(_)
+                | HeadOp::AddWith(_) => {}
             }
         });
+        match op {
+            HeadOp::Move(from, to) => {
+                self.track_move(from, to);
+                return;
+            }
+            HeadOp::Add(at) => {
+                if self.track_add(at) {
+                    self.status = format!("Added track {:02}", at + 1);
+                }
+                return;
+            }
+            HeadOp::AddWith(at) => {
+                if self.with(|s| s.song.channels) >= MAX_CHANNELS {
+                    self.status = "All 32 tracks are used (the channel limit)".into();
+                } else {
+                    self.br.new_track_at = Some(at);
+                    self.open_browser_tab(crate::browser::Tab::Instruments);
+                    self.status = format!(
+                        "Pick an instrument in the Browser (double-click or Enter) for the new track {:02}",
+                        at + 1
+                    );
+                }
+                return;
+            }
+            _ => {}
+        }
         if let HeadOp::Speed(i, v) = op {
             self.tl_apply(TlOp::Speed(i, v));
             return;
         }
         if let HeadOp::Select(i) = op {
             self.ch = i;
+            let given = self.with(|s| {
+                s.song
+                    .timeline
+                    .as_deref()
+                    .and_then(|t| t.tracks.get(i))
+                    .map(|t| t.instr)
+                    .unwrap_or(0)
+            });
+            if given > 0 && (given as usize) <= self.with(|s| s.song.instruments.len()) {
+                self.instr = given;
+            }
             self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
         }
         self.dirty = true;
@@ -2639,6 +2800,23 @@ enum HeadOp {
     Volume(usize, f32),
     Select(usize),
     Speed(usize, u8),
+    /// drag reorder: track, new index
+    Move(usize, usize),
+    /// an empty track at this index
+    Add(usize),
+    /// a track at this index with the instrument picked in the Browser
+    AddWith(usize),
+}
+
+/// the gap (0..=tracks) nearest content y, for the reorder insertion line
+fn insert_index(lay: &autolanes::Layout, y: f32) -> usize {
+    let n = lay.tracks();
+    (0..n)
+        .filter(|&k| {
+            let mid = (lay.top[k] + lay.top[k + 1].min(lay.top[k] + lay.clip_h)) / 2.0;
+            mid < y
+        })
+        .count()
 }
 
 /// the clip under `p` (index into `tl.clips`; clip rows only)
@@ -2680,6 +2858,56 @@ impl TimelineUi {
             Pos2::new(x(cl.start), y + 2.0),
             Pos2::new(x(cl.end()), y + self.th() - 2.0),
         ))
+    }
+
+    /// Where a Browser drop at `p` lands (headers or lanes): Ok(track) on
+    /// a track's rows, Err(n) below the last track (a new track); with the
+    /// snapped tick when `p` is over the lanes
+    pub(crate) fn drop_at(&self, p: Pos2) -> Option<(Result<usize, usize>, Option<Tick>)> {
+        let area = Rect::from_min_max(
+            self.heads.min,
+            Pos2::new(self.lanes.right(), self.heads.bottom()),
+        );
+        if !area.contains(p) || self.layout.tracks() == 0 {
+            return None;
+        }
+        let y = p.y - self.heads.top() + self.scroll_y;
+        let tick = self.lanes.contains(p).then(|| {
+            let t = self.scroll
+                + (p.x - self.lanes.left()) as f64 * PPQ as f64 / self.zoom.max(0.01) as f64;
+            tl::snap(t.max(0.0) as Tick, self.grid_now.max(1)).max(0)
+        });
+        if y >= self.layout.total() {
+            return Some((Err(self.layout.tracks()), tick));
+        }
+        Some((Ok(self.layout.track_at(y)), tick))
+    }
+
+    /// track `tr`'s header rect and its whole row (header + lanes) as last drawn
+    pub(crate) fn track_rects(&self, tr: usize) -> Option<(Rect, Rect)> {
+        let top = *self.layout.top.get(tr)?;
+        let y = self.heads.top() + top - self.scroll_y;
+        let h = self.layout.clip_h;
+        let hr = Rect::from_min_max(
+            Pos2::new(self.heads.left(), y),
+            Pos2::new(self.heads.right(), y + h),
+        )
+        .intersect(self.heads);
+        let row = Rect::from_min_max(
+            Pos2::new(self.heads.left(), y),
+            Pos2::new(self.lanes.right(), y + h),
+        )
+        .intersect(Rect::from_min_max(
+            self.heads.min,
+            Pos2::new(self.lanes.right(), self.heads.bottom()),
+        ));
+        Some((hr, row))
+    }
+
+    /// screen y just below the last track (clamped to the view)
+    pub(crate) fn tracks_bottom(&self) -> f32 {
+        (self.heads.top() + self.layout.total() - self.scroll_y)
+            .clamp(self.heads.top(), self.heads.bottom() - 2.0)
     }
 
     /// screen x of tick `t` as last drawn

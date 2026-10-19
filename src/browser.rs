@@ -242,18 +242,39 @@ const TAGS: [(&str, &[&str]); 14] = [
     (
         "FX",
         &[
-            "riser", "fx", "impact", "zap", "noise", "sweep", "downlifter", "laser", "wind",
-            "vinyl", "coin", "jump",
+            "riser",
+            "fx",
+            "impact",
+            "zap",
+            "noise",
+            "sweep",
+            "downlifter",
+            "laser",
+            "wind",
+            "vinyl",
+            "coin",
+            "jump",
         ],
     ),
-    ("Chip", &["chip", "pulse", "square", "nes", "sid", "8-bit", "8bit", "gameboy", "bit"]),
+    (
+        "Chip",
+        &[
+            "chip", "pulse", "square", "nes", "sid", "8-bit", "8bit", "gameboy", "bit",
+        ],
+    ),
     ("Analog", &["analog", "moog", "ladder", "saw"]),
     ("FM", &["fm", "operator", "dx"]),
-    ("Voice", &["voice", "vowel", "vocal", "vox", "speech", "choir", "robot"]),
+    (
+        "Voice",
+        &["voice", "vowel", "vocal", "vox", "speech", "choir", "robot"],
+    ),
     ("Warm", &["warm", "soft", "mellow", "smooth"]),
     ("Bright", &["bright", "super", "hoover", "shimmer"]),
     ("Plucky", &["pluck", "stab", "staccato"]),
-    ("Evolving", &["evolv", "morph", "motion", "scan", "formant", "sweep"]),
+    (
+        "Evolving",
+        &["evolv", "morph", "motion", "scan", "formant", "sweep"],
+    ),
 ];
 
 pub const TAG_NAMES: [&str; 14] = [
@@ -479,7 +500,11 @@ pub fn plugin_items(c: &crate::plugin::scan::Cache) -> Vec<Item> {
     let mut v = vec![];
     for f in c.instruments().into_iter().chain(c.effects()) {
         let inst = f.desc.is_instrument();
-        let fmt = if f.format == "vst3" { Fmt::Vst3 } else { Fmt::Clap };
+        let fmt = if f.format == "vst3" {
+            Fmt::Vst3
+        } else {
+            Fmt::Clap
+        };
         let feats: Vec<&str> = f
             .desc
             .features
@@ -581,7 +606,13 @@ pub const MAX_FILES: usize = 50_000;
 /// list the files the browser shows. `count` goes up per folder visited;
 /// `stop` ends the walk early.
 pub fn scan_folder(root: &Path, count: &AtomicUsize, stop: &AtomicBool) -> Vec<FileHit> {
-    fn walk(d: &Path, depth: usize, out: &mut Vec<FileHit>, count: &AtomicUsize, stop: &AtomicBool) {
+    fn walk(
+        d: &Path,
+        depth: usize,
+        out: &mut Vec<FileHit>,
+        count: &AtomicUsize,
+        stop: &AtomicBool,
+    ) {
         if depth > 12 || out.len() >= MAX_FILES || stop.load(Ordering::Relaxed) {
             return;
         }
@@ -885,7 +916,11 @@ pub fn sample_instrument(path: &Path) -> Result<Instrument, String> {
 
 /// a Wave generator instrument playing table `t` (built-in index, or an
 /// imported table) on oscillator A
-pub fn wave_instrument(name: &str, t: Option<u8>, user: Option<crate::wavetable::UserTable>) -> Instrument {
+pub fn wave_instrument(
+    name: &str,
+    t: Option<u8>,
+    user: Option<crate::wavetable::UserTable>,
+) -> Instrument {
     let mut g = crate::gen::presets()
         .into_iter()
         .find(|(_, _, p)| matches!(p.engine, crate::gen::GenEngine::Wave(_)))
@@ -951,7 +986,10 @@ pub fn instrument_of(it: &Item, song: &Song) -> Result<Instrument, String> {
                 Ok(wave_instrument(&name, None, Some(u)))
             }
             f if f.is_sample() => sample_instrument(p),
-            _ => Err(format!("{} files can't be loaded as an instrument", it.fmt.badge())),
+            _ => Err(format!(
+                "{} files can't be loaded as an instrument",
+                it.fmt.badge()
+            )),
         },
         _ => Err("not an instrument".into()),
     }

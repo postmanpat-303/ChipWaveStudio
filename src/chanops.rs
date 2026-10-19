@@ -18,7 +18,13 @@ use crate::model::{Cell, ChanMix, Song, MAX_CHANNELS};
 pub fn remap_channels(song: &mut Song, map: &[usize], n: usize, new_name: &str) {
     let old_n = song.channels.min(map.len());
     debug_assert!(n <= MAX_CHANNELS && map.iter().take(old_n).all(|&m| m < n));
-    let mv = |c: usize| -> Option<usize> { if c < old_n { Some(map[c]) } else { None } };
+    let mv = |c: usize| -> Option<usize> {
+        if c < old_n {
+            Some(map[c])
+        } else {
+            None
+        }
+    };
     // pattern columns
     for p in &mut song.patterns {
         for row in &mut p.cells {

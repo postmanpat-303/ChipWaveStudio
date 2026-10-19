@@ -10,12 +10,24 @@ fn tmpdir(name: &str) -> PathBuf {
 #[test]
 fn every_tab_has_built_in_items_and_badges_have_colours() {
     let v = builtin_items();
-    for t in [Tab::Instruments, Tab::Presets, Tab::Grid, Tab::Wavetables, Tab::Songs] {
+    for t in [
+        Tab::Instruments,
+        Tab::Presets,
+        Tab::Grid,
+        Tab::Wavetables,
+        Tab::Songs,
+    ] {
         assert!(v.iter().any(|i| i.tab == t), "{t:?} is empty");
     }
     assert_eq!(v.iter().filter(|i| i.tab == Tab::Wavetables).count(), 10);
-    assert!(v.iter().any(|i| matches!(i.src, Src::GridFx(_))), "Grid FX patches");
-    assert!(v.iter().any(|i| matches!(i.src, Src::Demo(_))), "demo songs");
+    assert!(
+        v.iter().any(|i| matches!(i.src, Src::GridFx(_))),
+        "Grid FX patches"
+    );
+    assert!(
+        v.iter().any(|i| matches!(i.src, Src::Demo(_))),
+        "demo songs"
+    );
     // keys are unique (favourites and ratings use them)
     let mut keys: Vec<&str> = v.iter().map(|i| i.key.as_str()).collect();
     keys.sort();
@@ -29,11 +41,16 @@ fn every_tab_has_built_in_items_and_badges_have_colours() {
     assert_eq!(cols.len(), Fmt::ALL.len());
     // every built-in instrument item makes an instrument
     let song = Song::empty();
-    for it in v.iter().filter(|i| matches!(i.tab, Tab::Instruments | Tab::Presets | Tab::Wavetables)) {
+    for it in v
+        .iter()
+        .filter(|i| matches!(i.tab, Tab::Instruments | Tab::Presets | Tab::Wavetables))
+    {
         instrument_of(it, &song).unwrap_or_else(|e| panic!("{}: {e}", it.name));
     }
     for it in v.iter().filter(|i| matches!(i.src, Src::GridFx(_))) {
-        let Src::GridFx(n) = &it.src else { unreachable!() };
+        let Src::GridFx(n) = &it.src else {
+            unreachable!()
+        };
         assert!(grid_fx_device(n).is_some());
     }
 }
@@ -100,7 +117,17 @@ fn folder_scan_classifies_files_skips_hidden_and_bundles() {
     std::fs::write(d.join("Wavetables/saw.wav"), &wav).unwrap();
     std::fs::write(d.join(".hidden/x.wav"), &wav).unwrap();
     std::fs::write(d.join("Synth.vst3/Contents/a.wav"), &wav).unwrap();
-    for f in ["loop.flac", "vox.mp3", "rain.ogg", "a.cwt", "b.cwt.toml", "c.mid", "d.mod", "e.cwi", "notes.txt"] {
+    for f in [
+        "loop.flac",
+        "vox.mp3",
+        "rain.ogg",
+        "a.cwt",
+        "b.cwt.toml",
+        "c.mid",
+        "d.mod",
+        "e.cwi",
+        "notes.txt",
+    ] {
         std::fs::write(d.join(f), b"x").unwrap();
     }
     let n = AtomicUsize::new(0);
@@ -125,12 +152,20 @@ fn folder_scan_classifies_files_skips_hidden_and_bundles() {
     let items = file_items(&root, &hits);
     let kick = items.iter().find(|i| i.name == "kick.wav").unwrap();
     assert_eq!(kick.tab, Tab::Samples);
-    assert_eq!(kick.category, Path::new("Drums").join("Kicks").display().to_string());
+    assert_eq!(
+        kick.category,
+        Path::new("Drums").join("Kicks").display().to_string()
+    );
     assert_eq!(kick.loc, Loc::Folder(root.clone()));
     assert!(kick.tags.contains(&"Drums"));
     let song = items.iter().find(|i| i.name == "b").unwrap();
     assert_eq!(song.tab, Tab::Songs);
-    assert!(items.iter().find(|i| i.name == "c.mid").unwrap().detail.contains("planned"));
+    assert!(items
+        .iter()
+        .find(|i| i.name == "c.mid")
+        .unwrap()
+        .detail
+        .contains("planned"));
     // a sample and a wavetable WAV load as instruments
     let s = Song::empty();
     let k = instrument_of(kick, &s).unwrap();
@@ -152,7 +187,12 @@ fn preview_song_plays_one_note_through_the_tracks_channel() {
     let p = preview_song(&inst, &base, 2);
     assert_eq!(p.mixer.channels[0].volume, 0.3);
     assert!(!p.mixer.channels[0].mute);
-    let notes: Vec<u8> = p.patterns[0].cells.iter().map(|r| r[0].note).filter(|&n| n > 0 && n != crate::model::NOTE_OFF).collect();
+    let notes: Vec<u8> = p.patterns[0]
+        .cells
+        .iter()
+        .map(|r| r[0].note)
+        .filter(|&n| n > 0 && n != crate::model::NOTE_OFF)
+        .collect();
     assert_eq!(notes, vec![crate::model::parse_note("C-3").unwrap()]);
     let out = crate::engine::render_song(&p, 22050);
     assert!(out.iter().any(|x| x.abs() > 1e-4), "it sounds");

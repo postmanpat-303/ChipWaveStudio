@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 37] = [
+pub const VIEWS: [&str; 40] = [
     "pattern",
     "arranger",
     "timeline",
@@ -71,6 +71,9 @@ pub const VIEWS: [&str; 37] = [
     "wave",
     "grid",
     "grid-fx",
+    "browser",
+    "browser-samples",
+    "plugin-setup",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -101,7 +104,68 @@ impl App {
             self.pattern = n.min(self.with(|s| s.song.patterns.len().saturating_sub(1)));
         }
         self.row = 0;
+        // the Browser shows in its own views only (the others stay as before)
+        self.extra.browser_open = view.starts_with("browser");
+        self.psetup = None;
         match view {
+            "browser" => {
+                self.view = View::Timeline;
+                self.ch = 1;
+                self.br.filter.tab = crate::browser::Tab::Instruments;
+                self.br.filter.tags = vec!["Bass"];
+                self.br_refresh();
+                let keys: Vec<String> = self
+                    .br_result_items()
+                    .iter()
+                    .map(|i| i.key.clone())
+                    .collect();
+                for (k, key) in keys.iter().enumerate().take(6) {
+                    self.extra
+                        .browser_ratings
+                        .insert(key.clone(), [3, 2, 3, 1, 2, 3][k]);
+                    if k % 2 == 0 {
+                        self.extra.browser_favs.push(key.clone());
+                    }
+                }
+                self.br.sel = keys.first().cloned();
+            }
+            "browser-samples" => {
+                self.view = View::Timeline;
+                let d = std::env::temp_dir()
+                    .join(format!("chipwave-shot-samples-{}", std::process::id()));
+                for (sub, names) in [
+                    (
+                        "Drums",
+                        &["Kick 909", "Snare Tight", "Hat Closed", "Clap Big"][..],
+                    ),
+                    ("Bass", &["Sub Sine C", "Reese Low"][..]),
+                    ("FX", &["Riser 8 bars", "Impact Boom"][..]),
+                ] {
+                    let _ = std::fs::create_dir_all(d.join(sub));
+                    for (k, n) in names.iter().enumerate() {
+                        let f = 55.0 * (k as f32 + 1.0);
+                        let data: Vec<f32> = (0..9600)
+                            .flat_map(|i| {
+                                let v = (i as f32 / 48000.0 * f * std::f32::consts::TAU).sin()
+                                    * (1.0 - i as f32 / 9600.0)
+                                    * 0.5;
+                                [v, v]
+                            })
+                            .collect();
+                        let _ = crate::engine::write_wav(
+                            &d.join(sub).join(format!("{n}.wav")),
+                            &data,
+                            48000,
+                        );
+                    }
+                }
+                self.br.filter.tab = crate::browser::Tab::Samples;
+                self.br_add_folder(d);
+            }
+            "plugin-setup" => {
+                self.view = View::Timeline;
+                self.open_plugin_setup(true);
+            }
             "arranger" | "cue" => self.view = View::Arranger,
             "timeline"
             | "timeline-mode"

@@ -12,7 +12,10 @@ fn render(song: &Song, secs: f32) -> Vec<f32> {
 
 fn max_diff(a: &[f32], b: &[f32]) -> f32 {
     assert_eq!(a.len(), b.len());
-    a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max)
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f32::max)
 }
 
 fn peak(a: &[f32]) -> f32 {
@@ -49,7 +52,10 @@ fn reorder_keeps_playback_tracker_and_timeline() {
         assert!(move_channel(&mut song, 1, 0));
         assert_eq!(song.channel_names[n - 1], name0);
         assert_eq!(song.mixer.channels[n - 1].pan, -0.6);
-        assert_eq!(song.automation.last().unwrap().target, Target::ChanVolume(1).id());
+        assert_eq!(
+            song.automation.last().unwrap().target,
+            Target::ChanVolume(1).id()
+        );
         assert_eq!(song.mixer.channels[1].volume, 0.5);
         if let Some(tl) = &song.timeline {
             assert_eq!(tl.tracks.len(), n);
@@ -58,7 +64,10 @@ fn reorder_keeps_playback_tracker_and_timeline() {
         let b = render(&song, 6.0);
         // only the summing order of the channels differs
         let d = max_diff(&a, &b);
-        assert!(d < 1e-4, "timeline {timeline}: reorder changed playback by {d}");
+        assert!(
+            d < 1e-4,
+            "timeline {timeline}: reorder changed playback by {d}"
+        );
     }
 }
 
@@ -75,7 +84,10 @@ fn insert_channel_is_silent_and_respects_the_limit() {
         assert!(insert_channel(&mut song, 1, "Bass 2"));
         assert_eq!(song.channels, n + 1);
         assert_eq!(song.channel_names[1], "Bass 2");
-        assert!(song.patterns.iter().all(|p| p.cells.iter().all(|r| r.len() == n + 1)));
+        assert!(song
+            .patterns
+            .iter()
+            .all(|p| p.cells.iter().all(|r| r.len() == n + 1)));
         let b = render(&song, 4.0);
         assert!(max_diff(&a, &b) < 1e-4);
         while song.channels < MAX_CHANNELS {

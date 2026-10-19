@@ -497,7 +497,9 @@ pub fn find_plugin_folders(
         if stop.load(Ordering::Relaxed) || visited.load(Ordering::Relaxed) >= limit {
             break;
         }
-        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
         visited.fetch_add(1, Ordering::Relaxed);
         if let Ok(mut g) = now.lock() {
             *g = d.display().to_string();
