@@ -315,6 +315,33 @@ impl App {
                     });
                 }
             }
+            // timeline mode, nothing selected: the selected track's first
+            // note or block clip, else nothing (an empty roll with a hint)
+            if self.tlv.sel.is_none() && self.with(|s| s.song.timeline.is_some()) {
+                let c = self.tlv.cache.as_ref()?;
+                let ch = self.ch;
+                return c
+                    .tl
+                    .clips
+                    .iter()
+                    .filter(|x| x.track as usize == ch)
+                    .filter_map(|cl| {
+                        let t = match cl.kind {
+                            tl::ClipKind::Block { pattern, col } => Target::Block {
+                                pattern,
+                                col: col as usize,
+                            },
+                            tl::ClipKind::Notes { data } => Target::Notes {
+                                data: data as usize,
+                                clip: Some(cl.id),
+                            },
+                            tl::ClipKind::Audio { .. } => return None,
+                        };
+                        Some((cl.start, t))
+                    })
+                    .min_by_key(|(start, _)| *start)
+                    .map(|(_, t)| t);
+            }
         }
         Some(Target::Block {
             pattern: self.pattern,
@@ -816,6 +843,18 @@ impl App {
         let t = th();
         let full = ui.max_rect();
         let Some(target) = self.pr_target() else {
+            self.pr.target = None;
+            ui.add_space(24.0);
+            ui.vertical_centered(|ui| {
+                ui.label(egui::RichText::new("Piano roll").strong().color(t.ink2));
+                ui.label(
+                    egui::RichText::new(
+                        "Select a clip on the Timeline to edit its notes here · Shift+double-click \
+                         empty space on a track makes a note clip",
+                    )
+                    .color(t.ink2),
+                );
+            });
             return;
         };
         if self.pr.target != Some(target) {

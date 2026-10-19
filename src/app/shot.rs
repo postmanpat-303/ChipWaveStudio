@@ -36,11 +36,12 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 47] = [
+pub const VIEWS: [&str; 48] = [
     "pattern",
     "arranger",
     "timeline",
     "timeline-new",
+    "timeline-layout",
     "timeline-mode",
     "timeline-switch",
     "timeline-notes",
@@ -269,6 +270,28 @@ impl App {
             }
             "timeline-new" => {
                 self.new_song();
+                self.dirty = false;
+            }
+            "timeline-layout" => {
+                // the default layout on a timeline-mode song, a clip with
+                // notes selected (track CHIPWAVE_SHOT_SEL, default 2)
+                self.enter_timeline();
+                self.default_layout();
+                let tr = std::env::var("CHIPWAVE_SHOT_SEL")
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(2);
+                let id = self.with(|s| {
+                    let t = s.song.timeline.as_deref()?;
+                    t.clips
+                        .iter()
+                        .filter(|c| c.track as usize == tr)
+                        .min_by_key(|c| c.start)
+                        .map(|c| c.id)
+                });
+                self.ch = tr;
+                self.tlv.sel = id;
+                self.tlv.sels = id.into_iter().collect();
                 self.dirty = false;
             }
             "mixer" => self.view = View::Mixer,

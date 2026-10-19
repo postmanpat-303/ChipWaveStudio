@@ -140,7 +140,8 @@ impl App {
         self.instr = 1;
         self.reset_cursor();
         if tl {
-            self.view = View::Timeline;
+            // Timeline on top, the piano roll below
+            self.default_layout();
             self.tlv.start_new_song();
             self.status =
                 "New song · drag an instrument from the Browser onto the timeline, or + Add track"
@@ -240,6 +241,11 @@ impl App {
                 });
                 self.path = if text { None } else { Some(p.clone()) };
                 self.reset_cursor();
+                // timeline-mode songs open in the default layout; tracker-
+                // mode songs keep the view (Ctrl+6 is one key away)
+                if self.with(|s| s.song.timeline.is_some()) {
+                    self.default_layout();
+                }
                 self.add_recent(&p);
                 self.status = if warnings.is_empty() {
                     format!("Opened {}", p.display())

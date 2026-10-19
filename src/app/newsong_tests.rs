@@ -186,3 +186,94 @@ fn add_track_on_a_clean_song() {
     key(&mut h, Key::Z, egui::Modifiers::COMMAND);
     frames(&mut h, 2);
 }
+
+// ---- the default layout: Timeline on top, piano roll below (Ctrl+6)
+
+#[test]
+fn new_song_opens_the_timeline_with_the_piano_roll_below() {
+    let mut h = clean();
+    assert!(h.state().is_default_layout());
+    assert!(h.state().pr.open && !h.state().extra.lower_inst);
+    assert_eq!(h.state().extra.lower_h, 0.0, "default height (about 40 %)");
+    // empty song: an empty piano roll with a hint, no target
+    assert_eq!(h.state().pr_target(), None);
+    assert!(h.state().pr.target.is_none());
+    // the Inspector opens alongside
+    key(&mut h, Key::I, egui::Modifiers::NONE);
+    frames(&mut h, 2);
+    assert!(h.state().extra.inspector_open && h.state().is_default_layout());
+}
+
+#[test]
+fn ctrl_6_view_bar_and_view_menu_bring_the_default_layout_back() {
+    use egui_kittest::kittest::Queryable;
+    let mut h = clean();
+    key(&mut h, Key::Num3, egui::Modifiers::COMMAND);
+    frames(&mut h, 2);
+    assert_eq!(h.state().view, View::Mixer);
+    key(&mut h, Key::Num6, egui::Modifiers::COMMAND);
+    frames(&mut h, 2);
+    assert!(h.state().is_default_layout(), "Ctrl+6");
+    // the instrument editor, then the view bar button
+    h.state_mut().show_instrument_panel();
+    frames(&mut h, 2);
+    assert!(!h.state().is_default_layout());
+    h.get_by_label("TIMELINE + PIANO").click();
+    frames(&mut h, 2);
+    assert!(h.state().is_default_layout(), "view bar button");
+    // a resized lower panel goes back to the default height
+    h.state_mut().extra.lower_h = 600.0;
+    h.state_mut().view = View::Fx;
+    h.state_mut().reset_layout();
+    assert!(h.state().is_default_layout() && h.state().extra.lower_h == 0.0);
+}
+
+#[test]
+fn the_piano_roll_follows_the_selected_clip_or_the_tracks_first_clip() {
+    use crate::app::pianoview::Target;
+    let mut s = fileio::demo_song();
+    crate::timeline::enter_timeline_mode(&mut s);
+    let mut h = harness_with(s);
+    h.state_mut().default_layout();
+    frames(&mut h, 3);
+    let clips = song(&mut h, |s| s.timeline.as_ref().unwrap().clips.clone());
+    // nothing selected: track 1's first clip
+    h.state_mut().ch = 1;
+    frames(&mut h, 2);
+    let first = clips
+        .iter()
+        .filter(|c| c.track == 1)
+        .min_by_key(|c| c.start)
+        .unwrap();
+    let (p, col) = first.block().unwrap();
+    assert_eq!(
+        h.state().pr_target(),
+        Some(Target::Block { pattern: p, col })
+    );
+    // a selected clip on another track wins
+    let other = clips
+        .iter()
+        .filter(|c| c.track == 3)
+        .max_by_key(|c| c.start)
+        .unwrap();
+    h.state_mut().tlv.sel = Some(other.id);
+    frames(&mut h, 2);
+    let (p, col) = other.block().unwrap();
+    assert_eq!(h.state().pr.target, Some(Target::Block { pattern: p, col }));
+}
+
+#[test]
+fn opening_a_timeline_song_shows_the_default_layout() {
+    let dir = std::env::temp_dir().join(format!("cw-layout-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = fileio::demo_song();
+    crate::timeline::enter_timeline_mode(&mut s);
+    let p = dir.join("tl.cwt");
+    fileio::save_cwt(&s, &p).unwrap();
+    let mut h = harness_with(fileio::demo_song());
+    h.state_mut().view = View::Mixer;
+    h.state_mut().open_path(p);
+    frames(&mut h, 2);
+    assert!(h.state().is_default_layout());
+    std::fs::remove_dir_all(&dir).ok();
+}

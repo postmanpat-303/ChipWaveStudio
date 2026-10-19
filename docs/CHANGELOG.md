@@ -4,6 +4,11 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Timeline + piano roll by default
+- The app starts with the **Timeline on top and the piano roll in the lower panel** (about 40 %, resizable). New songs and timeline-mode songs open in it; tracker-mode songs keep their view.
+- The piano roll follows the selected clip; with nothing selected, the selected track's first clip, or an empty roll with a hint.
+- Back in one step: **Ctrl+6**, **View › Reset to default layout**, or **TIMELINE + PIANO** in the view tab bar. Inspector and Browser work alongside.
+
 ### Clean new songs
 - **File › New song (Ctrl+N) starts clean:** no instruments, no tracks, no notes, only the **Song / Master** track, with a hint on the Timeline to drag an instrument from the Browser or click **+ Add track**. Default tempo and time signature as before. (Before, a new song kept the current song's instruments and channels.) With **Settings › New songs** off it's a tracker-mode song with four empty channels and no instruments.
 - Zero-track songs work everywhere: Inspector, mixer, instrument editor, piano roll, export, the view tabs, undo; leaving timeline mode gives one empty channel. **+ Add track** and changing the channel count keep Song / Master as the last track.

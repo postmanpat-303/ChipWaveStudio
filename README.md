@@ -236,6 +236,7 @@ On Linux, build it from source (below).
 | `Alt +` / `Alt -` (Shift = octave) | transpose selection or channel (also the Block bar **-12 -1 +1 +12** buttons and **Edit › Transpose**, which has *Transpose by…* for -24…+24) |
 | `F9` / `F10` | mute / solo channel |
 | `Ctrl+1`…`5`, `Ctrl+Tab` | Pattern / Arranger / Mixer / FX / Sample view |
+| `Ctrl+6` | the default layout: Timeline on top, piano roll below (also View › Reset to default layout and **TIMELINE + PIANO** in the view tab bar) |
 | `Ctrl+T` | Timeline view (tracks and clips; in timeline mode drag, loop, split, copy clips, [TIMELINE.md](docs/TIMELINE.md)) |
 | `Ctrl+Shift+F` | Fill to length |
 | `Ctrl+Shift+PgDn` / `Ctrl+Shift+PgUp` | double / halve the block length (or the Length field in the Block bar) |

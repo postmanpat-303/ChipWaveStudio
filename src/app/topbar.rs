@@ -406,6 +406,28 @@ impl App {
                         self.view = *v;
                     }
                 }
+                if ui
+                    .add(
+                        egui::Button::selectable(self.is_default_layout(), "Timeline + Piano roll")
+                            .shortcut_text("Ctrl+6"),
+                    )
+                    .on_hover_text("the default layout: the Timeline on top, the piano roll below")
+                    .clicked()
+                {
+                    self.reset_layout();
+                    ui.close();
+                }
+                if ui
+                    .button("Reset to default layout")
+                    .on_hover_text(
+                        "Timeline on top, piano roll in the lower panel at its default height \
+                         (Ctrl+6); the Inspector and Browser stay as they are",
+                    )
+                    .clicked()
+                {
+                    self.reset_layout();
+                    ui.close();
+                }
                 ui.separator();
                 if ui
                     .add(

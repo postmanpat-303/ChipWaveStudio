@@ -163,9 +163,16 @@ When all 32 tracks are used, the add commands are greyed out with "all 32 tracks
 
 **Reordering moves the whole channel**, in timeline *and* tracker mode: its column in every block (so tracker-mode blocks are remapped, not just the view), its mixer strip (volume, pan, mute / solo, sends, ducking, and the duck key if it was this channel), its name, its timeline track (clips, height, automation lanes) and every automation lane or modulation route that targets the channel (`mixer.ch.N.volume`, `…pan`, `…send.X`). Playback is therefore the same music; only the order in which the channels are added together changes, which can differ in the last bits of a float (tests allow 1e‑4 and in practice it's far smaller). We chose to remap safely in both modes rather than allow reordering only in timeline mode, because tracks are channels in both and a tracker-mode user expects the columns to follow. Track colours follow the position unless you picked one in the [Inspector](INSPECTOR.md) (timeline mode; saved with the song), so a moved track without its own colour takes the colour of its new place.
 
+## The default layout: Timeline + piano roll
+
+ChipWave starts with the **Timeline on top and the piano roll docked below** (about 40 % of the height; drag the splitter to resize). File › New and opening a timeline-mode song show the same layout; tracker-mode songs open in the view you are in.
+
+- The piano roll follows the selection: **click a clip** and its notes are in the roll; double-click still opens it focused. With nothing selected it shows the selected track's first clip, or an empty roll with a hint.
+- **Back to it in one step:** **Ctrl+6**, **View › Reset to default layout** (also the panel height), or **TIMELINE + PIANO** at the left of the view tab bar. The Inspector (I) and the Browser stay as they are.
+
 ## New songs
 
-**File › New** (Ctrl+N) is a clean project: timeline mode on the Timeline view, **no tracks and no instruments**, only the **Song / Master** track (tempo, master and return automation), default tempo (125 BPM) and time signature. The lanes say *"Drag an instrument from the Browser here, or + Add track"*: a Browser drop makes the first track with that instrument; **+ Add track** makes an empty one (double-click it to write a block). Undo takes either back. Leaving timeline mode with no tracks gives the song one empty channel, since the tracker needs a column.
+**File › New** (Ctrl+N) is a clean project: timeline mode on the Timeline view, **no tracks and no instruments**, only the **Song / Master** track (tempo, master and return automation), with the piano roll below, default tempo (125 BPM) and time signature. The lanes say *"Drag an instrument from the Browser here, or + Add track"*: a Browser drop makes the first track with that instrument; **+ Add track** makes an empty one (double-click it to write a block). Undo takes either back. Leaving timeline mode with no tracks gives the song one empty channel, since the tracker needs a column.
 
 ![A new song on the Timeline view: no tracks, only Song / Master, and the hint to drag an instrument from the Browser or + Add track](screenshots/dark-timeline-new-song.png)
 

@@ -56,6 +56,8 @@ A slim bar above the status line:
 - **Transport:** to start (play marker to bar 1), **Play song** (from the
   play marker), **Stop**, and the position: `bar 12.3 · 0:41.2` in
   timeline mode, `pos 03 · row 12` in tracker mode, plus the tempo.
+- **TIMELINE + PIANO:** the default layout (Timeline on top, piano roll
+  below; Ctrl+6, View › Reset to default layout). Lit while it is showing.
 - **Tabs:** **TIMELINE** · **TRACKER** (pattern editor) · **ARRANGER** ·
   **PIANO** (piano roll in the lower panel) · **INST** (instrument editor in
   the lower panel) · **AUTO** (automation lanes in the lower panel) ·
@@ -65,7 +67,7 @@ A slim bar above the status line:
 - **Right:** **Inspector** and **Browser** toggles.
 
 The tabs call the same switches as the toolbar's VIEW group, the View menu
-and the shortcuts (Ctrl+1 … 5, Ctrl+T, Ctrl+I, F11), so those keep working
+and the shortcuts (Ctrl+1 … 6, Ctrl+T, Ctrl+I, F11), so those keep working
 and the bar follows them. **View › View tab bar** hides it (saved).
 
 ## Settings

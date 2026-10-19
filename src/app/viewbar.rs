@@ -223,6 +223,30 @@ impl App {
                     .color(hdr_dim()),
             );
             ui.add_space(14.0);
+            // ---- the default layout, one click away
+            {
+                let on = self.is_default_layout();
+                let txt = egui::RichText::new("TIMELINE + PIANO")
+                    .size(11.0)
+                    .strong()
+                    .color(if on { t.accent } else { hdr_text() });
+                let b = egui::Button::new(txt)
+                    .min_size(egui::vec2(112.0, 22.0))
+                    .corner_radius(if theme::polished() { 5 } else { 2 })
+                    .stroke(egui::Stroke::new(
+                        1.0,
+                        t.accent.gamma_multiply(if on { 0.9 } else { 0.45 }),
+                    ))
+                    .fill(Color32::from_black_alpha(if t.light { 20 } else { 50 }));
+                if ui
+                    .add(b)
+                    .on_hover_text("the default layout: Timeline on top, piano roll below (Ctrl+6)")
+                    .clicked()
+                {
+                    self.reset_layout();
+                }
+                ui.add_space(8.0);
+            }
             // ---- view tabs
             let cur = self.vtab_current();
             let main = self.vtab_main();

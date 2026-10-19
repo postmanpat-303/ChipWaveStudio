@@ -210,6 +210,39 @@ impl App {
         self.save_settings();
     }
 
+    /// The default workspace (Del, 19 Oct 2026): the Timeline on top and
+    /// the piano roll docked in the lower panel at about 40 % of the height.
+    /// Shown on start, on File > New and when a timeline-mode song opens;
+    /// Ctrl+6, View > Reset to default layout and the view bar's
+    /// TIMELINE + PIANO button bring it back. The Inspector and the Browser
+    /// stay as they are.
+    pub(super) fn default_layout(&mut self) {
+        self.view = View::Timeline;
+        self.dock_arranger = true;
+        self.extra.full_height = false;
+        self.extra.lower_inst = false;
+        self.extra.lower_h = 0.0;
+        self.show_auto = false;
+        self.arr_focus = false;
+        self.pr.open = true;
+        self.pr.focus = true;
+    }
+
+    /// the default layout is showing
+    pub(super) fn is_default_layout(&self) -> bool {
+        self.view == View::Timeline
+            && self.lower_visible()
+            && !self.extra.lower_inst
+            && self.pr.open
+    }
+
+    /// Ctrl+6 / View > Reset to default layout (saved)
+    pub(super) fn reset_layout(&mut self) {
+        self.default_layout();
+        self.save_settings();
+        self.status = "Timeline + piano roll (the default layout; Ctrl+6)".into();
+    }
+
     /// 0 arranger, 1 instrument, 2 automation
     pub(super) fn set_lower(&mut self, m: u8) {
         self.dock_arranger = true;
@@ -242,7 +275,10 @@ impl App {
     pub(super) fn pattern_and_lower(&mut self, ui: &mut egui::Ui, inner: Rect) {
         let t = th();
         let nl = self.with(|s| s.song.automation.len());
-        let auto_h = if self.extra.lower_inst || self.pr.open {
+        let auto_h = if self.pr.open && !self.extra.lower_inst {
+            // the default layout: the piano roll at about 40 %
+            (inner.height() * 0.40).max(200.0)
+        } else if self.extra.lower_inst || self.pr.open {
             (inner.height() * 0.45).clamp(200.0, 340.0)
         } else if self.show_auto && nl > 0 {
             (inner.height() * 0.5).clamp(190.0, 120.0 + nl as f32 * 68.0 + 60.0)
