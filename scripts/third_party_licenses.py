@@ -371,3 +371,16 @@ for p in pkgs:
         out.write(f"{p['name']} {p['version']} - {os.path.relpath(f, d)}\n")
         out.write("=" * 60 + "\n")
         out.write(txt + "\n\n")
+
+# MPL-2.0 crates that ship no licence file (Symphonia, audio-clip decoding):
+# the licence text, and where their source code is (MPL-2.0 section 3.2)
+mpl = [p for p in pkgs if "MPL-2.0" in (p.get("license") or "")]
+if mpl:
+    out.write("=" * 60 + "\n")
+    out.write("MPL-2.0 crates: " + ", ".join(f"{p['name']} {p['version']}" for p in mpl) + "\n")
+    out.write("=" * 60 + "\n")
+    out.write("These crates are used unmodified under the Mozilla Public License 2.0.\n"
+              "Their source code is at https://crates.io (crate pages above) and\n"
+              "https://github.com/pdeljanov/Symphonia. The licence text follows.\n\n")
+    here = os.path.dirname(os.path.abspath(__file__))
+    out.write(open(os.path.join(here, "licenses", "MPL-2.0.txt"), encoding="utf-8").read().strip() + "\n\n")

@@ -428,3 +428,39 @@ fn audio_clips_block_tracker_mode_and_survive_fix() {
     let a = s.timeline.as_deref().unwrap();
     assert!(a.same_content(&a.clone()));
 }
+
+#[test]
+fn export_renders_audio_clips_and_the_tail_does_not_replay_them() {
+    let mut s = song();
+    // a clip at tick 0 that is the whole song: the wrap to row 0 at the end
+    // must not start it again in the export tail
+    let id = audio_clip(&mut s, 0, asset("tone", 44100, 1, sine(44100, 300.0, 1.0)));
+    let len = clip(&mut s, id).len;
+    tl(&mut s).clips.retain(|c| c.audio().is_some());
+    tl(&mut s).end = len;
+    let o = crate::export::Opts {
+        format: crate::export::Format::Wav,
+        sample_rate: 48000,
+        tail_secs: 1.0,
+        normalise: false,
+        limiter: false,
+        ..Default::default()
+    };
+    let out = crate::export::render(&s, &o, &Default::default()).unwrap();
+    let l = left(&out);
+    let loud = |a: usize, b: usize| {
+        l[a..b.min(l.len())]
+            .iter()
+            .fold(0.0f32, |m, x| m.max(x.abs()))
+    };
+    assert!(loud(0, 48000) > 0.05, "the clip plays in the export");
+    let end = (s.length_seconds() * 48000.0) as usize;
+    // (the render block that crosses the end wraps to row 0, as for any
+    // sound; at most one 1024-frame block, then the de-click fade)
+    let first_loud = (end + 1024 + 64..l.len()).find(|&i| l[i].abs() > 1e-3);
+    assert!(
+        first_loud.is_none(),
+        "tail plays from {first_loud:?} (song end {end}, total {})",
+        l.len()
+    );
+}

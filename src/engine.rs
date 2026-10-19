@@ -1996,6 +1996,10 @@ impl Engine {
         let nch = song.channels.clamp(1, MAX_CHANNELS);
         // note clips (timeline mode): the plan can't change during a callback
         let note_plan = self.tl.plan.clone().filter(|p| self.tl.on && p.has_notes());
+        // stopped without `stop` (export tails): audio clips fade out
+        if !self.playing && self.av.any {
+            self.av.release_all();
+        }
         // audio clips (timeline mode, M4); voices fading out after a stop
         // still read their files through the plan
         let audio_plan = self
