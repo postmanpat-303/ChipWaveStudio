@@ -110,6 +110,60 @@ pub enum Target {
     /// generator instrument, knob (`crate::gen::gen_knobs`; 0-based, the id
     /// is 1-based: `instrument.N.gen.K`), normalised 0..1 knob value
     Gen(usize, usize),
+    /// synth patch knob of an instrument (Synth / Voice / generator base
+    /// patch): instrument, `modulation::PATCH_PARAMS` index; the id is
+    /// `instrument.N.patch.<key>` with `.` in the key written as `-`
+    Patch(usize, usize),
+    /// depth of modulation route K (0-based; id `mod.K.amount`, 1-based),
+    /// -1..1 (normalised 0..1 = -100 %..+100 %)
+    ModAmount(usize),
+}
+
+/// The value a target has in the song, normalised 0..1 (the base that
+/// modulation moves around). None for values that live in a plugin (plugin
+/// FX parameters, plugin macros) or an unknown target. No allocation.
+pub fn song_norm(song: &crate::model::Song, t: Target) -> Option<f32> {
+    use crate::model::InstrumentKind;
+    Some(match t {
+        Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) => {
+            let p = song.instruments.get(i)?.kind.patch()?;
+            t.to_norm(match t {
+                Target::Cutoff(_) => p.cutoff,
+                Target::Resonance(_) => p.resonance,
+                _ => p.drive,
+            })
+        }
+        Target::Patch(i, k) => {
+            let p = song.instruments.get(i)?.kind.patch()?;
+            let pp = crate::modulation::PATCH_PARAMS.get(k)?;
+            t.to_norm((pp.get)(p))
+        }
+        Target::Level(_) => t.to_norm(1.0),
+        Target::ChanVolume(c) => t.to_norm(song.mixer.channels.get(c)?.volume),
+        Target::ChanPan(c) => t.to_norm(song.mixer.channels.get(c)?.pan),
+        Target::Master => t.to_norm(song.mixer.master),
+        Target::Tempo => t.to_norm(song.bpm),
+        Target::Fx(i, d, p) => {
+            let dev = song.instruments.get(i)?.fx.get(d)?;
+            if dev.plugin.is_some() {
+                return None;
+            }
+            *dev.params.get(p)?
+        }
+        Target::Ret(r, p) => *song.mixer.returns.get(r)?.device.params.get(p)?,
+        Target::Send(c, r) => *song.mixer.channels.get(c)?.send.get(r)?,
+        Target::Macro(..) => return None,
+        Target::Gen(i, k) => match &song.instruments.get(i)?.kind {
+            InstrumentKind::Gen(g) => crate::gen::gen_knob_norm(g, k)?,
+            _ => return None,
+        },
+        Target::ModAmount(k) => t.to_norm(song.modulation.routes.get(k)?.amount),
+    })
+}
+
+/// can a modulation route drive this target (tempo and route depths can't)
+pub fn modulatable(t: Target) -> bool {
+    !matches!(t, Target::Tempo | Target::ModAmount(_) | Target::Macro(..))
 }
 
 /// per-instrument value units for lane text: FX device kinds and the
@@ -183,6 +237,13 @@ impl Target {
                 let k = num(k).filter(|k| *k < crate::gen::GEN_KNOBS)?;
                 Some(Target::Gen(i, k))
             }
+            ["mod", k, "amount"] => num(k)
+                .filter(|k| *k < crate::modulation::MAX_ROUTES)
+                .map(Target::ModAmount),
+            ["instrument", n, "patch", key] => {
+                let i = num(n)?;
+                crate::modulation::patch_param_id(key).map(|k| Target::Patch(i, k))
+            }
             ["instrument", n, "fx", d, key] => {
                 let i = num(n)?;
                 let d = num(d)?;
@@ -231,6 +292,15 @@ impl Target {
             }
             Target::Macro(i, k) => format!("instrument.{}.macro.{}", i + 1, k + 1),
             Target::Gen(i, k) => format!("instrument.{}.gen.{}", i + 1, k + 1),
+            Target::Patch(i, k) => format!(
+                "instrument.{}.patch.{}",
+                i + 1,
+                crate::modulation::PATCH_PARAMS
+                    .get(k)
+                    .map(|p| p.key.replace('.', "-"))
+                    .unwrap_or_default()
+            ),
+            Target::ModAmount(k) => format!("mod.{}.amount", k + 1),
         }
     }
 
@@ -286,7 +356,9 @@ impl Target {
             | Target::Ret(..)
             | Target::Send(..)
             | Target::Macro(..)
-            | Target::Gen(..) => (0.0, 1.0, false),
+            | Target::Gen(..)
+            | Target::Patch(..) => (0.0, 1.0, false),
+            Target::ModAmount(_) => (-1.0, 1.0, false),
             Target::Cutoff(_) => (20.0, 18000.0, true),
             Target::Resonance(_) => (0.0, 0.98, false),
             Target::Drive(_) => (0.0, 1.0, false),
@@ -298,6 +370,12 @@ impl Target {
     }
 
     pub fn to_real(self, n: f32) -> f32 {
+        if let Target::Patch(_, k) = self {
+            return crate::modulation::PATCH_PARAMS
+                .get(k)
+                .map(|p| crate::modulation::from_norm(n, p.lo, p.hi, p.log))
+                .unwrap_or(0.0);
+        }
         let (lo, hi, log) = self.range();
         let n = n.clamp(0.0, 1.0);
         if log {
@@ -308,6 +386,12 @@ impl Target {
     }
 
     pub fn to_norm(self, v: f32) -> f32 {
+        if let Target::Patch(_, k) = self {
+            return crate::modulation::PATCH_PARAMS
+                .get(k)
+                .map(|p| crate::modulation::to_norm(v, p.lo, p.hi, p.log))
+                .unwrap_or(0.0);
+        }
         let (lo, hi, log) = self.range();
         let v = v.clamp(lo, hi);
         if log {
@@ -331,6 +415,11 @@ impl Target {
             Target::Send(..) => "Send",
             Target::Macro(..) => "Macro",
             Target::Gen(..) => "Generator knob",
+            Target::Patch(_, k) => crate::modulation::PATCH_PARAMS
+                .get(k)
+                .map(|p| p.name)
+                .unwrap_or("Patch"),
+            Target::ModAmount(_) => "Modulation amount",
         }
     }
 
@@ -344,6 +433,10 @@ impl Target {
             Target::ChanPan(_) if v < 0.0 => format!("L{:.0}", -v * 100.0),
             Target::ChanPan(_) => format!("R{:.0}", v * 100.0),
             Target::Tempo => format!("{v:.1} BPM"),
+            Target::ModAmount(_) => format!("{:+.0} %", v * 100.0),
+            Target::Patch(..) if v.abs() >= 100.0 => format!("{v:.0}"),
+            Target::Patch(..) if v.abs() >= 1.0 => format!("{v:.2}"),
+            Target::Patch(..) => format!("{v:.3}"),
             _ => format!("{:.0} %", n * 100.0),
         }
     }

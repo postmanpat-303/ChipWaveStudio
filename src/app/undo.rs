@@ -34,6 +34,7 @@ struct Meta {
     order: Vec<usize>,
     mixer: Mixer,
     info: SongInfo,
+    modulation: crate::modulation::Modulation,
 }
 
 impl Meta {
@@ -48,6 +49,7 @@ impl Meta {
             order: s.order.clone(),
             mixer: s.mixer.clone(),
             info: s.info.clone(),
+            modulation: s.modulation.clone(),
         }
     }
     fn same(&self, s: &Song) -> bool {
@@ -60,6 +62,7 @@ impl Meta {
             && self.order == s.order
             && self.mixer == s.mixer
             && self.info == s.info
+            && self.modulation == s.modulation
     }
     fn bytes(&self) -> usize {
         256 + self.order.len() * 8 + self.mixer.channels.len() * 32
@@ -87,6 +90,34 @@ impl Meta {
         set(7, self.mixer.master.to_bits() != s.mixer.master.to_bits());
         set(8, self.mixer.returns != s.mixer.returns);
         set(9, self.mixer.channels.len() != s.mixer.channels.len());
+        // modulator / route list changed (setting and depth edits alone
+        // may merge)
+        let (am, bm) = (&self.modulation.mods, &s.modulation.mods);
+        set(
+            10,
+            am.len() != bm.len()
+                || am
+                    .iter()
+                    .zip(bm)
+                    .any(|(a, b)| a.id != b.id || a.owner != b.owner || a.kind != b.kind)
+                || self.modulation.routes.len() != s.modulation.routes.len()
+                || self
+                    .modulation
+                    .routes
+                    .iter()
+                    .zip(&s.modulation.routes)
+                    .any(|(a, b)| a.src != b.src || a.target != b.target),
+        );
+        set(
+            11,
+            am != bm
+                || self
+                    .modulation
+                    .routes
+                    .iter()
+                    .zip(&s.modulation.routes)
+                    .any(|(a, b)| a.amount.to_bits() != b.amount.to_bits()),
+        );
         for (c, (a, b)) in self
             .mixer
             .channels
@@ -105,7 +136,7 @@ impl Meta {
     }
     /// on/off switches (mute, solo, channel count, order...) are never merged
     fn is_toggle(mask: Mask) -> bool {
-        let mut t: Mask = [(1 << 4) | (1 << 5) | (1 << 9), 0, 0, 0];
+        let mut t: Mask = [(1 << 4) | (1 << 5) | (1 << 9) | (1 << 10), 0, 0, 0];
         for c in 0..crate::model::MAX_CHANNELS {
             for bit in [12 + c * 5 + 3, 12 + c * 5 + 4] {
                 t[bit / 64] |= 1 << (bit % 64);
@@ -310,6 +341,7 @@ impl State {
         s.order.clone_from(&m.order);
         s.mixer.clone_from(&m.mixer);
         s.info.clone_from(&m.info);
+        s.modulation.clone_from(&m.modulation);
         s.patterns = self.patterns.iter().map(|p| (**p).clone()).collect();
         s.instruments = self.instruments.iter().map(|p| (**p).clone()).collect();
         s.automation = self.lanes.iter().map(|p| (**p).clone()).collect();

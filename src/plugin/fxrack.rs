@@ -41,6 +41,11 @@ pub struct FxSlot {
     ranges: Vec<(u32, f64, f64)>,
     /// last automation value sent per `ranges` entry (< 0 = none)
     sent: Vec<f32>,
+    /// the parameter's own value per `ranges` entry, normalised (what it
+    /// returns to when automation / modulation stops driving it)
+    base: Vec<f32>,
+    /// `ranges` entries driven since the last release pass
+    touched: Vec<bool>,
     /// FX_BLOCK + the plugin's reported latency
     pub latency: u32,
     /// on/off crossfade (1 = plugin, 0 = dry)
@@ -56,6 +61,10 @@ impl FxSlot {
             .map(|i| (i.id, i.min, i.max))
             .collect();
         ranges.sort_by_key(|r| r.0);
+        let base = ranges
+            .iter()
+            .map(|&(id, lo, hi)| norm_of(inst.value(id), lo, hi))
+            .collect();
         let z = || vec![0.0f32; FX_BLOCK].into_boxed_slice();
         FxSlot {
             chain,
@@ -72,9 +81,19 @@ impl FxSlot {
             dryr: z(),
             pos: 0,
             sent: vec![-1.0; ranges.len()],
+            touched: vec![false; ranges.len()],
+            base,
             ranges,
             gain: 1.0,
         }
+    }
+}
+
+/// a plugin value over its range, 0..1 (0.5 when unknown)
+fn norm_of(v: Option<f64>, lo: f64, hi: f64) -> f32 {
+    match v {
+        Some(v) if hi > lo => ((v - lo) / (hi - lo)).clamp(0.0, 1.0) as f32,
+        _ => 0.5,
     }
 }
 
@@ -145,12 +164,45 @@ impl FxRack {
             return;
         };
         let n = n.clamp(0.0, 1.0);
+        s.touched[k] = true;
         if (n - s.sent[k]).abs() < 1e-5 {
             return;
         }
         s.sent[k] = n;
         let (_, lo, hi) = s.ranges[k];
         s.inst.param(id, lo + (hi - lo) * n as f64);
+    }
+
+    /// the parameter's own (undriven) value of slot `si` in its units
+    pub fn base_value(&self, si: usize, id: u32) -> Option<f64> {
+        let s = self.slots.get(si)?;
+        let k = s.ranges.binary_search_by_key(&id, |r| r.0).ok()?;
+        let (_, lo, hi) = s.ranges[k];
+        Some(lo + (hi - lo) * s.base[k] as f64)
+    }
+
+    /// the parameter's own (undriven) value of slot `si`, normalised
+    pub fn base_norm(&self, si: usize, id: u32) -> Option<f32> {
+        let s = self.slots.get(si)?;
+        let k = s.ranges.binary_search_by_key(&id, |r| r.0).ok()?;
+        Some(s.base[k])
+    }
+
+    /// Parameters automation / modulation drove before but not since the
+    /// last call go back to their own value. Call after each automation
+    /// pass. No allocation.
+    pub fn release_untouched(&mut self) {
+        for s in &mut self.slots {
+            for k in 0..s.ranges.len() {
+                if s.touched[k] {
+                    s.touched[k] = false;
+                } else if s.sent[k] >= 0.0 {
+                    s.sent[k] = -1.0;
+                    let (id, lo, hi) = s.ranges[k];
+                    s.inst.param(id, lo + (hi - lo) * s.base[k] as f64);
+                }
+            }
+        }
     }
 
     /// one sample through slot `si`; `on` = device enabled (bypass crossfades
@@ -426,6 +478,10 @@ impl FxRack {
             .filter(|s| s.owner == owner && s.uid == uid)
         {
             s.inst.set_param_main(id, v);
+            if let Ok(k) = s.ranges.binary_search_by_key(&id, |r| r.0) {
+                let (_, lo, hi) = s.ranges[k];
+                s.base[k] = norm_of(Some(v), lo, hi);
+            }
         }
     }
 
@@ -435,8 +491,17 @@ impl FxRack {
         let mut dirty = vec![];
         for s in &mut self.slots {
             s.inst.poll_main();
-            if s.inst.take_dirty() && !dirty.contains(&(s.owner, s.uid)) {
-                dirty.push((s.owner, s.uid));
+            if s.inst.take_dirty() {
+                // editor edits: the new own values of the undriven parameters
+                for k in 0..s.ranges.len() {
+                    if s.sent[k] < 0.0 {
+                        let (id, lo, hi) = s.ranges[k];
+                        s.base[k] = norm_of(s.inst.value(id), lo, hi);
+                    }
+                }
+                if !dirty.contains(&(s.owner, s.uid)) {
+                    dirty.push((s.owner, s.uid));
+                }
             }
         }
         dirty

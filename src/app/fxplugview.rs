@@ -237,17 +237,26 @@ impl App {
         }
         // parameters: slider each, right-click = automation lane
         let params = self.fx_plugin_params(owner, uid);
+        // a modulated parameter shows its own value (the live one is a dot)
+        let tid = |id: u32| crate::automation::Target::Fx(owner, d, id as usize).id();
         let vals: Vec<(f64, String)> = self.with(|s| {
             let r = &s.engine.fx_plugins;
             let Some(k) = r.primary(owner, uid) else {
                 return vec![];
             };
             let inst = &r.slots[k].inst;
+            let m = &s.song.modulation;
             params
                 .iter()
                 .take(200)
                 .map(|x| {
-                    let v = inst.value(x.id).unwrap_or(x.default);
+                    let modded = m.routes_to(&tid(x.id)).next().is_some();
+                    let v = match modded {
+                        true => r.base_value(k, x.id),
+                        false => None,
+                    }
+                    .or_else(|| inst.value(x.id))
+                    .unwrap_or(x.default);
                     (v, inst.value_text(x.id, v).unwrap_or_default())
                 })
                 .collect()
@@ -292,12 +301,13 @@ impl App {
                         set.push((info.id, x));
                     }
                     if !info.readonly {
-                        r.context_menu(|ui| {
-                            if ui.button("Add automation lane").clicked() {
-                                lane = Some(info.id);
-                                ui.close();
-                            }
-                        });
+                        let span = (info.max - info.min).max(1e-9);
+                        let n = ((*v - info.min) / span).clamp(0.0, 1.0) as f32;
+                        let mut l = false;
+                        self.mod_slider(ui, &r, &tid(info.id), n, Some(&mut l));
+                        if l {
+                            lane = Some(info.id);
+                        }
                     }
                 }
             });

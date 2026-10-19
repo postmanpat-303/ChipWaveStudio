@@ -62,6 +62,10 @@ pub(crate) enum Custom {
     SampleInfo,
     /// FX chain: add effect, open the FX view
     FxChain,
+    /// drag-to-modulate: the selected modulator's settings
+    Modulators,
+    /// drag-to-modulate: every routing with its depth
+    Routings,
 }
 
 pub(crate) enum Ctl {
@@ -631,7 +635,49 @@ pub(crate) fn build(inst: &Instrument, idx: usize, kit_sel: usize) -> Layout {
     }
     output(&mut b, inst, idx);
     fx_chain(&mut b, inst, idx);
+    modulation(&mut b, inst, idx);
     b.l
+}
+
+/// drag-to-modulate: the Modulators and Routings cards lead the Modulation
+/// tab; synth-patch knobs without a target of their own get one
+/// (`Target::Patch`) so they can be modulated and automated
+fn modulation(b: &mut B, inst: &Instrument, idx: usize) {
+    let n0 = b.l.cards.len();
+    b.card(Tab::Modulation, "Modulators").note = "drag a chip onto a knob".into();
+    b.custom("mod.modulators", "Modulators", Custom::Modulators)
+        .tip(
+            "LFOs, envelopes, random, velocity, keytrack, mod wheel and macros of this instrument",
+        );
+    b.card(Tab::Modulation, "Routings");
+    b.custom("mod.routings", "Routings", Custom::Routings)
+        .tip("modulator → parameter connections with their depth");
+    let ours: Vec<Card> = b.l.cards.drain(n0..).collect();
+    let at =
+        b.l.cards
+            .iter()
+            .position(|c| c.tab == Tab::Modulation)
+            .unwrap_or(b.l.cards.len());
+    for (k, c) in ours.into_iter().enumerate() {
+        b.l.cards.insert(at + k, c);
+    }
+    let Some(patch) = inst.kind.patch() else {
+        return;
+    };
+    for p in b.l.params.iter_mut() {
+        if p.target.is_some() || !matches!(p.ctl, Ctl::Knob { .. }) {
+            continue;
+        }
+        let Some(k) = crate::modulation::patch_param(&p.key) else {
+            continue;
+        };
+        // only when the knob really is that patch field
+        let reg = &crate::modulation::PATCH_PARAMS[k];
+        let (a, c) = ((p.get)(inst), (reg.get)(patch));
+        if (a - c).abs() <= 1e-4 * a.abs().max(1.0) {
+            p.target = Some(crate::automation::Target::Patch(idx, k));
+        }
+    }
 }
 
 /// Volume / Transpose: on every instrument

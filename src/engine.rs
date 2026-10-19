@@ -318,9 +318,16 @@ pub struct AutoState {
     /// parsed lane targets: (target string it was parsed from, result).
     /// Re-parsed only when a lane's target text changes.
     targets: Vec<(String, Option<crate::automation::Target>)>,
+    /// this evaluation's driven values (target, normalised), lanes first in
+    /// lane order, then modulated targets. Capacity reserved up front.
+    pend: Vec<(crate::automation::Target, f32)>,
+    /// route depths set by `mod.K.amount` lanes this evaluation (NaN = the
+    /// route's own amount); MAX_ROUTES long, allocated once
+    mod_amt: Vec<f32>,
 }
 
 const FX_OVER_CAP: usize = 64;
+const PEND_CAP: usize = 512;
 
 pub struct Engine {
     pub sr: f32,
@@ -348,6 +355,9 @@ pub struct Engine {
     /// rows played since start (tests / diagnostics)
     pub rows_played: u64,
     auto: AutoState,
+    /// modulators (LFOs, envelopes, ...) evaluated with the automation;
+    /// `mods.out` is the live value per modulator for the UI
+    pub mods: crate::modulation::ModEngine,
     /// current song position in lines (for the UI playhead of lanes)
     pub song_pos: f32,
     /// per-channel insert chain (follows the channel's current instrument)
@@ -438,8 +448,11 @@ impl Engine {
                 fx: Vec::with_capacity(FX_OVER_CAP),
                 ret: Vec::with_capacity(FX_OVER_CAP),
                 macros: Vec::with_capacity(FX_OVER_CAP),
+                pend: Vec::with_capacity(PEND_CAP),
+                mod_amt: vec![f32::NAN; crate::modulation::MAX_ROUTES],
                 ..Default::default()
             },
+            mods: Default::default(),
             song_pos: 0.0,
             chains: (0..MAX_CHANNELS).map(|_| Default::default()).collect(),
             rets: (0..2).map(|_| Default::default()).collect(),
@@ -478,6 +491,14 @@ impl Engine {
     /// Apply one live MIDI event (allocation-free).
     pub fn live_event(&mut self, song: &Song, ev: crate::midi::LiveEv) {
         use crate::midi::LiveEv;
+        if let LiveEv::On {
+            note, vel, instr, ..
+        } = ev
+        {
+            self.mods
+                .feed
+                .note_on((instr as usize).wrapping_sub(1), note, vel);
+        }
         if !self.plugins.is_empty() {
             match ev {
                 LiveEv::On {
@@ -710,6 +731,9 @@ impl Engine {
         self.song_ended = false;
         // integrated loudness and the true-peak hold measure from here
         self.meter.reset();
+        // modulators restart with the song (LFO phases, envelopes, random
+        // seeds): a render is the same every time
+        self.mods.reset();
         // silent channels take their mixer gain at once (a muted or quiet
         // channel no longer blips during the 5 ms ramp from unity at start)
         let (tgt, _) = self.mix_targets(song);
@@ -1208,6 +1232,7 @@ impl Engine {
         c.synth.vel = c.vol;
         // velocity accent (a new note; 3D on the row can override it)
         if new_note && !gliding {
+            self.mods.feed.note_on(c.instr, cell.note, c.vol);
             c.synth.accent = match patch {
                 Some(p) if p.accent_vel > 0.0 && c.vol >= p.accent_vel - 1e-4 => p.accent,
                 _ => 0.0,
@@ -1598,7 +1623,8 @@ impl Engine {
         start as f32 + self.row as f32 + (self.tick as f32 + tick_frac as f32) / self.speed as f32
     }
 
-    /// Evaluate all lanes at the current position and update the overrides.
+    /// Evaluate all lanes at the current position, then the modulation
+    /// routes, and update the overrides.
     fn eval_auto(&mut self, song: &Song) {
         use crate::automation::{value_at, Target};
         let a = &mut self.auto;
@@ -1608,6 +1634,7 @@ impl Engine {
         a.fx.clear();
         a.ret.clear();
         a.macros.clear();
+        a.pend.clear();
         a.send = [[None; 2]; MAX_CHANNELS];
         let ni = song.instruments.len();
         if a.level.len() != ni {
@@ -1623,41 +1650,70 @@ impl Engine {
             }
         }
         a.level.iter_mut().for_each(|l| *l = 1.0);
-        if !self.playing || song.automation.is_empty() {
+        let lanes = self.playing && !song.automation.is_empty();
+        let modm = &song.modulation;
+        let modded = !modm.routes.is_empty() && !modm.mods.is_empty();
+        if !lanes && !modded {
             a.patches.iter_mut().for_each(|p| *p = None);
             a.vals.clear();
             return;
         }
-        let pos = self.calc_song_pos(song);
-        self.song_pos = pos;
+        if modded {
+            a.mod_amt.iter_mut().for_each(|x| *x = f32::NAN);
+        }
+        if lanes {
+            let pos = self.calc_song_pos(song);
+            self.song_pos = pos;
+            let a = &mut self.auto;
+            if a.vals.len() != song.automation.len() {
+                a.vals = vec![f32::NAN; song.automation.len()];
+            }
+            if a.targets.len() != song.automation.len() {
+                a.targets
+                    .resize(song.automation.len(), (String::new(), None));
+                a.targets.iter_mut().for_each(|c| c.0.clear());
+            }
+            for (k, lane) in song.automation.iter().enumerate() {
+                if !lane.enabled {
+                    continue;
+                }
+                let cache = &mut a.targets[k];
+                if cache.0 != lane.target {
+                    cache.0.clone_from(&lane.target);
+                    cache.1 = Target::parse(&lane.target);
+                }
+                let (Some(t), Some(n)) = (cache.1, value_at(&lane.points, pos)) else {
+                    continue;
+                };
+                // smoothing: ~1.5 ms time constant at 32-frame steps
+                let v = &mut a.vals[k];
+                *v = if v.is_nan() { n } else { *v + (n - *v) * 0.5 };
+                match t {
+                    Target::Tempo => self.bpm = t.to_real(*v).clamp(20.0, 400.0),
+                    Target::ModAmount(r) => {
+                        if let Some(x) = a.mod_amt.get_mut(r) {
+                            *x = t.to_real(*v);
+                        }
+                    }
+                    _ if a.pend.len() < PEND_CAP => a.pend.push((t, *v)),
+                    _ => {}
+                }
+            }
+        } else {
+            self.auto.vals.clear();
+        }
+        if modded {
+            self.eval_mods(song);
+        }
         let a = &mut self.auto;
-        if a.vals.len() != song.automation.len() {
-            a.vals = vec![f32::NAN; song.automation.len()];
-        }
         let mut used = [false; 256];
-        if a.targets.len() != song.automation.len() {
-            a.targets
-                .resize(song.automation.len(), (String::new(), None));
-            a.targets.iter_mut().for_each(|c| c.0.clear());
-        }
-        for (k, lane) in song.automation.iter().enumerate() {
-            if !lane.enabled {
-                continue;
-            }
-            let cache = &mut a.targets[k];
-            if cache.0 != lane.target {
-                cache.0.clone_from(&lane.target);
-                cache.1 = Target::parse(&lane.target);
-            }
-            let (Some(t), Some(n)) = (cache.1, value_at(&lane.points, pos)) else {
-                continue;
-            };
-            // smoothing: ~1.5 ms time constant at 32-frame steps
-            let v = &mut a.vals[k];
-            *v = if v.is_nan() { n } else { *v + (n - *v) * 0.5 };
-            let real = t.to_real(*v);
+        for &(t, v) in a.pend.iter() {
+            let real = t.to_real(v.clamp(0.0, 1.0));
             match t {
-                Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) => {
+                Target::Cutoff(i)
+                | Target::Resonance(i)
+                | Target::Drive(i)
+                | Target::Patch(i, _) => {
                     let Some(src) = song.instruments.get(i).and_then(|x| x.kind.patch()) else {
                         continue;
                     };
@@ -1674,7 +1730,13 @@ impl Engine {
                     match t {
                         Target::Cutoff(_) => p.cutoff = real,
                         Target::Resonance(_) => p.resonance = real,
-                        _ => p.drive = real,
+                        Target::Drive(_) => p.drive = real,
+                        Target::Patch(_, k) => {
+                            if let Some(pp) = crate::modulation::PATCH_PARAMS.get(k) {
+                                (pp.set)(p, real);
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 Target::Level(i) => {
@@ -1685,7 +1747,6 @@ impl Engine {
                 Target::ChanVolume(c) if c < MAX_CHANNELS => a.chan_vol[c] = Some(real),
                 Target::ChanPan(c) if c < MAX_CHANNELS => a.chan_pan[c] = Some(real),
                 Target::Master => a.master = Some(real),
-                Target::Tempo => self.bpm = real.clamp(20.0, 400.0),
                 Target::Fx(i, d, p) => {
                     if a.fx.len() < FX_OVER_CAP {
                         a.fx.push((i, d, p, real));
@@ -1708,6 +1769,72 @@ impl Engine {
         for (i, p) in self.auto.patches.iter_mut().enumerate() {
             if i >= used.len() || !used[i] {
                 *p = None;
+            }
+        }
+    }
+
+    /// Step the modulators and add every route's contribution to the
+    /// pending values (on top of a lane's value, else the song's own value).
+    fn eval_mods(&mut self, song: &Song) {
+        use crate::modulation::{MAX_MODS, MAX_ROUTES};
+        let Engine {
+            auto: a,
+            mods,
+            fx_plugins,
+            chans,
+            live,
+            nv,
+            ..
+        } = self;
+        let held = &mut mods.feed.held;
+        *held = [false; 256];
+        for c in chans.iter().take(song.channels.min(MAX_CHANNELS)) {
+            if c.active && c.gate && c.instr < 256 {
+                held[c.instr] = true;
+            }
+        }
+        for v in live.v.iter() {
+            if v.active && (v.down || v.held_by_pedal) && v.instr < 256 {
+                held[v.instr] = true;
+            }
+        }
+        nv.mark_held(held);
+        let m = &song.modulation;
+        mods.step(m, song, 32.0 / self.sr, self.bpm);
+        for (r, route) in m.routes.iter().enumerate().take(MAX_ROUTES) {
+            let Some(si) = m.find(route.src).filter(|k| *k < MAX_MODS) else {
+                continue;
+            };
+            let Some(t) = crate::automation::Target::parse(&route.target) else {
+                continue;
+            };
+            if !crate::automation::modulatable(t) {
+                continue;
+            }
+            let amt = match a.mod_amt[r] {
+                x if x.is_nan() => route.amount,
+                x => x,
+            };
+            let d = amt * mods.out[si];
+            if let Some(e) = a.pend.iter_mut().find(|e| e.0 == t) {
+                e.1 += d;
+            } else if a.pend.len() < PEND_CAP {
+                let base = match t {
+                    crate::automation::Target::Fx(i, dv, p) => {
+                        match song.instruments.get(i).and_then(|x| x.fx.get(dv)) {
+                            Some(dev) if dev.plugin.is_some() => fx_plugins
+                                .slots
+                                .iter()
+                                .position(|s| s.owner == i && s.uid == dev.uid)
+                                .and_then(|si| fx_plugins.base_norm(si, p as u32)),
+                            _ => crate::automation::song_norm(song, t),
+                        }
+                    }
+                    _ => crate::automation::song_norm(song, t),
+                };
+                if let Some(b) = base {
+                    a.pend.push((t, b + d));
+                }
             }
         }
     }
@@ -1801,6 +1928,10 @@ impl Engine {
                     a.ret.iter().find(|o| o.0 == b && o.1 == p).map(|o| o.2)
                 });
             }
+        }
+        // plugin parameters no longer automated or modulated: their own value
+        if !self.fx_plugins.is_empty() {
+            self.fx_plugins.release_untouched();
         }
     }
 
@@ -1906,6 +2037,7 @@ impl Engine {
                         let t = self.tl_clock();
                         notes::note_events(
                             &mut self.nv,
+                            &mut self.mods.feed,
                             p,
                             song,
                             &mut self.chans,

@@ -114,6 +114,35 @@ impl App {
                 .color(th().ink2),
             );
         });
+        if chain.is_some() {
+            // modulators of the instrument: drag one onto a slider
+            let (mut m, live, has_patch) = self.with(|s| {
+                (
+                    s.song.modulation.clone(),
+                    s.engine.mods.out,
+                    s.song
+                        .instruments
+                        .get(idx)
+                        .is_some_and(|i| i.kind.patch().is_some()),
+                )
+            });
+            let before = m.clone();
+            let mut out = super::modview::ModOut::default();
+            super::modview::strip(
+                ui,
+                &mut m,
+                idx,
+                has_patch,
+                &live,
+                &mut self.ip.mod_sel,
+                &mut out,
+            );
+            if m != before {
+                self.with(|s| s.song.modulation = m);
+                self.dirty = true;
+            }
+            self.mod_out(out);
+        }
         ui.add_space(6.0);
         let Some(chain) = chain else {
             ui.label("Select an instrument to edit its FX chain.");
@@ -527,6 +556,13 @@ impl App {
                             .show_value(false)
                             .trailing_fill(true),
                     );
+                    let owner = (self.instr as usize).wrapping_sub(1);
+                    let tid = crate::automation::Target::Fx(owner, i, k).id();
+                    let mut lane = false;
+                    self.mod_slider(ui, &r, &tid, v, Some(&mut lane));
+                    if lane {
+                        self.add_lane(crate::automation::Target::Fx(owner, i, k));
+                    }
                     if r.double_clicked() {
                         ops.push(FxOp::Param(i, k, info.to_norm(info.def), true));
                     } else if r.changed() {

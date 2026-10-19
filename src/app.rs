@@ -31,6 +31,7 @@ mod lanes;
 mod library;
 mod midiview;
 mod mixer;
+mod modview;
 mod noterec;
 mod params;
 mod pattern;

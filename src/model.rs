@@ -234,6 +234,14 @@ impl InstrumentKind {
             InstrumentKind::Sample { .. } | InstrumentKind::Plugin(_) => None,
         }
     }
+    pub fn patch_mut(&mut self) -> Option<&mut Patch> {
+        match self {
+            InstrumentKind::Synth(p) => Some(p),
+            InstrumentKind::Voice(v) => Some(&mut v.base),
+            InstrumentKind::Gen(g) => Some(&mut g.base),
+            InstrumentKind::Sample { .. } | InstrumentKind::Plugin(_) => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -273,6 +281,10 @@ pub struct Song {
     /// and the order list is not played. Saved as `timeline.toml`.
     #[serde(skip)]
     pub timeline: Option<Box<crate::timeline::Timeline>>,
+    /// drag-to-modulate: modulators and routes (Unreleased), saved as
+    /// `modulation.toml`
+    #[serde(skip)]
+    pub modulation: crate::modulation::Modulation,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -436,6 +448,7 @@ impl Song {
             automation: vec![],
             info: SongInfo::default(),
             timeline: None,
+            modulation: Default::default(),
         }
     }
 
@@ -474,6 +487,43 @@ impl Song {
     /// automation lane, and its own automation lanes go. The FX chain lives
     /// in the instrument, so every other instrument keeps its own. Returns
     /// the number of cells cleared (as `instrument_uses`).
+    /// Modulation routes were removed (`keep[k]` = route k survives): the
+    /// route-depth lanes (`mod.K.amount`) follow, lanes of removed routes go.
+    pub fn routes_changed(&mut self, keep: &[bool]) {
+        if keep.iter().all(|k| *k) {
+            return;
+        }
+        let mut map = Vec::with_capacity(keep.len());
+        let mut n = 0;
+        for &k in keep {
+            map.push(if k { Some(n) } else { None });
+            n += k as usize;
+        }
+        self.automation
+            .retain_mut(|l| match crate::automation::Target::parse(&l.target) {
+                Some(crate::automation::Target::ModAmount(r)) => {
+                    match map.get(r).copied().flatten() {
+                        Some(nr) => {
+                            l.target = crate::automation::Target::ModAmount(nr).id();
+                            true
+                        }
+                        None => false,
+                    }
+                }
+                _ => true,
+            });
+    }
+    /// remove modulator `k` with its routes (and their depth lanes)
+    pub fn remove_modulator(&mut self, k: usize) {
+        let keep = self.modulation.remove(k);
+        self.routes_changed(&keep);
+    }
+    /// remove modulation route `k` (and its depth lane)
+    pub fn remove_route(&mut self, k: usize) {
+        let keep = self.modulation.remove_route(k);
+        self.routes_changed(&keep);
+    }
+
     pub fn delete_instrument(&mut self, idx: usize) -> usize {
         if idx >= self.instruments.len() || idx > 254 {
             return 0;
@@ -505,6 +555,8 @@ impl Song {
                 }
                 _ => true,
             });
+        let keep = self.modulation.delete_instrument(idx);
+        self.routes_changed(&keep);
         used
     }
 
@@ -552,6 +604,7 @@ impl Song {
                 }
             }
         }
+        self.modulation.remap(map);
     }
 
     /// Swap instrument slot `from` for `to` (1-based) on every note that
@@ -599,7 +652,7 @@ impl Song {
 }
 
 /// 0-based instrument of an `instrument.N....` automation target
-fn lane_instrument(target: &str) -> Option<usize> {
+pub(crate) fn lane_instrument(target: &str) -> Option<usize> {
     let mut p = target.split('.');
     if p.next()? != "instrument" {
         return None;
@@ -611,7 +664,7 @@ fn lane_instrument(target: &str) -> Option<usize> {
         .map(|n| n - 1)
 }
 
-fn with_lane_instrument(target: &str, idx: usize) -> String {
+pub(crate) fn with_lane_instrument(target: &str, idx: usize) -> String {
     let rest = target.splitn(3, '.').nth(2).unwrap_or("");
     format!("instrument.{}.{}", idx + 1, rest)
 }

@@ -182,6 +182,54 @@ fn plugin_effect_parameters_follow_automation_lanes() {
 }
 
 #[test]
+fn plugin_effect_parameters_take_modulation_and_return_when_it_stops() {
+    use crate::modulation::ModKind;
+    let dry = left(&render(&synth_song(false), 0.6));
+    // Gain set to 0.5 (0.25 of its 0..2 range); a macro at full with depth
+    // +0.25 takes it to 0.5 of the range = unity gain
+    let mut song = with_fx(synth_song(false), vec![(10, 0.5)]);
+    let k = song.modulation.add(0, ModKind::Macro).unwrap();
+    song.modulation.mods[k].value = 1.0;
+    let id = song.modulation.mods[k].id;
+    song.modulation
+        .connect(id, "instrument.1.fx.1.p10", 0.25)
+        .unwrap();
+    let wet = left(&render(&song, 0.6));
+    let lag = FX_BLOCK + LAT;
+    let e1 = err_at(&wet, &dry, lag, 1.0, 4000, 20000);
+    assert!(e1 < 1e-3, "modulated to unity: {e1}");
+    // the route goes: the plugin's own 0.5 comes back
+    let mut e = crate::engine::Engine::new(SR as f32);
+    fxrack::prepare(&mut e.fx_plugins, &song, SR as f32);
+    e.start(&song, 0, 0, false, 0);
+    let mut buf = vec![0.0f32; 1024];
+    for _ in 0..10 {
+        e.render(&song, &mut buf);
+    }
+    let v = |e: &crate::engine::Engine| e.fx_plugins.slots[0].inst.value(10).unwrap();
+    assert!((v(&e) - 1.0).abs() < 1e-6, "{}", v(&e));
+    let mut plain = song.clone();
+    plain.modulation = Default::default();
+    for _ in 0..4 {
+        e.render(&plain, &mut buf);
+    }
+    assert!((v(&e) - 0.5).abs() < 1e-6, "{}", v(&e));
+    // a UI edit while modulated moves the base the route adds to
+    for _ in 0..4 {
+        e.render(&song, &mut buf);
+    }
+    e.fx_plugins.set_param(0, 7, 10, 0.0);
+    for _ in 0..4 {
+        e.render(&song, &mut buf);
+    }
+    assert!(
+        (v(&e) - 0.5).abs() < 1e-6,
+        "base 0 + 0.25 of the range: {}",
+        v(&e)
+    );
+}
+
+#[test]
 fn bypassing_a_plugin_device_keeps_the_timing() {
     let dry = left(&render(&synth_song(false), 0.6));
     let mut song = with_fx(synth_song(false), vec![(10, 0.25)]);

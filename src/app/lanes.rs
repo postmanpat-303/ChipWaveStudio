@@ -174,6 +174,18 @@ impl App {
                         if r == 0 { "A" } else { "B" }
                     )
                 }
+                Target::Patch(i, _) => format!("{} - {}", iname(i), t.param_name()),
+                Target::ModAmount(r) => {
+                    let m = &s.song.modulation;
+                    match m.routes.get(r) {
+                        Some(rt) => format!(
+                            "Depth {} > {}",
+                            m.find(rt.src).map(|k| m.title(k)).unwrap_or_default(),
+                            super::modview::target_label(&s.song, &rt.target)
+                        ),
+                        None => t.param_name().to_string(),
+                    }
+                }
                 _ => t.param_name().to_string(),
             }
         });
@@ -181,21 +193,6 @@ impl App {
         let n = self.with(|s| {
             // start flat at the current value
             let cur = match t {
-                Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) => {
-                    match s.song.instruments.get(i).and_then(|x| x.kind.patch()) {
-                        Some(p) => t.to_norm(match t {
-                            Target::Cutoff(_) => p.cutoff,
-                            Target::Resonance(_) => p.resonance,
-                            _ => p.drive,
-                        }),
-                        _ => 0.5,
-                    }
-                }
-                Target::Level(_) => t.to_norm(1.0),
-                Target::ChanVolume(c) => t.to_norm(s.song.mixer.channels[c].volume),
-                Target::ChanPan(c) => t.to_norm(s.song.mixer.channels[c].pan),
-                Target::Master => t.to_norm(s.song.mixer.master),
-                Target::Tempo => t.to_norm(s.song.bpm),
                 Target::Fx(i, d, p) => {
                     let dev = s.song.instruments.get(i).and_then(|x| x.fx.get(d));
                     match dev {
@@ -213,29 +210,12 @@ impl App {
                                 })
                                 .unwrap_or(0.5)
                         }
-                        Some(dev) => dev.params.get(p).copied().unwrap_or(0.5),
-                        None => 0.5,
+                        _ => crate::automation::song_norm(&s.song, t).unwrap_or(0.5),
                     }
                 }
-                Target::Ret(r, p) => s
-                    .song
-                    .mixer
-                    .returns
-                    .get(r)
-                    .and_then(|x| x.device.params.get(p).copied())
-                    .unwrap_or(0.5),
-                Target::Send(c, r) => s
-                    .song
-                    .mixer
-                    .channels
-                    .get(c)
-                    .map(|m| m.send[r])
-                    .unwrap_or(0.0),
                 Target::Macro(i, k) => crate::plugin::macro_norm(s, i, k).unwrap_or(0.5),
-                Target::Gen(i, k) => match s.song.instruments.get(i).map(|x| &x.kind) {
-                    Some(InstrumentKind::Gen(g)) => crate::gen::gen_knob_norm(g, k).unwrap_or(0.5),
-                    _ => 0.5,
-                },
+                Target::Send(..) => crate::automation::song_norm(&s.song, t).unwrap_or(0.0),
+                _ => crate::automation::song_norm(&s.song, t).unwrap_or(0.5),
             };
             let mut lane = Lane::new(t, label.clone());
             lane.points.push(crate::automation::Point {

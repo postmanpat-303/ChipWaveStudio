@@ -32,6 +32,8 @@ pub(super) struct InstUi {
     drag_h0: Option<f32>,
     /// the splitter is dragged to the bottom: release hides the panel
     pub collapse_pending: bool,
+    /// the selected modulator (its depth is what Alt-drag edits)
+    pub mod_sel: Option<u32>,
 }
 
 pub(super) struct Ab {
@@ -67,6 +69,13 @@ struct Cx {
     jump: Option<String>,
     card_h: f32,
     toggle_card: Option<String>,
+    /// the song's modulation (edited here, written back after the cards)
+    modm: crate::modulation::Modulation,
+    /// live modulator outputs from the engine
+    live: [f32; crate::modulation::MAX_MODS],
+    /// route target names (Routings card)
+    labels: Vec<String>,
+    mod_out: super::modview::ModOut,
 }
 
 fn matches(words: &[String], p: &Param) -> bool {
@@ -436,7 +445,27 @@ impl App {
             jump: self.ip.jump.take(),
             card_h: 0.0,
             toggle_card: None,
+            modm: Default::default(),
+            live: [0.0; crate::modulation::MAX_MODS],
+            labels: vec![],
+            mod_out: Default::default(),
         };
+        (cx.modm, cx.live, cx.labels) = self.with(|s| {
+            let m = &s.song.modulation;
+            (
+                m.clone(),
+                s.engine.mods.out,
+                m.routes
+                    .iter()
+                    .map(|r| super::modview::target_label(&s.song, &r.target))
+                    .collect(),
+            )
+        });
+        let orig_modm = cx.modm.clone();
+        if !cx.modm.routes.is_empty() {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(33));
+        }
         if let Some((c, t0)) = &self.ip.flash {
             let e = (now - t0) as f32;
             if e < 1.6 {
@@ -544,6 +573,19 @@ impl App {
             });
         });
         self.ip.tab = tab;
+        // ---- modulators: drag a chip onto a knob ----
+        if super::modview::strip(
+            ui,
+            &mut cx.modm,
+            idx,
+            inst.kind.patch().is_some(),
+            &cx.live,
+            &mut self.ip.mod_sel,
+            &mut cx.mod_out,
+        ) {
+            // a new modulator: show it on the Modulation tab
+            self.ip.tab = Tab::Modulation;
+        }
         // ---- cards ----
         let avail = ui.available_height();
         cx.card_h = (avail - 14.0).max(90.0);
@@ -585,6 +627,12 @@ impl App {
             });
             self.dirty = true;
         }
+        if cx.modm != orig_modm {
+            let m = cx.modm.clone();
+            self.with(|s| s.song.modulation = m);
+            self.dirty = true;
+        }
+        self.mod_out(std::mem::take(&mut cx.mod_out));
         for a in cx.acts {
             match a {
                 Act::Select(s) => {
@@ -810,6 +858,8 @@ fn custom_size(c: Custom, card_h: f32) -> (f32, f32) {
         Custom::PluginParams => (470.0, card_h - HEAD_H - 10.0),
         Custom::SampleInfo => (270.0, 84.0),
         Custom::FxChain => (210.0, 64.0),
+        Custom::Modulators => (300.0, card_h - HEAD_H - 10.0),
+        Custom::Routings => (330.0, card_h - HEAD_H - 10.0),
     }
 }
 
@@ -1036,6 +1086,17 @@ impl App {
         } else {
             p.tip.clone()
         };
+        let tid = p
+            .target
+            .filter(|t| crate::automation::modulatable(*t))
+            .map(|t| t.id());
+        let rings = tid
+            .as_deref()
+            .map(|id| super::modview::rings(&cx.modm, id, self.ip.mod_sel))
+            .unwrap_or_default();
+        let live = tid
+            .as_deref()
+            .map(|id| super::modview::live_pos(&cx.modm, id, n, &cx.live));
         let out = knob::knob(
             ui,
             egui::Id::unique(("ipk", cx.idx, &p.key)),
@@ -1050,8 +1111,13 @@ impl App {
                 badge: p.badge.as_deref(),
                 locked,
                 tip: &tip,
+                rings: &rings,
+                live,
             },
         );
+        if let Some(id) = &tid {
+            self.knob_modulation(ui, &out, id, cx);
+        }
         if out.changed {
             let mut v = params::from_norm(n, lo, hi, log);
             if step > 0.0 {
@@ -1067,6 +1133,47 @@ impl App {
             }
         }
         self.param_menu(&out.resp, p, inst, cx, Some(def));
+    }
+
+    /// a knob as a modulation target: drop a modulator chip on it, drag a
+    /// ring's handle, Alt-drag for the selected modulator's depth
+    fn knob_modulation(&mut self, ui: &egui::Ui, out: &knob::KnobOut, id: &str, cx: &mut Cx) {
+        let r = &out.resp;
+        if r.dnd_hover_payload::<super::modview::ModDrag>().is_some() {
+            ui.painter().circle_stroke(
+                r.rect.center(),
+                r.rect.width() * 0.5 + 6.0,
+                egui::Stroke::new(2.0, th().fx),
+            );
+        }
+        if let Some(d) = r.dnd_release_payload::<super::modview::ModDrag>() {
+            if cx
+                .modm
+                .connect(d.0, id, super::modview::DEFAULT_DEPTH)
+                .is_some()
+            {
+                self.ip.mod_sel = Some(d.0);
+                self.status =
+                    "Modulation routed: drag the dot on the knob's ring to set the depth".into();
+            }
+        }
+        if let Some((route, d)) = out.ring_drag {
+            if let Some(rt) = cx.modm.routes.get_mut(route) {
+                rt.amount = (rt.amount + d).clamp(-1.0, 1.0);
+            }
+        }
+        if let Some(d) = out.alt_drag {
+            let Some(sel) = self.ip.mod_sel.filter(|s| cx.modm.find(*s).is_some()) else {
+                self.status =
+                    "Alt-drag sets the selected modulator's depth: click a modulator chip first"
+                        .into();
+                return;
+            };
+            if let Some(k) = cx.modm.connect(sel, id, 0.0) {
+                let a = &mut cx.modm.routes[k].amount;
+                *a = (*a + d).clamp(-1.0, 1.0);
+            }
+        }
     }
 
     /// right-click: reset, add an automation lane, MIDI learn
@@ -1108,6 +1215,17 @@ impl App {
                 }
                 ui.separator();
                 self.learn_items(ui, id, *waiting);
+                if crate::automation::modulatable(*tg) {
+                    ui.separator();
+                    super::modview::menu_items(
+                        ui,
+                        &mut cx.modm,
+                        cx.idx,
+                        id,
+                        &mut self.ip.mod_sel,
+                        &mut cx.mod_out,
+                    );
+                }
             } else {
                 ui.label(
                     egui::RichText::new("not automatable (sound-design setting)")
@@ -1221,6 +1339,24 @@ impl App {
         let idx = cx.idx;
         let sel = self.gen_ui.sel;
         match (k, &mut inst.kind) {
+            (Custom::Modulators, _) => {
+                egui::ScrollArea::vertical()
+                    .id_salt(("mod_ed_scroll", idx))
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        super::modview::editor(
+                            ui,
+                            &mut cx.modm,
+                            idx,
+                            &cx.live,
+                            &mut self.ip.mod_sel,
+                            &mut cx.mod_out,
+                        );
+                    });
+            }
+            (Custom::Routings, _) => {
+                super::modview::routings(ui, &mut cx.modm, idx, &cx.labels, &mut cx.mod_out);
+            }
             (Custom::Vowels, InstrumentKind::Voice(v)) => {
                 cx.changed |= super::voiceview::vowels_ui(ui, v);
             }
@@ -1389,6 +1525,8 @@ impl App {
                             badge: Some(["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"][k]),
                             locked: None,
                             tip: &tip,
+                            rings: &[],
+                            live: None,
                         },
                     );
                     if out.changed {

@@ -227,6 +227,15 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
             z.write_all(toml::to_string(lane).map_err(|e| e.to_string())?.as_bytes())
                 .map_err(|e| e.to_string())?;
         }
+        if !song.modulation.is_empty() {
+            z.start_file("modulation.toml", defl).map_err(e)?;
+            z.write_all(
+                toml::to_string(&song.modulation)
+                    .map_err(|e| e.to_string())?
+                    .as_bytes(),
+            )
+            .map_err(|e| e.to_string())?;
+        }
         if let Some(tl) = &song.timeline {
             z.start_file("timeline.toml", defl).map_err(e)?;
             z.write_all(crate::timeline::to_toml(tl)?.as_bytes())
@@ -258,6 +267,64 @@ fn read_entry(z: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<Vec<
         .read_to_end(&mut v)
         .map_err(|e| e.to_string())?;
     Ok(v)
+}
+
+/// keep loaded modulation within the engine's limits and the song's
+/// instruments (bad entries are dropped)
+pub fn sanitize_modulation(
+    mut m: crate::modulation::Modulation,
+    ninst: usize,
+) -> crate::modulation::Modulation {
+    use crate::modulation::{MAX_MODS, MAX_ROUTES};
+    m.mods.retain(|x| x.owner < ninst);
+    m.mods.truncate(MAX_MODS);
+    let mut seen = vec![];
+    m.mods.retain(|x| {
+        let fresh = !seen.contains(&x.id);
+        seen.push(x.id);
+        fresh
+    });
+    for x in &mut m.mods {
+        for v in [&mut x.rate, &mut x.sync, &mut x.a, &mut x.d, &mut x.r] {
+            if !v.is_finite() || *v < 0.0 {
+                *v = 0.0;
+            }
+        }
+        x.rate = x.rate.min(100.0);
+        x.sync = x.sync.min(64.0);
+        x.phase = if x.phase.is_finite() {
+            x.phase.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        x.s = if x.s.is_finite() {
+            x.s.clamp(0.0, 1.0)
+        } else {
+            0.5
+        };
+        x.smooth = if x.smooth.is_finite() {
+            x.smooth.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        x.value = if x.value.is_finite() {
+            x.value.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+    }
+    let ids: Vec<u32> = m.mods.iter().map(|x| x.id).collect();
+    m.routes
+        .retain(|r| ids.contains(&r.src) && crate::automation::Target::parse(&r.target).is_some());
+    for r in &mut m.routes {
+        r.amount = if r.amount.is_finite() {
+            r.amount.clamp(-1.0, 1.0)
+        } else {
+            0.0
+        };
+    }
+    m.routes.truncate(MAX_ROUTES);
+    m
 }
 
 /// Newest `min_reader_version` this build can read. Tracker-mode songs write
@@ -434,7 +501,17 @@ pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
             .map(|a| a.zoom.clamp(0.25, 16.0))
             .unwrap_or(2.0),
         timeline: None,
+        modulation: Default::default(),
     };
+    // drag-to-modulate (docs/MODULATION.md)
+    if let Ok(b) = read_entry(&mut z, "modulation.toml") {
+        match toml::from_str::<crate::modulation::Modulation>(&String::from_utf8_lossy(&b)) {
+            Ok(m) => song.modulation = sanitize_modulation(m, song.instruments.len()),
+            Err(e) => warnings.push(format!(
+                "modulation.toml could not be read ({e}): the song opens without modulation"
+            )),
+        }
+    }
     // timeline mode (docs/TIMELINE.md)
     if let Ok(b) = read_entry(&mut z, "timeline.toml") {
         match crate::timeline::from_toml(&String::from_utf8_lossy(&b)) {
@@ -1048,6 +1125,13 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
         let mut tl = crate::timeline::from_toml(&text)?;
         tl.fix(&song);
         song.timeline = Some(Box::new(tl));
+    }
+    // optional [modulation] table: [[modulation.modulator]] / [[modulation.route]]
+    if let Some(m) = v.get("modulation") {
+        let text = toml::to_string(m).map_err(|e| e.to_string())?;
+        let m: crate::modulation::Modulation =
+            toml::from_str(&text).map_err(|e| format!("modulation: {e}"))?;
+        song.modulation = sanitize_modulation(m, song.instruments.len());
     }
     Ok(song)
 }

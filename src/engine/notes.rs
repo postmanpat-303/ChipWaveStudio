@@ -137,11 +137,23 @@ impl NoteState {
     }
 }
 
+impl NoteState {
+    /// mark the instruments with a held note (modulator envelopes)
+    pub(super) fn mark_held(&self, held: &mut [bool; 256]) {
+        for v in &self.v {
+            if v.active && v.down && v.instr < 256 {
+                held[v.instr] = true;
+            }
+        }
+    }
+}
+
 /// Start note `n` on track `ch`: a free voice, else the oldest released
 /// one, else the oldest (voice stealing).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn note_on(
     st: &mut NoteState,
+    feed: &mut crate::modulation::NoteFeed,
     song: &Song,
     chans: &mut [Chan],
     plugins: &mut crate::plugin::Rack,
@@ -159,6 +171,7 @@ pub(super) fn note_on(
     let Some(inst) = song.instruments.get(idx) else {
         return;
     };
+    feed.note_on(idx, n.key, n.vel);
     // a track with only note clips: its insert chain follows their instrument
     if c.instr == usize::MAX {
         c.instr = idx;
@@ -210,8 +223,10 @@ pub(super) fn note_on(
 }
 
 /// Note-ons and note-offs due at timeline tick `t` (once per sample).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn note_events(
     st: &mut NoteState,
+    feed: &mut crate::modulation::NoteFeed,
     plan: &Plan,
     song: &Song,
     chans: &mut [Chan],
@@ -244,7 +259,7 @@ pub(super) fn note_events(
             }
             st.cur[ch] += 1;
             if (n.end as f64) > t {
-                note_on(st, song, chans, plugins, ch, n);
+                note_on(st, feed, song, chans, plugins, ch, n);
             }
         }
     }
@@ -253,8 +268,10 @@ pub(super) fn note_events(
 /// Seek / start at tick `t`: notes that started before `t` and are still
 /// held are struck again when their instrument sustains (as the tracker
 /// chase does for held notes); decaying ones (drums, plucks) are not.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn restrike(
     st: &mut NoteState,
+    feed: &mut crate::modulation::NoteFeed,
     plan: &Plan,
     song: &Song,
     chans: &mut [Chan],
@@ -281,7 +298,7 @@ pub(super) fn restrike(
                         || i.kind.patch().is_some_and(|p| p.amp.s >= 0.05)
                 });
                 if sustains {
-                    note_on(st, song, chans, plugins, ch, n);
+                    note_on(st, feed, song, chans, plugins, ch, n);
                 }
             }
         }
@@ -314,6 +331,7 @@ impl Engine {
             let nch = song.channels.min(MAX_CHANNELS);
             restrike(
                 &mut self.nv,
+                &mut self.mods.feed,
                 &plan,
                 song,
                 &mut self.chans,

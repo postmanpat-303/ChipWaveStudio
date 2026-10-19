@@ -128,6 +128,19 @@ pub(super) fn apply_learned(s: &mut Shared, target: &str, n: f32) -> bool {
                 None => return false,
             }
         }
+        Target::Patch(i, k) => {
+            let (Some(p), Some(pp)) = (
+                song.instruments.get_mut(i).and_then(|x| x.kind.patch_mut()),
+                crate::modulation::PATCH_PARAMS.get(k),
+            ) else {
+                return false;
+            };
+            (pp.set)(p, real);
+        }
+        Target::ModAmount(k) => match song.modulation.routes.get_mut(k) {
+            Some(r) => r.amount = real,
+            None => return false,
+        },
     }
     true
 }
@@ -278,6 +291,10 @@ impl App {
     }
 
     pub(super) fn midi_cc(&mut self, cc: u8, val: u8) {
+        if cc == 1 {
+            // the mod wheel feeds "Mod wheel" modulators
+            self.with(|s| s.engine.mods.feed.wheel = val as f32 / 127.0);
+        }
         if let Some(t) = self.midi.learn.take() {
             let l = &mut self.extra.midi.learn;
             l.retain(|(c, x)| *c != cc && *x != t);

@@ -13,6 +13,10 @@ pub(super) struct KnobOut {
     pub resp: egui::Response,
     pub changed: bool,
     pub lock_clicked: bool,
+    /// a depth handle was dragged: (route, change of its amount)
+    pub ring_drag: Option<(usize, f32)>,
+    /// Alt-drag on the knob: change of the selected modulator's depth
+    pub alt_drag: Option<f32>,
 }
 
 pub(super) struct KnobArgs<'a> {
@@ -28,6 +32,10 @@ pub(super) struct KnobArgs<'a> {
     pub badge: Option<&'a str>,
     pub locked: Option<bool>,
     pub tip: &'a str,
+    /// modulation routes onto this knob (drawn as rings outside the arc)
+    pub rings: &'a [super::modview::Ring],
+    /// the modulated position now (a dot on the arc)
+    pub live: Option<f32>,
 }
 
 /// A knob for a 0..1 position. Drag up/down (or left/right) to turn it,
@@ -45,15 +53,19 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     let resp = ui.interact(krect, id, sense);
     let mut changed = false;
     let before = *v;
-    if a.enabled {
+    let mut alt_drag = None;
+    let m = ui.input(|i| i.modifiers);
+    let fine = if m.ctrl || m.command || m.shift {
+        0.1
+    } else {
+        1.0
+    };
+    if a.enabled && resp.dragged() && m.alt {
+        let d = resp.drag_delta();
+        alt_drag = Some((d.x - d.y) * 0.005 * fine);
+    } else if a.enabled {
         if resp.dragged() {
             let d = resp.drag_delta();
-            let m = ui.input(|i| i.modifiers);
-            let fine = if m.ctrl || m.command || m.shift {
-                0.1
-            } else {
-                1.0
-            };
             // keep the unrounded position while dragging (stepped knobs)
             let nid = id.with("drag_pos");
             let n0 = if resp.drag_started() {
@@ -78,13 +90,14 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     let a0 = std::f32::consts::PI * 0.75;
     let span = std::f32::consts::PI * 1.5;
     let pt = |ang: f32, r: f32| kc + egui::vec2(ang.cos(), ang.sin()) * r;
-    let arc = |from: f32, to: f32, col: Color32, w: f32| {
+    let arc_r = |from: f32, to: f32, col: Color32, w: f32, r: f32| {
         let n = 28;
         let pts: Vec<Pos2> = (0..=n)
-            .map(|i| pt(a0 + span * (from + (to - from) * i as f32 / n as f32), RAD))
+            .map(|i| pt(a0 + span * (from + (to - from) * i as f32 / n as f32), r))
             .collect();
         p.add(egui::Shape::line(pts, Stroke::new(w, col)));
     };
+    let arc = |from: f32, to: f32, col: Color32, w: f32| arc_r(from, to, col, w, RAD);
     p.circle_filled(kc, RAD - 3.0, t.pill.gamma_multiply(dim.max(0.7)));
     p.circle_stroke(kc, RAD - 3.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.35)));
     // stepped knobs (octave, voices...): a dot per step
@@ -116,6 +129,35 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         [pt(a0 + span * *v, 3.0), pt(a0 + span * *v, RAD - 4.0)],
         Stroke::new(2.0, t.ink.gamma_multiply(dim)),
     );
+    // modulation: a ring per route (value → value + depth) with a handle
+    // that sets the depth, and the live modulated value as a dot
+    let mut ring_drag = None;
+    for (j, rg) in a.rings.iter().enumerate().take(3) {
+        let r = RAD + 4.5 + j as f32 * 3.0;
+        let to = (*v + rg.amount).clamp(0.0, 1.0);
+        arc_r(*v, to, rg.col, if rg.selected { 2.5 } else { 1.8 }, r);
+        let hp = pt(a0 + span * to, r);
+        let hr = ui.interact(
+            Rect::from_center_size(hp, egui::vec2(9.0, 9.0)),
+            id.with(("ring", j)),
+            Sense::drag(),
+        );
+        let big = hr.hovered() || hr.dragged();
+        p.circle_filled(hp, if big { 3.5 } else { 2.5 }, rg.col);
+        if hr.dragged() {
+            let d = hr.drag_delta();
+            ring_drag = Some((rg.route, (d.x - d.y) * 0.005 * fine));
+        }
+        hr.on_hover_text(format!(
+            "modulation depth {:+.0} % (drag)",
+            rg.amount * 100.0
+        ));
+    }
+    if let Some(lv) = a.live {
+        if !a.rings.is_empty() {
+            p.circle_filled(pt(a0 + span * lv, RAD), 2.6, t.ink);
+        }
+    }
     let small = egui::FontId::proportional(10.5);
     let mono = egui::FontId::monospace(10.0);
     let name_col = if a.enabled {
@@ -222,6 +264,8 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         resp,
         changed,
         lock_clicked,
+        ring_drag,
+        alt_drag,
     }
 }
 

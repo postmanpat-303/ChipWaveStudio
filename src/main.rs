@@ -25,6 +25,7 @@ mod ladder;
 mod master;
 mod midi;
 mod model;
+mod modulation;
 mod plugin;
 mod presets;
 mod prompt;
