@@ -67,7 +67,7 @@ impl Pcm {
     #[inline]
     pub fn read(&self, p: f64) -> (f32, f32) {
         let n = self.frames() as i64;
-        if !(p >= 0.0) || p >= n as f64 {
+        if p.is_nan() || p < 0.0 || p >= n as f64 {
             return (0.0, 0.0);
         }
         let i = p as i64;
