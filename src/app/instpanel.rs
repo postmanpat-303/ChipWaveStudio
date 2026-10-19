@@ -102,6 +102,7 @@ pub(super) fn tag_colour(tag: &str) -> Color32 {
         "Analog" => hex(0x8FD9A3),
         "FM-4" => hex(0x7FCFC0),
         "Noise" => hex(0xB4BCC8),
+        "Wave" => hex(0xC79AF0),
         "Moog" => hex(0x6FB0E8),
         _ => hex(0x4FC3D9),
     }
@@ -858,6 +859,7 @@ fn custom_size(c: Custom, card_h: f32) -> (f32, f32) {
         Custom::PluginParams => (470.0, card_h - HEAD_H - 10.0),
         Custom::SampleInfo => (270.0, 84.0),
         Custom::FxChain => (210.0, 64.0),
+        Custom::WaveTable(_) => (210.0, 64.0),
         Custom::Modulators => (300.0, card_h - HEAD_H - 10.0),
         Custom::Routings => (330.0, card_h - HEAD_H - 10.0),
     }
@@ -1430,6 +1432,54 @@ impl App {
                     .clicked()
                 {
                     cx.acts.push(Act::OpenSample);
+                }
+            }
+            (Custom::WaveTable(o), InstrumentKind::Gen(g)) => {
+                let o = o as usize;
+                if let crate::gen::GenEngine::Wave(w) = &mut g.engine {
+                    let name = w.table_name(o);
+                    ui.add(egui::Label::new(egui::RichText::new(name).strong()).truncate());
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button("Import WAV…")
+                            .on_hover_text(
+                                "single-cycle WAV, or a wavetable WAV of 2048-sample frames \
+                                 (Serum clm chunk sizes are read); saved inside the song",
+                            )
+                            .clicked()
+                        {
+                            if let Some(p) = rfd::FileDialog::new()
+                                .add_filter("WAV", &["wav", "WAV"])
+                                .pick_file()
+                            {
+                                match crate::wavetable::import_wav(&p) {
+                                    Ok(u) => {
+                                        self.status = format!(
+                                            "Imported wavetable {} ({} frames)",
+                                            u.name(),
+                                            u.table.frames
+                                        );
+                                        w.user[o] = Some(u);
+                                        w.tables[o] = crate::gen_wave::USER;
+                                        cx.changed = true;
+                                    }
+                                    Err(e) => self.status = format!("Wavetable import: {e}"),
+                                }
+                            }
+                        }
+                        if w.user[o].is_some()
+                            && ui
+                                .button("Clear")
+                                .on_hover_text("drop the imported table (back to Basic Shapes)")
+                                .clicked()
+                        {
+                            w.user[o] = None;
+                            if w.tables[o] == crate::gen_wave::USER {
+                                w.tables[o] = 0;
+                            }
+                            cx.changed = true;
+                        }
+                    });
                 }
             }
             (Custom::FxChain, _) => {

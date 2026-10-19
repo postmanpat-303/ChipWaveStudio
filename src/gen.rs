@@ -70,6 +70,7 @@ impl MacroDef {
             "s" if x < 1.0 => format!("{:.0} ms", x * 1000.0),
             "s" => format!("{x:.2} s"),
             "st" => format!("{x:+.0} st"),
+            "ct" => format!("{x:+.0} ct"),
             "x" => format!("{x:.2}x"),
             "#" => format!("{}", x.round() as i32),
             _ => format!("{:.0} %", x * 100.0),
@@ -522,6 +523,8 @@ pub enum GenEngine {
     Fm(crate::gen2::FmP),
     /// noise: risers, downlifters, impacts, wind, crackle (0.2.3.14)
     Noise(crate::gen2::NoiseP),
+    /// wavetable synth (Unreleased)
+    Wave(crate::gen_wave::WaveP),
 }
 
 impl GenEngine {
@@ -530,7 +533,7 @@ impl GenEngine {
     pub fn own_env(&self) -> bool {
         matches!(
             self,
-            GenEngine::Analog(_) | GenEngine::Fm(_) | GenEngine::Noise(_)
+            GenEngine::Analog(_) | GenEngine::Fm(_) | GenEngine::Noise(_) | GenEngine::Wave(_)
         )
     }
 }
@@ -600,6 +603,7 @@ impl GenPatch {
             GenEngine::Analog(a) => a.fix(),
             GenEngine::Fm(f) => f.fix(),
             GenEngine::Noise(n) => n.fix(),
+            GenEngine::Wave(w) => w.fix(),
         }
         self.mutate = if self.mutate.is_finite() {
             self.mutate.clamp(0.0, 0.5)
@@ -631,6 +635,7 @@ impl GenPatch {
             GenEngine::Analog(a) => a.dice(seed),
             GenEngine::Fm(f) => f.dice(seed),
             GenEngine::Noise(n) => n.dice(seed),
+            GenEngine::Wave(w) => w.dice(seed),
             _ => {
                 if let Some(d) = self.drum_mut(sel) {
                     roll(d, seed)
@@ -647,6 +652,7 @@ impl GenPatch {
             GenEngine::Analog(a) => a.dice(seed),
             GenEngine::Fm(f) => f.dice(seed),
             GenEngine::Noise(n) => n.dice(seed),
+            GenEngine::Wave(w) => w.dice(seed),
             GenEngine::Kit(k) => {
                 for (i, d) in k.pieces.iter_mut().enumerate() {
                     roll(d, seed.wrapping_add(i as u32 * 0x9E37_79B9));
@@ -662,6 +668,7 @@ impl GenPatch {
             GenEngine::Analog(x) => return x.mutate(a, seed),
             GenEngine::Fm(x) => return x.mutate(a, seed),
             GenEngine::Noise(x) => return x.mutate(a, seed),
+            GenEngine::Wave(x) => return x.mutate(a, seed),
             _ => {}
         }
         let Some(d) = self.drum_mut(sel) else {
@@ -782,6 +789,7 @@ pub fn gen_knobs(g: &GenPatch) -> Vec<(usize, String)> {
         GenEngine::Analog(_) => named(&crate::gen2::ANALOG),
         GenEngine::Fm(_) => named(&crate::gen2::FM),
         GenEngine::Noise(_) => named(&crate::gen2::NOISE),
+        GenEngine::Wave(_) => named(&crate::gen_wave::WAVE),
     }
 }
 
@@ -794,6 +802,7 @@ pub fn gen_knob_def(g: &GenPatch, k: usize) -> Option<&'static MacroDef> {
         GenEngine::Analog(_) => crate::gen2::ANALOG.get(k),
         GenEngine::Fm(_) => crate::gen2::FM.get(k),
         GenEngine::Noise(_) => crate::gen2::NOISE.get(k),
+        GenEngine::Wave(_) => crate::gen_wave::WAVE.get(k),
     }
 }
 
@@ -806,6 +815,7 @@ pub fn gen_knob_norm(g: &GenPatch, k: usize) -> Option<f32> {
         GenEngine::Analog(a) => a.p.get(k).copied(),
         GenEngine::Fm(f) => f.p.get(k).copied(),
         GenEngine::Noise(n) => n.p.get(k).copied(),
+        GenEngine::Wave(w) => w.p.get(k).copied(),
     }
 }
 
@@ -830,6 +840,7 @@ pub fn set_gen_knob_norm(g: &mut GenPatch, k: usize, v: f32) -> bool {
         GenEngine::Analog(a) => a.p.get_mut(k),
         GenEngine::Fm(f) => f.p.get_mut(k),
         GenEngine::Noise(n) => n.p.get_mut(k),
+        GenEngine::Wave(w) => w.p.get_mut(k),
     };
     match slot {
         Some(x) => {
@@ -902,6 +913,7 @@ pub struct GenState {
     an: crate::gen2::AnalogState,
     fm: crate::gen2::FmState,
     ns: crate::gen2::NoiseState,
+    wv: crate::gen_wave::WaveState,
     /// note held (own-envelope engines release on false)
     pub gate: bool,
 }
@@ -929,6 +941,7 @@ impl Default for GenState {
             an: Default::default(),
             fm: Default::default(),
             ns: Default::default(),
+            wv: Default::default(),
             gate: true,
             done: false,
         }
@@ -951,10 +964,11 @@ impl GenState {
             GenEngine::Analog(a) => Some(self.an.render(a, ov, freq, sr, gate)),
             GenEngine::Fm(f) => Some(self.fm.render(f, ov, freq, sr, gate)),
             GenEngine::Noise(n) => Some(self.ns.render(n, ov, freq, sr, gate)),
+            GenEngine::Wave(w) => Some(self.wv.render(w, ov, freq, sr, gate)),
             _ => None,
         };
         if let Some(o) = own {
-            if self.an.done || self.fm.done || self.ns.done {
+            if self.an.done || self.fm.done || self.ns.done || self.wv.done {
                 self.done = true;
             }
             return o;
@@ -970,7 +984,8 @@ impl GenState {
             GenEngine::ChipFx(_)
             | GenEngine::Analog(_)
             | GenEngine::Fm(_)
-            | GenEngine::Noise(_) => {
+            | GenEngine::Noise(_)
+            | GenEngine::Wave(_) => {
                 unreachable!()
             }
             GenEngine::Drum(d) => (
@@ -1490,6 +1505,15 @@ pub fn presets() -> Vec<(&'static str, &'static str, GenPatch)> {
     for (n, tip, e, glide, legato) in crate::gen2::presets() {
         let mut g = GenPatch {
             engine: e,
+            ..Default::default()
+        };
+        g.base.glide = glide;
+        g.base.legato = legato;
+        v.push((n, tip, g));
+    }
+    for (n, tip, w, glide, legato) in crate::gen_wave::presets() {
+        let mut g = GenPatch {
+            engine: GenEngine::Wave(w),
             ..Default::default()
         };
         g.base.glide = glide;

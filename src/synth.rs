@@ -543,14 +543,16 @@ impl SynthVoice {
         let mut gmo = self.gmo;
         let own = gp.engine.own_env();
         self.gen.gate = self.amp.gate();
-        let ladder = fm_on && !gp.filter_on && matches!(gp.engine, GenEngine::Analog(_));
-        let (l, r, stereo) = if ladder {
-            // 38xx etc. on the Analog ladder: Cutoff = knob 0, Res = knob 1
+        // 38xx etc. on the engine's own ladder (Analog: Cutoff = knob 0,
+        // Res = knob 1; Wave: knobs 2 and 3, when its filter is on)
+        let own_lad: Option<(&[f32], &[crate::gen::MacroDef], usize)> = match &gp.engine {
+            GenEngine::Analog(a) => Some((&a.p, &crate::gen2::ANALOG, 0)),
+            GenEngine::Wave(w) if w.filter_on => Some((&w.p, &crate::gen_wave::WAVE, 2)),
+            _ => None,
+        };
+        let ladder = fm_on && !gp.filter_on && own_lad.is_some();
+        let (l, r, stereo) = if let (true, Some((ap, defs, c))) = (ladder, own_lad) {
             // (a copy only while a filter command is active)
-            let GenEngine::Analog(a) = &gp.engine else {
-                unreachable!()
-            };
-            let defs = &crate::gen2::ANALOG;
             let mut k2 = *ko;
             let cur = |i: usize| {
                 Ov {
@@ -558,20 +560,20 @@ impl SynthVoice {
                     knob: ko,
                 }
                 .get(i)
-                .unwrap_or(a.p[i])
+                .unwrap_or(ap[i])
             };
             if fm.cut_abs > 0.0 || fm.cut_oct != 0.0 {
                 let hz = if fm.cut_abs > 0.0 {
                     fm.cut_abs
                 } else {
-                    defs[0].map(cur(0))
+                    defs[c].map(cur(c))
                 };
-                k2[0] = defs[0].unmap(hz * 2f32.powf(fm.cut_oct));
-                gmo[0] = -1.0;
+                k2[c] = defs[c].unmap(hz * 2f32.powf(fm.cut_oct));
+                gmo[c] = -1.0;
             }
             if fm.res >= 0.0 {
-                k2[1] = defs[1].unmap(fm.res);
-                gmo[1] = -1.0;
+                k2[c + 1] = defs[c + 1].unmap(fm.res);
+                gmo[c + 1] = -1.0;
             }
             self.gen.render(
                 gp,

@@ -64,6 +64,8 @@ pub(crate) enum Custom {
     FxChain,
     /// drag-to-modulate: the selected modulator's settings
     Modulators,
+    /// Wave generator: import / clear a table for oscillator 0 or 1
+    WaveTable(u8),
     /// drag-to-modulate: every routing with its depth
     Routings,
 }
@@ -256,6 +258,7 @@ pub(crate) fn type_tag(k: &InstrumentKind) -> &'static str {
             GenEngine::Analog(_) => "Analog",
             GenEngine::Fm(_) => "FM-4",
             GenEngine::Noise(_) => "Noise",
+            GenEngine::Wave(_) => "Wave",
         },
     }
 }
@@ -276,6 +279,7 @@ fallback!(d_gen, GenPatch, GenPatch::default());
 fallback!(d_an, crate::gen2::AnalogP, Default::default());
 fallback!(d_fm, crate::gen2::FmP, Default::default());
 fallback!(d_nz, crate::gen2::NoiseP, Default::default());
+fallback!(d_wv, crate::gen_wave::WaveP, Default::default());
 fallback!(d_sfx, crate::chipfx::SfxP, Default::default());
 
 fn me(i: &Instrument) -> &Instrument {
@@ -338,6 +342,7 @@ macro_rules! engine_acc {
 engine_acc!(an, an_mut, Analog, crate::gen2::AnalogP, d_an);
 engine_acc!(fm, fm_mut, Fm, crate::gen2::FmP, d_fm);
 engine_acc!(nz, nz_mut, Noise, crate::gen2::NoiseP, d_nz);
+engine_acc!(wv, wv_mut, Wave, crate::gen_wave::WaveP, d_wv);
 engine_acc!(sfx, sfx_mut, ChipFx, crate::chipfx::SfxP, d_sfx);
 
 fn drum(i: &Instrument, sel: usize) -> DrumP {
@@ -1616,6 +1621,7 @@ fn generator(b: &mut B, g: &GenPatch, sel: usize) {
         GenEngine::Analog(_) => analog(b),
         GenEngine::Fm(_) => fm4(b),
         GenEngine::Noise(_) => noise(b),
+        GenEngine::Wave(_) => wave(b),
     }
     if !g.engine.own_env() {
         // release + optional filter (drums, kit, chip FX)
@@ -2079,6 +2085,99 @@ fn noise(b: &mut B) {
     b.card(Tab::Advanced, "Thump & hiss");
     for k in [12, 13] {
         gen_knob!(b, "nz", nz, nz_mut, NOISE, k);
+    }
+}
+
+fn wave(b: &mut B) {
+    use crate::gen_wave::{USER, WAVE};
+    use crate::wavetable::BUILTIN;
+    for o in 0..2usize {
+        let (card, tag) = if o == 0 { ("Osc A", "A") } else { ("Osc B", "B") };
+        b.card(Tab::Main, card).viz = Some(Box::new(move |i| {
+            let w = wv(i);
+            Viz::Wave(
+                w.table(o)
+                    .map(|t| t.frame_points(WAVE[o].map(w.p[o]), 64))
+                    .unwrap_or_else(|| vec![0.0; 64]),
+            )
+        }));
+        let gs: (Get, Set) = (
+            Box::new(move |i| match wv(i).tables[o] {
+                USER => BUILTIN.len() as f32,
+                t => t as f32,
+            }),
+            Box::new(move |i, v| {
+                if let Some(w) = wv_mut(i) {
+                    let v = v.round() as usize;
+                    if v < BUILTIN.len() {
+                        w.tables[o] = v as u8;
+                    } else if w.user[o].is_some() {
+                        w.tables[o] = USER;
+                    }
+                }
+            }),
+        );
+        let mut opts: Vec<String> = BUILTIN.iter().map(|n| n.to_string()).collect();
+        opts.push("Imported".into());
+        let p = b.choice(&format!("wv.table{o}"), &format!("Table {tag}"), opts, gs);
+        p.tip = "the wavetable (built-in, or Imported: see the import button)".into();
+        choice_lock!(p, wv, wv_mut, o as u32);
+        b.custom(&format!("wv.import{o}"), "Import", Custom::WaveTable(o as u8))
+            .tip("import a single-cycle WAV or a Serum-style wavetable WAV (2048-sample frames)");
+        let ks: &[usize] = if o == 0 { &[0, 8, 9, 10, 26] } else { &[1, 7, 11, 12, 27] };
+        for &k in ks {
+            gen_knob!(b, "wv", wv, wv_mut, WAVE, k);
+        }
+    }
+    b.card(Tab::Main, "Unison & sub");
+    for k in [13, 5, 6, 14, 15] {
+        gen_knob!(b, "wv", wv, wv_mut, WAVE, k);
+    }
+    b.card(Tab::Main, "Filter").viz = Some(Box::new(|i| {
+        let w = wv(i);
+        Viz::Filter(WAVE[2].map(w.p[2]), WAVE[3].map(w.p[3]), mode_ix(w.mode))
+    }));
+    b.toggle("wv.filter_on", "Filter", fldb!(wv, wv_mut, filter_on))
+        .tip("run the oscillators through the ladder filter");
+    let modes = [FilterMode::Lp, FilterMode::Bp, FilterMode::Hp];
+    b.choice(
+        "wv.mode",
+        "Mode",
+        names(&modes),
+        fldc!(wv, wv_mut, modes, mode),
+    );
+    b.toggle("wv.vintage", "Vintage", fldb!(wv, wv_mut, vintage))
+        .tip("saturated, 2x oversampled ladder (else clean)");
+    b.toggle("wv.pole4", "24 dB", fldb!(wv, wv_mut, pole4));
+    for k in [2, 3, 4, 16, 25] {
+        gen_knob!(b, "wv", wv, wv_mut, WAVE, k);
+    }
+    b.card(Tab::Main, "Amp envelope").viz = Some(Box::new(|i| {
+        let w = wv(i);
+        let m = |k: usize| WAVE[k].map(w.p[k]);
+        Viz::Adsr(m(21), m(22), m(23), m(24))
+    }));
+    for k in 21..25 {
+        gen_knob!(b, "wv", wv, wv_mut, WAVE, k);
+    }
+    b.card(Tab::Main, "Voice");
+    b.knob(
+        "wv.level",
+        "Level",
+        0.0,
+        4.0,
+        false,
+        1.0,
+        "",
+        fld!(wv, wv_mut, level),
+    );
+    b.card(Tab::Modulation, "Filter envelope").viz = Some(Box::new(|i| {
+        let w = wv(i);
+        let m = |k: usize| WAVE[k].map(w.p[k]);
+        Viz::Adsr(m(17), m(18), m(19), m(20))
+    }));
+    for k in [17, 18, 19, 20] {
+        gen_knob!(b, "wv", wv, wv_mut, WAVE, k);
     }
 }
 

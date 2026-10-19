@@ -19,6 +19,7 @@ mod fx;
 mod fxmod;
 mod gen;
 mod gen2;
+mod gen_wave;
 mod input;
 mod instfile;
 mod keymap;
@@ -40,6 +41,7 @@ mod timeline;
 mod transform;
 mod update;
 mod voice;
+mod wavetable;
 
 use std::path::PathBuf;
 

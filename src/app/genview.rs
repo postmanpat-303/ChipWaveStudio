@@ -177,6 +177,8 @@ pub(super) fn gen_panel(
                 "GENERATOR · FM-4"
             } else if matches!(g.engine, GenEngine::Noise(_)) {
                 "GENERATOR · NOISE"
+            } else if matches!(g.engine, GenEngine::Wave(_)) {
+                "GENERATOR · WAVETABLE"
             } else {
                 "GENERATOR · DRUM SYNTH"
             })
@@ -499,6 +501,40 @@ fn g2_choices(ui: &mut egui::Ui, g: &mut GenPatch) -> bool {
                     .changed();
             });
         }
+        GenEngine::Wave(w) => {
+            use crate::wavetable::BUILTIN;
+            for o in 0..2 {
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    ui.label(if o == 0 { "Table A" } else { "Table B" });
+                    egui::ComboBox::from_id_salt(("wv_table", o))
+                        .width(150.0)
+                        .selected_text(w.table_name(o))
+                        .show_ui(ui, |ui| {
+                            for (i, n) in BUILTIN.iter().enumerate() {
+                                ch |= ui.selectable_value(&mut w.tables[o], i as u8, *n).changed();
+                            }
+                            if w.user[o].is_some() {
+                                ch |= ui
+                                    .selectable_value(
+                                        &mut w.tables[o],
+                                        crate::gen_wave::USER,
+                                        "Imported",
+                                    )
+                                    .changed();
+                            }
+                        });
+                    ch |= choice_lock_ui(ui, &mut w.locks, o as u32);
+                });
+            }
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(14.0);
+                ch |= ui.checkbox(&mut w.filter_on, "Filter").changed();
+                ch |= mode_combo(ui, "wv_mode", &mut w.mode);
+                ch |= ui.checkbox(&mut w.vintage, "Vintage").changed();
+                ch |= ui.checkbox(&mut w.pole4, "24 dB").changed();
+            });
+        }
         _ => {}
     }
     ch
@@ -520,6 +556,14 @@ fn g2_knobs(ui: &mut egui::Ui, g: &mut GenPatch) -> bool {
         GenEngine::Analog(a) => (&mut a.p, &ANALOG, &mut a.locks, &mut a.level, AN, "an"),
         GenEngine::Fm(f) => (&mut f.p, &FM, &mut f.locks, &mut f.level, FN, "fm"),
         GenEngine::Noise(x) => (&mut x.p, &NOISE, &mut x.locks, &mut x.level, NN, "nz"),
+        GenEngine::Wave(x) => (
+            &mut x.p,
+            &crate::gen_wave::WAVE,
+            &mut x.locks,
+            &mut x.level,
+            crate::gen_wave::WN,
+            "wv",
+        ),
         _ => return false,
     };
     ch |= knob_rows(ui, p, defs, locks, &macros, 4, tag);
@@ -761,6 +805,11 @@ impl App {
                 "risers, downlifters, impacts, wind, vinyl",
                 2,
             ),
+            (
+                "Generator (wavetable)",
+                "2 wavetable oscillators, unison, sub + noise, ladder; import WAV tables",
+                3,
+            ),
         ] {
             ui.menu_button(menu, |ui| {
                 ui.label(egui::RichText::new(tip).small().color(th().ink2));
@@ -768,7 +817,8 @@ impl App {
                     let ok = match pick {
                         0 => matches!(p.engine, GenEngine::Analog(_)),
                         1 => matches!(p.engine, GenEngine::Fm(_)),
-                        _ => matches!(p.engine, GenEngine::Noise(_)),
+                        2 => matches!(p.engine, GenEngine::Noise(_)),
+                        _ => matches!(p.engine, GenEngine::Wave(_)),
                     };
                     if !ok {
                         continue;

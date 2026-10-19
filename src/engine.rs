@@ -437,6 +437,8 @@ impl Default for TlState {
 
 impl Engine {
     pub fn new(sr: f32) -> Self {
+        // the built-in wavetables (once per process, off the audio thread)
+        crate::wavetable::init();
         Self {
             sr,
             playing: false,
