@@ -1,6 +1,6 @@
 //! Timeline view (M1) UI tests: view switching, new songs, clips, ruler
 //! seek, double-click to the pattern editor, keys, and the frame budget.
-use super::ui_tests::{double_click, frame, harness_with, key};
+use super::ui_tests::{double_click, double_click_with, frame, harness_with, key};
 use super::*;
 use crate::timeline::{rows_to_ticks, ROW};
 use egui_kittest::Harness;
@@ -92,7 +92,7 @@ fn new_songs_open_on_the_timeline_unless_switched_off() {
 }
 
 #[test]
-fn double_click_a_clip_opens_its_block_column_and_row() {
+fn double_click_a_clip_opens_the_piano_roll_alt_the_pattern_editor() {
     let mut h = on_timeline(fileio::demo_song());
     // a clip on track 3 (index 2) that starts after the first entry
     let (id, start, block, col) = {
@@ -115,7 +115,25 @@ fn double_click_a_clip_opens_its_block_column_and_row() {
     assert!(h.state().tlv.lanes.contains(p));
     click(&mut h, p);
     assert_eq!(h.state().tlv.sel, Some(id), "a click selects");
+    // by default a double-click opens the clip in the piano roll
+    assert!(h.state().extra.dblclick_roll, "Del's default");
     double_click(&mut h, p);
+    {
+        let s = h.state();
+        assert_eq!(s.view, View::Timeline);
+        assert!(s.pr.open, "the piano roll tab is showing");
+        assert_eq!(
+            s.pr_target(),
+            Some(super::pianoview::Target::Block {
+                pattern: block,
+                col
+            })
+        );
+        assert_eq!((s.pattern, s.ch), (block, col));
+        assert!(s.status.contains("Piano roll"), "{}", s.status);
+    }
+    // Alt+double-click: the pattern editor, as before
+    double_click_with(&mut h, p, egui::Modifiers::ALT);
     let s = h.state();
     assert_eq!(s.view, View::Pattern);
     assert_eq!((s.pattern, s.ch, s.row), (block, col, 5));
@@ -126,6 +144,19 @@ fn double_click_a_clip_opens_its_block_column_and_row() {
     key(&mut h, Key::Enter, egui::Modifiers::NONE);
     assert_eq!(h.state().view, View::Pattern);
     assert_eq!((h.state().pattern, h.state().row), (block, 0));
+    // the setting swapped: a plain double-click opens the pattern editor,
+    // Alt+double-click the piano roll
+    key(&mut h, Key::T, egui::Modifiers::COMMAND);
+    h.state_mut().extra.dblclick_roll = false;
+    h.state_mut().set_lower(0);
+    frame(&mut h);
+    double_click(&mut h, p);
+    assert_eq!(h.state().view, View::Pattern);
+    assert_eq!((h.state().pattern, h.state().row), (block, 5));
+    key(&mut h, Key::T, egui::Modifiers::COMMAND);
+    double_click_with(&mut h, p, egui::Modifiers::ALT);
+    assert_eq!(h.state().view, View::Timeline);
+    assert!(h.state().pr.open);
 }
 
 #[test]

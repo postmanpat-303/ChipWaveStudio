@@ -55,6 +55,7 @@ These are set from the View menu and the lower panel, and saved in `settings.tom
 - the classic sidebar instrument editor (`classic_editor`)
 - the collapsed instrument-editor cards (`cards_closed`, as "Type/Card")
 - whether File › New opens on the Timeline view, in timeline mode (`new_in_timeline`, default on; **Settings › New songs**, Unreleased; off = a tracker-mode song on the pattern editor). See [TIMELINE.md](TIMELINE.md#new-songs)
+- what double-clicking a clip on the Timeline opens (`dblclick_roll`, default on = the piano roll; **Settings › Double-click a clip**, Unreleased; off = the pattern editor; Alt+double-click does the other one). See [TIMELINE.md](TIMELINE.md#finding-your-way-around)
 
 Older settings files get the defaults.
 

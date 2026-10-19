@@ -99,6 +99,12 @@ pub struct Extra {
     /// 2026; docs/TIMELINE.md). Off: on the pattern editor, as before.
     #[serde(default = "yes")]
     pub new_in_timeline: bool,
+    /// Timeline: double-clicking a clip opens it in the piano roll (Del's
+    /// choice, 19 Oct 2026). Off: the block in the pattern editor, as
+    /// before. Alt+double-click does the other one; Enter always opens the
+    /// pattern editor.
+    #[serde(default = "yes")]
+    pub dblclick_roll: bool,
 }
 
 fn two() -> u32 {
@@ -134,6 +140,7 @@ impl Default for Extra {
             classic_editor: false,
             cards_closed: vec![],
             new_in_timeline: true,
+            dblclick_roll: true,
         }
     }
 }

@@ -443,6 +443,17 @@ impl App {
                     changed = true;
                 }
                 ui.end_row();
+                ui.label("Double-click a clip");
+                ui.horizontal(|ui| {
+                    let a = ui
+                        .selectable_value(&mut self.extra.dblclick_roll, true, "Piano roll")
+                        .on_hover_text("Timeline: double-click opens the clip in the lower panel's piano roll (Alt+double-click: the pattern editor)");
+                    let b = ui
+                        .selectable_value(&mut self.extra.dblclick_roll, false, "Pattern editor")
+                        .on_hover_text("Timeline: double-click opens a block clip in the pattern editor (Alt+double-click: the piano roll)");
+                    changed |= a.changed() || b.changed();
+                });
+                ui.end_row();
                 ui.label("Row numbers");
                 ui.horizontal(|ui| {
                     let a = ui

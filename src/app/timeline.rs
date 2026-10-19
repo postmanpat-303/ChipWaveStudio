@@ -621,8 +621,9 @@ impl App {
                         "This song is arranged here: clips on tracks (track = mixer channel). \
                          Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
                          S split, Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
-                         Ctrl+Shift+D make unique. Double-click a clip to edit its block, \
-                         empty space to write a new one. The order list is not used.",
+                         Ctrl+Shift+D make unique. Double-click a clip to edit it in the piano roll \
+                         (Alt+double-click or Enter: the pattern editor; Settings can swap them), \
+                         empty space to write a new block. The order list is not used.",
                     );
                 if ui
                     .small_button("Back to tracker mode…")
@@ -636,7 +637,8 @@ impl App {
                     .on_hover_text(
                         "The timeline shows this song's order list as clips per track (track = mixer channel). \
                          To move, loop and split clips here, switch the song to timeline mode. \
-                         Double-click a clip to edit its block in the pattern editor.",
+                         Double-click a clip to edit it in the piano roll (Alt+double-click or Enter: \
+                         the pattern editor; Settings can swap them).",
                     );
                 if ui
                     .small_button("Switch to timeline mode")
@@ -2134,6 +2136,12 @@ impl App {
                             ops.push(TlOp::NewNotes(tr, tk / bar_ticks * bar_ticks));
                             None
                         }
+                        // block clips: the piano roll or the pattern editor,
+                        // as set in Settings (Alt: the other one)
+                        Some(_) if self.extra.dblclick_roll != mods.alt => {
+                            open_roll = true;
+                            None
+                        }
                         Some(cl) => cl
                             .block()
                             .map(|(b, col)| (b, col, (cl.source_at(tk) / ROW) as usize, entry)),
@@ -2203,13 +2211,16 @@ impl App {
                     }
                 } else {
                     if ui
-                        .add(egui::Button::new("Open in the pattern editor").shortcut_text("Enter"))
+                        .add(egui::Button::new("Open in the pattern editor").shortcut_text(if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" }))
                         .clicked()
                     {
                         menu_open_now = true;
                         ui.close();
                     }
-                    if ui.button("Open in the piano roll").clicked() {
+                    if ui
+                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
+                        .clicked()
+                    {
                         open_roll = true;
                         ui.close();
                     }
@@ -2305,10 +2316,17 @@ impl App {
                     .loop_len
                     .map(|l| format!(" · loops {}x", (cl.len + l - 1) / l))
                     .unwrap_or_default();
-                let how = if mode {
-                    "drag: move (Alt: copy) · edges: trim / loop · double-click: edit · right-click: more"
+                let dbl = if self.extra.dblclick_roll {
+                    "double-click: piano roll (Alt: pattern editor)"
                 } else {
-                    "double-click: edit in the pattern editor"
+                    "double-click: pattern editor (Alt: piano roll)"
+                };
+                let how = if mode {
+                    format!(
+                        "drag: move (Alt: copy) · edges: trim / loop · {dbl} · right-click: more"
+                    )
+                } else {
+                    dbl.to_string()
                 };
                 cresp.clone().on_hover_text(format!(
                     "{} · column {} · bar {}.{} · {} rows{passes}{}\n{how}",
@@ -2410,7 +2428,7 @@ impl App {
             self.timeline_open(b, col, row, entry);
         }
         if open_roll {
-            self.set_lower(3);
+            self.timeline_open_roll();
         }
         if live.playing {
             ui.ctx().request_repaint();
@@ -2437,6 +2455,33 @@ impl App {
             self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
         }
         self.dirty = true;
+    }
+
+    /// double-click (or right-click › Open in the piano roll): the selected
+    /// clip in the lower panel's piano roll. A block clip also becomes the
+    /// pattern editor's current block and channel, so the roll keeps showing
+    /// it in other views.
+    pub(super) fn timeline_open_roll(&mut self) {
+        let blk = self.tlv.sel.and_then(|id| {
+            let c = self.tlv.cache.as_ref()?;
+            c.tl.clips.iter().find(|x| x.id == id)?.block()
+        });
+        if let Some((b, col)) = blk {
+            let (nb, nch) = self.with(|s| (s.song.patterns.len(), s.song.channels));
+            if b < nb {
+                self.pattern = b;
+                self.ch = col.min(nch.saturating_sub(1));
+                self.row = self.row.min(self.rows().saturating_sub(1));
+                self.sel = None;
+            }
+        }
+        self.set_lower(3);
+        self.status = if blk.is_some() {
+            "Piano roll: this clip's block column (Alt+double-click or Enter: the pattern editor)"
+                .into()
+        } else {
+            "Piano roll: this note clip".into()
+        };
     }
 
     /// double-click: the block in the pattern editor, cursor on the column and row

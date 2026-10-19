@@ -839,6 +839,12 @@ fn instrument_menu_copy_paste_effects_and_open_in_fx_view() {
 /// two quick clicks at one spot (frames 50 ms apart: the harness's default
 /// 250 ms step is too slow for egui to count a double-click)
 pub(super) fn double_click(h: &mut Harness<'static, App>, p: Pos2) {
+    double_click_with(h, p, egui::Modifiers::NONE);
+}
+
+/// `double_click` with modifier keys held (e.g. Alt)
+pub(super) fn double_click_with(h: &mut Harness<'static, App>, p: Pos2, m: egui::Modifiers) {
+    h.input_mut().events.push(egui::Event::ModifiersChanged(m));
     h.input_mut().events.push(egui::Event::PointerMoved(p));
     frame(h);
     let mut t = h.ctx.input(|i| i.time);
@@ -850,13 +856,17 @@ pub(super) fn double_click(h: &mut Harness<'static, App>, p: Pos2) {
                 pos: p,
                 button: egui::PointerButton::Primary,
                 pressed,
-                modifiers: Default::default(),
+                modifiers: m,
             });
             frame(h);
         }
     }
     // back to the harness clock (RawInput keeps an explicit time)
     h.input_mut().time = None;
+    h.input_mut()
+        .events
+        .push(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+    frame(h);
     frames(h, 3);
 }
 

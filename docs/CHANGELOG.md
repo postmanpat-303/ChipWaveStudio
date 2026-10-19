@@ -4,6 +4,7 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+- **Timeline: double-click opens a clip in the piano roll** (lower panel, editing that clip; a block clip shows its column of the block). **Alt+double-click**, **Enter** or right-click › **Open in the pattern editor** open the block in the tracker as before. **Settings › Double-click a clip** chooses which one a plain double-click does (default: Piano roll). Guide: [TIMELINE.md › Finding your way around](TIMELINE.md#finding-your-way-around).
 - **The Grid, modular patching:** **New… › Generator (grid)** and an **Add effect › Grid FX** device. Guide: [GRID.md](GRID.md).
   - **A node canvas in the lower panel** (the Grid tab): add modules (+ Module or right-click), drag them by the title, **drag cables from outputs to inputs**, click an input to unplug. Every edit is undoable.
   - **20 modules:** Note (pitch / gate / velocity), Macro, Audio In, Out, Osc (5 band-limited shapes, PM, PW), Wavetable (the Wave generator's 10 tables, mipmapped), Noise, Filter (SVF LP/BP/HP/notch), Ladder, ADSR, LFO (5 shapes), Mix, VCA, Math (7 modes), Logic (6 modes), Slew, Sample & Hold, Shaper (soft / fold / hard), Delay (with feedback and damping) and Knob. Feedback loops are allowed (one-sample delay).

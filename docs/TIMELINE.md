@@ -75,7 +75,7 @@ The lower panel has a **Piano roll** tab (next to Arranger / Instrument / Automa
 - Only the cells of the notes you touch change. Drawing a note into silence and deleting it again leaves identical cells.
 
 **Note clips (M3b)** are polyphonic, with free timing:
-- To make one: right-click empty space › **New note clip here**, or **Shift+double-click** empty space. Double-click or **Enter** on a note clip opens it in the roll.
+- To make one: right-click empty space › **New note clip here**, or **Shift+double-click** empty space. Double-click or **Enter** on a note clip opens it in the roll; double-click opens block clips there too (see [Finding your way around](#finding-your-way-around)).
 - **Grid** sets the snap (1/4 … 1/32, 1/16T, off), and **Q** / **Quantise** snaps the selection (or every note).
 - **Chord** draws the song key's chord on the clicked scale degree (set the key in the Chords window). Notes in the song key are highlighted.
 - Dragging the edge of a note resizes the whole selection.
@@ -123,7 +123,7 @@ In timeline mode every track can show **automation lanes (M5)** under its header
 | Move the play marker / seek | Click the **ruler** (or the marker strip). Like the arranger it snaps to the bar, and **Alt** gives the exact row. While playing, playback jumps there. Drag to scrub |
 | Follow | **Follow** in the toolbar pages the view so the playhead stays about a third of the way in |
 | Bars or time | **Bars** / **Time** switches the ruler between bar numbers and minutes:seconds. The readout shows `bar.beat · m:ss` at the playhead, or at the play marker while stopped |
-| Open a clip | **Double-click** a clip. The pattern editor opens that block with the cursor in the clip's column, on the row you clicked. **Enter** opens the selected clip at its start. Double-clicking an empty part of a track opens the block playing there, in that column |
+| Open a clip | **Double-click** a clip: it opens in the lower panel's **Piano roll** tab (a block clip shows that column of its block, which also becomes the pattern editor's current block and channel; a note clip shows its notes). **Alt+double-click**, **Enter** or right-click › **Open in the pattern editor** opens the block in the pattern editor instead, with the cursor in the clip's column (on the row you clicked; Enter: at the clip's start). **Settings › Double-click a clip** swaps the two (*Piano roll*, the default, or *Pattern editor*; Alt always does the other one). Audio clips don't open. Double-clicking an empty part of a track opens the block playing there (tracker mode) or writes a new one (timeline mode) in the pattern editor |
 | Select | Click a clip (outlined). **Esc** clears the selection |
 | Track header | Coloured strip, number, name and instrument. **M** / **S** mute and solo the channel. The mini-fader is the mixer volume (double-click for 0 dB), and the meter is the channel's. Click a header to put the pattern cursor on that channel |
 | Full height | **F11** hides the lower panel and the timeline gets the whole height. **Ctrl+I** brings back the instrument editor under it |
