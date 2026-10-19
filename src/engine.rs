@@ -3638,6 +3638,57 @@ mod tests {
         }
     }
 
+    #[test]
+    fn grid_fx_macros_automate_its_patch_and_it_survives_a_round_trip() {
+        use crate::fx::FxKind;
+        // Macro 1 opens the Auto-Filter's low-passes
+        let song = mod_fx_song(FxKind::Grid, "m1");
+        let mut flat = song.clone();
+        flat.automation.clear();
+        let a = render_secs(&song, 2.0);
+        let b = render_secs(&flat, 2.0);
+        assert!(a.iter().all(|x| x.is_finite()));
+        let d: f32 = a[150_000..190_000]
+            .iter()
+            .zip(&b[150_000..190_000])
+            .map(|(x, y)| (x - y).abs())
+            .sum();
+        assert!(d > 50.0, "Macro 1 changed nothing ({d})");
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 512];
+        for _ in 0..50 {
+            e.render(&song, &mut buf);
+        }
+        let n = alloc_count::count(|| {
+            for _ in 0..500 {
+                e.render(&song, &mut buf);
+            }
+        });
+        assert_eq!(n, 0, "render allocated {n} times");
+        // every FX patch renders the input
+        for (name, _, g) in crate::grid::fx_presets() {
+            let mut s = flat.clone();
+            s.instruments[0].fx[0].grid = Some(Box::new(g));
+            let o = render_secs(&s, 1.0);
+            assert!(o.iter().all(|x| x.is_finite()), "{name}");
+            assert!(o.iter().any(|x| x.abs() > 0.02), "{name} is silent");
+        }
+        // saved with the song
+        let mut s = flat.clone();
+        s.instruments[0].fx[0].grid.as_mut().unwrap().p[9] = 0.123;
+        let path = std::env::temp_dir().join(format!("grid-fx-{}.cwt", std::process::id()));
+        crate::fileio::save_cwt(&s, &path).expect("save");
+        let back = crate::fileio::load_cwt(&path).expect("load");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(back.instruments[0].fx[0], s.instruments[0].fx[0]);
+        // a device of another kind carries no patch
+        let mut d = crate::fx::Device::new(FxKind::Delay);
+        d.grid = Some(Box::default());
+        d.fix();
+        assert!(d.grid.is_none());
+    }
+
     fn mod_fx_renders_and_automates(kind: crate::fx::FxKind) {
         let song = mod_fx_song(kind, "mix");
         let out = render_secs(&song, 2.0);

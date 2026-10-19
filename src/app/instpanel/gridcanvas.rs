@@ -111,7 +111,7 @@ pub(in crate::app) fn grid_editor(
         }
         ui.label(
             egui::RichText::new(format!(
-                "{}/{} modules · {} cables · drag output → input to patch, click an input to unplug, right-click a title to delete",
+                "{}/{} modules · {} cables · drag an output to an input to patch, click an input to unplug, right-click a title to delete",
                 g.modules.len(),
                 crate::grid::MAX_MODULES,
                 g.cables.len()

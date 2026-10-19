@@ -166,6 +166,13 @@ Generators (src/gen.rs, src/ladder.rs, 0.2.3.12):
   Independent Rust implementations of those recipes; no samples used. The
   macro-knob + dice workflow is inspired by Bitwig Studio's Grid and drum
   devices (ideas only, no code or assets).
+- The Grid generator and Grid FX (src/grid.rs, a modular patching
+  environment) are written from scratch for ChipWave. The idea of a
+  polyphonic, per-voice module canvas follows Bitwig Studio's The Grid
+  (Bitwig GmbH; ideas only, no code, modules, presets or assets). The node
+  canvas is ChipWave's own egui painter. The Karplus Pluck patch follows
+  K. Karplus & A. Strong, "Digital Synthesis of Plucked-String and Drum
+  Timbres", Computer Music Journal 7(2), 1983.
 - Analog, FM-4 and Noise generators (src/gen2.rs, 0.2.3.14) are written from
   scratch for ChipWave; no code from the projects below is copied. They were
   informed by, and ChipWave gratefully credits:

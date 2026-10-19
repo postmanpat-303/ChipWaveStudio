@@ -2413,6 +2413,7 @@ pub(crate) mod tests {
             ("FM-4", gen("Metallic Bell")),
             ("Noise", gen("White Riser")),
             ("Wave", gen("Wave Supersaw")),
+            ("Grid", gen("Grid Saw Bass")),
             (
                 "Sample",
                 inst(InstrumentKind::Sample {
@@ -2610,6 +2611,24 @@ pub(crate) mod tests {
                     "wv.level",
                 ]));
                 r.extend((0..crate::gen_wave::WN).map(|k| format!("wv.{k}")));
+            }
+            "Grid" => {
+                r.extend(s(&[
+                    "gen.dice",
+                    "gd.canvas",
+                    "gd.level",
+                    "gen.glide",
+                    "gen.legato",
+                ]));
+                r.extend((0..crate::grid::MACROS).map(|k| format!("gd.{k}")));
+                let Some(crate::gen::GenPatch {
+                    engine: crate::gen::GenEngine::Grid(g),
+                    ..
+                }) = crate::gen::preset("Grid Saw Bass")
+                else {
+                    unreachable!()
+                };
+                r.extend(g.knobs().into_iter().map(|(k, _)| format!("gd.{k}")));
             }
             "Sample" => r.push("sample.info".into()),
             "CLAP" | "VST3" => r.extend(s(&["plugin.status", "plugin.macros", "plugin.params"])),

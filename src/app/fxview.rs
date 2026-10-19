@@ -606,7 +606,7 @@ impl App {
                 let owner = (self.instr as usize).wrapping_sub(1);
                 let n = d.grid.as_ref().map_or(0, |g| g.modules.len());
                 if ui
-                    .button(format!("Edit patch… ({n} modules)"))
+                    .button(format!("Edit patch... ({n} modules)"))
                     .on_hover_text("open the Grid FX patch editor")
                     .clicked()
                 {

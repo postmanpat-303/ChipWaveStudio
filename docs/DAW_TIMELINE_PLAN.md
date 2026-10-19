@@ -316,6 +316,7 @@ Estimates are focused build days for one developer at the pace of recent ChipWav
 - Size: **8–10 d** (registry 3, modulators and engine 3, UI 3).
 
 ### 5.5 Grid (modular instrument / FX)
+**Status: built, first version** (19 Oct 2026, unreleased), see [GRID.md](GRID.md): the Grid generator and a Grid FX device; our own node canvas in the lower panel (no egui-snarl); 20 modules (note in, macro, audio in, out, osc, wavetable, noise, SVF, ladder, ADSR, LFO, mix, VCA, math, logic, slew, S&H, shaper, delay, knob); per-voice, compiled per voice into a fixed allocation-free order (one-sample feedback); every module knob is a generator knob (automation, MIDI learn, drag-to-modulate); 6 starter patches + 3 FX patches, saved with the song. Not yet: containers, Voice formant / chip / sample / sequencer modules, automatable modes, Grid FX inner knobs as targets, ~30-module set, separate patch files.
 - A **patchable instrument and FX type**: modules (oscillators incl. wavetable, filters, envelopes, LFOs, math, logic, mix, delay, shaper, Voice formant, chip pulse/noise, note in/out, audio in/out) connected by cables. Polyphonic: one graph instance per voice.
 - **Engine:** the graph is compiled on the UI thread into a flat, topologically sorted schedule of module `process(block)` calls with preallocated buffers. Feedback cables get a one-block (or one-sample, in "precise" mode) delay. Hot-swapped like `TimelinePlan`, with nothing allocated in the audio thread. Module parameters register in the parameter registry, so drag-to-modulate and automation work inside the Grid.
 - **UI:** a node editor in the lower panel ([`egui-snarl`](https://github.com/zakarumych/egui-snarl), MIT OR Apache-2.0, as a candidate, or our own painter if snarl's look can't match Dark Circuit), with ChipWave-style module cards and knobs. Patches save as `.cwi` instruments and presets.
@@ -335,7 +336,7 @@ Estimates are focused build days for one developer at the pace of recent ChipWav
 | 5 | **Timeline M4 (+M4b) and M5** (audio clips, track FX, track/clip automation using the registry) | Audio and automation on a proven timeline | 11–15 d |
 | 6 | **VST3 hosting** (instruments + FX), *built* | Bigger plugin catalogue. Shares the FX-in-chain work from step 2 | 10–14 d |
 | 7 | **Wavetable synth**, *built* | Modulation-ready from day one | 8–12 d |
-| 8 | **Grid** | Reuses the registry, modulators, wavetable osc and polyphony | 20–30 d |
+| 8 | **Grid**, *built (first version)* | Reuses the registry, modulators, wavetable osc and polyphony | 20–30 d |
 | 9 | Optional: **clip launcher (M6)**, **DAWproject (M7)** | Nice to have. Do them when asked | 10–13 d |
 
 Each step ends in a normal release (installer, notes, screenshots). The timeline steps keep tracker mode bit-exact, which is checked by the demo-render tests on every build.

@@ -4,6 +4,17 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+- **The Grid, modular patching:** **New… › Generator (grid)** and an **Add effect › Grid FX** device. Guide: [GRID.md](GRID.md).
+  - **A node canvas in the lower panel** (the Grid tab): add modules (+ Module or right-click), drag them by the title, **drag cables from outputs to inputs**, click an input to unplug. Every edit is undoable.
+  - **20 modules:** Note (pitch / gate / velocity), Macro, Audio In, Out, Osc (5 band-limited shapes, PM, PW), Wavetable (the Wave generator's 10 tables, mipmapped), Noise, Filter (SVF LP/BP/HP/notch), Ladder, ADSR, LFO (5 shapes), Mix, VCA, Math (7 modes), Logic (6 modes), Slew, Sample & Hold, Shaper (soft / fold / hard), Delay (with feedback and damping) and Knob. Feedback loops are allowed (one-sample delay).
+  - **Polyphonic per voice**, compiled to a fixed processing order in fixed-size arrays inside each voice: nothing is allocated on the audio thread (tested with a lane and an LFO route on a module knob, and on Grid FX).
+  - **Every module knob is automatable and a drag-to-modulate target** (`instrument.N.gen.K`; knobs 1–8 are the Grid macros and 43xy). Knob numbers stay with their module, so lanes survive patch edits.
+  - **Grid FX:** the chain's audio comes in through Audio In; its Macro 1–8 and Mix are automatable / modulatable; **Edit patch...** in the FX view opens the canvas; starter patches Auto-Filter, Ring Mod and Comb Resonator.
+  - **6 starter patches:** Grid Saw Bass, Grid Wavetable Pad, Grid FM Bell, Grid Karplus Pluck, Grid S&H Lead, Grid Chip Gate. Patches are saved with the song.
+  - Old songs render bit-identically (all demos checked against the previous build). `--self-test` renders every starter patch and round-trips Grid instruments and FX through `.cwt`.
+  - Inspired by Bitwig Studio's The Grid (idea only, no code or assets; credited). Our own canvas, no new dependency.
+  - Limits: 32 modules / 128 cables per patch, 2 delays (≈85 ms) and 4 ladders per voice; mode menus aren't automatable; Grid FX exposes only its macros and Mix; no containers, sample player, sequencer or envelope follower modules, canvas zoom or separate patch files yet; older versions can't open Grid songs.
+
 - **Wave, a wavetable synth generator:** **New… › Generator (wavetable)**. Guide: [GENERATORS.md › Wave](GENERATORS.md#wave-wavetable-unreleased).
   - **Two wavetable oscillators** with **position scanning** (smooth crossfades between frames), Semi/Fine and level each; **unison** up to 8 voices per oscillator with **Detune** and stereo **Spread**; a **sub** sine and **noise**.
   - **Band-limited:** every frame is stored as 10 FFT mipmaps (512 → 1 harmonics) and each note plays the richest one below Nyquist, so high notes don't alias (tested at 3.1 kHz: alias images below −74 dBFS).

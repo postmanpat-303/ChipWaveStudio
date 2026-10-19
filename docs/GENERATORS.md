@@ -8,8 +8,9 @@
 | [FM-4](#fm-4-02314) | 0.2.3.14 | Generator (FM-4) | E-Piano, Metallic Bell, Psy Zap Bass, Growl, Dark Pluck |
 | [Noise](#noise-02314) | 0.2.3.14 | Generator (noise) | White Riser, Downlifter, Impact, Wind, Vinyl Crackle |
 | [Wave](#wave-wavetable-unreleased) (wavetable) | Unreleased | Generator (wavetable) | Wave Supersaw, Wave Vowel Bass, Wave Glass Keys, Wave Evolving Pad, Wave Chip Pluck, Wave Growl |
+| [Grid](GRID.md) (modular) | Unreleased | Generator (grid) | Grid Saw Bass, Grid Wavetable Pad, Grid FM Bell, Grid Karplus Pluck, Grid S&H Lead, Grid Chip Gate |
 
-52 presets in all; every one is also in the instrument library under "generator".
+58 presets in all; every one is also in the instrument library under "generator".
 
 Generators are instruments that synthesise a sound from a few **macro knobs**
 instead of playing a sample or a full synth patch. Each one can be rolled with
@@ -243,6 +244,14 @@ top harmonic sits between a quarter and half the sample rate (12–24 kHz at
 48 kHz), and below about 47 Hz the 512-harmonic limit sets it lower (≈ 10 kHz
 at 20 Hz). Older versions can't open songs that use Wave.
 
+## Grid (modular, Unreleased)
+
+**New… > Generator (grid)**: a Bitwig-style modular patch (oscillators,
+wavetables, noise, filters, envelopes, LFOs, math, logic, delay …) on a node
+canvas in the lower panel, polyphonic per voice, every module knob automatable
+and modulatable. There is also a **Grid FX** device. Full guide:
+[GRID.md](GRID.md).
+
 ## Moog ladder filter
 
 The Synth, Voice and Generator filters can be switched from the default **SVF
@@ -334,8 +343,8 @@ on generator instruments (Unreleased):
 - Songs using generators or the ladder filter don't open in ChipWave
   versions before 0.2.3.12, and songs with Chip FX don't open before
   0.2.3.13.
-- Analog, FM-4 and Noise don't open in versions before 0.2.3.14. Wave
-  (Unreleased) doesn't open in 0.2.4.0 or older.
+- Analog, FM-4 and Noise don't open in versions before 0.2.3.14. Wave and
+  Grid (Unreleased) don't open in 0.2.4.0 or older.
 - A channel plays one note, so the Analog generator is mono per channel.
   Chords use several channels (chord spread).
 - FM-4 isn't oversampled, so very high ratios with a high Bright alias.
@@ -355,7 +364,8 @@ on generator instruments (Unreleased):
 - **Sonic Pi** sc808 by Sam Aaron and contributors (MIT), after Yoshinosuke
   Horiuchi's SC-808.
 - **Plaits** by Emilie Gillet (MIT), via DaisySP by Electrosmith (MIT).
-- **Bitwig Studio**, for the macro and dice idea (no code or assets).
+- **Bitwig Studio**, for the macro and dice idea and The Grid's modular
+  patching (no code or assets).
 - **sfxr** by Tomas Pettersson (DrPetter, MIT) and **sfxr-rs** by Teemu
   Erkkola (MIT): the Chip FX generator.
 

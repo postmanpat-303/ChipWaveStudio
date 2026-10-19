@@ -515,3 +515,73 @@ fn lower_panel_opens_on_the_instrument_editor_and_remembers_the_choice() {
     frames(&mut h, 2);
     assert!(!h.state().extra.lower_inst && h.state().show_auto);
 }
+
+fn grid_of(h: &Harness<'static, App>) -> crate::grid::GridP {
+    let i = h.state().instr as usize - 1;
+    h.state().with(|s| match &s.song.instruments[i].kind {
+        InstrumentKind::Gen(crate::gen::GenPatch {
+            engine: crate::gen::GenEngine::Grid(g),
+            ..
+        }) => g.clone(),
+        _ => panic!("not a Grid"),
+    })
+}
+
+#[test]
+fn grid_canvas_adds_modules_unplugs_and_patches_cables_with_undo() {
+    let inst = Instrument {
+        name: "Grid".into(),
+        volume: 0.8,
+        transpose: 0,
+        fx: vec![],
+        kind: InstrumentKind::Gen(crate::gen::preset("Grid Saw Bass").unwrap()),
+    };
+    let mut h = with_inst(inst);
+    h.state_mut().show_instrument_panel();
+    h.state_mut().extra.lower_h = 640.0;
+    frames(&mut h, 3);
+    assert_eq!(h.state().ip.tab, Tab::Grid, "a Grid opens on its patch");
+    let g0 = grid_of(&h);
+    // + Module › Sources › Noise
+    let c = super::ui_tests::exact(&h, "+ Module").center();
+    super::ui_tests::click_at(&mut h, c);
+    frames(&mut h, 2);
+    let c = super::ui_tests::exact(&h, "Sources").center();
+    super::ui_tests::click_at(&mut h, c);
+    frames(&mut h, 2);
+    let c = super::ui_tests::exact(&h, "Noise").center();
+    super::ui_tests::click_at(&mut h, c);
+    frames(&mut h, 3);
+    let g1 = grid_of(&h);
+    assert_eq!(g1.modules.len(), g0.modules.len() + 1);
+    assert_eq!(g1.modules.last().unwrap().kind, crate::grid::Kind::Noise);
+    key(&mut h, Key::Z, ctrl());
+    frames(&mut h, 2);
+    assert_eq!(grid_of(&h), g0, "Ctrl+Z removes it");
+    // the ladder's "Res" knob (2nd knob) locates its module on the canvas
+    let res = labelled_rect(&h, Role::Slider, "Res").expect("Res knob");
+    let kr_min = res.center() - egui::vec2(30.0, 18.0);
+    let lad = egui::pos2(
+        kr_min.x - 8.0 - 66.0,
+        kr_min.y - (20.0 + 22.0 + 2.0 * 16.0 + 4.0),
+    );
+    let lad_in = lad + egui::vec2(0.0, 20.0 + 22.0 + 8.0);
+    let lad_id = g0
+        .modules
+        .iter()
+        .find(|m| m.kind == crate::grid::Kind::Ladder)
+        .unwrap()
+        .id;
+    let plugged = |g: &crate::grid::GridP| g.cables.iter().any(|c| c.to == lad_id && c.inp == 0);
+    assert!(plugged(&g0));
+    super::ui_tests::click_at(&mut h, lad_in);
+    frames(&mut h, 2);
+    assert!(!plugged(&grid_of(&h)), "clicking the input unplugs it");
+    // drag the Mix output (one column left) back onto it
+    let mix_out = lad + egui::vec2(-185.0 + 150.0, 20.0 + 8.0);
+    drag(&mut h, mix_out, lad_in);
+    frames(&mut h, 2);
+    let g2 = grid_of(&h);
+    assert!(plugged(&g2), "a dragged cable patches it");
+    assert_eq!(g2.cables.len(), g0.cables.len());
+}

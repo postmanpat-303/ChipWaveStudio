@@ -361,7 +361,7 @@ pub fn spec(k: Kind) -> &'static Spec {
                     m("Offset", -2.0, 2.0, false, "v", "added afterwards"),
                 ],
                 defaults: &[1.0, 0.0],
-                modes: &["A", "A + B", "A − B", "A × B", "|A|", "min", "max"],
+                modes: &["A", "A + B", "A - B", "A × B", "|A|", "min", "max"],
             };
             &S
         }
@@ -1379,7 +1379,7 @@ impl GridState {
             return (0.0, 0.0, true);
         }
         let dt = 1.0 / sr;
-        if !self.started || self.tick % 64 == 0 {
+        if !self.started || self.tick.is_multiple_of(64) {
             let fp = g.fingerprint();
             if !self.started || fp != self.plan.fp {
                 self.plan = compile(g, fp);
@@ -1402,7 +1402,7 @@ impl GridState {
                 self.started = true;
             }
         }
-        if self.tick % CR == 0 {
+        if self.tick.is_multiple_of(CR) {
             self.read_knobs(g, &ov);
             self.pitch = (freq.max(1.0) / C4).log2();
         }

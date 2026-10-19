@@ -104,7 +104,7 @@ pub(super) fn drag(h: &mut Harness<'static, App>, from: Pos2, to: Pos2) {
 }
 
 /// a quick click (a held press would count as a long-press, not a click)
-fn click_at(h: &mut Harness<'static, App>, p: Pos2) {
+pub(super) fn click_at(h: &mut Harness<'static, App>, p: Pos2) {
     click_with(h, p, egui::PointerButton::Primary);
 }
 
@@ -709,7 +709,7 @@ fn midi_light_opens_the_midi_settings_card() {
 // ---- 0.2.3.1: toolbar MIDI toggles, instrument FX menu, mixer resets ----
 
 /// rect of the widget whose label (or text, for plain labels) is exactly `text`
-fn exact(h: &Harness<'static, App>, text: &str) -> Rect {
+pub(super) fn exact(h: &Harness<'static, App>, text: &str) -> Rect {
     h.query_all_by(|n| n.label().as_deref() == Some(text) || n.value().as_deref() == Some(text))
         .next()
         .unwrap_or_else(|| panic!("no widget labelled exactly {text:?}"))

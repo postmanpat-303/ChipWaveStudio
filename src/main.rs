@@ -851,7 +851,59 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         good
     };
+    // the Grid: every starter patch renders, a Grid FX device processes
+    // audio, and both survive a .cwt round trip
+    let grid_ok = {
+        wavetable::init();
+        let mut s = fileio::demo_song();
+        let mut peaks = vec![];
+        for (name, _, g, _, _) in grid::presets() {
+            let p = gen::GenPatch {
+                engine: gen::GenEngine::Grid(g),
+                ..Default::default()
+            };
+            let y = gen::bake(&p, 220.0, 48000.0, 1.0);
+            let pk = y.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+            peaks.push((name, pk, y.iter().all(|x| x.is_finite())));
+            s.instruments.push(model::Instrument {
+                name: name.into(),
+                volume: 0.8,
+                transpose: 0,
+                fx: vec![fx::Device::new(fx::FxKind::Grid)],
+                kind: model::InstrumentKind::Gen(p),
+            });
+        }
+        let p = std::env::temp_dir().join("chipwave_selftest_grid.cwt");
+        let rt = fileio::save_cwt(&s, &p)
+            .and_then(|_| fileio::load_cwt(&p))
+            .map(|b| {
+                b.instruments.len() == s.instruments.len()
+                    && b.instruments
+                        .iter()
+                        .zip(&s.instruments)
+                        .all(|(x, y)| x.kind == y.kind && x.fx == y.fx)
+            })
+            .unwrap_or(false);
+        let _ = std::fs::remove_file(&p);
+        let audible = peaks
+            .iter()
+            .all(|(_, pk, fin)| *fin && *pk > 0.05 && *pk < 2.0);
+        let good = !peaks.is_empty() && audible && rt;
+        report.push_str(&format!(
+            "  grid: {} starter patches (peaks {}), + Grid FX devices, .cwt round trip {} ({})\n",
+            peaks.len(),
+            peaks
+                .iter()
+                .map(|(_, p, _)| format!("{p:.2}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+            if rt { "ok" } else { "FAILED" },
+            if good { "ok" } else { "FAILED" }
+        ));
+        good
+    };
     let ok = fill_ok
+        && grid_ok
         && wt_ok
         && mod_ok
         && plug_ok

@@ -1483,16 +1483,19 @@ impl FxState {
     }
 }
 
+/// a chain's structure: per device its kind and Grid patch fingerprint
+type Sig = Vec<(FxKind, u64)>;
+
 /// A chain of device states mirroring a `[Device]` list.
 #[derive(Default)]
 pub struct ChainState {
     /// structure signature (kinds) the states were built for
-    sig: Vec<(FxKind, u64)>,
+    sig: Sig,
     pub states: Vec<FxState>,
     pub owner: usize,
     /// chains of instruments that played on this channel before, kept so a
     /// mid-song instrument switch reuses their buffers instead of allocating
-    spare: Vec<(usize, Vec<(FxKind, u64)>, Vec<FxState>)>,
+    spare: Vec<(usize, Sig, Vec<FxState>)>,
 }
 
 /// spare chains kept per channel
@@ -1824,6 +1827,7 @@ mod tests {
             params: vec![0.5, 0.5, 0.1, 1.0, 1.0],
             plugin: None,
             uid: 0,
+            grid: None,
         };
         d.fix();
         assert_eq!(d.params.len(), 7);
