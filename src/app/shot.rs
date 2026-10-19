@@ -903,6 +903,16 @@ impl App {
         sh.frame += 1;
         let (f, view) = (sh.frame, sh.view.clone());
         ctx.request_repaint();
+        if f == 1 {
+            // CHIPWAVE_SHOT_BROWSER_W=<pt>: the Browser at that width, from
+            // its first frame (a panel keeps the width it first opened at)
+            if let Some(w) = std::env::var("CHIPWAVE_SHOT_BROWSER_W")
+                .ok()
+                .and_then(|v| v.parse::<f32>().ok())
+            {
+                self.extra.browser_w = w;
+            }
+        }
         if f == SETUP_AT {
             self.shot_setup(ctx, &view);
         }

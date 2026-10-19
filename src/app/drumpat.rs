@@ -674,8 +674,12 @@ impl App {
                         grid_icon(pt, ib.center(), 16.0, accent);
                     }
                     // right side: PATTERN tag, heart, thumbnail
-                    let tag_r = Rect::from_min_max(Pos2::new(r.right() - 64.0, r.top()), Pos2::new(r.right() - 6.0, r.bottom()));
-                    pt.text(tag_r.right_center(), egui::Align2::RIGHT_CENTER, "PATTERN", FontId::proportional(10.0), t.ink2);
+                    // (a narrow panel drops the PATTERN tag to keep room for the name)
+                    let tag_w = if w < 280.0 { 8.0 } else { 64.0 };
+                    let tag_r = Rect::from_min_max(Pos2::new(r.right() - tag_w, r.top()), Pos2::new(r.right() - 6.0, r.bottom()));
+                    if w >= 280.0 {
+                        pt.text(tag_r.right_center(), egui::Align2::RIGHT_CENTER, "PATTERN", FontId::proportional(10.0), t.ink2);
+                    }
                     let heart = Rect::from_center_size(Pos2::new(tag_r.left() - 10.0, r.center().y), egui::vec2(16.0, 16.0));
                     let fav = favs.contains(&key);
                     let gold = Color32::from_rgb(0xE0, 0xC4, 0x6C);
@@ -693,7 +697,7 @@ impl App {
                     tp.text(
                         Pos2::new(text_r.left(), r.top() + 11.0),
                         egui::Align2::LEFT_CENTER,
-                        p.name,
+                        super::pattern::fit(&tp, p.name, &FontId::proportional(12.5), text_r.width()),
                         FontId::proportional(12.5),
                         if playing { t.accent } else { t.ink },
                     );
@@ -702,6 +706,7 @@ impl App {
                     } else {
                         format!("{} · {} bar{} · {}", p.kit.trim_end_matches(" Kit"), p.bars, if p.bars == 1 { "" } else { "s" }, p.bpm_tag())
                     };
+                    let detail = super::pattern::fit(&tp, &detail, &FontId::proportional(10.5), text_r.width());
                     tp.text(Pos2::new(text_r.left(), r.top() + 25.0), egui::Align2::LEFT_CENTER, detail, FontId::proportional(10.5), t.ink2);
                     if playing {
                         // progress underline under the name

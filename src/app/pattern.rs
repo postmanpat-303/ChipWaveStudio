@@ -24,7 +24,7 @@ pub(super) struct Headers {
 }
 
 /// `s` cut with "…" to fit `w` points
-fn fit(p: &egui::Painter, s: &str, f: &FontId, w: f32) -> String {
+pub(super) fn fit(p: &egui::Painter, s: &str, f: &FontId, w: f32) -> String {
     let width = |t: &str| {
         p.layout_no_wrap(t.to_string(), f.clone(), Color32::WHITE)
             .size()

@@ -724,7 +724,19 @@ impl App {
                                     } else if resp.hovered() {
                                         p.rect_filled(rr, 2, well(&t, 1.4));
                                     }
-                                    let lp = p.with_clip_rect(rr.shrink2(egui::vec2(2.0, 0.0)));
+                                    // the label stops before the count (narrow columns)
+                                    let cw = p
+                                        .layout_no_wrap(
+                                            n.to_string(),
+                                            FontId::proportional(10.0),
+                                            t.ink2,
+                                        )
+                                        .size()
+                                        .x;
+                                    let lp = p.with_clip_rect(Rect::from_min_max(
+                                        rr.min + egui::vec2(2.0, 0.0),
+                                        Pos2::new(rr.right() - cw - 6.0, rr.bottom()),
+                                    ));
                                     lp.text(
                                         Pos2::new(rr.left() + 4.0, rr.center().y),
                                         egui::Align2::LEFT_CENTER,
@@ -790,7 +802,8 @@ impl App {
                         } else if resp.hovered() {
                             p.rect_filled(rr, 2, well(&t, 1.4));
                         }
-                        let lp = p.with_clip_rect(rr.shrink2(egui::vec2(2.0, 0.0)));
+                        let cw = p.layout_no_wrap(n.to_string(), FontId::proportional(10.0), t.ink2).size().x;
+                        let lp = p.with_clip_rect(Rect::from_min_max(rr.min + egui::vec2(2.0, 0.0), Pos2::new(rr.right() - cw - 6.0, rr.bottom())));
                         lp.text(Pos2::new(rr.left() + 4.0, rr.center().y), egui::Align2::LEFT_CENTER, label, FontId::proportional(11.5), t.ink);
                         p.text(Pos2::new(rr.right() - 3.0, rr.center().y), egui::Align2::RIGHT_CENTER, n.to_string(), FontId::proportional(10.0), t.ink2);
                         let resp = if let LocFilter::Folder(d) = lf { resp.on_hover_text(d.as_str()) } else { resp };
