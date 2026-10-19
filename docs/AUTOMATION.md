@@ -22,6 +22,8 @@ Automation lanes sit **under the arranger blocks** ([ARRANGER.md](ARRANGER.md)),
   - **Block lanes** belong to a block and repeat wherever that block is played, which is good for per-pattern wobbles.
   - Both are shown, with block lanes drawn inside the block's span.
 
+**Timeline lanes (Unreleased):** in timeline mode a lane can also live under a track or inside a clip, and the innermost one wins (clip, then track, then song). Linear segments can be bent into curves by Alt-dragging them there. See [TIMELINE.md › Automation lanes](TIMELINE.md#automation-lanes).
+
 ## 2. Drawing
 | Tool | Behaviour |
 |---|---|

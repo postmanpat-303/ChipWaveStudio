@@ -4,6 +4,12 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+- **Automation lanes on the timeline (Timeline M5):** guide: [TIMELINE.md › Automation lanes](TIMELINE.md#automation-lanes).
+  - **Per-track lanes** under each track header, opened and closed with the **A** button. **+ lane** offers every automatable parameter: mixer, instrument, generator knobs, FX including plugin FX, return buses, master and modulation depths. Song lanes can be pinned to a track and unpinned again.
+  - **Drawing:** click, drag, Ctrl-drag pencil, Alt-drag to **bend segments into curves**, double-click to delete, right-click for shapes.
+  - **Clip automation:** a clip can have its own lanes, which move, loop, trim and split with the clip.
+  - **Innermost lane wins** (clip, then track, then song). Lanes play live and in export; leaving timeline mode bakes them into song lanes.
+  - Saved with the song (reader version 4 when a song uses them). Older songs open and render exactly as before, and the audio thread stays allocation-free (tested).
 - **Audio clips (Timeline M4):** WAV, FLAC, MP3 and Ogg Vorbis files on the timeline. Guide: [TIMELINE.md › Audio clips](TIMELINE.md#audio-clips).
   - **Drop files on a track** (or right-click › **Import audio file here…**); decoding runs in the background. Clips draw their waveform.
   - Move, copy, trim, **loop** (drag past the end), **split**, mute; **fades** by dragging the top-corner handles (equal power, linear or S-curve) and **clip gain** (right-click). Overlapping clips crossfade.
