@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 48] = [
+pub const VIEWS: [&str; 49] = [
     "pattern",
     "arranger",
     "timeline",
@@ -82,6 +82,7 @@ pub const VIEWS: [&str; 48] = [
     "browser-patterns-styles",
     "browser-patterns-drop",
     "browser-files",
+    "browser-plugins",
     "plugin-setup",
     "showcase",
     "showcase-progress",
@@ -172,6 +173,33 @@ impl App {
                 }
                 self.br.filter.tab = crate::browser::Tab::Samples;
                 self.br_add_folder(d);
+            }
+            // Browser › Plugins with thumbnails; CHIPWAVE_SHOT_LOAD=<name>
+            // [|clap|vst3] then double-click-loads it (new track + editor)
+            "browser-plugins" => {
+                self.view = View::Timeline;
+                self.extra.browser_thumbs = true;
+                self.br.filter.tab = crate::browser::Tab::Plugins;
+                self.br_refresh();
+                if let Ok(want) = std::env::var("CHIPWAVE_SHOT_LOAD") {
+                    let (name, fmt) = want.split_once('|').unwrap_or((want.as_str(), ""));
+                    let it = self
+                        .br_result_items()
+                        .iter()
+                        .find(|i| match &i.src {
+                            crate::browser::Src::Plugin(f) => {
+                                f.desc.name == name && (fmt.is_empty() || f.format == fmt)
+                            }
+                            _ => false,
+                        })
+                        .map(|i| (*i).clone());
+                    if let Some(it) = it {
+                        self.br.sel = Some(it.key.clone());
+                        self.br_load(&it, ctx);
+                    } else {
+                        eprintln!("CHIPWAVE_SHOT_LOAD: no plugin {want}");
+                    }
+                }
             }
             "browser-drop" => {
                 // dragging an instrument below the last track: "New track: …"
