@@ -4,6 +4,16 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+- **Drag-to-modulate:** Bitwig-style modulators. Guide: [MODULATION.md](MODULATION.md).
+  - **+ Modulator** (above the instrument editor's cards, and in the FX view) adds an LFO, envelope, random, velocity, keytrack, mod wheel, macro or the instrument's own LFO. Each is a chip with a live meter.
+  - **Drag a chip onto any knob** (synth, Voice, generator, built-in FX, plugin FX parameters) to route it. The knob shows a coloured depth ring and a live dot; drag the ring's dot or **Alt-drag** the knob to set the depth. Right-click › **Modulate with ›** / **Remove**.
+  - The Modulation tab has a **Modulators** card (shape, sync, rate, phase, retrigger, unipolar, ADSR, glide, smoothing, macro value) and a **Routings** card (depths in %, remove, **Lane** for an automatable depth `mod.K.amount`).
+  - Synth-patch knobs without a target before (pulse width, detune, ADSR, glide, LFO depths, accent…) are now automatable and modulatable (`instrument.N.patch.<key>`).
+  - Saved with the song (`modulation.toml`; older versions ignore it), undoable, follows instrument delete/move. Modulation adds on top of automation lanes; modulators restart with the song, so renders repeat exactly.
+  - The audio thread stays allocation-free (tested) and songs without modulation render bit-identically (checked against the previous build with every demo). Plugin effect parameters now return to their own value when a lane or routing stops driving them.
+  - Limits: modulators are per instrument, not per voice; plugin instrument macros, tempo and the mixer view's faders aren't drop targets; `.cwi` files don't carry modulators.
+  - Tests: modulator engine, renders (LFO on a filter, envelope on sustain, FX and plugin parameters, depth lanes, zero depth = no change), allocation, files, instrument edits, and UI tests for drop, ring, Alt-drag, undo, Routings card and FX sliders. `--self-test` renders a modulated note.
+
 - **Piano roll and note clips (Timeline M3a/M3b):** a new lower-panel tab, **Piano roll**. Guide: [TIMELINE.md › Piano roll and note clips](TIMELINE.md#piano-roll-and-note-clips).
   - **Blocks:** it edits the selected clip's block column (or the pattern editor's current column) as bars on the row grid. Draw, move, resize (moves the note-off), right-click to delete, velocity lane = volume column, effect badges and an inspector (instrument, velocity, effect), plus keys (Del, arrows, Ctrl+A). Only the touched cells change.
   - **Note clips:** polyphonic clips with free timing. Make one with **New note clip here** or Shift+double-click, and open it with a double-click or Enter. In the roll: snap grid, **Q** quantise, chord stamp in the song key, scale highlight, playhead. Timeline clips show note previews, and make unique copies the notes.

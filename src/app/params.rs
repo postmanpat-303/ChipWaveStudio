@@ -651,7 +651,7 @@ fn modulation(b: &mut B, inst: &Instrument, idx: usize) {
         );
     b.card(Tab::Modulation, "Routings");
     b.custom("mod.routings", "Routings", Custom::Routings)
-        .tip("modulator → parameter connections with their depth");
+        .tip("modulator > parameter connections with their depth");
     let ours: Vec<Card> = b.l.cards.drain(n0..).collect();
     let at =
         b.l.cards

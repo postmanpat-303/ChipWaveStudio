@@ -12,6 +12,9 @@ Automation lanes sit **under the arranger blocks** ([ARRANGER.md](ARRANGER.md)),
   - mixer faders, pans and sends
   - CLAP/VST3/LV2 plugin parameters (CLAP effect parameters: `instrument.N.fx.D.p<param id>`, 0–1 over the parameter's range, see [FX.md](FX.md#plugin-effects-clap-unreleased))
   - tempo
+  - synth-patch knobs without a target of their own (pulse width, detune, ADSR, glide, LFO depths…: `instrument.N.patch.<key>`, Unreleased)
+  - a modulation routing's depth (`mod.K.amount`, −100..+100 %, Unreleased): **Lane** on the Routings card ([MODULATION.md](MODULATION.md))
+- **Modulation** (Unreleased) adds on top of a lane: a modulated parameter moves around the lane's value ([MODULATION.md](MODULATION.md)).
 - **Adding a lane:** "＋ Add lane…" (searchable, using the same list as the effect autocomplete in [PATTERN_EDITOR.md §6](PATTERN_EDITOR.md)), right-click a knob → "Automate", or just move a knob while recording.
 - **Lane header:** name, current value in real units, the matching effect command (e.g. `cmd Fcxx`), the curve type, and **R** (read) / **W** (write) toggles. Lanes can be collapsed, reordered, coloured and grouped per channel.
 - **Song or block scope:**

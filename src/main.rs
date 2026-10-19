@@ -621,7 +621,49 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         }
         ok
     };
+    // drag-to-modulate: an LFO on a synth's cutoff changes the render, zero
+    // depth doesn't, and the routing survives a .cwt round trip
+    let mod_ok = {
+        let mut s = fileio::demo_song();
+        s.order.truncate(1);
+        s.automation.clear();
+        let synth = s
+            .instruments
+            .iter()
+            .position(|i| matches!(i.kind, model::InstrumentKind::Synth(_)))
+            .unwrap_or(0);
+        let plain = engine::render_song(&s, 22050);
+        let k = s
+            .modulation
+            .add(synth, modulation::ModKind::Lfo)
+            .unwrap_or(0);
+        s.modulation.mods[k].shape = modulation::LfoShape::Square;
+        let id = s.modulation.mods[k].id;
+        s.modulation
+            .connect(id, &format!("instrument.{}.cutoff", synth + 1), 0.5);
+        let modded = engine::render_song(&s, 22050);
+        let diff = plain
+            .iter()
+            .zip(&modded)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        let p = std::env::temp_dir().join("chipwave_selftest_mod.cwt");
+        let rt = fileio::save_cwt(&s, &p)
+            .and_then(|_| fileio::load_cwt(&p))
+            .map(|b| b.modulation == s.modulation)
+            .unwrap_or(false);
+        let _ = std::fs::remove_file(&p);
+        let good = diff > 1e-3 && modded.iter().all(|x| x.is_finite()) && rt;
+        report.push_str(&format!(
+            "  modulation: LFO on instrument {:02X} cutoff, max diff {diff:.3}, modulation.toml round trip {} ({})\n",
+            synth + 1,
+            if rt { "ok" } else { "FAILED" },
+            if good { "ok" } else { "FAILED" }
+        ));
+        good
+    };
     let ok = fill_ok
+        && mod_ok
         && plug_ok
         && inst_ok
         && tf_ok

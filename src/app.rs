@@ -32,6 +32,8 @@ mod library;
 mod midiview;
 mod mixer;
 mod modview;
+#[cfg(test)]
+mod modview_tests;
 mod noterec;
 mod params;
 mod pattern;

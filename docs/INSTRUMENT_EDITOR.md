@@ -105,13 +105,21 @@ Generator knobs that are also `43xy` macros carry a small **M1–M8** badge.
 | `Ctrl`-drag (or `Shift`-drag) | fine: a tenth of the speed |
 | Double-click | reset to the default |
 | Hover or drag | show the value; the value is always written under the knob |
-| Right-click | Reset to default, **Add automation lane**, **MIDI learn** / Forget (on automatable parameters) |
+| Right-click | Reset to default, **Add automation lane**, **MIDI learn** / Forget, **Modulate with ›** / Remove routing (on automatable parameters) |
+| Drop a modulator chip | route it to this knob (Unreleased, [MODULATION.md](MODULATION.md)); the ring's end dot sets the depth |
+| `Alt`-drag | the selected modulator's depth on this knob (the value stays) |
 | The padlock (generators) | lock the knob so Dice and Mutate leave it alone |
 
 Stepped knobs (octave, unison voices, semitones) show a dot per step. Discrete settings are
 dropdowns (with a **lock** on generators) or checkboxes.
 
 Every drag is one undo step, the same as before.
+
+**Modulators (Unreleased):** a strip of modulator chips sits between the tabs and the cards
+(**+ Modulator** adds one). The **Modulation** tab starts with the **Modulators** card (settings
+of the selected modulator) and the **Routings** card (every routing with its depth, × to remove,
+Lane for a depth lane). Synth-patch knobs without a target (pulse width, detune, ADSR, glide,
+LFO depths…) are now automatable and modulatable. See [MODULATION.md](MODULATION.md).
 
 ## 6. What is not in the new panel
 

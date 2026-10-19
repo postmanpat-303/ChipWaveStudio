@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 30] = [
+pub const VIEWS: [&str; 32] = [
     "pattern",
     "arranger",
     "timeline",
@@ -64,6 +64,8 @@ pub const VIEWS: [&str; 30] = [
     "plugin",
     "plugins",
     "plugin-fx",
+    "modulate",
+    "modulate-fx",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -277,6 +279,17 @@ impl App {
             let len = self.with(|s| s.song.instruments.len()) as u8;
             self.instr = n.clamp(1, len.max(1));
         }
+        // drag-to-modulate: modulators with routes on the selected
+        // instrument's knobs and FX (instrument 7 unless CHIPWAVE_SHOT_INSTR)
+        if view == "modulate" || view == "modulate-fx" {
+            if std::env::var("CHIPWAVE_SHOT_INSTR").is_err() {
+                self.instr = 7;
+            }
+            self.shot_modulation();
+            if view == "modulate-fx" {
+                self.view = View::Fx;
+            }
+        }
         if view == "arranger" {
             // whole song from half-way through "Build" (order 13), so the
             // playhead crosses into "Drop 2" and the riser automation
@@ -423,6 +436,48 @@ impl App {
     }
 
     /// recording mode: time-based changes (theme flips, instrument browsing)
+    /// modulators and routes for the "modulate" screenshots
+    fn shot_modulation(&mut self) {
+        use crate::modulation::{LfoShape, ModKind};
+        let idx = (self.instr as usize).wrapping_sub(1);
+        let sel = self.with(|s| {
+            let inst = s.song.instruments.get(idx)?;
+            let nfx = inst.fx.len();
+            let m = &mut s.song.modulation;
+            let n = idx + 1;
+            let lfo = m.add(idx, ModKind::Lfo)?;
+            m.mods[lfo].sync = 2.0;
+            m.mods[lfo].shape = LfoShape::Triangle;
+            let env = m.add(idx, ModKind::Envelope)?;
+            m.mods[env].a = 0.05;
+            m.mods[env].d = 0.4;
+            let mac = m.add(idx, ModKind::Macro)?;
+            m.mods[mac].name = "Brightness".into();
+            m.mods[mac].value = 0.7;
+            let rnd = m.add(idx, ModKind::Random)?;
+            m.mods[rnd].rate = 4.0;
+            m.mods[rnd].smooth = 0.6;
+            let id = |k: usize| m.mods[k].id;
+            let (l, e, c, r) = (id(lfo), id(env), id(mac), id(rnd));
+            m.connect(l, &format!("instrument.{n}.cutoff"), 0.3);
+            m.connect(e, &format!("instrument.{n}.cutoff"), -0.2);
+            m.connect(e, &format!("instrument.{n}.resonance"), 0.35);
+            m.connect(c, &format!("instrument.{n}.patch.detune_cents"), 0.4);
+            m.connect(r, &format!("instrument.{n}.patch.width"), 0.5);
+            m.connect(c, &format!("instrument.{n}.patch.lfo-amp"), 0.3);
+            if nfx > 0 {
+                m.connect(l, &format!("instrument.{n}.fx.1.p1"), 0.25);
+                m.connect(c, &format!("instrument.{n}.fx.1.p2"), -0.3);
+            }
+            if nfx > 1 {
+                m.connect(r, &format!("instrument.{n}.fx.2.p1"), 0.4);
+            }
+            Some(l)
+        });
+        self.ip.mod_sel = sel;
+        self.dirty = false;
+    }
+
     fn shot_animate(&mut self, ctx: &egui::Context, view: &str, t: f32) {
         match view {
             "themes" => {

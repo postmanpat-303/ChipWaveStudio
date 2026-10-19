@@ -473,11 +473,11 @@ pub(super) fn routings(
                     ui.painter().circle_filled(rr.center(), 4.0, col);
                     ui.add(
                         egui::Label::new(
-                            egui::RichText::new(format!("{title} → {label}")).small(),
+                            egui::RichText::new(format!("{title} > {label}")).small(),
                         )
                         .truncate(),
                     )
-                    .on_hover_text(format!("{title} → {label} ({})", m.routes[r].target));
+                    .on_hover_text(format!("{title} > {label} ({})", m.routes[r].target));
                 });
                 ui.horizontal(|ui| {
                     ui.add_space(12.0);
@@ -496,7 +496,7 @@ pub(super) fn routings(
                         changed = true;
                     }
                     if ui
-                        .small_button("✕")
+                        .small_button("×")
                         .on_hover_text("remove this routing")
                         .clicked()
                     {
