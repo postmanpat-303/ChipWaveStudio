@@ -416,8 +416,16 @@ impl App {
                 } else {
                     name.clone()
                 };
+                // the field's own fill decides the ink (Amiga's text fields are navy)
+                let bg = ui.visuals().extreme_bg_color;
+                let ink = if crate::theme::luma(bg) > 0.5 {
+                    Color32::from_rgb(0x10, 0x12, 0x16)
+                } else {
+                    Color32::from_rgb(0xE8, 0xEC, 0xEF)
+                };
                 let r = ui.add(
                     egui::TextEdit::singleline(&mut text)
+                        .text_color(ink)
                         .id_salt(("insp_name", tr))
                         .desired_width(150.0)
                         .char_limit(32),
@@ -482,6 +490,7 @@ impl App {
                 .on_hover_text("track (mixer channel) volume");
             });
             row(ui, "Pan", |ui| {
+                ui.spacing_mut().slider_width = 70.0;
                 ui.add(
                     egui::Slider::new(&mut m.pan, -1.0..=1.0)
                         .custom_formatter(|v, _| pan_text(v)),
