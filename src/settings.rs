@@ -109,6 +109,32 @@ pub struct Extra {
     /// before the polish pass)
     #[serde(default)]
     pub flat_ui: bool,
+    /// the file browser on the right is shown (Ctrl+B; docs/BROWSER.md)
+    #[serde(default = "yes")]
+    pub browser_open: bool,
+    /// its width in points
+    #[serde(default = "browser_w")]
+    pub browser_w: f32,
+    /// folders added to the browser's Locations (scanned in the background)
+    #[serde(default)]
+    pub browser_dirs: Vec<String>,
+    /// favourite items (browser item keys)
+    #[serde(default)]
+    pub browser_favs: Vec<String>,
+    /// star ratings 1-5 per browser item key
+    #[serde(default)]
+    pub browser_ratings: std::collections::BTreeMap<String, u8>,
+    /// selecting a sample or sound plays it
+    #[serde(default = "yes")]
+    pub browser_autoplay: bool,
+    /// the plugin setup ("Find plugins…") was shown once (first run, or
+    /// the one-time prompt for existing users)
+    #[serde(default)]
+    pub plugin_setup_done: bool,
+}
+
+fn browser_w() -> f32 {
+    340.0
 }
 
 fn two() -> u32 {
@@ -146,6 +172,13 @@ impl Default for Extra {
             new_in_timeline: true,
             dblclick_roll: true,
             flat_ui: false,
+            browser_open: true,
+            browser_w: browser_w(),
+            browser_dirs: vec![],
+            browser_favs: vec![],
+            browser_ratings: Default::default(),
+            browser_autoplay: true,
+            plugin_setup_done: false,
         }
     }
 }

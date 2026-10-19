@@ -412,10 +412,121 @@ pub fn resolve(p: &PluginPatch) -> Option<PathBuf> {
 /// all folders to scan: the standard ones plus the user's
 pub fn all_dirs(user: &[String]) -> Vec<PathBuf> {
     let mut v = default_dirs();
-    v.extend(
-        user.iter()
-            .filter(|s| !s.trim().is_empty())
-            .map(PathBuf::from),
-    );
+    for p in user
+        .iter()
+        .filter(|s| !s.trim().is_empty())
+        .map(PathBuf::from)
+    {
+        // the plugin setup may add a standard folder too: scan it once
+        if !v.contains(&p) {
+            v.push(p);
+        }
+    }
     v
+}
+
+/// First-run plugin setup (docs/PLUGINS.md "Find plugins"): the folders a
+/// deep drive search starts from (every drive on Windows; the usual
+/// install roots on macOS and Linux)
+pub fn deep_roots() -> Vec<PathBuf> {
+    let mut v = vec![];
+    if cfg!(windows) {
+        for c in b'A'..=b'Z' {
+            let p = PathBuf::from(format!("{}:\\", c as char));
+            if p.exists() {
+                v.push(p);
+            }
+        }
+    } else if cfg!(target_os = "macos") {
+        v.push("/Applications".into());
+        v.push("/Library".into());
+        if let Some(h) = std::env::var_os("HOME") {
+            v.push(PathBuf::from(h));
+        }
+    } else {
+        if let Some(h) = std::env::var_os("HOME") {
+            v.push(PathBuf::from(h));
+        }
+        for d in ["/usr", "/opt"] {
+            v.push(d.into());
+        }
+    }
+    v
+}
+
+/// folders a deep search never enters (system, caches, trash, VCS)
+fn skip_dir(name: &str) -> bool {
+    let n = name.to_lowercase();
+    (n.starts_with('.') && n != ".vst3" && n != ".clap")
+        || matches!(
+            n.as_str(),
+            "windows"
+                | "$recycle.bin"
+                | "system volume information"
+                | "winsxs"
+                | "proc"
+                | "sys"
+                | "dev"
+                | "node_modules"
+                | "target"
+                | "cache"
+                | "caches"
+                | "temp"
+                | "tmp"
+                | "appdata"
+        )
+}
+
+/// Search `roots` (down to `max_depth` folders) for folders that hold
+/// `.vst3` / `.clap` plugins. Returns each folder with its plugin count,
+/// in the order found; bundles count as files and are not entered.
+/// `visited` counts folders as they are read and `now` names the current
+/// one (progress), `stop` cancels. At most `limit` folders are read.
+pub fn find_plugin_folders(
+    roots: &[PathBuf],
+    max_depth: usize,
+    limit: usize,
+    visited: &std::sync::atomic::AtomicUsize,
+    now: &Mutex<String>,
+    stop: &std::sync::atomic::AtomicBool,
+) -> Vec<(PathBuf, usize)> {
+    use std::sync::atomic::Ordering;
+    let mut out: Vec<(PathBuf, usize)> = vec![];
+    let mut stack: Vec<(PathBuf, usize)> = roots.iter().rev().map(|r| (r.clone(), 0)).collect();
+    while let Some((d, depth)) = stack.pop() {
+        if stop.load(Ordering::Relaxed) || visited.load(Ordering::Relaxed) >= limit {
+            break;
+        }
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        visited.fetch_add(1, Ordering::Relaxed);
+        if let Ok(mut g) = now.lock() {
+            *g = d.display().to_string();
+        }
+        let mut n = 0;
+        let mut subs = vec![];
+        for e in rd.flatten() {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().to_string();
+            let ext = p
+                .extension()
+                .map(|x| x.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            if ext == "vst3" || ext == "clap" {
+                n += 1;
+                continue;
+            }
+            let Ok(ft) = e.file_type() else { continue };
+            if ft.is_dir() && !ft.is_symlink() && depth < max_depth && !skip_dir(&name) {
+                subs.push(p);
+            }
+        }
+        if n > 0 && !out.iter().any(|(o, _)| o == &d) {
+            out.push((d.clone(), n));
+        }
+        subs.sort();
+        for s in subs.into_iter().rev() {
+            stack.push((s, depth + 1));
+        }
+    }
+    out
 }

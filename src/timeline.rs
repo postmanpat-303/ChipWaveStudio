@@ -202,6 +202,11 @@ pub struct Track {
     /// track automation (positions in rows from the song start, values 0..=1)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub auto: Vec<Lane>,
+    /// the instrument slot this track was given (Browser drop, "Add track
+    /// with instrument"; 1-based, 0 = none): the header shows it while the
+    /// track is empty and selecting the track makes it the current one
+    #[serde(skip_serializing_if = "is_default")]
+    pub instr: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
