@@ -33,11 +33,13 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 26] = [
+pub const VIEWS: [&str; 28] = [
     "pattern",
     "arranger",
     "timeline",
     "timeline-new",
+    "timeline-mode",
+    "timeline-switch",
     "mixer",
     "fx",
     "fill",
@@ -92,7 +94,11 @@ impl App {
         self.row = 0;
         match view {
             "arranger" | "cue" => self.view = View::Arranger,
-            "timeline" => self.view = View::Timeline,
+            "timeline" | "timeline-mode" => self.view = View::Timeline,
+            "timeline-switch" => {
+                self.view = View::Timeline;
+                self.tlv.ask_switch = Some(None);
+            }
             "timeline-new" => {
                 self.new_song();
                 self.dirty = false;
@@ -240,6 +246,47 @@ impl App {
             });
             // the play marker (where Play song started) stays behind it
             self.cue = (13.min(self.order_len().saturating_sub(1)), 32);
+        } else if view == "timeline-mode" {
+            // timeline mode with a few edits: a loop region, a marker, a
+            // muted clip, a track speed, two selected clips; playing from
+            // order entry CHIPWAVE_SHOT_POS (default 8)
+            let pos = std::env::var("CHIPWAVE_SHOT_POS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(8);
+            let row = self.with(|s| {
+                let (_, map) = crate::timeline::from_order(&s.song);
+                let k = pos.min(map.starts.len().saturating_sub(1));
+                map.starts.get(k).copied().unwrap_or(0) / crate::timeline::ROW
+            }) as usize;
+            self.enter_timeline();
+            let sels = self.with(|s| {
+                let t = s.song.timeline.as_deref_mut().unwrap();
+                let bar = 4 * crate::timeline::PPQ;
+                let a = (row as i64 * crate::timeline::ROW / bar) * bar;
+                crate::timeline::set_loop(t, a, a + 8 * bar);
+                let i = crate::timeline::add_marker(t, a + 4 * bar);
+                t.markers[i].name = "Hook".into();
+                if let Some(t3) = t.tracks.get_mut(3) {
+                    t3.speed = 3;
+                }
+                let on: Vec<u32> = t
+                    .clips
+                    .iter()
+                    .filter(|c| c.start <= a + 2 * bar && c.end() > a + 2 * bar)
+                    .map(|c| c.id)
+                    .collect();
+                if let Some(&m) = on.get(4) {
+                    crate::timeline::toggle_mute(t, &[m]);
+                }
+                let Shared { song, engine, .. } = s;
+                engine.ensure_plan(song);
+                engine.start(song, 0, row, false, 0);
+                on.into_iter().take(2).collect::<Vec<u32>>()
+            });
+            self.tlv.sel = sels.last().copied();
+            self.tlv.sels = sels;
+            self.tlv.cue = (row as i64) * crate::timeline::ROW;
         } else if view == "timeline" {
             // play the song from order entry CHIPWAVE_SHOT_POS (default 8)
             let pos = std::env::var("CHIPWAVE_SHOT_POS")
@@ -257,7 +304,14 @@ impl App {
             self.seek_to((5.min(n.saturating_sub(1)), 32));
         } else if !matches!(
             view,
-            "fill" | "settings" | "about" | "library" | "chords" | "slice" | "timeline-new"
+            "fill"
+                | "settings"
+                | "about"
+                | "library"
+                | "chords"
+                | "slice"
+                | "timeline-new"
+                | "timeline-switch"
         ) && std::env::var_os("CHIPWAVE_SHOT_NOPLAY").is_none()
         {
             self.play(3);
