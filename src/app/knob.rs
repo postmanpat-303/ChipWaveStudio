@@ -98,8 +98,31 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         p.add(egui::Shape::line(pts, Stroke::new(w, col)));
     };
     let arc = |from: f32, to: f32, col: Color32, w: f32| arc_r(from, to, col, w, RAD);
-    p.circle_filled(kc, RAD - 3.0, t.pill.gamma_multiply(dim.max(0.7)));
-    p.circle_stroke(kc, RAD - 3.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.35)));
+    if crate::theme::polished() {
+        // a soft shadow under the cap, the cap lit from above, a recessed track
+        p.circle_filled(
+            kc + egui::vec2(0.0, 1.5),
+            RAD - 2.5,
+            Color32::from_black_alpha(if t.light { 40 } else { 70 }),
+        );
+        let cap = t.pill.gamma_multiply(dim.max(0.7));
+        p.circle_filled(kc, RAD - 3.0, crate::theme::tone(cap, -0.06));
+        p.circle_filled(
+            kc - egui::vec2(0.0, 1.0),
+            RAD - 4.5,
+            crate::theme::tone(cap, if t.light { 0.25 } else { 0.07 }),
+        );
+        p.circle_stroke(kc, RAD - 3.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.35)));
+        arc(
+            0.0,
+            1.0,
+            Color32::from_black_alpha(if t.light { 45 } else { 90 }),
+            4.5,
+        );
+    } else {
+        p.circle_filled(kc, RAD - 3.0, t.pill.gamma_multiply(dim.max(0.7)));
+        p.circle_stroke(kc, RAD - 3.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.35)));
+    }
     // stepped knobs (octave, voices...): a dot per step
     if a.steps >= 1.0 && a.steps <= 16.0 {
         let n = a.steps.round() as i32;

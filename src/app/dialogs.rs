@@ -30,6 +30,7 @@ fn ext(f: Format) -> &'static str {
 
 impl App {
     pub(super) fn apply_theme(&self, ctx: &egui::Context) {
+        theme::set_polished(!self.extra.flat_ui);
         theme::apply(ctx, theme::with_accent(self.theme, &self.extra.accent));
     }
 

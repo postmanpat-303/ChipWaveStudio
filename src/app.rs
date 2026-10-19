@@ -907,7 +907,7 @@ impl eframe::App for App {
         }
         let ctx = ui.ctx().clone();
         if !self.themed {
-            theme::apply(&ctx, theme::with_accent(self.theme, &self.extra.accent));
+            self.apply_theme(&ctx);
             ctx.options_mut(|o| o.zoom_with_keyboard = false);
             self.themed = true;
         }

@@ -374,6 +374,17 @@ impl App {
                     }
                 });
                 ui.end_row();
+                ui.label("Interface style");
+                ui.horizontal(|ui| {
+                    let a = ui
+                        .selectable_value(&mut self.extra.flat_ui, false, "Polished")
+                        .on_hover_text("soft depth: rounded clips with a gentle gradient, shadows under panels and menus, shaded knobs and meters (default)");
+                    let b = ui
+                        .selectable_value(&mut self.extra.flat_ui, true, "Flat")
+                        .on_hover_text("the plain look: flat fills, no shadows");
+                    changed |= a.changed() || b.changed();
+                });
+                ui.end_row();
                 ui.label("Scale");
                 ui.horizontal(|ui| {
                     let mut z = self.zoom;

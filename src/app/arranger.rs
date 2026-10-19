@@ -578,19 +578,36 @@ impl App {
                 };
                 let is_sel = selected.contains(&i);
                 let col = if is_sel { col.gamma_multiply(1.3) } else { col };
-                painter.rect_filled(cr, 6, col);
+                let pol = theme::polished();
+                let crad: u8 = if pol { 3 } else { 6 };
+                if pol {
+                    if is_sel {
+                        theme::glow(&painter, cr, crad, th().selection_outline);
+                    }
+                    theme::block(&painter, cr, col);
+                } else {
+                    painter.rect_filled(cr, 6, col);
+                }
                 if let Some((fi, t0)) = &self.arr_flash {
                     let age = ui.input(|inp| inp.time) - t0;
                     if fi.contains(&i) && age < 0.8 {
                         painter.rect_filled(
                             cr,
-                            6,
+                            crad,
                             Color32::from_white_alpha((90.0 * (1.0 - age / 0.8)) as u8),
                         );
                         ui.ctx().request_repaint();
                     }
                 }
-                if is_sel {
+                if is_sel && pol {
+                    // soft glow (above) + a crisp 2 px outline
+                    painter.rect_stroke(
+                        cr,
+                        crad,
+                        Stroke::new(2.0, th().selection_outline),
+                        egui::StrokeKind::Inside,
+                    );
+                } else if is_sel {
                     // inner shadow, then a thick light outline
                     painter.rect_stroke(
                         cr.shrink(3.0),

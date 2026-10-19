@@ -105,6 +105,10 @@ pub struct Extra {
     /// pattern editor.
     #[serde(default = "yes")]
     pub dblclick_roll: bool,
+    /// Interface style: false = Polished (default), true = Flat (the look
+    /// before the polish pass)
+    #[serde(default)]
+    pub flat_ui: bool,
 }
 
 fn two() -> u32 {
@@ -141,6 +145,7 @@ impl Default for Extra {
             cards_closed: vec![],
             new_in_timeline: true,
             dblclick_roll: true,
+            flat_ui: false,
         }
     }
 }

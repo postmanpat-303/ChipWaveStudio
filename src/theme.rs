@@ -116,6 +116,15 @@ pub const AMIGA: Theme = Theme {
 pub const THEMES: [Theme; 2] = [DARK, AMIGA];
 
 static CURRENT: std::sync::RwLock<Theme> = std::sync::RwLock::new(DARK);
+/// Interface style: Polished (default: soft depth, gradients, shadows) or
+/// Flat (the look before 0.2.4.x's polish pass). Settings › Look.
+static POLISHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+pub fn polished() -> bool {
+    POLISHED.load(std::sync::atomic::Ordering::Relaxed)
+}
+pub fn set_polished(on: bool) {
+    POLISHED.store(on, std::sync::atomic::Ordering::Relaxed);
+}
 pub fn th() -> Theme {
     *CURRENT.read().unwrap()
 }
@@ -187,11 +196,239 @@ pub fn apply(ctx: &egui::Context, t: Theme) {
     ] {
         w.fg_stroke.color = t.ink;
     }
+    if polished() {
+        polish(&mut v, &t);
+    }
     ctx.set_visuals(v);
     ctx.global_style_mut(|s| {
         s.spacing.item_spacing = egui::vec2(6.0, 5.0);
         s.spacing.button_padding = egui::vec2(9.0, 3.0);
     });
+}
+
+/// The Polished style on top of the base visuals: soft shadows under
+/// windows and menus, gentle hover / pressed states and a clearer selected
+/// state (active tabs, selectable labels). Sizes and spacing are unchanged.
+fn polish(v: &mut egui::Visuals, t: &Theme) {
+    let (win_a, pop_a) = if t.light { (70, 50) } else { (120, 90) };
+    v.window_shadow = egui::Shadow {
+        offset: [0, 6],
+        blur: 22,
+        spread: 0,
+        color: Color32::from_black_alpha(win_a),
+    };
+    v.popup_shadow = egui::Shadow {
+        offset: [0, 3],
+        blur: 12,
+        spread: 0,
+        color: Color32::from_black_alpha(pop_a),
+    };
+    // hover lifts a touch, pressed sinks (darker fill, no lift)
+    v.widgets.hovered.expansion = 0.5;
+    v.widgets.active.expansion = 0.0;
+    v.widgets.active.weak_bg_fill = mix(v.widgets.inactive.weak_bg_fill, Color32::BLACK, 0.18);
+    v.widgets.active.bg_fill = v.widgets.active.weak_bg_fill;
+    v.widgets.active.bg_stroke = Stroke::new(1.0, mix(t.border, Color32::BLACK, 0.2));
+    v.widgets.hovered.bg_stroke = Stroke::new(1.0, mix(t.border, t.ink, 0.25));
+    // selected tabs / toggles: the accent shows through, text stays light
+    v.selection.bg_fill = mix(t.slate, t.accent, if t.light { 0.45 } else { 0.4 });
+    v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
+}
+
+/// linear mix of two colours (opaque result), `k` = 0 → a, 1 → b
+pub fn mix(a: Color32, b: Color32, k: f32) -> Color32 {
+    let k = k.clamp(0.0, 1.0);
+    let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * k).round() as u8;
+    Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
+}
+
+/// a colour a little lighter (`k` > 0) or darker (`k` < 0), keeping the hue
+pub fn tone(c: Color32, k: f32) -> Color32 {
+    if k >= 0.0 {
+        mix(c, Color32::WHITE, k)
+    } else {
+        mix(c, Color32::BLACK, -k)
+    }
+}
+
+/// A rounded rect with a vertical gradient, added to `mesh` (no extra
+/// shapes, so thousands of clips stay one draw call). `rad` = (nw, ne, se,
+/// sw) corner radii, clamped to the rect.
+pub fn round_mesh(mesh: &mut egui::Mesh, r: Rect, rad: [f32; 4], top: Color32, bot: Color32) {
+    if r.width() <= 0.0 || r.height() <= 0.0 {
+        return;
+    }
+    let lim = (r.width().min(r.height()) * 0.5).max(0.0);
+    let rad = rad.map(|x| x.clamp(0.0, lim));
+    let col = |y: f32| {
+        let k = ((y - r.top()) / r.height()).clamp(0.0, 1.0);
+        let m = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * k).round() as u8;
+        Color32::from_rgba_premultiplied(
+            m(top.r(), bot.r()),
+            m(top.g(), bot.g()),
+            m(top.b(), bot.b()),
+            m(top.a(), bot.a()),
+        )
+    };
+    // outline: 4 corner arcs (3 segments each; a single point when square)
+    let corners = [
+        (
+            Pos2::new(r.left() + rad[0], r.top() + rad[0]),
+            rad[0],
+            180.0f32,
+        ),
+        (
+            Pos2::new(r.right() - rad[1], r.top() + rad[1]),
+            rad[1],
+            270.0,
+        ),
+        (
+            Pos2::new(r.right() - rad[2], r.bottom() - rad[2]),
+            rad[2],
+            0.0,
+        ),
+        (
+            Pos2::new(r.left() + rad[3], r.bottom() - rad[3]),
+            rad[3],
+            90.0,
+        ),
+    ];
+    let base = mesh.vertices.len() as u32;
+    let c = r.center();
+    mesh.colored_vertex(c, col(c.y));
+    let mut n = 0u32;
+    for (o, rr, a0) in corners {
+        let steps = if rr > 0.5 { 3 } else { 0 };
+        for i in 0..=steps {
+            let a = (a0 + 90.0 * i as f32 / steps.max(1) as f32).to_radians();
+            let p = o + egui::vec2(a.cos(), a.sin()) * rr;
+            mesh.colored_vertex(p, col(p.y));
+            n += 1;
+            if steps == 0 {
+                break;
+            }
+        }
+    }
+    for i in 0..n {
+        mesh.add_triangle(base, base + 1 + i, base + 1 + (i + 1) % n);
+    }
+}
+
+/// Polished: a slight raised look on a button-like rect (highlight under the
+/// top edge, shade over the bottom edge); `pressed` sinks it instead.
+pub fn raise(p: &egui::Painter, r: Rect, rad: f32, pressed: bool) {
+    if !polished() || r.width() < 2.0 * rad + 2.0 {
+        return;
+    }
+    let x = (r.left() + rad)..=(r.right() - rad);
+    if pressed {
+        p.hline(
+            x,
+            r.top() + 1.5,
+            Stroke::new(1.0, Color32::from_black_alpha(60)),
+        );
+    } else {
+        p.hline(
+            x.clone(),
+            r.top() + 1.5,
+            Stroke::new(
+                1.0,
+                Color32::from_white_alpha(if th().light { 110 } else { 26 }),
+            ),
+        );
+        p.hline(
+            x,
+            r.bottom() - 1.5,
+            Stroke::new(1.0, Color32::from_black_alpha(45)),
+        );
+    }
+}
+
+/// a soft glow around `r` (selected items): a few fading outlines
+pub fn glow(p: &egui::Painter, r: Rect, rad: u8, c: Color32) {
+    for (i, a) in [0.45f32, 0.22, 0.1].iter().enumerate() {
+        let e = 1.0 + i as f32;
+        p.rect_stroke(
+            r.expand(e),
+            rad.saturating_add(i as u8 + 1),
+            Stroke::new(1.0, c.gamma_multiply(*a)),
+            egui::StrokeKind::Outside,
+        );
+    }
+}
+
+/// An arranger block / clip body in the Polished style: ~3 px corners, a
+/// faint top highlight fading to a soft bottom shade, a 1 px darker border.
+pub fn block(p: &egui::Painter, r: Rect, col: Color32) {
+    let mut m = egui::Mesh::default();
+    let rad = [3.0; 4];
+    round_mesh(&mut m, r, rad, tone(col, 0.10), tone(col, -0.12));
+    p.add(egui::Shape::mesh(m));
+    // a 1 px highlight just under the top edge
+    p.hline(
+        (r.left() + 3.0)..=(r.right() - 3.0),
+        r.top() + 1.0,
+        Stroke::new(1.0, Color32::from_white_alpha(28)),
+    );
+    p.rect_stroke(
+        r,
+        3,
+        Stroke::new(1.0, tone(col, -0.38)),
+        egui::StrokeKind::Inside,
+    );
+}
+
+/// a level meter's lit part: green → amber → red over the dB scale
+/// (`frac` = lit height 0..1 of `r`, scale -60..+6 dB), plus the track
+pub fn meter(p: &egui::Painter, r: Rect, frac: f32) {
+    let t = th();
+    p.rect_filled(r, 3, tone(t.crt_bot, -0.15));
+    p.rect_stroke(
+        r,
+        3,
+        Stroke::new(1.0, Color32::from_black_alpha(70)),
+        egui::StrokeKind::Inside,
+    );
+    if frac <= 0.0 {
+        return;
+    }
+    let y = |db: f32| r.bottom() - ((db + 60.0) / 66.0).clamp(0.0, 1.0) * r.height();
+    let top = r.bottom() - frac.clamp(0.0, 1.0) * r.height();
+    let stops = [
+        (-60.0, hex(0x3E8E57)),
+        (-18.0, hex(0x5CC07A)),
+        (-6.0, hex(0xA9C95E)),
+        (-3.0, hex(0xE8C35A)),
+        (0.0, hex(0xE39A55)),
+        (6.0, hex(0xD9605A)),
+    ];
+    let mut m = egui::Mesh::default();
+    let ins = r.shrink(1.0);
+    for w in stops.windows(2) {
+        let (y0, y1) = (y(w[0].0), y(w[1].0));
+        let (lo, hi) = (y0.max(y1), y0.min(y1)); // lo = lower edge (bigger y)
+        if lo <= top {
+            continue;
+        }
+        let cut = hi.max(top);
+        let k = |yy: f32| ((lo - yy) / (lo - hi).max(0.5)).clamp(0.0, 1.0);
+        let seg = Rect::from_min_max(Pos2::new(ins.left(), cut), Pos2::new(ins.right(), lo));
+        let i = m.vertices.len() as u32;
+        let ct = mix(w[0].1, w[1].1, k(cut));
+        m.colored_vertex(seg.left_top(), ct);
+        m.colored_vertex(seg.right_top(), ct);
+        m.colored_vertex(seg.right_bottom(), w[0].1);
+        m.colored_vertex(seg.left_bottom(), w[0].1);
+        m.add_triangle(i, i + 1, i + 2);
+        m.add_triangle(i, i + 2, i + 3);
+    }
+    p.add(egui::Shape::mesh(m));
+    // a soft sheen along the left edge
+    p.vline(
+        ins.left() + 1.0,
+        top..=ins.bottom(),
+        Stroke::new(1.0, Color32::from_white_alpha(40)),
+    );
 }
 
 /// Vertical gradient rect (egui has no gradient fill: mesh with per-vertex colours).
@@ -211,6 +448,17 @@ pub fn gradient(painter: &egui::Painter, r: Rect, top: Color32, bot: Color32) {
 /// overkill for an MVP, so we draw a flat rounded base + inner gradient band.
 pub fn cartridge(painter: &egui::Painter, r: Rect, spine: Color32) {
     let t = th();
+    if polished() {
+        painter.add(
+            egui::Shadow {
+                offset: [0, 2],
+                blur: 10,
+                spread: 0,
+                color: Color32::from_black_alpha(if t.light { 45 } else { 90 }),
+            }
+            .as_shape(r, CornerRadius::same(8)),
+        );
+    }
     painter.rect_filled(r, CornerRadius::same(8), t.cart_bot);
     let inner = r.shrink2(egui::vec2(0.0, 6.0));
     gradient(
@@ -239,6 +487,27 @@ pub fn cartridge(painter: &egui::Painter, r: Rect, spine: Color32) {
         },
         spine,
     );
+    if polished() {
+        // depth under the toolbar: a soft shade just inside the top edge,
+        // and a faint highlight on the top border
+        gradient(
+            painter,
+            Rect::from_min_max(
+                Pos2::new(r.left() + 7.0, r.top() + 1.0),
+                Pos2::new(r.right() - 1.0, r.top() + 7.0),
+            ),
+            Color32::from_black_alpha(if t.light { 22 } else { 40 }),
+            Color32::TRANSPARENT,
+        );
+        painter.hline(
+            (r.left() + 8.0)..=(r.right() - 8.0),
+            r.top() + 0.5,
+            Stroke::new(
+                1.0,
+                Color32::from_white_alpha(if t.light { 60 } else { 18 }),
+            ),
+        );
+    }
     painter.rect_stroke(
         r,
         CornerRadius::same(8),

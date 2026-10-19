@@ -5,14 +5,18 @@ impl App {
     pub(super) fn meter(ui: &mut egui::Ui, level: f32, h: f32) {
         let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, h), Sense::hover());
         let p = ui.painter();
-        p.rect_filled(r, 3, th().crt_bot);
         let db = if level > 1e-5 {
             20.0 * level.log10()
         } else {
             -90.0
         };
         let frac = ((db + 60.0) / 66.0).clamp(0.0, 1.0);
-        if frac > 0.0 {
+        if theme::polished() {
+            theme::meter(p, r, frac);
+        } else {
+            p.rect_filled(r, 3, th().crt_bot);
+        }
+        if frac > 0.0 && !theme::polished() {
             let top = r.bottom() - frac * r.height();
             let col = if db > 0.0 {
                 hex(0xD9605A)
@@ -280,7 +284,13 @@ impl App {
                                     egui::Slider::new(vol, 0.0..=2.0)
                                         .vertical()
                                         .trailing_fill(true)
-                                        .show_value(false),
+                                        .show_value(false)
+                                        .handle_shape(if theme::polished() {
+                                            // a fader cap
+                                            egui::style::HandleShape::Rect { aspect_ratio: 0.55 }
+                                        } else {
+                                            egui::style::HandleShape::Circle
+                                        }),
                                 )
                                 .interact(Sense::click());
                             if r.double_clicked() {

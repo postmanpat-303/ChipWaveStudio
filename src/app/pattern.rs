@@ -253,7 +253,23 @@ impl App {
                 );
             }
             if r == self.row {
-                painter.rect_filled(row_rect, 4, th().slate.gamma_multiply(0.7));
+                if theme::polished() {
+                    // a soft cursor row: a gentle band with faint edges
+                    let t = th();
+                    painter.rect_filled(row_rect, 3, t.slate.gamma_multiply(0.6));
+                    painter.hline(
+                        row_rect.x_range().shrink(3.0),
+                        row_rect.top() + 0.5,
+                        Stroke::new(1.0, t.accent.gamma_multiply(0.35)),
+                    );
+                    painter.hline(
+                        row_rect.x_range().shrink(3.0),
+                        row_rect.bottom() - 0.5,
+                        Stroke::new(1.0, t.accent.gamma_multiply(0.35)),
+                    );
+                } else {
+                    painter.rect_filled(row_rect, 4, th().slate.gamma_multiply(0.7));
+                }
             }
             if let Some((r0, r1, c0, c1)) = sel {
                 if (r0..=r1).contains(&r) {

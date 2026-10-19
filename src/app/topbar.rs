@@ -69,6 +69,7 @@ fn tool_button(
         let v = ui.style().interact_selectable(&resp, on);
         let p = ui.painter();
         p.rect(r, 5, v.weak_bg_fill, v.bg_stroke, egui::StrokeKind::Inside);
+        theme::raise(p, r, 5.0, resp.is_pointer_button_down_on() || on);
         let ir = Rect::from_min_size(r.min + egui::vec2(10.0, 4.0), egui::vec2(18.0, 18.0));
         // light themes: active buttons are filled, so draw the icon in the text colour
         let ic_col = if on && th().light {
@@ -122,6 +123,7 @@ fn segmented(ui: &mut egui::Ui, items: &[(&str, &str)], cur: usize) -> Option<us
         let on_fill = if t.light { Color32::WHITE } else { t.accent };
         if sel {
             ui.painter().rect_filled(sr, 4, on_fill);
+            theme::raise(ui.painter(), sr, 4.0, false);
         } else if resp.hovered() {
             ui.painter()
                 .rect_filled(sr, 4, Color32::from_white_alpha(30));

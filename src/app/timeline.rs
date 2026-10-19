@@ -991,6 +991,8 @@ impl App {
         // audio clips: fade curves and handles (rect, header height, clip, hot handle)
         let mut fades: Vec<(Rect, f32, tl::Clip, Option<bool>)> = vec![];
         let mut outlines: Vec<(Rect, Stroke)> = vec![];
+        let pol = theme::polished();
+        let mut glows: Vec<Rect> = vec![];
         for tr in first_tr..last_tr {
             let lr = lane_rect(tr);
             if tr % 2 == 1 {
@@ -1080,18 +1082,43 @@ impl App {
                 let head_c = col
                     .gamma_multiply(if hot { 1.0 } else { 0.85 } * k)
                     .to_opaque();
-                quad(&mut bodies, r, body_c);
                 let hh = (lane_h * 0.3).clamp(9.0, 15.0);
                 let hr = Rect::from_min_max(r.min, Pos2::new(r.right(), r.top() + hh));
-                quad(&mut bodies, hr, head_c);
-                // clip edge so neighbours stay apart
-                quad(
-                    &mut bodies,
-                    Rect::from_min_max(r.left_top(), Pos2::new(r.left() + 1.0, r.bottom())),
-                    col.gamma_multiply(1.1 * k).to_opaque(),
-                );
-                if sel {
-                    outlines.push((r, Stroke::new(2.0, t.selection_outline)));
+                if pol {
+                    // rounded body with a gentle gradient, header rounded on top,
+                    // a 1 px darker border; selected: a soft glow + outline
+                    theme::round_mesh(
+                        &mut bodies,
+                        r,
+                        [3.0; 4],
+                        theme::tone(body_c, 0.06),
+                        theme::tone(body_c, -0.14),
+                    );
+                    theme::round_mesh(
+                        &mut bodies,
+                        hr,
+                        [3.0, 3.0, 0.0, 0.0],
+                        theme::tone(head_c, 0.12),
+                        head_c,
+                    );
+                    if sel {
+                        glows.push(r);
+                        outlines.push((r, Stroke::new(2.0, t.selection_outline)));
+                    } else {
+                        outlines.push((r, Stroke::new(1.0, theme::tone(body_c, -0.45))));
+                    }
+                } else {
+                    quad(&mut bodies, r, body_c);
+                    quad(&mut bodies, hr, head_c);
+                    // clip edge so neighbours stay apart
+                    quad(
+                        &mut bodies,
+                        Rect::from_min_max(r.left_top(), Pos2::new(r.left() + 1.0, r.bottom())),
+                        col.gamma_multiply(1.1 * k).to_opaque(),
+                    );
+                    if sel {
+                        outlines.push((r, Stroke::new(2.0, t.selection_outline)));
+                    }
                 }
                 // loop notches in the header
                 if clip.loop_len.is_some() && r.width() > 8.0 {
@@ -1325,8 +1352,12 @@ impl App {
             let fp = lp.with_clip_rect(r.intersect(lanes));
             audioclip::paint_fades(&fp, *r, *hh, clip, &x_of, *hot);
         }
+        for r in glows {
+            theme::glow(&lp, r, 3, t.selection_outline);
+        }
+        let orad: u8 = if pol { 3 } else { 2 };
         for (r, s) in outlines {
-            lp.rect_stroke(r, 2, s, egui::StrokeKind::Inside);
+            lp.rect_stroke(r, orad, s, egui::StrokeKind::Inside);
         }
         for (r, p, txt, colr) in texts {
             let tp = lp.with_clip_rect(r.intersect(lanes).shrink(1.0));
