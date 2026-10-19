@@ -396,7 +396,7 @@ fn build_previews(song: &Song, nch: usize) -> Previews {
     for (b, p) in song.patterns.iter().enumerate() {
         let eff = tl::effective_rows(p, nch);
         let mut u = vec![false; nch];
-        for c in 0..nch {
+        for (c, used_c) in u.iter_mut().enumerate() {
             let mut pv = Preview {
                 lo: 255,
                 ..Default::default()
@@ -407,7 +407,7 @@ fn build_previews(song: &Song, nch: usize) -> Previews {
                 let Some(cell) = p.cells.get(r).and_then(|row| row.get(c)) else {
                     continue;
                 };
-                u[c] |= !cell.is_empty();
+                *used_c |= !cell.is_empty();
                 if cell.instr > 0 {
                     *ic.entry(cell.instr).or_default() += 1;
                 }

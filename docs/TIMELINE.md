@@ -1,6 +1,6 @@
 # Timeline view
 
-**Status:** read-only view (milestones M0 + M1 of [DAW_TIMELINE_PLAN.md](DAW_TIMELINE_PLAN.md)). You can't edit clips yet. That arrives in M2, when the timeline becomes something a song can be saved as.
+**Status:** editable (milestones M0, M1 and M2 of [DAW_TIMELINE_PLAN.md](DAW_TIMELINE_PLAN.md), unreleased). A song is in **tracker mode** (the order list decides what plays, and the timeline only shows it) or in **timeline mode** (the clips are the song, and you arrange them here). New songs start in timeline mode.
 
 ![Timeline view: the Velvet Mirrorball demo playing, 14 tracks with headers on the left, coloured block clips with note previews, Intro/Verse/Chorus/Breakdown markers above the bar ruler, the playhead, the mini-map strip, and the instrument editor in the lower panel](screenshots/dark-timeline.png)
 
@@ -11,7 +11,55 @@ The **Timeline** view (the **Timeline** tab in the VIEW group, **View › Timeli
 - When the order list plays the same block several times in a row, the clips merge into one **looped clip**, with small notches where each repeat starts.
 - **Markers** come from the arranger's section roles (Intro, Verse, Chorus…).
 
-The toolbar says **Tracker mode · from the order list**. Every song is in tracker mode for now: the order list and blocks are what you edit, and the timeline is worked out from them every time they change.
+The toolbar shows which mode the song is in:
+
+- **Tracker mode · from the order list.** The timeline is worked out from the order list and blocks every time they change. You can look, play, seek and open clips, but the first clip edit (dragging a clip, S, M, Delete, Ctrl+D…) asks *Switch to timeline mode?* (see below). Every song made before this version opens in tracker mode and plays exactly as before.
+- **Timeline mode.** The clips are the song. The order list is no longer used (the Arranger says so), and the blocks are the clips' contents. **Back to tracker mode…** turns the timeline back into blocks and an order list.
+
+## Timeline mode
+
+### Switching
+- **Switch to timeline mode** (toolbar), or any clip edit in a tracker-mode song, opens a prompt. **Switch to timeline mode** (or Enter) converts the song and then runs the edit you asked for. **Not now** (or Esc) leaves everything alone.
+- The switch is lossless: the song plays the **same samples** afterwards (checked by a test for every demo and fixture song, and by `--self-test`).
+- **Undo puts it back.** The switch and the edit that asked for it are separate undo steps, so Ctrl+Z once undoes the edit and twice returns to tracker mode.
+- **Back to tracker mode…** asks first, then turns the timeline into blocks and an order list that play the same (overlapping or partial clips become new blocks). Markers, the loop region and track speeds are dropped. Undo brings the timeline back.
+- **File › New** starts a song in timeline mode (Del's decision). Turning off **Settings › New songs › Open on the Timeline view** gives a tracker-mode song on the pattern editor instead.
+
+### Editing clips
+
+| Do | How |
+|---|---|
+| Select | Click a clip. **Ctrl-click** or **Shift-click** adds or removes clips. Drag on empty space for a **box** selection (with Ctrl/Shift it adds). **Ctrl+A** selects every clip, **Esc** clears |
+| Move | Drag a clip (the whole selection moves, across tracks too). Moves snap to the grid by the clip's start. Hold **Shift** for single rows |
+| Copy | **Alt-drag**: copies follow the mouse and the originals stay. **Ctrl+D** duplicates the selection right after itself. Copies are **linked**: they play the same block, so editing the block changes all of them |
+| Make unique | **Ctrl+Shift+D**: the clip gets its own copy of its block ("Groove copy"), so editing it no longer changes the others |
+| Resize / loop | Drag a clip's **right edge**. Past the end of its block the block repeats (notches show each repeat) |
+| Trim | Drag the **left edge**: hides (or, on a looping clip, reveals) the start, while the content stays where it is |
+| Split | **S** splits the clips under the mouse (or the selected clips at the play marker) at the snapped position |
+| Glue | **Ctrl+J**: the selected clips of one track become one clip of a new block "Glue NN" that plays exactly what they played (gaps become empty rows, up to 256 rows) |
+| Mute | **M** mutes or unmutes the selected clips (drawn dim, marked *muted*) |
+| Delete | **Del** or **Backspace** (the blocks stay in the song) |
+| New clip | **Double-click** empty space on a track: a new empty 64-row block on that bar, opened in the pattern editor on that channel |
+| Clip menu | **Right-click** a clip: open, split here, duplicate, make unique, glue, mute, delete, loop around the selection, add marker |
+| Track speed | **Right-click** a track header: the ticks per row for this track's effects (slides, `0D` volume slides, filter slides), or *Follow the song*. A track with its own speed shows "speed N" in its header |
+
+Each gesture is one undo step (a drag records when you let go). The status line shows the position while dragging.
+
+### Snap
+The **snap** menu in the toolbar: **Auto** (bar, beat or row, whichever is at least about 10 pixels wide at this zoom), **Bar**, **Beat** or **Row**. Hold **Shift** while dragging for rows. The ruler snaps to the same grid (**Alt** = exact row).
+
+### Loop region and markers
+- **Shift-drag the ruler** to set the loop region, or press **Ctrl+L** to loop around the selected clips. **L** or the **Loop** toggle switches it on and off. While it is on, playback wraps from its end to its start, and the region is shaded.
+- **+ Marker** (or **Shift+M**) adds a marker at the play marker and asks for its name. Right-click the marker strip to add one under the mouse. Click a marker to jump there. Drag it to move it, double-click it to rename it, and right-click it to rename or delete it.
+
+### Playing
+- **Space** on the Timeline plays the song from the play marker (the triangle on the ruler), and stops it. Click the ruler to move the marker; while playing, playback jumps there.
+- **Seeking is exact.** Starting or jumping anywhere replays everything before that point silently (tempo, speed, instruments, volumes, filter and the other state commands), and a note that is still held is struck again if its instrument sustains.
+- The song ends at the end of the last clip, or at the end the song had when it was converted, whichever is later.
+- **Export** (File › Export…) renders the timeline once, never looped. In timeline mode the range can also be **Loop region** (the region, once, with everything before it chased).
+
+### File › Export tracker-compatible copy…
+Timeline-mode songs save a `timeline.toml` and need this version to open (older versions refuse them cleanly, see below). **File › Export tracker-compatible copy…** saves a tracker-mode copy (blocks + order list, reader version 1) that ChipWave Studio 0.2.4.0 and older open and play the same. Your song stays as it is.
 
 ## Finding your way around
 
@@ -29,17 +77,17 @@ The toolbar says **Tracker mode · from the order list**. Every song is in track
 | Track header | Coloured strip, number, name and instrument. **M** / **S** mute and solo the channel. The mini-fader is the mixer volume (double-click for 0 dB), and the meter is the channel's. Click a header to put the pattern cursor on that channel |
 | Full height | **F11** hides the lower panel and the timeline gets the whole height. **Ctrl+I** brings back the instrument editor under it |
 
-Keys typed in the Timeline view never enter notes. Ctrl shortcuts, Space (play/stop) and the F-keys work as everywhere else.
+Keys typed in the Timeline view never enter notes. Ctrl shortcuts and the F-keys work as everywhere else, and **Space** plays the song from the play marker.
 
 ## New songs
 
-**File › New** opens on the Timeline view: 8 tracks, 16 bars across, and an outline on every track for the empty block 00 that says *empty · double-click to write*. Double-click a track to start writing in that channel. The instruments are kept, as before.
+**File › New** opens on the Timeline view, in timeline mode: 8 empty tracks, 16 bars across. Double-click a track to make a new block there and start writing it in that channel. The instruments are kept, as before.
 
 ![A new song on the Timeline view: eight empty tracks with "00 Block 00 · empty · double-click to write" outlines](screenshots/dark-timeline-new-song.png)
 
 To go straight to the pattern editor instead, turn off **Settings › New songs › Open on the Timeline view**. Songs you open from disk keep the view you are in.
 
-**The decision (Del, 19 Oct 2026):** new songs start on the Timeline. Until M2 that means *the Timeline view*. The song itself is still a tracker-mode song with an order list. From M2 on, a new song will start in **timeline mode** (clips are the song). Existing songs always open in tracker mode, play exactly as before, and only switch if you ask (the first timeline edit offers it, and Undo puts it back).
+**The decision (Del, 19 Oct 2026):** new songs start on the Timeline, in **timeline mode** (clips are the song). Existing songs always open in tracker mode, play exactly as before, and only switch if you ask (the first timeline edit offers it, and Undo puts it back).
 
 ![The Amiga theme: the same song with the arranger in the lower panel](screenshots/amiga-timeline.png)
 
@@ -77,14 +125,29 @@ Everything uses `serde(default)` and leaves out fields that are at their default
 - `consolidate(song, timeline)` goes the other way. It cuts the timeline at every clip start, end and loop wrap (at most 256 rows per block), builds one new block per distinct slice (identical slices share a block), and writes the order list. A later clip wins where clips overlap, muted clips are silent, and gaps are empty rows. A `0F00` survives only on the last row of a slice.
 - **Tested bit-exact:** for the three demos, the 0.2.3.5 and 0.2.3.6 fixture songs, and a synthetic song with breaks, odd lengths, repeats and a 300-row block, order list → timeline → consolidated order list renders the **same samples**. The self-test (`--self-test`) checks the demo too.
 
+### Timeline mode in the engine (M2)
+- `song.timeline: Option<Box<Timeline>>`. `None` is tracker mode and the engine's tracker path is untouched (so old songs stay bit-exact).
+- **The plan.** In timeline mode the engine plays an `Arc<Plan>` (`src/timeline/plan.rs`): per track, a sorted list of non-overlapping row segments (`Seg { start, end, pattern, col, src0, loop_rows }`). A later clip start wins where clips overlap, and muted clips and note clips are left out. The plan is built on the UI thread (`Engine::ensure_plan`, keyed by a cheap hash of everything it depends on) whenever the timeline changes, and right away by every edit. The audio thread only reads it, never allocates, and finds each track's segment with a cursor (binary search after a seek).
+- **Rows stay global.** Every track steps rows together, so the song-wide tick length still follows `song.speed`, `09xx` (last writer wins across tracks, as in the tracker) and `0Fxx`. This is what makes the conversion lossless. **Per-track speed** is a track property (`Track.speed`, 0 = follow the song): a track with its own speed spreads that many effect steps over the row.
+  - *Deviation from the plan:* `09xx` stays song-wide in timeline mode (rather than becoming per-track), because making it per-track would change how converted songs sound.
+- A `0F00` pattern break ends **its clip's** block there (the rest of the block is silent in that clip); playback never jumps. A tempo map point changes the tempo at its row. Before the first point the tempo is `song.bpm` (points at tick 0 are dropped on conversion).
+- **Seek / start** chase rows 0 to the target with state only (instrument, volume column, `09`, `0C`, `0Fxx`, `38`/`39`, `3F`–`42`, `43`), then strike notes that are still held, if the patch sustains (`amp.s ≥ 0.05`).
+- **Loop region:** wraps when the next row would be the region's end, if `loop_on`. **Song end:** `play_end` = the later of the last unmuted clip's end and `Timeline.end` (the converted song's length), rounded up to a row (64 rows if empty).
+- **Edits** (`src/timeline/edit.rs`): `enter_timeline_mode` (from the order list; automation positions move from block rows to timeline rows, which differ only after a break), `leave_timeline_mode` / `tracker_copy` (consolidate), `move_clips`, `set_end` (turns on looping past the block end), `set_start`, `split`, `duplicate`, `copies_at`, `delete`, `toggle_mute`, `make_unique`, `glue`, `new_clip`, `add_marker`, `set_loop`, `snap`. They edit the song in place; the song-wide undo keeps a pointer copy of the timeline (`same_content` ignores the view state).
+- `Timeline::fix(&song)` repairs a loaded `timeline.toml` (drops clips on missing tracks or blocks, clamps values, matches the track count) and returns warnings.
+- Tests (`src/timeline/m2_tests.rs`, `src/app/timeline_m2_tests.rs`): a moved clip plays exactly a bar later; split, glue and make unique render the same samples; resize loops and trim; mute; the loop region wraps; a seek chases tempo and held notes; per-track speed changes effects, not timing; the tracker copy renders the same as the edited timeline; the switch prompt and its two undo steps; drag, Alt-drag, edges, S, Ctrl+D, Delete, Ctrl+Shift+D, ruler seek, Shift-drag loop and L.
+
 ### File format and older versions
-Nothing is saved from the timeline yet: songs are written exactly as before, byte for byte. Since M0, ChipWave reads `min_reader_version` (in `manifest.toml` of a `.cwt`, or the top level / `[song]` table of a `.cwt.toml`) and refuses files that need a newer reader. You get *"This song was made with a newer ChipWave Studio … Please update"* and a **Check for updates** button, rather than a wrong-sounding song. This app reads version 1. Timeline-mode songs (M2) will save `timeline.toml` and write `min_reader_version = 2`, so this version and later refuse them cleanly, and **File › Export tracker-compatible copy** will save a consolidated version 1 song.
+Tracker-mode songs are written exactly as before, byte for byte, with `min_reader_version = 1`. A timeline-mode song adds **`timeline.toml`** (the `Timeline`, see the model above) to the `.cwt` and writes **`min_reader_version = 2`** in `manifest.toml` (a `.cwt.toml` text song takes an optional `[timeline]` table). This version reads version 2. Since M0, ChipWave reads `min_reader_version` (in `manifest.toml` of a `.cwt`, or the top level / `[song]` table of a `.cwt.toml`) and refuses files that need a newer reader. You get *"This song was made with a newer ChipWave Studio … Please update"* and a **Check for updates** button, rather than a wrong-sounding song. So 0.2.4.0 and older (which read version 1 or don't check) are told to update instead of opening a timeline-mode song wrongly, and **File › Export tracker-compatible copy…** saves a consolidated version 1 song for them.
 
 ### Screenshots
 `chipwave --screenshot out.png --view timeline --song demos/disco.cwt.toml` plays from order entry 8 (`CHIPWAVE_SHOT_POS=n` changes it). `--view timeline-new` shows a new song. See `scripts/screenshots.sh`.
 
 ## Limits in this version
-- **Read-only:** no moving, resizing or splitting clips, no loop region, and no adding markers (M2).
-- **Tempo:** the ruler's time and the readout use the song's BPM. `0Fxx` tempo commands inside blocks still play, but the timeline doesn't show their effect on time yet.
-- **Song automation after a pattern break:** the engine places automation by *full* block rows, so a song that has both automation and `0F00` breaks would not consolidate bit-exactly. Nothing does that yet (the view never consolidates), and M2's tick transport removes the difference.
-- Note clips, audio clips, per-track automation lanes and the arm button are in the model but not used yet (M3b, M4, M5).
+- **Not yet in M2:** range selection with insert / delete time, snapping to other clips' edges and markers, clip fades and gain, a MOD/MMD exporter (ChipWave has none yet; the tracker-compatible copy is a `.cwt`), and the browser panel. These move to M3.
+- **Chase:** a seek re-strikes held notes only on sustaining patches (plugin instruments get no re-strike), and slides (`01`, `02`, `0D`…) running at the seek point are not replayed.
+- **Glue** writes the result into the track's own column of the new block, at most 256 rows.
+- **Tempo:** the ruler's time and the readout use the song's BPM and the tempo map. `0Fxx` tempo commands inside blocks still play, but the ruler doesn't show their effect on time.
+- **Song automation after a pattern break:** positions are moved to timeline rows on the switch, but a song that has both automation and `0F00` breaks may not consolidate back bit-exactly.
+- **New songs** keep their empty block 00 (unused) next to the blocks you create.
+- Note clips, audio clips, per-track automation lanes and the arm button are in the model but not used yet (M3b, M4, M5). A timeline with note clips can't go back to tracker mode.
