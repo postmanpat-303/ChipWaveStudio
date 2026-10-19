@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 32] = [
+pub const VIEWS: [&str; 33] = [
     "pattern",
     "arranger",
     "timeline",
@@ -41,6 +41,7 @@ pub const VIEWS: [&str; 32] = [
     "timeline-mode",
     "timeline-switch",
     "timeline-notes",
+    "timeline-audio",
     "mixer",
     "fx",
     "fill",
@@ -98,7 +99,9 @@ impl App {
         self.row = 0;
         match view {
             "arranger" | "cue" => self.view = View::Arranger,
-            "timeline" | "timeline-mode" | "timeline-notes" => self.view = View::Timeline,
+            "timeline" | "timeline-mode" | "timeline-notes" | "timeline-audio" => {
+                self.view = View::Timeline
+            }
             "timeline-switch" => {
                 self.view = View::Timeline;
                 self.tlv.ask_switch = Some(None);
@@ -301,7 +304,7 @@ impl App {
             });
             // the play marker (where Play song started) stays behind it
             self.cue = (13.min(self.order_len().saturating_sub(1)), 32);
-        } else if view == "timeline-mode" || view == "timeline-notes" {
+        } else if view == "timeline-mode" || view == "timeline-notes" || view == "timeline-audio" {
             // timeline mode with a few edits: a loop region, a marker, a
             // muted clip, a track speed, two selected clips; playing from
             // order entry CHIPWAVE_SHOT_POS (default 8)
@@ -344,6 +347,9 @@ impl App {
             self.tlv.cue = (row as i64) * crate::timeline::ROW;
             if view == "timeline-notes" {
                 self.shot_note_clip(row);
+            }
+            if view == "timeline-audio" {
+                self.shot_audio_clips(row);
             }
         } else if view == "timeline" {
             // play the song from order entry CHIPWAVE_SHOT_POS (default 8)
@@ -606,6 +612,119 @@ impl App {
 impl App {
     /// timeline-notes: a looped note clip (chords + an arpeggio in the song
     /// key) on track 5 at the play position, selected, in the roll
+    /// timeline-audio: a looped drum break with a fade-in, a pad with
+    /// fades and gain, and a clip whose file is missing (generated audio)
+    fn shot_audio_clips(&mut self, row: usize) {
+        use crate::audiofile::{wav_f32, Pcm};
+        use crate::timeline::{self as tl, PPQ};
+        let bar = 4 * PPQ;
+        let at = (row as i64 * tl::ROW / bar) * bar;
+        let ids = self.with(|s| {
+            let nch = s.song.channels;
+            let bpm = s.song.bpm as f64;
+            let sr = 44100u32;
+            let bar_f = (4.0 * 60.0 / bpm * sr as f64) as usize;
+            // a one-bar break: kicks, snares, hats (deterministic noise)
+            let mut seed = 0x1234_5678u32;
+            let mut noise = move || {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed as f32 / u32::MAX as f32 * 2.0 - 1.0
+            };
+            let mut drums = vec![0.0f32; bar_f * 2];
+            let step = bar_f / 16;
+            for k in 0..16 {
+                let (kick, snare) = (k % 8 == 0 || k == 10, k % 8 == 4);
+                for i in 0..step.min(9000) {
+                    let t = i as f32 / sr as f32;
+                    let mut v = noise() * 0.12 * (-t * 60.0).exp();
+                    if kick {
+                        v += (t * std::f32::consts::TAU * (50.0 + 90.0 * (-t * 30.0).exp())).sin()
+                            * 0.9
+                            * (-t * 9.0).exp();
+                    }
+                    if snare {
+                        v += noise() * 0.55 * (-t * 18.0).exp();
+                    }
+                    let j = (k * step + i).min(bar_f - 1);
+                    drums[j * 2] += v;
+                    drums[j * 2 + 1] += v * 0.9;
+                }
+            }
+            let pad: Vec<f32> = (0..sr as usize * 8)
+                .map(|i| {
+                    let t = i as f32 / sr as f32;
+                    let f = |hz: f32| (t * hz * std::f32::consts::TAU).sin();
+                    (f(220.0) + 0.6 * f(277.2) + 0.5 * f(329.6) + 0.2 * f(440.0))
+                        * 0.22
+                        * (0.7 + 0.3 * f(0.25))
+                })
+                .collect();
+            let tracks = [4.min(nch - 1), 5.min(nch - 1), 6.min(nch - 1)];
+            if let Some(t) = s.song.timeline.as_deref_mut() {
+                t.clips.retain(|c| {
+                    !(tracks.contains(&(c.track as usize))
+                        && c.start < at + 8 * bar
+                        && c.end() > at)
+                });
+            }
+            let mut ids = vec![];
+            let assets = [
+                ("drum break.wav", 2u8, drums),
+                ("pad chords.flac", 1u8, pad),
+                ("guitar take 3.wav", 1u8, vec![0.0; sr as usize * 4]),
+            ];
+            for (k, (name, ch, data)) in assets.into_iter().enumerate() {
+                let bytes = wav_f32(sr, ch as u16, &data);
+                let mut a = tl::AudioAsset::from_pcm(
+                    name,
+                    &format!("/home/del/samples/{name}"),
+                    "wav",
+                    Pcm::new(sr, ch, data),
+                    bytes,
+                );
+                if k == 2 {
+                    a.pcm = None;
+                    a.bytes = None;
+                    a.embed = false;
+                }
+                let t = s.song.timeline.as_deref_mut()?;
+                let n = tl::add_audio_asset(t, a);
+                let id =
+                    tl::new_audio_clip(&mut s.song, tracks[k], at + [0, 2 * bar, 4 * bar][k], n)?;
+                let t = s.song.timeline.as_deref_mut()?;
+                let c = t.clips.iter_mut().find(|c| c.id == id)?;
+                match k {
+                    0 => {
+                        c.loop_len = Some(c.len);
+                        c.len = 8 * bar;
+                        c.fade_in = 2 * PPQ;
+                    }
+                    1 => {
+                        c.len = c.len.min(6 * bar);
+                        c.fade_in = bar;
+                        c.fade_out = 2 * bar;
+                        c.gain = 0.7;
+                    }
+                    _ => {}
+                }
+                ids.push(id);
+            }
+            let crate::audio::Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
+            Some(ids)
+        });
+        if let Some(ids) = ids {
+            self.tlv.sel = ids.first().copied();
+            self.tlv.sels = ids.into_iter().take(1).collect();
+        }
+        // close enough to see the waveforms
+        self.tlv.zoom = 30.0;
+        self.tlv.scroll = (at - bar) as f64;
+        self.tlv.track_h = 62.0;
+    }
+
     fn shot_note_clip(&mut self, row: usize) {
         use crate::chords::{self, ChordKind};
         use crate::timeline::{self as tl, PPQ};

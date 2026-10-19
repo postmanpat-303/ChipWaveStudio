@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 
 mod about;
 mod arranger;
+#[cfg(test)]
+mod audioclip_tests;
 mod blocklen;
 mod chordview;
 mod dialogs;
@@ -950,7 +952,7 @@ impl eframe::App for App {
                 self.save_settings();
             }
         }
-        let dropped: Vec<PathBuf> = ctx.input(|i| {
+        let mut dropped: Vec<PathBuf> = ctx.input(|i| {
             i.raw
                 .dropped_files
                 .iter()
@@ -958,6 +960,17 @@ impl eframe::App for App {
                 .filter(|p| !p.as_os_str().is_empty())
                 .collect()
         });
+        // audio files dropped on the Timeline view: audio clips where the
+        // mouse is (else on the current track at the play marker)
+        if self.view == View::Timeline && dropped.iter().any(|p| crate::audiofile::is_audio(p)) {
+            let (audio, rest): (Vec<PathBuf>, Vec<PathBuf>) = dropped
+                .into_iter()
+                .partition(|p| crate::audiofile::is_audio(p));
+            let (tr, at) = self.tlv_drop_target();
+            self.import_audio_files(audio, tr, at);
+            dropped = rest;
+        }
+        self.poll_audio_imports(&ctx);
         for p in dropped {
             if p.extension()
                 .map(|e| e.eq_ignore_ascii_case("cwt"))

@@ -175,7 +175,39 @@ fn self_test(out: Option<PathBuf>) -> i32 {
             ));
             ok
         };
-        let same = same && mode_same && mode_saved && notes_ok;
+        // audio clips (M4): a decoded WAV plays at its own speed at another
+        // output rate, embedded in the song file and loaded back
+        let audio_ok = {
+            let mut n = m.clone();
+            let tr = n.channels.saturating_sub(1);
+            let data: Vec<f32> = (0..11025)
+                .map(|i| (i as f32 * 441.0 * std::f32::consts::TAU / 11025.0).sin() * 0.25)
+                .collect();
+            let bytes = audiofile::wav_f32(11025, 1, &data);
+            let decoded = audiofile::decode(&bytes, "wav").ok();
+            let placed = decoded.is_some_and(|pcm| {
+                let t = n.timeline.as_deref_mut().unwrap();
+                let a = timeline::AudioAsset::from_pcm("tone.wav", "", "wav", pcm, bytes);
+                let k = timeline::add_audio_asset(t, a);
+                timeline::new_audio_clip(&mut n, tr, 0, k).is_some()
+            });
+            let a = engine::render_song(&n, 22050);
+            let plays = placed && a != want && a.iter().all(|x| x.is_finite());
+            let tmp = std::env::temp_dir().join("chipwave_selftest_audio.cwt");
+            let saved = fileio::save_cwt(&n, &tmp)
+                .and_then(|_| fileio::load_cwt_warn(&tmp))
+                .is_ok_and(|(b, w)| w.is_empty() && engine::render_song(&b, 22050) == a);
+            std::fs::remove_file(&tmp).ok();
+            let ok = plays && saved;
+            report.push_str(&format!(
+                "  audio clips: a WAV plays {}, embedded round trip {} ({})\n",
+                if plays { "yes" } else { "NO" },
+                if saved { "yes" } else { "NO" },
+                if ok { "ok" } else { "FAILED" }
+            ));
+            ok
+        };
+        let same = same && mode_same && mode_saved && notes_ok && audio_ok;
         let refused = fileio::song_from_text("min_reader_version = 999\n")
             .err()
             .is_some_and(|e| fileio::is_too_new(&e));

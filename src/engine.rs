@@ -715,6 +715,7 @@ impl Engine {
         self.playing = true;
         // audio clips still fading from the last play end now
         self.av.release_all();
+        self.av.starting = true;
         self.loop_pattern = loop_pattern;
         self.tl.on = !loop_pattern && song.timeline.is_some();
         if self.tl.on {
@@ -757,6 +758,7 @@ impl Engine {
             // timeline mode: `row` is the timeline row (order_pos unused)
             self.tl_jump(song, row, true);
         }
+        self.av.starting = false;
         self.process_row(song);
     }
 
@@ -779,9 +781,11 @@ impl Engine {
                             (row as i64 * crate::timeline::ROW) as f64
                         };
                         self.nv.seek(&p, t);
-                        // audio voices of unchanged clips play on
-                        let live = self.playing && self.tl.on && self.av.live;
-                        let at = if live { self.av.clock } else { t };
+                        // audio voices of unchanged clips play on; new
+                        // clips under the playhead start (not while
+                        // `start` sets up: it seeks right after)
+                        let live = self.playing && self.tl.on && !self.av.starting;
+                        let at = if live { self.tl_clock() } else { t };
                         let sr = self.sr;
                         self.av.seek(&p, at, sr, live, true);
                     }

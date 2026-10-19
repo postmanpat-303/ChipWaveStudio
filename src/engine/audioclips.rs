@@ -66,8 +66,8 @@ pub(super) struct AudioState {
     pub(super) clock: f64,
     /// some voice is active (rendering is skipped otherwise)
     pub(super) any: bool,
-    /// playback is running through `events` (cleared by stop and seek)
-    pub(super) live: bool,
+    /// `Engine::start` is setting up (plan rebuilds don't start voices)
+    pub(super) starting: bool,
 }
 
 impl AudioState {
@@ -77,13 +77,12 @@ impl AudioState {
             cur: [0; MAX_CHANNELS],
             clock: 0.0,
             any: false,
-            live: false,
+            starting: false,
         }
     }
 
     /// fade every voice out (stop, seek)
     pub(super) fn release_all(&mut self) {
-        self.live = false;
         for v in self.v.iter_mut().filter(|v| v.active) {
             v.rel = true;
         }
@@ -94,7 +93,6 @@ impl AudioState {
             v.active = false;
         }
         self.any = false;
-        self.live = false;
     }
 
     /// Start span `s` on track `ch` at tick `t` (`ramp`: fade in, for a
@@ -182,7 +180,6 @@ impl AudioState {
     /// Clip starts and ends due at timeline tick `t` (once per sample).
     pub(super) fn events(&mut self, plan: &Plan, nch: usize, t: f64, sr: f32) {
         self.clock = t;
-        self.live = true;
         if self.any {
             for v in self.v[..nch * AUDIO_VOICES].iter_mut() {
                 // clips end exactly at their end (as cut: a split plays

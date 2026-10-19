@@ -19,6 +19,8 @@ pub(super) enum DragEdit {
     Marker(usize, Tick),
     /// loop region from, to
     Loop(Tick, Tick),
+    /// audio clip id's fade in (true) / out handle to tick
+    Fade(u32, bool, Tick),
 }
 
 impl App {
@@ -53,6 +55,17 @@ impl App {
                 DragEdit::Loop(a, b) => {
                     tl::set_loop(&mut t, a, b);
                     moved = true;
+                }
+                DragEdit::Fade(id, inn, at) => {
+                    if let Some(c) = t.clips.iter().find(|c| c.id == id) {
+                        let (fi, fo) = if inn {
+                            (at - c.start, c.fade_out)
+                        } else {
+                            (c.fade_in, c.end() - at)
+                        };
+                        tl::set_fades(&mut t, id, fi, fo);
+                        moved = true;
+                    }
                 }
             }
             let what = describe(&t, e);
@@ -151,6 +164,11 @@ impl App {
             TlOp::Capture(..) => self.capture_notes(),
             _ => vec![],
         };
+        let ready = if op == TlOp::PlaceAudio {
+            std::mem::take(&mut self.tlv.ready_audio)
+        } else {
+            vec![]
+        };
         let msg: String = self.with(|s| {
             let song = &mut s.song;
             let msg = match op {
@@ -208,6 +226,10 @@ impl App {
                     let mut made = vec![];
                     for &id in &sels {
                         if tl::make_unique_notes(song.timeline.as_deref_mut().unwrap(), id).is_some() {
+                            continue;
+                        }
+                        let audio = song.timeline.as_deref().unwrap().clips.iter().any(|c| c.id == id && c.audio().is_some());
+                        if audio {
                             continue;
                         }
                         match tl::make_unique(song, id) {
@@ -304,6 +326,13 @@ impl App {
                     } else {
                         format!("Track {:02} speed {v} (its effects step {v} times a row)", tr + 1)
                     }
+                }
+                TlOp::PlaceAudio => {
+                    let (msg, ids) = App::place_ready_audio(song, ready);
+                    if !ids.is_empty() {
+                        new_sel = Some(ids);
+                    }
+                    msg
                 }
                 TlOp::SelectAll => {
                     let t = song.timeline.as_deref().unwrap();
@@ -593,5 +622,15 @@ fn describe(t: &tl::Timeline, e: DragEdit) -> String {
         DragEdit::Start(_, x) => format!("Clip start: {}", at(x)),
         DragEdit::Marker(_, x) => format!("Marker: {}", at(x)),
         DragEdit::Loop(a, b) => format!("Loop: {} to {}", at(a.min(b)), at(a.max(b))),
+        DragEdit::Fade(id, inn, _) => {
+            let c = t.clips.iter().find(|c| c.id == id);
+            let len = c.map_or(0, |c| if inn { c.fade_in } else { c.fade_out });
+            format!(
+                "Fade {}: {:.2} beats{}",
+                if inn { "in" } else { "out" },
+                len as f64 / PPQ as f64,
+                if len == 0 { " (off)" } else { "" }
+            )
+        }
     }
 }

@@ -57,9 +57,6 @@ impl Pcm {
     pub fn frames(&self) -> usize {
         self.data.len() / self.channels.max(1) as usize
     }
-    pub fn seconds(&self) -> f64 {
-        self.frames() as f64 / self.rate.max(1) as f64
-    }
     /// bytes held in memory
     pub fn mem_bytes(&self) -> usize {
         self.data.len() * 4

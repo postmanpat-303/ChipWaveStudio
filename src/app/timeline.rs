@@ -12,6 +12,7 @@ use super::*;
 use crate::timeline::{self as tl, Tick, PPQ, ROW};
 use std::collections::HashMap;
 
+pub(crate) mod audioclip;
 mod edit;
 use edit::DragEdit;
 
@@ -94,6 +95,8 @@ enum DragKind {
     Marker(usize),
     /// Shift-drag on the ruler: loop region from this tick
     Loop(Tick),
+    /// fade handle of audio clip `id` (true: fade in)
+    Fade(u32, bool),
 }
 
 #[derive(Clone, Debug)]
@@ -129,6 +132,8 @@ pub(crate) enum TlOp {
     Capture(usize, Tick),
     Speed(usize, u8),
     SelectAll,
+    /// place the decoded audio imports (`TimelineUi::ready_audio`)
+    PlaceAudio,
 }
 
 pub(crate) struct TimelineUi {
@@ -138,7 +143,7 @@ pub(crate) struct TimelineUi {
     /// first visible tick (fractional while zooming)
     pub(crate) scroll: f64,
     scroll_y: f32,
-    track_h: f32,
+    pub(crate) track_h: f32,
     /// start a new song's layout (a few bars, not "fit one empty block")
     new_song: bool,
     wheel: f32,
@@ -174,6 +179,9 @@ pub(crate) struct TimelineUi {
     pub(crate) heads: Rect,
     /// time to build and paint the last frame, in microseconds
     pub(crate) frame_us: u128,
+    /// audio files being decoded, and decoded ones waiting to be placed
+    pub(crate) imports: Vec<audioclip::Import>,
+    pub(crate) ready_audio: Vec<(tl::AudioAsset, usize, Tick)>,
 }
 
 impl Default for TimelineUi {
@@ -206,6 +214,8 @@ impl Default for TimelineUi {
             ruler: Rect::NOTHING,
             heads: Rect::NOTHING,
             frame_us: 0,
+            imports: vec![],
+            ready_audio: vec![],
         }
     }
 }
@@ -278,6 +288,15 @@ fn fingerprint(song: &Song) -> u64 {
                 put(b as u64);
             }
             put(0x1_0000);
+        }
+        for a in &t.audio {
+            for b in a.name.bytes().chain(a.path.bytes()) {
+                put(b as u64);
+            }
+            put(a.embed as u64 | (a.missing() as u64) << 1 | (a.bytes.is_some() as u64) << 2);
+        }
+        for c in t.clips.iter().filter(|c| c.audio().is_some()) {
+            put(c.gain.to_bits() as u64 | (c.fade_shape as u64) << 32);
         }
     }
     put(u64::MAX - 1);
@@ -936,6 +955,8 @@ impl App {
         let mut bodies = egui::Mesh::default();
         let mut notes = egui::Mesh::default();
         let mut texts: Vec<(Rect, Pos2, String, Color32)> = vec![];
+        // audio clips: fade curves and handles (rect, header height, clip, hot handle)
+        let mut fades: Vec<(Rect, f32, tl::Clip, Option<bool>)> = vec![];
         let mut outlines: Vec<(Rect, Stroke)> = vec![];
         for tr in first_tr..last_tr {
             let lr = lane_rect(tr);
@@ -1063,6 +1084,72 @@ impl App {
                             Color32::from_white_alpha(140),
                         );
                     }
+                }
+                if let tl::ClipKind::Audio { asset } = clip.kind {
+                    let a = c.tl.audio.get(asset as usize);
+                    let missing = a.is_none_or(|a| a.missing());
+                    if missing {
+                        quad(
+                            &mut bodies,
+                            Rect::from_min_max(Pos2::new(r.left(), hr.bottom()), r.max),
+                            t.brick.gamma_multiply(0.35 * k),
+                        );
+                    }
+                    if r.width() > 26.0 {
+                        let vis_l = r.left().max(lanes.left()) + 4.0;
+                        let mut name = a.map_or("audio".into(), |a| a.name.clone());
+                        if missing {
+                            name.push_str(" · missing: right-click > Locate");
+                        }
+                        if clip.gain != 1.0 {
+                            name.push_str(&format!(
+                                " · {:+.1} dB",
+                                20.0 * clip.gain.max(1e-6).log10()
+                            ));
+                        }
+                        if clip.muted {
+                            name.push_str(" · muted");
+                        }
+                        texts.push((
+                            r,
+                            Pos2::new(
+                                vis_l + if clip.fade_in == 0 { 8.0 } else { 0.0 },
+                                hr.center().y,
+                            ),
+                            name,
+                            if th().light {
+                                Color32::BLACK
+                            } else {
+                                Color32::WHITE
+                            },
+                        ));
+                    }
+                    let body = Rect::from_min_max(
+                        Pos2::new(r.left() + 1.0, hr.bottom() + 2.0),
+                        Pos2::new(r.right() - 1.0, r.bottom() - 2.0),
+                    );
+                    if r.width() >= 2.0 && body.height() >= 4.0 && !missing {
+                        let vis = body.intersect(lanes);
+                        audioclip::paint_waveform(
+                            &mut notes,
+                            vis,
+                            clip,
+                            &c.tl,
+                            live.bpm,
+                            &x_of,
+                            &tick_of,
+                            r,
+                            col.gamma_multiply(1.6 * k).to_opaque(),
+                        );
+                    }
+                    if mode && (sel || hot) {
+                        let hot_h =
+                            hover.and_then(|p| audioclip::fade_handle_at(p, r, hh, clip, &x_of));
+                        fades.push((r, hh, clip.clone(), hot_h.filter(|_| hot)));
+                    } else if clip.fade_in > 0 || clip.fade_out > 0 {
+                        fades.push((r, hh, clip.clone(), None));
+                    }
+                    continue;
                 }
                 if let tl::ClipKind::Notes { data } = clip.kind {
                     let Some(d) = c.tl.notes.get(data as usize) else {
@@ -1201,6 +1288,10 @@ impl App {
         }
         lp.add(egui::Shape::mesh(bodies));
         lp.add(egui::Shape::mesh(notes));
+        for (r, hh, clip, hot) in &fades {
+            let fp = lp.with_clip_rect(r.intersect(lanes));
+            audioclip::paint_fades(&fp, *r, *hh, clip, &x_of, *hot);
+        }
         for (r, s) in outlines {
             lp.rect_stroke(r, 2, s, egui::StrokeKind::Inside);
         }
@@ -1721,10 +1812,24 @@ impl App {
             ui.scope_id().with("tl_lanes"),
             Sense::click_and_drag(),
         );
-        // which part of a clip is under p: 0 body, 1 left edge, 2 right edge
+        // which part of a clip is under p: 0 body, 1 left edge, 2 right
+        // edge, 3 fade-in handle, 4 fade-out handle (audio clips)
         let part = |i: usize, p: Pos2| {
             let cl = &c.tl.clips[i];
             let (x0, x1) = (x_of(cl.start as f64), x_of(cl.end() as f64));
+            if cl.audio().is_some() {
+                let lr = lane_rect(cl.track as usize);
+                let r = Rect::from_min_max(
+                    Pos2::new(x0 + 0.5, lr.top() + 2.0),
+                    Pos2::new((x1 - 0.5).max(x0 + 1.5), lr.bottom() - 2.0),
+                );
+                let hh = (lane_h * 0.3).clamp(9.0, 15.0);
+                match audioclip::fade_handle_at(p, r, hh, cl, &x_of) {
+                    Some(true) => return 3,
+                    Some(false) => return 4,
+                    None => {}
+                }
+            }
             let e = if x1 - x0 > 24.0 {
                 6.0
             } else {
@@ -1746,6 +1851,7 @@ impl App {
             if mode {
                 ui.ctx().set_cursor_icon(match part(i, p) {
                     0 => egui::CursorIcon::Grab,
+                    3 | 4 => egui::CursorIcon::PointingHand,
                     _ => egui::CursorIcon::ResizeHorizontal,
                 });
             }
@@ -1774,6 +1880,10 @@ impl App {
                             2 => {
                                 sels = vec![id];
                                 DragKind::End(id)
+                            }
+                            k @ (3 | 4) => {
+                                sels = vec![id];
+                                DragKind::Fade(id, k == 3)
                             }
                             _ => DragKind::Move { dup: mods.alt },
                         };
@@ -1821,6 +1931,12 @@ impl App {
                     }
                     DragKind::End(id) => Some(DragEdit::End(id, at(d.anchor))),
                     DragKind::Start(id) => Some(DragEdit::Start(id, at(d.anchor))),
+                    DragKind::Fade(id, inn) => {
+                        // free (Shift: on the grid)
+                        let tk = tick_of(p.x).max(0.0) as Tick;
+                        let tk = if mods.shift { tl::snap(tk, ROW) } else { tk };
+                        Some(DragEdit::Fade(id, inn, tk))
+                    }
                     DragKind::Band(p0) => {
                         let band = Rect::from_two_pos(p0, p);
                         lp.rect(
@@ -1892,6 +2008,7 @@ impl App {
                         c.map.entry_at(tk).0
                     };
                     open = match hit.map(|i| &c.tl.clips[i]) {
+                        Some(cl) if cl.audio().is_some() => None,
                         Some(cl) if cl.block().is_none() => {
                             open_roll = true;
                             None
@@ -1946,6 +2063,12 @@ impl App {
             });
         let mut menu_open_now = false;
         let capture_empty = self.noterec.recent.is_empty();
+        let mut audio_ops: Vec<audioclip::AudioOp> = vec![];
+        let sel_audio: Option<&tl::Clip> = self
+            .tlv
+            .sel
+            .and_then(|id| c.tl.clips.iter().find(|x| x.id == id))
+            .filter(|cl| cl.audio().is_some());
         cresp.context_menu(|ui| {
             let snap_at = menu_at.map_or(0, |m| tl::snap(m.1, ROW));
             if !mode {
@@ -1957,16 +2080,23 @@ impl App {
                 return;
             }
             if n_sel > 0 {
-                if ui
-                    .add(egui::Button::new("Open in the pattern editor").shortcut_text("Enter"))
-                    .clicked()
-                {
-                    menu_open_now = true;
-                    ui.close();
-                }
-                if ui.button("Open in the piano roll").clicked() {
-                    open_roll = true;
-                    ui.close();
+                if let Some(cl) = sel_audio {
+                    audioclip::audio_menu(ui, cl, cl.audio().and_then(|k| c.tl.audio.get(k)), &mut audio_ops);
+                    if !audio_ops.is_empty() && !matches!(audio_ops[0], audioclip::AudioOp::Gain(_)) {
+                        ui.close();
+                    }
+                } else {
+                    if ui
+                        .add(egui::Button::new("Open in the pattern editor").shortcut_text("Enter"))
+                        .clicked()
+                    {
+                        menu_open_now = true;
+                        ui.close();
+                    }
+                    if ui.button("Open in the piano roll").clicked() {
+                        open_roll = true;
+                        ui.close();
+                    }
                 }
                 ui.separator();
                 let items: [(&str, &str, TlOp); 6] = [
@@ -2012,6 +2142,14 @@ impl App {
                     ops.push(TlOp::Capture(tr, tk / bar_ticks * bar_ticks));
                     ui.close();
                 }
+                if ui
+                    .button("Import audio file here…")
+                    .on_hover_text("WAV, FLAC, MP3 or Ogg Vorbis (or drop files on a track)")
+                    .clicked()
+                {
+                    audio_ops.push(audioclip::AudioOp::Import(tr, tl::snap(tk, ROW)));
+                    ui.close();
+                }
             }
             if ui
                 .add(egui::Button::new("Add marker here").shortcut_text("Shift+M"))
@@ -2028,6 +2166,23 @@ impl App {
         }
         if let Some(i) = hover_clip.filter(|_| self.tlv.drag.is_none()) {
             let cl = &c.tl.clips[i];
+            if let Some(a) = cl.audio().and_then(|k| c.tl.audio.get(k)) {
+                let bp = c.tl.bar_pos(cl.start);
+                cresp.clone().on_hover_text(format!(
+                    "{} · {} · bar {}.{}{}{}\n{}\ndrag: move · edges: trim / loop · top corners: fades · right-click: gain, fades, file",
+                    a.name,
+                    audioclip::describe_asset(a),
+                    bp.bar,
+                    bp.beat,
+                    if a.embed { " · stored in the song" } else { " · referenced" },
+                    if cl.muted { " · muted" } else { "" },
+                    if a.missing() {
+                        format!("missing: {}", a.path)
+                    } else {
+                        a.path.clone()
+                    },
+                ));
+            }
             if let Some((b, col)) = cl.block() {
                 let bp = c.tl.bar_pos(cl.start);
                 let passes = cl
@@ -2094,6 +2249,9 @@ impl App {
         }
         for op in ops {
             self.tl_apply(op);
+        }
+        for op in audio_ops {
+            self.audio_op(op);
         }
         if let Some((i, del)) = marker_op {
             if del {
@@ -2260,7 +2418,7 @@ impl App {
                     let c = self.tlv.cache.as_ref()?;
                     c.tl.clips
                         .iter()
-                        .find(|x| x.id == id && x.block().is_none())
+                        .find(|x| x.id == id && matches!(x.kind, tl::ClipKind::Notes { .. }))
                 });
                 match hit {
                     Some((b, col, row, e)) => self.timeline_open(b, col, row, e),
