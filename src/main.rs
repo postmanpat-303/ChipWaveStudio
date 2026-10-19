@@ -111,9 +111,36 @@ fn self_test(out: Option<PathBuf>) -> i32 {
     let timeline_ok = {
         let (tl, _) = timeline::from_order(&song);
         let back = timeline::consolidated_song(&song, &tl);
+        let want = engine::render_song(&song, 22050);
         let same = back
             .as_ref()
-            .is_ok_and(|b| engine::render_song(b, 22050) == engine::render_song(&song, 22050));
+            .is_ok_and(|b| engine::render_song(b, 22050) == want);
+        // timeline mode (M2): the engine plays the clips directly, the same
+        // samples; saving needs reader version 2 and loads back
+        let mut m = song.clone();
+        timeline::enter_timeline_mode(&mut m);
+        let mode_same = engine::render_song(&m, 22050) == want;
+        let tmp = std::env::temp_dir().join("chipwave_selftest_tl.cwt");
+        let mode_saved = fileio::save_cwt(&m, &tmp)
+            .and_then(|_| fileio::load_cwt(&tmp))
+            .is_ok_and(|b| {
+                b.timeline
+                    .as_deref()
+                    .zip(m.timeline.as_deref())
+                    .is_some_and(|(x, y)| x.same_content(y))
+            });
+        std::fs::remove_file(&tmp).ok();
+        report.push_str(&format!(
+            "  timeline mode: plays bit-exact {}, timeline.toml round trip {} ({})\n",
+            if mode_same { "yes" } else { "NO" },
+            if mode_saved { "yes" } else { "NO" },
+            if mode_same && mode_saved {
+                "ok"
+            } else {
+                "FAILED"
+            }
+        ));
+        let same = same && mode_same && mode_saved;
         let refused = fileio::song_from_text("min_reader_version = 999\n")
             .err()
             .is_some_and(|e| fileio::is_too_new(&e));

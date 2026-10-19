@@ -1514,8 +1514,10 @@ impl App {
         );
         if rresp.drag_started() && mods.shift {
             if mode {
-                if let Some(p) = rresp.interact_pointer_pos() {
-                    start_drag = Some(new_drag(DragKind::Loop(snap_t(p.x)), p, 0));
+                if let Some(p) = ui.input(|i| i.pointer.press_origin()) {
+                    // (Shift is the gesture here, so the grid stays coarse)
+                    let a = tl::snap(tick_of(p.x).max(0.0) as Tick, self.tlv.grid_now);
+                    start_drag = Some(new_drag(DragKind::Loop(a), p, 0));
                 }
             } else {
                 ask = true;
@@ -1525,7 +1527,10 @@ impl App {
                 rresp.interact_pointer_pos(),
                 self.tlv.drag.as_ref().map(|d| d.kind.clone()),
             ) {
-                edit = Some(DragEdit::Loop(a, snap_t(p.x)));
+                edit = Some(DragEdit::Loop(
+                    a,
+                    tl::snap(tick_of(p.x).max(0.0) as Tick, self.tlv.grid_now),
+                ));
             }
         } else if rresp.clicked() || rresp.dragged() || rresp.drag_started() {
             if let Some(p) = rresp.interact_pointer_pos() {

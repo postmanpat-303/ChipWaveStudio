@@ -275,6 +275,8 @@ impl App {
                     self.col = 0;
                 }
                 Key::Space if self.view == View::Sample && !m.shift => self.sample_preview_toggle(),
+                // the Timeline plays the song from its play marker
+                Key::Space if self.view == View::Timeline => self.play(0),
                 Key::Space => self.play(if m.shift { 0 } else { 1 }),
                 Key::Enter => self.play(if cmd || m.shift { 2 } else { 3 }),
                 Key::Plus | Key::Equals if cmd => self.set_zoom(self.zoom + 0.25),

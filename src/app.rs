@@ -38,6 +38,8 @@ mod settingsview;
 pub mod shot;
 mod timeline;
 #[cfg(test)]
+mod timeline_m2_tests;
+#[cfg(test)]
 mod timeline_tests;
 mod topbar;
 mod transpose;
