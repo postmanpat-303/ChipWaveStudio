@@ -23,7 +23,7 @@
 //!   the ladder with a swept cutoff; impact thump after the sc808 kick.
 //!
 //! No code from those projects is copied.
-use crate::gen::{MacroDef, Rng};
+use crate::gen::{MacroDef, Ov, Rng};
 use crate::synth::{Adsr, Env, FilterMode, Svf};
 use serde::{Deserialize, Serialize};
 use std::f32::consts::TAU;
@@ -60,8 +60,8 @@ fn xs(n: &mut u32) -> f32 {
 
 /// map knob `i` (with a 43xy override) through its definition
 #[inline]
-fn val(defs: &[MacroDef], p: &[f32], ov: &[f32; 8], i: usize) -> f32 {
-    let v = if i < 8 && ov[i] >= 0.0 { ov[i] } else { p[i] };
+fn val(defs: &[MacroDef], p: &[f32], ov: Ov, i: usize) -> f32 {
+    let v = ov.get(i).unwrap_or(p[i]);
     defs[i].map(v)
 }
 
@@ -442,7 +442,7 @@ impl AnalogState {
     pub fn render(
         &mut self,
         a: &AnalogP,
-        ov: &[f32; 8],
+        ov: Ov,
         freq: f32,
         sr: f32,
         gate: bool,
@@ -826,14 +826,7 @@ pub struct FmState {
 }
 
 impl FmState {
-    pub fn render(
-        &mut self,
-        f: &FmP,
-        ov: &[f32; 8],
-        freq: f32,
-        sr: f32,
-        gate: bool,
-    ) -> (f32, f32, bool) {
+    pub fn render(&mut self, f: &FmP, ov: Ov, freq: f32, sr: f32, gate: bool) -> (f32, f32, bool) {
         if self.done {
             return (0.0, 0.0, false);
         }
@@ -878,7 +871,11 @@ impl FmState {
             return (0.0, 0.0, false);
         }
         let ratio = |o: usize| {
-            let k = if o == 1 && ov[3] >= 0.0 { 3 } else { fk(o, 0) };
+            let k = if o == 1 && ov.mac[3] >= 0.0 {
+                3
+            } else {
+                fk(o, 0)
+            };
             RATIOS[(v(k).round() as usize).min(RATIOS.len() - 1)]
         };
         // operators 4 -> 1 (modulation flows down)
@@ -1181,7 +1178,7 @@ impl NoiseState {
     pub fn render(
         &mut self,
         n: &NoiseP,
-        ov: &[f32; 8],
+        ov: Ov,
         freq: f32,
         sr: f32,
         gate: bool,
@@ -1623,13 +1620,13 @@ mod tests {
         a.vintage = false;
         a.waves[0] = AWave::Triangle;
         let mut s = AnalogState::default();
-        let o = run(|g| s.render(&a, &[-1.0; 8], 220.0, SR, g), 1.0, 1.0);
+        let o = run(|g| s.render(&a, Ov::NONE, 220.0, SR, g), 1.0, 1.0);
         let f = zc(&o, 12000, 48000);
         assert!((f - 220.0).abs() < 3.0, "{f}");
         // drift moves the pitch only a little
         a.p[5] = 1.0;
         let mut s = AnalogState::default();
-        let o = run(|g| s.render(&a, &[-1.0; 8], 220.0, SR, g), 1.0, 1.0);
+        let o = run(|g| s.render(&a, Ov::NONE, 220.0, SR, g), 1.0, 1.0);
         let f = zc(&o, 12000, 48000);
         assert!((f - 220.0).abs() < 4.0, "drift {f}");
         // extremes: every knob 0 / 1, every wave, sync, notes 8 Hz .. 20 kHz
@@ -1645,7 +1642,7 @@ mod tests {
             a.vintage = k % 3 == 0;
             for f in [0.0, 8.0, 55.0, 2000.0, 20000.0] {
                 let mut s = AnalogState::default();
-                let o = run(|g| s.render(&a, &[-1.0; 8], f, SR, g), 0.3, 0.6);
+                let o = run(|g| s.render(&a, Ov::NONE, f, SR, g), 0.3, 0.6);
                 assert!(o.iter().all(|(l, r)| l.is_finite()
                     && r.is_finite()
                     && l.abs() <= 2.0
@@ -1659,7 +1656,7 @@ mod tests {
             |g| {
                 s1.render(
                     &a,
-                    &[1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0],
+                    Ov::macros(&[1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0]),
                     110.0,
                     SR,
                     g,
@@ -1673,7 +1670,7 @@ mod tests {
             |g| {
                 s2.render(
                     &a,
-                    &[0.0, -1.0, 0.0, -1.0, -1.0, -1.0, -1.0, -1.0],
+                    Ov::macros(&[0.0, -1.0, 0.0, -1.0, -1.0, -1.0, -1.0, -1.0]),
                     110.0,
                     SR,
                     g,
@@ -1698,7 +1695,7 @@ mod tests {
         let mut s = AnalogState::default();
         let mut n = 0;
         while !s.done && n < (SR * 3.0) as usize {
-            s.render(&a, &[-1.0; 8], 110.0, SR, n < 4800);
+            s.render(&a, Ov::NONE, 110.0, SR, n < 4800);
             n += 1;
         }
         assert!(s.done, "ends after note-off");
@@ -1717,7 +1714,7 @@ mod tests {
         }
         f.op(0, 2.0, 1.0, 0.001, 1.0, 1.0, 0.1);
         let mut s = FmState::default();
-        let o = run(|g| s.render(&f, &[-1.0; 8], 220.0, SR, g), 1.0, 1.0);
+        let o = run(|g| s.render(&f, Ov::NONE, 220.0, SR, g), 1.0, 1.0);
         let fr = zc(&o, 4800, 48000);
         assert!((fr - 440.0).abs() < 3.0, "{fr}");
         // modulation brightens: more zero crossings with index
@@ -1729,7 +1726,7 @@ mod tests {
         let mut s = FmState::default();
         let o2 = run(|g| f2_render(&mut s, &f2, g), 1.0, 1.0);
         fn f2_render(s: &mut FmState, f: &FmP, g: bool) -> (f32, f32, bool) {
-            s.render(f, &[-1.0; 8], 220.0, SR, g)
+            s.render(f, Ov::NONE, 220.0, SR, g)
         }
         assert!(zc(&o2, 4800, 48000) > 300.0);
         for algo in 0..8u8 {
@@ -1743,7 +1740,7 @@ mod tests {
                 }
                 for fq in [0.0, 30.0, 440.0, 12000.0] {
                     let mut s = FmState::default();
-                    let o = run(|g| s.render(&f, &[-1.0; 8], fq, SR, g), 0.2, 0.4);
+                    let o = run(|g| s.render(&f, Ov::NONE, fq, SR, g), 0.2, 0.4);
                     assert!(
                         o.iter().all(|(l, _)| l.is_finite() && l.abs() <= 2.0),
                         "algo {algo}"
@@ -1764,7 +1761,7 @@ mod tests {
             };
             n.set(&[1.0, 18000.0, 18000.0, 0.0, 0.5, 0.0, 0.0]);
             let mut s = NoiseState::default();
-            let o = run(|g| s.render(&n, &[-1.0; 8], 0.0, SR, g), 1.0, 1.0);
+            let o = run(|g| s.render(&n, Ov::NONE, 0.0, SR, g), 1.0, 1.0);
             let d: f32 = o.windows(2).map(|w| (w[1].0 - w[0].0).powi(2)).sum();
             let e: f32 = o.iter().map(|x| x.0 * x.0).sum();
             e / d.max(1e-9)
@@ -1781,7 +1778,7 @@ mod tests {
                 continue;
             };
             let mut s = NoiseState::default();
-            let o = run(|g| s.render(&n, &[-1.0; 8], C4, SR, g), 2.0, 6.0);
+            let o = run(|g| s.render(&n, Ov::NONE, C4, SR, g), 2.0, 6.0);
             assert!(o.iter().all(|(l, r)| l.is_finite() && r.is_finite()));
             assert!(peak(&o) > 0.05, "{name} silent");
             assert!(s.done, "{name} ends");
@@ -1794,7 +1791,7 @@ mod tests {
             n.color = Color::ALL[k as usize % 4];
             n.ladder = k % 2 == 0;
             let mut s = NoiseState::default();
-            let o = run(|g| s.render(&n, &[-1.0; 8], 440.0, SR, g), 0.2, 0.4);
+            let o = run(|g| s.render(&n, Ov::NONE, 440.0, SR, g), 0.2, 0.4);
             assert!(o
                 .iter()
                 .all(|(l, r)| l.is_finite() && r.is_finite() && l.abs() <= 2.0 && r.abs() <= 2.0));
@@ -1854,7 +1851,7 @@ mod tests {
         };
         let mut s = AnalogState::default();
         // E-1 (41.2 Hz), a 16th at 145 BPM
-        let o = run(|g| s.render(&a, &[-1.0; 8], 41.2, SR, g), 0.1, 0.4);
+        let o = run(|g| s.render(&a, Ov::NONE, 41.2, SR, g), 0.1, 0.4);
         let first: f32 = o[..4800].iter().map(|x| x.0.abs()).fold(0.0, f32::max);
         let late: f32 = o[12000..].iter().map(|x| x.0.abs()).fold(0.0, f32::max);
         assert!(

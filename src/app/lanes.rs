@@ -128,6 +128,17 @@ impl App {
                     };
                     format!("{} - Macro {} {pn}", iname(i), k + 1)
                 }
+                Target::Gen(i, k) => {
+                    let pn = match s.song.instruments.get(i).map(|x| &x.kind) {
+                        Some(InstrumentKind::Gen(g)) => crate::gen::gen_knobs(g)
+                            .into_iter()
+                            .find(|x| x.0 == k)
+                            .map(|x| x.1)
+                            .unwrap_or_else(|| format!("Knob {}", k + 1)),
+                        _ => format!("Knob {}", k + 1),
+                    };
+                    format!("{} - {pn}", iname(i))
+                }
                 Target::Send(c, r) => {
                     format!(
                         "Ch {} {} - Send {}",
@@ -180,6 +191,10 @@ impl App {
                     .map(|m| m.send[r])
                     .unwrap_or(0.0),
                 Target::Macro(i, k) => crate::plugin::macro_norm(s, i, k).unwrap_or(0.5),
+                Target::Gen(i, k) => match s.song.instruments.get(i).map(|x| &x.kind) {
+                    Some(InstrumentKind::Gen(g)) => crate::gen::gen_knob_norm(g, k).unwrap_or(0.5),
+                    _ => 0.5,
+                },
             };
             let mut lane = Lane::new(t, label.clone());
             lane.points.push(crate::automation::Point {
@@ -223,6 +238,16 @@ impl App {
             )
         });
         let _ = ninst;
+        let gens: Vec<Vec<(usize, String)>> = self.with(|s| {
+            s.song
+                .instruments
+                .iter()
+                .map(|i| match &i.kind {
+                    InstrumentKind::Gen(g) => crate::gen::gen_knobs(g),
+                    _ => Vec::new(),
+                })
+                .collect()
+        });
         let plugs: Vec<bool> = self.with(|s| {
             s.song
                 .instruments
@@ -266,6 +291,19 @@ impl App {
                                 add = Some(t);
                                 ui.close();
                             }
+                        }
+                        if let Some(knobs) = gens.get(i).filter(|g| !g.is_empty()) {
+                            ui.menu_button(format!("{:02X} {n} - Generator knobs", i + 1), |ui| {
+                                ui.set_max_height(320.0);
+                                egui::ScrollArea::vertical().show(ui, |ui| {
+                                    for (k, name) in knobs {
+                                        if ui.button(name).clicked() {
+                                            add = Some(Target::Gen(i, *k));
+                                            ui.close();
+                                        }
+                                    }
+                                });
+                            });
                         }
                         for (d, k) in fxdevs.get(i).into_iter().flatten().enumerate() {
                             ui.menu_button(

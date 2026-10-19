@@ -713,6 +713,133 @@ pub fn roll(d: &mut DrumP, seed: u32) {
 // ------------------------------------------------------------------ DSP
 
 const C4: f32 = 261.625_58;
+
+/// automatable generator knobs per instrument (0.2.4.x): Drum macros 0-7, Kit
+/// piece p macro m = p*8+m, ChipFx / Analog / FM-4 / Noise parameter index
+pub const GEN_KNOBS: usize = 64;
+/// no knob automated (`< 0` = use the patch value)
+pub const NO_KNOBS: [f32; GEN_KNOBS] = [-1.0; GEN_KNOBS];
+
+/// Knob overrides for one generator voice: `mac` = the channel's 43xy macros
+/// (they win), `knob` = automation lanes (`Target::Gen`). Both `< 0` = none.
+/// Borrowed views only: nothing is copied or allocated per sample.
+#[derive(Clone, Copy)]
+pub struct Ov<'a> {
+    pub mac: &'a [f32; 8],
+    pub knob: &'a [f32; GEN_KNOBS],
+}
+
+#[cfg(test)]
+impl Ov<'static> {
+    pub const NONE: Ov<'static> = Ov {
+        mac: &[-1.0; 8],
+        knob: &NO_KNOBS,
+    };
+}
+
+impl<'a> Ov<'a> {
+    #[cfg(test)]
+    pub fn macros(mac: &'a [f32; 8]) -> Ov<'a> {
+        Ov {
+            mac,
+            knob: &NO_KNOBS,
+        }
+    }
+    /// the override of parameter `i` whose 43xy macro is `i` (gen2 engines)
+    pub fn get(&self, i: usize) -> Option<f32> {
+        if i < 8 && self.mac[i] >= 0.0 {
+            Some(self.mac[i])
+        } else {
+            self.knob.get(i).copied().filter(|v| *v >= 0.0)
+        }
+    }
+}
+
+/// The automatable knobs of a generator: (knob index for `Target::Gen`, name).
+/// Kit pieces are named "Kick: Tune" etc.
+pub fn gen_knobs(g: &GenPatch) -> Vec<(usize, String)> {
+    let named = |defs: &[MacroDef]| -> Vec<(usize, String)> {
+        defs.iter()
+            .enumerate()
+            .map(|(k, d)| (k, d.name.to_string()))
+            .collect()
+    };
+    match &g.engine {
+        GenEngine::Drum(d) => named(d.kind.macros()),
+        GenEngine::Kit(k) => k
+            .pieces
+            .iter()
+            .enumerate()
+            .flat_map(|(p, d)| {
+                d.kind
+                    .macros()
+                    .iter()
+                    .enumerate()
+                    .map(move |(m, def)| (p * 8 + m, format!("{}: {}", KIT_NAMES[p], def.name)))
+            })
+            .collect(),
+        GenEngine::ChipFx(_) => named(&crate::chipfx::PARAMS),
+        GenEngine::Analog(_) => named(&crate::gen2::ANALOG),
+        GenEngine::Fm(_) => named(&crate::gen2::FM),
+        GenEngine::Noise(_) => named(&crate::gen2::NOISE),
+    }
+}
+
+/// the MacroDef of knob `k` (for value text), None = no such knob
+pub fn gen_knob_def(g: &GenPatch, k: usize) -> Option<&'static MacroDef> {
+    match &g.engine {
+        GenEngine::Drum(d) => d.kind.macros().get(k),
+        GenEngine::Kit(kp) => kp.pieces.get(k / 8)?.kind.macros().get(k % 8),
+        GenEngine::ChipFx(_) => crate::chipfx::PARAMS.get(k),
+        GenEngine::Analog(_) => crate::gen2::ANALOG.get(k),
+        GenEngine::Fm(_) => crate::gen2::FM.get(k),
+        GenEngine::Noise(_) => crate::gen2::NOISE.get(k),
+    }
+}
+
+/// the knob's current 0..1 value in the patch
+pub fn gen_knob_norm(g: &GenPatch, k: usize) -> Option<f32> {
+    match &g.engine {
+        GenEngine::Drum(d) => d.macros.get(k).copied(),
+        GenEngine::Kit(kp) => kp.pieces.get(k / 8)?.macros.get(k % 8).copied(),
+        GenEngine::ChipFx(s) => Some(crate::chipfx::PARAMS.get(k)?.unmap(*s.p.get(k)?)),
+        GenEngine::Analog(a) => a.p.get(k).copied(),
+        GenEngine::Fm(f) => f.p.get(k).copied(),
+        GenEngine::Noise(n) => n.p.get(k).copied(),
+    }
+}
+
+/// set the knob to a 0..1 value in the patch (MIDI learn / live lane write)
+pub fn set_gen_knob_norm(g: &mut GenPatch, k: usize, v: f32) -> bool {
+    let v = v.clamp(0.0, 1.0);
+    let slot = match &mut g.engine {
+        GenEngine::Drum(d) => d.macros.get_mut(k),
+        GenEngine::Kit(kp) => match kp.pieces.get_mut(k / 8) {
+            Some(d) => d.macros.get_mut(k % 8),
+            None => None,
+        },
+        GenEngine::ChipFx(s) => {
+            return match (crate::chipfx::PARAMS.get(k), s.p.get_mut(k)) {
+                (Some(d), Some(x)) => {
+                    *x = d.map(v);
+                    true
+                }
+                _ => false,
+            }
+        }
+        GenEngine::Analog(a) => a.p.get_mut(k),
+        GenEngine::Fm(f) => f.p.get_mut(k),
+        GenEngine::Noise(n) => n.p.get_mut(k),
+    };
+    match slot {
+        Some(x) => {
+            *x = v;
+            true
+        }
+        None => false,
+    }
+}
+
 /// 808 hat oscillators (Hz)
 const HAT808: [f32; 6] = [205.3, 304.4, 369.6, 522.7, 540.0, 800.0];
 
@@ -815,7 +942,7 @@ impl GenState {
     }
 
     /// pattern macro overrides (43xy): values >= 0 replace macro i
-    pub fn render(&mut self, g: &GenPatch, ov: &[f32; 8], freq: f32, sr: f32) -> (f32, f32, bool) {
+    pub fn render(&mut self, g: &GenPatch, ov: Ov, freq: f32, sr: f32) -> (f32, f32, bool) {
         if self.done {
             return (0.0, 0.0, false);
         }
@@ -865,10 +992,20 @@ impl GenState {
                 (&k.pieces[self.piece], 2f32.powf(self.off / 12.0))
             }
         };
+        // automation lanes (Kit: piece p macro m = knob p*8+m), then 43xy
+        let base = if matches!(g.engine, GenEngine::Kit(_)) {
+            self.piece * 8
+        } else {
+            0
+        };
         let mut mac = d.macros;
-        for (m, o) in mac.iter_mut().zip(ov) {
-            if *o >= 0.0 {
-                *m = *o;
+        for (k, m) in mac.iter_mut().enumerate() {
+            let a = ov.knob[base + k];
+            if a >= 0.0 {
+                *m = a;
+            }
+            if ov.mac[k] >= 0.0 {
+                *m = ov.mac[k];
             }
         }
         if mac != self.src || self.kind != Some((d.kind, d.model)) {

@@ -14,7 +14,7 @@
 //! seeded PCG dice instead of `rand`, per-parameter locks, and guards
 //! against the 0/0 of zero-length envelope stages. MIT notices are in
 //! THIRD_PARTY_LICENSES.txt.
-use crate::gen::{MacroDef, Rng};
+use crate::gen::{MacroDef, Ov, Rng};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -651,9 +651,15 @@ impl SfxState {
         self.flthp_d = 1.0 + v[HPF_RAMP] * 0.0003;
     }
 
-    fn start(&mut self, p: &SfxP, ov: &[f32; 8], freq: f32) {
+    fn start(&mut self, p: &SfxP, ov: Ov, freq: f32) {
         self.v = p.p;
-        for (k, &o) in ov.iter().enumerate() {
+        // automation lanes (parameter index), then the 43xy macros
+        for (i, &o) in ov.knob.iter().enumerate().take(N) {
+            if o >= 0.0 {
+                self.v[i] = PARAMS[i].map(o);
+            }
+        }
+        for (k, &o) in ov.mac.iter().enumerate() {
             if o >= 0.0 {
                 let i = MACROS[k];
                 self.v[i] = PARAMS[i].map(o);
@@ -809,7 +815,7 @@ impl SfxState {
     }
 
     /// next engine-rate sample; `false` once the sound has ended
-    pub fn render(&mut self, p: &SfxP, ov: &[f32; 8], freq: f32, sr: f32) -> (f32, bool) {
+    pub fn render(&mut self, p: &SfxP, ov: Ov, freq: f32, sr: f32) -> (f32, bool) {
         if self.done {
             return (0.0, false);
         }
@@ -841,7 +847,7 @@ mod tests {
         let mut st = Box::<SfxState>::default();
         let mut v = vec![];
         for _ in 0..(max_s * sr) as usize {
-            let (y, alive) = st.render(p, &[-1.0; 8], freq, sr);
+            let (y, alive) = st.render(p, Ov::NONE, freq, sr);
             v.push(y);
             if !alive {
                 break;
@@ -983,7 +989,7 @@ mod tests {
         let mut st = Box::<SfxState>::default();
         let mut ov = [-1.0; 8];
         ov[0] = 1.0; // Freq knob to the top
-        st.render(&p, &ov, 0.0, 48000.0);
+        st.render(&p, Ov::macros(&ov), 0.0, 48000.0);
         assert_eq!(st.v[BASE_FREQ], 1.0);
         assert_eq!(st.v[ENV_DECAY], p.p[ENV_DECAY]);
     }

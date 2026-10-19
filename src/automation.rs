@@ -107,6 +107,30 @@ pub enum Target {
     Send(usize, usize),
     /// plugin instrument, macro 0-7 (0.2.3.16)
     Macro(usize, usize),
+    /// generator instrument, knob (`crate::gen::gen_knobs`; 0-based, the id
+    /// is 1-based: `instrument.N.gen.K`), normalised 0..1 knob value
+    Gen(usize, usize),
+}
+
+/// per-instrument value units for lane text: FX device kinds and the
+/// generator knob definitions (`Target::Gen` index -> MacroDef)
+#[derive(Clone, Default)]
+pub struct Units {
+    pub fx: Vec<crate::fx::FxKind>,
+    pub gen: Vec<Option<&'static crate::gen::MacroDef>>,
+}
+
+impl Units {
+    pub fn gen_of(
+        kind: &crate::model::InstrumentKind,
+    ) -> Vec<Option<&'static crate::gen::MacroDef>> {
+        match kind {
+            crate::model::InstrumentKind::Gen(g) => (0..crate::gen::GEN_KNOBS)
+                .map(|k| crate::gen::gen_knob_def(g, k))
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
 }
 
 impl Target {
@@ -153,6 +177,11 @@ impl Target {
                 let i = num(n)?;
                 let k = num(k).filter(|k| *k < 8)?;
                 Some(Target::Macro(i, k))
+            }
+            ["instrument", n, "gen", k] => {
+                let i = num(n)?;
+                let k = num(k).filter(|k| *k < crate::gen::GEN_KNOBS)?;
+                Some(Target::Gen(i, k))
             }
             ["instrument", n, "fx", d, key] => {
                 let i = num(n)?;
@@ -201,6 +230,7 @@ impl Target {
                 format!("mixer.ch.{}.send_{}", c + 1, if r == 0 { "a" } else { "b" })
             }
             Target::Macro(i, k) => format!("instrument.{}.macro.{}", i + 1, k + 1),
+            Target::Gen(i, k) => format!("instrument.{}.gen.{}", i + 1, k + 1),
         }
     }
 
@@ -219,16 +249,21 @@ impl Target {
         None
     }
 
-    /// value text; FX params use their own units (`kinds` = FX kinds per instrument)
-    pub fn format_in(self, n: f32, kinds: &[Vec<crate::fx::FxKind>]) -> String {
+    /// value text; FX params and generator knobs use their own units
+    /// (`units` = per instrument)
+    pub fn format_in(self, n: f32, units: &[Units]) -> String {
         use crate::fx::FxKind;
         let info = |k: FxKind, p: usize| crate::fx::params(k).get(p).map(|i| i.format(n));
         match self {
-            Target::Fx(i, d, p) => kinds
+            Target::Fx(i, d, p) => units
                 .get(i)
-                .and_then(|x| x.get(d))
+                .and_then(|x| x.fx.get(d))
                 .and_then(|&k| info(k, p))
                 .unwrap_or_default(),
+            Target::Gen(i, k) => match units.get(i).and_then(|u| u.gen.get(k)) {
+                Some(Some(d)) => d.show(n),
+                _ => format!("{:.0} %", n * 100.0),
+            },
             Target::Ret(r, p) => info(
                 if r == 0 {
                     FxKind::Delay
@@ -246,9 +281,11 @@ impl Target {
     /// (min, max, logarithmic)
     fn range(self) -> (f32, f32, bool) {
         match self {
-            Target::Fx(..) | Target::Ret(..) | Target::Send(..) | Target::Macro(..) => {
-                (0.0, 1.0, false)
-            }
+            Target::Fx(..)
+            | Target::Ret(..)
+            | Target::Send(..)
+            | Target::Macro(..)
+            | Target::Gen(..) => (0.0, 1.0, false),
             Target::Cutoff(_) => (20.0, 18000.0, true),
             Target::Resonance(_) => (0.0, 0.98, false),
             Target::Drive(_) => (0.0, 1.0, false),
@@ -292,6 +329,7 @@ impl Target {
             Target::Fx(..) | Target::Ret(..) => "FX param",
             Target::Send(..) => "Send",
             Target::Macro(..) => "Macro",
+            Target::Gen(..) => "Generator knob",
         }
     }
 

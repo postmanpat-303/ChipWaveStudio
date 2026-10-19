@@ -209,6 +209,50 @@ values stay on the channel until another instrument plays on it. Example: on
 a kick, `4320` removes the punch, `432F` gives full punch, and `4340` sets
 the shortest decay (macro 2 = Punch, macro 4 = Decay).
 
+## Automation lanes on generator knobs
+
+Every generator knob is an automation target (Unreleased, after 0.2.4.0):
+the Drum Synth macros, each Kit piece's macros, all Chip FX parameters, and
+every Analog, FM-4 and Noise knob (Moog-style presets are Analog patches).
+Dice-rolled patches are ordinary knob values, so they automate the same way.
+
+- **Add a lane:** right-click a knob → **Add automation lane**, or **+ Lane →
+  NN name - Generator knobs** in the automation bar. MIDI learn works on the
+  same knobs.
+- **Ids:** `instrument.N.gen.K`, where K is the 1-based knob index: the
+  parameter order of Chip FX, Analog, FM-4 and Noise (Analog Cutoff =
+  `gen.1`, Res = `gen.2`), the macro order of a Drum, and piece × 8 + macro
+  for a Kit (Kick Tune = `gen.1`, Snare macro 1 = `gen.9`, …). The lane shows
+  the knob's own units (Hz, ms, …).
+- **Priority:** a `43xy` macro on the channel beats a lane on that macro;
+  `38xx`/`39xx` beat a lane on an Analog Cutoff/Res. The song keeps the
+  knob's own value; the lane only overrides it during playback and export.
+- **Chip FX** reads its parameters when a note starts (as sfxr does), so a
+  lane changes each new note, not a sound that is already playing.
+- **Compatibility:** songs without these lanes are unchanged. A song with a
+  generator lane still opens in 0.2.4.0 and older; those versions ignore
+  just that lane.
+- **Realtime:** the engine keeps a fixed 64-slot override table per
+  instrument, refreshed every 32 samples; no allocation in the audio thread.
+- Tests: `a_lane_sweeps_the_analog_cutoff_and_is_allocation_free`,
+  `every_generator_knob_is_an_automation_target`,
+  `a_lane_moves_a_drum_kit_piece_macro`,
+  `generator_knobs_offer_add_automation_lane`.
+
+## Filter commands 38–3B on generators
+
+`38xx`/`39xx` (cutoff / resonance) and `3Axx`/`3Bxx` (cutoff slides) also work
+on generator instruments (Unreleased):
+
+- **Analog** with the instrument Filter off: they move the Moog ladder's own
+  **Cutoff** and **Res** knobs. `3A`/`3B` slide from the knob's value (or the
+  last `38`).
+- **Drum, Kit, Chip FX, FM-4, Noise** (and an Analog with the instrument Filter
+  on): they drive the instrument filter (the generator's Filter card), and
+  switch it on for that channel while a command is active even if the Filter
+  switch is off. `3800`/`3900` return to the instrument's setting, as on synths.
+- Test: `filter_commands_reach_generator_instruments`.
+
 ## Text songs and .cwi
 
 - **Text songs:** `patch = "gen:Psy Kit"` loads a generator preset. An

@@ -7,6 +7,7 @@ Automation lanes sit **under the arranger blocks** ([ARRANGER.md](ARRANGER.md)),
 ## 1. Lanes
 - **Any parameter** can have a lane:
   - synth patch parameters and macros
+  - generator knobs: Drum/Kit macros, Chip FX, Analog, FM-4 and Noise (`instrument.N.gen.K`, see [GENERATORS.md](GENERATORS.md#automation-lanes-on-generator-knobs))
   - FX devices
   - mixer faders, pans and sends
   - CLAP/VST3/LV2 plugin parameters

@@ -146,7 +146,8 @@ fn voice_raw(
                 .get(instr)
                 .and_then(|o| o.as_ref())
                 .unwrap_or(&gp.base);
-            let v = synth.render_gen(p, gp, freq, sr, bpm);
+            let ko = ov.gen.get(instr).unwrap_or(&crate::gen::NO_KNOBS);
+            let v = synth.render_gen_ko(p, gp, ko, freq, sr, bpm);
             (v, !synth.amp.done() && !synth.gen.done)
         }
         // plugin instruments render in the rack (Engine::render); the channel
@@ -304,6 +305,11 @@ pub struct AutoState {
     ret: Vec<(usize, usize, f32)>,
     /// automated plugin macros (instrument, macro 0-7, normalised value)
     macros: Vec<(usize, usize, f32)>,
+    /// automated generator knobs per instrument (`< 0` = patch value);
+    /// resized only when the instrument count changes
+    gen: Vec<[f32; crate::gen::GEN_KNOBS]>,
+    /// instruments with an automated generator knob in `gen`
+    gen_on: Vec<bool>,
     send: [[Option<f32>; 2]; MAX_CHANNELS],
     /// parsed lane targets: (target string it was parsed from, result).
     /// Re-parsed only when a lane's target text changes.
@@ -1213,6 +1219,14 @@ impl Engine {
         if a.level.len() != ni {
             a.level.resize(ni, 1.0);
             a.patches.resize(ni, None);
+            a.gen.resize(ni, crate::gen::NO_KNOBS);
+            a.gen_on.resize(ni, false);
+        }
+        for (g, on) in a.gen.iter_mut().zip(a.gen_on.iter_mut()) {
+            if *on {
+                *g = crate::gen::NO_KNOBS;
+                *on = false;
+            }
         }
         a.level.iter_mut().for_each(|l| *l = 1.0);
         if !self.playing || song.automation.is_empty() {
@@ -1290,6 +1304,10 @@ impl Engine {
                 }
                 Target::Send(c, b) if c < MAX_CHANNELS && b < 2 => a.send[c][b] = Some(real),
                 Target::Macro(i, m) if a.macros.len() < FX_OVER_CAP => a.macros.push((i, m, real)),
+                Target::Gen(i, k) if i < a.gen.len() && k < crate::gen::GEN_KNOBS => {
+                    a.gen[i][k] = real;
+                    a.gen_on[i] = true;
+                }
                 _ => {}
             }
         }
@@ -2895,6 +2913,135 @@ mod tests {
             }
         });
         assert_eq!(n, 0, "render allocated {n} times");
+    }
+
+    // ------------------------------------------- generator knob automation
+
+    /// one long note on a generator instrument 1 (filter off)
+    fn gen_engine_song(engine: crate::gen::GenEngine) -> Song {
+        let mut song = acid_song(saw_patch());
+        song.instruments[0].kind = InstrumentKind::Gen(crate::gen::GenPatch {
+            engine,
+            ..Default::default()
+        });
+        song.patterns[0].cells[0][0] = note(25, 0, 0); // C-2
+        song
+    }
+
+    fn analog() -> crate::gen::GenEngine {
+        let mut a = crate::gen2::AnalogP::default();
+        a.p[1] = 0.0; // no resonance: brightness follows the cutoff only
+        crate::gen::GenEngine::Analog(a)
+    }
+
+    #[test]
+    fn a_lane_sweeps_the_analog_cutoff_and_is_allocation_free() {
+        use crate::automation::{Lane, Point, Shape, Target};
+        let mut song = gen_engine_song(analog());
+        let t = Target::parse("instrument.1.gen.1").expect("gen target");
+        assert_eq!(t, Target::Gen(0, 0));
+        assert_eq!(t.id(), "instrument.1.gen.1");
+        let mut l = Lane::new(t, "Cutoff".into());
+        for (pos, value) in [(0.0, 0.0), (16.0, 1.0)] {
+            l.points.push(Point {
+                pos,
+                value,
+                shape: Shape::Linear,
+            });
+        }
+        song.automation = vec![l];
+        let out = left(&render_secs(&song, 2.4));
+        assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
+        // 16 rows = 2 s: closed at the start, wide open at the end
+        let early = bright(&out[2400..12000]);
+        let late = bright(&out[100_000..112_000]);
+        assert!(late > 4.0 * early, "{early} -> {late}");
+        // the 43xy macro still wins over the lane (pattern beats automation)
+        let mut m = song.clone();
+        m.patterns[0].cells[0][0] = note(25, 0x43, 0x10); // macro 1 = 0
+        let mo = left(&render_secs(&m, 2.4));
+        let ml = bright(&mo[100_000..112_000]);
+        assert!(ml < late / 4.0, "43xy {ml} vs lane {late}");
+        // allocation-free with the lane running
+        let mut e = Engine::new(48000.0);
+        e.start(&song, 0, 0, false, 0);
+        let mut buf = vec![0.0f32; 512];
+        for _ in 0..50 {
+            e.render(&song, &mut buf);
+        }
+        let n = alloc_count::count(|| {
+            for _ in 0..500 {
+                e.render(&song, &mut buf);
+            }
+        });
+        assert_eq!(n, 0, "render allocated {n} times");
+    }
+
+    #[test]
+    fn every_generator_knob_is_an_automation_target() {
+        use crate::automation::Target;
+        use crate::gen::{gen_knob_norm, gen_knobs, presets, set_gen_knob_norm, GEN_KNOBS};
+        for (name, _, mut g) in presets() {
+            let knobs = gen_knobs(&g);
+            assert!(!knobs.is_empty(), "{name}");
+            for (k, label) in &knobs {
+                assert!(*k < GEN_KNOBS && !label.is_empty());
+                let t = Target::Gen(3, *k);
+                assert_eq!(Target::parse(&t.id()), Some(t));
+                assert!(set_gen_knob_norm(&mut g, *k, 0.25));
+                let v = gen_knob_norm(&g, *k).unwrap();
+                assert!((v - 0.25).abs() < 0.02, "{name} {label} {v}");
+            }
+        }
+        // ids out of range don't parse (and older songs never contain them)
+        assert_eq!(Target::parse("instrument.1.gen.0"), None);
+        assert_eq!(Target::parse("instrument.1.gen.65"), None);
+    }
+
+    #[test]
+    fn a_lane_moves_a_drum_kit_piece_macro() {
+        use crate::automation::{Lane, Point, Target};
+        let mut song = gen_song("808 Kit", &[49]); // C-4 = Kick
+        let render = |s: &Song| left(&render_secs(s, 0.4));
+        let plain = render(&song);
+        let mut l = Lane::new(Target::Gen(1, 0), "Kick: Tune".into());
+        l.points.push(Point {
+            pos: 0.0,
+            value: 1.0,
+            shape: Default::default(),
+        });
+        song.automation = vec![l];
+        let moved = render(&song);
+        let d: f32 = plain.iter().zip(&moved).map(|(a, b)| (a - b).abs()).sum();
+        assert!(d > 1.0, "kick macro 1 lane changed nothing ({d})");
+    }
+
+    #[test]
+    fn filter_commands_reach_generator_instruments() {
+        // Analog (filter off): 38xx/39xx move the ladder cutoff / resonance
+        let b = |engine: crate::gen::GenEngine, fx: u8, fxp: u8| {
+            let mut song = gen_engine_song(engine);
+            song.patterns[0].cells[0][0] = note(25, fx, fxp);
+            bright(&left(&render_secs(&song, 0.3))[4800..14000])
+        };
+        let plain = b(analog(), 0, 0);
+        let open = b(analog(), 0x38, 0xE0);
+        let shut = b(analog(), 0x38, 0x30);
+        assert!(
+            open > 2.0 * plain && plain > 1.5 * shut,
+            "{shut} {plain} {open}"
+        );
+        assert_eq!(b(analog(), 0x38, 0x00), plain, "3800 = instrument cutoff");
+        // 3Bxx slides the ladder down from the knob
+        let slid = b(analog(), 0x3B, 0x40);
+        assert!(slid < plain * 0.8, "3B: {slid} vs {plain}");
+        // FM-4 (no filter of its own, Filter off): 38xx switches the
+        // instrument filter on
+        let fm = || crate::gen::GenEngine::Fm(crate::gen2::FmP::default());
+        let fplain = b(fm(), 0, 0);
+        let fshut = b(fm(), 0x38, 0x30);
+        assert!(fplain > 2.0 * fshut, "FM: {fplain} vs {fshut}");
+        assert_eq!(b(fm(), 0x38, 0x00), fplain);
     }
 
     // ------------------------------------------------ 0.2.3.12: generators

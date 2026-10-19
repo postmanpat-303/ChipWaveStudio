@@ -513,20 +513,88 @@ impl SynthVoice {
         gp: &crate::gen::GenPatch,
         freq: f32,
         sr: f32,
+        bpm: f32,
+    ) -> (f32, f32) {
+        self.render_gen_ko(p, gp, &crate::gen::NO_KNOBS, freq, sr, bpm)
+    }
+
+    /// Generator render with automated knobs `ko` (`< 0` = patch value).
+    /// Pattern 38xx/39xx/3Axx/3Bxx reach generators too: on an Analog they move
+    /// the ladder Cutoff/Res knobs; on other engines (and an Analog with the
+    /// instrument Filter on) they drive the instrument filter, which they switch
+    /// on when it is off. Allocation-free.
+    pub fn render_gen_ko(
+        &mut self,
+        p: &Patch,
+        gp: &crate::gen::GenPatch,
+        ko: &[f32; crate::gen::GEN_KNOBS],
+        freq: f32,
+        sr: f32,
         _bpm: f32,
     ) -> (f32, f32) {
+        use crate::gen::{GenEngine, Ov};
         let dt_s = 1.0 / sr;
         if self.waited < p.start_delay {
             self.waited += dt_s;
             return (0.0, 0.0);
         }
-        let gmo = self.gmo;
+        let fm = self.fmod;
+        let fm_on = fm.cut_abs > 0.0 || fm.cut_oct != 0.0 || fm.res >= 0.0;
+        let mut gmo = self.gmo;
         let own = gp.engine.own_env();
         self.gen.gate = self.amp.gate();
-        let (l, r, stereo) = self.gen.render(gp, &gmo, freq, sr);
+        let ladder = fm_on && !gp.filter_on && matches!(gp.engine, GenEngine::Analog(_));
+        let (l, r, stereo) = if ladder {
+            // 38xx etc. on the Analog ladder: Cutoff = knob 0, Res = knob 1
+            // (a copy only while a filter command is active)
+            let GenEngine::Analog(a) = &gp.engine else {
+                unreachable!()
+            };
+            let defs = &crate::gen2::ANALOG;
+            let mut k2 = *ko;
+            let cur = |i: usize| {
+                Ov {
+                    mac: &gmo,
+                    knob: ko,
+                }
+                .get(i)
+                .unwrap_or(a.p[i])
+            };
+            if fm.cut_abs > 0.0 || fm.cut_oct != 0.0 {
+                let hz = if fm.cut_abs > 0.0 {
+                    fm.cut_abs
+                } else {
+                    defs[0].map(cur(0))
+                };
+                k2[0] = defs[0].unmap(hz * 2f32.powf(fm.cut_oct));
+                gmo[0] = -1.0;
+            }
+            if fm.res >= 0.0 {
+                k2[1] = defs[1].unmap(fm.res);
+                gmo[1] = -1.0;
+            }
+            self.gen.render(
+                gp,
+                Ov {
+                    mac: &gmo,
+                    knob: &k2,
+                },
+                freq,
+                sr,
+            )
+        } else {
+            self.gen.render(
+                gp,
+                Ov {
+                    mac: &gmo,
+                    knob: ko,
+                },
+                freq,
+                sr,
+            )
+        };
         let fe = self.fenv.next(&p.fenv, dt_s);
-        let (yl, yr) = if gp.filter_on {
-            let fm = self.fmod;
+        let (yl, yr) = if gp.filter_on || (fm_on && !ladder) {
             let base = if fm.cut_abs > 0.0 {
                 fm.cut_abs
             } else {

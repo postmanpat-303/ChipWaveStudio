@@ -96,6 +96,10 @@ pub(super) fn apply_learned(s: &mut Shared, target: &str, n: f32) -> bool {
             _ => return false,
         },
         Target::Macro(i, k) => return crate::plugin::set_macro_norm(s, i, k, n),
+        Target::Gen(i, k) => match song.instruments.get_mut(i).map(|x| &mut x.kind) {
+            Some(InstrumentKind::Gen(g)) => return crate::gen::set_gen_knob_norm(g, k, n),
+            _ => return false,
+        },
         Target::Master => song.mixer.master = real,
         Target::Tempo => {
             song.bpm = real.round();

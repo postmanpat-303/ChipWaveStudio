@@ -395,7 +395,10 @@ impl App {
                 s.song
                     .instruments
                     .iter()
-                    .map(|i| i.fx.iter().map(|d| d.kind).collect::<Vec<_>>())
+                    .map(|i| crate::automation::Units {
+                        fx: i.fx.iter().map(|d| d.kind).collect(),
+                        gen: crate::automation::Units::gen_of(&i.kind),
+                    })
                     .collect::<Vec<_>>(),
             )
         });

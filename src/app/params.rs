@@ -412,6 +412,8 @@ struct B {
     l: Layout,
     tab: Tab,
     card: String,
+    /// the instrument (0-based), for automation targets
+    idx: usize,
 }
 
 impl B {
@@ -511,7 +513,8 @@ impl B {
         let gs: (Get, Set) = (Box::new(|_| 0.0), Box::new(|_, _| {}));
         self.push(key, name, "", Ctl::Custom(c), gs)
     }
-    /// a 0..1 generator knob described by a MacroDef
+    /// a 0..1 generator knob described by a MacroDef; `gk` = its
+    /// automation knob index (`Target::Gen`)
     fn mac(
         &mut self,
         key: &str,
@@ -519,13 +522,16 @@ impl B {
         gs: (Get, Set),
         lock: LockFns,
         badge: Option<usize>,
+        gk: usize,
     ) -> &mut Param {
+        let idx = self.idx;
         let mid = (def.dice.0 + def.dice.1) * 0.5;
         let p = self.knob(key, def.name, 0.0, 1.0, false, mid, "", gs);
         p.tip = def.tip.to_string();
         p.fmt = Some(Box::new(move |v| def.show(v)));
         p.lock = Some(lock);
         p.badge = badge.map(|k| format!("M{}", k + 1));
+        p.target = Some(Target::Gen(idx, gk));
         p
     }
 }
@@ -591,6 +597,7 @@ pub(crate) fn build(inst: &Instrument, idx: usize, kit_sel: usize) -> Layout {
         l: Layout::default(),
         tab: Tab::Main,
         card: String::new(),
+        idx,
     };
     match &inst.kind {
         InstrumentKind::Synth(_) => synth(&mut b, idx, false),
@@ -1530,6 +1537,7 @@ macro_rules! gen_knob {
             gs,
             lock,
             (k < 8).then_some(k),
+            k,
         )
     }};
 }
@@ -1707,7 +1715,8 @@ fn drums(b: &mut B, g: &GenPatch, sel: usize) {
                 }
             }),
         );
-        b.mac(&format!("drum.m{k}"), def, gs, lock, Some(k));
+        let gk = if kit { sel.min(7) * 8 + k } else { k };
+        b.mac(&format!("drum.m{k}"), def, gs, lock, Some(k), gk);
     }
     let gs: (Get, Set) = (
         Box::new(move |i| drum(i, sel).level),
@@ -1774,7 +1783,7 @@ fn chipfx(b: &mut B) {
                 }
             }),
         );
-        let p = b.mac(&format!("sfx.{k}"), &PARAMS[k], gs, lock, badge);
+        let p = b.mac(&format!("sfx.{k}"), &PARAMS[k], gs, lock, badge, k);
         // double-click = the sfxr default of this parameter
         if let Ctl::Knob { def, .. } = &mut p.ctl {
             *def = PARAMS[k].unmap(SfxP::default().p[k]);
@@ -2379,6 +2388,43 @@ pub(crate) mod tests {
                 per_tab.join(", ")
             );
         }
+    }
+
+    #[test]
+    fn generator_knobs_offer_add_automation_lane() {
+        use crate::automation::Target;
+        // every knob of every generator type carries a Target::Gen that
+        // names the same knob in crate::gen::gen_knobs
+        for (tag, i) in all_types() {
+            let InstrumentKind::Gen(g) = &i.kind else {
+                continue;
+            };
+            let knobs = crate::gen::gen_knobs(g);
+            let l = build(&i, 4, 2);
+            let mut n = 0;
+            for p in &l.params {
+                if let Some(Target::Gen(idx, k)) = p.target {
+                    assert_eq!(idx, 4);
+                    let name = &knobs.iter().find(|x| x.0 == k).expect("knob listed").1;
+                    assert!(
+                        name.ends_with(p.name.as_str()),
+                        "{tag}: {} vs {name}",
+                        p.name
+                    );
+                    n += 1;
+                }
+            }
+            assert!(n >= 8, "{tag}: only {n} automatable knobs");
+        }
+        // the Analog cutoff is knob 0
+        let a = inst(InstrumentKind::Gen(crate::gen::GenPatch {
+            engine: crate::gen::GenEngine::Analog(Default::default()),
+            ..Default::default()
+        }));
+        let l = build(&a, 0, 0);
+        let cut = l.params.iter().find(|p| p.key == "an.0").unwrap();
+        assert_eq!(cut.target, Some(Target::Gen(0, 0)));
+        assert_eq!(cut.name, "Cutoff");
     }
 
     #[test]
