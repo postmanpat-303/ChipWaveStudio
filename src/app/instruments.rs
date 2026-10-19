@@ -1179,7 +1179,9 @@ impl App {
             );
         });
         ui.add_space(4.0);
-        let showing = self.view == View::Pattern && self.lower_visible() && self.extra.lower_inst;
+        let showing = matches!(self.view, View::Pattern | View::Timeline)
+            && self.lower_visible()
+            && self.extra.lower_inst;
         ui.horizontal(|ui| {
             ui.add_space(10.0);
             let b = egui::Button::new(if showing {

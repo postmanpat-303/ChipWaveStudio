@@ -358,7 +358,7 @@ pub struct Proposal {
 impl Proposal {
     pub fn seconds(&self, song: &Song) -> f64 {
         self.rows as f64 * 60.0
-            / (self.bpm.unwrap_or(song.bpm) as f64 * song.lines_per_beat.max(1) as f64)
+            / (self.bpm.unwrap_or(song.bpm) as f64 * crate::model::ROWS_PER_BEAT as f64)
     }
     pub fn bars(&self) -> f32 {
         self.rows as f32 / self.rows_per_bar as f32
@@ -376,8 +376,10 @@ pub struct Params<'a> {
     pub locks: Vec<(usize, Section)>,
 }
 
-pub fn rows_per_bar(song: &Song) -> usize {
-    (song.lines_per_beat.max(1) * 4) as usize
+/// rows in a 4/4 bar: 16, as the engine times them (`lines_per_beat` is
+/// display-only; using it here made bars disagree with `bar_secs`)
+pub fn rows_per_bar(_song: &Song) -> usize {
+    (crate::model::ROWS_PER_BEAT * 4) as usize
 }
 pub fn bar_secs(song: &Song) -> f64 {
     4.0 * 60.0 / song.bpm as f64
@@ -750,7 +752,7 @@ fn generate_with(song: &Song, p: &Params, relaxed: bool) -> Result<Proposal, Str
             ));
         } else {
             let d = (tend as f64 - target as f64) * 60.0
-                / (song.bpm as f64 * song.lines_per_beat.max(1) as f64);
+                / (song.bpm as f64 * crate::model::ROWS_PER_BEAT as f64);
             prop.notes
                 .push(format!("{:+.1} s from the target (no exact fit)", d));
         }

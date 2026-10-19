@@ -26,6 +26,7 @@ pub enum Action {
     ViewPattern,
     ViewArranger,
     ViewMixer,
+    ViewTimeline,
     ViewFx,
     ViewSample,
     ScaleUp,
@@ -120,7 +121,7 @@ mod key_name {
 }
 
 use Action as A;
-pub const DEFAULTS: [(Action, &str, Combo); 31] = [
+pub const DEFAULTS: [(Action, &str, Combo); 32] = [
     (
         A::PlayBlock,
         "Play / stop block",
@@ -169,6 +170,11 @@ pub const DEFAULTS: [(Action, &str, Combo); 31] = [
         A::ViewArranger,
         "View: arranger",
         Combo::new(Key::Num2, true, false),
+    ),
+    (
+        A::ViewTimeline,
+        "View: timeline",
+        Combo::new(Key::T, true, false),
     ),
     (
         A::ViewMixer,

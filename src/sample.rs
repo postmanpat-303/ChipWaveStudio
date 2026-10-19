@@ -640,7 +640,7 @@ mod features {
         let data = super::demo_break(rate);
         let cuts = super::transient_slices(&data, rate, 0.5, 50.0);
         let bounds = super::slice_bounds(&cuts, data.len());
-        let row_s = 60.0 / s.bpm / s.lines_per_beat as f32;
+        let row_s = 60.0 / s.bpm / crate::model::ROWS_PER_BEAT as f32;
         let mut slots = vec![];
         for (k, &(a, b)) in bounds.iter().enumerate() {
             let i = Instrument {

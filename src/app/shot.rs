@@ -33,9 +33,11 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 24] = [
+pub const VIEWS: [&str; 26] = [
     "pattern",
     "arranger",
+    "timeline",
+    "timeline-new",
     "mixer",
     "fx",
     "fill",
@@ -90,6 +92,11 @@ impl App {
         self.row = 0;
         match view {
             "arranger" | "cue" => self.view = View::Arranger,
+            "timeline" => self.view = View::Timeline,
+            "timeline-new" => {
+                self.new_song();
+                self.dirty = false;
+            }
             "mixer" => self.view = View::Mixer,
             "fx" => {
                 self.instr = 7; // Supersaw Pad: filter + chorus
@@ -233,13 +240,24 @@ impl App {
             });
             // the play marker (where Play song started) stays behind it
             self.cue = (13.min(self.order_len().saturating_sub(1)), 32);
+        } else if view == "timeline" {
+            // play the song from order entry CHIPWAVE_SHOT_POS (default 8)
+            let pos = std::env::var("CHIPWAVE_SHOT_POS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(8);
+            self.with(|s| {
+                let Shared { song, engine, .. } = s;
+                let pos = pos.min(song.order.len().saturating_sub(1));
+                engine.start(song, pos, 0, false, 0);
+            });
         } else if view == "cue" {
             // stopped, play marker moved by a ruler click into the 6th clip, bar 3
             let n = self.order_len();
             self.seek_to((5.min(n.saturating_sub(1)), 32));
         } else if !matches!(
             view,
-            "fill" | "settings" | "about" | "library" | "chords" | "slice"
+            "fill" | "settings" | "about" | "library" | "chords" | "slice" | "timeline-new"
         ) && std::env::var_os("CHIPWAVE_SHOT_NOPLAY").is_none()
         {
             self.play(3);
@@ -258,6 +276,9 @@ impl App {
                 }
                 _ => {}
             }
+        }
+        if view.starts_with("timeline") {
+            self.view = View::Timeline;
         }
         if let Ok(tb) = std::env::var("CHIPWAVE_SHOT_TAB") {
             self.ip.tab = match tb.as_str() {

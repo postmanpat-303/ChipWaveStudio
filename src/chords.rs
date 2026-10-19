@@ -202,7 +202,7 @@ const KK_MINOR: [f32; 12] = [
 pub fn histogram(song: &Song) -> [f32; 12] {
     let drums = crate::arrange::drum_mask(song);
     let mut h = [0.0f32; 12];
-    let bar = (song.lines_per_beat.max(1) * 4) as usize;
+    let bar = (crate::model::ROWS_PER_BEAT * 4) as usize;
     for (bi, p) in song.patterns.iter().enumerate() {
         let plays = song.order.iter().filter(|&&o| o == bi).count().max(1) as f32;
         for ch in 0..song.channels.min(p.cells.first().map_or(0, |r| r.len())) {
@@ -567,7 +567,7 @@ pub struct WriteOpts {
     pub instr: u8,
     /// octave of the chord roots (tracker octave, 4 = C-4)
     pub octave: u8,
-    /// rows per beat (song lines_per_beat)
+    /// rows per beat (`model::ROWS_PER_BEAT`: the engine always plays 4)
     pub rows_per_beat: usize,
     pub start_row: usize,
     /// repeat the progression until the block ends

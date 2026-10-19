@@ -614,7 +614,7 @@ mod tests {
             .iter()
             .map(|&d| Step::new(d, ChordKind::Triad))
             .collect();
-        let rpb = s.lines_per_beat.max(1) as usize;
+        let rpb = crate::model::ROWS_PER_BEAT as usize;
         let w = |s: &mut Song, blk: usize, style: Style, channel: usize, instr: u8, octave: u8| {
             let n = chords::write(
                 &mut s.patterns[blk],

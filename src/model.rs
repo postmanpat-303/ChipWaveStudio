@@ -8,6 +8,12 @@ pub const ROWS: usize = 64;
 /// channels (tracks) per song: each song sets its own count, 1..=MAX_CHANNELS
 /// (0.2.3.8 raised this from 8 to 32)
 pub const MAX_CHANNELS: usize = 32;
+/// Rows per beat for everything that measures time: a row is always a
+/// sixteenth note (the engine's tick length is `sr*60 / (bpm*4*speed)`).
+/// `Song::lines_per_beat` is kept in files for compatibility but never
+/// changes timing (the timeline work fixed the places that used it as if
+/// it did).
+pub const ROWS_PER_BEAT: u32 = 4;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Cell {
@@ -428,9 +434,10 @@ impl Song {
         }
     }
 
-    /// seconds per row: 4 rows per beat at the given BPM (speed only subdivides ticks)
+    /// seconds per row: 4 rows per beat at the given BPM, as the engine plays
+    /// it (speed only subdivides ticks; `lines_per_beat` does not count)
     pub fn row_seconds(&self) -> f64 {
-        60.0 / (self.bpm as f64 * self.lines_per_beat.max(1) as f64)
+        60.0 / (self.bpm as f64 * ROWS_PER_BEAT as f64)
     }
 
     pub fn length_seconds(&self) -> f64 {

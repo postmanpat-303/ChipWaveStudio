@@ -432,6 +432,17 @@ impl App {
                     changed = true;
                 }
                 ui.end_row();
+                ui.label("New songs");
+                if ui
+                    .checkbox(&mut self.extra.new_in_timeline, "Open on the Timeline view")
+                    .on_hover_text(
+                        "File > New starts on the Timeline (tracks and clips); off: on the pattern editor",
+                    )
+                    .changed()
+                {
+                    changed = true;
+                }
+                ui.end_row();
                 ui.label("Row numbers");
                 ui.horizontal(|ui| {
                     let a = ui

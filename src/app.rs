@@ -36,6 +36,9 @@ mod pluginview;
 mod sampleview;
 mod settingsview;
 pub mod shot;
+mod timeline;
+#[cfg(test)]
+mod timeline_tests;
 mod topbar;
 mod transpose;
 #[cfg(test)]
@@ -51,6 +54,8 @@ const SUBCOLS: usize = 9;
 enum View {
     Pattern,
     Arranger,
+    /// tracks x time (docs/TIMELINE.md), app/timeline.rs
+    Timeline,
     Mixer,
     Fx,
     Sample,
@@ -229,6 +234,10 @@ pub struct App {
     instr_shown: u8,
     /// plugin instruments: browser, scan, panel state (app/pluginview.rs)
     plug: pluginview::PluginUi,
+    /// Timeline view state and its derived-timeline cache (app/timeline.rs)
+    pub(crate) tlv: timeline::TimelineUi,
+    /// "made with a newer ChipWave Studio" message (open refused)
+    too_new: Option<String>,
 }
 
 pub fn run(open: Option<PathBuf>) -> Result<(), String> {
@@ -502,6 +511,8 @@ impl App {
             fx_clip: None,
             instr_shown: 0,
             plug: Default::default(),
+            tlv: Default::default(),
+            too_new: None,
         };
         let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
         app.midi_apply(connect);
@@ -854,6 +865,7 @@ impl eframe::App for App {
         self.shot_frame(ui.ctx());
         self.poll_save();
         self.load_warnings_window(ui.ctx());
+        self.too_new_window(ui.ctx());
         self.instr_delete_dialog(ui.ctx());
         self.block_len_dialog(ui.ctx());
         self.chord_window(ui.ctx());
@@ -1017,6 +1029,14 @@ impl eframe::App for App {
                     View::Arranger => {
                         ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
                             self.arranger_view(ui)
+                        });
+                    }
+                    View::Timeline if self.lower_visible() => {
+                        self.pattern_and_lower(ui, inner);
+                    }
+                    View::Timeline => {
+                        ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                            self.timeline_view(ui)
                         });
                     }
                     View::Mixer => {

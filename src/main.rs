@@ -34,6 +34,7 @@ mod settings;
 mod speech;
 mod synth;
 mod theme;
+mod timeline;
 mod transform;
 mod update;
 mod voice;
@@ -221,7 +222,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
                     channel: 1,
                     instr: 1,
                     octave: 3,
-                    rows_per_beat: song.lines_per_beat.max(1) as usize,
+                    rows_per_beat: crate::model::ROWS_PER_BEAT as usize,
                     start_row: 0,
                     fill: true,
                     vol: 0,

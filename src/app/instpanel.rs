@@ -155,13 +155,19 @@ impl App {
             self.dock_arranger = true;
             self.status = "Lower panel shown".into();
         }
-        self.view = View::Pattern;
+        // F11 works for the Timeline view too (full-height timeline)
+        if self.view != View::Timeline {
+            self.view = View::Pattern;
+        }
         self.save_settings();
     }
 
     /// Ctrl+I: the instrument editor in the lower panel (again: back to the arranger)
     pub(super) fn toggle_instrument_panel(&mut self) {
-        if self.view == View::Pattern && self.lower_visible() && self.extra.lower_inst {
+        if matches!(self.view, View::Pattern | View::Timeline)
+            && self.lower_visible()
+            && self.extra.lower_inst
+        {
             self.set_lower(0);
         } else {
             self.show_instrument_panel();
@@ -169,7 +175,10 @@ impl App {
     }
 
     pub(super) fn show_instrument_panel(&mut self) {
-        self.view = View::Pattern;
+        // the Timeline view has the same lower panel
+        if self.view != View::Timeline {
+            self.view = View::Pattern;
+        }
         self.dock_arranger = true;
         self.extra.full_height = false;
         self.extra.lower_inst = true;
@@ -228,7 +237,11 @@ impl App {
         let top = Rect::from_min_max(inner.min, Pos2::new(inner.right(), split.top()));
         let bot = Rect::from_min_max(Pos2::new(inner.left(), split.bottom()), inner.max);
         ui.scope_builder(egui::UiBuilder::new().max_rect(top), |ui| {
-            self.pattern_view(ui)
+            if self.view == View::Timeline {
+                self.timeline_view(ui)
+            } else {
+                self.pattern_view(ui)
+            }
         });
         // splitter: drag to resize, to the bottom to hide, double-click = automatic
         let sr = ui

@@ -95,6 +95,10 @@ pub struct Extra {
     /// collapsed instrument-editor cards, "Type/Card"
     #[serde(default)]
     pub cards_closed: Vec<String>,
+    /// File > New opens the song on the Timeline view (Del's choice, 19 Oct
+    /// 2026; docs/TIMELINE.md). Off: on the pattern editor, as before.
+    #[serde(default = "yes")]
+    pub new_in_timeline: bool,
 }
 
 fn two() -> u32 {
@@ -129,6 +133,7 @@ impl Default for Extra {
             full_height: false,
             classic_editor: false,
             cards_closed: vec![],
+            new_in_timeline: true,
         }
     }
 }

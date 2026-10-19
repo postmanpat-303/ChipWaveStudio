@@ -123,6 +123,32 @@ impl App {
             if self.modal_key(key, m, ctx) {
                 continue;
             }
+            // Timeline view: its own keys; plain keys never type into the pattern
+            if self.view == View::Timeline {
+                if self.timeline_key(key, m) {
+                    continue;
+                }
+                let allowed = cmd
+                    || matches!(
+                        key,
+                        Key::Space
+                            | Key::F1
+                            | Key::F2
+                            | Key::F3
+                            | Key::F4
+                            | Key::F5
+                            | Key::F6
+                            | Key::F7
+                            | Key::F8
+                            | Key::F9
+                            | Key::F10
+                            | Key::F11
+                            | Key::F12
+                    );
+                if !allowed {
+                    continue;
+                }
+            }
             let nav_sel = m.shift
                 && !cmd
                 && matches!(
@@ -172,7 +198,8 @@ impl App {
                 Key::Tab if cmd => {
                     self.view = match self.view {
                         View::Pattern => View::Arranger,
-                        View::Arranger => View::Mixer,
+                        View::Arranger => View::Timeline,
+                        View::Timeline => View::Mixer,
                         View::Mixer => View::Fx,
                         View::Fx => View::Sample,
                         View::Sample | View::Settings => View::Pattern,
@@ -183,6 +210,7 @@ impl App {
                     self.arr_focus = false;
                 }
                 Key::Num2 if cmd => self.view = View::Arranger,
+                Key::T if cmd => self.view = View::Timeline,
                 Key::Num3 if cmd => self.view = View::Mixer,
                 Key::Num4 if cmd => self.view = View::Fx,
                 Key::Num5 if cmd => self.view = View::Sample,

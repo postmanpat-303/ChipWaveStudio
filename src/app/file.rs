@@ -138,6 +138,12 @@ impl App {
         self.path = None;
         self.reset_cursor();
         self.status = "New song (instruments kept)".into();
+        // new songs start on the Timeline view (Settings > Look > New songs)
+        if self.extra.new_in_timeline {
+            self.view = View::Timeline;
+            self.tlv.start_new_song();
+            self.status = "New song on the Timeline (instruments kept) · double-click a track to write its block".into();
+        }
     }
 
     pub(super) fn add_block(&mut self) {
@@ -228,7 +234,40 @@ impl App {
                 };
                 self.load_warnings = warnings;
             }
+            Err(e) if fileio::is_too_new(&e) => {
+                self.status = "Open failed: the song needs a newer ChipWave Studio".into();
+                self.too_new = Some(e);
+            }
             Err(e) => self.status = format!("Open failed: {e}"),
+        }
+    }
+
+    /// a song from a newer ChipWave Studio was refused: say why, offer the update
+    pub(super) fn too_new_window(&mut self, ctx: &egui::Context) {
+        let Some(msg) = self.too_new.clone() else {
+            return;
+        };
+        let (mut ok, mut check) = (false, false);
+        egui::Window::new("Song needs a newer ChipWave Studio")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_max_width(420.0);
+                ui.label(msg);
+                ui.add_space(6.0);
+                ui.label("Your current song is unchanged.");
+                ui.horizontal(|ui| {
+                    check = ui.button("Check for updates").clicked();
+                    ok = ui.button("OK").clicked();
+                });
+            });
+        if check {
+            self.too_new = None;
+            self.check_updates(true);
+        }
+        if ok || ctx.input(|i| i.key_pressed(Key::Enter) || i.key_pressed(Key::Escape)) {
+            self.too_new = None;
         }
     }
 

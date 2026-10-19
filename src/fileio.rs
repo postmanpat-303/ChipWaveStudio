@@ -248,6 +248,36 @@ fn read_entry(z: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<Vec<
     Ok(v)
 }
 
+/// Newest `min_reader_version` this build can read. Tracker-mode songs write
+/// 1; timeline-mode songs (M2, docs/TIMELINE.md) will write 2, and builds
+/// older than the timeline refuse them instead of playing a stale order list.
+pub const READER_VERSION: u32 = 1;
+
+/// Start of the error for a song that needs a newer app (see [`is_too_new`]).
+const TOO_NEW: &str = "This song was made with a newer version of ChipWave Studio";
+
+/// The message for a file that needs reader version `need`.
+pub fn too_new_message(need: i64) -> String {
+    format!(
+        "{TOO_NEW} (it needs file reader version {need}; ChipWave Studio {} reads up to version {READER_VERSION}). Please update ChipWave Studio (Help > Check for updates) to open it.",
+        crate::VERSION
+    )
+}
+
+/// the open failed because the song needs a newer ChipWave Studio
+pub fn is_too_new(err: &str) -> bool {
+    err.starts_with(TOO_NEW)
+}
+
+/// Refuse a song whose `min_reader_version` is newer than this build reads.
+/// A missing or unreadable value counts as 1 (every file written so far).
+fn check_reader_version(v: Option<&toml::Value>) -> Result<(), String> {
+    match v.and_then(|x| x.as_integer()) {
+        Some(n) if n > READER_VERSION as i64 => Err(too_new_message(n)),
+        _ => Ok(()),
+    }
+}
+
 /// Most blocks / automation lanes a song may have (save and load agree).
 pub const MAX_BLOCKS: usize = 10_000;
 pub const MAX_LANES: usize = 4096;
@@ -264,6 +294,11 @@ pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
     let mut z = zip::ZipArchive::new(f).map_err(|e| e.to_string())?;
     if z.len() > 10_000 {
         return Err("too many entries".into());
+    }
+    // manifest first: a song from a newer app must not half-load
+    if let Ok(m) = read_entry(&mut z, "manifest.toml") {
+        let m = toml::from_str::<toml::Value>(&String::from_utf8_lossy(&m)).ok();
+        check_reader_version(m.as_ref().and_then(|m| m.get("min_reader_version")))?;
     }
     let sf: SongFile = toml::from_str(&String::from_utf8_lossy(&read_entry(&mut z, "song.toml")?))
         .map_err(|e| e.to_string())?;
@@ -656,6 +691,10 @@ fn fx_kind(name: &str) -> Option<crate::fx::FxKind> {
 pub fn song_from_text(text: &str) -> Result<Song, String> {
     use crate::automation::{Lane, Point, Shape, Target};
     let v: toml::Value = toml::from_str(text).map_err(|e| e.to_string())?;
+    check_reader_version(
+        v.get("min_reader_version")
+            .or_else(|| v.get("song").and_then(|s| s.get("min_reader_version"))),
+    )?;
     let s = &v["song"];
     let int = |t: &toml::Value, k: &str, d: i64| t.get(k).and_then(|x| x.as_integer()).unwrap_or(d);
     let real = |t: &toml::Value, k: &str| t.get(k).and_then(num_of);
@@ -1065,6 +1104,66 @@ mod tests {
         let l = load_cwt(&dir).unwrap();
         assert_eq!(l.patterns[0].cells, s.patterns[0].cells);
         assert_eq!(l.instruments.len(), s.instruments.len());
+    }
+
+    /// copy of the .cwt at `src` with manifest.toml replaced (None = removed)
+    fn with_manifest(src: &Path, dst: &Path, manifest: Option<&str>) {
+        let mut a = zip::ZipArchive::new(std::fs::File::open(src).unwrap()).unwrap();
+        let mut w = zip::ZipWriter::new(std::fs::File::create(dst).unwrap());
+        for i in 0..a.len() {
+            let f = a.by_index(i).unwrap();
+            if f.name().unwrap() == "manifest.toml" {
+                drop(f);
+                if let Some(m) = manifest {
+                    w.start_file("manifest.toml", zip::write::SimpleFileOptions::default())
+                        .unwrap();
+                    w.write_all(m.as_bytes()).unwrap();
+                }
+            } else {
+                w.raw_copy_file(f).unwrap();
+            }
+        }
+        w.finish().unwrap();
+    }
+
+    #[test]
+    fn songs_from_a_newer_reader_version_are_refused_with_a_clear_message() {
+        let dir = std::env::temp_dir().join(format!("cw_reader_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("ok.cwt");
+        save_cwt(&demo_song(), &src).unwrap();
+        // what we write today is readable
+        let m = {
+            let mut z = zip::ZipArchive::new(std::fs::File::open(&src).unwrap()).unwrap();
+            String::from_utf8(read_entry(&mut z, "manifest.toml").unwrap()).unwrap()
+        };
+        assert!(m.contains("min_reader_version = 1"), "{m}");
+        assert!(load_cwt(&src).is_ok());
+        let newer = dir.join("newer.cwt");
+        with_manifest(
+            &src,
+            &newer,
+            Some("format = \"chipwave-song\"\nformat_version = 2\nmin_reader_version = 2\n"),
+        );
+        let e = load_cwt(&newer).unwrap_err();
+        assert!(is_too_new(&e), "{e}");
+        assert!(
+            e.contains("reader version 2") && e.contains("Check for updates"),
+            "{e}"
+        );
+        // a missing or odd manifest is treated as version 1
+        let none = dir.join("none.cwt");
+        with_manifest(&src, &none, None);
+        assert!(load_cwt(&none).is_ok());
+        with_manifest(&src, &none, Some("min_reader_version = \"x\"\n"));
+        assert!(load_cwt(&none).is_ok());
+        // text songs: the same rule
+        let t = include_str!("../demos/first_run.cwt.toml");
+        assert!(song_from_text(t).is_ok());
+        let e = song_from_text(&format!("min_reader_version = 3\n{t}")).unwrap_err();
+        assert!(is_too_new(&e), "{e}");
+        assert!(!is_too_new("zip error"));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// the demo is a real arrangement: 1:30-2:00, every block has a role,

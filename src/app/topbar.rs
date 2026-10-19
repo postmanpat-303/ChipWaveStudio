@@ -186,9 +186,14 @@ fn item(ui: &mut egui::Ui, text: &str, sc: &str) -> bool {
     ui.add(egui::Button::new(text).shortcut_text(sc)).clicked()
 }
 
-pub(super) const VIEWS: [(View, &str, &str); 5] = [
+pub(super) const VIEWS: [(View, &str, &str); 6] = [
     (View::Pattern, "Pattern", "pattern editor (Ctrl+1)"),
     (View::Arranger, "Arranger", "song arrangement (Ctrl+2)"),
+    (
+        View::Timeline,
+        "Timeline",
+        "tracks and clips over time, like a DAW (Ctrl+T)",
+    ),
     (
         View::Mixer,
         "Mixer",
@@ -197,6 +202,19 @@ pub(super) const VIEWS: [(View, &str, &str); 5] = [
     (View::Fx, "FX", "instrument FX chain (Ctrl+4)"),
     (View::Sample, "Sample", "sample editor (Ctrl+5)"),
 ];
+
+/// the default shortcut of a view (View menu)
+pub(super) fn view_shortcut(v: View) -> &'static str {
+    match v {
+        View::Pattern => "Ctrl+1",
+        View::Arranger => "Ctrl+2",
+        View::Timeline => "Ctrl+T",
+        View::Mixer => "Ctrl+3",
+        View::Fx => "Ctrl+4",
+        View::Sample => "Ctrl+5",
+        View::Settings => "Ctrl+,",
+    }
+}
 
 /// donation link on Help > About (opens in the system browser)
 pub(super) const DONATE_URL: &str = "https://buymeacoffee.com/postmanpat";
@@ -364,8 +382,8 @@ impl App {
                 }
             });
             ui.menu_button("View", |ui| {
-                for (k, (v, n, _)) in VIEWS.iter().enumerate() {
-                    let sc = format!("Ctrl+{}", k + 1);
+                for (v, n, _) in VIEWS.iter() {
+                    let sc = view_shortcut(*v);
                     if ui
                         .add(egui::Button::selectable(self.view == *v, *n).shortcut_text(sc))
                         .clicked()

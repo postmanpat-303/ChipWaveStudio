@@ -157,7 +157,7 @@ impl App {
         let (ch, ins) = (self.ch, self.instr);
         self.snapshot();
         let r = self.with(|s| {
-            let rpb = s.song.lines_per_beat.max(1) as usize;
+            let rpb = ROWS_PER_BEAT as usize;
             let p = s.song.patterns.get_mut(pat).ok_or("no block")?;
             chords::write(
                 p,

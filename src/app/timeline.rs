@@ -1,0 +1,1327 @@
+//! Timeline view (docs/TIMELINE.md): the song as tracks (= mixer channels) x
+//! time, Bitwig-style. M1 is read-only: in tracker mode the timeline is
+//! derived from the order list (`crate::timeline::from_order`) and cached
+//! until the song changes. One painter-based widget: clips, previews and
+//! grid go into a few meshes, only visible tracks and clips are touched
+//! (binary search per track), so hundreds or thousands of clips stay cheap.
+//! M2 makes it editable: the drawing takes a `Timeline` and hit-tests clips
+//! by id, so edits only need to replace the cached timeline.
+use super::*;
+use crate::timeline::{self as tl, Tick, PPQ, ROW};
+use std::collections::HashMap;
+
+/// track header column width
+pub(crate) const HEAD_W: f32 = 232.0;
+const MARK_H: f32 = 16.0;
+const RULER_H: f32 = 20.0;
+const OVERVIEW_H: f32 = 18.0;
+const VBAR_W: f32 = 10.0;
+const DEFAULT_TRACK_H: f32 = 46.0;
+/// zoom limits in pixels per beat
+const MIN_ZOOM: f32 = 0.5;
+const MAX_ZOOM: f32 = 480.0;
+
+/// track colours: muted, distinct, readable with white text (dark and Amiga themes)
+const TRACK_COLOURS: [u32; 12] = [
+    0xB0605A, 0xC0864A, 0xB9A04E, 0x6E9A58, 0x4F9A96, 0x5A86B4, 0x7A6CB4, 0xA8679A, 0x8A7A68,
+    0x5F8FA0, 0x9A6A50, 0x7F8A99,
+];
+
+pub(crate) fn track_colour(i: usize) -> Color32 {
+    hex(TRACK_COLOURS[i % TRACK_COLOURS.len()])
+}
+
+/// what a block column looks like in a clip: note bars (row, rows, key)
+#[derive(Clone, Debug, Default)]
+struct Preview {
+    notes: Vec<(u16, u16, u8)>,
+    lo: u8,
+    hi: u8,
+}
+
+/// the derived timeline and everything the painter needs, rebuilt only when
+/// the song's content changes (fingerprint)
+pub(crate) struct Cache {
+    key: u64,
+    pub(crate) tl: tl::Timeline,
+    pub(crate) map: tl::OrderMap,
+    idx: tl::TrackIndex,
+    previews: HashMap<(usize, usize), Preview>,
+    /// "02 Groove" per block
+    names: Vec<String>,
+    /// the instrument a track mostly plays
+    instr: Vec<String>,
+    order: Vec<usize>,
+    /// used[block][column]: the column has something in its played rows
+    used: Vec<Vec<bool>>,
+}
+
+pub(crate) struct TimelineUi {
+    pub(crate) cache: Option<Cache>,
+    /// pixels per beat (0 = fit on the next frame)
+    pub(crate) zoom: f32,
+    /// first visible tick (fractional while zooming)
+    pub(crate) scroll: f64,
+    scroll_y: f32,
+    track_h: f32,
+    /// start a new song's layout (a few bars, not "fit one empty block")
+    new_song: bool,
+    wheel: f32,
+    /// selected clip id (M2 edits act on it; M1: Enter opens it)
+    pub(crate) sel: Option<u32>,
+    /// the ruler shows minutes:seconds instead of bars
+    time_ruler: bool,
+    ruler_drag: bool,
+    overview_drag: bool,
+    vbar_drag: bool,
+    /// screen rects (tests, screenshots): lanes, ruler, headers
+    pub(crate) lanes: Rect,
+    pub(crate) ruler: Rect,
+    pub(crate) heads: Rect,
+    /// time to build and paint the last frame, in microseconds
+    pub(crate) frame_us: u128,
+}
+
+impl Default for TimelineUi {
+    fn default() -> Self {
+        Self {
+            cache: None,
+            zoom: 0.0,
+            scroll: 0.0,
+            scroll_y: 0.0,
+            track_h: 0.0,
+            new_song: false,
+            wheel: 0.0,
+            sel: None,
+            time_ruler: false,
+            ruler_drag: false,
+            overview_drag: false,
+            vbar_drag: false,
+            lanes: Rect::NOTHING,
+            ruler: Rect::NOTHING,
+            heads: Rect::NOTHING,
+            frame_us: 0,
+        }
+    }
+}
+
+impl TimelineUi {
+    /// File > New: a fresh layout (zoomed to show a few dozen bars)
+    pub(super) fn start_new_song(&mut self) {
+        self.new_song = true;
+        self.zoom = 0.0;
+        self.scroll = 0.0;
+        self.scroll_y = 0.0;
+        self.sel = None;
+    }
+    fn th(&self) -> f32 {
+        if self.track_h > 0.0 {
+            self.track_h
+        } else {
+            DEFAULT_TRACK_H
+        }
+    }
+}
+
+/// cheap content hash of everything the derived timeline shows
+fn fingerprint(song: &Song) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut put = |v: u64| {
+        h ^= v;
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    };
+    put(song.channels as u64);
+    put(song.bpm.to_bits() as u64);
+    for &o in &song.order {
+        put(o as u64);
+    }
+    put(u64::MAX);
+    for n in song
+        .channel_names
+        .iter()
+        .chain(song.instruments.iter().map(|i| &i.name))
+    {
+        for b in n.bytes() {
+            put(b as u64);
+        }
+        put(0x1_0000);
+    }
+    for p in &song.patterns {
+        for b in p.name.bytes() {
+            put(b as u64);
+        }
+        put(p.rows as u64 | (p.role.map_or(0, |r| r as u64 + 1) << 32));
+        for row in &p.cells {
+            for c in row {
+                put(u64::from_le_bytes([
+                    c.note, c.instr, c.vol, c.fx, c.fxp, 0, 0, 1,
+                ]));
+            }
+        }
+    }
+    h
+}
+
+fn build_cache(song: &Song, key: u64) -> Cache {
+    let (tl, map) = tl::from_order(song);
+    let nch = tl.tracks.len();
+    let idx = tl.index();
+    let mut previews = HashMap::new();
+    let mut used = vec![];
+    let mut instr_count: Vec<HashMap<u8, usize>> = vec![HashMap::new(); nch];
+    let plays: Vec<usize> = (0..song.patterns.len())
+        .map(|b| song.order.iter().filter(|&&o| o == b).count())
+        .collect();
+    for (b, p) in song.patterns.iter().enumerate() {
+        let eff = tl::effective_rows(p, nch);
+        let mut u = vec![false; nch];
+        for c in 0..nch {
+            let mut pv = Preview {
+                lo: 255,
+                ..Default::default()
+            };
+            let mut open: Option<(usize, u8)> = None;
+            for r in 0..eff {
+                let Some(cell) = p.cells.get(r).and_then(|row| row.get(c)) else {
+                    continue;
+                };
+                u[c] |= !cell.is_empty();
+                if cell.instr > 0 && plays[b] > 0 {
+                    *instr_count[c].entry(cell.instr).or_default() += plays[b];
+                }
+                if cell.note == 0 {
+                    continue;
+                }
+                if let Some((r0, k)) = open.take() {
+                    pv.notes.push((r0 as u16, (r - r0) as u16, k));
+                }
+                if cell.note != NOTE_OFF {
+                    open = Some((r, cell.note));
+                    pv.lo = pv.lo.min(cell.note);
+                    pv.hi = pv.hi.max(cell.note);
+                }
+            }
+            if let Some((r0, k)) = open {
+                pv.notes.push((r0 as u16, (eff - r0).max(1) as u16, k));
+            }
+            if !pv.notes.is_empty() {
+                // at least an octave of range, centred
+                let span = pv.hi - pv.lo;
+                if span < 12 {
+                    let pad = (12 - span) / 2;
+                    pv.lo = pv.lo.saturating_sub(pad).max(1);
+                    pv.hi = (pv.lo + 12).max(pv.hi);
+                }
+                previews.insert((b, c), pv);
+            }
+        }
+        used.push(u);
+    }
+    let instr = instr_count
+        .iter()
+        .map(|m| {
+            m.iter()
+                .max_by_key(|(k, n)| (**n, std::cmp::Reverse(**k)))
+                .and_then(|(k, _)| {
+                    song.instruments
+                        .get(*k as usize - 1)
+                        .map(|i| format!("{k:02X} {}", i.name))
+                })
+                .unwrap_or_default()
+        })
+        .collect();
+    Cache {
+        key,
+        names: song
+            .patterns
+            .iter()
+            .enumerate()
+            .map(|(b, p)| format!("{b:02} {}", p.name))
+            .collect(),
+        tl,
+        map,
+        idx,
+        previews,
+        instr,
+        order: song.order.clone(),
+        used,
+    }
+}
+
+/// what the painter reads from the engine and mixer once per frame
+struct Live {
+    playing: bool,
+    /// playhead tick (None: stopped, or a looped block that is not in the order)
+    head: Option<f64>,
+    bpm: f32,
+    mix: Vec<ChanMix>,
+    peaks: Vec<f32>,
+    any_solo: bool,
+}
+
+/// adaptive bar-label step: 1, 2, 4, 8 ... bars so labels stay >= `min_px` apart
+fn bar_step(bar_px: f32, min_px: f32) -> i64 {
+    let mut s = 1;
+    while (s as f32) * bar_px < min_px && s < 1 << 20 {
+        s *= 2;
+    }
+    s
+}
+
+fn mmss(secs: f64) -> String {
+    let s = secs.max(0.0);
+    format!("{}:{:04.1}", (s / 60.0) as u32, s % 60.0)
+}
+
+fn quad(mesh: &mut egui::Mesh, r: Rect, c: Color32) {
+    if r.width() > 0.0 && r.height() > 0.0 {
+        mesh.add_colored_rect(r, c);
+    }
+}
+
+impl App {
+    /// derived timeline for the current song (rebuilt when the song changed)
+    fn timeline_refresh(&mut self) -> Live {
+        let shared = self.shared.clone();
+        let s = audio::lock(&shared);
+        let key = fingerprint(&s.song);
+        if self.tlv.cache.as_ref().map(|c| c.key) != Some(key) {
+            self.tlv.cache = Some(build_cache(&s.song, key));
+            // a clip id may be gone
+            if let (Some(id), Some(c)) = (self.tlv.sel, &self.tlv.cache) {
+                if !c.tl.clips.iter().any(|x| x.id == id) {
+                    self.tlv.sel = None;
+                }
+            }
+        }
+        let c = self.tlv.cache.as_ref().unwrap();
+        let e = &s.engine;
+        let head = if !e.playing {
+            None
+        } else if e.loop_pattern {
+            c.order
+                .iter()
+                .position(|&b| b == e.pattern)
+                .map(|k| c.map.tick_of_song_pos(k, e.song_pos))
+        } else {
+            Some(c.map.tick_of_song_pos(e.order_pos, e.song_pos))
+        };
+        let n = c.tl.tracks.len();
+        Live {
+            playing: e.playing,
+            head,
+            bpm: s.song.bpm,
+            mix: s.song.mixer.channels.iter().take(n).copied().collect(),
+            peaks: e.chan_peak.iter().take(n).copied().collect(),
+            any_solo: s.song.mixer.channels.iter().take(n).any(|m| m.solo),
+        }
+    }
+
+    /// Ctrl+T view: toolbar, ruler, track headers, clips
+    pub(super) fn timeline_view(&mut self, ui: &mut egui::Ui) {
+        let t_start = std::time::Instant::now();
+        let live = self.timeline_refresh();
+        let t = th();
+        let cue_tick = {
+            let c = self.tlv.cache.as_ref().unwrap();
+            c.map.tick_of(self.cue.0, self.cue.1)
+        };
+        let (n_tracks, n_clips, end) = {
+            let c = self.tlv.cache.as_ref().unwrap();
+            (
+                c.tl.tracks.len(),
+                c.tl.clips.len(),
+                c.map.end().max(c.tl.end()),
+            )
+        };
+        // ---- toolbar
+        let mut fit = false;
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(" TIMELINE ")
+                    .strong()
+                    .monospace()
+                    .color(Color32::from_rgb(0x1A, 0x1C, 0x1F))
+                    .background_color(t.accent),
+            );
+            ui.label(egui::RichText::new("Tracker mode · from the order list").color(t.ink2))
+                .on_hover_text(
+                    "The timeline shows this song's order list as clips per track (track = mixer channel). \
+                     It is read-only for now: moving and resizing clips comes with timeline mode. \
+                     Double-click a clip to edit its block in the pattern editor.",
+                );
+            ui.separator();
+            ui.checkbox(&mut self.follow, "Follow")
+                .on_hover_text("keep the playhead in view while playing");
+            ui.label(egui::RichText::new("zoom").color(t.ink2));
+            if ui.small_button("−").on_hover_text("zoom out (-)").clicked() {
+                self.tlv.zoom_by(0.8, None);
+            }
+            if ui.small_button("+").on_hover_text("zoom in (+)").clicked() {
+                self.tlv.zoom_by(1.25, None);
+            }
+            if ui
+                .small_button("Fit")
+                .on_hover_text("show the whole song (F)")
+                .clicked()
+            {
+                fit = true;
+            }
+            ui.separator();
+            if ui
+                .selectable_label(!self.tlv.time_ruler, "Bars")
+                .on_hover_text("ruler in bars")
+                .clicked()
+            {
+                self.tlv.time_ruler = false;
+            }
+            if ui
+                .selectable_label(self.tlv.time_ruler, "Time")
+                .on_hover_text("ruler in minutes:seconds")
+                .clicked()
+            {
+                self.tlv.time_ruler = true;
+            }
+            ui.separator();
+            let pos = live.head.unwrap_or(cue_tick as f64) as Tick;
+            let c = self.tlv.cache.as_ref().unwrap();
+            let bp = c.tl.bar_pos(pos);
+            ui.label(
+                egui::RichText::new(format!(
+                    "{}.{} · {}",
+                    bp.bar,
+                    bp.beat,
+                    mmss(c.tl.seconds_at(pos, live.bpm))
+                ))
+                .monospace()
+                .color(if live.playing { t.play } else { t.ink }),
+            )
+            .on_hover_text("playhead (stopped: the play marker) in bar.beat and minutes:seconds");
+            ui.label(
+                egui::RichText::new(format!(
+                    "{n_tracks} tracks · {n_clips} clips · {}",
+                    mmss(c.tl.seconds_at(end, live.bpm))
+                ))
+                .small()
+                .color(t.ink2),
+            );
+        });
+        ui.add_space(2.0);
+        let full = ui.available_rect_before_wrap();
+        if full.width() < HEAD_W + 80.0 || full.height() < MARK_H + RULER_H + OVERVIEW_H + 30.0 {
+            return;
+        }
+        let heads = Rect::from_min_max(
+            Pos2::new(full.left(), full.top() + MARK_H + RULER_H + 2.0),
+            Pos2::new(full.left() + HEAD_W, full.bottom() - OVERVIEW_H - 4.0),
+        );
+        let x_l = full.left() + HEAD_W + 4.0;
+        let x_r = full.right() - VBAR_W - 2.0;
+        let marks = Rect::from_min_max(
+            Pos2::new(x_l, full.top()),
+            Pos2::new(x_r, full.top() + MARK_H),
+        );
+        let ruler = Rect::from_min_max(
+            Pos2::new(x_l, marks.bottom()),
+            Pos2::new(x_r, marks.bottom() + RULER_H),
+        );
+        let lanes = Rect::from_min_max(Pos2::new(x_l, heads.top()), Pos2::new(x_r, heads.bottom()));
+        let overview = Rect::from_min_max(
+            Pos2::new(x_l, full.bottom() - OVERVIEW_H),
+            Pos2::new(x_r, full.bottom()),
+        );
+        let vbar = Rect::from_min_max(
+            Pos2::new(x_r + 2.0, lanes.top()),
+            Pos2::new(full.right(), lanes.bottom()),
+        );
+        self.tlv.lanes = lanes;
+        self.tlv.ruler = ruler;
+        self.tlv.heads = heads;
+        // ---- zoom and scroll bounds
+        let content_end = end.max(tl::rows_to_ticks(ROWS)) as f64;
+        let fit_zoom = |w: f32| (w - 24.0) / (content_end / PPQ as f64).max(8.0) as f32;
+        if self.tlv.new_song {
+            // a new song: 16 bars across, its empty first block at the left
+            self.tlv.zoom = (lanes.width() / (16.0 * 4.0)).clamp(MIN_ZOOM, MAX_ZOOM);
+            self.tlv.new_song = false;
+        }
+        if fit || self.tlv.zoom <= 0.0 {
+            self.tlv.zoom = fit_zoom(lanes.width()).clamp(MIN_ZOOM, MAX_ZOOM);
+            self.tlv.scroll = 0.0;
+        }
+        let lane_h = self.tlv.th();
+        let total_h = n_tracks as f32 * lane_h;
+        let max_sy = (total_h - lanes.height()).max(0.0);
+        // ---- wheel: tracks / Shift: time / Ctrl: zoom at the mouse / Alt: track height
+        let hover = ui.input(|i| i.pointer.hover_pos());
+        let over = hover.filter(|p| {
+            lanes.contains(*p) || heads.contains(*p) || ruler.contains(*p) || overview.contains(*p)
+        });
+        if let Some(p) = over {
+            let (ev, m) = ui.input(|i| (i.events.clone(), i.modifiers));
+            let lines = input::wheel_lines(&ev);
+            let dx: f32 = ev
+                .iter()
+                .filter_map(|e| match e {
+                    egui::Event::MouseWheel { delta, unit, .. } if delta.y != 0.0 => {
+                        Some(match unit {
+                            egui::MouseWheelUnit::Point => delta.x,
+                            egui::MouseWheelUnit::Line => delta.x * 40.0,
+                            egui::MouseWheelUnit::Page => delta.x * 400.0,
+                        })
+                    }
+                    _ => None,
+                })
+                .sum();
+            if lines != 0.0 || dx != 0.0 {
+                if m.command {
+                    let n = input::take_notches(&mut self.tlv.wheel, lines);
+                    if n != 0 {
+                        self.tlv.zoom_by(1.2f32.powi(n), Some(p.x - lanes.left()));
+                    }
+                } else if m.alt {
+                    let n = input::take_notches(&mut self.tlv.wheel, lines);
+                    self.tlv.track_h = (lane_h * 1.15f32.powi(n)).clamp(24.0, 140.0);
+                } else if m.shift || max_sy <= 0.0 || ruler.contains(p) || overview.contains(p) {
+                    self.tlv.scroll -= (lines * 40.0) as f64 * PPQ as f64 / self.tlv.zoom as f64;
+                } else {
+                    self.tlv.scroll_y -= lines * 40.0;
+                }
+                if dx != 0.0 && !m.command {
+                    self.tlv.scroll -= dx as f64 * PPQ as f64 / self.tlv.zoom as f64;
+                }
+            }
+        }
+        let zoom = self.tlv.zoom.clamp(MIN_ZOOM, MAX_ZOOM);
+        self.tlv.zoom = zoom;
+        let ppt = zoom as f64 / PPQ as f64; // pixels per tick
+        let vis_ticks = lanes.width() as f64 / ppt;
+        // ---- follow the playhead (page so it sits a third in)
+        if let Some(h) = live.head {
+            if self.follow && !self.tlv.ruler_drag && !self.tlv.overview_drag {
+                let s = self.tlv.scroll;
+                if h < s || h > s + vis_ticks * 0.92 {
+                    self.tlv.scroll = h - vis_ticks / 3.0;
+                }
+            }
+        }
+        let max_scroll = (content_end + vis_ticks * 0.25 - vis_ticks).max(0.0);
+        self.tlv.scroll = self.tlv.scroll.clamp(0.0, max_scroll);
+        self.tlv.scroll_y = self.tlv.scroll_y.clamp(0.0, max_sy);
+        let scroll = self.tlv.scroll;
+        let sy = self.tlv.scroll_y;
+        let x_of = |tk: f64| lanes.left() + ((tk - scroll) * ppt) as f32;
+        let tick_of = |x: f32| scroll + (x - lanes.left()) as f64 / ppt;
+        let v0 = scroll.floor() as Tick;
+        let v1 = (scroll + vis_ticks).ceil() as Tick + 1;
+        let first_tr = (sy / lane_h).floor().max(0.0) as usize;
+        let last_tr = (((sy + lanes.height()) / lane_h).ceil() as usize).min(n_tracks);
+        let lane_rect = |tr: usize| {
+            let y = lanes.top() + tr as f32 * lane_h - sy;
+            Rect::from_min_max(
+                Pos2::new(lanes.left(), y),
+                Pos2::new(lanes.right(), y + lane_h),
+            )
+        };
+        let painter = ui.painter_at(full);
+        // backgrounds
+        painter.rect_filled(lanes, 4, t.crt_bot);
+        painter.rect_filled(ruler.union(marks), 3, t.crt_top);
+        painter.rect_filled(heads, 4, t.cart_bot);
+        let lp = ui.painter_at(lanes);
+        let c = self.tlv.cache.as_ref().unwrap();
+        // ---- grid and ruler
+        let bar_ticks = c.tl.sig_at(v0.max(0)).bar_ticks();
+        let bar_px = bar_ticks as f32 * ppt as f32;
+        let label_step = bar_step(bar_px, 46.0);
+        let line_step = bar_step(bar_px, 7.0);
+        let mut grid = egui::Mesh::default();
+        let beat_px = PPQ as f32 * ppt as f32;
+        if beat_px >= 12.0 {
+            let mut b = (v0.max(0) / PPQ) * PPQ;
+            while b < v1 {
+                let x = x_of(b as f64);
+                quad(
+                    &mut grid,
+                    Rect::from_min_max(
+                        Pos2::new(x, lanes.top()),
+                        Pos2::new(x + 1.0, lanes.bottom()),
+                    ),
+                    t.crt_grid.gamma_multiply(0.55),
+                );
+                b += PPQ;
+            }
+        }
+        let rp = ui.painter_at(ruler);
+        for (bt, bar) in c.tl.bars_in(v0.max(0), v1) {
+            let x = x_of(bt as f64);
+            if (bar - 1) % line_step == 0 {
+                quad(
+                    &mut grid,
+                    Rect::from_min_max(
+                        Pos2::new(x, lanes.top()),
+                        Pos2::new(x + 1.0, lanes.bottom()),
+                    ),
+                    t.crt_grid,
+                );
+            }
+            let major = (bar - 1) % label_step == 0;
+            if major || (bar - 1) % line_step == 0 {
+                rp.vline(
+                    x,
+                    ruler.top() + if major { 2.0 } else { 12.0 }..=ruler.bottom(),
+                    Stroke::new(1.0, t.ink2.gamma_multiply(if major { 0.8 } else { 0.4 })),
+                );
+            }
+            if major {
+                let label = if self.tlv.time_ruler {
+                    mmss(c.tl.seconds_at(bt, live.bpm))
+                } else {
+                    bar.to_string()
+                };
+                rp.text(
+                    Pos2::new(x + 3.0, ruler.top() + 2.0),
+                    egui::Align2::LEFT_TOP,
+                    label,
+                    FontId::monospace(11.0),
+                    t.ink2,
+                );
+            }
+        }
+        lp.add(egui::Shape::mesh(grid));
+        // ---- lanes: alternate shading, then clips (one mesh for bodies + notes)
+        let mut bodies = egui::Mesh::default();
+        let mut notes = egui::Mesh::default();
+        let mut texts: Vec<(Rect, Pos2, String, Color32)> = vec![];
+        let mut outlines: Vec<(Rect, Stroke)> = vec![];
+        for tr in first_tr..last_tr {
+            let lr = lane_rect(tr);
+            if tr % 2 == 1 {
+                quad(&mut bodies, lr, Color32::from_white_alpha(4));
+            }
+            quad(
+                &mut bodies,
+                Rect::from_min_max(Pos2::new(lr.left(), lr.bottom() - 1.0), lr.max),
+                t.crt_grid,
+            );
+        }
+        let hover_clip = hover
+            .filter(|p| lanes.contains(*p))
+            .and_then(|p| clip_at(c, p, lanes, lane_h, sy, tick_of(p.x)));
+        // empty block columns of the order list: faint slots (new songs start here)
+        let k0 = c.map.starts.partition_point(|&s| s <= v0).saturating_sub(1);
+        let k1 = c.map.starts.partition_point(|&s| s < v1);
+        // (only while the song is nearly empty: in a full song they'd be noise;
+        // double-click on an empty spot opens the block there either way)
+        if n_clips < 8 && (k1.saturating_sub(k0)) * (last_tr - first_tr) <= 4000 {
+            for k in k0..k1 {
+                let b = c.order[k];
+                for tr in first_tr..last_tr {
+                    if c.used
+                        .get(b)
+                        .and_then(|u| u.get(tr))
+                        .copied()
+                        .unwrap_or(true)
+                    {
+                        continue;
+                    }
+                    let lr = lane_rect(tr);
+                    let r = Rect::from_min_max(
+                        Pos2::new(x_of(c.map.starts[k] as f64) + 1.0, lr.top() + 3.0),
+                        Pos2::new(
+                            x_of((c.map.starts[k] + tl::rows_to_ticks(c.map.lens[k])) as f64) - 1.0,
+                            lr.bottom() - 3.0,
+                        ),
+                    );
+                    outlines.push((r, Stroke::new(1.0, t.ink2.gamma_multiply(0.18))));
+                    if r.width() > 60.0 {
+                        texts.push((
+                            r,
+                            r.left_top() + egui::vec2(6.0, 9.0),
+                            c.names[b].clone(),
+                            t.ink2.gamma_multiply(0.8),
+                        ));
+                        if r.height() > 30.0 {
+                            texts.push((
+                                r,
+                                r.left_bottom() + egui::vec2(6.0, -9.0),
+                                "empty · double-click to write".into(),
+                                t.ink2.gamma_multiply(0.55),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        let px_row = ROW as f32 * ppt as f32;
+        for tr in first_tr..last_tr {
+            let lr = lane_rect(tr);
+            let col = track_colour(tr);
+            let muted = !live
+                .mix
+                .get(tr)
+                .map(|m| !m.mute && (!live.any_solo || m.solo))
+                .unwrap_or(true);
+            for i in c.idx.visible(&c.tl, tr, v0, v1) {
+                let clip = &c.tl.clips[i];
+                let x0 = x_of(clip.start as f64);
+                let x1 = x_of(clip.end() as f64);
+                let r = Rect::from_min_max(
+                    Pos2::new(x0 + 0.5, lr.top() + 2.0),
+                    Pos2::new((x1 - 0.5).max(x0 + 1.5), lr.bottom() - 2.0),
+                );
+                let sel = self.tlv.sel == Some(clip.id);
+                let hot = hover_clip == Some(i);
+                let k = if muted { 0.35 } else { 1.0 };
+                let body_c = col.gamma_multiply(0.42 * k).to_opaque();
+                let head_c = col
+                    .gamma_multiply(if hot { 1.0 } else { 0.85 } * k)
+                    .to_opaque();
+                quad(&mut bodies, r, body_c);
+                let hh = (lane_h * 0.3).clamp(9.0, 15.0);
+                let hr = Rect::from_min_max(r.min, Pos2::new(r.right(), r.top() + hh));
+                quad(&mut bodies, hr, head_c);
+                // clip edge so neighbours stay apart
+                quad(
+                    &mut bodies,
+                    Rect::from_min_max(r.left_top(), Pos2::new(r.left() + 1.0, r.bottom())),
+                    col.gamma_multiply(1.1 * k).to_opaque(),
+                );
+                if sel {
+                    outlines.push((r, Stroke::new(2.0, t.selection_outline)));
+                }
+                // loop notches in the header
+                if clip.loop_len.is_some() && r.width() > 8.0 {
+                    for lt in clip.loop_points() {
+                        if lt < v0 || lt > v1 {
+                            continue;
+                        }
+                        let x = x_of(lt as f64);
+                        quad(
+                            &mut bodies,
+                            Rect::from_min_max(
+                                Pos2::new(x - 0.5, hr.top()),
+                                Pos2::new(x + 0.5, r.bottom()),
+                            ),
+                            Color32::from_black_alpha(90),
+                        );
+                        quad(
+                            &mut bodies,
+                            Rect::from_min_max(
+                                Pos2::new(x - 2.0, hr.top()),
+                                Pos2::new(x + 2.0, hr.top() + 3.0),
+                            ),
+                            Color32::from_white_alpha(140),
+                        );
+                    }
+                }
+                let Some((b, colm)) = clip.block() else {
+                    continue;
+                };
+                if r.width() > 26.0 {
+                    let vis_l = r.left().max(lanes.left()) + 4.0;
+                    let name = c.names.get(b).cloned().unwrap_or_default();
+                    texts.push((
+                        r,
+                        Pos2::new(vis_l, hr.center().y),
+                        name,
+                        if th().light {
+                            Color32::BLACK
+                        } else {
+                            Color32::WHITE
+                        },
+                    ));
+                }
+                // note preview
+                let body = Rect::from_min_max(
+                    Pos2::new(r.left() + 1.0, hr.bottom() + 2.0),
+                    Pos2::new(r.right() - 1.0, r.bottom() - 2.0),
+                );
+                if r.width() < 6.0 || body.height() < 5.0 {
+                    continue;
+                }
+                let Some(pv) = c.previews.get(&(b, colm)) else {
+                    continue;
+                };
+                let range = (pv.hi - pv.lo + 1) as f32;
+                let nh = (body.height() / range).clamp(1.5, 4.0);
+                let note_c = col.gamma_multiply(1.6 * k).to_opaque();
+                let l = clip.loop_len.unwrap_or(Tick::MAX / 4);
+                let p0 = clip.pass_at(clip.start.max(v0));
+                let p1 = clip.pass_at((clip.end() - 1).min(v1));
+                let decimate = px_row < 1.0;
+                for pass in p0..=p1 {
+                    let base = clip.start - clip.offset + pass as Tick * l;
+                    let mut last_x = f32::NEG_INFINITY;
+                    for &(row, len, key) in &pv.notes {
+                        let a = base + row as Tick * ROW;
+                        let e = (a + len as Tick * ROW).min(base + l).min(clip.end());
+                        if e <= clip.start.max(v0) || a >= clip.end().min(v1) {
+                            continue;
+                        }
+                        let a = a.max(clip.start);
+                        let xa = x_of(a as f64).max(body.left());
+                        if decimate && xa - last_x < 1.0 {
+                            continue;
+                        }
+                        last_x = xa;
+                        let xe = x_of(e as f64).min(body.right()).max(xa + 1.0);
+                        let y =
+                            body.bottom() - ((key - pv.lo) as f32 + 0.5) / range * body.height();
+                        quad(
+                            &mut notes,
+                            Rect::from_min_max(
+                                Pos2::new(xa, y - nh * 0.5),
+                                Pos2::new(xe - 0.5, y + nh * 0.5),
+                            ),
+                            note_c,
+                        );
+                    }
+                }
+            }
+        }
+        lp.add(egui::Shape::mesh(bodies));
+        lp.add(egui::Shape::mesh(notes));
+        for (r, s) in outlines {
+            lp.rect_stroke(r, 2, s, egui::StrokeKind::Inside);
+        }
+        for (r, p, txt, colr) in texts {
+            let tp = lp.with_clip_rect(r.intersect(lanes).shrink(1.0));
+            tp.text(
+                p,
+                egui::Align2::LEFT_CENTER,
+                txt,
+                FontId::proportional(11.0),
+                colr,
+            );
+        }
+        // ---- markers
+        let mp = ui.painter_at(marks);
+        for m in &c.tl.markers {
+            if m.tick < v0 - bar_ticks * 16 || m.tick > v1 {
+                continue;
+            }
+            let x = x_of(m.tick as f64);
+            let colr = t.ochre;
+            mp.rect_filled(
+                Rect::from_min_max(
+                    Pos2::new(x, marks.top() + 1.0),
+                    Pos2::new(x + 3.0, marks.bottom()),
+                ),
+                0,
+                colr,
+            );
+            mp.text(
+                Pos2::new(x + 6.0, marks.center().y),
+                egui::Align2::LEFT_CENTER,
+                &m.name,
+                FontId::proportional(11.0),
+                t.ink,
+            );
+            lp.vline(
+                x,
+                lanes.y_range(),
+                Stroke::new(1.0, colr.gamma_multiply(0.25)),
+            );
+        }
+        // ---- playhead / play marker
+        let ph = live.head.unwrap_or(cue_tick as f64);
+        let phx = x_of(ph);
+        if phx >= lanes.left() - 1.0 && phx <= lanes.right() + 1.0 {
+            let colr = if live.head.is_some() {
+                t.play
+            } else {
+                t.accent
+            };
+            lp.vline(
+                phx,
+                lanes.y_range(),
+                Stroke::new(if live.head.is_some() { 1.5 } else { 1.0 }, colr),
+            );
+            rp.add(egui::Shape::convex_polygon(
+                vec![
+                    Pos2::new(phx - 5.0, ruler.top() + 4.0),
+                    Pos2::new(phx + 5.0, ruler.top() + 4.0),
+                    Pos2::new(phx, ruler.bottom() - 2.0),
+                ],
+                colr,
+                Stroke::NONE,
+            ));
+        }
+        // end of song
+        let ex = x_of(c.map.end() as f64);
+        if ex < lanes.right() {
+            lp.rect_filled(
+                Rect::from_min_max(Pos2::new(ex, lanes.top()), lanes.max),
+                0,
+                Color32::from_black_alpha(50),
+            );
+        }
+        // ---- overview (mini-map of the whole song) and scroll position
+        let op = ui.painter_at(overview);
+        op.rect_filled(overview, 3, t.crt_top);
+        let o_ppt = overview.width() as f64 / content_end.max(1.0);
+        let rows_h = ((overview.height() - 4.0) / n_tracks.max(1) as f32).max(0.5);
+        let mut om = egui::Mesh::default();
+        for clip in &c.tl.clips {
+            let y = overview.top() + 2.0 + clip.track as f32 * rows_h;
+            let x0 = overview.left() + (clip.start as f64 * o_ppt) as f32;
+            let x1 = overview.left() + (clip.end() as f64 * o_ppt) as f32;
+            quad(
+                &mut om,
+                Rect::from_min_max(
+                    Pos2::new(x0, y),
+                    Pos2::new(x1.max(x0 + 1.0), y + rows_h.max(1.0)),
+                ),
+                track_colour(clip.track as usize).gamma_multiply(0.75),
+            );
+        }
+        op.add(egui::Shape::mesh(om));
+        let win = Rect::from_min_max(
+            Pos2::new(overview.left() + (scroll * o_ppt) as f32, overview.top()),
+            Pos2::new(
+                overview.left() + ((scroll + vis_ticks) * o_ppt) as f32,
+                overview.bottom(),
+            ),
+        );
+        op.rect_stroke(
+            win,
+            2,
+            Stroke::new(1.5, t.ink.gamma_multiply(0.8)),
+            egui::StrokeKind::Inside,
+        );
+        if let Some(h) = live.head {
+            let x = overview.left() + (h * o_ppt) as f32;
+            op.vline(x, overview.y_range(), Stroke::new(1.0, t.play));
+        }
+        // ---- vertical scroll bar
+        if max_sy > 0.0 {
+            let vp = ui.painter_at(vbar);
+            vp.rect_filled(vbar, 3, t.crt_top);
+            let f0 = sy / total_h;
+            let f1 = (sy + lanes.height()) / total_h;
+            let th_r = Rect::from_min_max(
+                Pos2::new(vbar.left() + 2.0, vbar.top() + f0 * vbar.height()),
+                Pos2::new(vbar.right() - 2.0, vbar.top() + f1 * vbar.height()),
+            );
+            vp.rect_filled(th_r, 3, t.ink2.gamma_multiply(0.6));
+        }
+        // ---- track headers
+        let hp = ui.painter_at(heads);
+        let mut head_ops: Vec<HeadOp> = vec![];
+        for tr in first_tr..last_tr {
+            let y = heads.top() + tr as f32 * lane_h - sy;
+            let hr = Rect::from_min_max(
+                Pos2::new(heads.left(), y + 1.0),
+                Pos2::new(heads.right(), y + lane_h - 1.0),
+            );
+            if hr.bottom() < heads.top() || hr.top() > heads.bottom() {
+                continue;
+            }
+            let colr = track_colour(tr);
+            let cur = self.ch == tr;
+            hp.rect_filled(
+                hr,
+                3,
+                if cur {
+                    t.sel.gamma_multiply(0.35)
+                } else if tr % 2 == 1 {
+                    t.cart_top.gamma_multiply(0.9)
+                } else {
+                    t.cart_top.gamma_multiply(0.75)
+                },
+            );
+            hp.rect_filled(
+                Rect::from_min_max(hr.min, Pos2::new(hr.left() + 4.0, hr.bottom())),
+                2,
+                colr,
+            );
+            let m = live.mix.get(tr).copied().unwrap_or_default();
+            let name = &c.tl.tracks[tr].name;
+            let one_line = lane_h < 36.0;
+            let ty = if one_line {
+                hr.center().y
+            } else {
+                hr.top() + 12.0
+            };
+            hp.text(
+                Pos2::new(hr.left() + 10.0, ty),
+                egui::Align2::LEFT_CENTER,
+                format!("{:02}", tr + 1),
+                FontId::monospace(11.0),
+                t.ink2,
+            );
+            let np = hp.with_clip_rect(Rect::from_min_max(
+                Pos2::new(hr.left() + 30.0, hr.top()),
+                Pos2::new(hr.right() - 112.0, hr.bottom()),
+            ));
+            np.text(
+                Pos2::new(hr.left() + 32.0, ty),
+                egui::Align2::LEFT_CENTER,
+                name,
+                FontId::proportional(13.0),
+                t.ink,
+            );
+            if !one_line {
+                np.text(
+                    Pos2::new(hr.left() + 32.0, hr.top() + 28.0),
+                    egui::Align2::LEFT_CENTER,
+                    &c.instr[tr],
+                    FontId::proportional(10.5),
+                    t.ink2,
+                );
+            }
+            // M / S
+            let bs = 17.0;
+            let by = if one_line {
+                hr.center().y - bs / 2.0
+            } else {
+                hr.top() + 4.0
+            };
+            let mr = Rect::from_min_size(Pos2::new(hr.right() - 108.0, by), egui::vec2(bs, bs));
+            let sr = Rect::from_min_size(Pos2::new(mr.right() + 3.0, by), egui::vec2(bs, bs));
+            for (r, on, label, on_c, op_) in [
+                (mr, m.mute, "M", t.ochre, HeadOp::Mute(tr)),
+                (sr, m.solo, "S", t.accent, HeadOp::Solo(tr)),
+            ] {
+                let resp = ui
+                    .interact(r, ui.scope_id().with(("tl_ms", label, tr)), Sense::click())
+                    .on_hover_text(if label == "M" {
+                        "mute this track (F9 on the cursor channel)"
+                    } else {
+                        "solo this track (F10)"
+                    });
+                let bg = if on {
+                    on_c
+                } else if resp.hovered() {
+                    t.pill.gamma_multiply(1.4)
+                } else {
+                    t.pill
+                };
+                hp.rect_filled(r, 3, bg);
+                hp.text(
+                    r.center(),
+                    egui::Align2::CENTER_CENTER,
+                    label,
+                    FontId::proportional(11.0),
+                    if on {
+                        Color32::from_rgb(0x16, 0x18, 0x1B)
+                    } else {
+                        t.ink2
+                    },
+                );
+                if resp.clicked() {
+                    head_ops.push(op_);
+                }
+            }
+            // volume mini-fader (0..2 linear, unity marked) and meter
+            let fr = Rect::from_min_max(
+                Pos2::new(sr.right() + 6.0, by + bs / 2.0 - 3.0),
+                Pos2::new(hr.right() - 12.0, by + bs / 2.0 + 3.0),
+            );
+            let fresp = ui
+                .interact(
+                    fr.expand2(egui::vec2(2.0, 5.0)),
+                    ui.scope_id().with(("tl_vol", tr)),
+                    Sense::click_and_drag(),
+                )
+                .on_hover_text(format!(
+                    "volume {} · drag · double-click: 0 dB",
+                    crate::model::db_text(m.volume)
+                ));
+            hp.rect_filled(fr, 3, t.crt_bot);
+            let f = (m.volume / 2.0).clamp(0.0, 1.0);
+            hp.rect_filled(
+                Rect::from_min_max(fr.min, Pos2::new(fr.left() + f * fr.width(), fr.bottom())),
+                3,
+                colr.gamma_multiply(0.8),
+            );
+            hp.vline(
+                fr.center().x,
+                fr.y_range(),
+                Stroke::new(1.0, t.ink2.gamma_multiply(0.6)),
+            );
+            hp.circle_filled(
+                Pos2::new(fr.left() + f * fr.width(), fr.center().y),
+                4.5,
+                t.ink,
+            );
+            if fresp.double_clicked() {
+                head_ops.push(HeadOp::Volume(tr, 1.0));
+            } else if fresp.dragged() || fresp.clicked() {
+                if let Some(p) = fresp.interact_pointer_pos() {
+                    let v = ((p.x - fr.left()) / fr.width()).clamp(0.0, 1.0) * 2.0;
+                    head_ops.push(HeadOp::Volume(tr, v));
+                }
+            }
+            let pk = live.peaks.get(tr).copied().unwrap_or(0.0);
+            let lvl = ((20.0 * pk.max(1e-6).log10() + 48.0) / 48.0).clamp(0.0, 1.0);
+            let meter = Rect::from_min_max(
+                Pos2::new(hr.right() - 7.0, hr.top() + 4.0),
+                Pos2::new(hr.right() - 3.0, hr.bottom() - 4.0),
+            );
+            hp.rect_filled(meter, 1, t.crt_bot);
+            if lvl > 0.0 {
+                let mc = if pk > 0.98 { t.brick } else { t.sage };
+                hp.rect_filled(
+                    Rect::from_min_max(
+                        Pos2::new(meter.left(), meter.bottom() - lvl * meter.height()),
+                        meter.max,
+                    ),
+                    1,
+                    mc,
+                );
+            }
+            // the rest of the header selects the track (cursor channel)
+            let nr = Rect::from_min_max(hr.min, Pos2::new(mr.left() - 2.0, hr.bottom()));
+            if ui
+                .interact(nr, ui.scope_id().with(("tl_head", tr)), Sense::click())
+                .on_hover_text("select this track (the pattern editor's cursor channel)")
+                .clicked()
+            {
+                head_ops.push(HeadOp::Select(tr));
+            }
+        }
+        // ---- input: ruler seek, clips, scroll bars
+        let rresp = ui
+            .interact(ruler.union(marks), ui.scope_id().with("tl_ruler"), Sense::click_and_drag())
+            .on_hover_text("click: move the play marker here (jumps while playing) · drag: scrub · Alt: exact row");
+        if rresp.hovered() || rresp.dragged() {
+            rp.rect_filled(ruler, 2, t.ink2.gamma_multiply(0.10));
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        self.tlv.ruler_drag = rresp.dragged();
+        let mut seek: Option<(usize, usize)> = None;
+        if rresp.clicked() || rresp.dragged() || rresp.drag_started() {
+            if let Some(p) = rresp.interact_pointer_pos() {
+                let abs = (tick_of(p.x).max(0.0) / ROW as f64) as usize;
+                let alt = ui.input(|i| i.modifiers.alt);
+                let tgt = super::arranger::ruler_target(&c.map.lens, abs, !alt);
+                if rresp.clicked() || rresp.drag_started() || tgt != self.cue {
+                    seek = Some(tgt);
+                }
+            }
+        }
+        let cresp = ui.interact(
+            lanes,
+            ui.scope_id().with("tl_lanes"),
+            Sense::click_and_drag(),
+        );
+        let mut open: Option<(usize, usize, usize, usize)> = None; // block, col, row, entry
+        let mut select: Option<Option<u32>> = None;
+        if cresp.clicked() || cresp.double_clicked() {
+            if let Some(p) = cresp.interact_pointer_pos() {
+                let tk = tick_of(p.x);
+                let tr = ((p.y - lanes.top() + sy) / lane_h).floor() as usize;
+                let hit = clip_at(c, p, lanes, lane_h, sy, tk);
+                select = Some(hit.map(|i| c.tl.clips[i].id));
+                if cresp.double_clicked() && tr < n_tracks && tk >= 0.0 {
+                    let tk = tk as Tick;
+                    let entry = c.map.entry_at(tk).0;
+                    open = match hit.map(|i| &c.tl.clips[i]) {
+                        Some(cl) => cl
+                            .block()
+                            .map(|(b, col)| (b, col, (cl.source_at(tk) / ROW) as usize, entry)),
+                        None if tk < c.map.end() => {
+                            let (e, row) = c.map.entry_at(tk);
+                            c.order.get(e).map(|&b| (b, tr, row, e))
+                        }
+                        None => None,
+                    };
+                }
+            }
+        }
+        if let Some(i) = hover_clip {
+            let cl = &c.tl.clips[i];
+            if let Some((b, col)) = cl.block() {
+                let bp = c.tl.bar_pos(cl.start);
+                let passes = cl
+                    .loop_len
+                    .map(|l| format!(" · loops {}x", (cl.len + l - 1) / l))
+                    .unwrap_or_default();
+                cresp.clone().on_hover_text(format!(
+                    "{} · column {} · bar {}.{} · {} rows{passes}\ndouble-click: edit in the pattern editor",
+                    c.names.get(b).cloned().unwrap_or_default(),
+                    col + 1,
+                    bp.bar,
+                    bp.beat,
+                    cl.len / ROW
+                ));
+            }
+        }
+        // overview: click / drag moves the view
+        let oresp = ui.interact(
+            overview,
+            ui.scope_id().with("tl_overview"),
+            Sense::click_and_drag(),
+        );
+        self.tlv.overview_drag = oresp.dragged();
+        if oresp.clicked() || oresp.dragged() {
+            if let Some(p) = oresp.interact_pointer_pos() {
+                let centre = (p.x - overview.left()) as f64 / o_ppt;
+                self.tlv.scroll = centre - vis_ticks / 2.0;
+            }
+        }
+        let vresp = ui.interact(vbar, ui.scope_id().with("tl_vbar"), Sense::click_and_drag());
+        self.tlv.vbar_drag = vresp.dragged();
+        if (vresp.clicked() || vresp.dragged()) && max_sy > 0.0 {
+            if let Some(p) = vresp.interact_pointer_pos() {
+                let f = (p.y - vbar.top()) / vbar.height();
+                self.tlv.scroll_y = f * total_h - lanes.height() / 2.0;
+            }
+        }
+        // ---- apply
+        if let Some(s) = select {
+            self.tlv.sel = s;
+        }
+        for op in head_ops {
+            self.timeline_head_op(op);
+        }
+        if let Some(tgt) = seek {
+            self.seek_to(tgt);
+        }
+        if let Some((b, col, row, entry)) = open {
+            self.timeline_open(b, col, row, entry);
+        }
+        if live.playing {
+            ui.ctx().request_repaint();
+        }
+        self.tlv.frame_us = t_start.elapsed().as_micros();
+    }
+
+    fn timeline_head_op(&mut self, op: HeadOp) {
+        self.with(|s| {
+            let mx = &mut s.song.mixer.channels;
+            match op {
+                HeadOp::Mute(i) => mx[i].mute = !mx[i].mute,
+                HeadOp::Solo(i) => mx[i].solo = !mx[i].solo,
+                HeadOp::Volume(i, v) => mx[i].volume = v.clamp(0.0, 2.0),
+                HeadOp::Select(_) => {}
+            }
+        });
+        if let HeadOp::Select(i) = op {
+            self.ch = i;
+            self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
+        }
+        self.dirty = true;
+    }
+
+    /// double-click: the block in the pattern editor, cursor on the column and row
+    pub(super) fn timeline_open(&mut self, block: usize, col: usize, row: usize, entry: usize) {
+        let (nb, nch) = self.with(|s| (s.song.patterns.len(), s.song.channels));
+        if block >= nb {
+            return;
+        }
+        self.pattern = block;
+        self.ch = col.min(nch.saturating_sub(1));
+        self.col = 0;
+        self.row = row.min(self.rows().saturating_sub(1));
+        self.sel = None;
+        if entry < self.order_len() {
+            self.arr_sel = entry;
+            self.arr_multi.clear();
+            self.arr_multi.insert(entry);
+        }
+        self.view = View::Pattern;
+        self.arr_focus = false;
+        let name = self.with(|s| s.song.patterns[block].name.clone());
+        let rows = self.rows();
+        self.status = format!(
+            "Editing block {block:02} {name} · channel {} · row {} (Ctrl+T: back to the timeline)",
+            self.ch + 1,
+            self.row_text(self.row, rows)
+        );
+    }
+
+    /// keys while the Timeline view is showing; true = used
+    pub(super) fn timeline_key(&mut self, key: Key, m: egui::Modifiers) -> bool {
+        if m.command || m.alt {
+            return false;
+        }
+        let bar = (4 * PPQ) as f64;
+        match key {
+            Key::Plus | Key::Equals => self.tlv.zoom_by(1.25, None),
+            Key::Minus => self.tlv.zoom_by(0.8, None),
+            Key::F => self.tlv.zoom = 0.0,
+            Key::Home => self.tlv.scroll = 0.0,
+            Key::End => self.tlv.scroll = f64::MAX / 4.0,
+            Key::ArrowLeft => self.tlv.scroll -= bar,
+            Key::ArrowRight => self.tlv.scroll += bar,
+            Key::ArrowUp => self.tlv.scroll_y -= self.tlv.th(),
+            Key::ArrowDown => self.tlv.scroll_y += self.tlv.th(),
+            Key::Escape => self.tlv.sel = None,
+            Key::Enter => {
+                let hit = self.tlv.sel.and_then(|id| {
+                    let c = self.tlv.cache.as_ref()?;
+                    let cl = c.tl.clips.iter().find(|x| x.id == id)?;
+                    let (b, col) = cl.block()?;
+                    Some((
+                        b,
+                        col,
+                        (cl.offset / ROW) as usize,
+                        c.map.entry_at(cl.start).0,
+                    ))
+                });
+                match hit {
+                    Some((b, col, row, e)) => self.timeline_open(b, col, row, e),
+                    None => return false,
+                }
+            }
+            _ => return false,
+        }
+        true
+    }
+}
+
+#[derive(Clone, Copy)]
+enum HeadOp {
+    Mute(usize),
+    Solo(usize),
+    Volume(usize, f32),
+    Select(usize),
+}
+
+/// the clip under `p` (index into `tl.clips`)
+fn clip_at(c: &Cache, p: Pos2, lanes: Rect, lane_h: f32, sy: f32, tk: f64) -> Option<usize> {
+    if tk < 0.0 {
+        return None;
+    }
+    let tr = ((p.y - lanes.top() + sy) / lane_h).floor();
+    if tr < 0.0 {
+        return None;
+    }
+    let tk = tk as Tick;
+    c.idx.visible(&c.tl, tr as usize, tk, tk + 1).last()
+}
+
+impl TimelineUi {
+    /// screen rect of clip `id` as last drawn (tests, M2 hit-testing)
+    #[allow(dead_code)]
+    pub(crate) fn clip_rect(&self, id: u32) -> Option<Rect> {
+        let c = self.cache.as_ref()?;
+        let cl = c.tl.clips.iter().find(|x| x.id == id)?;
+        let ppt = self.zoom as f64 / PPQ as f64;
+        let x = |t: Tick| self.lanes.left() + ((t as f64 - self.scroll) * ppt) as f32;
+        let y = self.lanes.top() + cl.track as f32 * self.th() - self.scroll_y;
+        Some(Rect::from_min_max(
+            Pos2::new(x(cl.start), y + 2.0),
+            Pos2::new(x(cl.end()), y + self.th() - 2.0),
+        ))
+    }
+
+    /// screen x of tick `t` as last drawn
+    #[allow(dead_code)]
+    pub(crate) fn x_of(&self, t: Tick) -> f32 {
+        self.lanes.left() + ((t as f64 - self.scroll) * self.zoom as f64 / PPQ as f64) as f32
+    }
+
+    /// zoom by `f` around `at` (pixels from the lanes' left edge; None = centre)
+    pub(crate) fn zoom_by(&mut self, f: f32, at: Option<f32>) {
+        let z0 = if self.zoom > 0.0 { self.zoom } else { 8.0 };
+        let z1 = (z0 * f).clamp(MIN_ZOOM, MAX_ZOOM);
+        let rel = at.unwrap_or(self.lanes.width() / 2.0).max(0.0) as f64;
+        let anchor = self.scroll + rel * PPQ as f64 / z0 as f64;
+        self.zoom = z1;
+        self.scroll = (anchor - rel * PPQ as f64 / z1 as f64).max(0.0);
+    }
+}

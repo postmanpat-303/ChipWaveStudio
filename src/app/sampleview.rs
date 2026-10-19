@@ -255,8 +255,7 @@ impl App {
             }
             let mut placed = 0;
             if notes {
-                let row_s =
-                    60.0 / (s.song.bpm.max(1.0) as f64 * s.song.lines_per_beat.max(1) as f64);
+                let row_s = 60.0 / (s.song.bpm.max(1.0) as f64 * ROWS_PER_BEAT as f64);
                 if let Some(p) = s.song.patterns.get_mut(pat) {
                     if ch < p.cells.first().map_or(0, |r| r.len()) {
                         for r in p.cells.iter_mut() {
