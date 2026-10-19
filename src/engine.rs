@@ -2084,7 +2084,7 @@ impl Engine {
         // drum-pattern preview: aligned with the transport once per callback
         let pp_on = self.patprev.is_some();
         let pp_rate = self.pp_begin(song);
-        let nch = song.channels.clamp(1, MAX_CHANNELS);
+        let nch = song.channels.min(MAX_CHANNELS);
         // note clips (timeline mode): the plan can't change during a callback
         let note_plan = self.tl.plan.clone().filter(|p| self.tl.on && p.has_notes());
         // stopped without `stop` (export tails): audio clips fade out
@@ -2098,7 +2098,7 @@ impl Engine {
             .plan
             .clone()
             .filter(|p| (self.tl.on || self.av.any) && p.has_audio());
-        let live_ch = self.live.ch.min(nch - 1);
+        let live_ch = self.live.ch.min(nch.saturating_sub(1));
         let live_gain = {
             // fader + pan of the cursor channel, ignoring mute/solo
             let m = song

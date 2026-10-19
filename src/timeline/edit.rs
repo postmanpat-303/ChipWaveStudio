@@ -45,6 +45,13 @@ pub fn enter_timeline_mode(song: &mut Song) {
 /// order list ([`consolidate`]); the result plays the same. Errors (piano-
 /// roll clips, too many blocks) leave the song unchanged.
 pub fn leave_timeline_mode(song: &mut Song) -> Result<(), String> {
+    if song.timeline.is_none() {
+        return Ok(());
+    }
+    // a clean new song has no tracks: tracker mode needs one channel
+    if song.channels == 0 {
+        crate::chanops::insert_channel(song, 0, "Ch 1");
+    }
     let Some(tl) = song.timeline.as_deref() else {
         return Ok(());
     };
@@ -264,7 +271,7 @@ pub fn make_unique_notes(tl: &mut Timeline, id: u32) -> Option<usize> {
 /// A new empty note clip (piano roll, 4 bars) on `track` at `start`.
 /// Returns its id.
 pub fn new_note_clip(song: &mut Song, track: usize, start: Tick) -> Option<u32> {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     if track >= nch {
         return None;
     }
@@ -310,7 +317,7 @@ pub fn add_audio_asset(tl: &mut Timeline, a: AudioAsset) -> usize {
 /// A new audio clip of pooled file `asset` on `track` at `start`, as long
 /// as the file. Returns its id.
 pub fn new_audio_clip(song: &mut Song, track: usize, start: Tick, asset: usize) -> Option<u32> {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     let bpm = song.bpm;
     let tl = song.timeline.as_deref_mut()?;
     if track >= nch || asset >= tl.audio.len() {
@@ -357,7 +364,7 @@ pub fn set_fades(tl: &mut Timeline, id: u32, fade_in: Tick, fade_out: Tick) {
 /// (written into the block's column for that track) that plays exactly what
 /// they played; gaps become empty rows. Returns the new clip id.
 pub fn glue(song: &mut Song, ids: &[u32]) -> Result<u32, String> {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     let tl = song.timeline.as_deref().ok_or("not in timeline mode")?;
     let first = tl
         .clips
@@ -474,7 +481,7 @@ pub fn glue(song: &mut Song, ids: &[u32]) -> Result<u32, String> {
 /// A new empty block (64 rows) placed as a clip on `track` at `start`
 /// (double-click on empty space). Returns (block, clip id).
 pub fn new_clip(song: &mut Song, track: usize, start: Tick) -> Option<(usize, u32)> {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     if song.patterns.len() >= crate::fileio::MAX_BLOCKS || track >= nch {
         return None;
     }

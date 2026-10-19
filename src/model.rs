@@ -452,6 +452,26 @@ impl Song {
         }
     }
 
+    /// File > New song: a clean project in timeline mode with no tracks
+    /// and no instruments, only the Song / Master track (tempo, metre and
+    /// mixer defaults as [`Song::empty`]). Zero channels only ever exist in
+    /// timeline mode; leaving it gives the song one empty channel.
+    pub fn clean() -> Self {
+        let mut s = Self::empty();
+        s.channels = 0;
+        s.channel_names.clear();
+        s.patterns = vec![Pattern::new("Block 00", ROWS, 0)];
+        s.order = vec![0];
+        let mut tl = crate::timeline::Timeline {
+            tempo: vec![],
+            next_id: 1,
+            ..Default::default()
+        };
+        crate::timeline::ensure_master_track(&mut tl, 0);
+        s.timeline = Some(Box::new(tl));
+        s
+    }
+
     /// seconds per row: 4 rows per beat at the given BPM, as the engine plays
     /// it (speed only subdivides ticks; `lines_per_beat` does not count)
     pub fn row_seconds(&self) -> f64 {

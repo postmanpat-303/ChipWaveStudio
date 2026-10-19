@@ -165,9 +165,9 @@ When all 32 tracks are used, the add commands are greyed out with "all 32 tracks
 
 ## New songs
 
-**File › New** opens on the Timeline view, in timeline mode: 8 empty tracks, 16 bars across. Double-click a track to make a new block there and start writing it in that channel. The instruments are kept, as before.
+**File › New** (Ctrl+N) is a clean project: timeline mode on the Timeline view, **no tracks and no instruments**, only the **Song / Master** track (tempo, master and return automation), default tempo (125 BPM) and time signature. The lanes say *"Drag an instrument from the Browser here, or + Add track"*: a Browser drop makes the first track with that instrument; **+ Add track** makes an empty one (double-click it to write a block). Undo takes either back. Leaving timeline mode with no tracks gives the song one empty channel, since the tracker needs a column.
 
-![A new song on the Timeline view: eight empty tracks with "00 Block 00 · empty · double-click to write" outlines](screenshots/dark-timeline-new-song.png)
+![A new song on the Timeline view: no tracks, only Song / Master, and the hint to drag an instrument from the Browser or + Add track](screenshots/dark-timeline-new-song.png)
 
 To go straight to the pattern editor instead, turn off **Settings › New songs › Open on the Timeline view**. Songs you open from disk keep the view you are in.
 

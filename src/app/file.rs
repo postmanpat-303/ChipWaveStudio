@@ -124,31 +124,29 @@ impl App {
         }
     }
 
+    /// File > New song (Ctrl+N): a clean project. Timeline mode (Settings >
+    /// Look > New songs, Del's default) starts with no tracks and no
+    /// instruments, only Song / Master; tracker mode with four empty
+    /// channels and no instruments. Tempo and metre are the defaults.
     pub(super) fn new_song(&mut self) {
-        let ch = self.with(|s| s.song.channels);
+        let tl = self.extra.new_in_timeline;
         self.with(|s| {
             s.engine.stop();
-            let ins = s.song.instruments.clone();
-            s.song = Song::empty();
-            s.song.channels = ch;
-            s.song.channel_names = (1..=ch).map(|i| format!("Ch {i}")).collect();
-            s.song.patterns = vec![Pattern::new("Block 00", ROWS, ch)];
-            s.song.instruments = ins;
+            s.song = if tl { Song::clean() } else { Song::empty() };
+            let Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
         });
         self.path = None;
+        self.instr = 1;
         self.reset_cursor();
-        self.status = "New song (instruments kept)".into();
-        // new songs start on the Timeline view (Settings > Look > New songs)
-        if self.extra.new_in_timeline {
-            // ... in timeline mode (Del's call): arranged with clips from the start
-            self.with(|s| {
-                crate::timeline::enter_timeline_mode(&mut s.song);
-                let Shared { song, engine, .. } = s;
-                engine.ensure_plan(song);
-            });
+        if tl {
             self.view = View::Timeline;
             self.tlv.start_new_song();
-            self.status = "New song in timeline mode (instruments kept) · double-click a track to write a block".into();
+            self.status =
+                "New song · drag an instrument from the Browser onto the timeline, or + Add track"
+                    .into();
+        } else {
+            self.status = "New song (no instruments yet: add one from the Browser)".into();
         }
     }
 
@@ -172,10 +170,17 @@ impl App {
     pub(super) fn set_channels(&mut self, ch: usize) {
         let ch = ch.clamp(1, MAX_CHANNELS);
         self.with(|s| {
+            let old = s.song.channels;
             s.song.channels = ch;
             s.song.channel_names.resize(ch, "Ch".into());
             if let Some(t) = s.song.timeline.as_deref_mut() {
+                // the Song / Master track (after the channels) stays last
+                let tail = t.tracks.split_off(old.min(t.tracks.len()));
                 t.tracks.resize_with(ch, Default::default);
+                t.tracks.extend(
+                    tail.into_iter()
+                        .filter(|x| x.kind == crate::timeline::TrackKind::Master),
+                );
             }
             for p in &mut s.song.patterns {
                 for r in &mut p.cells {

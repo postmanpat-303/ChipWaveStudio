@@ -51,6 +51,8 @@ mod mixer;
 mod modview;
 #[cfg(test)]
 mod modview_tests;
+#[cfg(test)]
+mod newsong_tests;
 mod noterec;
 mod params;
 mod pattern;

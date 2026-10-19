@@ -140,7 +140,7 @@ pub fn auto_key(song: &Song, tl: &Timeline) -> u64 {
 
 /// Compile the track and clip lanes of `tl` (UI thread).
 pub fn build_auto(song: &Song, tl: &Timeline) -> AutoPlan {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     let mut p = AutoPlan {
         key: auto_key(song, tl),
         ..Default::default()
@@ -324,7 +324,7 @@ pub fn bake_into_song(song: &mut Song, tl: &Timeline) {
 /// The track lanes [`bake_into_song`] can move back unchanged, with their
 /// targets: one lane per target across tracks, clips and the song.
 fn verbatim_lanes(song: &Song, tl: &Timeline) -> Vec<(Target, Lane)> {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     let parse = |l: &Lane| Target::parse_in(&l.target, song);
     let track_lanes: Vec<(Target, &Lane)> = tl
         .tracks

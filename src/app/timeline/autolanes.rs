@@ -705,7 +705,7 @@ pub(crate) fn lanes_ui(
                     _ => None,
                 };
                 if let Some((set, up, down)) = cmd {
-                    let nch = song.channels.clamp(1, crate::model::MAX_CHANNELS);
+                    let nch = song.channels.min(crate::model::MAX_CHANNELS);
                     if tr < nch {
                         for (bi, pat) in song.patterns.iter().enumerate() {
                             for (row, cells) in pat.cells.iter().enumerate() {
@@ -1388,7 +1388,7 @@ impl App {
                 }
                 AutoOp::AddLane(tr, tg) => {
                     let id = tg.id();
-                    let nch = s.song.channels.clamp(1, crate::model::MAX_CHANNELS);
+                    let nch = s.song.channels.min(crate::model::MAX_CHANNELS);
                     let tr = if matches!(
                         *tg,
                         Target::Master | Target::Tempo | Target::Ret(..) | Target::ModAmount(_)

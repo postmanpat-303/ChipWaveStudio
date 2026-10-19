@@ -940,7 +940,7 @@ impl OrderMap {
 /// exactly like a gap), runs of one block on a track merged into one looped
 /// clip. Block roles become markers.
 pub fn from_order(song: &Song) -> (Timeline, OrderMap) {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     let mut tl = Timeline {
         tracks: (0..nch)
             .map(|i| Track {
@@ -1045,7 +1045,7 @@ pub fn from_order(song: &Song) -> (Timeline, OrderMap) {
 type SegKey = (usize, Vec<Option<(usize, usize, usize)>>);
 
 pub fn consolidate(song: &Song, tl: &Timeline) -> Result<(Vec<Pattern>, Vec<usize>), String> {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     let mut clips: Vec<&Clip> = vec![];
     for c in &tl.clips {
         let Some((pat, col)) = c.block() else {
@@ -1193,7 +1193,7 @@ pub fn consolidated_song(song: &Song, tl: &Timeline) -> Result<Song, String> {
 /// only on a block's last played row). Two songs with the same stream play
 /// the same notes and commands.
 pub fn row_stream(song: &Song) -> Vec<Vec<Cell>> {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     let mut out = vec![];
     for &b in &song.order {
         let Some(p) = song.patterns.get(b) else {
@@ -1248,7 +1248,7 @@ impl Timeline {
     /// or blocks, keep lengths positive, and leave the start tempo to the
     /// song's BPM. Returns warnings for the user.
     pub fn fix(&mut self, song: &Song) -> Vec<String> {
-        let nch = song.channels.clamp(1, MAX_CHANNELS);
+        let nch = song.channels.min(MAX_CHANNELS);
         let n = self.clips.len();
         self.clips.retain(|c| {
             (c.track as usize) < nch

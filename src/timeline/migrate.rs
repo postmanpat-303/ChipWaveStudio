@@ -7,7 +7,7 @@ use crate::model::{Song, MAX_CHANNELS};
 
 /// Ensure a Song/Master track exists at the end (after mixer channels).
 pub fn ensure_master_track(tl: &mut Timeline, channels: usize) -> usize {
-    let nch = channels.clamp(1, MAX_CHANNELS);
+    let nch = channels.min(MAX_CHANNELS);
     if let Some(i) = tl
         .tracks
         .iter()
@@ -41,9 +41,11 @@ fn is_master_target(t: Target) -> bool {
 
 /// Which mixer track should own a song lane for `t` (not Master).
 fn owner_mixer_track(song: &Song, tl: &Timeline, t: Target) -> usize {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     match t {
-        Target::ChanVolume(c) | Target::ChanPan(c) | Target::Send(c, _) => c.min(nch - 1),
+        Target::ChanVolume(c) | Target::ChanPan(c) | Target::Send(c, _) => {
+            c.min(nch.saturating_sub(1))
+        }
         Target::Cutoff(i)
         | Target::Resonance(i)
         | Target::Drive(i)
@@ -84,7 +86,7 @@ pub fn migrate_song_lanes(song: &mut Song) -> usize {
     if song.timeline.is_none() || song.automation.is_empty() {
         return 0;
     }
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     // (target_id, Target, Lane)
     let pending: Vec<(String, Target, Lane)> = song
         .automation

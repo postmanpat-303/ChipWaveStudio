@@ -120,7 +120,11 @@ impl App {
 
     /// several files: one per track from `track` down
     pub(crate) fn import_audio_files(&mut self, files: Vec<PathBuf>, track: usize, at: Tick) {
-        let nch = self.with(|s| s.song.channels.clamp(1, MAX_CHANNELS));
+        // a clean new song has no tracks yet: the first file makes one
+        if self.with(|s| s.song.channels) == 0 {
+            self.with(|s| crate::chanops::insert_channel(&mut s.song, 0, "Audio 1"));
+        }
+        let nch = self.with(|s| s.song.channels.min(MAX_CHANNELS));
         for (k, f) in files.into_iter().enumerate() {
             self.import_audio(f, (track + k).min(nch - 1), at.max(0));
         }

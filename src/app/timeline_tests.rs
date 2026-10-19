@@ -51,6 +51,8 @@ fn new_songs_open_on_the_timeline_unless_switched_off() {
     let mut h = harness_with(fileio::demo_song());
     assert!(h.state().extra.new_in_timeline, "Del's default");
     h.state_mut().new_song();
+    // new songs start with no tracks: four empty ones, as + Add track would
+    h.state_mut().set_channels(4);
     frame(&mut h);
     frame(&mut h);
     assert_eq!(h.state().view, View::Timeline);

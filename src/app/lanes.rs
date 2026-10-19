@@ -224,7 +224,7 @@ impl App {
             }
             Target::Master | Target::Tempo | Target::Ret(..) | Target::ModAmount(_) => {
                 // Song / Master track (created on demand)
-                let nch = self.with(|s| s.song.channels.clamp(1, crate::model::MAX_CHANNELS));
+                let nch = self.with(|s| s.song.channels.min(crate::model::MAX_CHANNELS));
                 return self.with(|s| {
                     let tl = s.song.timeline.as_deref()?;
                     tl.tracks

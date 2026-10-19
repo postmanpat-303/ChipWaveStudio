@@ -208,6 +208,8 @@ fn note_data(h: &Harness<'static, App>) -> tl::NoteClipData {
 fn shift_double_click_makes_a_note_clip_and_the_roll_draws_chords() {
     let mut h = harness_with(fileio::demo_song());
     h.state_mut().new_song();
+    // new songs start with no tracks: four empty ones, as + Add track would
+    h.state_mut().set_channels(4);
     frame(&mut h);
     assert!(
         h.state().with(|s| s.song.timeline.is_some()),

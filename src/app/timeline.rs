@@ -411,7 +411,7 @@ fn pattern_key(song: &Song) -> u64 {
 /// clips whenever the timeline / order list did (a drag rebuilds only those).
 fn build_cache(song: &Song, key: u64, old: Option<Cache>) -> Cache {
     let pkey = pattern_key(song);
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     let (previews, col_instr, used, names) = match old {
         Some(o) if o.pkey == pkey => (o.previews, o.col_instr, o.used, o.names),
         _ => build_previews(song, nch),
@@ -1706,7 +1706,15 @@ impl App {
                 Pos2::new(tx, hr.top()),
                 Pos2::new(hr.right() - 132.0, hr.bottom()),
             ));
-            let num = hp.layout_no_wrap(format!("{:02}", tr + 1), FontId::monospace(10.0), t.ink2);
+            let num = hp.layout_no_wrap(
+                if c.tl.tracks[tr].kind == tl::TrackKind::Master {
+                    "M".to_string()
+                } else {
+                    format!("{:02}", tr + 1)
+                },
+                FontId::monospace(10.0),
+                t.ink2,
+            );
             let nw = num.size().x;
             np.galley(Pos2::new(tx, ty - num.size().y / 2.0), num, t.ink2);
             np.text(
@@ -1990,7 +1998,12 @@ impl App {
             if y + 20.0 < heads.bottom() {
                 let br =
                     Rect::from_min_size(Pos2::new(heads.left() + 6.0, y), egui::vec2(110.0, 20.0));
-                let n = c.tl.tracks.len();
+                // after the last mixer track (the Song / Master track stays last)
+                let n =
+                    c.tl.tracks
+                        .iter()
+                        .filter(|x| x.kind != tl::TrackKind::Master)
+                        .count();
                 let full = n >= MAX_CHANNELS;
                 let r = ui.put(
                     br,
@@ -2005,6 +2018,18 @@ impl App {
                     head_ops.push(HeadOp::Add(n));
                 }
             }
+        }
+        // ---- a clean new song: no tracks yet
+        if self.with(|s| s.song.channels) == 0 {
+            let y = (heads.top() + lay.total() - sy + 40.0).min(lanes.bottom() - 30.0);
+            let p = ui.painter_at(lanes);
+            p.text(
+                Pos2::new(lanes.left() + 24.0, y),
+                egui::Align2::LEFT_TOP,
+                "Drag an instrument from the Browser here, or + Add track",
+                egui::FontId::proportional(15.0),
+                t.ink2,
+            );
         }
         // ---- input: ruler seek / loop, markers, clips, scroll bars
         let mods = ui.input(|i| i.modifiers);

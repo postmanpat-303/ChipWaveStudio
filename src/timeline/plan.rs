@@ -231,7 +231,7 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
 /// starts later wins (the same rule as [`consolidate`]); muted and piano-roll
 /// clips play nothing yet.
 pub fn build_plan(song: &Song, tl: &Timeline) -> Plan {
-    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let nch = song.channels.min(MAX_CHANNELS);
     let mut per: Vec<Vec<&Clip>> = vec![vec![]; nch];
     for c in &tl.clips {
         if c.len <= 0 || c.muted || c.track as usize >= nch || c.block().is_none() {
@@ -432,7 +432,7 @@ pub fn plan_cell(song: &Song, s: &Seg, row: usize, limit: usize) -> Cell {
 
 /// rows of block `pattern` that play (a `0F00` in any column ends it)
 pub fn source_limit(song: &Song, pattern: usize) -> usize {
-    song.patterns.get(pattern).map_or(0, |p| {
-        effective_rows(p, song.channels.clamp(1, MAX_CHANNELS))
-    })
+    song.patterns
+        .get(pattern)
+        .map_or(0, |p| effective_rows(p, song.channels.min(MAX_CHANNELS)))
 }

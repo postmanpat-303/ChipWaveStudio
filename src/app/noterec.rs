@@ -126,10 +126,13 @@ impl App {
             let t = e.tl_ticks()?;
             let tps = ROW as f64 / e.row_secs().max(1e-4) as f64;
             s.song.timeline.as_ref()?;
-            Some((t, tps, s.song.channels.clamp(1, MAX_CHANNELS)))
+            Some((t, tps, s.song.channels.min(MAX_CHANNELS)))
         }) else {
             return false;
         };
+        if nch == 0 {
+            return false;
+        }
         let t = (now - back * tps).max(0.0).round() as Tick;
         let track = self.ch.min(nch - 1);
         let vel16 = if ms.velocity {

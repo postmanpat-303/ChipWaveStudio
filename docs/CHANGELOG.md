@@ -4,6 +4,11 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Clean new songs
+- **File › New song (Ctrl+N) starts clean:** no instruments, no tracks, no notes, only the **Song / Master** track, with a hint on the Timeline to drag an instrument from the Browser or click **+ Add track**. Default tempo and time signature as before. (Before, a new song kept the current song's instruments and channels.) With **Settings › New songs** off it's a tracker-mode song with four empty channels and no instruments.
+- Zero-track songs work everywhere: Inspector, mixer, instrument editor, piano roll, export, the view tabs, undo; leaving timeline mode gives one empty channel. **+ Add track** and changing the channel count keep Song / Master as the last track.
+- Old songs play exactly as before (the zero-track handling only applies to songs with no tracks).
+
 ### Plugin thumbnails and double-click load
 - **Plugins tab thumbnails:** each plugin row can show a small screenshot of its editor (or a generated card). Captured off-screen in a crash-guarded child, cached under `plugin-thumbs/`, refreshable from the row menu; ••• › Plugin thumbnails toggles them (`browser_thumbs`).
 - **Double-click / Enter** a plugin instrument or built-in instrument: creates a **new track** with it and opens its editor (plugin window on Windows, or the instrument panel). Double-click an effect: adds it to the current instrument's FX chain and opens its editor. Undoable.
