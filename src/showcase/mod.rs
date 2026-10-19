@@ -1,5 +1,5 @@
 //! "Get showcase instruments…" (docs/BROWSER.md): an optional, user-started
-//! download of eight free, open-source instrument plugins from their
+//! download of nine free, open-source instrument plugins from their
 //! creators' own release pages. Nothing here is shipped with ChipWave: the
 //! manifest pins each official release URL, its size and its SHA-256; the
 //! installer downloads, checks the hash, extracts only the `.vst3` / `.clap`
@@ -282,9 +282,10 @@ const ADL_MAC: &[Asset] = &[Asset {
     picks: &[p("ADLplug-1.0.0-mac/vst3/ADLplug.vst3", Dest::Vst3, "ADLplug.vst3")],
 }];
 
+const NO_BUILD: &str = "no ready-made download yet: the creator publishes source code only";
 const INSTALLER_ONLY: &str = "the creator ships this as an installer program only";
 
-/// the eight showcase instruments (same order as the dialog)
+/// the nine showcase instruments (same order as the dialog)
 pub const ITEMS: &[Item] = &[
     Item {
         id: "surge-xt",
@@ -422,6 +423,23 @@ pub const ITEMS: &[Item] = &[
         macos: Get::Auto(ADL_MAC),
         linux: Get::Page("the creator ships a .deb package only"),
     },
+    Item {
+        id: "aymidi",
+        name: "AyMidi",
+        creator: "Bernat Arlandis (berarma)",
+        category: "Chip",
+        licence: "GPL-2.0",
+        version: "source (2024-03-27)",
+        formats: "CLAP + VST3 (when built)",
+        page: "https://github.com/berarma/aymidi",
+        source: "https://github.com/berarma/aymidi",
+        licence_text: None,
+        big: false,
+        note: "AY-3-8910 / YM2149 PSG chip",
+        windows: Get::Page(NO_BUILD),
+        macos: Get::Page(NO_BUILD),
+        linux: Get::Page(NO_BUILD),
+    },
 ];
 
 pub fn item(id: &str) -> Option<&'static Item> {
@@ -542,14 +560,6 @@ pub enum State {
     Cancelled,
 }
 
-impl State {
-    pub fn finished(&self) -> bool {
-        matches!(
-            self,
-            State::Done | State::Skipped | State::Failed(_) | State::Cancelled
-        )
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct Progress {

@@ -1171,6 +1171,9 @@ fn main() {
         println!("{}", serde_json::to_string(&rep).unwrap_or_default());
         std::process::exit(0);
     }
+    if let Some(i) = args.iter().position(|a| a == "--install-showcase") {
+        std::process::exit(app::showcase::cli_install(&args, i));
+    }
     if let Some(i) = args.iter().position(|a| a == "--scan-plugins") {
         // scan every plugin folder (plus an optional extra one) and list instruments
         let mut dirs = plugin::scan::all_dirs(&settings::load().extra.plugin_dirs);

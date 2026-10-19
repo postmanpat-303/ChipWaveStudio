@@ -58,6 +58,9 @@ mod pluginview;
 mod plugsetup;
 mod sampleview;
 mod settingsview;
+pub mod showcase;
+#[cfg(test)]
+mod showcase_tests;
 pub mod shot;
 mod timeline;
 #[cfg(test)]
@@ -175,6 +178,8 @@ pub struct App {
     br: browserview::BrowserUi,
     /// Find plugins dialog (first run, Settings › Plugins, Browser)
     psetup: Option<plugsetup::PlugSetup>,
+    /// Get showcase instruments dialog (Browser › Plugins)
+    showcase: Option<showcase::ShowcaseDlg>,
     /// instrument list search
     instr_query: String,
     /// Generator editor state: kit piece, Dice history (0.2.3.12)
@@ -497,6 +502,7 @@ impl App {
             library: Default::default(),
             br: Default::default(),
             psetup: None,
+            showcase: None,
             instr_query: String::new(),
             gen_ui: Default::default(),
             ip: Default::default(),
@@ -1172,6 +1178,7 @@ impl eframe::App for App {
         self.fill_dialog(&ctx);
         self.plugin_browser(&ctx);
         self.plugin_setup_window(&ctx);
+        self.showcase_window(&ctx);
         self.browser_drag(&ctx);
         // window close button: ask first when there are unsaved changes
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {

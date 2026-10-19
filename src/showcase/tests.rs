@@ -275,7 +275,7 @@ fn archive_paths_cannot_escape() {
 
 #[test]
 fn manifest_is_pinned_official_and_matches_the_catalogue() {
-    assert_eq!(ITEMS.len(), 8);
+    assert_eq!(ITEMS.len(), 9);
     let mut ids = std::collections::HashSet::new();
     for it in ITEMS {
         assert!(ids.insert(it.id));
@@ -320,6 +320,9 @@ fn manifest_is_pinned_official_and_matches_the_catalogue() {
     assert!(matches!(item("dexed").unwrap().windows, Get::Auto(_)));
     assert!(matches!(item("adlplug").unwrap().windows, Get::Auto(_)));
     assert!(matches!(item("odin2").unwrap().windows, Get::Page(_)));
+    // AyMidi has no published binaries anywhere: download page only
+    let ay = item("aymidi").unwrap();
+    assert!([ay.windows, ay.macos, ay.linux].iter().all(|g| matches!(g, Get::Page(_))));
 }
 
 #[test]

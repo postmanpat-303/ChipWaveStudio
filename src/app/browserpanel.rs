@@ -231,6 +231,7 @@ enum Op {
     RemoveFolder(String),
     Rescan,
     FindPlugins,
+    GetShowcase,
     PluginRescan,
     Close,
 }
@@ -373,6 +374,10 @@ impl App {
                     }
                     if ui.button("Find plugins…").clicked() {
                         ops.push(Op::FindPlugins);
+                        ui.close();
+                    }
+                    if ui.button("Get showcase instruments…").clicked() {
+                        ops.push(Op::GetShowcase);
                         ui.close();
                     }
                     ui.separator();
@@ -744,6 +749,13 @@ impl App {
                     ops.push(Op::FindPlugins);
                 }
                 if ui
+                    .button("Get showcase instruments…")
+                    .on_hover_text("download 8 free, open-source instruments from their creators")
+                    .clicked()
+                {
+                    ops.push(Op::GetShowcase);
+                }
+                if ui
                     .add_enabled(
                         self.plug.scan.is_none(),
                         egui::Button::new("Rescan plugins"),
@@ -1052,7 +1064,7 @@ impl App {
                 Tab::Samples | Tab::Midi | Tab::Songs if self.extra.browser_dirs.is_empty() => {
                     "Nothing here yet: add a folder (Location column + Add folder…, or the ••• menu)"
                 }
-                Tab::Plugins => "No plugins found yet: Find plugins… searches your drive",
+                Tab::Plugins => "No plugins found yet: Find plugins… searches your drive, or Get showcase instruments…",
                 _ => "No matches: clear the search or a filter",
             };
             ui.label(egui::RichText::new(msg).small().color(t.ink2));
@@ -1184,6 +1196,7 @@ impl App {
                 Op::RemoveFolder(d) => self.br_remove_folder(&d),
                 Op::Rescan => self.br_rescan(),
                 Op::FindPlugins => self.open_plugin_setup(false),
+                Op::GetShowcase => self.open_showcase(),
                 Op::PluginRescan => self.start_plugin_scan(true),
                 Op::Close => self.toggle_browser(),
             }

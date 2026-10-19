@@ -71,6 +71,15 @@ const BY_ID: &[(&str, Entry)] = &[
         },
     ),
 
+    (
+        "github.com/berarma/aymidi",
+        Entry {
+            category: "Chip",
+            creator: "Bernat Arlandis (berarma)",
+            tags: &["Showcase", "Chip", "PSG"],
+        },
+    ),
+
     // VST3 class ids (32 hex digits, ChipWave text form)
     (
         "abcdef019182faeb566d624153675854", // Surge XT
@@ -237,6 +246,14 @@ const BY_NAME: &[(&str, Entry)] = &[
             tags: &["Showcase", "Chip", "FM"],
         },
     ),
+    (
+        "aymidi",
+        Entry {
+            category: "Chip",
+            creator: "Bernat Arlandis (berarma)",
+            tags: &["Showcase", "Chip", "PSG"],
+        },
+    ),
 ];
 
 /// look up metadata for a scanned plugin by its id and display name
@@ -294,6 +311,8 @@ mod tests {
         assert_eq!(lookup("deadbeef", "sfizz").unwrap().category, "Sampler");
         assert_eq!(lookup("deadbeef", "ADLplug").unwrap().category, "Chip");
         assert_eq!(lookup("deadbeef", "Odin 2").unwrap().category, "Pad");
+        assert_eq!(lookup("github.com/berarma/aymidi", "AyMidi").unwrap().category, "Chip");
+        assert_eq!(lookup("deadbeef", "AyMidi").unwrap().creator, "Bernat Arlandis (berarma)");
         // VST3 class id (hex) matches without relying on the name
         assert_eq!(
             lookup("ABCDEF019182FAEB566D624153675854", "Anything")
