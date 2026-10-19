@@ -548,19 +548,10 @@ impl App {
                     } else {
                         t.ink2
                     }))
+                    .truncate()
                     .sense(Sense::click()),
                 )
             };
-            if crumb(ui, "Drum Patterns", !inside).clicked() {
-                ops.push(POp::Open(None));
-            }
-            if flat {
-                ui.label(egui::RichText::new("›").color(t.ink2));
-                crumb(ui, if q.is_empty() { "Favourites" } else { "Search" }, true);
-            } else if let Some(f) = self.br.pat.folder {
-                ui.label(egui::RichText::new("›").color(t.ink2));
-                crumb(ui, STYLES[f], true);
-            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if pill(ui, "Favourites", favs_only)
                     .on_hover_text("only your favourite patterns (click a row's heart)")
@@ -568,6 +559,19 @@ impl App {
                 {
                     self.br.pat.favs_only = !favs_only;
                 }
+                // the crumbs take what is left, truncated with "…" when narrow
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    if crumb(ui, "Drum Patterns", !inside).clicked() {
+                        ops.push(POp::Open(None));
+                    }
+                    if flat {
+                        ui.label(egui::RichText::new("›").color(t.ink2));
+                        crumb(ui, if q.is_empty() { "Favourites" } else { "Search" }, true);
+                    } else if let Some(f) = self.br.pat.folder {
+                        ui.label(egui::RichText::new("›").color(t.ink2));
+                        crumb(ui, STYLES[f], true);
+                    }
+                });
             });
         });
         // ---- the list
@@ -800,11 +804,18 @@ impl App {
                         (None, true) => "starts on the next bar, in time".into(),
                         (None, false) => format!("loops at the song tempo ({bpm:.0} BPM)"),
                     };
-                    ui.label(egui::RichText::new(txt).size(11.0).color(t.ink));
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(&txt).size(11.0).color(t.ink))
+                            .truncate(),
+                    )
+                    .on_hover_text(&txt);
                 });
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Volume").size(11.0).color(t.ink2));
                     let mut v = self.extra.pattern_vol;
+                    // the slider gives way to "Auto" when the panel is narrow
+                    ui.spacing_mut().slider_width =
+                        (ui.available_width() - 70.0).clamp(40.0, 100.0);
                     let r = ui.add(egui::Slider::new(&mut v, 0.0..=1.5).show_value(false));
                     if r.changed() {
                         self.extra.pattern_vol = v;
@@ -1024,7 +1035,7 @@ impl App {
                 f.layout_no_wrap("Sort".into(), FontId::proportional(12.5), t.ink).size().x
             });
             let reserve = 24.0 + sort_w + 2.0 * ui.spacing().button_padding.x + 3.0 * 3.0 + 10.0;
-            let w = (ui.available_width() - reserve).max(80.0);
+            let w = (ui.available_width() - reserve).max(30.0);
             if let Some(mut s) = self.br.files.edit.clone() {
                 let r = ui.add(
                     egui::TextEdit::singleline(&mut s)

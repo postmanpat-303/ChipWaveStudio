@@ -9,7 +9,7 @@ The Browser is a long panel docked on the **right** of the window. It lists ever
 | Do | How |
 |---|---|
 | Show / hide | **Ctrl+B**, the **Browser** button in the toolbar's VIEW group, or **×** in the panel's header |
-| Width | drag the panel's left edge (260–720 pt) |
+| Width | drag the panel's left edge (220–720 pt; it stays where you drop it and is remembered; long names and paths truncate with "…") |
 
 Whether it is open and how wide it is are saved in `settings.toml` (`browser_open`, `browser_w`; see [SETTINGS.md](SETTINGS.md)). It is open by default and works in every theme.
 

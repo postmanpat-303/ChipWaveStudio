@@ -32,6 +32,8 @@ pub(super) struct InstUi {
     pub ab: Option<Ab>,
     /// lower_h when the splitter drag started
     drag_h0: Option<f32>,
+    /// the splitter as last drawn (tests drag it)
+    pub split: Option<Rect>,
     /// the splitter is dragged to the bottom: release hides the panel
     pub collapse_pending: bool,
     /// the selected modulator (its depth is what Alt-drag edits)
@@ -317,6 +319,7 @@ impl App {
                 self.pattern_view(ui)
             }
         });
+        self.ip.split = Some(split);
         // splitter: drag to resize, to the bottom to hide, double-click = automatic
         let sr = ui
             .interact(split, egui::Id::unique("lower_split"), Sense::click_and_drag())

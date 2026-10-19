@@ -92,6 +92,9 @@ pub(crate) struct BrowserUi {
     pub(crate) focus: bool,
     /// screen rects as last drawn: the panel, instrument slots, the view
     pub(crate) rect: Rect,
+    /// how wide the panel's content asked to be last frame (it is clipped
+    /// to the panel instead of widening it; tests check it fits)
+    pub(crate) want_w: f32,
     pub(crate) slot_rects: Vec<(u8, Rect)>,
     pub(crate) central: Rect,
     pub(crate) preview_until: Option<Instant>,
@@ -139,6 +142,7 @@ impl Default for BrowserUi {
             rev: 0,
             focus: false,
             rect: Rect::NOTHING,
+            want_w: 0.0,
             slot_rects: vec![],
             central: Rect::NOTHING,
             preview_until: None,

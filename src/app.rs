@@ -58,6 +58,8 @@ mod modview;
 #[cfg(test)]
 mod modview_tests;
 #[cfg(test)]
+mod narrow_tests;
+#[cfg(test)]
 mod newsong_tests;
 mod noterec;
 #[cfg(test)]

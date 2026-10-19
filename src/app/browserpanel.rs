@@ -310,14 +310,18 @@ fn badge(p: &egui::Painter, r: Rect, f: Fmt) {
     );
 }
 
+/// the narrowest the Browser can be dragged; everything inside truncates,
+/// wraps or scrolls to fit (wider content must never widen the panel)
+pub(super) const BROWSER_MIN_W: f32 = 220.0;
+
 impl App {
     pub(super) fn browser_side(&mut self, ui: &mut egui::Ui) {
-        let w = self.extra.browser_w.clamp(260.0, 720.0);
+        let w = self.extra.browser_w.clamp(BROWSER_MIN_W, 720.0);
 
         let resp = egui::Panel::right("browser")
             .resizable(true)
             .default_size(w)
-            .size_range(260.0..=720.0)
+            .size_range(BROWSER_MIN_W..=720.0)
             .frame(
                 egui::Frame::NONE
                     .fill(th().cart_top)
@@ -328,7 +332,22 @@ impl App {
                         bottom: 4,
                     }),
             )
-            .show(ui, |ui| self.browser_panel(ui));
+            .show(ui, |ui| {
+                // the content lives in a child that does not report its size
+                // to the panel: anything too wide is clipped (and truncates,
+                // wraps or scrolls on its own) instead of pushing the panel
+                // wider than the user dragged it, frame after frame
+                let r = ui.max_rect();
+                let mut c = ui.new_child(egui::UiBuilder::new().max_rect(r).layout(*ui.layout()));
+                c.set_clip_rect(ui.clip_rect());
+                self.browser_panel(&mut c);
+                self.br.want_w = c.min_rect().width();
+                let h = c.min_rect().height().min(r.height());
+                ui.allocate_rect(
+                    Rect::from_min_size(r.min, egui::vec2(r.width(), h)),
+                    Sense::hover(),
+                );
+            });
         let nw = resp.response.rect.width();
         if (nw - self.extra.browser_w).abs() > 0.5 && !ui.ctx().input(|i| i.pointer.any_down()) {
             self.extra.browser_w = nw;
@@ -380,11 +399,6 @@ impl App {
                 .background_color(rgb(Fmt::Cwi.colour()));
             ui.label(g);
             let n_tab = self.br.items.iter().filter(|i| i.in_tab(tab)).count();
-            ui.label(
-                egui::RichText::new(format!("{} · {n_tab}", tab.name()))
-                    .small()
-                    .color(t.ink2),
-            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
                     .small_button("×")
@@ -449,17 +463,34 @@ impl App {
                 }
                 if let Some(n) = scanning {
                     ui.spinner();
-                    ui.label(
-                        egui::RichText::new(format!("{n} files"))
-                            .small()
-                            .color(t.ink2),
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(format!("{n} files"))
+                                .small()
+                                .color(t.ink2),
+                        )
+                        .truncate(),
                     );
                 }
+                // the tab and its count take what the buttons leave (narrow
+                // panels: truncated with "…", never wider than the panel)
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(format!("{} · {n_tab}", tab.name()))
+                                .small()
+                                .color(t.ink2),
+                        )
+                        .truncate(),
+                    );
+                });
             });
         });
-        // ---- category tabs (4 x 2)
-        let tw = ((ui.available_width() - 9.0) / 4.0).floor();
-        for row in Tab::ALL.chunks(4) {
+        // ---- category tabs: 4 per row, 3 when the panel is narrow (the
+        // strip wraps into more rows instead of widening the panel)
+        let per_row = if ui.available_width() < 270.0 { 3 } else { 4 };
+        let tw = ((ui.available_width() - 3.0 * (per_row - 1) as f32) / per_row as f32).floor();
+        for row in Tab::ALL.chunks(per_row) {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 3.0;
                 for &tb in row {
@@ -502,7 +533,7 @@ impl App {
                         );
                     }
                     icon(p, Icon::Tab(tb), Pos2::new(r.center().x, r.top() + 14.0), 16.0, c);
-                    p.text(
+                    p.with_clip_rect(r.shrink2(egui::vec2(2.0, 0.0))).text(
                         Pos2::new(r.center().x, r.bottom() - 10.0),
                         egui::Align2::CENTER_CENTER,
                         if tb == Tab::Patterns { "Patterns" } else { tb.name() },
@@ -815,7 +846,8 @@ impl App {
         }
         // ---- the Plugins tab: find / rescan
         if tab == Tab::Plugins {
-            ui.horizontal(|ui| {
+            // wrap onto a second line when narrow
+            ui.horizontal_wrapped(|ui| {
                 if ui
                     .button("Find plugins…")
                     .on_hover_text("search your drive for VST3 and CLAP plugin folders")
@@ -857,14 +889,12 @@ impl App {
             } else {
                 format!(" · {}", what.join(" + "))
             };
-            ui.label(
-                egui::RichText::new(format!(
-                    "{n} result{}{extra}",
-                    if n == 1 { "" } else { "s" }
-                ))
-                .small()
-                .color(t.ink2),
-            );
+            let label = egui::RichText::new(format!(
+                "{n} result{}{extra}",
+                if n == 1 { "" } else { "s" }
+            ))
+            .small()
+            .color(t.ink2);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 egui::ComboBox::from_id_salt("br_sort")
                     .selected_text(match self.br.filter.sort {
@@ -878,6 +908,9 @@ impl App {
                         ui.selectable_value(&mut self.br.filter.sort, Sort::Type, "Type");
                         ui.selectable_value(&mut self.br.filter.sort, Sort::Rating, "Rating");
                     });
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add(egui::Label::new(label).truncate());
+                });
             });
         });
         // ---- results (virtualised rows)
@@ -1225,7 +1258,7 @@ impl App {
                 Tab::Plugins => "No plugins found yet: Find plugins… searches your drive, or Get showcase instruments…",
                 _ => "No matches: clear the search or a filter",
             };
-            ui.label(egui::RichText::new(msg).small().color(t.ink2));
+            ui.add(egui::Label::new(egui::RichText::new(msg).small().color(t.ink2)).wrap());
         }
         // ---- preview bar
         let bar_top = self.br.rect.bottom() - bottom_h;
@@ -1257,20 +1290,24 @@ impl App {
                     }
                     let tname =
                         self.with(|s| s.song.channel_names.get(ch).cloned().unwrap_or_default());
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "Preview on C-3 · plays through track {:02} {tname}",
-                            ch + 1
-                        ))
-                        .size(11.0)
-                        .color(t.ink),
-                    );
+                    let text =
+                        format!("Preview on C-3 · plays through track {:02} {tname}", ch + 1);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.checkbox(
                             &mut self.extra.browser_autoplay,
                             egui::RichText::new("Auto").size(11.0),
                         )
                         .on_hover_text("auto-play: preview each item when it's selected");
+                        // the label gets what is left, truncated with "…"
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(&text).size(11.0).color(t.ink),
+                                )
+                                .truncate(),
+                            )
+                            .on_hover_text(&text);
+                        });
                     });
                 });
             },
