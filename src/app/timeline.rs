@@ -190,6 +190,10 @@ pub(crate) struct TimelineUi {
     pub(crate) lane_menu: Option<(std::time::Instant, super::lanes::LaneMenu)>,
     /// a track header being dragged (reorder): the track
     pub(crate) head_drag: Option<usize>,
+    /// follow last-touched knob (design A §3.4): open/show its lane
+    pub(crate) follow_touch: bool,
+    /// last automatable target the user moved (instrument/FX/mixer knob)
+    pub(crate) last_touch: Option<crate::automation::Target>,
 }
 
 impl Default for TimelineUi {
@@ -229,6 +233,8 @@ impl Default for TimelineUi {
             auto_menu: None,
             lane_menu: None,
             head_drag: None,
+            follow_touch: false,
+            last_touch: None,
         }
     }
 }
@@ -2069,6 +2075,8 @@ impl App {
                     self.tlv.lane_menu.as_ref().map(|m| &m.1),
                     &song_lanes,
                     &units,
+                    self.tlv.follow_touch,
+                    self.tlv.last_touch.is_some(),
                     &mut auto_ops,
                 );
             }

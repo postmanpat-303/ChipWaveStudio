@@ -6,6 +6,8 @@
 >
 > **Stage 1 (Unreleased):** lane headers show **Device > Parameter** (generated from the target); colour follows the parameter family (cutoff cyan, resonance magenta, volume green, pan amber…); a **value scale** (Hz / dB / %) sits on the left of each timeline lane; points are larger; **double-click** adds a point (a plain click no longer does); the "+ Lane" menu has a **search** box; **Add automation lane** from a knob in timeline mode creates a **track** lane (does not switch the lower panel away from the Instrument editor, and does not duplicate an existing lane).
 
+> **Stage 2 (Unreleased):** knobs with a lane show a **coloured LED**; right-click › **Show automation** opens the track lane (or adds it); the "+ lane" strip has **last** (follow last-touched) and **show**.
+
 
 Automation lanes sit **under the arranger blocks** ([ARRANGER.md](ARRANGER.md)), drawn as glowing curves on dark CRT-style lanes: the "visually cool" part. Curve colours are functional (one saturated colour per lane), while block colours stay muted ([DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md)).
 

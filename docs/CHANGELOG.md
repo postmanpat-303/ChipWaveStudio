@@ -4,6 +4,11 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Automation UX stage 2 (design A)
+- Knobs with a lane show a **coloured LED** (family colour).
+- Right-click › **Show automation** (or Add) opens the track lane without leaving the Instrument editor.
+- Timeline "+ lane" strip: **last** toggles follow-last-touched; **show** opens the last knob's lane.
+
 ### Automation UX stage 1 (design A)
 - Timeline lane headers show **Device > Parameter** (generated from the target).
 - Lane colour follows the **parameter family** (cutoff cyan, resonance magenta, volume green, pan amber, FX mix violet, plugins teal).

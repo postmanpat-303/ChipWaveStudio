@@ -36,6 +36,8 @@ pub(super) struct KnobArgs<'a> {
     pub rings: &'a [super::modview::Ring],
     /// the modulated position now (a dot on the arc)
     pub live: Option<f32>,
+    /// automation LED (lane colour) when this parameter has a lane
+    pub auto_led: Option<Color32>,
 }
 
 /// A knob for a 0..1 position. Drag up/down (or left/right) to turn it,
@@ -180,6 +182,11 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         if !a.rings.is_empty() {
             p.circle_filled(pt(a0 + span * lv, RAD), 2.6, t.ink);
         }
+    }
+    if let Some(led) = a.auto_led {
+        let lp = Pos2::new(kc.x + RAD - 1.0, kc.y - RAD + 2.0);
+        p.circle_filled(lp, 3.6, led);
+        p.circle_stroke(lp, 3.6, Stroke::new(1.0, Color32::from_black_alpha(160)));
     }
     let small = egui::FontId::proportional(10.5);
     let mono = egui::FontId::monospace(10.0);

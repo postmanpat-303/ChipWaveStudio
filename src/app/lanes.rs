@@ -230,6 +230,41 @@ impl App {
         (tr < ntr).then_some(tr)
     }
 
+    /// colour of an existing lane for `t` (song or any track), if any
+    pub(super) fn lane_led(&self, t: crate::automation::Target) -> Option<egui::Color32> {
+        let id = t.id();
+        let rgb = self.with(|s| {
+            let has_song =
+                s.song.automation.iter().any(|l| {
+                    l.target == id || crate::automation::Target::parse(&l.target) == Some(t)
+                });
+            let has_track = s.song.timeline.as_deref().is_some_and(|tl| {
+                tl.tracks.iter().any(|tr| {
+                    tr.auto.iter().any(|l| l.target == id)
+                        || tl
+                            .clips
+                            .iter()
+                            .any(|c| c.auto.iter().any(|l| l.target == id))
+                })
+            });
+            (has_song || has_track).then(|| t.family_in(&s.song).colour())
+        })?;
+        Some(egui::Color32::from_rgb(
+            ((rgb >> 16) & 0xff) as u8,
+            ((rgb >> 8) & 0xff) as u8,
+            (rgb & 0xff) as u8,
+        ))
+    }
+
+    /// record that the user touched `t`; when follow-last-touched is on,
+    /// open/show its track lane (design A §3.4)
+    pub(super) fn touch_param(&mut self, t: crate::automation::Target) {
+        self.tlv.last_touch = Some(t);
+        if self.tlv.follow_touch {
+            self.add_lane(t);
+        }
+    }
+
     /// "Bass · Analog > Filter cutoff": a lane's label for target `t`
     pub(super) fn lane_label(&self, t: crate::automation::Target) -> String {
         use crate::automation::Target;

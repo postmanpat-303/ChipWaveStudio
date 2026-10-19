@@ -73,6 +73,8 @@ struct Cx {
     tag: &'static str,
     words: Vec<String>,
     changed: bool,
+    /// knob the user just moved (follow last-touched)
+    touch: Option<crate::automation::Target>,
     acts: Vec<Act>,
     flash: Option<(String, f32)>,
     jump: Option<String>,
@@ -457,6 +459,7 @@ impl App {
             tag,
             words,
             changed: false,
+            touch: None,
             acts: vec![],
             flash: None,
             jump: self.ip.jump.take(),
@@ -701,6 +704,9 @@ impl App {
                 Act::AddPluginFx(p) => self.add_plugin_fx(idx as u8 + 1, p),
                 Act::Lane(tg) => self.add_lane(tg),
             }
+        }
+        if let Some(tg) = cx.touch {
+            self.touch_param(tg);
         }
     }
 
@@ -1120,6 +1126,7 @@ impl App {
         let live = tid
             .as_deref()
             .map(|id| super::modview::live_pos(&cx.modm, id, n, &cx.live));
+        let auto_led = p.target.and_then(|tg| self.lane_led(tg));
         let out = knob::knob(
             ui,
             egui::Id::unique(("ipk", cx.idx, &p.key)),
@@ -1136,6 +1143,7 @@ impl App {
                 tip: &tip,
                 rings: &rings,
                 live,
+                auto_led,
             },
         );
         if let Some(id) = &tid {
@@ -1148,6 +1156,9 @@ impl App {
             }
             (p.set)(inst, v);
             cx.changed = true;
+            if let Some(tg) = p.target {
+                cx.touch = Some(tg);
+            }
         }
         if out.lock_clicked {
             if let Some((_, f)) = &p.lock {
@@ -1229,8 +1240,14 @@ impl App {
             }
             if let Some((tg, id, waiting)) = &learn {
                 if ui
-                    .button("Add automation lane")
-                    .on_hover_text("draw this parameter's changes over the song")
+                    .button(if self.lane_led(*tg).is_some() {
+                        "Show automation"
+                    } else {
+                        "Add automation lane"
+                    })
+                    .on_hover_text(
+                        "open this parameter's lane under its track (timeline) or in the Automation tab",
+                    )
                     .clicked()
                 {
                     cx.acts.push(Act::Lane(*tg));
@@ -1598,19 +1615,28 @@ impl App {
                             tip: &tip,
                             rings: &[],
                             live: None,
+                            auto_led: self.lane_led(Target::Macro(i, k)),
                         },
                     );
                     if out.changed {
                         if let Some(x) = info {
                             set.push((id, x.min + (x.max - x.min) * n as f64));
                         }
+                        self.touch_param(Target::Macro(i, k));
                     }
                     let tg = Target::Macro(i, k);
                     let tid = tg.id();
                     let waiting = self.midi.learn.as_deref() == Some(tid.as_str());
                     let r = out.resp.interact(Sense::click());
                     r.context_menu(|ui| {
-                        if ui.button("Add automation lane").clicked() {
+                        if ui
+                            .button(if self.lane_led(tg).is_some() {
+                                "Show automation"
+                            } else {
+                                "Add automation lane"
+                            })
+                            .clicked()
+                        {
                             self.add_lane(tg);
                             ui.close();
                         }

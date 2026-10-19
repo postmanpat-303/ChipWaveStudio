@@ -71,6 +71,10 @@ pub(crate) struct AutoMenu {
 pub(crate) enum AutoOp {
     /// fold / unfold track `tr`
     Toggle(usize),
+    /// toggle follow-last-touched
+    FollowTouch(bool),
+    /// show the last-touched knob's lane
+    ShowLastTouch,
     AddLane(usize, Target),
     /// move song lane `k` onto track `tr` (pin)
     Pin(usize, usize),
@@ -322,6 +326,8 @@ pub(crate) fn lanes_ui(
     menu: Option<&super::super::lanes::LaneMenu>,
     song_lanes: &[(usize, String)],
     units: &[Units],
+    follow_touch: bool,
+    has_last_touch: bool,
     ops: &mut Vec<AutoOp>,
 ) {
     let t = th();
@@ -384,6 +390,25 @@ pub(crate) fn lanes_ui(
                     })
                     .response
                     .on_hover_text("automate a parameter on this track (mixer, instrument, FX, plugin, modulation depth)");
+                    let ft = ui
+                        .selectable_label(
+                            follow_touch,
+                            egui::RichText::new("last").small(),
+                        )
+                        .on_hover_text(
+                            "follow last-touched knob: moving a knob opens or focuses its lane on this track",
+                        );
+                    if ft.clicked() {
+                        ops.push(AutoOp::FollowTouch(!follow_touch));
+                    }
+                    if has_last_touch
+                        && ui
+                            .small_button("show")
+                            .on_hover_text("show the lane for the last knob you moved")
+                            .clicked()
+                    {
+                        ops.push(AutoOp::ShowLastTouch);
+                    }
                     if !song_lanes.is_empty() {
                         ui.menu_button(egui::RichText::new("pin song lane").small(), |ui| {
                             ui.label(
@@ -1058,6 +1083,23 @@ impl App {
             }
             AutoOp::Menu(m) => {
                 self.tlv.auto_menu = Some(m);
+                return;
+            }
+            AutoOp::FollowTouch(on) => {
+                self.tlv.follow_touch = on;
+                self.status = if on {
+                    "Follow last-touched: on — move a knob to open its lane".into()
+                } else {
+                    "Follow last-touched: off".into()
+                };
+                return;
+            }
+            AutoOp::ShowLastTouch => {
+                if let Some(t) = self.tlv.last_touch {
+                    self.add_lane(t);
+                } else {
+                    self.status = "Move a knob first, then click show".into();
+                }
                 return;
             }
             AutoOp::Snapshot => {

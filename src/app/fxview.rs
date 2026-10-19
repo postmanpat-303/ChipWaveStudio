@@ -264,6 +264,7 @@ impl App {
                                 tip: def.tip,
                                 rings: &[],
                                 live: None,
+                                auto_led: None,
                             },
                         );
                     },

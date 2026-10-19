@@ -100,7 +100,7 @@ Audio files play on the timeline as **audio clips (M4)**, on any track, mixed in
 
 ## Automation lanes
 
-**Stage 1 (Unreleased, design A):** lane headers show Device > Parameter; colour by parameter family; value scale on the left; double-click to add points; searchable "+ lane" menu. See [AUTOMATION.md](AUTOMATION.md) and [research/automation-ux.md](research/automation-ux.md).
+**Stage 1–2 (Unreleased, design A):** knob LEDs, Show automation, follow last-touched;  lane headers show Device > Parameter; colour by parameter family; value scale on the left; double-click to add points; searchable "+ lane" menu. See [AUTOMATION.md](AUTOMATION.md) and [research/automation-ux.md](research/automation-ux.md).
 
 
 In timeline mode every track can show **automation lanes (M5)** under its header.

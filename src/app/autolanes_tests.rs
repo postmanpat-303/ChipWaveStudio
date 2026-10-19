@@ -297,3 +297,25 @@ fn lane_colour_follows_the_parameter_not_the_index() {
     assert_eq!(v, 0x6FD07A);
     assert_eq!(p, 0xE0A060);
 }
+
+#[test]
+fn follow_last_touched_opens_the_track_lane() {
+    let mut h = setup(true);
+    h.state_mut().tlv.follow_touch = true;
+    h.state_mut().touch_param(Target::ChanVolume(1));
+    frame(&mut h);
+    let t = timeline(&h);
+    assert!(t.view.auto_open & 0b10 != 0);
+    assert_eq!(t.tracks[1].auto.len(), 1);
+    assert_eq!(h.state().tlv.last_touch, Some(Target::ChanVolume(1)));
+}
+
+#[test]
+fn lane_led_is_some_when_a_track_lane_exists() {
+    let mut h = setup(true);
+    assert!(h.state().lane_led(Target::ChanVolume(1)).is_none());
+    h.state_mut()
+        .auto_op(AutoOp::AddLane(1, Target::ChanVolume(1)));
+    let led = h.state().lane_led(Target::ChanVolume(1));
+    assert!(led.is_some(), "LED after adding a lane");
+}
