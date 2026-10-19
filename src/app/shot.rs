@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 34] = [
+pub const VIEWS: [&str; 35] = [
     "pattern",
     "arranger",
     "timeline",
@@ -68,6 +68,7 @@ pub const VIEWS: [&str; 34] = [
     "plugin-fx",
     "modulate",
     "modulate-fx",
+    "wave",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -142,7 +143,7 @@ impl App {
                 self.dirty = false;
                 super::voiceview::TF_SCROLL.with(|f| f.set(true));
             }
-            "drums" | "kit" | "chipfx" | "analog" | "fm" | "noise" => {
+            "drums" | "kit" | "chipfx" | "analog" | "fm" | "noise" | "wave" => {
                 // a Generator (0.2.3.12): the Zap kick or the Psy Kit;
                 // Chip FX (0.2.3.13): the Psy Laser
                 let name = match view {
@@ -151,7 +152,14 @@ impl App {
                     "analog" => "Psy Rolling Bass",
                     "fm" => "Metallic Bell",
                     "noise" => "White Riser",
+                    "wave" => "Wave Vowel Bass",
                     _ => "Psy Zap Kick",
+                };
+                // CHIPWAVE_SHOT_PRESET=<name>: another generator preset
+                let pick = std::env::var("CHIPWAVE_SHOT_PRESET").ok();
+                let name = match &pick {
+                    Some(n) if crate::gen::preset(n).is_some() => n.as_str(),
+                    _ => name,
                 };
                 let p = crate::gen::preset(name).unwrap_or_default();
                 self.add_instrument(name, InstrumentKind::Gen(p));

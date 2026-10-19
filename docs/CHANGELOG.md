@@ -4,6 +4,18 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+- **Wave, a wavetable synth generator:** **New… › Generator (wavetable)**. Guide: [GENERATORS.md › Wave](GENERATORS.md#wave-wavetable-unreleased).
+  - **Two wavetable oscillators** with **position scanning** (smooth crossfades between frames), Semi/Fine and level each; **unison** up to 8 voices per oscillator with **Detune** and stereo **Spread**; a **sub** sine and **noise**.
+  - **Band-limited:** every frame is stored as 10 FFT mipmaps (512 → 1 harmonics) and each note plays the richest one below Nyquist, so high notes don't alias (tested at 3.1 kHz: alias images below −74 dBFS).
+  - ChipWave's **ladder filter** (LP/BP/HP, 12/24 dB, clean or vintage) with key tracking, drive and its own envelope, which can also sweep the table positions (**Env>Pos**); an amp envelope, glide and legato. 38xx–3Bxx move its cutoff and resonance.
+  - **All 28 knobs are automatable** (`instrument.N.gen.K`), the first 8 are 43xy macros, and every one is a drag-to-modulate target. Dice, Mutate, locks, history and Bake work as on the other generators.
+  - **10 built-in tables, generated in code** (Basic Shapes, Pulse Width, Harmonic Sweep, Formant Vowels from the Voice engine, FM Sweep, Sync Sweep, Wavefold, Bit Crush, Odd Harmonics, Digital Noise), so all are ours to ship. No third-party tables are included.
+  - **Import WAV…:** single-cycle WAVs (any length up to 8 192 samples) and Serum-style wavetables (2 048-sample frames, `clm` chunk frame sizes read, up to 256 frames). The table is saved inside the song.
+  - 6 presets: Wave Supersaw, Wave Vowel Bass, Wave Glass Keys, Wave Evolving Pad, Wave Chip Pluck, Wave Growl (also in the library and as `patch = "gen:…"` in text songs).
+  - Old songs render bit-identically (all demos checked against the previous build) and the audio thread stays allocation-free (tested with 8+8 unison voices, a lane and an LFO on the position). `--self-test` checks the tables, aliasing, import and a `.cwt` round trip.
+  - Design inspired by Vital by Matt Tytel and Surge XT's wavetable oscillator (ideas only; credited in About › Credits and THIRD_PARTY_LICENSES).
+  - Limits: no warp modes or spectral morphing yet, no table drawing or sample-to-table conversion, modulators are per instrument (not per voice), octave mipmaps (see the guide), older versions can't open songs that use Wave.
+
 - **VST3 hosting:** VST3 instruments and effects next to CLAP. Guide: [PLUGINS.md › VST3](PLUGINS.md#vst3-unreleased).
   - **Same everything as CLAP:** the scan (crash-guarded child process, cache), the **Add plugin instrument** browser and the **Plugin effect ›** menus (marked VST3), the parameter list, 8 macros and 43xy, automation lanes, drag-to-modulate, plugin delay compensation, state saved in the song, missing-plugin placeholders, offline render and `--self-test`.
   - **Editor:** the plugin's own VST3 editor is embedded in a ChipWave window on Windows, resizable both ways. Linux and macOS use the parameter list for now.

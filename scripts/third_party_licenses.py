@@ -174,11 +174,12 @@ Generators (src/gen.rs, src/ladder.rs, 0.2.3.12):
   * V. Valimaki & A. Huovilainen, "Antialiasing oscillators in subtractive
     synthesis", IEEE Signal Processing Magazine 24(2), 2007 (polyBLEP);
     M. Finke's polyBLEP notes;
-  * Vital by Matt Tytel, GPL-3.0, https://github.com/mtytel/vital (oscillator
-    drift and macro/random workflow ideas);
+  * Vital by Matt Tytel, GPL-3.0, https://github.com/mtytel/vital (the Wave
+    wavetable synth design, oscillator drift and macro/random workflow ideas;
+    no code, presets or wavetables are used);
   * Surge XT by the Surge Synth Team, GPL-3.0,
     https://github.com/surge-synthesizer/surge (analog-style drift, noise
-    colours);
+    colours, the wavetable oscillator's mipmapping);
   * Dexed by Pascal Gauthier, GPL-3.0, https://github.com/asb2m10/dexed , and
     the Music Synthesizer for Android (MSFA) by Raph Levien / Google,
     Apache-2.0, https://github.com/google/music-synthesizer-for-android

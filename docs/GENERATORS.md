@@ -7,8 +7,9 @@
 | [Analog](#analog-02314) | 0.2.3.14 | Generator (analog) | Fat Moog Bass, Psy Rolling Bass, Warm Lead, Brass, Dark Pad, Acid Squelch |
 | [FM-4](#fm-4-02314) | 0.2.3.14 | Generator (FM-4) | E-Piano, Metallic Bell, Psy Zap Bass, Growl, Dark Pluck |
 | [Noise](#noise-02314) | 0.2.3.14 | Generator (noise) | White Riser, Downlifter, Impact, Wind, Vinyl Crackle |
+| [Wave](#wave-wavetable-unreleased) (wavetable) | Unreleased | Generator (wavetable) | Wave Supersaw, Wave Vowel Bass, Wave Glass Keys, Wave Evolving Pad, Wave Chip Pluck, Wave Growl |
 
-46 presets in all; every one is also in the instrument library under "generator".
+52 presets in all; every one is also in the instrument library under "generator".
 
 Generators are instruments that synthesise a sound from a few **macro knobs**
 instead of playing a sample or a full synth patch. Each one can be rolled with
@@ -181,6 +182,67 @@ The Noise generator makes risers, downlifters, impacts and textures.
 
 Presets: White Riser, Downlifter, Impact, Wind, Vinyl Crackle.
 
+## Wave (wavetable, Unreleased)
+
+![Wave generator](screenshots/dark-generators-wave.png)
+
+**New… > Generator (wavetable)**. A wavetable synth in the Generator family,
+so Dice, Mutate, locks, Bake, 43xy, automation lanes, MIDI learn and
+drag-to-modulate all work on it.
+
+- **Two oscillators (A, B):** each plays a **table** (a stack of single-cycle
+  frames) and scans it with **Pos A / Pos B** (0 % = the first frame, 100 % =
+  the last; neighbouring frames crossfade smoothly). **Semi** (±24 st), **Fine**
+  (±50 ct) and a level each. The card shows the current frame.
+- **No aliasing:** every frame is stored as 10 band-limited **mipmaps**
+  (512, 256, … 1 harmonics, built with an FFT when the table is made). Each
+  note plays the richest level whose top harmonic stays below Nyquist, so even
+  a 3 kHz saw is clean (tested: alias images below −74 dBFS).
+- **Unison:** 1–8 voices per oscillator, **Detune** (up to ±50 cents across
+  the stack) and **Spread** (stereo). One voice is mono and centred.
+- **Sub** (a sine an octave below A) and **Noise** (white).
+- **Filter:** ChipWave's ladder (LP / BP / HP, 12 or 24 dB, clean or
+  **Vintage**), with **Cutoff**, **Res**, **Key trk**, **Drive** and its own
+  ADSR (**Env amt**, up to 6 octaves). **Env>Pos A / B** also send that
+  envelope to the table positions (±100 %), for vowel and sweep sounds.
+- **Amp envelope** (A/D/S/R), **Level**, **Glide** and **Legato**.
+- **Knobs 1–8** (43xy macros) are Pos A, Pos B, Cutoff, Res, Env amt,
+  Detune, Spread and Osc B. All 28 knobs are automation targets
+  (`instrument.N.gen.K`, K = 1…28) and drop targets for modulators.
+- **38xx–3Bxx** move the Wave's own Cutoff (knob 3) and Res (knob 4) when its
+  filter is on.
+
+**Built-in tables** (generated in code by ChipWave, 32 frames each, so they're
+free to redistribute): Basic Shapes (sine → triangle → saw → square), Pulse
+Width (50 % → 3 %), Harmonic Sweep (1 → 64 harmonics), Formant Vowels (A E I O
+U from the Voice engine's formant data), FM Sweep, Sync Sweep, Wavefold, Bit
+Crush, Odd Harmonics and Digital Noise. They are built once at start-up (about
+5.6 MB).
+
+**Import** (the **Import WAV…** button on each oscillator card):
+
+- a **single-cycle WAV** (up to 8 192 samples, any length), or
+- a **wavetable WAV** of **2 048-sample frames** (Serum style, up to 256
+  frames). A Serum `clm ` chunk (`<!>2048` etc.) sets the frame size when it is
+  there.
+
+Stereo files are mixed to mono and the table is peak-normalised. The table is
+**saved inside the song** (16-bit, base64 in the instrument's `user` entry),
+so the song plays on another machine without the file. **Clear** goes back to
+Basic Shapes. Imported tables are your own responsibility: ChipWave ships no
+third-party wavetables.
+
+Text songs: `patch = "gen:Wave Supersaw"`, and `[instrument.gen.engine.Wave]`
+keys override it (`tables = [0, 2]` picks built-ins by number, `p = [...]`
+the knob values 0..1).
+
+Not yet: warp modes (bend, sync, FM from B…), spectral morphing, drawing a
+table or converting a ChipWave sample, per-voice modulation (modulators are
+per instrument). The mipmaps are one per octave, so depending on the note the
+top harmonic sits between a quarter and half the sample rate (12–24 kHz at
+48 kHz), and below about 47 Hz the 512-harmonic limit sets it lower (≈ 10 kHz
+at 20 Hz). Older versions can't open songs that use Wave.
+
 ## Moog ladder filter
 
 The Synth, Voice and Generator filters can be switched from the default **SVF
@@ -272,7 +334,8 @@ on generator instruments (Unreleased):
 - Songs using generators or the ladder filter don't open in ChipWave
   versions before 0.2.3.12, and songs with Chip FX don't open before
   0.2.3.13.
-- Analog, FM-4 and Noise don't open in versions before 0.2.3.14.
+- Analog, FM-4 and Noise don't open in versions before 0.2.3.14. Wave
+  (Unreleased) doesn't open in 0.2.4.0 or older.
 - A channel plays one note, so the Analog generator is mono per channel.
   Chords use several channels (chord spread).
 - FM-4 isn't oversampled, so very high ratios with a high Bright alias.
@@ -296,6 +359,10 @@ on generator instruments (Unreleased):
 - **sfxr** by Tomas Pettersson (DrPetter, MIT) and **sfxr-rs** by Teemu
   Erkkola (MIT): the Chip FX generator.
 
+- **Wave:** the wavetable design is inspired by **Vital** by Matt Tytel
+  (GPL-3) and Surge XT's wavetable oscillator (Surge Synth Team, GPL-3);
+  ideas only, no code, presets or tables copied. Serum's `clm` chunk is read
+  for frame sizes (format only).
 - **Robert Moog**'s Minimoog (the Analog voice), **V. Välimäki & A.
   Huovilainen**, IEEE SPM 2007 (polyBLEP).
 - **Vital** by Matt Tytel (GPL-3, https://github.com/mtytel/vital) and
