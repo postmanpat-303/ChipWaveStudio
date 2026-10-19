@@ -4,6 +4,14 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Devices: the track's chain along the bottom
+- **Devices tab** in the lower panel, next to Piano roll (also **DEVICES** in the view tab bar, **View › Devices in lower panel**, **Ctrl+7**): the selected track's instrument and effects **left to right**. First the **instrument card** (the lower-panel instrument editor, foldable to a slim strip), then one **card per insert effect**, then a **+** card that opens Browser › Effects. Scrolls sideways when the chain is long.
+- Effect cards have their key controls inline: **EQ** with its curve and a draggable dot per band, **Compressor** with its transfer curve, **Filter** with its response, **Delay** with its echo taps, **Reverb** with its decay, knobs for the rest. Plugin effects show their **thumbnail**, **Editor…** (double-click the thumbnail too), status and parameters. Every card: **power** (bypass), **collapse**, **×** remove, and drag the **title** to move it (an insertion marker shows where). Right-click a card for duplicate, move, presets.
+- **Browser › Effects (new tab):** ChipWave's built-in effects with a one-line description, the Grid FX patches and every effect plugin. The top says **Adds to: <track · instrument> (or drag onto a track)**. Double-click adds to the end of that chain; drag into the Devices row to insert **between cards** (insertion marker, "Insert at position n of …"); drop onto a timeline track to add to that track's chain. Dragging an instrument onto the Devices row replaces the track's instrument and **keeps its effects** (Ctrl+Z undoes).
+- **New EQ device:** 4 bands (low shelf, two peaks with Q, high shelf), ±18 dB, after Robert Bristow-Johnson's Audio EQ Cookbook. Flat at 0 dB (bit-exact pass-through). Presets: Warm low end, Air, Telephone, Flat.
+- The Devices tab follows the selected track (timeline header or tracker channel). Everything is undoable; the chain is the instrument's existing FX list, so **no song format change** and old songs play bit-identically.
+- **Inserting, moving or removing a device keeps the others running:** their delay / reverb tails and plugin instances are kept, only the new device is built (on the engine thread; the audio callback never allocates or locks). Automation lanes and modulation routes now **follow their device** when devices are moved, inserted or removed (before, a lane stayed on the slot number); a removed device's lanes go with it.
+
 ### Tracker: Advanced Edit and coloured channel headers
 - **Advanced Edit** panel (**Ctrl+Shift+A**, the **A<>E** toggle on the Block bar, View › Advanced Edit). Docked right of the pattern or floating.
   - **Section:** selection, column / track in the pattern or the whole song, whole pattern, whole song.

@@ -621,6 +621,105 @@ impl Song {
         Some(map)
     }
 
+    /// Insert `d` into instrument `owner`'s FX chain at `at` (clamped to the
+    /// end). Automation lanes and modulation routes of the devices after it
+    /// follow them. Returns the index, None if the chain is full (16).
+    pub fn insert_device(
+        &mut self,
+        owner: usize,
+        at: usize,
+        d: crate::fx::Device,
+    ) -> Option<usize> {
+        let c = &mut self.instruments.get_mut(owner)?.fx;
+        if c.len() >= crate::fx::MAX_DEVICES {
+            return None;
+        }
+        let at = at.min(c.len());
+        c.insert(at, d);
+        self.remap_devices(owner, &|i| Some(if i >= at { i + 1 } else { i }));
+        Some(at)
+    }
+    /// Remove device `i` of instrument `owner`'s chain with its lanes and routes.
+    pub fn remove_device(&mut self, owner: usize, i: usize) -> Option<crate::fx::Device> {
+        let c = &mut self.instruments.get_mut(owner)?.fx;
+        if i >= c.len() {
+            return None;
+        }
+        let d = c.remove(i);
+        self.remap_devices(owner, &|k| match k.cmp(&i) {
+            std::cmp::Ordering::Less => Some(k),
+            std::cmp::Ordering::Equal => None,
+            std::cmp::Ordering::Greater => Some(k - 1),
+        });
+        Some(d)
+    }
+    /// Move device `from` so it lands before device `to` (0..=len, the
+    /// position as seen before the move); lanes and routes follow. Returns
+    /// the new index, None when nothing moves.
+    pub fn move_device(&mut self, owner: usize, from: usize, to: usize) -> Option<usize> {
+        let c = &mut self.instruments.get_mut(owner)?.fx;
+        let n = c.len();
+        if from >= n || to > n || to == from || to == from + 1 {
+            return None;
+        }
+        let d = c.remove(from);
+        let dest = if to > from { to - 1 } else { to };
+        c.insert(dest, d);
+        self.remap_devices(owner, &|k| {
+            Some(if k == from {
+                dest
+            } else if from < dest && k > from && k <= dest {
+                k - 1
+            } else if dest < from && k >= dest && k < from {
+                k + 1
+            } else {
+                k
+            })
+        });
+        Some(dest)
+    }
+    /// device indices of instrument `owner` changed (old -> new, None = gone):
+    /// rewrite `instrument.N.fx.D.*` lane and route targets
+    fn remap_devices(&mut self, owner: usize, f: &dyn Fn(usize) -> Option<usize>) {
+        let pre = format!("instrument.{}.fx.", owner + 1);
+        // Some(None) = drop, Some(Some(t)) = new target, None = not ours
+        let fix = |t: &str| -> Option<Option<String>> {
+            let rest = t.strip_prefix(&pre)?;
+            let (d, tail) = rest.split_once('.')?;
+            let d: usize = d.parse().ok().filter(|d| *d >= 1)?;
+            Some(f(d - 1).map(|n| format!("{pre}{}.{tail}", n + 1)))
+        };
+        for lanes in self.lane_lists_mut() {
+            lanes.retain_mut(|l| match fix(&l.target) {
+                Some(Some(t)) => {
+                    l.target = t;
+                    true
+                }
+                Some(None) => false,
+                None => true,
+            });
+        }
+        let mut keep = Vec::with_capacity(self.modulation.routes.len());
+        for r in &mut self.modulation.routes {
+            keep.push(match fix(&r.target) {
+                Some(Some(t)) => {
+                    r.target = t;
+                    true
+                }
+                Some(None) => false,
+                None => true,
+            });
+        }
+        if keep.iter().any(|k| !k) {
+            let mut i = 0;
+            self.modulation.routes.retain(|_| {
+                i += 1;
+                keep[i - 1]
+            });
+            self.routes_changed(&keep);
+        }
+    }
+
     /// renumber instrument slots in cells, block caches and lanes (map[old] = new, 0-based)
     fn remap_slots(&mut self, map: &[usize]) {
         let fix = |c: &mut Cell| {
@@ -774,6 +873,73 @@ mod tests {
             fx: vec![],
             kind: InstrumentKind::Synth(Default::default()),
         }
+    }
+
+    #[test]
+    fn device_insert_move_remove_keep_lanes_on_their_device() {
+        use crate::fx::{Device, FxKind};
+        let mut s = Song::empty();
+        s.instruments = vec![inst("a"), inst("b")];
+        s.instruments[0].fx = vec![Device::new(FxKind::Delay), Device::new(FxKind::Reverb)];
+        let lane = |t: &str| crate::automation::Lane {
+            target: t.into(),
+            label: String::new(),
+            points: vec![],
+            enabled: true,
+            mode: Default::default(),
+        };
+        s.automation = vec![
+            lane("instrument.1.fx.1.p6"),
+            lane("instrument.1.fx.2.p4"),
+            lane("instrument.2.fx.1.p0"),
+        ];
+        let t = |s: &Song| {
+            s.automation
+                .iter()
+                .map(|l| l.target.clone())
+                .collect::<Vec<_>>()
+        };
+        // an EQ in front: the delay becomes device 2, the reverb 3
+        assert_eq!(s.insert_device(0, 0, Device::new(FxKind::Eq)), Some(0));
+        assert_eq!(
+            t(&s),
+            [
+                "instrument.1.fx.2.p6",
+                "instrument.1.fx.3.p4",
+                "instrument.2.fx.1.p0"
+            ]
+        );
+        // the reverb to the front
+        assert_eq!(s.move_device(0, 2, 0), Some(0));
+        let kinds: Vec<FxKind> = s.instruments[0].fx.iter().map(|d| d.kind).collect();
+        assert_eq!(kinds, [FxKind::Reverb, FxKind::Eq, FxKind::Delay]);
+        assert_eq!(
+            t(&s),
+            [
+                "instrument.1.fx.3.p6",
+                "instrument.1.fx.1.p4",
+                "instrument.2.fx.1.p0"
+            ]
+        );
+        // the delay to the end is no move; Eq after the delay
+        assert_eq!(s.move_device(0, 2, 3), None);
+        assert_eq!(s.move_device(0, 1, 3), Some(2));
+        assert_eq!(
+            t(&s),
+            [
+                "instrument.1.fx.2.p6",
+                "instrument.1.fx.1.p4",
+                "instrument.2.fx.1.p0"
+            ]
+        );
+        // removing the reverb drops its lane
+        assert_eq!(s.remove_device(0, 0).map(|d| d.kind), Some(FxKind::Reverb));
+        assert_eq!(t(&s), ["instrument.1.fx.1.p6", "instrument.2.fx.1.p0"]);
+        // full chain
+        while s.instruments[0].fx.len() < crate::fx::MAX_DEVICES {
+            s.instruments[0].fx.push(Device::new(FxKind::Drive));
+        }
+        assert_eq!(s.insert_device(0, 0, Device::new(FxKind::Eq)), None);
     }
 
     #[test]

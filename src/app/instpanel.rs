@@ -159,7 +159,10 @@ pub(super) fn tag_pill(ui: &mut egui::Ui, tag: &str) -> egui::Response {
 impl App {
     /// the arranger is docked under the pattern and showing
     pub(super) fn arr_docked(&self) -> bool {
-        self.dock_arranger && !self.extra.full_height && !self.extra.lower_inst
+        self.dock_arranger
+            && !self.extra.full_height
+            && !self.extra.lower_inst
+            && !self.extra.lower_dev
     }
 
     /// the lower panel (arranger / automation / instrument) is showing
@@ -205,6 +208,7 @@ impl App {
         self.dock_arranger = true;
         self.extra.full_height = false;
         self.extra.lower_inst = true;
+        self.extra.lower_dev = false;
         self.extra.lower_chosen = true;
         self.arr_focus = false;
         self.save_settings();
@@ -221,6 +225,7 @@ impl App {
         self.dock_arranger = true;
         self.extra.full_height = false;
         self.extra.lower_inst = false;
+        self.extra.lower_dev = false;
         self.extra.lower_h = 0.0;
         self.show_auto = false;
         self.arr_focus = false;
@@ -243,15 +248,16 @@ impl App {
         self.status = "Timeline + piano roll (the default layout; Ctrl+6)".into();
     }
 
-    /// 0 arranger, 1 instrument, 2 automation
+    /// 0 arranger, 1 instrument, 2 automation, 3 piano roll, 4 devices
     pub(super) fn set_lower(&mut self, m: u8) {
         self.dock_arranger = true;
         self.extra.full_height = false;
         self.extra.lower_inst = m == 1;
+        self.extra.lower_dev = m == 4;
         self.extra.lower_chosen = true;
         self.pr.open = m == 3;
         self.pr.focus = m == 3;
-        if m == 1 || m == 3 {
+        if m == 1 || m == 3 || m == 4 {
             self.arr_focus = false;
         } else {
             self.show_auto = m == 2;
@@ -260,7 +266,9 @@ impl App {
     }
 
     fn lower_mode(&self) -> u8 {
-        if self.extra.lower_inst {
+        if self.extra.lower_dev {
+            4
+        } else if self.extra.lower_inst {
             1
         } else if self.pr.open {
             3
@@ -278,6 +286,9 @@ impl App {
         let auto_h = if self.pr.open && !self.extra.lower_inst {
             // the default layout: the piano roll at about 40 %
             (inner.height() * 0.40).max(200.0)
+        } else if self.extra.lower_dev {
+            // Devices: the instrument card wants room for its knobs
+            (inner.height() * 0.45).clamp(260.0, 400.0)
         } else if self.extra.lower_inst || self.pr.open {
             (inner.height() * 0.45).clamp(200.0, 340.0)
         } else if self.show_auto && nl > 0 {
@@ -371,7 +382,9 @@ impl App {
             return;
         }
         ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
-            if self.extra.lower_inst {
+            if self.extra.lower_dev {
+                self.devices_view(ui)
+            } else if self.extra.lower_inst {
                 self.instrument_view(ui)
             } else if self.pr.open {
                 self.piano_view(ui)
@@ -402,6 +415,11 @@ impl App {
                     3,
                     "Piano roll",
                     "the notes of the selected clip (or the current block column) as bars: draw, move, resize",
+                ),
+                (
+                    4,
+                    "Devices",
+                    "the selected track's instrument and effects, left to right (Ctrl+7)",
                 ),
             ] {
                 let txt = egui::RichText::new(name).strong();

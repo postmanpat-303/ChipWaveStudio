@@ -32,6 +32,8 @@ pub enum Fmt {
     Midi,
     /// a built-in drum pattern (Drum Patterns tab; not in the legend)
     Pattern,
+    /// a built-in insert effect (Effects tab; not in the legend)
+    Fx,
 }
 
 impl Fmt {
@@ -64,6 +66,7 @@ impl Fmt {
             Fmt::Grid => "GRID",
             Fmt::Midi => "MID",
             Fmt::Pattern => "PAT",
+            Fmt::Fx => "FX",
         }
     }
     /// legend text
@@ -78,6 +81,7 @@ impl Fmt {
             Fmt::Grid => "Grid patch",
             Fmt::Midi => "MIDI*",
             Fmt::Pattern => "drum pattern",
+            Fmt::Fx => "effect",
         }
     }
     /// badge colour (0xRRGGBB), the same in every theme (dark text on it)
@@ -96,6 +100,7 @@ impl Fmt {
             Fmt::Grid => 0xE06C6C,
             Fmt::Midi => 0x6C8FE8,
             Fmt::Pattern => 0xE8A25C,
+            Fmt::Fx => 0x5FC9C0,
         }
     }
     pub fn is_sample(self) -> bool {
@@ -112,6 +117,9 @@ impl Fmt {
 pub enum Tab {
     #[default]
     Instruments,
+    /// built-in insert effects, Grid FX patches and effect plugins (0.2.4
+    /// Devices): drag onto the Devices row or a track
+    Effects,
     Plugins,
     Samples,
     Songs,
@@ -126,8 +134,9 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 10] = [
+    pub const ALL: [Tab; 11] = [
         Tab::Instruments,
+        Tab::Effects,
         Tab::Plugins,
         Tab::Samples,
         Tab::Songs,
@@ -141,6 +150,7 @@ impl Tab {
     pub fn name(self) -> &'static str {
         match self {
             Tab::Instruments => "Instruments",
+            Tab::Effects => "Effects",
             Tab::Plugins => "Plugins",
             Tab::Samples => "Samples",
             Tab::Songs => "Songs",
@@ -156,6 +166,7 @@ impl Tab {
     pub fn fmt(self) -> Fmt {
         match self {
             Tab::Instruments | Tab::Presets => Fmt::Cwi,
+            Tab::Effects => Fmt::Fx,
             Tab::Plugins => Fmt::Vst3,
             Tab::Samples => Fmt::Wav,
             Tab::Songs => Fmt::Song,
@@ -204,6 +215,8 @@ pub enum Src {
     File(PathBuf),
     /// a built-in drum pattern (`drumpat::PATTERNS` index)
     Pattern(usize),
+    /// a built-in insert effect
+    Fx(crate::fx::FxKind),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -227,14 +240,19 @@ impl Item {
     pub fn is_effect(&self) -> bool {
         match &self.src {
             Src::Plugin(f) => !f.desc.is_instrument(),
-            Src::GridFx(_) => true,
+            Src::GridFx(_) | Src::Fx(_) => true,
             _ => false,
         }
+    }
+    /// listed under tab `t` (the Effects tab also lists effect plugins and
+    /// Grid FX patches from their own tabs)
+    pub fn in_tab(&self, t: Tab) -> bool {
+        self.tab == t || (t == Tab::Effects && self.is_effect())
     }
     /// can be auditioned (played on C-3 through the current track)
     pub fn previewable(&self) -> bool {
         match &self.src {
-            Src::Plugin(_) | Src::Demo(_) | Src::GridFx(_) => false,
+            Src::Plugin(_) | Src::Demo(_) | Src::GridFx(_) | Src::Fx(_) => false,
             Src::Pattern(_) => true,
             Src::File(_) => {
                 self.fmt == Fmt::Cwi || self.fmt.is_sample() || self.fmt == Fmt::Wavetable
@@ -386,6 +404,19 @@ pub fn builtin_items() -> Vec<Item> {
             Loc::Library,
             format!("{eng} generator · {tip}"),
             Src::Gen(name.into()),
+        ));
+    }
+    for k in crate::fx::FxKind::ALL {
+        v.push(item(
+            format!("fx:{k:?}"),
+            k.name().into(),
+            Tab::Effects,
+            Fmt::Fx,
+            "Built-in",
+            cw,
+            Loc::Library,
+            k.blurb().into(),
+            Src::Fx(k),
         ));
     }
     for (name, tip, _) in crate::grid::fx_presets() {
@@ -910,7 +941,7 @@ pub fn filter(
     let mut v: Vec<usize> = (0..items.len())
         .filter(|&i| {
             let it = &items[i];
-            it.tab == f.tab
+            it.in_tab(f.tab)
                 && matches_query(it, &f.query)
                 && f.tags.iter().all(|t| it.tags.contains(t))
                 && f.category.as_ref().is_none_or(|c| &it.category == c)
@@ -940,7 +971,7 @@ pub fn column_values(
 ) -> Vec<(String, usize)> {
     let mut m: BTreeMap<String, usize> = BTreeMap::new();
     for it in items.iter().filter(|it| {
-        it.tab == f.tab
+        it.in_tab(f.tab)
             && matches_query(it, &f.query)
             && f.tags.iter().all(|t| it.tags.contains(t))
             && (skip_cat || f.category.as_ref().is_none_or(|c| &it.category == c))

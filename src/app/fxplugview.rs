@@ -80,15 +80,20 @@ impl App {
 
     /// add a plugin effect device to instrument `slot` (1-based) and load it
     pub(super) fn add_plugin_fx(&mut self, slot: u8, p: PluginPatch) {
+        self.add_plugin_fx_at(slot, p, usize::MAX);
+    }
+
+    /// a plugin effect into instrument `slot`'s chain at `at` (clamped)
+    pub(super) fn add_plugin_fx_at(&mut self, slot: u8, p: PluginPatch, at: usize) {
         let idx = (slot as usize).wrapping_sub(1);
         self.snapshot();
         let name = p.name.clone();
         let ok = self.with(|s| {
-            let i = s.song.instruments.get_mut(idx)?;
+            let i = s.song.instruments.get(idx)?;
             if i.fx.len() >= MAX_DEVICES {
                 return Some(false);
             }
-            i.fx.push(crate::fx::Device::plugin(p));
+            s.song.insert_device(idx, at, crate::fx::Device::plugin(p));
             Some(true)
         });
         self.status = match ok {

@@ -472,6 +472,17 @@ impl App {
                     self.toggle_full_height();
                     ui.close();
                 }
+                if ui
+                    .add(
+                        egui::Button::selectable(self.devices_visible(), "Devices in lower panel")
+                            .shortcut_text("Ctrl+7"),
+                    )
+                    .on_hover_text("the selected track's instrument and effect chain, left to right")
+                    .clicked()
+                {
+                    self.vtab_select(super::viewbar::VTab::Devices);
+                    ui.close();
+                }
                 let inst_on = self.lower_visible() && self.extra.lower_inst;
                 if ui
                     .add(

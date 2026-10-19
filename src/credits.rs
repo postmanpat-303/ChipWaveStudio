@@ -141,6 +141,9 @@ pub const CREDITS: &[Credit] = &[
         "Chip FX: the Rust port of sfxr it follows", "MIT", "",
         "https://github.com/bzar/sfxr-rs"),
     // Effects, mixing & loudness
+    c(Effects, "Audio EQ Cookbook", "Robert Bristow-Johnson",
+        "The EQ device's shelf and peak biquad formulas (and its curve)", "", "Formulas, independent implementation",
+        "https://www.w3.org/TR/audio-eq-cookbook/"),
     c(Effects, "libebur128", "Jan Kokemüller",
         "K-weighting formulas for the loudness meter", "MIT", "No code copied",
         "https://github.com/jiixyj/libebur128"),

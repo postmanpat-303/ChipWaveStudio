@@ -18,6 +18,7 @@ pub(crate) enum VTab {
     Tracker,
     Arranger,
     Piano,
+    Devices,
     Inst,
     Auto,
     Mix,
@@ -25,7 +26,7 @@ pub(crate) enum VTab {
     Sample,
 }
 
-pub(crate) const VTABS: [(VTab, &str, &str); 9] = [
+pub(crate) const VTABS: [(VTab, &str, &str); 10] = [
     (
         VTab::Timeline,
         "TIMELINE",
@@ -41,6 +42,11 @@ pub(crate) const VTABS: [(VTab, &str, &str); 9] = [
         VTab::Piano,
         "PIANO",
         "the piano roll in the lower panel (double-click a clip)",
+    ),
+    (
+        VTab::Devices,
+        "DEVICES",
+        "the selected track's instrument and effects in the lower panel (Ctrl+7)",
     ),
     (
         VTab::Inst,
@@ -110,6 +116,7 @@ impl App {
     pub(crate) fn vtab_current(&self) -> Option<VTab> {
         let lower = matches!(self.view, View::Pattern | View::Timeline) && self.lower_visible();
         Some(match self.view {
+            _ if lower && self.extra.lower_dev => VTab::Devices,
             _ if lower && self.extra.lower_inst => VTab::Inst,
             _ if lower && self.pr.open => VTab::Piano,
             View::Timeline => VTab::Timeline,
@@ -160,6 +167,10 @@ impl App {
                 } else {
                     self.set_lower(3);
                 }
+            }
+            VTab::Devices => {
+                self.view = host(self);
+                self.set_lower(4);
             }
             VTab::Inst => {
                 self.view = host(self);

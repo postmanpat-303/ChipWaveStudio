@@ -204,7 +204,7 @@ impl App {
     }
 
     /// the patch editor of a Grid FX device (a window over the FX view)
-    fn grid_fx_window(
+    pub(super) fn grid_fx_window(
         &mut self,
         ctx: &egui::Context,
         idx: usize,
@@ -303,7 +303,7 @@ impl App {
                 };
                 let c = &mut inst.fx;
                 match op {
-                    FxOp::Add(k, p) if c.len() < 16 => {
+                    FxOp::Add(k, p) if c.len() < fx::MAX_DEVICES => {
                         let mut d = Device::new(k);
                         if let Some(p) = p {
                             apply_preset(&mut d, p);
@@ -313,12 +313,16 @@ impl App {
                     }
                     FxOp::Add(..) => "Chain is full (16 devices)".into(),
                     FxOp::Remove(i) if i < c.len() => {
-                        format!("Removed {}", c.remove(i).title())
+                        // its lanes and routes go with it
+                        match s.song.remove_device(idx, i) {
+                            Some(d) => format!("Removed {} (Ctrl+Z brings it back)", d.title()),
+                            None => String::new(),
+                        }
                     }
-                    FxOp::Dup(i) if i < c.len() && c.len() < 16 => {
+                    FxOp::Dup(i) if i < c.len() && c.len() < fx::MAX_DEVICES => {
                         let mut d = c[i].clone();
                         d.renew_uid();
-                        c.insert(i + 1, d);
+                        s.song.insert_device(idx, i + 1, d);
                         "Duplicated device".into()
                     }
                     FxOp::Toggle(i) if i < c.len() => {
@@ -334,10 +338,12 @@ impl App {
                         String::new()
                     }
                     FxOp::Move(from, to) if from < c.len() => {
-                        let d = c.remove(from);
-                        let to = if to > from { to - 1 } else { to }.min(c.len());
-                        c.insert(to, d);
-                        "Moved device".into()
+                        // automation lanes follow their device
+                        let to = to.min(c.len());
+                        match s.song.move_device(idx, from, to) {
+                            Some(_) => "Moved device".into(),
+                            None => String::new(),
+                        }
                     }
                     FxOp::Preset(i, p) if i < c.len() => {
                         apply_preset(&mut c[i], p);

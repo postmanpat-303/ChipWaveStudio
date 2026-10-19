@@ -109,6 +109,15 @@ pub(super) fn icon(p: &egui::Painter, ic: Icon, c: Pos2, s: f32, col: Color32) {
                 Stroke::new(3.0, col),
             );
         }
+        Icon::Tab(Tab::Effects) => {
+            // a knob with its pointer
+            p.circle_stroke(c, s * 0.34, st);
+            p.line_segment([c, c + v(s * 0.2, -s * 0.24)], Stroke::new(2.0, col));
+            for k in 0..3 {
+                let a = 2.4 + k as f32 * 0.9;
+                p.circle_filled(c + v(a.cos() * s * 0.5, a.sin() * s * 0.5), 1.2, col);
+            }
+        }
         Icon::Tab(Tab::Plugins) => {
             p.rect_filled(
                 Rect::from_center_size(c + v(0.0, s * 0.08), v(s * 0.55, s * 0.4)),
@@ -370,7 +379,7 @@ impl App {
                 .color(Color32::from_rgb(0x1a, 0x1c, 0x1f))
                 .background_color(rgb(Fmt::Cwi.colour()));
             ui.label(g);
-            let n_tab = self.br.items.iter().filter(|i| i.tab == tab).count();
+            let n_tab = self.br.items.iter().filter(|i| i.in_tab(tab)).count();
             ui.label(
                 egui::RichText::new(format!("{} · {n_tab}", tab.name()))
                     .small()
@@ -502,6 +511,7 @@ impl App {
                     );
                     let resp = resp.on_hover_text(match tb {
                         Tab::Instruments => "instruments: blank synths, generator presets, your .cwi library, this song's instruments",
+                        Tab::Effects => "effects: ChipWave's built-ins, Grid FX patches and your effect plugins; double-click adds to the selected track, or drag into Devices or onto a track",
                         Tab::Plugins => "CLAP and VST3 plugins from the plugin scan (instruments and effects)",
                         Tab::Samples => "WAV, FLAC, MP3 and Ogg files in your locations",
                         Tab::Songs => "demo songs and .cwt songs in your locations (MOD/MED: import planned)",
@@ -553,14 +563,14 @@ impl App {
                 self.br
                     .items
                     .iter()
-                    .any(|i| i.tab == tab && i.tags.contains(tg))
+                    .any(|i| i.in_tab(tab) && i.tags.contains(tg))
             })
             .collect();
         let n_fav = self
             .br
             .items
             .iter()
-            .filter(|i| i.tab == tab && self.extra.browser_favs.contains(&i.key))
+            .filter(|i| i.in_tab(tab) && self.extra.browser_favs.contains(&i.key))
             .count();
         {
             ui.horizontal_wrapped(|ui| {
@@ -775,6 +785,34 @@ impl App {
                 });
             });
         }
+        // ---- the Effects tab: where a double-click adds (like the reference)
+        if tab == Tab::Effects {
+            let to = self.devices_target_label();
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Adds to:").small().color(t.ink2));
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(format!("{to}  (or drag onto a track)"))
+                            .small()
+                            .strong()
+                            .color(t.accent),
+                    )
+                    .truncate(),
+                );
+            })
+            .response
+            .on_hover_text(
+                "double-click an effect to add it to the end of this chain; drag it into the Devices row to put it in between, or onto any track",
+            );
+            if !self.devices_visible()
+                && ui
+                    .small_button("Show Devices  Ctrl+7")
+                    .on_hover_text("the chain in the lower panel")
+                    .clicked()
+            {
+                self.vtab_select(super::viewbar::VTab::Devices);
+            }
+        }
         // ---- the Plugins tab: find / rescan
         if tab == Tab::Plugins {
             ui.horizontal(|ui| {
@@ -846,7 +884,8 @@ impl App {
         let legend_rows = Fmt::ALL.len().div_ceil(3);
         let bottom_h = 30.0 + 18.0 + legend_rows as f32 * 15.0 + 10.0;
         let list_h = (ui.available_height() - bottom_h).max(60.0);
-        let thumbs = self.extra.browser_thumbs && self.br.filter.tab == Tab::Plugins;
+        let thumbs =
+            self.extra.browser_thumbs && matches!(self.br.filter.tab, Tab::Plugins | Tab::Effects);
         let row_h = if thumbs { 40.0 } else { 32.0 };
         // prefetch thumbnails for the rows about to be drawn
         if thumbs {
@@ -1385,7 +1424,15 @@ impl App {
         let Some(it) = self.br.drag.clone() else {
             return;
         };
-        let (pos, down, released) = if self.br.shot_drop {
+        let (pos, down, released) = if let Some(k) = self.dev.shot_at.filter(|_| self.br.shot_drop)
+        {
+            // screenshot: hold the drag over the left part of device card k
+            let p = match self.dev.cards.get(k) {
+                Some(r) => Pos2::new(r.left() + r.width() * 0.25, r.center().y),
+                None => Pos2::new(self.dev.inst.right() - 40.0, self.dev.inst.center().y),
+            };
+            (Some(p), true, false)
+        } else if self.br.shot_drop {
             let p = Pos2::new(
                 self.tlv.lanes.left() + 260.0,
                 self.tlv.tracks_bottom() + 40.0,
@@ -1414,6 +1461,14 @@ impl App {
         let p = ctx.layer_painter(layer);
         // the target
         match &target {
+            Some(DropAt::Slot(_)) if pos.is_some_and(|q| self.dev.inst.contains(q)) => {
+                p.rect_stroke(
+                    self.dev.inst,
+                    8,
+                    egui::Stroke::new(2.5, t.accent),
+                    egui::StrokeKind::Inside,
+                );
+            }
             Some(DropAt::Slot(s)) => {
                 if let Some((_, r)) = self.br.slot_rects.iter().find(|(x, _)| x == s) {
                     p.rect_stroke(
@@ -1460,6 +1515,10 @@ impl App {
                         t.accent,
                     );
                 }
+            }
+            Some(DropAt::Device(i)) => {
+                let x = super::devices::marker_x(self.dev.inst, &self.dev.cards, *i);
+                super::devices::paint_marker(&p, x, self.dev.inst.y_range());
             }
             Some(DropAt::Fx) | Some(DropAt::Central) if hint.is_some() => {
                 p.rect_stroke(

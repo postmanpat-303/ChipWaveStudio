@@ -50,6 +50,8 @@ pub(crate) enum DropAt {
     Track(usize, Option<tl::Tick>),
     NewTrack(Option<tl::Tick>),
     Fx,
+    /// the Devices row: insert into the current instrument's chain here
+    Device(usize),
     Central,
 }
 
@@ -617,36 +619,41 @@ impl App {
         }
     }
 
-    /// add an effect item to instrument `slot`'s FX chain
+    /// add an effect item to the end of instrument `slot`'s FX chain
     fn br_effect(&mut self, it: &Item, slot: u8) {
+        self.br_effect_at(it, slot, usize::MAX);
+    }
+
+    /// add an effect item to instrument `slot`'s FX chain at `at` (clamped)
+    pub(crate) fn br_effect_at(&mut self, it: &Item, slot: u8, at: usize) {
         if slot == 0 || self.with(|s| s.song.instruments.len()) < slot as usize {
             self.status = "Pick an instrument first: effects go into its FX chain".into();
             return;
         }
-        match &it.src {
-            Src::Plugin(f) => self.add_plugin_fx(slot, fxplugview::patch_of(f.clone())),
-            Src::GridFx(n) => {
-                let Some(d) = br::grid_fx_device(n) else {
-                    return;
-                };
-                self.snapshot();
-                let idx = slot as usize - 1;
-                let ok = self.with(|s| {
-                    let i = &mut s.song.instruments[idx];
-                    if i.fx.len() >= super::instruments::MAX_DEVICES {
-                        return false;
-                    }
-                    i.fx.push(d);
-                    true
-                });
-                self.status = if ok {
-                    format!("Added Grid FX '{n}' to instrument {slot:02X}")
-                } else {
-                    "Chain is full (16 devices)".into()
-                };
+        let idx = slot as usize - 1;
+        let (dev, what) = match &it.src {
+            Src::Plugin(f) => {
+                self.add_plugin_fx_at(slot, fxplugview::patch_of(f.clone()), at);
+                return;
             }
-            _ => {}
-        }
+            Src::GridFx(n) => match br::grid_fx_device(n) {
+                Some(d) => (d, format!("Grid FX '{n}'")),
+                None => return,
+            },
+            Src::Fx(k) => (crate::fx::Device::new(*k), k.name().to_string()),
+            _ => return,
+        };
+        self.snapshot();
+        let (ok, name) = self.with(|s| {
+            let ok = s.song.insert_device(idx, at, dev).is_some();
+            (ok, s.song.instruments[idx].name.clone())
+        });
+        self.status = if ok {
+            format!("Added {what} to {slot:02X} {name} (Ctrl+Z undoes)")
+        } else {
+            "Chain is full (16 devices)".into()
+        };
+        self.dirty = true;
     }
 
     /// Double-click / Enter: the item's natural load
@@ -674,7 +681,9 @@ impl App {
         if it.is_effect() {
             let slot = self.instr;
             self.br_effect(it, slot);
-            self.br_schedule_fx_editor(slot);
+            if matches!(it.src, Src::Plugin(_)) {
+                self.br_schedule_fx_editor(slot);
+            }
             return;
         }
         match &it.src {
@@ -981,6 +990,26 @@ impl App {
         if let Some((s, _)) = self.br.slot_rects.iter().find(|(_, r)| r.contains(p)) {
             return Some(DropAt::Slot(*s));
         }
+        // the Devices row: effects go in between the cards, instruments
+        // replace the track's instrument
+        let kind = self
+            .br
+            .drag
+            .as_ref()
+            .map(|i| (i.is_effect(), is_instrumentish(i)));
+        if let Some((effect, inst)) = kind
+            .filter(|k| k.0 || k.1)
+            .filter(|_| self.devices_visible() && self.dev.row.contains(p) && self.instr > 0)
+        {
+            let _ = inst;
+            return Some(if !effect {
+                DropAt::Slot(self.instr)
+            } else if self.dev.inst.contains(p) {
+                DropAt::Device(0)
+            } else {
+                DropAt::Device(super::devices::insert_index(&self.dev.cards, p.x))
+            });
+        }
         if !self.br.central.contains(p) {
             return None;
         }
@@ -1019,6 +1048,18 @@ impl App {
                 "All 32 tracks are used".into()
             }
             DropAt::NewTrack(_) if inst => format!("New track: {}", it.name),
+            DropAt::Device(i) if it.is_effect() => {
+                let n = self.dev.cards.len();
+                if *i >= n {
+                    format!("Add to the end of {}", self.devices_target_label())
+                } else {
+                    format!(
+                        "Insert at position {} of {}",
+                        i + 1,
+                        self.devices_target_label()
+                    )
+                }
+            }
             DropAt::Fx | DropAt::Central if it.is_effect() => {
                 format!("Add to instrument {:02X}'s FX chain", self.instr)
             }
@@ -1071,7 +1112,24 @@ impl App {
         self.br_stop_preview();
         let inst = is_instrumentish(it);
         match d {
-            DropAt::Slot(s) if inst => self.br_instrument(it, Act::Replace(s)),
+            DropAt::Slot(s) if inst => {
+                if self.devices_visible() && s == self.instr {
+                    // dropped on the Devices instrument card: keep its effects
+                    let fx = self.with(|x| {
+                        x.song
+                            .instruments
+                            .get(s as usize - 1)
+                            .map(|i| i.fx.clone())
+                            .unwrap_or_default()
+                    });
+                    self.dev.keep_fx = Some((s, fx));
+                }
+                self.br_instrument(it, Act::Replace(s))
+            }
+            DropAt::Device(i) if it.is_effect() => {
+                let s = self.instr;
+                self.br_effect_at(it, s, i)
+            }
             DropAt::Slot(s) if it.is_effect() => self.br_effect(it, s),
             DropAt::Track(tr, Some(tick)) if it.fmt.is_sample() => {
                 if let Src::File(p) = &it.src {

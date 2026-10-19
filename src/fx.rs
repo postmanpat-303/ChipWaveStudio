@@ -21,6 +21,8 @@ pub enum FxKind {
     Phaser,
     /// Bode-style frequency shifter (crate::fxmod)
     FreqShift,
+    /// 4-band parametric EQ: low shelf, two peaks, high shelf (Devices, 0.2.4)
+    Eq,
     /// a modular Grid patch (`Device::grid`, crate::grid) fed by the audio
     Grid,
     /// a CLAP or VST3 effect plugin (`Device::plugin`); not in `ALL` (its menu lists
@@ -29,7 +31,8 @@ pub enum FxKind {
 }
 
 impl FxKind {
-    pub const ALL: [FxKind; 13] = [
+    pub const ALL: [FxKind; 14] = [
+        FxKind::Eq,
         FxKind::Delay,
         FxKind::Reverb,
         FxKind::Drive,
@@ -59,7 +62,28 @@ impl FxKind {
             FxKind::Phaser => "Phaser",
             FxKind::FreqShift => "Frequency shifter",
             FxKind::Grid => "Grid FX",
+            FxKind::Eq => "EQ",
             FxKind::Plugin => "Plugin effect",
+        }
+    }
+    /// one-line description (Browser › Effects)
+    pub fn blurb(self) -> &'static str {
+        match self {
+            FxKind::Delay => "echo · tempo sync · ping-pong",
+            FxKind::Reverb => "space · size, damping, pre-delay",
+            FxKind::Drive => "saturation · soft, hard, fold",
+            FxKind::Chorus => "modulation · chorus and flanger",
+            FxKind::Filter => "LP / HP / BP with an LFO",
+            FxKind::Bitcrusher => "lo-fi bits and rate",
+            FxKind::Compressor => "dynamics · threshold, ratio, makeup",
+            FxKind::Resonator => "metallic ringing tuned to the note",
+            FxKind::Digital => "digital drive, crush and ring mod",
+            FxKind::Sub => "adds a sub octave under the note",
+            FxKind::Phaser => "sweeping notches · 4-12 stages",
+            FxKind::FreqShift => "inharmonic shift up / down",
+            FxKind::Grid => "your own modular effect patch",
+            FxKind::Eq => "4-band EQ · shelves and two peaks",
+            FxKind::Plugin => "a CLAP or VST3 effect",
         }
     }
     /// muted strip tint per device type
@@ -74,6 +98,7 @@ impl FxKind {
             FxKind::Compressor => 0x5E6B7A, // neutral
             FxKind::Plugin => 0x4E7A66,     // plugins: green-grey
             FxKind::Grid => 0x8A6A4E,       // the Grid's amber
+            FxKind::Eq => 0x4E7A86,         // EQ: teal
         }
     }
 }
@@ -262,6 +287,20 @@ pub const FREQ_SHIFT: [ParamInfo; 5] = [
     p("mix", "Mix", 0.0, 1.0, 0.5, false, "%"),
 ];
 
+/// EQ: low shelf, peak 1, peak 2, high shelf (RBJ Audio EQ Cookbook biquads)
+pub const EQ: [ParamInfo; 10] = [
+    p("lo_freq", "Low freq", 20.0, 1000.0, 100.0, true, "Hz"),
+    p("lo_gain", "Low gain", -18.0, 18.0, 0.0, false, "dB"),
+    p("m1_freq", "Mid 1 freq", 40.0, 8000.0, 400.0, true, "Hz"),
+    p("m1_gain", "Mid 1 gain", -18.0, 18.0, 0.0, false, "dB"),
+    p("m1_q", "Mid 1 Q", 0.3, 8.0, 1.0, true, ""),
+    p("m2_freq", "Mid 2 freq", 200.0, 16000.0, 2500.0, true, "Hz"),
+    p("m2_gain", "Mid 2 gain", -18.0, 18.0, 0.0, false, "dB"),
+    p("m2_q", "Mid 2 Q", 0.3, 8.0, 1.0, true, ""),
+    p("hi_freq", "High freq", 1000.0, 20000.0, 8000.0, true, "Hz"),
+    p("hi_gain", "High gain", -18.0, 18.0, 0.0, false, "dB"),
+];
+
 pub fn params(k: FxKind) -> &'static [ParamInfo] {
     match k {
         FxKind::Delay => &DELAY,
@@ -277,12 +316,16 @@ pub fn params(k: FxKind) -> &'static [ParamInfo] {
         FxKind::Phaser => &PHASER,
         FxKind::FreqShift => &FREQ_SHIFT,
         FxKind::Grid => &GRID_FX,
+        FxKind::Eq => &EQ,
         // plugin parameters come from the instance (ids, not indices)
         FxKind::Plugin => &[],
     }
 }
 
 pub const MAX_PARAMS: usize = 10;
+
+/// devices per insert chain
+pub const MAX_DEVICES: usize = 16;
 
 impl ParamInfo {
     pub fn to_real(&self, n: f32) -> f32 {
@@ -740,6 +783,47 @@ pub fn presets(k: FxKind) -> &'static [(&'static str, &'static [(&'static str, f
                 ],
             ),
         ],
+        FxKind::Eq => &[
+            (
+                "Warm low end",
+                &[
+                    ("lo_freq", 120.0),
+                    ("lo_gain", 4.0),
+                    ("m1_freq", 350.0),
+                    ("m1_gain", -3.0),
+                ],
+            ),
+            (
+                "Air",
+                &[
+                    ("hi_freq", 9000.0),
+                    ("hi_gain", 5.0),
+                    ("m2_freq", 3000.0),
+                    ("m2_gain", -2.0),
+                ],
+            ),
+            (
+                "Telephone",
+                &[
+                    ("lo_freq", 400.0),
+                    ("lo_gain", -18.0),
+                    ("m1_freq", 1500.0),
+                    ("m1_gain", 8.0),
+                    ("m1_q", 1.2),
+                    ("hi_freq", 3500.0),
+                    ("hi_gain", -18.0),
+                ],
+            ),
+            (
+                "Flat",
+                &[
+                    ("lo_gain", 0.0),
+                    ("m1_gain", 0.0),
+                    ("m2_gain", 0.0),
+                    ("hi_gain", 0.0),
+                ],
+            ),
+        ],
         FxKind::Compressor => &[
             (
                 "Glue",
@@ -781,6 +865,7 @@ pub fn from_preset(t: &toml::Value) -> Option<Device> {
         "sub" | "subbass" => FxKind::Sub,
         "phaser" => FxKind::Phaser,
         "freqshift" | "frequency_shifter" | "freq_shift" => FxKind::FreqShift,
+        "eq" | "equalizer" | "equaliser" => FxKind::Eq,
         _ => return None,
     };
     let num = |k: &str| {
@@ -992,6 +1077,118 @@ impl Allpass {
     }
 }
 
+/// biquad coefficients (normalised: a0 = 1)
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Biquad {
+    pub b0: f32,
+    pub b1: f32,
+    pub b2: f32,
+    pub a1: f32,
+    pub a2: f32,
+}
+
+impl Biquad {
+    const FLAT: Biquad = Biquad {
+        b0: 1.0,
+        b1: 0.0,
+        b2: 0.0,
+        a1: 0.0,
+        a2: 0.0,
+    };
+    /// RBJ cookbook shapes: 0 low shelf, 1 peak, 2 high shelf (S = 1 for
+    /// the shelves). Gain 0 dB is exactly flat.
+    pub fn rbj(shape: u8, f: f32, gain_db: f32, q: f32, sr: f32) -> Biquad {
+        if gain_db.abs() < 1e-4 {
+            return Biquad::FLAT;
+        }
+        let a = 10f32.powf(gain_db / 40.0);
+        let w = std::f32::consts::TAU * f.clamp(10.0, sr * 0.49) / sr;
+        let (sn, cs) = w.sin_cos();
+        let (b0, b1, b2, a0, a1, a2) = match shape {
+            1 => {
+                let al = sn / (2.0 * q.max(0.05));
+                (
+                    1.0 + al * a,
+                    -2.0 * cs,
+                    1.0 - al * a,
+                    1.0 + al / a,
+                    -2.0 * cs,
+                    1.0 - al / a,
+                )
+            }
+            _ => {
+                // shelf slope S = 1
+                let al = sn / 2.0 * std::f32::consts::SQRT_2;
+                let sq = 2.0 * a.sqrt() * al;
+                if shape == 0 {
+                    (
+                        a * ((a + 1.0) - (a - 1.0) * cs + sq),
+                        2.0 * a * ((a - 1.0) - (a + 1.0) * cs),
+                        a * ((a + 1.0) - (a - 1.0) * cs - sq),
+                        (a + 1.0) + (a - 1.0) * cs + sq,
+                        -2.0 * ((a - 1.0) + (a + 1.0) * cs),
+                        (a + 1.0) + (a - 1.0) * cs - sq,
+                    )
+                } else {
+                    (
+                        a * ((a + 1.0) + (a - 1.0) * cs + sq),
+                        -2.0 * a * ((a - 1.0) + (a + 1.0) * cs),
+                        a * ((a + 1.0) + (a - 1.0) * cs - sq),
+                        (a + 1.0) - (a - 1.0) * cs + sq,
+                        2.0 * ((a - 1.0) - (a + 1.0) * cs),
+                        (a + 1.0) - (a - 1.0) * cs - sq,
+                    )
+                }
+            }
+        };
+        Biquad {
+            b0: b0 / a0,
+            b1: b1 / a0,
+            b2: b2 / a0,
+            a1: a1 / a0,
+            a2: a2 / a0,
+        }
+    }
+    /// |H| at frequency `f` (for the EQ curve)
+    pub fn mag(&self, f: f32, sr: f32) -> f32 {
+        let w = std::f32::consts::TAU * f / sr;
+        let (s1, c1) = w.sin_cos();
+        let (s2, c2) = (2.0 * w).sin_cos();
+        let nr = self.b0 + self.b1 * c1 + self.b2 * c2;
+        let ni = -(self.b1 * s1 + self.b2 * s2);
+        let dr = 1.0 + self.a1 * c1 + self.a2 * c2;
+        let di = -(self.a1 * s1 + self.a2 * s2);
+        ((nr * nr + ni * ni) / (dr * dr + di * di).max(1e-12)).sqrt()
+    }
+    /// transposed direct form II, state `z`
+    #[inline]
+    fn run(&self, x: f32, z: &mut [f32; 2]) -> f32 {
+        let y = self.b0 * x + z[0];
+        z[0] = self.b1 * x - self.a1 * y + z[1];
+        z[1] = self.b2 * x - self.a2 * y;
+        y
+    }
+}
+
+/// the 4 EQ bands for real parameter values `p` (`EQ` order)
+pub fn eq_bands(p: &[f32], sr: f32) -> [Biquad; 4] {
+    let g = |i: usize| p.get(i).copied().unwrap_or(0.0);
+    [
+        Biquad::rbj(0, g(0), g(1), 0.707, sr),
+        Biquad::rbj(1, g(2), g(3), g(4), sr),
+        Biquad::rbj(1, g(5), g(6), g(7), sr),
+        Biquad::rbj(2, g(8), g(9), 0.707, sr),
+    ]
+}
+
+/// the EQ's response in dB at `f` for a device's normalised params
+#[cfg(test)]
+pub fn eq_response_db(d: &Device, f: f32, sr: f32) -> f32 {
+    let real: Vec<f32> = (0..EQ.len()).map(|i| d.real(i)).collect();
+    let m: f32 = eq_bands(&real, sr).iter().map(|b| b.mag(f, sr)).product();
+    20.0 * m.max(1e-6).log10()
+}
+
 enum Dsp {
     /// a plugin effect: runs in `crate::plugin::fxrack` (see ChainState::process_with)
     Plugin,
@@ -1034,6 +1231,14 @@ enum Dsp {
     Stage(Box<crate::transform::FxStage>),
     Phaser(crate::fxmod::Phaser),
     FreqShift(crate::fxmod::FreqShifter),
+    /// 4 biquads, (L, R) state per band, coefficients for `last`, and a
+    /// countdown to the next coefficient check (every 16 samples)
+    Eq {
+        c: [Biquad; 4],
+        z: [[[f32; 2]; 2]; 4],
+        last: [f32; 10],
+        n: u32,
+    },
     /// the device's patch (a copy: structure changes rebuild the chain,
     /// knob values are copied in place) and its state
     Grid(Box<(crate::grid::GridP, crate::grid::GridState)>),
@@ -1115,6 +1320,12 @@ impl FxState {
             FxKind::Resonator | FxKind::Digital | FxKind::Sub => Dsp::Stage(Box::default()),
             FxKind::Phaser => Dsp::Phaser(Default::default()),
             FxKind::FreqShift => Dsp::FreqShift(Default::default()),
+            FxKind::Eq => Dsp::Eq {
+                c: [Biquad::FLAT; 4],
+                z: [[[0.0; 2]; 2]; 4],
+                last: [f32::NAN; 10],
+                n: 0,
+            },
             FxKind::Grid => Dsp::Grid(Box::new((
                 d.grid
                     .as_deref()
@@ -1203,6 +1414,12 @@ impl FxState {
             Dsp::Phaser(ph) => *ph = Default::default(),
             Dsp::FreqShift(f) => *f = Default::default(),
             Dsp::Grid(b) => b.1 = Default::default(),
+            Dsp::Eq { c, z, last, n } => {
+                *c = [Biquad::FLAT; 4];
+                *z = [[[0.0; 2]; 2]; 4];
+                *last = [f32::NAN; 10];
+                *n = 0;
+            }
         }
         self.on_gain = if d.enabled { 1.0 } else { 0.0 };
         self.set_targets(d, |_| None);
@@ -1267,6 +1484,23 @@ impl FxState {
         let sr = self.sr;
         match &mut self.dsp {
             Dsp::Plugin => (l, r),
+            Dsp::Eq { c, z, last, n } => {
+                if *n == 0 {
+                    *n = 16;
+                    if *last != p {
+                        *last = p;
+                        *c = eq_bands(&p, sr);
+                    }
+                } else {
+                    *n -= 1;
+                }
+                let (mut yl, mut yr) = (l, r);
+                for (b, zz) in c.iter().zip(z.iter_mut()) {
+                    yl = b.run(yl, &mut zz[0]);
+                    yr = b.run(yr, &mut zz[1]);
+                }
+                (yl, yr)
+            }
             Dsp::Delay {
                 l: bl,
                 r: br,
@@ -1531,6 +1765,30 @@ impl ChainState {
             let states = std::mem::take(&mut self.states);
             self.spare.push((self.owner, sig, states));
         }
+        if self.owner == owner && !self.states.is_empty() {
+            // the chain was edited (a device inserted, removed or moved):
+            // the devices that stay keep their state (delay and reverb
+            // tails, plugin slots); only new devices are built
+            let sig = std::mem::take(&mut self.sig);
+            let mut old: Vec<Option<FxState>> = std::mem::take(&mut self.states)
+                .into_iter()
+                .map(Some)
+                .collect();
+            self.states = devs
+                .iter()
+                .map(|d| {
+                    let ds = dev_sig(d);
+                    let k = (0..old.len())
+                        .find(|&k| sig[k] == ds && old[k].as_ref().is_some_and(|s| s.uid == d.uid));
+                    match k.and_then(|k| old[k].take()) {
+                        Some(s) => s,
+                        None => FxState::new(d, sr),
+                    }
+                })
+                .collect();
+            self.sig = devs.iter().map(dev_sig).collect();
+            return;
+        }
         let hit = self
             .spare
             .iter()
@@ -1604,6 +1862,76 @@ impl ChainState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn eq_flat_is_transparent_and_bands_shape_the_curve() {
+        let d = Device::new(FxKind::Eq);
+        let mut st = FxState::new(&d, 48000.0);
+        let ctx = Ctx {
+            bpm: 120.0,
+            note: 0.0,
+        };
+        for i in 0..2000 {
+            let x = ((i as f32) * 0.07).sin() * 0.5;
+            let (l, r) = st.process(x, -x, &ctx);
+            assert_eq!((l, r), (x, -x), "0 dB on every band passes bit-exact");
+        }
+        let mut b = Device::new(FxKind::Eq);
+        b.set_real("m1_freq", 1000.0);
+        b.set_real("m1_gain", 12.0);
+        b.set_real("lo_gain", -12.0);
+        let at = |f| eq_response_db(&b, f, 48000.0);
+        assert!((at(1000.0) - 12.0).abs() < 0.3, "peak {}", at(1000.0));
+        assert!(at(25.0) < -10.0, "low shelf cut {}", at(25.0));
+        assert!(at(15000.0).abs() < 0.5);
+        // the DSP follows the curve: a 1 kHz sine comes out ~4x louder
+        let mut st = FxState::new(&b, 48000.0);
+        let mut peak = 0.0f32;
+        for i in 0..48000 {
+            let x = (i as f32 / 48000.0 * 1000.0 * std::f32::consts::TAU).sin() * 0.1;
+            let (l, _) = st.process(x, x, &ctx);
+            if i > 24000 {
+                peak = peak.max(l.abs());
+            }
+        }
+        assert!((peak / 0.1 - 3.98).abs() < 0.2, "gain {}", peak / 0.1);
+    }
+
+    #[test]
+    fn editing_a_chain_keeps_the_states_of_devices_that_stay() {
+        let ctx = Ctx {
+            bpm: 120.0,
+            note: 0.0,
+        };
+        let delay = Device::new(FxKind::Delay);
+        let mut c = ChainState {
+            sig: vec![],
+            states: vec![],
+            owner: usize::MAX,
+            spare: vec![],
+        };
+        c.sync(std::slice::from_ref(&delay), 2, 48000.0);
+        // feed an impulse so the delay holds a tail
+        c.process(1.0, 1.0, &ctx);
+        for _ in 0..100 {
+            c.process(0.0, 0.0, &ctx);
+        }
+        // insert an EQ in front: the delay's buffer must survive
+        let devs = [Device::new(FxKind::Eq), delay.clone()];
+        c.sync(&devs, 2, 48000.0);
+        assert_eq!(c.states.len(), 2);
+        assert_eq!(c.states[0].kind, FxKind::Eq);
+        let mut heard = 0.0f32;
+        for _ in 0..48000 {
+            let (l, _) = c.process(0.0, 0.0, &ctx);
+            heard = heard.max(l.abs());
+        }
+        assert!(heard > 0.01, "the echo of the impulse still comes out");
+        // remove the EQ again: still the same delay state, no rebuild
+        c.sync(std::slice::from_ref(&delay), 2, 48000.0);
+        assert_eq!(c.states.len(), 1);
+        assert_eq!(c.states[0].kind, FxKind::Delay);
+    }
 
     #[test]
     fn chain_remap_follows_instrument_indices() {

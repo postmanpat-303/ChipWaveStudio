@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 51] = [
+pub const VIEWS: [&str; 53] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -88,6 +88,8 @@ pub const VIEWS: [&str; 51] = [
     "plugin-setup",
     "showcase",
     "showcase-progress",
+    "devices",
+    "devices-drop",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -270,6 +272,55 @@ impl App {
                     self.with(|s| s.song.mixer.channels[2].mute = true);
                     self.extra.full_height = true;
                 }
+            }
+            "devices" | "devices-drop" => {
+                // the Devices tab on the Supersaw Pad: EQ, its filter and
+                // chorus, a compressor and a reverb; Browser › Effects open
+                self.enter_timeline();
+                self.default_layout();
+                self.instr = 7;
+                let nch = self.with(|s| s.song.channels);
+                if let Some(c) = (0..nch).find(|&c| self.track_slot(c) == 7) {
+                    self.ch = c;
+                }
+                self.dev.follow_ch = self.ch;
+                self.with(|s| {
+                    use crate::fx::{Device, FxKind};
+                    let mut eq = Device::new(FxKind::Eq);
+                    for (k, v) in [
+                        ("lo_freq", 90.0),
+                        ("lo_gain", -6.0),
+                        ("m1_freq", 700.0),
+                        ("m1_gain", 3.5),
+                        ("m2_freq", 3200.0),
+                        ("m2_gain", -4.0),
+                        ("m2_q", 2.0),
+                        ("hi_gain", 5.0),
+                    ] {
+                        eq.set_real(k, v);
+                    }
+                    let mut comp = Device::new(FxKind::Compressor);
+                    super::fxview::apply_preset(&mut comp, 0);
+                    let rev = Device::new(FxKind::Reverb);
+                    s.song.insert_device(6, 0, eq);
+                    let n = s.song.instruments.get(6).map_or(0, |i| i.fx.len());
+                    s.song.insert_device(6, n, comp);
+                    s.song.insert_device(6, n + 1, rev);
+                });
+                self.set_lower(4);
+                self.extra.lower_h = 430.0;
+                self.dev.inst_folded = std::env::var_os("CHIPWAVE_SHOT_FOLD").is_some();
+                self.extra.browser_open = true;
+                self.br.filter.tab = crate::browser::Tab::Effects;
+                self.br_refresh();
+                if view == "devices-drop" {
+                    let it = self.br.items.iter().find(|i| i.key == "fx:Delay").cloned();
+                    self.br.sel = it.as_ref().map(|i| i.key.clone());
+                    self.br.drag = it;
+                    self.br.shot_drop = true;
+                    self.dev.shot_at = Some(1);
+                }
+                self.dirty = false;
             }
             "plugin-setup" => {
                 self.view = View::Timeline;

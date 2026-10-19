@@ -232,6 +232,7 @@ impl App {
                 Key::Num5 if cmd => self.view = View::Sample,
                 Key::Num6 if cmd => self.reset_layout(),
                 Key::A if cmd && m.shift => self.toggle_adv_edit(),
+                Key::Num7 if cmd => self.vtab_select(super::viewbar::VTab::Devices),
                 Key::A if cmd => {
                     let last = self.rows() - 1;
                     let chsel = Some(((0, self.ch), (last, self.ch)));

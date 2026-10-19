@@ -768,7 +768,7 @@ impl App {
 }
 
 /// devices per instrument chain (same limit as the FX view)
-pub(super) const MAX_DEVICES: usize = 16;
+pub(super) const MAX_DEVICES: usize = crate::fx::MAX_DEVICES;
 
 impl App {
     /// Add a default `kind` device at the end of instrument `slot`'s chain.

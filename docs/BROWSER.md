@@ -18,11 +18,12 @@ Whether it is open and how wide it is are saved in `settings.toml` (`browser_ope
 From top to bottom (this is mockup B, `docs/mockups/src/browser_b.html`):
 
 1. **Header:** the BROWSER chip, the tab and how many items it has, and three buttons: **♥** (favourites only), **rescan** (library and locations, in the background) and **•••** (Add folder…, Rescan locations, Find plugins…, Auto-play on select, remove a location).
-2. **Category tabs** (4 × 2), each in its format's colour:
+2. **Category tabs** (4 per row), each in its format's colour:
 
    | Tab | Shows |
    |---|---|
    | **Instruments** | blank Synth and Voice, every generator preset (Drum Synth, kits, Chip FX, Analog, FM-4, Noise, Wave, Grid), your `.cwi` instrument library, `.cwi` files in your locations, and the open song's instruments (Location *This song*) |
+   | **Effects** | ChipWave's built-in effects (EQ, Delay, Reverb, Compressor, Filter …, each with a one-line description), the Grid FX patches and every effect plugin from the scan. **Adds to: …** at the top says which track / instrument a double-click adds to; drag into the lower panel's **Devices** row to insert between two devices ([FX.md › Devices](FX.md#devices-tab-unreleased)) |
    | **Plugins** | CLAP and VST3 plugins from the plugin scan, instruments and effects (the subtitle says which). **Find plugins…** and **Rescan plugins** are on this tab |
    | **Samples** | WAV, FLAC, MP3 and Ogg files in your locations |
    | **Songs** | the demo songs, `.cwt` / `.cwt.toml` songs in your locations, and MOD / MED files (listed; import is planned) |
@@ -188,6 +189,7 @@ Drag a row out of the Browser. A ghost shows the item and what letting go there 
 | **Below the last track** (the empty area under the headers or lanes) | a **new track**, named after it, playing it | – | a new track with it as a sample instrument |
 | **An instrument slot** in the sidebar list | replaces that slot's sound (notes kept) | added to that slot's FX chain | replaces that slot's sound |
 | **The FX view** | – | added to the current instrument's chain | – |
+| **The Devices row** (lower panel) | replaces the track's instrument, **keeping its effects** | inserted where the marker shows (between two cards; on the instrument card = first) | replaces the track's instrument |
 | **The pattern editor** (or any other view) | a new instrument slot, made current, ready to type with | added to the current instrument's chain | a new sample instrument |
 
 The drop indicator on the timeline is an outlined header and a tinted row, or an **insertion line** under the last track with **"New track: <name>"**. A full song (32 tracks) says "All 32 tracks are used" instead.

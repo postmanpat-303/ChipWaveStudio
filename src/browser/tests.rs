@@ -12,6 +12,7 @@ fn every_tab_has_built_in_items_and_badges_have_colours() {
     let v = builtin_items();
     for t in [
         Tab::Instruments,
+        Tab::Effects,
         Tab::Presets,
         Tab::Grid,
         Tab::Wavetables,
@@ -328,4 +329,21 @@ fn plugin_catalogue_sets_category_creator_and_showcase_tag() {
     let fx = items.iter().find(|i| i.name == "Surge XT Effects").unwrap();
     assert_eq!(fx.category, "Effect");
     assert!(fx.tags.contains(&"Showcase"));
+}
+
+#[test]
+fn effects_tab_lists_built_ins_grid_fx_and_effect_plugins() {
+    let v = builtin_items();
+    let f = Filter {
+        tab: Tab::Effects,
+        ..Default::default()
+    };
+    let hits = filter(&v, &f, &[], &BTreeMap::new());
+    let names: Vec<&str> = hits.iter().map(|&i| v[i].name.as_str()).collect();
+    for k in crate::fx::FxKind::ALL {
+        assert!(names.contains(&k.name()), "{k:?} missing");
+    }
+    assert!(hits.iter().any(|&i| matches!(v[i].src, Src::GridFx(_))));
+    assert!(hits.iter().all(|&i| v[i].is_effect()));
+    assert!(!v.iter().any(|i| i.tab == Tab::Effects && i.previewable()));
 }

@@ -408,7 +408,7 @@ impl App {
             DropAt::NewTrack(_) if n >= MAX_CHANNELS => "All 32 tracks are used".into(),
             DropAt::NewTrack(_) => format!("New drum track: {} ({})", p.name, p.kit),
             DropAt::Central | DropAt::Fx => "New drum track at the play marker".into(),
-            DropAt::Slot(_) => return None,
+            DropAt::Slot(_) | DropAt::Device(_) => return None,
         })
     }
 
@@ -417,7 +417,7 @@ impl App {
             DropAt::Track(tr, at) => self.pat_place(i, Some(tr), at),
             DropAt::NewTrack(at) => self.pat_place(i, None, at),
             DropAt::Central | DropAt::Fx => self.pat_place(i, None, None),
-            DropAt::Slot(_) => {}
+            DropAt::Slot(_) | DropAt::Device(_) => {}
         }
     }
 

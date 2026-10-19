@@ -26,6 +26,9 @@ mod browserpanel;
 mod browserview;
 mod chordlane;
 mod chordview;
+mod devices;
+#[cfg(test)]
+mod devices_tests;
 mod dialogs;
 mod drumpat;
 #[cfg(test)]
@@ -160,6 +163,8 @@ pub struct App {
     arr_sel: usize,
     arr_drag: Option<usize>,
     fx_drag: Option<usize>,
+    /// the lower panel's Devices tab (app/devices.rs)
+    dev: devices::DevUi,
     recent: Vec<String>,
     session: Option<crate::recovery::Session>,
     last_autosave: std::time::Instant,
@@ -503,6 +508,7 @@ impl App {
             arr_sel: 0,
             arr_drag: None,
             fx_drag: None,
+            dev: Default::default(),
             recent: crate::settings::load().recent,
             session,
             last_autosave: std::time::Instant::now(),

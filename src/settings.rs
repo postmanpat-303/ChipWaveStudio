@@ -86,6 +86,10 @@ pub struct Extra {
     /// wrote `lower_inst = false` whether or not anyone chose the arranger
     #[serde(default)]
     pub lower_chosen: bool,
+    /// the lower panel shows Devices: the selected track's instrument and
+    /// effect chain (0.2.4)
+    #[serde(default)]
+    pub lower_dev: bool,
     /// Full-height pattern: the lower panel is hidden
     #[serde(default)]
     pub full_height: bool,
@@ -195,6 +199,7 @@ impl Default for Extra {
             lower_h: 0.0,
             lower_inst: true,
             lower_chosen: false,
+            lower_dev: false,
             full_height: false,
             classic_editor: false,
             cards_closed: vec![],

@@ -87,8 +87,14 @@ impl App {
     }
 
     /// replace slot `slot`'s sound, keeping every note that uses it
-    pub(super) fn replace_instrument_sound(&mut self, slot: u8, inst: Instrument) {
+    pub(super) fn replace_instrument_sound(&mut self, slot: u8, mut inst: Instrument) {
         let idx = (slot as usize).wrapping_sub(1);
+        // a Devices drop onto the instrument card keeps the track's effects
+        if let Some((s, fx)) = self.dev.keep_fx.take() {
+            if s == slot && inst.fx.is_empty() {
+                inst.fx = fx;
+            }
+        }
         self.snapshot();
         let name = inst.name.clone();
         let ok = self.with(|s| match s.song.instruments.get_mut(idx) {

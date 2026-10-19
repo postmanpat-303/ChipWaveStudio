@@ -19,6 +19,37 @@ the DSP never allocates in the audio thread: buffers are built once when a chain
 | **Phaser** | Unreleased | 4–12 all-pass stages swept by an LFO |
 | **Frequency shifter** | Unreleased | Bode-style single-sideband shift, ±2000 Hz |
 | **Plugin effect** | Unreleased | any installed CLAP or VST3 effect, see [Plugin effects](#plugin-effects-clap-unreleased) |
+| **EQ** | Unreleased | 4 bands: low shelf, two peaks (with Q), high shelf, ±18 dB (RBJ Audio EQ Cookbook biquads); flat = bit-exact pass-through |
+
+## Devices tab (Unreleased)
+
+The lower panel's **Devices** tab (next to Piano roll; **DEVICES** in the view tab bar, **Ctrl+7**)
+shows the selected track's chain left to right, the way Del (postmanpat) picked from a reference
+screenshot: the **instrument card** (the lower-panel instrument editor; the chevron folds it to a
+slim strip), an arrow, then a **card per device** and a **+** card at the end (opens Browser ›
+Effects).
+
+- **Cards:** power (bypass), the name (drag it to move the card; double-click collapses), collapse
+  and **×** (remove, Ctrl+Z brings it back). Right-click: bypass, collapse, duplicate, move left /
+  right, remove, presets.
+- **Inline controls:** EQ (curve + a draggable dot per band: drag = frequency and gain,
+  double-click = 0 dB; the band chips pick which band's knobs show), Compressor (transfer curve),
+  Filter (response curve, mode chips), Delay (echo taps, sync and ping-pong chips), Reverb (decay
+  shape), knobs for every other device. Knobs right-click for automation lanes and modulation like
+  everywhere else. Plugin effects: thumbnail (Browser › Plugin thumbnails), **Editor…**, status
+  and parameter sliders.
+- **Adding:** Browser › **Effects** lists the built-ins, the Grid FX patches and the effect
+  plugins; its header says **Adds to: …**. Double-click adds at the end; drag into the row to
+  insert between two cards (an accent insertion marker shows where); drop on a timeline track to
+  add to that track's chain. Dragging an instrument onto the row replaces the track's instrument
+  and keeps its effects.
+- **Follows the selection:** the Timeline's or tracker's current track picks the instrument shown
+  (its most used instrument, or the one the track was given).
+- **Real-time safety:** all edits change the song's `fx` list under the shared lock, like the FX
+  view. The engine thread rebuilds only devices that are new (the ones that stay keep their state
+  and plugin slot) and the audio callback only reads the ring buffer, so it never allocates or
+  locks. Automation lanes (`instrument.N.fx.D.*`) and modulation routes follow their device when
+  devices move.
 
 ## Plugin effects (CLAP, Unreleased)
 
