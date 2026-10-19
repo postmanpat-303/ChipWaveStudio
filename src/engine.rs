@@ -3741,6 +3741,64 @@ mod tests {
     }
 
     #[test]
+    fn wave_position_follows_lanes_and_modulators_allocation_free() {
+        use crate::automation::{Lane, Point, Target};
+        let mut w = crate::gen_wave::WaveP::default();
+        w.filter_on = false;
+        w.p[0] = 0.0; // Pos A: sine
+        w.set(&[0.0, 0.0, 6000.0, 0.0, 0.0, 0.3, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 8.0]);
+        let mut song = gen_engine_song(crate::gen::GenEngine::Wave(w));
+        let plain = left(&render_secs(&song, 2.4));
+        assert!(plain.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
+        // a lane on knob 1 (Pos A) scans sine -> saw -> square
+        let mut l = Lane::new(Target::Gen(0, 0), "Pos A".into());
+        for (pos, value) in [(0.0, 0.0), (16.0, 1.0)] {
+            l.points.push(Point {
+                pos,
+                value,
+                shape: Default::default(),
+                curve: 0.0,
+            });
+        }
+        song.automation = vec![l];
+        let out = left(&render_secs(&song, 2.4));
+        let early = bright(&out[2400..12000]);
+        let late = bright(&out[100_000..112_000]);
+        assert!(late > 3.0 * early, "{early} -> {late}");
+        // drag-to-modulate: an LFO on Pos A changes the sound
+        let InstrumentKind::Gen(g0) = &song.instruments[0].kind else {
+            unreachable!()
+        };
+        let mut m = gen_engine_song(g0.engine.clone());
+        let k = m
+            .modulation
+            .add(0, crate::modulation::ModKind::Lfo)
+            .unwrap();
+        let id = m.modulation.mods[k].id;
+        m.modulation
+            .connect(id, &Target::Gen(0, 0).id(), 1.0)
+            .unwrap();
+        let mo = left(&render_secs(&m, 2.4));
+        let d: f32 = mo.iter().zip(&plain).map(|(a, b)| (a - b).abs()).sum();
+        assert!(d > 100.0, "the LFO route changed nothing ({d})");
+        // allocation-free with the lane, the LFO and 8 + 8 unison voices
+        for s in [&song, &m] {
+            let mut e = Engine::new(48000.0);
+            e.start(s, 0, 0, false, 0);
+            let mut buf = vec![0.0f32; 512];
+            for _ in 0..50 {
+                e.render(s, &mut buf);
+            }
+            let n = alloc_count::count(|| {
+                for _ in 0..500 {
+                    e.render(s, &mut buf);
+                }
+            });
+            assert_eq!(n, 0, "render allocated {n} times");
+        }
+    }
+
+    #[test]
     fn every_generator_knob_is_an_automation_target() {
         use crate::automation::Target;
         use crate::gen::{gen_knob_norm, gen_knobs, presets, set_gen_knob_norm, GEN_KNOBS};

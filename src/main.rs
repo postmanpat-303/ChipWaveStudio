@@ -759,7 +759,94 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         good
     };
+    // wavetable: built-ins ready, a high note stays alias-free, a
+    // Serum-style 3-frame WAV imports and survives a .cwt round trip
+    let wt_ok = {
+        let tables = wavetable::init().len();
+        let mut w = gen_wave::WaveP::default();
+        w.filter_on = false;
+        w.p[0] = gen_wave::WAVE[0].unmap(0.67); // saw
+        let mut st = gen_wave::WaveState::default();
+        let (mac, knob) = ([-1.0f32; 8], gen::NO_KNOBS);
+        let ov = gen::Ov {
+            mac: &mac,
+            knob: &knob,
+        };
+        let (sr, f) = (48000.0f32, 3100.0f32);
+        let y: Vec<f32> = (0..24000)
+            .map(|_| st.render(&w, ov, f, sr, true).0)
+            .collect();
+        let bin = |hz: f32| {
+            let (mut a, mut b) = (0.0f64, 0.0f64);
+            for (i, x) in y[4800..].iter().enumerate() {
+                let p = std::f64::consts::TAU * (hz * i as f32 / sr) as f64;
+                a += *x as f64 * p.cos();
+                b += *x as f64 * p.sin();
+            }
+            ((a * a + b * b).sqrt() / (y.len() - 4800) as f64) as f32
+        };
+        let fund = bin(f);
+        let alias = bin(sr - 8.0 * f); // where harmonic 8 would fold
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        if let Ok(mut wr) = hound::WavWriter::new(
+            &mut bytes,
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: 44100,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        ) {
+            for fr in 0..3 {
+                for i in 0..wavetable::FRAME {
+                    let t = i as f32 / wavetable::FRAME as f32;
+                    let v = (t * std::f32::consts::TAU * (fr + 1) as f32).sin();
+                    let _ = wr.write_sample((v * 20000.0) as i16);
+                }
+            }
+            let _ = wr.finalize();
+        }
+        let imp = wavetable::import_wav_bytes("self-test", bytes.get_ref());
+        let frames = imp.as_ref().map(|u| u.table.frames).unwrap_or(0);
+        let rt = imp
+            .map(|u| {
+                let mut s = fileio::demo_song();
+                w.user[1] = Some(u);
+                w.tables[1] = gen_wave::USER;
+                s.instruments.push(model::Instrument {
+                    name: "Wave".into(),
+                    volume: 0.8,
+                    transpose: 0,
+                    fx: vec![],
+                    kind: model::InstrumentKind::Gen(gen::GenPatch {
+                        engine: gen::GenEngine::Wave(w.clone()),
+                        ..Default::default()
+                    }),
+                });
+                let p = std::env::temp_dir().join("chipwave_selftest_wt.cwt");
+                let ok = fileio::save_cwt(&s, &p)
+                    .and_then(|_| fileio::load_cwt(&p))
+                    .map(|b| b.instruments.last().map(|i| &i.kind) == s.instruments.last().map(|i| &i.kind))
+                    .unwrap_or(false);
+                let _ = std::fs::remove_file(&p);
+                ok
+            })
+            .unwrap_or(false);
+        let good = tables == wavetable::BUILTIN.len()
+            && y.iter().all(|x| x.is_finite())
+            && fund > 0.05
+            && alias < 1e-3
+            && frames == 3
+            && rt;
+        report.push_str(&format!(
+            "  wavetable: {tables} built-in tables, 3.1 kHz saw fundamental {fund:.3} alias {alias:.6}, import {frames} frames, .cwt round trip {} ({})\n",
+            if rt { "ok" } else { "FAILED" },
+            if good { "ok" } else { "FAILED" }
+        ));
+        good
+    };
     let ok = fill_ok
+        && wt_ok
         && mod_ok
         && plug_ok
         && inst_ok
