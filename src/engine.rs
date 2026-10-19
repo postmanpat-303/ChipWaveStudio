@@ -3746,7 +3746,9 @@ mod tests {
         let mut w = crate::gen_wave::WaveP::default();
         w.filter_on = false;
         w.p[0] = 0.0; // Pos A: sine
-        w.set(&[0.0, 0.0, 6000.0, 0.0, 0.0, 0.3, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 8.0]);
+        w.set(&[
+            0.0, 0.0, 6000.0, 0.0, 0.0, 0.3, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 8.0,
+        ]);
         let mut song = gen_engine_song(crate::gen::GenEngine::Wave(w));
         let plain = left(&render_secs(&song, 2.4));
         assert!(plain.iter().all(|x| x.is_finite() && x.abs() <= 1.0));

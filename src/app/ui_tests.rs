@@ -2218,6 +2218,11 @@ fn stage2_generators_menu_dice_locks_history_and_bake() {
         ),
         ("Generator (FM-4)", "E-Piano", "GENERATOR · FM-4"),
         ("Generator (noise)", "Impact", "GENERATOR · NOISE"),
+        (
+            "Generator (wavetable)",
+            "Wave Glass Keys",
+            "GENERATOR · WAVETABLE",
+        ),
     ] {
         let mut h = harness();
         classic(&mut h);
@@ -2233,6 +2238,7 @@ fn stage2_generators_menu_dice_locks_history_and_bake() {
                 GenEngine::Analog(a) => (a.p.to_vec(), a.locks),
                 GenEngine::Fm(f) => (f.p.to_vec(), f.locks),
                 GenEngine::Noise(n) => (n.p.to_vec(), n.locks),
+                GenEngine::Wave(w) => (w.p.to_vec(), w.locks),
                 _ => panic!("not stage 2"),
             }
         };

@@ -2092,7 +2092,11 @@ fn wave(b: &mut B) {
     use crate::gen_wave::{USER, WAVE};
     use crate::wavetable::BUILTIN;
     for o in 0..2usize {
-        let (card, tag) = if o == 0 { ("Osc A", "A") } else { ("Osc B", "B") };
+        let (card, tag) = if o == 0 {
+            ("Osc A", "A")
+        } else {
+            ("Osc B", "B")
+        };
         b.card(Tab::Main, card).viz = Some(Box::new(move |i| {
             let w = wv(i);
             Viz::Wave(
@@ -2122,9 +2126,17 @@ fn wave(b: &mut B) {
         let p = b.choice(&format!("wv.table{o}"), &format!("Table {tag}"), opts, gs);
         p.tip = "the wavetable (built-in, or Imported: see the import button)".into();
         choice_lock!(p, wv, wv_mut, o as u32);
-        b.custom(&format!("wv.import{o}"), "Import", Custom::WaveTable(o as u8))
-            .tip("import a single-cycle WAV or a Serum-style wavetable WAV (2048-sample frames)");
-        let ks: &[usize] = if o == 0 { &[0, 8, 9, 10, 26] } else { &[1, 7, 11, 12, 27] };
+        b.custom(
+            &format!("wv.import{o}"),
+            "Import",
+            Custom::WaveTable(o as u8),
+        )
+        .tip("import a single-cycle WAV or a Serum-style wavetable WAV (2048-sample frames)");
+        let ks: &[usize] = if o == 0 {
+            &[0, 8, 9, 10, 26]
+        } else {
+            &[1, 7, 11, 12, 27]
+        };
         for &k in ks {
             gen_knob!(b, "wv", wv, wv_mut, WAVE, k);
         }
@@ -2171,6 +2183,19 @@ fn wave(b: &mut B) {
         "",
         fld!(wv, wv_mut, level),
     );
+    b.knob(
+        "gen.glide",
+        "Glide",
+        0.0,
+        1000.0,
+        false,
+        60.0,
+        "ms",
+        flds!(1000.0, pa, pa_mut, glide),
+    )
+    .tip("portamento time (with Legato, or 3C in the pattern)");
+    b.toggle("gen.legato", "Legato", fldb!(pa, pa_mut, legato))
+        .tip("overlapping notes glide instead of retriggering (mono)");
     b.card(Tab::Modulation, "Filter envelope").viz = Some(Box::new(|i| {
         let w = wv(i);
         let m = |k: usize| WAVE[k].map(w.p[k]);
@@ -2296,6 +2321,7 @@ pub(crate) mod tests {
             ("Analog", gen("Psy Rolling Bass")),
             ("FM-4", gen("Metallic Bell")),
             ("Noise", gen("White Riser")),
+            ("Wave", gen("Wave Supersaw")),
             (
                 "Sample",
                 inst(InstrumentKind::Sample {
@@ -2476,6 +2502,23 @@ pub(crate) mod tests {
                     "nz.level",
                 ]));
                 r.extend((0..crate::gen2::NN).map(|k| format!("nz.{k}")));
+            }
+            "Wave" => {
+                r.extend(s(&[
+                    "gen.dice",
+                    "wv.table0",
+                    "wv.table1",
+                    "wv.import0",
+                    "wv.import1",
+                    "wv.filter_on",
+                    "wv.mode",
+                    "wv.vintage",
+                    "wv.pole4",
+                    "gen.glide",
+                    "gen.legato",
+                    "wv.level",
+                ]));
+                r.extend((0..crate::gen_wave::WN).map(|k| format!("wv.{k}")));
             }
             "Sample" => r.push("sample.info".into()),
             "CLAP" | "VST3" => r.extend(s(&["plugin.status", "plugin.macros", "plugin.params"])),

@@ -826,7 +826,10 @@ fn self_test(out: Option<PathBuf>) -> i32 {
                 let p = std::env::temp_dir().join("chipwave_selftest_wt.cwt");
                 let ok = fileio::save_cwt(&s, &p)
                     .and_then(|_| fileio::load_cwt(&p))
-                    .map(|b| b.instruments.last().map(|i| &i.kind) == s.instruments.last().map(|i| &i.kind))
+                    .map(|b| {
+                        b.instruments.last().map(|i| &i.kind)
+                            == s.instruments.last().map(|i| &i.kind)
+                    })
                     .unwrap_or(false);
                 let _ = std::fs::remove_file(&p);
                 ok

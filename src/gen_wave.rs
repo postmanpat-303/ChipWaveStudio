@@ -46,34 +46,234 @@ const fn m(
 pub const WN: usize = 28;
 /// knob definitions; 0-7 are also the 43xy macros
 pub const WAVE: [MacroDef; WN] = [
-    m("Pos A", 0.0, 1.0, false, "", (0.0, 1.0), "oscillator A table position (scans the frames)"),
-    m("Pos B", 0.0, 1.0, false, "", (0.0, 1.0), "oscillator B table position"),
-    m("Cutoff", 30.0, 18000.0, true, "Hz", (0.3, 0.85), "filter cutoff"),
-    m("Res", 0.0, 1.0, false, "", (0.0, 0.6), "filter resonance (self-oscillates near the top)"),
-    m("Env amt", 0.0, 1.0, false, "", (0.0, 0.6), "filter envelope amount (up to 6 octaves)"),
-    m("Detune", 0.0, 1.0, false, "", (0.0, 0.4), "unison detune, up to +-50 cents across the voices"),
-    m("Spread", 0.0, 1.0, false, "", (0.2, 1.0), "unison stereo spread"),
-    m("Osc B", 0.0, 1.0, false, "", (0.0, 0.8), "oscillator B level"),
-    m("Osc A", 0.0, 1.0, false, "", (0.6, 1.0), "oscillator A level"),
-    m("Semi A", -24.0, 24.0, false, "st", (0.5, 0.5), "oscillator A transpose"),
-    m("Fine A", -50.0, 50.0, false, "ct", (0.45, 0.55), "oscillator A fine tune"),
-    m("Semi B", -24.0, 24.0, false, "st", (0.25, 0.75), "oscillator B transpose"),
-    m("Fine B", -50.0, 50.0, false, "ct", (0.4, 0.6), "oscillator B fine tune"),
-    m("Unison", 1.0, 8.0, false, "#", (0.0, 0.6), "voices per oscillator"),
-    m("Sub", 0.0, 1.0, false, "", (0.0, 0.4), "sine one octave below oscillator A"),
-    m("Noise", 0.0, 1.0, false, "", (0.0, 0.1), "white noise level"),
-    m("Key trk", 0.0, 1.0, false, "", (0.3, 1.0), "cutoff follows the note"),
-    m("F.Attack", 0.001, 2.0, true, "s", (0.0, 0.4), "filter envelope attack"),
-    m("F.Decay", 0.01, 3.0, true, "s", (0.1, 0.7), "filter envelope decay"),
-    m("F.Sustain", 0.0, 1.0, false, "", (0.0, 0.6), "filter envelope sustain"),
-    m("F.Release", 0.005, 3.0, true, "s", (0.2, 0.6), "filter envelope release"),
+    m(
+        "Pos A",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.0, 1.0),
+        "oscillator A table position (scans the frames)",
+    ),
+    m(
+        "Pos B",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.0, 1.0),
+        "oscillator B table position",
+    ),
+    m(
+        "Cutoff",
+        30.0,
+        18000.0,
+        true,
+        "Hz",
+        (0.3, 0.85),
+        "filter cutoff",
+    ),
+    m(
+        "Res",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.0, 0.6),
+        "filter resonance (self-oscillates near the top)",
+    ),
+    m(
+        "Env amt",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.0, 0.6),
+        "filter envelope amount (up to 6 octaves)",
+    ),
+    m(
+        "Detune",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.0, 0.4),
+        "unison detune, up to +-50 cents across the voices",
+    ),
+    m(
+        "Spread",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.2, 1.0),
+        "unison stereo spread",
+    ),
+    m(
+        "Osc B",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.0, 0.8),
+        "oscillator B level",
+    ),
+    m(
+        "Osc A",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.6, 1.0),
+        "oscillator A level",
+    ),
+    m(
+        "Semi A",
+        -24.0,
+        24.0,
+        false,
+        "st",
+        (0.5, 0.5),
+        "oscillator A transpose",
+    ),
+    m(
+        "Fine A",
+        -50.0,
+        50.0,
+        false,
+        "ct",
+        (0.45, 0.55),
+        "oscillator A fine tune",
+    ),
+    m(
+        "Semi B",
+        -24.0,
+        24.0,
+        false,
+        "st",
+        (0.25, 0.75),
+        "oscillator B transpose",
+    ),
+    m(
+        "Fine B",
+        -50.0,
+        50.0,
+        false,
+        "ct",
+        (0.4, 0.6),
+        "oscillator B fine tune",
+    ),
+    m(
+        "Unison",
+        1.0,
+        8.0,
+        false,
+        "#",
+        (0.0, 0.6),
+        "voices per oscillator",
+    ),
+    m(
+        "Sub",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.0, 0.4),
+        "sine one octave below oscillator A",
+    ),
+    m(
+        "Noise",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.0, 0.1),
+        "white noise level",
+    ),
+    m(
+        "Key trk",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.3, 1.0),
+        "cutoff follows the note",
+    ),
+    m(
+        "F.Attack",
+        0.001,
+        2.0,
+        true,
+        "s",
+        (0.0, 0.4),
+        "filter envelope attack",
+    ),
+    m(
+        "F.Decay",
+        0.01,
+        3.0,
+        true,
+        "s",
+        (0.1, 0.7),
+        "filter envelope decay",
+    ),
+    m(
+        "F.Sustain",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.0, 0.6),
+        "filter envelope sustain",
+    ),
+    m(
+        "F.Release",
+        0.005,
+        3.0,
+        true,
+        "s",
+        (0.2, 0.6),
+        "filter envelope release",
+    ),
     m("A.Attack", 0.001, 2.0, true, "s", (0.0, 0.3), "amp attack"),
     m("A.Decay", 0.01, 3.0, true, "s", (0.2, 0.8), "amp decay"),
     m("A.Sustain", 0.0, 1.0, false, "", (0.3, 1.0), "amp sustain"),
-    m("A.Release", 0.005, 3.0, true, "s", (0.1, 0.5), "amp release"),
-    m("Drive", 0.0, 1.0, false, "", (0.0, 0.4), "drive into the filter, soft-clipped"),
-    m("Env>Pos A", -1.0, 1.0, false, "", (0.4, 0.6), "filter envelope -> oscillator A position"),
-    m("Env>Pos B", -1.0, 1.0, false, "", (0.4, 0.6), "filter envelope -> oscillator B position"),
+    m(
+        "A.Release",
+        0.005,
+        3.0,
+        true,
+        "s",
+        (0.1, 0.5),
+        "amp release",
+    ),
+    m(
+        "Drive",
+        0.0,
+        1.0,
+        false,
+        "",
+        (0.0, 0.4),
+        "drive into the filter, soft-clipped",
+    ),
+    m(
+        "Env>Pos A",
+        -1.0,
+        1.0,
+        false,
+        "",
+        (0.4, 0.6),
+        "filter envelope -> oscillator A position",
+    ),
+    m(
+        "Env>Pos B",
+        -1.0,
+        1.0,
+        false,
+        "",
+        (0.4, 0.6),
+        "filter envelope -> oscillator B position",
+    ),
 ];
 
 /// The Wave generator's patch.
@@ -127,7 +327,11 @@ impl WaveP {
     }
     pub fn fix(&mut self) {
         for v in self.p.iter_mut() {
-            *v = if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.5 };
+            *v = if v.is_finite() {
+                v.clamp(0.0, 1.0)
+            } else {
+                0.5
+            };
         }
         for o in 0..2 {
             let ok = match self.tables[o] {
@@ -225,7 +429,9 @@ mod user_ser {
         v.serialize(s)
     }
 
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[Option<UserTable>; 2], D::Error> {
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> Result<[Option<UserTable>; 2], D::Error> {
         let v = Vec::<Slot>::deserialize(d)?;
         let mut u: [Option<UserTable>; 2] = [None, None];
         for s in v {
@@ -365,7 +571,8 @@ impl WaveState {
         // sub (sine an octave below A) and noise, centred
         let fs = f0 * 2f32.powf(v(9).round() / 12.0) * 0.5;
         self.sub = (self.sub + fs * dt).fract();
-        let c = (self.sub * std::f32::consts::TAU).sin() * v(14) * 0.8 + xs(&mut self.nz) * v(15) * 0.5;
+        let c =
+            (self.sub * std::f32::consts::TAU).sin() * v(14) * 0.8 + xs(&mut self.nz) * v(15) * 0.5;
         l += c;
         r += c;
         let drive = v(25);
@@ -498,11 +705,12 @@ mod tests {
             mac: &mac,
             knob: &NO_KNOBS,
         };
-        (0..n).map(|_| {
-            let (l, r, _) = s.render(w, ov, freq, sr, true);
-            (l, r)
-        })
-        .unzip()
+        (0..n)
+            .map(|_| {
+                let (l, r, _) = s.render(w, ov, freq, sr, true);
+                (l, r)
+            })
+            .unzip()
     }
 
     fn rms(v: &[f32]) -> f32 {
@@ -523,7 +731,9 @@ mod tests {
     fn plain() -> WaveP {
         let mut w = WaveP::default();
         w.filter_on = false;
-        w.set(&[0.67, 0.0, 6000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]);
+        w.set(&[
+            0.67, 0.0, 6000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ]);
         w.p[23] = 1.0; // sustain
         w
     }
@@ -554,8 +764,14 @@ mod tests {
         let (a, _) = note(&w, 220.0, 48000.0, 9600);
         w.p[0] = 1.0; // square
         let (b, _) = note(&w, 220.0, 48000.0, 9600);
-        let (ha, hb) = (bin(&a[2400..], 660.0, 48000.0), bin(&b[2400..], 660.0, 48000.0));
-        assert!(ha < 0.01 && hb > 0.05, "3rd harmonic: sine {ha}, square {hb}");
+        let (ha, hb) = (
+            bin(&a[2400..], 660.0, 48000.0),
+            bin(&b[2400..], 660.0, 48000.0),
+        );
+        assert!(
+            ha < 0.01 && hb > 0.05,
+            "3rd harmonic: sine {ha}, square {hb}"
+        );
     }
 
     #[test]
@@ -563,10 +779,17 @@ mod tests {
         let mut w = plain();
         let (l, r) = note(&w, 220.0, 48000.0, 9600);
         assert_eq!(l, r, "one voice is mono");
-        w.set(&[0.67, 0.0, 6000.0, 0.0, 0.0, 0.5, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 7.0]);
+        w.set(&[
+            0.67, 0.0, 6000.0, 0.0, 0.0, 0.5, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 7.0,
+        ]);
         let (l, r) = note(&w, 220.0, 48000.0, 9600);
         let d: Vec<f32> = l.iter().zip(&r).map(|(a, b)| a - b).collect();
-        assert!(rms(&d) > 0.05 * rms(&l), "spread: {} vs {}", rms(&d), rms(&l));
+        assert!(
+            rms(&d) > 0.05 * rms(&l),
+            "spread: {} vs {}",
+            rms(&d),
+            rms(&l)
+        );
         assert!(rms(&l) > 0.05);
     }
 

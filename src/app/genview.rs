@@ -534,6 +534,23 @@ fn g2_choices(ui: &mut egui::Ui, g: &mut GenPatch) -> bool {
                 ch |= ui.checkbox(&mut w.vintage, "Vintage").changed();
                 ch |= ui.checkbox(&mut w.pole4, "24 dB").changed();
             });
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label("Glide");
+                let mut ms = *glide * 1000.0;
+                if ui
+                    .add(egui::Slider::new(&mut ms, 0.0..=1000.0).suffix(" ms"))
+                    .on_hover_text("portamento time (with Legato, or 3C in the pattern)")
+                    .changed()
+                {
+                    *glide = ms / 1000.0;
+                    ch = true;
+                }
+                ch |= ui
+                    .checkbox(legato, "Legato")
+                    .on_hover_text("overlapping notes glide instead of retriggering (mono)")
+                    .changed();
+            });
         }
         _ => {}
     }

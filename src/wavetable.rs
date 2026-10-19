@@ -446,7 +446,11 @@ pub struct UserTable {
 
 impl std::fmt::Debug for UserTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "UserTable({:?}, {} frames)", self.table.name, self.table.frames)
+        write!(
+            f,
+            "UserTable({:?}, {} frames)",
+            self.table.name, self.table.frames
+        )
     }
 }
 
@@ -629,11 +633,7 @@ mod tests {
             let cyc: Vec<f32> = (0..len).map(|j| t.data[OFFS[k] + j]).collect();
             let sp = spectrum(&cyc);
             let lim = (MAX_HARM >> k).min(len / 2 - 1);
-            let above: f64 = sp
-                .iter()
-                .skip(lim + 1)
-                .map(|(r, i)| r * r + i * i)
-                .sum();
+            let above: f64 = sp.iter().skip(lim + 1).map(|(r, i)| r * r + i * i).sum();
             let kept: f64 = sp.iter().take(lim + 1).map(|(r, i)| r * r + i * i).sum();
             assert!(above < kept * 1e-12, "level {k}: {above} vs {kept}");
             assert_eq!(t.data[OFFS[k] + len], t.data[OFFS[k]], "guard sample");
@@ -740,6 +740,9 @@ mod tests {
         let t = toml::to_string(&std::collections::BTreeMap::from([("t", u.clone())])).unwrap();
         let back: std::collections::BTreeMap<String, UserTable> = toml::from_str(&t).unwrap();
         assert_eq!(back["t"], u);
-        assert_eq!(back["t"].table.frame_points(0.3, 16), u.table.frame_points(0.3, 16));
+        assert_eq!(
+            back["t"].table.frame_points(0.3, 16),
+            u.table.frame_points(0.3, 16)
+        );
     }
 }
