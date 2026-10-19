@@ -49,8 +49,12 @@ VIAddVersionKey "CompanyName" "${PUBLISHER}"
 !define MUI_ICON "${ICON}"
 !define MUI_UNICON "${ICON}"
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\ChipWave.exe"
+!define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_TEXT "Start ChipWave Studio"
+; Start it as the signed-in user, not elevated like this setup: an elevated process can't see
+; the user's mapped network drives (Z: etc. belong to the non-elevated logon session), so a
+; ChipWave started from here showed no network drives. Explorer starts it unelevated.
+!define MUI_FINISHPAGE_RUN_FUNCTION StartUnelevated
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "${PKGDIR}\LICENSE.txt"
@@ -73,6 +77,10 @@ Function .onInit
   ${If} $0 != ""
     StrCpy $INSTDIR $0
   ${EndIf}
+FunctionEnd
+
+Function StartUnelevated
+  Exec '"$WINDIR\explorer.exe" "$INSTDIR\ChipWave.exe"'
 FunctionEnd
 
 Function un.onInit
