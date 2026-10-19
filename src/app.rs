@@ -60,6 +60,8 @@ mod modview_tests;
 #[cfg(test)]
 mod newsong_tests;
 mod noterec;
+#[cfg(test)]
+mod opentl_tests;
 mod params;
 mod pattern;
 #[cfg(test)]
@@ -326,6 +328,11 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
             crate::settings::load().extra.new_in_timeline,
         ),
     };
+    // a tracker-mode song given on the command line opens in timeline mode
+    // (Settings › Open tracker songs in timeline mode); screenshots keep it
+    let mut song = song;
+    let converted = shot.is_none()
+        && file::convert_on_open(&mut song, crate::settings::load().extra.open_in_timeline);
     let shared: SharedRef = Arc::new(Mutex::new(Shared {
         song,
         engine: Engine::new(48000.0),
@@ -382,6 +389,8 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
             ),
             None => "Lumen Drift demo loaded.".to_string(),
         }
+    } else if converted {
+        format!("{status} · {}", file::OPENED_IN_TIMELINE)
     } else {
         status
     };

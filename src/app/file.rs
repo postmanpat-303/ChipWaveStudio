@@ -209,7 +209,26 @@ impl App {
         }
     }
 
-    /// open a .cwt by path (File > Recent, drag and drop)
+    /// Settings › Open tracker songs in timeline mode (on by default): a
+    /// just-loaded tracker-mode song switches to timeline mode with the same
+    /// lossless conversion as the "Switch to timeline mode?" dialog. Call it
+    /// before `reset_cursor`, so the converted song is the undo base and not
+    /// an edit. Screenshots keep the song as it is. True: it was converted.
+    pub(super) fn convert_on_open(&mut self) -> bool {
+        if self.shot.is_some() {
+            return false;
+        }
+        let on = self.extra.open_in_timeline;
+        self.with(|s| {
+            let done = convert_on_open(&mut s.song, on);
+            if done {
+                let Shared { song, engine, .. } = s;
+                engine.ensure_plan(song);
+            }
+            done
+        })
+    }
+
     /// replace the song with the built-in demo (unsaved, no file path)
     pub(super) fn load_demo(&mut self, i: usize) {
         let song = fileio::demo_song_n(i);
@@ -219,11 +238,19 @@ impl App {
             s.song = song;
         });
         self.path = None;
+        let conv = self.convert_on_open();
         self.reset_cursor();
         self.dirty = false;
+        if conv {
+            self.default_layout();
+        }
         self.status = format!("Loaded the demo song \"{title}\" (Save As to keep your changes)");
+        if conv {
+            self.status = format!("{} · {OPENED_IN_TIMELINE}", self.status);
+        }
     }
 
+    /// open a .cwt by path (File > Recent, drag and drop)
     pub(super) fn open_path(&mut self, p: PathBuf) {
         // a single-file text song (demos/*.cwt.toml) opens unsaved: Save asks
         // for a .cwt name instead of overwriting the text file
@@ -240,6 +267,7 @@ impl App {
                     s.song = song;
                 });
                 self.path = if text { None } else { Some(p.clone()) };
+                let conv = self.convert_on_open();
                 self.reset_cursor();
                 // timeline-mode songs open in the default layout; tracker-
                 // mode songs keep the view (Ctrl+6 is one key away)
@@ -252,6 +280,9 @@ impl App {
                 } else {
                     format!("Opened {} with {} warning(s)", p.display(), warnings.len())
                 };
+                if conv {
+                    self.status = format!("{} · {OPENED_IN_TIMELINE}", self.status);
+                }
                 self.load_warnings = warnings;
             }
             Err(e) if fileio::is_too_new(&e) => {
@@ -380,4 +411,20 @@ impl App {
             Err(e) => self.status = format!("Import failed: {e}"),
         }
     }
+}
+
+/// the note after a tracker-mode song was opened in timeline mode
+pub(crate) const OPENED_IN_TIMELINE: &str =
+    "Opened in timeline mode. File > Export tracker-compatible copy for 0.2.4.0 and older.";
+
+/// Switch a just-opened tracker-mode song to timeline mode when `on`
+/// (Settings › Open tracker songs in timeline mode); the conversion of the
+/// "Switch to timeline mode?" dialog, which plays bit-identically. True:
+/// converted (timeline songs and `on` = false are left alone).
+pub(crate) fn convert_on_open(song: &mut Song, on: bool) -> bool {
+    if !on || song.timeline.is_some() {
+        return false;
+    }
+    crate::timeline::enter_timeline_mode(song);
+    true
 }

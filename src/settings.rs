@@ -103,6 +103,12 @@ pub struct Extra {
     /// 2026; docs/TIMELINE.md). Off: on the pattern editor, as before.
     #[serde(default = "yes")]
     pub new_in_timeline: bool,
+    /// Opening a tracker-mode song (a .cwt, a demo) switches it to timeline
+    /// mode on load, without the dialog (Del's choice, 19 Oct 2026: "default
+    /// is timeline mode"). Off: it stays in tracker mode and the first
+    /// timeline edit asks, as before.
+    #[serde(default = "yes")]
+    pub open_in_timeline: bool,
     /// Timeline: double-clicking a clip opens it in the piano roll (Del's
     /// choice, 19 Oct 2026). Off: the block in the pattern editor, as
     /// before. Alt+double-click does the other one; Enter always opens the
@@ -204,6 +210,7 @@ impl Default for Extra {
             classic_editor: false,
             cards_closed: vec![],
             new_in_timeline: true,
+            open_in_timeline: true,
             dblclick_roll: true,
             flat_ui: false,
             chord_list_menu: false,

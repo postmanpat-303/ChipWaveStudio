@@ -1088,10 +1088,15 @@ impl App {
                             s.engine.stop();
                             s.song = song;
                         });
-                        self.reset_cursor();
                         self.path = None;
+                        let conv = self.convert_on_open();
+                        self.reset_cursor();
                         self.dirty = true;
                         self.status = "Recovered - choose File > Save As to keep it".into();
+                        if conv {
+                            self.status =
+                                format!("{} · {}", self.status, super::file::OPENED_IN_TIMELINE);
+                        }
                         crate::recovery::discard(&o);
                     }
                     Err(e) => {

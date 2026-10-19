@@ -1,6 +1,6 @@
 # Timeline view
 
-**Status:** editable (milestones M0, M1 and M2 of [DAW_TIMELINE_PLAN.md](DAW_TIMELINE_PLAN.md), unreleased). A song is in **tracker mode** (the order list decides what plays, and the timeline only shows it) or in **timeline mode** (the clips are the song, and you arrange them here). New songs start in timeline mode.
+**Status:** editable (milestones M0, M1 and M2 of [DAW_TIMELINE_PLAN.md](DAW_TIMELINE_PLAN.md), unreleased). A song is in **tracker mode** (the order list decides what plays, and the timeline only shows it) or in **timeline mode** (the clips are the song, and you arrange them here). New songs start in timeline mode, and tracker-mode songs and demos are switched to timeline mode when you open them (below).
 
 ![Timeline view: the Velvet Mirrorball demo playing, 14 tracks with headers on the left, coloured block clips with note previews, Intro/Verse/Chorus/Breakdown markers above the bar ruler, the playhead, the mini-map strip, and the instrument editor in the lower panel](screenshots/dark-timeline.png)
 
@@ -13,7 +13,7 @@ The **Timeline** view (the **Timeline** tab in the VIEW group, **View › Timeli
 
 The toolbar shows which mode the song is in:
 
-- **Tracker mode · from the order list.** The timeline is worked out from the order list and blocks every time they change. You can look, play, seek and open clips, but the first clip edit (dragging a clip, S, M, Delete, Ctrl+D…) asks *Switch to timeline mode?* (see below). Every song made before this version opens in tracker mode and plays exactly as before.
+- **Tracker mode · from the order list.** The timeline is worked out from the order list and blocks every time they change. You can look, play, seek and open clips, but the first clip edit (dragging a clip, S, M, Delete, Ctrl+D…) asks *Switch to timeline mode?* (see below). Since 0.2.4.1 a tracker-mode song (a `.cwt`, a demo from File › Demo songs or Help › Load demo song, a recovered song, a file on the command line) is **switched to timeline mode when it is opened**, with the same lossless conversion as the prompt below and no prompt. It plays bit-identically (tests compare the render of every demo). Opening is not an edit: the song isn't marked unsaved and there is no conversion step to undo. The status bar says *Opened in timeline mode. File > Export tracker-compatible copy for 0.2.4.0 and older.* The file on disk is untouched until you save. **Settings › Opening songs › Open tracker songs in timeline mode** (on by default) turns this off: songs then open in tracker mode and play exactly as before, and the first clip edit asks. Screenshots (`--screenshot`) and the command-line tools (`--render`, `--self-test`, `--play-test`) don't convert.
 - **Timeline mode.** The clips are the song. The order list is no longer used (the Arranger says so), and the blocks are the clips' contents. **Back to tracker mode…** turns the timeline back into blocks and an order list.
 
 ## Timeline mode
@@ -182,7 +182,7 @@ ChipWave starts with the clean song of File › New (no demo; the demos are in F
 
 To go straight to the pattern editor instead, turn off **Settings › New songs › Open on the Timeline view**. Songs you open from disk keep the view you are in.
 
-**The decision (Del, 19 Oct 2026):** new songs start on the Timeline, in **timeline mode** (clips are the song). Existing songs always open in tracker mode, play exactly as before, and only switch if you ask (the first timeline edit offers it, and Undo puts it back).
+**The decision (Del, 19 Oct 2026):** new songs start on the Timeline, in **timeline mode** (clips are the song). Existing songs used to open in tracker mode and switch only when asked. **Update (Del, 19 Oct 2026: "default is timeline mode"):** tracker-mode songs and demos now open in timeline mode, playing the same; Settings › Open tracker songs in timeline mode (off) brings the old behaviour back.
 
 ![The Amiga theme: the same song with the arranger in the lower panel](screenshots/amiga-timeline.png)
 

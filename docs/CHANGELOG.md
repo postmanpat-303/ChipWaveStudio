@@ -4,6 +4,12 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## 0.2.4.1: Timeline, Browser, Devices and a faster engine
 
+### Timeline mode is the default for opened songs
+- **Tracker-mode songs open in timeline mode:** `.cwt` files, the demos (File › Demo songs, Help › Load demo song), recovered songs and a song on the command line are switched on load, without the *Switch to timeline mode?* dialog. It's the same lossless conversion and plays bit-identically (a test compares the render of every demo).
+- Opening is not an edit: the song isn't marked unsaved, there's no conversion step to undo, and the file isn't touched until you save. The status bar notes *Opened in timeline mode. File > Export tracker-compatible copy for 0.2.4.0 and older.*
+- New setting **Settings › Opening songs › Open tracker songs in timeline mode** (on). Off: songs stay in tracker mode and the first timeline edit asks, as before. Settings › New songs stays on timeline mode by default.
+- The tracker (pattern editor) view works on these songs as before. Screenshots and `--render` / `--self-test` / `--play-test` don't convert.
+
 ### No demo song on start
 - **ChipWave now starts with the clean song of File › New** (timeline mode, only Song / Master, Timeline on top with the piano roll below) instead of loading the Lumen Drift demo, on first run and every normal start. Nothing to undo or save until you change something. Opening a file (double-click, `chipwave song.cwt`) works as before. The demos stay in **File › Demo songs** and **Help › Load demo song**. With **Settings › New songs** off it's the tracker-mode empty song, like File › New. (`--screenshot`, `--render demo`, `--self-test` and `--play-test` still use the demo.)
 

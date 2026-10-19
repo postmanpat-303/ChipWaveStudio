@@ -460,6 +460,22 @@ impl App {
                     changed = true;
                 }
                 ui.end_row();
+                ui.label("Opening songs");
+                if ui
+                    .checkbox(
+                        &mut self.extra.open_in_timeline,
+                        "Open tracker songs in timeline mode",
+                    )
+                    .on_hover_text(
+                        "tracker-mode songs and demos switch to timeline mode when opened \
+                         (they play the same; File > Export tracker-compatible copy for 0.2.4.0 \
+                         and older); off: they stay in tracker mode and the first timeline edit asks",
+                    )
+                    .changed()
+                {
+                    changed = true;
+                }
+                ui.end_row();
                 ui.label("Double-click a clip");
                 ui.horizontal(|ui| {
                     let a = ui
