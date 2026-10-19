@@ -479,7 +479,7 @@ fn old_settings_files_get_the_new_defaults() {
 
 /// new users (and settings with no saved choice) get the instrument editor in
 /// the lower panel; the switch remembers the user's choice, and adding an
-/// automation lane shows the lanes
+/// automation lane shows the lanes without closing the instrument editor
 #[test]
 fn lower_panel_opens_on_the_instrument_editor_and_remembers_the_choice() {
     let mut h = with_inst(analog());
@@ -506,14 +506,15 @@ fn lower_panel_opens_on_the_instrument_editor_and_remembers_the_choice() {
     let mut saved = e.clone();
     saved.default_lower_view();
     assert!(!saved.lower_inst, "kept on the next start");
-    // Ctrl+I back to the instrument editor, then a new automation lane
-    // switches the lower panel to the lanes
+    // Ctrl+I back to the instrument editor; a new automation lane shows the
+    // lanes but keeps the instrument editor open (automation design A: adding
+    // a lane from a knob doesn't yank the lower panel away)
     key(&mut h, Key::I, ctrl());
     frames(&mut h, 2);
     assert!(h.state().extra.lower_inst);
     h.state_mut().add_lane(crate::automation::Target::Master);
     frames(&mut h, 2);
-    assert!(!h.state().extra.lower_inst && h.state().show_auto);
+    assert!(h.state().extra.lower_inst && h.state().show_auto);
 }
 
 fn grid_of(h: &Harness<'static, App>) -> crate::grid::GridP {

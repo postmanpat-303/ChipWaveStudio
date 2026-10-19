@@ -4,6 +4,11 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Fixes
+- **Leaving timeline mode keeps automation exactly as it was:** a track lane that is the only lane for its parameter now goes back to the song unchanged (curves, disabled lanes and labels included) instead of being resampled row by row, so a song plays bit-identically after entering and leaving timeline mode. Parameters that also have clip lanes are still combined and sampled as before.
+- **Reordering or inserting tracks no longer drops the Song / Master track** (tempo, master and return automation) in timeline mode, which changed playback.
+- Tests brought up to date with intended behaviour: adding an automation lane keeps the instrument editor open; a timeline song with track lanes needs file reader version 4.
+
 ### Get showcase instruments…
 - Browser › Plugins › **Get showcase instruments…**: a dialog listing the nine showcase instruments (creator, category, licence, size, source link) with per-item checkboxes, progress bars, **Cancel** and clear error messages.
 - Downloads only from the creators' own GitHub releases (pinned version + SHA-256), extracts only the `.vst3` / `.clap` bundles into the per-user plugin folders (no admin), writes the licence and a source note next to them, adds the folders, rescans and shows them under **Showcase**. Already-installed same versions are skipped.

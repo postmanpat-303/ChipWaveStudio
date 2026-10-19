@@ -1537,7 +1537,16 @@ mod tests {
         let (m, names) = entries(&plain);
         assert!(m.contains("min_reader_version = 1"), "{m}");
         assert!(!names.iter().any(|n| n == "timeline.toml"), "{names:?}");
+        // the demo's song lanes become track lanes in timeline mode, and
+        // track lanes need reader version 4 (older builds can't play them)
+        let mut auto = demo_song();
+        crate::timeline::enter_timeline_mode(&mut auto);
+        let ap = dir.join("auto.cwt");
+        save_cwt(&auto, &ap).unwrap();
+        assert!(entries(&ap).0.contains("min_reader_version = 4"));
+        // without automation a timeline song needs version 2
         let mut song = demo_song();
+        song.automation.clear();
         crate::timeline::enter_timeline_mode(&mut song);
         {
             let t = song.timeline.as_mut().unwrap();
