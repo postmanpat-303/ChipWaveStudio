@@ -1,4 +1,4 @@
-//! "Get showcase instruments…" dialog (docs/BROWSER.md): pick from the nine
+//! "Get showcase instruments…" dialog (docs/BROWSER.md): pick from the eleven
 //! free, open-source instruments, download them from their creators' own
 //! release pages (SHA-256 checked) into the per-user plugin folders, then
 //! rescan so they show in the Browser's Plugins tab with the Showcase tag.
@@ -7,7 +7,7 @@ use super::*;
 use crate::showcase::{self, Get, Roots, State, ITEMS};
 
 pub(crate) struct ShowcaseDlg {
-    /// one per showcase::ITEMS entry (nine)
+    /// one per showcase::ITEMS entry (eleven)
     pub(crate) ticked: Vec<bool>,
     pub(crate) job: Option<showcase::Job>,
     pub(crate) roots: Option<Roots>,
@@ -149,7 +149,7 @@ impl App {
             .default_width(1040.0)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
-                ui.label("Nine free, open-source instruments, made by their creators and downloaded from their own release pages. ChipWave checks each download's SHA-256, copies only the plugin into your user plugin folders (no admin needed) and puts the licence and a source-code note next to it.");
+                ui.label("Eleven free, open-source instruments, made by their creators and downloaded from their own release pages. ChipWave checks each download's SHA-256, copies only the plugin into your user plugin folders (no admin needed) and puts the licence and a source-code note next to it.");
                 ui.label(egui::RichText::new("They are not part of ChipWave: thanks to the creators below. Instruments whose creators only ship an installer program get an Open download page button instead, so nothing is run behind your back.").small().color(t.ink2));
                 ui.add_space(6.0);
                 egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| {

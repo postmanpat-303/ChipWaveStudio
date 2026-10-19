@@ -44,7 +44,7 @@ impl showcase::Fetch for Offline {
 }
 
 #[test]
-fn plugins_tab_button_opens_the_dialog_with_all_nine_and_credits() {
+fn plugins_tab_button_opens_the_dialog_with_all_eleven_and_credits() {
     let mut h = harness();
     let c = h.get_by_label("Get showcase instruments…").rect().center();
     click_at(&mut h, c);
@@ -63,6 +63,8 @@ fn plugins_tab_button_opens_the_dialog_with_all_nine_and_credits() {
     assert_eq!(h.query_all_by_label("Open download page").count(), pages);
     let n = h.query_all_by_label("Close").count();
     assert_eq!(n, 1);
+    // let the auto-sized window settle before aiming at its button
+    frames(&mut h, 10);
     let c = h.get_by_label("Close").rect().center();
     click_at(&mut h, c);
     assert!(h.state().showcase.is_none());

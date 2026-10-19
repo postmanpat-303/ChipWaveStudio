@@ -80,6 +80,31 @@ const BY_ID: &[(&str, Entry)] = &[
         },
     ),
 
+    (
+        "de.mukkemann.retrotrax",
+        Entry {
+            category: "Chip",
+            creator: "Mukkemann",
+            tags: &["Showcase", "Chip", "SID"],
+        },
+    ),
+    (
+        "abcdef019182faeb48726b69594d756c", // YMulator-Synth (VST3)
+        Entry {
+            category: "Chip",
+            creator: "Hiroaki (hiroaki0923)",
+            tags: &["Showcase", "Chip", "FM"],
+        },
+    ),
+    (
+        "abcdef019182faeb4d756b6b52747278", // Mukkemann RetroTrax (VST3)
+        Entry {
+            category: "Chip",
+            creator: "Mukkemann",
+            tags: &["Showcase", "Chip", "SID"],
+        },
+    ),
+
     // VST3 class ids (32 hex digits, ChipWave text form)
     (
         "abcdef019182faeb566d624153675854", // Surge XT
@@ -247,6 +272,30 @@ const BY_NAME: &[(&str, Entry)] = &[
         },
     ),
     (
+        "ymulator-synth",
+        Entry {
+            category: "Chip",
+            creator: "Hiroaki (hiroaki0923)",
+            tags: &["Showcase", "Chip", "FM"],
+        },
+    ),
+    (
+        "ymulator synth",
+        Entry {
+            category: "Chip",
+            creator: "Hiroaki (hiroaki0923)",
+            tags: &["Showcase", "Chip", "FM"],
+        },
+    ),
+    (
+        "mukkemann retrotrax",
+        Entry {
+            category: "Chip",
+            creator: "Mukkemann",
+            tags: &["Showcase", "Chip", "SID"],
+        },
+    ),
+    (
         "aymidi",
         Entry {
             category: "Chip",
@@ -312,6 +361,9 @@ mod tests {
         assert_eq!(lookup("deadbeef", "ADLplug").unwrap().category, "Chip");
         assert_eq!(lookup("deadbeef", "Odin 2").unwrap().category, "Pad");
         assert_eq!(lookup("github.com/berarma/aymidi", "AyMidi").unwrap().category, "Chip");
+        assert!(lookup("deadbeef", "YMulator-Synth").unwrap().tags.contains(&"FM"));
+        assert!(lookup("de.mukkemann.retrotrax", "x").unwrap().tags.contains(&"SID"));
+        assert_eq!(lookup("ABCDEF019182FAEB48726B69594D756C", "x").unwrap().category, "Chip");
         assert_eq!(lookup("deadbeef", "AyMidi").unwrap().creator, "Bernat Arlandis (berarma)");
         // VST3 class id (hex) matches without relying on the name
         assert_eq!(

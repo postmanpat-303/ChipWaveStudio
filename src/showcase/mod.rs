@@ -1,5 +1,5 @@
 //! "Get showcase instruments…" (docs/BROWSER.md): an optional, user-started
-//! download of nine free, open-source instrument plugins from their
+//! download of eleven free, open-source instrument plugins from their
 //! creators' own release pages. Nothing here is shipped with ChipWave: the
 //! manifest pins each official release URL, its size and its SHA-256; the
 //! installer downloads, checks the hash, extracts only the `.vst3` / `.clap`
@@ -282,10 +282,63 @@ const ADL_MAC: &[Asset] = &[Asset {
     picks: &[p("ADLplug-1.0.0-mac/vst3/ADLplug.vst3", Dest::Vst3, "ADLplug.vst3")],
 }];
 
+
+const YM_P: &[Pick] = &[p("src/YMulator-Synth_artefacts/Release/VST3/YMulator-Synth.vst3", Dest::Vst3, "YMulator-Synth.vst3")];
+const YM_WIN: &[Asset] = &[Asset {
+    url: "https://github.com/hiroaki0923/YMulator-Synth/releases/download/v0.1.3/YMulator-Synth-Windows-VST3.zip",
+    sha256: "a695c12d10f0d34e0b95c2de15c15279c0db709b40721e74681c38a447e74e5b",
+    size: 2_916_908,
+    kind: Kind::Zip,
+    picks: YM_P,
+}];
+const YM_MAC: &[Asset] = &[Asset {
+    url: "https://github.com/hiroaki0923/YMulator-Synth/releases/download/v0.1.3/YMulator-Synth-macOS-VST3.zip",
+    sha256: "5e0d38753899d7fe340d85dd7cc69e6d718ddc68cf606ad37b035083572ce7b4",
+    size: 2_156_684,
+    kind: Kind::Zip,
+    picks: YM_P,
+}];
+const YM_LNX: &[Asset] = &[Asset {
+    url: "https://github.com/hiroaki0923/YMulator-Synth/releases/download/v0.1.3/YMulator-Synth-Linux-VST3.tar.gz",
+    sha256: "9c7c48e5a42a32db2daf4055d9e4ce8da299df5f9072a74f5a76dbeef361052f",
+    size: 3_098_750,
+    kind: Kind::TarGz,
+    picks: YM_P,
+}];
+
+const RT_WIN: &[Asset] = &[Asset {
+    url: "https://github.com/Mukkemann1972/retrotrax/releases/download/v0.92.0/RetroTrax-Windows-0.92.0.zip",
+    sha256: "a922cfe140b5b259514f2311a371890cbd02fc1801913335eee6b7dd495308ba",
+    size: 14_053_305,
+    kind: Kind::Zip,
+    picks: &[
+        p("Mukkemann RetroTrax.vst3", Dest::Vst3, "Mukkemann RetroTrax.vst3"),
+        p("Mukkemann RetroTrax.clap", Dest::Clap, "Mukkemann RetroTrax.clap"),
+    ],
+}];
+const RT_PICKS: &[Pick] = &[
+    p("VST3/Mukkemann RetroTrax.vst3", Dest::Vst3, "Mukkemann RetroTrax.vst3"),
+    p("CLAP/Mukkemann RetroTrax.clap", Dest::Clap, "Mukkemann RetroTrax.clap"),
+];
+const RT_MAC: &[Asset] = &[Asset {
+    url: "https://github.com/Mukkemann1972/retrotrax/releases/download/v0.92.0/RetroTrax-macOS-0.92.0.zip",
+    sha256: "92ef45b5f501836453af80eb138de52970651df0fda4e6f4b113fc1e71fe6b55",
+    size: 19_739_801,
+    kind: Kind::Zip,
+    picks: RT_PICKS,
+}];
+const RT_LNX: &[Asset] = &[Asset {
+    url: "https://github.com/Mukkemann1972/retrotrax/releases/download/v0.92.0/RetroTrax-Linux-0.92.0.zip",
+    sha256: "ca56f748d19f0027d1471d8cd00fd078ef47165064ae18d267f53b41188cb9fd",
+    size: 24_508_071,
+    kind: Kind::Zip,
+    picks: RT_PICKS,
+}];
+
 const NO_BUILD: &str = "no ready-made download yet: the creator publishes source code only";
 const INSTALLER_ONLY: &str = "the creator ships this as an installer program only";
 
-/// the nine showcase instruments (same order as the dialog)
+/// the eleven showcase instruments (same order as the dialog)
 pub const ITEMS: &[Item] = &[
     Item {
         id: "surge-xt",
@@ -439,6 +492,40 @@ pub const ITEMS: &[Item] = &[
         windows: Get::Page(NO_BUILD),
         macos: Get::Page(NO_BUILD),
         linux: Get::Page(NO_BUILD),
+    },
+    Item {
+        id: "ymulator",
+        name: "YMulator Synth",
+        creator: "Hiroaki (hiroaki0923)",
+        category: "Chip",
+        licence: "GPL-3.0",
+        version: "0.1.3",
+        formats: "VST3",
+        page: "https://github.com/hiroaki0923/YMulator-Synth/releases/tag/v0.1.3",
+        source: "https://github.com/hiroaki0923/YMulator-Synth",
+        licence_text: Some(GPL3),
+        big: false,
+        note: "YM2151 (OPM) FM chip",
+        windows: Get::Auto(YM_WIN),
+        macos: Get::Auto(YM_MAC),
+        linux: Get::Auto(YM_LNX),
+    },
+    Item {
+        id: "retrotrax",
+        name: "Mukkemann RetroTrax",
+        creator: "Mukkemann (Mukkemann1972)",
+        category: "Chip",
+        licence: "GPL-3.0",
+        version: "0.92.0",
+        formats: "CLAP + VST3",
+        page: "https://github.com/Mukkemann1972/retrotrax/releases/tag/v0.92.0",
+        source: "https://github.com/Mukkemann1972/retrotrax",
+        licence_text: Some(GPL3),
+        big: false,
+        note: "SID 6581 (reSIDfp) · a tracker-style instrument",
+        windows: Get::Auto(RT_WIN),
+        macos: Get::Auto(RT_MAC),
+        linux: Get::Auto(RT_LNX),
     },
 ];
 

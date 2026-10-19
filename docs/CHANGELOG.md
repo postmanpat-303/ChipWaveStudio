@@ -10,11 +10,12 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 - Tests brought up to date with intended behaviour: adding an automation lane keeps the instrument editor open; a timeline song with track lanes needs file reader version 4.
 
 ### Get showcase instruments…
-- Browser › Plugins › **Get showcase instruments…**: a dialog listing the nine showcase instruments (creator, category, licence, size, source link) with per-item checkboxes, progress bars, **Cancel** and clear error messages.
+- Browser › Plugins › **Get showcase instruments…**: a dialog listing the eleven showcase instruments (creator, category, licence, size, source link) with per-item checkboxes, progress bars, **Cancel** and clear error messages.
 - Downloads only from the creators' own GitHub releases (pinned version + SHA-256), extracts only the `.vst3` / `.clap` bundles into the per-user plugin folders (no admin), writes the licence and a source note next to them, adds the folders, rescans and shows them under **Showcase**. Already-installed same versions are skipped.
 - Installer-only releases (Odin 2, Geonkick, sfizz on Windows) and AyMidi (source only) get **Open download page**; no third-party installer is ever run.
 - New: AyMidi (AY-3-8910 / YM2149, Bernat Arlandis) in the Showcase catalogue; About › Credits lists every showcase instrument and the new libraries (sha2, tar, flate2, sevenz-rust2).
 - Developer flag `--install-showcase <ids|all> [--root DIR]`.
+- Two chip instruments added: **YMulator Synth** (YM2151 / OPM, Hiroaki) and **Mukkemann RetroTrax** (SID 6581, tracker-style), both auto-install on Windows, macOS and Linux.
 
 ### Inspired layout (Del's picks A, E, F from the reference screenshots)
 - **Timeline polish (mockup B):** clips have a **solid title bar** in the track colour over a softer body (notes and waveforms keep their saturation); track headers get a rounded **icon tile** with the instrument type's glyph (synth, drum, voice, sample, wave, Grid, plugin, audio, Song/Master); the marker row shows each marker as a **section band** up to the next one, with **Markers** / **Bars** captions over the header column; a slimmer timeline tool strip; header width 232 → 250 px so names fit. Track colours can now be set per track (saved with the song). Dark Circuit, Amiga and the Flat style all keep their look.

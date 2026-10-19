@@ -172,6 +172,8 @@ pub const CREDITS: &[Credit] = &[
     c(Plugins, "Geonkick", "Iurie Nistor (Quamplex)", "Showcase instrument (Drums), link to the creator's download", "GPL-3.0", "Not shipped with ChipWave", "https://github.com/quamplex/geonkick"),
     c(Plugins, "sfizz", "SFZTools", "Showcase instrument (Sampler), link to the creator's download", "BSD-2-Clause", "Not shipped with ChipWave", "https://github.com/sfztools/sfizz"),
     c(Plugins, "AyMidi", "Bernat Arlandis (berarma)", "Showcase instrument (Chip, AY-3-8910 / YM2149), link to the creator's page", "GPL-2.0", "Not shipped with ChipWave", "https://github.com/berarma/aymidi"),
+    c(Plugins, "YMulator Synth", "Hiroaki (hiroaki0923)", "Showcase instrument (Chip, YM2151 / OPM FM via ymfm), optional download", "GPL-3.0", "Not shipped with ChipWave", "https://github.com/hiroaki0923/YMulator-Synth"),
+    c(Plugins, "Mukkemann RetroTrax", "Mukkemann (Mukkemann1972)", "Showcase instrument (Chip, SID 6581 via reSIDfp; tracker-style), optional download", "GPL-3.0", "Not shipped with ChipWave", "https://github.com/Mukkemann1972/retrotrax"),
     c(Plugins, "ADLplug", "Jean Pierre Cimalando", "Showcase instrument (Chip, OPL3), optional download", "BSL-1.0", "Not shipped with ChipWave", "https://github.com/jpcima/ADLplug"),
     c(Plugins, "CLAP", "the free-audio project (Alexandre Bique et al.)",
         "Plugin hosting: the plugin standard ChipWave hosts", "MIT", "",

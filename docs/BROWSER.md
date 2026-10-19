@@ -59,6 +59,8 @@ Current catalogue (not bundled with ChipWave; install them yourself or with **Ge
 | sfizz | SFZTools | BSD-2 (engine) | VST3 | Sampler |
 | ADLplug | Jean Pierre Cimalando | BSL-1.0 | VST3 | Chip |
 | AyMidi | Bernat Arlandis (berarma) | GPL-2.0 | CLAP+VST3 (source only) | Chip (AY-3-8910 / YM2149) |
+| YMulator Synth | Hiroaki (hiroaki0923) | GPL-3.0 | VST3 | Chip (YM2151 / OPM FM) |
+| Mukkemann RetroTrax | Mukkemann | GPL-3.0 | CLAP+VST3 | Chip (SID 6581; tracker-style instrument) |
 
 ### Get showcase instruments…
 
@@ -88,8 +90,10 @@ Each item has its own progress bar; **Cancel** stops cleanly (partly extracted f
 | sfizz 1.2.3 | download page (installer only) | download page | download page |
 | ADLplug 1.0.0 | auto (.7z) | auto (.7z) | download page (.deb only) |
 | AyMidi | download page (no builds published) | download page | download page |
+| YMulator Synth 0.1.3 | auto | auto | auto |
+| Mukkemann RetroTrax 0.92.0 | auto | auto | auto |
 
-Developer / test flag: `chipwave --install-showcase <id,id|all> [--root DIR]` runs the same installer without the window (ids: `surge-xt, dexed, ob-xf, odin2, monique, geonkick, sfizz, adlplug, aymidi`).
+Developer / test flag: `chipwave --install-showcase <id,id|all> [--root DIR]` runs the same installer without the window (ids: `surge-xt, dexed, ob-xf, odin2, monique, geonkick, sfizz, adlplug, aymidi, ymulator, retrotrax`).
 
 Libraries: `ureq` (HTTPS), `zip`, `tar` + `flate2` (.tar.gz), `sevenz-rust2` (.7z, Apache-2.0), `sha2` — all GPL-3-compatible, credited in Help › About.
 

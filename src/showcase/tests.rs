@@ -275,7 +275,7 @@ fn archive_paths_cannot_escape() {
 
 #[test]
 fn manifest_is_pinned_official_and_matches_the_catalogue() {
-    assert_eq!(ITEMS.len(), 9);
+    assert_eq!(ITEMS.len(), 11);
     let mut ids = std::collections::HashSet::new();
     for it in ITEMS {
         assert!(ids.insert(it.id));
