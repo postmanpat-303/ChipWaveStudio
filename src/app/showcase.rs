@@ -146,13 +146,13 @@ impl App {
             .open(&mut open)
             .collapsible(false)
             .resizable(true)
-            .default_width(820.0)
+            .default_width(1040.0)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 ui.label("Nine free, open-source instruments, made by their creators and downloaded from their own release pages. ChipWave checks each download's SHA-256, copies only the plugin into your user plugin folders (no admin needed) and puts the licence and a source-code note next to it.");
                 ui.label(egui::RichText::new("They are not part of ChipWave: thanks to the creators below. Instruments whose creators only ship an installer program get an Open download page button instead, so nothing is run behind your back.").small().color(t.ink2));
                 ui.add_space(6.0);
-                egui::ScrollArea::vertical().max_height(380.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| {
                     egui::Grid::new("showcase-grid")
                         .striped(true)
                         .num_columns(7)
@@ -173,13 +173,20 @@ impl App {
                                     }
                                 }
                                 ui.vertical(|ui| {
-                                    ui.hyperlink_to(egui::RichText::new(it.name).strong(), it.source)
-                                        .on_hover_text(format!("source code: {}", it.source));
-                                    let mut sub = format!("{} · {}", it.version, it.formats);
-                                    if !it.note.is_empty() {
-                                        sub += &format!(" · {}", it.note);
-                                    }
-                                    ui.label(egui::RichText::new(sub).small().color(t.ink2));
+                                    ui.set_min_width(250.0);
+                                    ui.set_max_width(320.0);
+                                    ui.horizontal(|ui| {
+                                        ui.hyperlink_to(egui::RichText::new(it.name).strong(), it.source)
+                                            .on_hover_text(format!("source code: {}", it.source));
+                                        ui.label(egui::RichText::new(it.version).small().color(t.ink2));
+                                    });
+                                    let sub = if it.note.is_empty() {
+                                        it.formats.to_string()
+                                    } else {
+                                        format!("{} · {}", it.formats, it.note)
+                                    };
+                                    ui.add(egui::Label::new(egui::RichText::new(sub).small().color(t.ink2)).wrap_mode(egui::TextWrapMode::Truncate))
+                                        .on_hover_text(it.note);
                                 });
                                 ui.label(it.category);
                                 ui.label(it.creator);
@@ -230,7 +237,7 @@ impl App {
                                             if installed[k] {
                                                 ui.label(egui::RichText::new(format!("{} installed", it.version)).small().color(t.accent));
                                             } else if it.big {
-                                                ui.label(egui::RichText::new("large download").small().color(t.ink2));
+                                                ui.label(egui::RichText::new("large download: tick to include").small().color(t.ink2));
                                             }
                                         }
                                     }

@@ -46,7 +46,7 @@ The Plugins tab enriches a small built-in catalogue of well-known open-source in
 - a credited **creator**
 - the **Showcase** tag chip (plus related tags such as FM / Analog / Drums)
 
-Current catalogue (not bundled with ChipWave; install them yourself or via a future optional installer component):
+Current catalogue (not bundled with ChipWave; install them yourself or with **Get showcase instruments…**, below):
 
 | Plugin | Creator | Licence | Formats | Category |
 |---|---|---|---|---|
@@ -58,6 +58,40 @@ Current catalogue (not bundled with ChipWave; install them yourself or via a fut
 | Geonkick | Quamplex | GPL-3.0+ | VST3 | Drums |
 | sfizz | SFZTools | BSD-2 (engine) | VST3 | Sampler |
 | ADLplug | Jean Pierre Cimalando | BSL-1.0 | VST3 | Chip |
+| AyMidi | Bernat Arlandis (berarma) | GPL-2.0 | CLAP+VST3 (source only) | Chip (AY-3-8910 / YM2149) |
+
+### Get showcase instruments…
+
+Browser › **Plugins** tab › **Get showcase instruments…** (also in the Browser's ••• menu) opens a dialog listing the catalogue above with creator, category, licence, download size and a link to each project's source code. Tick what you want and press **Download & install**:
+
+1. ChipWave downloads each instrument from its **creator's own GitHub release** (URLs, versions, sizes and SHA-256 sums are pinned in `src/showcase/mod.rs`; nothing else is fetched).
+2. The **SHA-256** of every download is checked; a mismatch (or a missing file) stops that item with a clear message and an **Open download page** button. Nothing is installed from a bad download.
+3. Only the `.vst3` / `.clap` bundles are extracted (plus the plugin's own factory-data folder where it needs one: Surge XT's patches / wavetables, OB-Xf's patches), into the **per-user** plugin folders — no admin rights:
+   - Windows: `%LOCALAPPDATA%\Programs\Common\VST3` and `…\CLAP` (data: `%LOCALAPPDATA%\Surge XT`, `%LOCALAPPDATA%\Surge Synth Team\OB-Xf`)
+   - macOS: `~/Library/Audio/Plug-Ins/VST3` and `CLAP`
+   - Linux: `~/.vst3` and `~/.clap` (data under `$XDG_DATA_HOME` or `~/.local/share`)
+4. The plugin's licence (`<Name>-LICENSE.txt`) and a source note (`<Name>-SOURCE.txt`: version, source-code link, download URL and SHA-256) are written next to it.
+5. The folders are added to ChipWave's plugin folders, the plugin scan runs, and the Browser jumps to Plugins filtered to **Showcase**.
+
+Each item has its own progress bar; **Cancel** stops cleanly (partly extracted files are removed). An instrument that is already installed at the same version is skipped (`showcase-installed.json` in the ChipWave settings folder records what was installed). Standalone apps, VST2 and LV2 builds inside the archives are never copied.
+
+**Installer-only releases are never run.** When a creator ships only an `.exe` / `.pkg` / `.dmg` installer, or no build at all, the row shows **Open download page** instead of a checkbox.
+
+| Instrument | Windows | macOS | Linux |
+|---|---|---|---|
+| Surge XT 1.3.4 | auto (≈302 MB incl. factory data; unticked by default) | download page | download page |
+| Dexed 1.0.1 | auto | auto | auto |
+| OB-Xf 1.0.3 | auto (+ patches) | download page | auto (+ patches) |
+| Odin 2 2.4.1 | download page (installer only) | download page | auto |
+| Monique (nightly 2024-08-07) | auto | download page | auto |
+| Geonkick 3.9.0 basic | download page (installer only) | download page (no build) | auto |
+| sfizz 1.2.3 | download page (installer only) | download page | download page |
+| ADLplug 1.0.0 | auto (.7z) | auto (.7z) | download page (.deb only) |
+| AyMidi | download page (no builds published) | download page | download page |
+
+Developer / test flag: `chipwave --install-showcase <id,id|all> [--root DIR]` runs the same installer without the window (ids: `surge-xt, dexed, ob-xf, odin2, monique, geonkick, sfizz, adlplug, aymidi`).
+
+Libraries: `ureq` (HTTPS), `zip`, `tar` + `flate2` (.tar.gz), `sevenz-rust2` (.7z, Apache-2.0), `sha2` — all GPL-3-compatible, credited in Help › About.
 
 The mapping lives in `src/browser/catalogue.rs` and is generic: any scanned plugin whose id or name matches is enriched. Binaries are **not** in the git repo.
 
@@ -146,6 +180,7 @@ The Browser only reads. Opening it changes nothing in a song (tested: an old son
 ## Under the hood (for developers)
 
 - `src/browser/catalogue.rs`: Showcase plugin metadata (id/name → category, creator, tags).
+- `src/showcase/mod.rs`: the Get showcase instruments manifest and installer; `src/app/showcase.rs`: its dialog.
 - `src/browser.rs`: the item model (`Item`, `Tab`, `Fmt` with badge colours, `Loc`, `Src`), tags, the built-in / library / song / plugin item builders, the folder scanner (`scan_folder`, `classify`), the cached `Index` (`browser-index.json`), `filter` / `column_values`, and loading helpers (`instrument_of`, `sample_instrument`, `wave_instrument`, `grid_fx_device`, `preview_song`). Unit tests in `src/browser/tests.rs`.
 - `src/app/browserview.rs`: state (`BrowserUi`), the background scan and load jobs, actions (`br_load`, `br_instrument` with `Act`, `br_drop` with `DropAt`), preview and keys. `src/app/browserpanel.rs`: painting and input, the drag ghost and drop indicators. `src/app/plugsetup.rs`: Find plugins. `src/chanops.rs`: channel remapping (reorder, insert, assign). UI tests: `src/app/browser_tests.rs`.
 - Screenshots: `--screenshot out.png --view browser|browser-samples|plugin-setup --theme dark|amiga`.

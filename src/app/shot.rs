@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 41] = [
+pub const VIEWS: [&str; 43] = [
     "pattern",
     "arranger",
     "timeline",
@@ -75,6 +75,8 @@ pub const VIEWS: [&str; 41] = [
     "browser-samples",
     "browser-drop",
     "plugin-setup",
+    "showcase",
+    "showcase-progress",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -177,6 +179,32 @@ impl App {
             "plugin-setup" => {
                 self.view = View::Timeline;
                 self.open_plugin_setup(true);
+            }
+            "showcase" | "showcase-progress" => {
+                // Browser › Plugins › Get showcase instruments… (no download runs)
+                self.view = View::Timeline;
+                self.extra.browser_open = true;
+                self.br.filter.tab = crate::browser::Tab::Plugins;
+                self.open_showcase();
+                if view == "showcase-progress" {
+                    use crate::showcase::{Job, Progress, State};
+                    let p = |id, state, done: f64| {
+                        let total = crate::showcase::item(id).map(|i| i.size()).unwrap_or(1);
+                        Progress { id, state, done: (total as f64 * done) as u64, total }
+                    };
+                    if let Some(d) = self.showcase.as_mut() {
+                        d.job = Some(Job {
+                            progress: Arc::new(Mutex::new(vec![
+                                p("dexed", State::Done, 1.0),
+                                p("ob-xf", State::Downloading, 0.62),
+                                p("monique", State::Waiting, 0.0),
+                                p("adlplug", State::Waiting, 0.0),
+                            ])),
+                            cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                            done: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                        });
+                    }
+                }
             }
             "arranger" | "cue" => self.view = View::Arranger,
             "timeline"
