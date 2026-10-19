@@ -100,7 +100,7 @@ impl Plug {
             .v
             .iter()
             .position(|v| !v.on)
-            .unwrap_or_else(|| (key as usize) % 8);
+            .unwrap_or((key as usize) % 8);
         self.v[slot] = Voice {
             on: true,
             gate: true,
