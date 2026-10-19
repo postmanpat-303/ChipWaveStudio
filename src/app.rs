@@ -85,6 +85,9 @@ mod timeline_m2_tests;
 mod timeline_tests;
 mod topbar;
 mod trackops;
+mod trackpie;
+#[cfg(test)]
+mod trackpie_tests;
 mod transpose;
 #[cfg(test)]
 mod ui_tests;
@@ -308,6 +311,12 @@ pub struct App {
     too_new: Option<String>,
     /// the left Inspector (I; app/inspector.rs)
     insp: inspector::InspectorUi,
+    /// the track pie menu (right-click a track header; app/trackpie.rs)
+    pub(crate) pie: Option<trackpie::Pie>,
+    /// a track name being typed inline (track, text) and whether the field
+    /// has been focused yet
+    pub(crate) track_rename: Option<(usize, String)>,
+    pub(crate) tr_focus: bool,
 }
 
 pub fn run(open: Option<PathBuf>) -> Result<(), String> {
@@ -626,6 +635,9 @@ impl App {
             noterec: Default::default(),
             too_new: None,
             insp: Default::default(),
+            pie: None,
+            track_rename: None,
+            tr_focus: false,
         };
         let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
         app.midi_apply(connect);
@@ -1103,6 +1115,8 @@ impl eframe::App for App {
         self.midi_frame(&ctx);
         self.br_poll(&ctx);
         self.br.slot_rects.clear();
+        // the track pie takes the keys while it is open
+        self.track_pie(&ctx);
         self.handle_keys(&ctx);
         self.tick_safety();
         self.tick_derived();

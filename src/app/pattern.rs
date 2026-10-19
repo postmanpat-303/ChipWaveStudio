@@ -12,6 +12,8 @@ pub(super) enum HdrOp {
     SoloPlay,
     Mute,
     Solo,
+    /// a click on the name: this channel becomes the cursor channel
+    Select,
 }
 
 /// per channel, worked out once a frame
@@ -21,10 +23,13 @@ pub(super) struct Headers {
     pub(super) instruments: Vec<String>,
     /// the instrument slot (1-based, 0 = none)
     pub(super) slots: Vec<u8>,
+    /// the header glyph: the track's icon (track pie › Icon) or the
+    /// instrument type's
+    pub(super) glyphs: Vec<super::glyphs::Glyph>,
 }
 
 /// `s` cut with "…" to fit `w` points
-fn fit(p: &egui::Painter, s: &str, f: &FontId, w: f32) -> String {
+pub(super) fn fit(p: &egui::Painter, s: &str, f: &FontId, w: f32) -> String {
     let width = |t: &str| {
         p.layout_no_wrap(t.to_string(), f.clone(), Color32::WHITE)
             .size()
@@ -236,6 +241,8 @@ impl App {
         // the channel's instrument, and Play (audition; Shift = solo-play) / M / S
         let hdr = self.channel_headers(channels);
         let mut hdr_ops: Vec<(usize, HdrOp)> = vec![];
+        let mut rename_at: Option<Rect> = None;
+        let mut pie_at: Option<(usize, Pos2)> = None;
         self.hdr_hits.clear();
         for (vi, ch) in (first_ch..channels).enumerate() {
             let x = x0 + vi as f32 * chan_w;
@@ -288,6 +295,7 @@ impl App {
                         HdrOp::SoloPlay => "",
                         HdrOp::Mute => "mute (F9)",
                         HdrOp::Solo => "solo (F10)",
+                        HdrOp::Select => "",
                     });
                 let fill = if on {
                     on_col
@@ -330,17 +338,53 @@ impl App {
                     ));
                 }
             }
-            // number + name (truncated to fit before the buttons), instrument below
-            let name_w = rp.left() - hr.left() - 9.0;
+            // icon, number + name (truncated to fit before the buttons),
+            // instrument below; right-click: the track pie
+            let ir =
+                Rect::from_min_size(Pos2::new(hr.left() + 5.0, by + 1.0), egui::vec2(13.0, 13.0));
+            super::glyphs::tile(
+                &painter,
+                ir,
+                hdr.glyphs
+                    .get(ch)
+                    .copied()
+                    .unwrap_or(super::glyphs::Glyph::Note),
+                colour.gamma_multiply(if audible { 1.0 } else { 0.45 }),
+                super::timeline::title_ink(colour),
+                theme::polished(),
+            );
+            let nx = ir.right() + 4.0;
+            let name_w = rp.left() - nx - 3.0;
             let name = format!("{} {}", ch + 1, names.get(ch).cloned().unwrap_or_default());
             let f1 = FontId::proportional(12.5);
-            painter.text(
-                Pos2::new(hr.left() + 6.0, by + bs / 2.0),
-                egui::Align2::LEFT_CENTER,
-                fit(&painter, &name, &f1, name_w),
-                f1,
-                Color32::WHITE,
-            );
+            let head = Rect::from_min_max(hr.min, Pos2::new(rp.left() - 2.0, hr.bottom()));
+            let hresp = ui
+                .interact(head, egui::Id::unique(("chhdr", ch, "head")), Sense::click())
+                .on_hover_text("right-click: the track menu (rename, colour, icon, add, devices, routing, organize, delete)");
+            if hresp.hovered()
+                && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Secondary))
+            {
+                if let Some(p) = ui.input(|i| i.pointer.interact_pos()) {
+                    pie_at = Some((ch, p));
+                }
+            }
+            if hresp.clicked() {
+                hdr_ops.push((ch, HdrOp::Select));
+            }
+            if self.track_rename.as_ref().is_some_and(|r| r.0 == ch) && !self.pie_open() {
+                rename_at = Some(Rect::from_min_max(
+                    Pos2::new(nx, by - 2.0),
+                    Pos2::new(rp.left() - 3.0, by + bs + 2.0),
+                ));
+            } else {
+                painter.text(
+                    Pos2::new(nx, by + bs / 2.0),
+                    egui::Align2::LEFT_CENTER,
+                    fit(&painter, &name, &f1, name_w),
+                    f1,
+                    Color32::WHITE,
+                );
+            }
             let f2 = FontId::proportional(10.5);
             let inst = &hdr.instruments[ch];
             painter.text(
@@ -365,6 +409,13 @@ impl App {
         }
         for (ch, op) in hdr_ops {
             self.header_op(ch, op, &hdr);
+        }
+        if let Some(r) = rename_at {
+            self.rename_field(ui, r);
+        }
+        if let Some((ch, p)) = pie_at {
+            let ctx = ui.ctx().clone();
+            self.open_track_pie(ch, p, true, &ctx);
         }
         for vi in 0..visible {
             let r = start + vi;
@@ -712,6 +763,7 @@ impl App {
                 colours: vec![],
                 instruments: vec![],
                 slots: vec![],
+                glyphs: vec![],
             };
             for (ch, cnt) in count.iter().enumerate() {
                 h.colours.push(match tl {
@@ -732,6 +784,15 @@ impl App {
                     .get((slot as usize).wrapping_sub(1))
                     .map(|i| format!("{slot:02X} {}", i.name))
                     .unwrap_or_default();
+                let tag = song
+                    .instruments
+                    .get((slot as usize).wrapping_sub(1))
+                    .map(|i| super::params::type_tag(&i.kind))
+                    .unwrap_or("");
+                let icon = tl
+                    .and_then(|t| t.tracks.get(ch))
+                    .map_or(crate::timeline::TrackIcon::Auto, |t| t.icon);
+                h.glyphs.push(super::glyphs::track_glyph(icon, tag));
                 h.slots.push(if name.is_empty() { 0 } else { slot });
                 h.instruments.push(name);
             }
@@ -779,6 +840,7 @@ impl App {
                 self.with(|s| s.song.mixer.channels[ch].mute ^= true);
                 self.dirty = true;
             }
+            HdrOp::Select => {}
             HdrOp::Solo => {
                 self.with(|s| s.song.mixer.channels[ch].solo ^= true);
                 self.dirty = true;

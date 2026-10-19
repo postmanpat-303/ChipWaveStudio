@@ -392,7 +392,7 @@ impl App {
 
     fn inspector_track(&mut self, ui: &mut egui::Ui, tr: usize) {
         let t = th();
-        let (name, mut m, colour, mode) = self.with(|s| {
+        let (name, mut m, colour, mode, icon) = self.with(|s| {
             (
                 s.song.channel_names.get(tr).cloned().unwrap_or_default(),
                 s.song.mixer.channels.get(tr).copied().unwrap_or_default(),
@@ -402,8 +402,22 @@ impl App {
                     .and_then(|x| x.tracks.get(tr))
                     .and_then(|x| x.colour),
                 s.song.timeline.is_some(),
+                s.song
+                    .timeline
+                    .as_deref()
+                    .and_then(|x| x.tracks.get(tr))
+                    .map_or(tl::TrackIcon::Auto, |x| x.icon),
             )
         });
+        let slot = self.track_slot(tr);
+        let tag = self.with(|s| {
+            s.song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .map(|i| super::params::type_tag(&i.kind))
+                .unwrap_or("")
+        });
+        let mut new_icon: Option<tl::TrackIcon> = None;
         let cur_col = match colour {
             Some(c) => hex(c & 0xFF_FFFF),
             None => super::timeline::track_colour(tr),
@@ -485,6 +499,74 @@ impl App {
                     .on_disabled_hover_text("track colours need timeline mode");
                 });
             });
+            row(ui, "Icon", |ui| {
+                let (r, _) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), Sense::hover());
+                super::glyphs::tile(
+                    ui.painter(),
+                    r,
+                    super::glyphs::track_glyph(icon, tag),
+                    cur_col,
+                    Color32::from_rgb(0x16, 0x18, 0x1B),
+                    theme::polished(),
+                );
+                ui.add_space(4.0);
+                ui.add_enabled_ui(mode, |ui| {
+                    ui.menu_button("Pick…", |ui| {
+                        ui.label(egui::RichText::new("track icon").small());
+                        if ui
+                            .selectable_label(icon == tl::TrackIcon::Auto, "Auto")
+                            .on_hover_text("picked from the instrument type")
+                            .clicked()
+                        {
+                            new_icon = Some(tl::TrackIcon::Auto);
+                            ui.close();
+                        }
+                        egui::Grid::new(("insp_icons", tr))
+                            .spacing([3.0, 3.0])
+                            .show(ui, |ui| {
+                                for (k, ic) in tl::TrackIcon::ALL.iter().enumerate() {
+                                    let (r, resp) = ui.allocate_exact_size(
+                                        egui::vec2(28.0, 24.0),
+                                        Sense::click(),
+                                    );
+                                    let on = icon == *ic;
+                                    ui.painter().rect_filled(
+                                        r,
+                                        4,
+                                        if on || resp.hovered() {
+                                            t.accent.gamma_multiply(0.35)
+                                        } else {
+                                            theme::shade(&t, 0.1)
+                                        },
+                                    );
+                                    if let Some(g) = super::glyphs::icon_glyph(*ic) {
+                                        super::glyphs::paint(
+                                            ui.painter(),
+                                            Rect::from_center_size(
+                                                r.center(),
+                                                egui::vec2(14.0, 14.0),
+                                            ),
+                                            g,
+                                            t.ink,
+                                        );
+                                    }
+                                    if resp.on_hover_text(ic.label()).clicked() {
+                                        new_icon = Some(*ic);
+                                        ui.close();
+                                    }
+                                    if k % 4 == 3 {
+                                        ui.end_row();
+                                    }
+                                }
+                            });
+                    })
+                    .response
+                    .on_hover_text(
+                        "this track's header icon (also in the track pie: right-click the header)",
+                    )
+                    .on_disabled_hover_text("track icons need timeline mode");
+                });
+            });
             row(ui, "Volume", |ui| {
                 ui.add(
                     egui::Slider::new(&mut m.volume, 0.0..=2.0)
@@ -540,6 +622,19 @@ impl App {
                     .and_then(|x| x.tracks.get_mut(tr))
                 {
                     x.colour = c;
+                }
+            });
+        }
+        if let Some(i) = new_icon {
+            self.snapshot();
+            self.with(|s| {
+                if let Some(x) = s
+                    .song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|x| x.tracks.get_mut(tr))
+                {
+                    x.icon = i;
                 }
             });
         }

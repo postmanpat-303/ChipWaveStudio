@@ -158,14 +158,34 @@ Tracks are mixer channels, so these change the song's channels (up to 32). Every
 
 | Do | How |
 |---|---|
-| **Add a track** | **+ Add track** under the last track header, or right-click a header › **Add track above** / **Add track below**. A new track is empty, with default mixer settings, named "Track N" |
-| **Add a track with an instrument** | right-click a header › **Add track with instrument…**: the [Browser](BROWSER.md) opens on its Instruments tab, and the next instrument you double-click (or Enter) there makes the track, named after it. Or **drag an instrument from the Browser onto the empty area below the last track**: an insertion line and "New track: <name>" show where it goes |
+| **Add a track** | **+ Add track** under the last track header, or right-click a header › **Add ›** › **Empty track above** / **below** (the [track pie](#track-pie-menu)). A new track is empty, with default mixer settings, named "Track N" |
+| **Add a track with an instrument** | right-click a header › **Add ›** › **Instrument track…**: the [Browser](BROWSER.md) opens on its Instruments tab, and the next instrument you double-click (or Enter) there makes the track, named after it. Or **drag an instrument from the Browser onto the empty area below the last track**: an insertion line and "New track: <name>" show where it goes |
 | **Give a track an instrument** | drag an instrument, preset, `.cwi` file or VST3 / CLAP plugin instrument from the Browser onto the **track's header** (or its row). The header lights up. Every note on the track switches to that instrument (block clips: the track's column of each block; note clips: their notes), and the track remembers it, so the header shows it even while the track is empty and clicking the header makes it the current instrument |
 | **Reorder** | **drag a header up or down** (by its number / name). An insertion line shows where it lands; let go to move it |
 
 When all 32 tracks are used, the add commands are greyed out with "all 32 tracks are used (the channel limit)" and a drop below the tracks says so instead of adding one.
 
 **Reordering moves the whole channel**, in timeline *and* tracker mode: its column in every block (so tracker-mode blocks are remapped, not just the view), its mixer strip (volume, pan, mute / solo, sends, ducking, and the duck key if it was this channel), its name, its timeline track (clips, height, automation lanes) and every automation lane or modulation route that targets the channel (`mixer.ch.N.volume`, `…pan`, `…send.X`). Playback is therefore the same music; only the order in which the channels are added together changes, which can differ in the last bits of a float (tests allow 1e‑4 and in practice it's far smaller). We chose to remap safely in both modes rather than allow reordering only in timeline mode, because tracks are channels in both and a tracker-mode user expects the columns to follow. Track colours follow the position unless you picked one in the [Inspector](INSPECTOR.md) (timeline mode; saved with the song), so a moved track without its own colour takes the colour of its new place.
+
+## Track pie menu
+
+**Right-click a track header** (in the Timeline's track list, or a channel header in the pattern editor) and a round menu opens around the pointer. The centre says **TRACK** and the track's name; nine segments go round it, clockwise from the top:
+
+| Segment | What it does |
+|---|---|
+| **Rename** | the name in the header becomes a text field: type, then **Enter** or click away keeps it, **Esc** cancels (one undo step) |
+| **Colour ›** | a swatch panel pops out: the 12 track colours or **Auto** (the palette colour of the track's place). Timeline mode |
+| **Icon ›** | the **TRACK ICON** panel: **Auto** (picked from the instrument type, the default) or one of 16 icons (keys, synth wave, sine, square, drums, hi-hat, guitar, bass clef, mic, violin, brass, voice, sparkle, waveform, noise, pad). Shown in the track header, the channel header and the [Inspector](INSPECTOR.md). Saved with the song; timeline mode |
+| **Add ›** | **Instrument track…** (the Browser picks the instrument, as "Add track with instrument"), **Audio track** (timeline mode), **Empty track above / below**, **Duplicate** (a copy below: its block column, clips with their own notes, mixer strip, colour, icon and lanes). **FX track** is greyed out: bus tracks are not in ChipWave yet |
+| **Devices** | the lower panel's Devices tab for this track |
+| **Routing** | the Inspector for this track; its **Sends** section has the delay / reverb sends and the duck depth |
+| **Organize ›** | **Move up / down / to top / to bottom** (the whole channel moves, as when you drag a header) and the track's **effect speed** (follow the song, 3, 6, 12) |
+| **Save CPU** | greyed out for now (freezing or deactivating a track is on the [roadmap](ROADMAP.md)) |
+| **Delete** | deletes the track with its clips, its block column, mixer strip and the lanes aimed at it (**Ctrl+Z** brings it back). Refused with a message if another track's clip plays this track's block column, or for the last channel of a tracker-mode song |
+
+**Using it:** point at a segment to light it (it lifts a little with an accent arc on the rim; segments with **›** pop their panel out), then click. Or hold the right button, drag onto a segment and let go. **Esc**, a click on the centre or anywhere outside closes it. Keyboard: the **arrow keys** (or Tab) walk round the ring and through a panel, **Enter** or Space chooses, Esc closes a panel and then the pie; other keys do nothing while it is open, so shortcuts can't act behind it. The pie (and its panels) always fits on screen: near an edge it moves in. The Song / Master row keeps its small menu (add a track).
+
+**Motion:** it opens in 180 ms with an ease-out (scale 0.6 → 1 and a fade, each segment 12 ms after the one before, clockwise), closes in 120 ms, and hover fades in 80 ms; a panel pops out from its segment in 120 ms. ChipWave only repaints while something moves. **Settings › Look › Reduce motion** shows and hides it at once. The ring's shape is computed once and only scaled per frame, so it stays smooth at 60 fps and more. Every choice is one undo step and works in the Dark and Amiga themes.
 
 ## The default layout: Timeline + piano roll
 
@@ -257,7 +277,7 @@ Everything uses `serde(default)` and leaves out fields that are at their default
 Tracker-mode songs are written exactly as before, byte for byte, with `min_reader_version = 1`. A timeline-mode song adds **`timeline.toml`** (the `Timeline`, see the model above) to the `.cwt` and writes **`min_reader_version = 2`** in `manifest.toml` (a `.cwt.toml` text song takes an optional `[timeline]` table). This version reads version 2. Since M0, ChipWave reads `min_reader_version` (in `manifest.toml` of a `.cwt`, or the top level / `[song]` table of a `.cwt.toml`) and refuses files that need a newer reader. You get *"This song was made with a newer ChipWave Studio … Please update"* and a **Check for updates** button, rather than a wrong-sounding song. So 0.2.4.0 and older (which read version 1 or don't check) are told to update instead of opening a timeline-mode song wrongly, and **File › Export tracker-compatible copy…** saves a consolidated version 1 song for them.
 
 ### Screenshots
-`chipwave --screenshot out.png --view timeline --song demos/disco.cwt.toml` plays from order entry 8 (`CHIPWAVE_SHOT_POS=n` changes it). `--view timeline-new` shows a new song, `--view timeline-audio` audio clips (a looped break with a fade-in, a pad with fades and gain, a missing file), `--view timeline-automation` automation lanes (track lanes on Bass and Hats, a clip lane on a Bass clip). See `scripts/screenshots.sh`.
+`chipwave --screenshot out.png --view timeline --song demos/disco.cwt.toml` plays from order entry 8 (`CHIPWAVE_SHOT_POS=n` changes it). `--view timeline-new` shows a new song, `--view timeline-audio` audio clips (a looped break with a fade-in, a pad with fades and gain, a missing file), `--view timeline-automation` automation lanes (track lanes on Bass and Hats, a clip lane on a Bass clip), `--view trackpie` the track pie on track 2 with Icon lit and `--view trackpie-icons` with its TRACK ICON panel out (`CHIPWAVE_SHOT_PIE_T=<s>` freezes the open animation at that time, `CHIPWAVE_SHOT_PIE_KEY=<n|none>` picks the lit segment). See `scripts/screenshots.sh`.
 
 ## Limits in this version
 - **Not yet in M2:** range selection with insert / delete time, snapping to other clips' edges and markers, clip fades and gain, a MOD/MMD exporter (ChipWave has none yet; the tracker-compatible copy is a `.cwt`), and the browser panel. These move to M3. (The Browser is now in: [BROWSER.md](BROWSER.md).)

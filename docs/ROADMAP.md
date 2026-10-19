@@ -65,6 +65,8 @@ Each item has a size, **[easy]** (an evening or two), **[medium]** (a few days) 
 - Automation: a tempo-map lane and "record knobs" in timeline mode. [medium] start: `src/automation/mod.rs`
 - Automation: convert between lanes and effect commands. [medium] start: `src/automation/mod.rs`
 - Automation: rubber-band multi-select and copy of points. [medium] start: `src/app/timeline/autolanes.rs`
+- Save CPU: freeze a track to audio, or deactivate it (no processing), from the track pie. [big] start: `src/engine.rs`
+- FX (bus) tracks and track groups, so the track pie's Add › FX track and Organize › Group can work. [big] start: `src/timeline.rs`
 - Use the track arm button (it is in the model but does nothing yet). [medium] start: `src/timeline.rs`
 - New songs: don't keep the unused empty block 00. [easy] start: `src/model.rs`
 - Clip launcher with scenes (M6, optional). [big] start: `src/timeline.rs`

@@ -35,7 +35,7 @@ Host/API (PipeWire, ALSA or JACK on Linux; WASAPI or ASIO on Windows; CoreAudio 
 Enabled inputs and outputs, MIDI thru, clock send/receive and song position, the MIDI learn mapping list (edit/delete), and velocity curve. **Advanced:** per-port channel filters, MPE (later).
 
 ### 2.3 Look
-Theme, UI scale (auto from the OS or 75–300 %), pattern font and size, row highlight spacing, hex/decimal rows, colour-blind palette, high contrast, reduce motion (turns off the wave band animation). See [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
+Theme, UI scale (auto from the OS or 75–300 %), pattern font and size, row highlight spacing, hex/decimal rows, colour-blind palette, high contrast, reduce motion (turns off the wave band animation). **Reduce motion is in (Unreleased, `reduce_motion`, default off; Settings › Look › Motion):** the track pie menu then appears and closes at once instead of animating. See [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
 
 ### 2.4 Keys
 Keymap preset (ChipWave / FT2 / ProTracker / OpenMPT / OctaMED), "press a key" rebinding, conflict list, piano layout (physical-key based), and an import/export `keymap.toml` ([PATTERN_EDITOR.md §9](PATTERN_EDITOR.md)).

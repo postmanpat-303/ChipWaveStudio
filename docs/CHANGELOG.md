@@ -2,6 +2,16 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## Unreleased
+
+### Track pie menu
+- **Right-click a track header** (Timeline track list or pattern-editor channel header): a round menu around the pointer, the track's name in the centre, and **Rename**, **Colour ›**, **Icon ›**, **Add ›**, **Devices**, **Routing**, **Organize ›**, **Save CPU** and **Delete** around it. Inspired by other DAWs; requested by Del (postmanpat).
+- **Buttery motion:** opens in 180 ms with an ease-out (scale and fade, the segments following each other round the ring), closes in 120 ms, hover fades in 80 ms, and the panels pop out from their segment. It repaints only while something moves. New **Settings › Look › Reduce motion** turns the animation off.
+- Point and click, or hold the right button, drag onto a segment and let go. Esc, the centre or a click outside closes it. Arrow keys walk the ring and the panels, Enter chooses. It always fits on screen. Dark and Amiga themes.
+- **Rename** edits the name in the header (Enter or click away keeps it, Esc cancels). **Colour** and **Icon** pop out a swatch panel and a **TRACK ICON** grid (Auto + 16 icons). **Add**: instrument track, audio track, empty track above / below, **Duplicate**. **Organize**: move up / down / to top / to bottom, track speed. **Devices** opens the Devices tab, **Routing** the Inspector's sends. **Delete** removes the track (Ctrl+Z brings it back). Everything is one undo step.
+- **Track icons** are new: saved per track (Auto by default, picked from the instrument type), shown in the track header, the channel header and the Inspector (Icon › Pick…). Old songs open with Auto and play bit-identically; songs without icons save as before.
+- Not yet: **Save CPU** (freeze / deactivate) and **FX track** are greyed out with "coming soon" and are on the roadmap. There are no track groups yet, so Organize has no Group.
+
 ## 0.2.4.1: Timeline, Browser, Devices and a faster engine
 
 ### Timeline mode is the default for opened songs
