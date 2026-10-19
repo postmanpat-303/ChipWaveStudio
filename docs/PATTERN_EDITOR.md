@@ -9,7 +9,7 @@ The defaults follow the conventions most trackers share (FastTracker 2, ProTrack
 ## 1. Layout
 - **Rows** run down the screen, **channels** across. Row numbers count in **decimal** by default since 0.2.3.17 (00–63 for a 64-row block, three digits for blocks over 100 rows). **View → Row numbers → Hex** or **Settings → Look → Row numbers** switches to classic hex (00–3F). Every 4th row (beat) and 16th row (bar) is highlighted either way, and the setting is saved. The status bar ("Row 32/64"), the play-marker message and MIDI recording messages use the same numbering. Effect, instrument, volume and order numbers stay hex.
 - Each channel has **columns**: `Note` (C-4, `---` empty, `===`/`^^^` note-off), `Instr` (01–FF), `Vol` (00–40, or `..`), and 1–8 **effect columns** (`cmd` 2 hex + `arg` 2 hex). Cursor **sub-columns** step through the digits.
-- **Channel header:** name, colour, **S**olo and **M**ute buttons, a mini level meter, and a collapse arrow that shrinks a channel to the note column only.
+- **Channel header:** a colour bar in the track colour, number and name (cut short when narrow), the channel's instrument, a **Play** button (audition the instrument; Shift+click solo-plays the channel) and **M**ute / **S**olo. See [ADVANCED_EDIT.md › Channel headers](ADVANCED_EDIT.md#channel-headers). (Planned: a mini level meter, and a collapse arrow that shrinks a channel to the note column only.)
 - **Follow playback:** the playing row stays centred (`Scroll Lock` or the toolbar toggle). With follow off, a play marker moves and the cursor stays put.
 - **Edit step:** after a note is entered the cursor moves down *step* rows (0–16, default 1).
 
@@ -95,6 +95,7 @@ Z X C V B N M , Q W E R T Y U I    Z = C (base octave), Q = C (base octave + 1)
 | Select channel / block | `Ctrl+A` once = channel, twice = whole block | `Cmd+A` |
 | Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | `Cmd+C/X/V` |
 | Mix-paste (only into empty cells) | `Ctrl+Shift+V` | `Cmd+Shift+V` |
+| Advanced Edit panel (section, mask, flip, shrink, expand, mix-paste, fades …) | `Ctrl+Shift+A` | `Cmd+Shift+A` |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Y` (also `Ctrl+Shift+Z`) | `Cmd+Z` / `Cmd+Shift+Z` |
 | Transpose selection (or channel) ±1 semitone | `Alt+=` / `Alt+-`, or the Block bar **+1** / **-1**, or **Edit › Transpose** | `Option+=/-` |
 | Transpose ±1 octave | `Alt+Shift+=` / `Alt+Shift+-`, or the Block bar **+12** / **-12** | `Option+Shift+=/-` |
@@ -217,6 +218,7 @@ Typing hex codes is fast for experts but hard to learn. ChipWave adds a dropdown
 The two letters are display mnemonics. Internally each is `(target id, value)`, resolved through the song's per-channel target table, so renaming or moving a device doesn't break patterns. MMD export bakes extended commands into automation where possible and lists the ones it had to drop.
 
 ## 7. Advanced edits
+- **Advanced Edit panel** (`Ctrl+Shift+A`, the **A<>E** toggle on the Block bar): section (selection, column, track, block or song), content mask, cut / copy / paste / mix-paste, flip, shrink, expand, safe transpose, mirror, volume fades and instrument replace, each one undo step. See [ADVANCED_EDIT.md](ADVANCED_EDIT.md).
 - **Interpolate:** linear (default) or curved, on volume or effect arguments; it keeps the command code from the first row.
 - **Humanise:** volume ±n and/or 1–3 tick note delay (`1F`) with a seed, so it can be undone or rerolled.
 - **Transpose:** moves notes only (note-offs and empty cells stay), clamps to the note range, and leaves a status message. Keys, Block bar buttons and Edit › Transpose all share one code path. (Planned, not built yet: skipping drum channels marked "no transpose". Today the pattern editor transposes drum notes too; only the arranger's key-change variations skip drum channels.)

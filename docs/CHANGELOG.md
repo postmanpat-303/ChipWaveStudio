@@ -4,6 +4,21 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Tracker: Advanced Edit and coloured channel headers
+- **Advanced Edit** panel (**Ctrl+Shift+A**, the **A<>E** toggle on the Block bar, View › Advanced Edit). Docked right of the pattern or floating.
+  - **Section:** selection, column / track in the pattern or the whole song, whole pattern, whole song.
+  - **Content mask:** Note / Inst / Vol / FX# / FX val. Right-click a box for that column only.
+  - **Operations:** Cut, Copy, Paste, **Mix-Paste** (only into empty cells), Clear, **Flip**, **Shrink**, **Expand**, transpose -12 / -1 / +1 / +12 with **Safe mode** (out-of-range notes are left alone), **Mirror** around C-4 or any pivot, **volume fade** from / to plus the 0F->01 and 01->0F presets (scaled to 40->04 / 04->40), and **Replace instrument** X with Y.
+  - Each operation is one undo step. Guide: [ADVANCED_EDIT.md](ADVANCED_EDIT.md).
+- **Channel headers** in the tracker:
+  - a colour bar in the track's (timeline) colour;
+  - the channel's instrument;
+  - a **Play** button that auditions it (Shift+click solo-plays the channel);
+  - **M / S** buttons.
+
+  They stay compact at 16–32 channels, and long names are cut short.
+- No song format change: old songs load and play exactly as before.
+
 ### Piano roll: hold to pan, selected colour, group moves
 - **Hold to pan:** press and hold empty grid for ¼ s (within 6 px) and drag to scroll time and pitch together (grab hand; nothing is drawn). Quick clicks and quick drags work as before. **Middle-drag** pans too.
 - **Selected notes are orange** (velocity still shades them, lighter outline; Dark and Amiga), also in note clips on the Timeline; hover lightens a note.
