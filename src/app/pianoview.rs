@@ -251,6 +251,7 @@ impl App {
                             data: data as usize,
                             clip: Some(id),
                         },
+                        tl::ClipKind::Audio { .. } => return None,
                     });
                 }
             }

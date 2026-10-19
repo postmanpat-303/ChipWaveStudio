@@ -223,6 +223,7 @@ impl Chan {
     }
 }
 
+mod audioclips;
 mod notes;
 #[cfg(test)]
 pub use notes::NOTE_VOICES;
@@ -388,6 +389,8 @@ pub struct Engine {
     tl: TlState,
     /// note-clip voices (engine/notes.rs)
     nv: notes::NoteState,
+    /// audio-clip voices (timeline mode, M4)
+    av: audioclips::AudioState,
 }
 
 /// Timeline-mode playback: the plan being played, the row position and the
@@ -470,6 +473,7 @@ impl Engine {
             loud: Default::default(),
             tl: TlState::default(),
             nv: notes::NoteState::new(),
+            av: audioclips::AudioState::new(),
         }
     }
 
@@ -709,6 +713,8 @@ impl Engine {
         pattern: usize,
     ) {
         self.playing = true;
+        // audio clips still fading from the last play end now
+        self.av.release_all();
         self.loop_pattern = loop_pattern;
         self.tl.on = !loop_pattern && song.timeline.is_some();
         if self.tl.on {
@@ -773,6 +779,11 @@ impl Engine {
                             (row as i64 * crate::timeline::ROW) as f64
                         };
                         self.nv.seek(&p, t);
+                        // audio voices of unchanged clips play on
+                        let live = self.playing && self.tl.on && self.av.live;
+                        let at = if live { self.av.clock } else { t };
+                        let sr = self.sr;
+                        self.av.seek(&p, at, sr, live, true);
                     }
                 }
             }
@@ -1012,6 +1023,7 @@ impl Engine {
             v.active = false;
         }
         self.nv.silence();
+        self.av.silence();
         self.plugins.panic();
         self.fx_plugins.panic();
         self.panic_len = ((0.003 * self.sr) as u32).max(1);
@@ -1060,6 +1072,7 @@ impl Engine {
     pub fn stop(&mut self) {
         self.playing = false;
         self.nv.release_all(&mut self.plugins);
+        self.av.release_all();
         self.plugins.all_off();
         for c in &mut self.chans {
             c.synth.amp.release();
@@ -1979,6 +1992,13 @@ impl Engine {
         let nch = song.channels.clamp(1, MAX_CHANNELS);
         // note clips (timeline mode): the plan can't change during a callback
         let note_plan = self.tl.plan.clone().filter(|p| self.tl.on && p.has_notes());
+        // audio clips (timeline mode, M4); voices fading out after a stop
+        // still read their files through the plan
+        let audio_plan = self
+            .tl
+            .plan
+            .clone()
+            .filter(|p| (self.tl.on || self.av.any) && p.has_audio());
         let live_ch = self.live.ch.min(nch - 1);
         let live_gain = {
             // fader + pan of the cursor channel, ignoring mute/solo
@@ -2047,6 +2067,12 @@ impl Engine {
                         );
                     }
                 }
+                if let Some(p) = audio_plan.as_deref() {
+                    if self.playing && self.tl.on {
+                        let t = self.tl_clock();
+                        self.av.events(p, nch, t, self.sr);
+                    }
+                }
             }
             // plugin chunks end where the next tick (new events) starts
             let chunk = if plugs {
@@ -2109,6 +2135,7 @@ impl Engine {
                 (0.0, 0.0)
             };
             let mut nv_alive = false;
+            let mut av_alive = false;
             for (i, (c, chain)) in self
                 .chans
                 .iter_mut()
@@ -2157,6 +2184,22 @@ impl Engine {
                         s += x;
                         s_r += xr;
                         nv_alive |= v.active;
+                    }
+                }
+                // audio clips of this track (before its insert chain)
+                if self.av.any {
+                    if let Some(p) = audio_plan.as_deref() {
+                        let t = self.av.clock;
+                        let base = i * audioclips::AUDIO_VOICES;
+                        for v in self.av.v[base..base + audioclips::AUDIO_VOICES]
+                            .iter_mut()
+                            .filter(|v| v.active)
+                        {
+                            let (x, xr) = v.render(p, t);
+                            s += x;
+                            s_r += xr;
+                            av_alive |= v.active;
+                        }
                     }
                 }
                 // plugin instruments on this channel (their own release tails)
@@ -2257,6 +2300,9 @@ impl Engine {
             }
             if self.nv.any {
                 self.nv.any = nv_alive;
+            }
+            if self.av.any {
+                self.av.any = av_alive && audio_plan.is_some();
             }
             if pdc {
                 self.fx_plugins.pdc_advance();

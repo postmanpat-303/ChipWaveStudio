@@ -7,6 +7,7 @@ pub const VERSION: &str = "0.2.4.0";
 mod app;
 mod arrange;
 mod audio;
+mod audiofile;
 mod automation;
 mod chipfx;
 mod chords;

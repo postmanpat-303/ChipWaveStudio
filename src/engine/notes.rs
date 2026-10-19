@@ -327,6 +327,10 @@ impl Engine {
         };
         let t = (row as i64 * ROW) as f64;
         self.nv.seek(&plan, t);
+        if plan.has_audio() || self.av.any {
+            let (sr, playing) = (self.sr, self.playing && self.tl.on);
+            self.av.seek(&plan, t, sr, playing, false);
+        }
         if strike && plan.has_notes() {
             let nch = song.channels.min(MAX_CHANNELS);
             restrike(
@@ -340,6 +344,12 @@ impl Engine {
                 t,
             );
         }
+    }
+
+    /// sounding audio-clip voices on `track` (tests)
+    #[cfg(test)]
+    pub fn audio_voices(&self, track: usize) -> usize {
+        self.av.sounding(track)
     }
 
     /// sounding note-clip voices on `track` (tests)

@@ -152,7 +152,14 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
         z.start_file("manifest.toml", defl).map_err(e)?;
         // version 2: timeline mode, or plugin effect devices (an older
         // reader can't parse `FxKind::Plugin`)
-        let min_reader = if song.timeline.is_some() || crate::plugin::fxrack::song_has_fx(song) {
+        // version 3: audio clips (an older reader can't parse `ClipKind::Audio`)
+        let has_audio = song
+            .timeline
+            .as_deref()
+            .is_some_and(|t| !t.audio.is_empty() || t.clips.iter().any(|c| c.audio().is_some()));
+        let min_reader = if has_audio {
+            3
+        } else if song.timeline.is_some() || crate::plugin::fxrack::song_has_fx(song) {
             2
         } else {
             1
@@ -240,6 +247,19 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
             z.start_file("timeline.toml", defl).map_err(e)?;
             z.write_all(crate::timeline::to_toml(tl)?.as_bytes())
                 .map_err(|e| e.to_string())?;
+            // embedded audio files: the original bytes (compressed already)
+            for (i, a) in tl.audio.iter().enumerate() {
+                if let (true, Some(b)) = (a.embed, &a.bytes) {
+                    if b.len() as u64 > MAX_ENTRY {
+                        return Err(format!(
+                            "audio file '{}' is too large to embed: reference it instead",
+                            a.name
+                        ));
+                    }
+                    z.start_file(audio_entry(i, &a.ext), stored).map_err(e)?;
+                    z.write_all(b).map_err(|e| e.to_string())?;
+                }
+            }
         }
         z.start_file("arranger.toml", defl).map_err(e)?;
         z.write_all(
@@ -255,6 +275,61 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
         f.sync_all().map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// zip entry of embedded audio file `i`
+fn audio_entry(i: usize, ext: &str) -> String {
+    let ext: String = ext
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(8)
+        .collect();
+    format!("audio/{i:03}.{}", if ext.is_empty() { "bin" } else { &ext })
+}
+
+/// Decode the audio files of a loaded timeline: embedded ones through
+/// `embedded(entry name)`, referenced ones from their path, else from the
+/// song's folder (`base`) by file name. A file that can't be found or read
+/// stays missing (its clips are silent, keep their place, and can be
+/// relinked); each gives a warning.
+pub fn load_audio_assets(
+    tl: &mut crate::timeline::Timeline,
+    mut embedded: impl FnMut(&str) -> Result<Vec<u8>, String>,
+    base: Option<&Path>,
+) -> Vec<String> {
+    let mut warnings = vec![];
+    for (i, a) in tl.audio.iter_mut().enumerate() {
+        let got: Result<(Vec<u8>, bool), String> = if a.embed {
+            embedded(&audio_entry(i, &a.ext)).map(|b| (b, true))
+        } else {
+            let p = Path::new(&a.path);
+            let local = base.zip(p.file_name()).map(|(d, f)| d.join(f));
+            match std::fs::read(p) {
+                Ok(b) => Ok((b, false)),
+                Err(e) => match local.as_deref().map(std::fs::read) {
+                    Some(Ok(b)) => {
+                        a.path = local.unwrap().to_string_lossy().to_string();
+                        Ok((b, false))
+                    }
+                    _ => Err(if a.path.is_empty() {
+                        "no file".to_string()
+                    } else {
+                        format!("{}: {e}", a.path)
+                    }),
+                },
+            }
+        };
+        match got.and_then(|(b, keep)| {
+            crate::audiofile::decode(&b, &a.ext).map(|p| (p, keep.then_some(b)))
+        }) {
+            Ok((pcm, bytes)) => a.attach(pcm, bytes),
+            Err(e) => warnings.push(format!(
+                "audio file '{}' is missing ({e}): its clips are silent until you locate it (right-click the clip)",
+                a.name
+            )),
+        }
+    }
+    warnings
 }
 
 fn read_entry(z: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<Vec<u8>, String> {
@@ -331,8 +406,8 @@ pub fn sanitize_modulation(
 /// 1 (byte-identical to older versions); timeline-mode songs (docs/TIMELINE.md)
 /// write 2 plus `timeline.toml`, so builds older than the timeline refuse
 /// them instead of playing a stale order list. Songs with plugin effect
-/// devices also write 2.
-pub const READER_VERSION: u32 = 2;
+/// devices also write 2; songs with audio clips (M4) write 3.
+pub const READER_VERSION: u32 = 3;
 
 /// Start of the error for a song that needs a newer app (see [`is_too_new`]).
 const TOO_NEW: &str = "This song was made with a newer version of ChipWave Studio";
@@ -516,6 +591,11 @@ pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
     if let Ok(b) = read_entry(&mut z, "timeline.toml") {
         match crate::timeline::from_toml(&String::from_utf8_lossy(&b)) {
             Ok(mut tl) => {
+                warnings.extend(load_audio_assets(
+                    &mut tl,
+                    |name| read_entry(&mut z, name),
+                    path.parent(),
+                ));
                 warnings.extend(tl.fix(&song));
                 song.timeline = Some(Box::new(tl));
             }
@@ -597,7 +677,20 @@ pub fn is_text_song(path: &Path) -> bool {
 /// load a single-file text song from disk (File > Open of a .cwt.toml)
 pub fn load_text_song(path: &Path) -> Result<Song, String> {
     let t = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    song_from_text(&t)
+    let mut song = song_from_text(&t)?;
+    // audio clips of a text song reference files next to it
+    if let Some(tl) = song.timeline.as_deref_mut() {
+        if !tl.audio.is_empty() {
+            for w in load_audio_assets(
+                tl,
+                |_| Err("a text song can't embed audio".into()),
+                path.parent(),
+            ) {
+                eprintln!("{}: {w}", path.display());
+            }
+        }
+    }
+    Ok(song)
 }
 
 /// The first-run demo (demos/first_run.cwt.toml, generated by
@@ -1263,12 +1356,12 @@ mod tests {
         with_manifest(
             &src,
             &newer,
-            Some("format = \"chipwave-song\"\nformat_version = 3\nmin_reader_version = 3\n"),
+            Some("format = \"chipwave-song\"\nformat_version = 4\nmin_reader_version = 4\n"),
         );
         let e = load_cwt(&newer).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(
-            e.contains("reader version 3") && e.contains("Check for updates"),
+            e.contains("reader version 4") && e.contains("Check for updates"),
             "{e}"
         );
         // a missing or odd manifest is treated as version 1
@@ -1280,7 +1373,7 @@ mod tests {
         // text songs: the same rule
         let t = include_str!("../demos/first_run.cwt.toml");
         assert!(song_from_text(t).is_ok());
-        let e = song_from_text(&format!("min_reader_version = 3\n{t}")).unwrap_err();
+        let e = song_from_text(&format!("min_reader_version = 4\n{t}")).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(!is_too_new("zip error"));
         std::fs::remove_dir_all(&dir).ok();

@@ -50,6 +50,46 @@ pub struct NoteSpan {
     pub tune: f32,
 }
 
+/// One audio clip, placed on the timeline (M4). The file plays at its own
+/// speed from source frame `off` at `start` (the engine converts its rate
+/// while it plays); seeking finds the frame through the tempo map.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct AudioSpan {
+    pub start: Tick,
+    pub end: Tick,
+    /// index into `Plan::pcm`
+    pub asset: u32,
+    /// source frame at `start`
+    pub off: f64,
+    /// > 0: the source wraps every `loop_len` frames
+    pub loop_len: f64,
+    /// the file's sample rate
+    pub rate: f64,
+    pub gain: f32,
+    pub fade_in: Tick,
+    pub fade_out: Tick,
+    pub shape: FadeShape,
+    /// seconds from tick 0 to `start`
+    pub secs0: f64,
+}
+
+impl AudioSpan {
+    /// clip gain with the fades at timeline tick `t`
+    #[inline]
+    pub fn env(&self, t: f64) -> f32 {
+        let mut g = self.gain;
+        let u = t - self.start as f64;
+        if self.fade_in > 0 && u < self.fade_in as f64 {
+            g *= self.shape.gain((u / self.fade_in as f64) as f32);
+        }
+        let v = self.end as f64 - t;
+        if self.fade_out > 0 && v < self.fade_out as f64 {
+            g *= self.shape.gain((v / self.fade_out as f64) as f32);
+        }
+        g
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Plan {
     /// [`plan_key`] of the timeline this was built from
@@ -67,12 +107,36 @@ pub struct Plan {
     /// note-clip notes per track, sorted by start (M3b; empty for tracker
     /// songs, so they play exactly as before)
     pub notes: Vec<Vec<NoteSpan>>,
+    /// audio clips per track, sorted by start (M4; empty without audio
+    /// clips, so other songs play exactly as before)
+    pub audio: Vec<Vec<AudioSpan>>,
+    /// decoded files, indexed by `AudioSpan::asset` (`None` = missing)
+    pub pcm: Vec<Option<Arc<crate::audiofile::Pcm>>>,
+    /// the tempo map and start tempo (audio seeks)
+    pub tempo: Vec<TempoPoint>,
+    pub bpm: f32,
 }
 
 impl Plan {
     /// any track has note-clip notes
     pub fn has_notes(&self) -> bool {
         self.notes.iter().any(|v| !v.is_empty())
+    }
+
+    /// any track has an audio clip that can sound
+    pub fn has_audio(&self) -> bool {
+        self.audio.iter().any(|v| !v.is_empty())
+    }
+
+    /// Source frame (before the loop wrap) of span `s` at tick `t`: the
+    /// time since its start through the tempo map, at the file's rate.
+    pub fn audio_frame(&self, s: &AudioSpan, t: f64) -> f64 {
+        let ti = t.floor();
+        let frac = t - ti;
+        let ti = ti as Tick;
+        let secs = tempo_seconds(&self.tempo, ti, self.bpm)
+            + frac * 60.0 / (PPQ as f64 * tempo_bpm(&self.tempo, ti, self.bpm).max(1.0) as f64);
+        s.off + (secs - s.secs0) * s.rate
     }
 
     /// index of the first note on `track` that starts at or after `t`
@@ -117,6 +181,22 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
         (c.track, c.start, c.len, c.offset, c.loop_len, c.muted).hash(&mut h);
         match c.kind {
             ClipKind::Block { pattern, col } => (0u8, pattern, col).hash(&mut h),
+            ClipKind::Audio { asset } => {
+                (
+                    2u8,
+                    asset,
+                    c.gain.to_bits(),
+                    c.fade_in,
+                    c.fade_out,
+                    c.fade_shape,
+                )
+                    .hash(&mut h);
+                song.bpm.to_bits().hash(&mut h);
+                if let Some(a) = tl.audio.get(asset as usize) {
+                    (a.rate, a.frames).hash(&mut h);
+                    a.pcm.as_ref().map(|p| Arc::as_ptr(p) as usize).hash(&mut h);
+                }
+            }
             ClipKind::Notes { data } => {
                 (1u8, data as usize, c.seed).hash(&mut h);
                 if let Some(d) = tl.notes.get(data as usize) {
@@ -221,7 +301,54 @@ pub fn build_plan(song: &Song, tl: &Timeline) -> Plan {
             .collect(),
         tempo_changes: tl.tempo.iter().any(|p| p.tick > 0),
         notes: note_spans(tl, nch),
+        audio: audio_spans(song, tl, nch),
+        pcm: tl.audio.iter().map(|a| a.pcm.clone()).collect(),
+        tempo: tl.tempo.clone(),
+        bpm: song.bpm,
     }
+}
+
+/// Every unmuted audio clip whose file is loaded, per track, sorted.
+pub fn audio_spans(song: &Song, tl: &Timeline, nch: usize) -> Vec<Vec<AudioSpan>> {
+    let mut out: Vec<Vec<AudioSpan>> = vec![vec![]; nch];
+    for c in &tl.clips {
+        let Some(ai) = c.audio() else { continue };
+        if c.len <= 0 || c.muted || c.track as usize >= nch {
+            continue;
+        }
+        let Some(a) = tl.audio.get(ai).filter(|a| !a.missing()) else {
+            continue;
+        };
+        let fpt = tl.frames_per_tick(c.start, song.bpm, a.rate);
+        let src_ticks = tl.audio_ticks(ai, c.start, song.bpm);
+        let loop_len = match c.loop_len.filter(|l| *l > 0) {
+            // a loop of the whole file wraps exactly at its last frame
+            Some(l) if l == src_ticks => a.frames as f64,
+            Some(l) => l as f64 * fpt,
+            None => 0.0,
+        };
+        out[c.track as usize].push(AudioSpan {
+            start: c.start,
+            end: c.end(),
+            asset: ai as u32,
+            off: c.offset as f64 * fpt,
+            loop_len,
+            rate: a.rate as f64,
+            gain: if c.gain.is_finite() {
+                c.gain.clamp(0.0, 16.0)
+            } else {
+                1.0
+            },
+            fade_in: c.fade_in.clamp(0, c.len),
+            fade_out: c.fade_out.clamp(0, c.len),
+            shape: c.fade_shape,
+            secs0: tl.seconds_at(c.start, song.bpm),
+        });
+    }
+    for v in &mut out {
+        v.sort_by_key(|s| (s.start, s.asset));
+    }
+    out
 }
 
 /// Every note of the unmuted note clips, per track, in timeline ticks.

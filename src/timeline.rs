@@ -44,6 +44,56 @@ pub const fn rows_to_ticks(rows: usize) -> Tick {
     rows as Tick * ROW
 }
 
+/// Tempo at `t` in tempo map `tempo` (ramps interpolate linearly in BPM).
+pub fn tempo_bpm(tempo: &[TempoPoint], t: Tick, song_bpm: f32) -> f32 {
+    let k = tempo.partition_point(|p| p.tick <= t);
+    if k == 0 {
+        // before the first point: the song's BPM
+        return song_bpm;
+    }
+    let a = tempo[k - 1];
+    match tempo.get(k) {
+        Some(b) if a.ramp && b.tick > a.tick => {
+            let f = (t - a.tick) as f64 / (b.tick - a.tick) as f64;
+            (a.bpm as f64 + (b.bpm - a.bpm) as f64 * f) as f32
+        }
+        _ => a.bpm,
+    }
+}
+
+/// Seconds from tick 0 to `t` through tempo map `tempo` (sorted).
+pub fn tempo_seconds(tempo: &[TempoPoint], t: Tick, song_bpm: f32) -> f64 {
+    let secs = |ticks: f64, bpm: f64| ticks * 60.0 / (PPQ as f64 * bpm.max(1.0));
+    let first_bpm = song_bpm as f64;
+    let Some(first) = tempo.first() else {
+        return secs(t as f64, song_bpm as f64);
+    };
+    if t <= first.tick {
+        return secs(t as f64, first_bpm);
+    }
+    let mut s = secs(first.tick as f64, first_bpm);
+    for (k, a) in tempo.iter().enumerate() {
+        if a.tick >= t {
+            break;
+        }
+        let next = tempo.get(k + 1);
+        let seg_end = next.map_or(t, |b| b.tick.min(t));
+        let d = (seg_end - a.tick) as f64;
+        match next {
+            Some(b) if a.ramp && b.tick > a.tick && (b.bpm - a.bpm).abs() > 1e-6 => {
+                // bpm(x) = b0 + (b1-b0) x/D; time = ∫ 60/(PPQ bpm) dx
+                let span = (b.tick - a.tick) as f64;
+                let k = (b.bpm - a.bpm) as f64 / span;
+                let b0 = a.bpm as f64;
+                let b_end = b0 + k * d;
+                s += 60.0 / (PPQ as f64 * k) * (b_end.max(1.0) / b0.max(1.0)).ln();
+            }
+            _ => s += secs(d, a.bpm as f64),
+        }
+    }
+    s
+}
+
 /// shared, copy-on-write pool entry: cloning a song (undo, save snapshots)
 /// shares it; the first edit copies only this entry (`Arc::make_mut`)
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -98,6 +148,9 @@ pub struct Timeline {
     pub clips: Vec<Clip>,
     /// pooled piano-roll contents, shared by linked clips (`ClipKind::Notes`)
     pub notes: Vec<Shared<NoteClipData>>,
+    /// pooled audio files of audio clips (`ClipKind::Audio`, M4)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub audio: Vec<AudioAsset>,
     /// tempo map; empty = the song's BPM throughout
     pub tempo: Vec<TempoPoint>,
     /// time-signature map; empty = 4/4. Ruler and snap only.
@@ -158,6 +211,131 @@ pub enum ClipKind {
     Block { pattern: usize, col: u8 },
     /// polyphonic notes in `Timeline::notes[data]` (piano roll, M3b)
     Notes { data: u32 },
+    /// audio file `Timeline::audio[asset]` (M4), played at its own speed
+    Audio { asset: u32 },
+}
+
+/// Curve of an audio clip's fades.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FadeShape {
+    /// constant power through a crossfade (sine / cosine)
+    #[default]
+    EqualPower,
+    Linear,
+    /// slow start and end (raised cosine)
+    SCurve,
+}
+
+impl FadeShape {
+    pub const ALL: [FadeShape; 3] = [FadeShape::EqualPower, FadeShape::Linear, FadeShape::SCurve];
+    pub fn name(self) -> &'static str {
+        match self {
+            FadeShape::EqualPower => "Equal power",
+            FadeShape::Linear => "Linear",
+            FadeShape::SCurve => "S-curve",
+        }
+    }
+    /// fade-in gain at `x` in 0..=1 (a fade-out uses `1 - x`)
+    #[inline]
+    pub fn gain(self, x: f32) -> f32 {
+        let x = x.clamp(0.0, 1.0);
+        match self {
+            FadeShape::EqualPower => (x * std::f32::consts::FRAC_PI_2).sin(),
+            FadeShape::Linear => x,
+            FadeShape::SCurve => 0.5 - 0.5 * (x * std::f32::consts::PI).cos(),
+        }
+    }
+}
+
+/// One audio file used by audio clips (pooled in `Timeline::audio`). The
+/// file is either embedded in the `.cwt` (`audio/NNN.<ext>`, the original
+/// bytes) or referenced by path. The decoded audio (`pcm`) is not saved;
+/// it is `None` while the file is missing, and its clips then play silence
+/// but keep their place, length and settings.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioAsset {
+    /// display name (the file name)
+    pub name: String,
+    /// where the file lives (referenced) or came from (embedded)
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub path: String,
+    /// stored inside the song file
+    #[serde(skip_serializing_if = "is_default")]
+    pub embed: bool,
+    /// format hint: wav, flac, mp3, ogg
+    pub ext: String,
+    /// the file's own sample rate, channels and length (kept so a missing
+    /// file's clips keep their length)
+    pub rate: u32,
+    pub channels: u8,
+    pub frames: u64,
+    #[serde(skip)]
+    pub pcm: Option<Arc<crate::audiofile::Pcm>>,
+    /// the original file bytes (kept for embedded files, to save them)
+    #[serde(skip)]
+    pub bytes: Option<Arc<Vec<u8>>>,
+}
+
+impl PartialEq for AudioAsset {
+    fn eq(&self, o: &Self) -> bool {
+        let same = |a: &Option<Arc<crate::audiofile::Pcm>>,
+                    b: &Option<Arc<crate::audiofile::Pcm>>| match (a, b) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        };
+        self.name == o.name
+            && self.path == o.path
+            && self.embed == o.embed
+            && self.ext == o.ext
+            && self.rate == o.rate
+            && self.channels == o.channels
+            && self.frames == o.frames
+            && same(&self.pcm, &o.pcm)
+            && self.bytes.as_ref().map(|b| b.len()) == o.bytes.as_ref().map(|b| b.len())
+    }
+}
+
+/// files above this size are referenced, not embedded, by default
+pub const EMBED_DEFAULT_MAX: usize = 64 * 1024 * 1024;
+
+impl AudioAsset {
+    /// A loaded asset from decoded audio and the original file bytes.
+    pub fn from_pcm(
+        name: &str,
+        path: &str,
+        ext: &str,
+        pcm: crate::audiofile::Pcm,
+        bytes: Vec<u8>,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            path: path.to_string(),
+            embed: bytes.len() <= EMBED_DEFAULT_MAX,
+            ext: ext.to_string(),
+            rate: pcm.rate,
+            channels: pcm.channels,
+            frames: pcm.frames() as u64,
+            pcm: Some(Arc::new(pcm)),
+            bytes: Some(Arc::new(bytes)),
+        }
+    }
+    pub fn missing(&self) -> bool {
+        self.pcm.is_none()
+    }
+    pub fn seconds(&self) -> f64 {
+        self.frames as f64 / self.rate.max(1) as f64
+    }
+    /// put decoded audio in place (load, relink); metadata follows the file
+    pub fn attach(&mut self, pcm: crate::audiofile::Pcm, bytes: Option<Vec<u8>>) {
+        self.rate = pcm.rate;
+        self.channels = pcm.channels;
+        self.frames = pcm.frames() as u64;
+        self.pcm = Some(Arc::new(pcm));
+        self.bytes = bytes.map(Arc::new);
+    }
 }
 
 impl Default for ClipKind {
@@ -193,6 +371,9 @@ pub struct Clip {
     pub fade_in: Tick,
     #[serde(skip_serializing_if = "is_default")]
     pub fade_out: Tick,
+    /// curve of both fades (audio clips)
+    #[serde(skip_serializing_if = "is_default")]
+    pub fade_shape: FadeShape,
     /// random seed: chance, humanise and generators draw only from
     /// `ClipRng::new(seed, pass)`, so export and seeks are bit-exact
     pub seed: u32,
@@ -218,6 +399,7 @@ impl Default for Clip {
             gain: 1.0,
             fade_in: 0,
             fade_out: 0,
+            fade_shape: FadeShape::EqualPower,
             seed: 0,
             auto: vec![],
         }
@@ -262,7 +444,13 @@ impl Clip {
     pub fn block(&self) -> Option<(usize, usize)> {
         match self.kind {
             ClipKind::Block { pattern, col } => Some((pattern, col as usize)),
-            ClipKind::Notes { .. } => None,
+            ClipKind::Notes { .. } | ClipKind::Audio { .. } => None,
+        }
+    }
+    pub fn audio(&self) -> Option<usize> {
+        match self.kind {
+            ClipKind::Audio { asset } => Some(asset as usize),
+            _ => None,
         }
     }
 }
@@ -507,53 +695,28 @@ impl Timeline {
     }
 
     /// Tempo at `t` (ramps interpolate linearly in BPM).
+    /// Frames of a `rate` Hz file per tick at the tempo where `t` is: how
+    /// audio clips measure their trim, loop and source length.
+    pub fn frames_per_tick(&self, t: Tick, song_bpm: f32, rate: u32) -> f64 {
+        rate as f64 * 60.0 / (PPQ as f64 * self.bpm_at(t, song_bpm).max(1.0) as f64)
+    }
+
+    /// Length in ticks of audio asset `asset` placed at `t` (at least a tick).
+    pub fn audio_ticks(&self, asset: usize, t: Tick, song_bpm: f32) -> Tick {
+        let Some(a) = self.audio.get(asset) else {
+            return ROW;
+        };
+        let fpt = self.frames_per_tick(t, song_bpm, a.rate.max(1));
+        ((a.frames as f64 / fpt).round() as Tick).max(1)
+    }
+
     pub fn bpm_at(&self, t: Tick, song_bpm: f32) -> f32 {
-        let k = self.tempo.partition_point(|p| p.tick <= t);
-        if k == 0 {
-            // before the first point: the song's BPM
-            return song_bpm;
-        }
-        let a = self.tempo[k - 1];
-        match self.tempo.get(k) {
-            Some(b) if a.ramp && b.tick > a.tick => {
-                let f = (t - a.tick) as f64 / (b.tick - a.tick) as f64;
-                (a.bpm as f64 + (b.bpm - a.bpm) as f64 * f) as f32
-            }
-            _ => a.bpm,
-        }
+        tempo_bpm(&self.tempo, t, song_bpm)
     }
 
     /// Seconds from tick 0 to `t` through the tempo map.
     pub fn seconds_at(&self, t: Tick, song_bpm: f32) -> f64 {
-        let secs = |ticks: f64, bpm: f64| ticks * 60.0 / (PPQ as f64 * bpm.max(1.0));
-        let first_bpm = song_bpm as f64;
-        let Some(first) = self.tempo.first() else {
-            return secs(t as f64, song_bpm as f64);
-        };
-        if t <= first.tick {
-            return secs(t as f64, first_bpm);
-        }
-        let mut s = secs(first.tick as f64, first_bpm);
-        for (k, a) in self.tempo.iter().enumerate() {
-            if a.tick >= t {
-                break;
-            }
-            let next = self.tempo.get(k + 1);
-            let seg_end = next.map_or(t, |b| b.tick.min(t));
-            let d = (seg_end - a.tick) as f64;
-            match next {
-                Some(b) if a.ramp && b.tick > a.tick && (b.bpm - a.bpm).abs() > 1e-6 => {
-                    // bpm(x) = b0 + (b1-b0) x/D; time = ∫ 60/(PPQ bpm) dx
-                    let span = (b.tick - a.tick) as f64;
-                    let k = (b.bpm - a.bpm) as f64 / span;
-                    let b0 = a.bpm as f64;
-                    let b_end = b0 + k * d;
-                    s += 60.0 / (PPQ as f64 * k) * (b_end.max(1.0) / b0.max(1.0)).ln();
-                }
-                _ => s += secs(d, a.bpm as f64),
-            }
-        }
-        s
+        tempo_seconds(&self.tempo, t, song_bpm)
     }
 
     fn sigs(&self) -> &[SigPoint] {
@@ -868,6 +1031,12 @@ pub fn consolidate(song: &Song, tl: &Timeline) -> Result<(Vec<Pattern>, Vec<usiz
     let mut clips: Vec<&Clip> = vec![];
     for c in &tl.clips {
         let Some((pat, col)) = c.block() else {
+            if c.audio().is_some() {
+                return Err(format!(
+                    "clip {} is an audio clip: tracker mode can't play audio clips",
+                    c.id
+                ));
+            }
             return Err(format!(
                 "clip {} holds piano-roll notes: converting those to blocks is not supported yet",
                 c.id
@@ -1047,6 +1216,7 @@ impl Timeline {
         self.tracks == o.tracks
             && self.clips == o.clips
             && self.notes == o.notes
+            && self.audio == o.audio
             && self.tempo == o.tempo
             && self.signature == o.signature
             && self.markers == o.markers
@@ -1070,6 +1240,7 @@ impl Timeline {
                         pattern < song.patterns.len() && (col as usize) < MAX_CHANNELS
                     }
                     ClipKind::Notes { data } => (data as usize) < self.notes.len(),
+                    ClipKind::Audio { asset } => (asset as usize) < self.audio.len(),
                 }
         });
         for c in &mut self.clips {
@@ -1121,5 +1292,7 @@ pub use plan::*;
 mod m2_tests;
 #[cfg(test)]
 mod m3_tests;
+#[cfg(test)]
+mod m4_tests;
 #[cfg(test)]
 mod tests;

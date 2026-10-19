@@ -97,15 +97,24 @@ pub fn move_clips(tl: &mut Timeline, ids: &[u32], dt: Tick, dtrack: i32, tracks:
 /// Past the end of its block the source loops (with notches).
 pub fn set_end(song: &Song, tl: &mut Timeline, id: u32, end: Tick) {
     let Some(i) = find(tl, id) else { return };
+    let audio_len = tl.clips[i]
+        .audio()
+        .map(|a| tl.audio_ticks(a, tl.clips[i].start, song.bpm));
     let c = &mut tl.clips[i];
     let len = (end - c.start).max(ROW);
-    if let Some((pattern, _)) = c.block() {
-        let sl = src_len(song, pattern);
+    let sl = match (c.block(), audio_len) {
+        (Some((pattern, _)), _) => Some(src_len(song, pattern)),
+        (None, Some(t)) => Some(t),
+        _ => None,
+    };
+    if let Some(sl) = sl {
         if c.loop_len.is_none() && c.offset + len > sl {
             c.loop_len = Some(sl);
         }
     }
     c.len = len;
+    c.fade_in = c.fade_in.min(len);
+    c.fade_out = c.fade_out.min(len - c.fade_in);
 }
 
 /// Drag the left edge: the clip starts at `start` (its content stays where
@@ -127,6 +136,8 @@ pub fn set_start(tl: &mut Timeline, id: u32, start: Tick) {
     }
     c.len = end - start;
     c.start = start;
+    c.fade_in = c.fade_in.min(c.len);
+    c.fade_out = c.fade_out.min(c.len - c.fade_in);
     tl.sort();
 }
 
@@ -147,7 +158,12 @@ pub fn split(tl: &mut Timeline, id: u32, at: Tick) -> Option<u32> {
     if let Some(l) = c.loop_len.filter(|l| *l > 0) {
         right.offset = right.offset.rem_euclid(l);
     }
+    // fades stay at the outer ends
+    right.fade_in = 0;
+    right.fade_out = c.fade_out.min(right.len);
     tl.clips[i].len = at - c.start;
+    tl.clips[i].fade_out = 0;
+    tl.clips[i].fade_in = c.fade_in.min(at - c.start);
     tl.clips.push(right);
     tl.sort();
     Some(nid)
@@ -267,6 +283,68 @@ pub fn new_note_clip(song: &mut Song, track: usize, start: Tick) -> Option<u32> 
     });
     tl.sort();
     Some(id)
+}
+
+/// Add an audio file to the pool; a loaded file with the same path is
+/// shared instead. Returns its index.
+pub fn add_audio_asset(tl: &mut Timeline, a: AudioAsset) -> usize {
+    if !a.path.is_empty() {
+        if let Some(k) = tl
+            .audio
+            .iter()
+            .position(|x| x.path == a.path && !x.missing() && x.frames == a.frames)
+        {
+            return k;
+        }
+    }
+    tl.audio.push(a);
+    tl.audio.len() - 1
+}
+
+/// A new audio clip of pooled file `asset` on `track` at `start`, as long
+/// as the file. Returns its id.
+pub fn new_audio_clip(song: &mut Song, track: usize, start: Tick, asset: usize) -> Option<u32> {
+    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let bpm = song.bpm;
+    let tl = song.timeline.as_deref_mut()?;
+    if track >= nch || asset >= tl.audio.len() {
+        return None;
+    }
+    let start = start.max(0);
+    let len = tl.audio_ticks(asset, start, bpm);
+    let id = tl.new_id();
+    let name = tl.audio[asset].name.clone();
+    tl.clips.push(Clip {
+        id,
+        track: track as u16,
+        start,
+        len,
+        kind: ClipKind::Audio {
+            asset: asset as u32,
+        },
+        name: Some(name),
+        seed: seed_for(id),
+        ..Default::default()
+    });
+    if let Some(t) = tl.tracks.get_mut(track) {
+        if !tl
+            .clips
+            .iter()
+            .any(|c| c.track as usize == track && c.audio().is_none())
+        {
+            t.kind = TrackKind::Audio;
+        }
+    }
+    tl.sort();
+    Some(id)
+}
+
+/// Fades of clip `id` in ticks (kept inside the clip, not overlapping).
+pub fn set_fades(tl: &mut Timeline, id: u32, fade_in: Tick, fade_out: Tick) {
+    let Some(i) = find(tl, id) else { return };
+    let c = &mut tl.clips[i];
+    c.fade_in = fade_in.clamp(0, c.len);
+    c.fade_out = fade_out.clamp(0, c.len - c.fade_in);
 }
 
 /// Glue: the selected clips on one track become one clip of a new block
