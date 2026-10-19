@@ -2368,4 +2368,157 @@ mod features {
         put(s, 17, 30, 6, "F#4", pl, (0, 0));
         crate::fileio::save_cwt(s, std::path::Path::new(&out)).unwrap();
     }
+
+    /// Unreleased FX demo (scripts/make_fx_demo.py): a pad through the
+    /// Phaser and the Frequency shifter (lanes on their params), then an
+    /// Analog bass whose ladder cutoff is swept by a `Target::Gen` lane.
+    #[test]
+    #[ignore]
+    fn fx_demo_song() {
+        use crate::automation::{Lane, Point, Shape, Target};
+        use crate::fx::{Device, FxKind};
+        let inp = std::env::var("CW_FXDEMO_IN").expect("CW_FXDEMO_IN");
+        let out = std::env::var("CW_FXDEMO_OUT").expect("CW_FXDEMO_OUT");
+        let mut s = crate::fileio::load_text_song(std::path::Path::new(&inp)).unwrap();
+        let s = &mut s;
+        let kit = gen(s, "Psy Kit", 0.8);
+        let pad = gen(s, "Dark Pad", 0.55);
+        let bass = gen(s, "Fat Moog Bass", 0.9);
+        // the pad's chain: phaser, then the frequency shifter (both start dry)
+        let mut ph = Device::new(FxKind::Phaser);
+        ph.set_real("stages", 2.0); // 8 stages
+        ph.set_real("rate", 0.25);
+        ph.set_real("depth", 0.85);
+        ph.set_real("center", 700.0);
+        ph.set_real("feedback", 0.55);
+        ph.set_real("mix", 0.0);
+        let mut fs = Device::new(FxKind::FreqShift);
+        fs.set_real("coarse", 0.0);
+        fs.set_real("mix", 0.0);
+        let pi = pad as usize - 1;
+        s.instruments[pi].fx = vec![ph, fs];
+        // pad chords: Em(add9) / Cmaj7 / Am9 / Bsus, one per block
+        let chords: [[&str; 4]; 4] = [
+            ["E-3", "G-3", "B-3", "F#4"],
+            ["C-3", "E-3", "G-3", "B-3"],
+            ["A-2", "C-3", "E-3", "B-3"],
+            ["B-2", "E-3", "F#3", "A-3"],
+        ];
+        for b in 0..5 {
+            chord(s, b, 0, 31, &chords[b % 4], pad);
+        }
+        chord(s, 7, 0, 31, &chords[0], pad);
+        // the Analog bass: 16ths, blocks 5-7 (kick on the beat from block 6)
+        let line = ["E-1", "E-1", "E-2", "E-1", "G-1", "E-1", "D-2", "E-1"];
+        for b in 5..8 {
+            for r in 0..32 {
+                if r % 4 == 0 && b >= 6 {
+                    put(s, b, r, 0, "C-4", kit, (0, 0));
+                }
+                let n = if b == 6 && r >= 24 {
+                    "F#1"
+                } else {
+                    line[r % 8]
+                };
+                put(s, b, r, 3, n, bass, (0, 0));
+            }
+        }
+        // lanes: positions in lines from the song start (32 lines a block)
+        let lane = |t: Target, label: &str, pts: &[(f32, f32)]| {
+            let mut l = Lane::new(t, label.into());
+            for &(pos, value) in pts {
+                l.points.push(Point {
+                    pos,
+                    value,
+                    shape: Shape::Linear,
+                });
+            }
+            l
+        };
+        let fx = |kind, key| Device::param_index(kind, key).unwrap();
+        let ph_mix = Target::Fx(pi, 0, fx(FxKind::Phaser, "mix"));
+        let ph_fb = Target::Fx(pi, 0, fx(FxKind::Phaser, "feedback"));
+        let fs_mix = Target::Fx(pi, 1, fx(FxKind::FreqShift, "mix"));
+        let fs_hz = Target::Fx(pi, 1, fx(FxKind::FreqShift, "coarse"));
+        let fs_fb = Target::Fx(pi, 1, fx(FxKind::FreqShift, "feedback"));
+        // coarse: -2000..2000 Hz linear, 0.5 = 0 Hz
+        let hz = |h: f32| 0.5 + h / 4000.0;
+        let cut = Target::Gen(bass as usize - 1, 0); // Analog "Cutoff"
+        s.automation = vec![
+            // block 1-2 phaser in (feedback rises to a jet in block 2), out at 3
+            lane(
+                ph_mix,
+                "Phaser mix",
+                &[
+                    (32.0, 0.0),
+                    (36.0, 0.75),
+                    (95.0, 0.75),
+                    (98.0, 0.0),
+                    (224.0, 0.0),
+                    (228.0, 0.5),
+                ],
+            ),
+            lane(
+                ph_fb,
+                "Phaser feedback",
+                &[(64.0, ph_fb_n(0.55)), (90.0, ph_fb_n(0.9))],
+            ),
+            // block 3-4 frequency shifter: +3 Hz chorus to +240 Hz metal, then
+            // -500 Hz with feedback (barber pole)
+            lane(
+                fs_mix,
+                "Shifter mix",
+                &[
+                    (96.0, 0.0),
+                    (99.0, 0.6),
+                    (159.0, 0.6),
+                    (161.0, 0.0),
+                    (224.0, 0.0),
+                    (228.0, 0.3),
+                ],
+            ),
+            lane(
+                fs_hz,
+                "Shifter Hz",
+                &[
+                    (96.0, hz(3.0)),
+                    (112.0, hz(3.0)),
+                    (127.0, hz(240.0)),
+                    (128.0, hz(-80.0)),
+                    (159.0, hz(-500.0)),
+                    (224.0, hz(5.0)),
+                ],
+            ),
+            lane(
+                fs_fb,
+                "Shifter feedback",
+                &[
+                    (128.0, 0.0),
+                    (140.0, 0.6 / 0.95),
+                    (159.0, 0.6 / 0.95),
+                    (160.0, 0.0),
+                ],
+            ),
+            // block 5-7: the bass cutoff opens, closes, then wobbles
+            lane(
+                cut,
+                "Fat Moog Bass - Cutoff",
+                &[
+                    (160.0, 0.12),
+                    (190.0, 0.8),
+                    (222.0, 0.15),
+                    (232.0, 0.6),
+                    (240.0, 0.2),
+                    (248.0, 0.7),
+                    (256.0, 0.25),
+                ],
+            ),
+        ];
+        crate::fileio::save_cwt(s, std::path::Path::new(&out)).unwrap();
+    }
+
+    /// phaser feedback (-0.95..0.95) to its normalised lane value
+    fn ph_fb_n(v: f32) -> f32 {
+        (v + 0.95) / 1.9
+    }
 }
