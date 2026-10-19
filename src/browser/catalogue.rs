@@ -70,7 +70,6 @@ const BY_ID: &[(&str, Entry)] = &[
             tags: &["Showcase", "Pad", "Evolving"],
         },
     ),
-
     (
         "github.com/berarma/aymidi",
         Entry {
@@ -79,7 +78,6 @@ const BY_ID: &[(&str, Entry)] = &[
             tags: &["Showcase", "Chip", "PSG"],
         },
     ),
-
     (
         "de.mukkemann.retrotrax",
         Entry {
@@ -104,7 +102,6 @@ const BY_ID: &[(&str, Entry)] = &[
             tags: &["Showcase", "Chip", "SID"],
         },
     ),
-
     // VST3 class ids (32 hex digits, ChipWave text form)
     (
         "abcdef019182faeb566d624153675854", // Surge XT
@@ -338,11 +335,15 @@ mod tests {
         let fx = lookup("org.surge-synth-team.surge-xt-fx", "Surge XT Effects").unwrap();
         assert_eq!(fx.category, "Effect");
         assert_eq!(
-            lookup("com.digital-suburban.dexed", "Dexed").unwrap().category,
+            lookup("com.digital-suburban.dexed", "Dexed")
+                .unwrap()
+                .category,
             "FM"
         );
         assert_eq!(
-            lookup("org.surge-synth-team.OB-Xf", "OB-Xf").unwrap().category,
+            lookup("org.surge-synth-team.OB-Xf", "OB-Xf")
+                .unwrap()
+                .category,
             "Analog"
         );
         assert_eq!(
@@ -356,15 +357,37 @@ mod tests {
             "Bass"
         );
         // VST3 class ids: fall back to the name
-        assert_eq!(lookup("ABCDEF0123456789", "Geonkick").unwrap().category, "Drums");
+        assert_eq!(
+            lookup("ABCDEF0123456789", "Geonkick").unwrap().category,
+            "Drums"
+        );
         assert_eq!(lookup("deadbeef", "sfizz").unwrap().category, "Sampler");
         assert_eq!(lookup("deadbeef", "ADLplug").unwrap().category, "Chip");
         assert_eq!(lookup("deadbeef", "Odin 2").unwrap().category, "Pad");
-        assert_eq!(lookup("github.com/berarma/aymidi", "AyMidi").unwrap().category, "Chip");
-        assert!(lookup("deadbeef", "YMulator-Synth").unwrap().tags.contains(&"FM"));
-        assert!(lookup("de.mukkemann.retrotrax", "x").unwrap().tags.contains(&"SID"));
-        assert_eq!(lookup("ABCDEF019182FAEB48726B69594D756C", "x").unwrap().category, "Chip");
-        assert_eq!(lookup("deadbeef", "AyMidi").unwrap().creator, "Bernat Arlandis (berarma)");
+        assert_eq!(
+            lookup("github.com/berarma/aymidi", "AyMidi")
+                .unwrap()
+                .category,
+            "Chip"
+        );
+        assert!(lookup("deadbeef", "YMulator-Synth")
+            .unwrap()
+            .tags
+            .contains(&"FM"));
+        assert!(lookup("de.mukkemann.retrotrax", "x")
+            .unwrap()
+            .tags
+            .contains(&"SID"));
+        assert_eq!(
+            lookup("ABCDEF019182FAEB48726B69594D756C", "x")
+                .unwrap()
+                .category,
+            "Chip"
+        );
+        assert_eq!(
+            lookup("deadbeef", "AyMidi").unwrap().creator,
+            "Bernat Arlandis (berarma)"
+        );
         // VST3 class id (hex) matches without relying on the name
         assert_eq!(
             lookup("ABCDEF019182FAEB566D624153675854", "Anything")

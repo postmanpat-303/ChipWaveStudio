@@ -188,9 +188,11 @@ impl App {
         } else {
             section(ui, "track", "Track", |ui| {
                 ui.label(
-                    egui::RichText::new("Song / Master track: tempo and master lanes (Mixer has the master level)")
-                        .small()
-                        .color(t.ink2),
+                    egui::RichText::new(
+                        "Song / Master track: tempo and master lanes (Mixer has the master level)",
+                    )
+                    .small()
+                    .color(t.ink2),
                 );
             });
         }
@@ -336,7 +338,9 @@ impl App {
                 ui.horizontal(|ui| {
                     if ui
                         .button("Piano roll")
-                        .on_hover_text("edit this clip's notes in the lower panel (double-click the clip)")
+                        .on_hover_text(
+                            "edit this clip's notes in the lower panel (double-click the clip)",
+                        )
                         .clicked()
                     {
                         open_roll = true;
@@ -492,8 +496,7 @@ impl App {
             row(ui, "Pan", |ui| {
                 ui.spacing_mut().slider_width = 70.0;
                 ui.add(
-                    egui::Slider::new(&mut m.pan, -1.0..=1.0)
-                        .custom_formatter(|v, _| pan_text(v)),
+                    egui::Slider::new(&mut m.pan, -1.0..=1.0).custom_formatter(|v, _| pan_text(v)),
                 );
                 if ui.small_button("C").on_hover_text("centre").clicked() {
                     m.pan = 0.0;

@@ -244,7 +244,6 @@ fn plugin_folder_search_finds_folders_and_skips_bundles() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-
 #[test]
 fn plugin_catalogue_sets_category_creator_and_showcase_tag() {
     use crate::plugin::clap::Desc;

@@ -51,7 +51,11 @@ fn plugins_tab_button_opens_the_dialog_with_all_eleven_and_credits() {
     assert!(h.state().showcase.is_some());
     for it in ITEMS {
         h.get_by_label(it.name);
-        assert!(h.query_all_by_label(it.creator).next().is_some(), "{}", it.creator);
+        assert!(
+            h.query_all_by_label(it.creator).next().is_some(),
+            "{}",
+            it.creator
+        );
     }
     // the big one starts unticked, the small auto ones ticked
     let d = h.state().showcase.as_ref().unwrap();
@@ -90,8 +94,13 @@ fn a_failed_download_shows_a_clear_error_and_installs_nothing() {
     let d = h.state().showcase.as_ref().unwrap();
     assert!(d.msg.contains("Nothing was installed"), "{}", d.msg);
     let prog = d.job.as_ref().unwrap().progress.lock().unwrap().clone();
-    assert!(prog.iter().all(|p| matches!(&p.state, State::Failed(e) if e.contains("no connection"))));
-    assert!(h.query_all_by_label_contains("no connection").next().is_some());
+    assert!(prog
+        .iter()
+        .all(|p| matches!(&p.state, State::Failed(e) if e.contains("no connection"))));
+    assert!(h
+        .query_all_by_label_contains("no connection")
+        .next()
+        .is_some());
     assert_eq!(h.state().extra.plugin_dirs, dirs0);
     assert!(!base.join("VST3").join("Dexed.vst3").exists());
     let _ = std::fs::remove_dir_all(&base);
@@ -107,8 +116,18 @@ fn a_finished_install_adds_the_folders_and_shows_showcase_in_the_browser() {
     let mut dlg = super::showcase::ShowcaseDlg::new(Some(roots.clone()));
     dlg.job = Some(showcase::Job {
         progress: Arc::new(Mutex::new(vec![
-            Progress { id: "dexed", state: State::Done, done: 1, total: 1 },
-            Progress { id: "adlplug", state: State::Skipped, done: 1, total: 1 },
+            Progress {
+                id: "dexed",
+                state: State::Done,
+                done: 1,
+                total: 1,
+            },
+            Progress {
+                id: "adlplug",
+                state: State::Skipped,
+                done: 1,
+                total: 1,
+            },
         ])),
         cancel: Arc::new(AtomicBool::new(false)),
         done: Arc::new(AtomicBool::new(true)),
@@ -118,9 +137,19 @@ fn a_finished_install_adds_the_folders_and_shows_showcase_in_the_browser() {
     frames(&mut h, 3);
     let st = h.state();
     let d = st.showcase.as_ref().unwrap();
-    assert!(d.applied && d.msg.starts_with("1 installed, 1 already there"), "{}", d.msg);
-    assert!(st.extra.plugin_dirs.contains(&roots.vst3.display().to_string()));
-    assert!(st.extra.plugin_dirs.contains(&roots.clap.display().to_string()));
+    assert!(
+        d.applied && d.msg.starts_with("1 installed, 1 already there"),
+        "{}",
+        d.msg
+    );
+    assert!(st
+        .extra
+        .plugin_dirs
+        .contains(&roots.vst3.display().to_string()));
+    assert!(st
+        .extra
+        .plugin_dirs
+        .contains(&roots.clap.display().to_string()));
     assert_eq!(st.br.filter.tab, crate::browser::Tab::Plugins);
     assert_eq!(st.br.filter.tags, vec!["Showcase"]);
     let k = ITEMS.iter().position(|i| i.id == "dexed").unwrap();
@@ -145,6 +174,9 @@ fn the_dialog_leaves_an_old_song_untouched() {
         g.song.clone()
     };
     crate::fileio::save_cwt(&now, &d.join("b.cwt")).unwrap();
-    assert_eq!(std::fs::read(d.join("a.cwt")).unwrap(), std::fs::read(d.join("b.cwt")).unwrap());
+    assert_eq!(
+        std::fs::read(d.join("a.cwt")).unwrap(),
+        std::fs::read(d.join("b.cwt")).unwrap()
+    );
     let _ = std::fs::remove_dir_all(&d);
 }

@@ -25,7 +25,9 @@ impl ShowcaseDlg {
             .map(|it| {
                 it.auto()
                     && !it.big
-                    && !roots.as_ref().is_some_and(|r| showcase::is_installed(r, it))
+                    && !roots
+                        .as_ref()
+                        .is_some_and(|r| showcase::is_installed(r, it))
             })
             .collect();
         Self {
@@ -51,7 +53,9 @@ impl App {
 
     /// start downloading the ticked items
     pub(super) fn showcase_start(&mut self) {
-        let Some(d) = self.showcase.as_mut() else { return };
+        let Some(d) = self.showcase.as_mut() else {
+            return;
+        };
         let Some(roots) = d.roots.clone() else {
             d.msg = "Couldn't find your user folder (LOCALAPPDATA / HOME is not set).".into();
             return;
@@ -72,7 +76,9 @@ impl App {
 
     /// once the job is done: add the folders, rescan, show them in the Browser
     pub(super) fn showcase_poll(&mut self) {
-        let Some(d) = self.showcase.as_mut() else { return };
+        let Some(d) = self.showcase.as_mut() else {
+            return;
+        };
         let Some(j) = &d.job else { return };
         if !j.finished() || d.applied {
             return;
@@ -81,24 +87,41 @@ impl App {
         let prog = j.progress.lock().unwrap().clone();
         let ok = prog.iter().filter(|p| p.state == State::Done).count();
         let skip = prog.iter().filter(|p| p.state == State::Skipped).count();
-        let bad = prog.iter().filter(|p| matches!(p.state, State::Failed(_))).count();
+        let bad = prog
+            .iter()
+            .filter(|p| matches!(p.state, State::Failed(_)))
+            .count();
         let roots = d.roots.clone();
-        let summary;
-        for p in prog.iter().filter(|p| matches!(p.state, State::Done | State::Skipped)) {
+        for p in prog
+            .iter()
+            .filter(|p| matches!(p.state, State::Done | State::Skipped))
+        {
             if let Some(k) = ITEMS.iter().position(|i| i.id == p.id) {
                 d.ticked[k] = false;
             }
         }
         d.msg = format!(
             "{ok} installed{}{} · scanning plugins…",
-            if skip > 0 { format!(", {skip} already there") } else { String::new() },
-            if bad > 0 { format!(", {bad} failed") } else { String::new() }
+            if skip > 0 {
+                format!(", {skip} already there")
+            } else {
+                String::new()
+            },
+            if bad > 0 {
+                format!(", {bad} failed")
+            } else {
+                String::new()
+            }
         );
         if ok + skip == 0 {
-            d.msg = if bad > 0 { "Nothing was installed (see the errors above).".into() } else { "Cancelled.".into() };
+            d.msg = if bad > 0 {
+                "Nothing was installed (see the errors above).".into()
+            } else {
+                "Cancelled.".into()
+            };
             return;
         }
-        summary = d.msg.trim_end_matches(" · scanning plugins…").to_string();
+        let summary = d.msg.trim_end_matches(" · scanning plugins…").to_string();
         if let Some(r) = roots {
             for dir in [&r.vst3, &r.clap] {
                 let s = dir.display().to_string();
@@ -108,7 +131,8 @@ impl App {
             }
         }
         self.save_settings();
-        self.status = format!("Showcase instruments: {summary} · scanning plugins in the background");
+        self.status =
+            format!("Showcase instruments: {summary} · scanning plugins in the background");
         self.br.rev += 1;
         self.start_plugin_scan(true);
         self.showcase_reveal();
@@ -123,7 +147,9 @@ impl App {
 
     pub(super) fn showcase_window(&mut self, ctx: &egui::Context) {
         self.showcase_poll();
-        let Some(d) = self.showcase.as_ref() else { return };
+        let Some(d) = self.showcase.as_ref() else {
+            return;
+        };
         let t = th();
         let running = d.running();
         let prog: Vec<showcase::Progress> = d
@@ -134,7 +160,11 @@ impl App {
         let mut ticked = d.ticked.clone();
         let installed: Vec<bool> = ITEMS
             .iter()
-            .map(|it| d.roots.as_ref().is_some_and(|r| showcase::is_installed(r, it)))
+            .map(|it| {
+                d.roots
+                    .as_ref()
+                    .is_some_and(|r| showcase::is_installed(r, it))
+            })
             .collect();
         let msg = d.msg.clone();
         let roots = d.roots.clone();
@@ -310,7 +340,9 @@ impl App {
 pub fn cli_install(args: &[String], i: usize) -> i32 {
     let want = args.get(i + 1).cloned().unwrap_or_default();
     let roots = match args.iter().position(|a| a == "--root") {
-        Some(k) => args.get(k + 1).map(|d| Roots::under(std::path::Path::new(d))),
+        Some(k) => args
+            .get(k + 1)
+            .map(|d| Roots::under(std::path::Path::new(d))),
         None => Roots::user(),
     };
     let Some(roots) = roots else {
@@ -331,7 +363,11 @@ pub fn cli_install(args: &[String], i: usize) -> i32 {
         );
         return 2;
     }
-    println!("VST3 → {}\nCLAP → {}", roots.vst3.display(), roots.clap.display());
+    println!(
+        "VST3 → {}\nCLAP → {}",
+        roots.vst3.display(),
+        roots.clap.display()
+    );
     let mut code = 0;
     for id in ids {
         let it = showcase::item(id).unwrap();
@@ -340,14 +376,20 @@ pub fn cli_install(args: &[String], i: usize) -> i32 {
             continue;
         }
         let mut last = 0u64;
-        let r = showcase::install(it, &roots, &showcase::Http, &std::sync::atomic::AtomicBool::new(false), &mut |s, d| {
-            if let Some(d) = d {
-                if d >= last + 5_000_000 || s != State::Downloading {
-                    last = d;
-                    println!("  {id}: {s:?} {}", showcase::mb(d));
+        let r = showcase::install(
+            it,
+            &roots,
+            &showcase::Http,
+            &std::sync::atomic::AtomicBool::new(false),
+            &mut |s, d| {
+                if let Some(d) = d {
+                    if d >= last + 5_000_000 || s != State::Downloading {
+                        last = d;
+                        println!("  {id}: {s:?} {}", showcase::mb(d));
+                    }
                 }
-            }
-        });
+            },
+        );
         match r {
             Ok(true) => println!("{id}: installed {}", it.version),
             Ok(false) => println!("{id}: already installed {}", it.version),

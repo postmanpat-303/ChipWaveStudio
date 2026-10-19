@@ -35,7 +35,6 @@ mod glyphs;
 mod inspector;
 #[cfg(test)]
 mod inspector_tests;
-mod viewbar;
 mod instpanel;
 #[cfg(test)]
 mod instpanel_tests;
@@ -60,10 +59,10 @@ mod plugsetup;
 mod radial;
 mod sampleview;
 mod settingsview;
+pub mod shot;
 pub mod showcase;
 #[cfg(test)]
 mod showcase_tests;
-pub mod shot;
 mod timeline;
 #[cfg(test)]
 mod timeline_m2_tests;
@@ -76,6 +75,7 @@ mod transpose;
 mod ui_tests;
 mod undo;
 mod updates;
+mod viewbar;
 mod voiceview;
 
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect

@@ -64,7 +64,11 @@ fn track_name_commits_on_click_away_and_esc_cancels_and_undo_restores() {
     frames(&mut h, 2);
     key(&mut h, Key::Escape, egui::Modifiers::NONE);
     frames(&mut h, 3);
-    assert_eq!(song(&mut h, |s| s.channel_names[1].clone()), name0, "Esc keeps the old name");
+    assert_eq!(
+        song(&mut h, |s| s.channel_names[1].clone()),
+        name0,
+        "Esc keeps the old name"
+    );
     // click-away commits
     click_at(&mut h, field.center());
     key(&mut h, Key::End, egui::Modifiers::NONE);
@@ -135,7 +139,9 @@ fn view_tab_bar_switches_views_and_the_old_ways_still_work() {
     frames(&mut h, 2);
     assert!(h.state().view == View::Timeline);
     assert_eq!(
-        h.state().vtab_current().map(|t| t != super::viewbar::VTab::Arranger),
+        h.state()
+            .vtab_current()
+            .map(|t| t != super::viewbar::VTab::Arranger),
         Some(true)
     );
     key(&mut h, Key::Num3, egui::Modifiers::COMMAND);

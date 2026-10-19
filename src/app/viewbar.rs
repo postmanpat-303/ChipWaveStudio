@@ -26,11 +26,27 @@ pub(crate) enum VTab {
 }
 
 pub(crate) const VTABS: [(VTab, &str, &str); 9] = [
-    (VTab::Timeline, "TIMELINE", "tracks and clips over time (Ctrl+T)"),
+    (
+        VTab::Timeline,
+        "TIMELINE",
+        "tracks and clips over time (Ctrl+T)",
+    ),
     (VTab::Tracker, "TRACKER", "the pattern editor (Ctrl+1)"),
-    (VTab::Arranger, "ARRANGER", "the order list of blocks (Ctrl+2)"),
-    (VTab::Piano, "PIANO", "the piano roll in the lower panel (double-click a clip)"),
-    (VTab::Inst, "INST", "the instrument editor in the lower panel (Ctrl+I)"),
+    (
+        VTab::Arranger,
+        "ARRANGER",
+        "the order list of blocks (Ctrl+2)",
+    ),
+    (
+        VTab::Piano,
+        "PIANO",
+        "the piano roll in the lower panel (double-click a clip)",
+    ),
+    (
+        VTab::Inst,
+        "INST",
+        "the instrument editor in the lower panel (Ctrl+I)",
+    ),
     (VTab::Auto, "AUTO", "automation lanes in the lower panel"),
     (VTab::Mix, "MIX", "the mixer (Ctrl+3)"),
     (VTab::Fx, "FX", "the instrument FX chain (Ctrl+4)"),
@@ -62,14 +78,22 @@ fn transport_button(ui: &mut egui::Ui, ic: Tr, on: bool, col: Color32, tip: &str
                 col,
             );
             p.add(egui::Shape::convex_polygon(
-                vec![c + egui::vec2(5.0, -5.0), c + egui::vec2(5.0, 5.0), c + egui::vec2(-3.0, 0.0)],
+                vec![
+                    c + egui::vec2(5.0, -5.0),
+                    c + egui::vec2(5.0, 5.0),
+                    c + egui::vec2(-3.0, 0.0),
+                ],
                 col,
                 Stroke::NONE,
             ));
         }
         Tr::Play => {
             p.add(egui::Shape::convex_polygon(
-                vec![c + egui::vec2(-4.0, -6.0), c + egui::vec2(6.0, 0.0), c + egui::vec2(-4.0, 6.0)],
+                vec![
+                    c + egui::vec2(-4.0, -6.0),
+                    c + egui::vec2(6.0, 0.0),
+                    c + egui::vec2(-4.0, 6.0),
+                ],
                 col,
                 Stroke::NONE,
             ));
@@ -205,20 +229,17 @@ impl App {
             for (tab, name, tip) in VTABS {
                 let on = cur == Some(tab);
                 let host_on = !on && main == Some(tab);
-                let txt = egui::RichText::new(name)
-                    .size(11.0)
-                    .strong()
-                    .color(if on {
-                        if t.light {
-                            t.hdr_bot
-                        } else {
-                            Color32::from_rgb(0x16, 0x18, 0x1B)
-                        }
-                    } else if host_on {
-                        hdr_text()
+                let txt = egui::RichText::new(name).size(11.0).strong().color(if on {
+                    if t.light {
+                        t.hdr_bot
                     } else {
-                        hdr_dim()
-                    });
+                        Color32::from_rgb(0x16, 0x18, 0x1B)
+                    }
+                } else if host_on {
+                    hdr_text()
+                } else {
+                    hdr_dim()
+                });
                 let mut b = egui::Button::new(txt)
                     .min_size(egui::vec2(62.0, 22.0))
                     .corner_radius(if theme::polished() { 5 } else { 2 });

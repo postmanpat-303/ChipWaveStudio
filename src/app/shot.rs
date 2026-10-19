@@ -193,7 +193,12 @@ impl App {
                     use crate::showcase::{Job, Progress, State};
                     let p = |id, state, done: f64| {
                         let total = crate::showcase::item(id).map(|i| i.size()).unwrap_or(1);
-                        Progress { id, state, done: (total as f64 * done) as u64, total }
+                        Progress {
+                            id,
+                            state,
+                            done: (total as f64 * done) as u64,
+                            total,
+                        }
                     };
                     if let Some(d) = self.showcase.as_mut() {
                         d.job = Some(Job {

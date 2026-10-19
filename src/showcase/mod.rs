@@ -272,18 +272,29 @@ const ADL_WIN: &[Asset] = &[Asset {
     size: 18_564_457,
     kind: Kind::SevenZ,
     // a single-file VST3 (the DLL itself), renamed to .vst3
-    picks: &[p("ADLplug-1.0.0-win64/vst3/ADLplug.dll", Dest::Vst3, "ADLplug.vst3")],
+    picks: &[p(
+        "ADLplug-1.0.0-win64/vst3/ADLplug.dll",
+        Dest::Vst3,
+        "ADLplug.vst3",
+    )],
 }];
 const ADL_MAC: &[Asset] = &[Asset {
     url: "https://github.com/jpcima/ADLplug/releases/download/v1.0.0/ADLplug-1.0.0-mac.7z",
     sha256: "2390f87bbd747b9d3a017c45c2bef3fda0d0e4e8efb5bcb9ff163c0aadbf3fe7",
     size: 7_079_858,
     kind: Kind::SevenZ,
-    picks: &[p("ADLplug-1.0.0-mac/vst3/ADLplug.vst3", Dest::Vst3, "ADLplug.vst3")],
+    picks: &[p(
+        "ADLplug-1.0.0-mac/vst3/ADLplug.vst3",
+        Dest::Vst3,
+        "ADLplug.vst3",
+    )],
 }];
 
-
-const YM_P: &[Pick] = &[p("src/YMulator-Synth_artefacts/Release/VST3/YMulator-Synth.vst3", Dest::Vst3, "YMulator-Synth.vst3")];
+const YM_P: &[Pick] = &[p(
+    "src/YMulator-Synth_artefacts/Release/VST3/YMulator-Synth.vst3",
+    Dest::Vst3,
+    "YMulator-Synth.vst3",
+)];
 const YM_WIN: &[Asset] = &[Asset {
     url: "https://github.com/hiroaki0923/YMulator-Synth/releases/download/v0.1.3/YMulator-Synth-Windows-VST3.zip",
     sha256: "a695c12d10f0d34e0b95c2de15c15279c0db709b40721e74681c38a447e74e5b",
@@ -317,8 +328,16 @@ const RT_WIN: &[Asset] = &[Asset {
     ],
 }];
 const RT_PICKS: &[Pick] = &[
-    p("VST3/Mukkemann RetroTrax.vst3", Dest::Vst3, "Mukkemann RetroTrax.vst3"),
-    p("CLAP/Mukkemann RetroTrax.clap", Dest::Clap, "Mukkemann RetroTrax.clap"),
+    p(
+        "VST3/Mukkemann RetroTrax.vst3",
+        Dest::Vst3,
+        "Mukkemann RetroTrax.vst3",
+    ),
+    p(
+        "CLAP/Mukkemann RetroTrax.clap",
+        Dest::Clap,
+        "Mukkemann RetroTrax.clap",
+    ),
 ];
 const RT_MAC: &[Asset] = &[Asset {
     url: "https://github.com/Mukkemann1972/retrotrax/releases/download/v0.92.0/RetroTrax-macOS-0.92.0.zip",
@@ -565,7 +584,11 @@ impl Roots {
         } else if cfg!(target_os = "macos") {
             let h = env("HOME")?;
             let pl = h.join("Library/Audio/Plug-Ins");
-            (pl.join("VST3"), pl.join("CLAP"), h.join("Library/Application Support"))
+            (
+                pl.join("VST3"),
+                pl.join("CLAP"),
+                h.join("Library/Application Support"),
+            )
         } else {
             let h = env("HOME")?;
             let d = env("XDG_DATA_HOME").unwrap_or_else(|| h.join(".local/share"));
@@ -628,7 +651,9 @@ fn save_record(r: &Roots, m: &BTreeMap<String, Installed>) -> Result<(), String>
 /// this exact version is installed and all its files are still there
 pub fn is_installed(r: &Roots, it: &Item) -> bool {
     load_record(r).get(it.id).is_some_and(|i| {
-        i.version == it.version && !i.files.is_empty() && i.files.iter().all(|f| Path::new(f).exists())
+        i.version == it.version
+            && !i.files.is_empty()
+            && i.files.iter().all(|f| Path::new(f).exists())
     })
 }
 
@@ -646,7 +671,6 @@ pub enum State {
     Failed(String),
     Cancelled,
 }
-
 
 #[derive(Clone, Debug)]
 pub struct Progress {
@@ -831,13 +855,20 @@ pub fn install(
     on: &mut dyn FnMut(State, Option<u64>),
 ) -> Result<bool, String> {
     let Get::Auto(assets) = it.get() else {
-        return Err(format!("{} can't be installed automatically here: use Open download page", it.name));
+        return Err(format!(
+            "{} can't be installed automatically here: use Open download page",
+            it.name
+        ));
     };
     if is_installed(roots, it) {
         return Ok(false);
     }
-    std::fs::create_dir_all(&roots.cache)
-        .map_err(|e| format!("couldn't create the download folder {} ({e})", roots.cache.display()))?;
+    std::fs::create_dir_all(&roots.cache).map_err(|e| {
+        format!(
+            "couldn't create the download folder {} ({e})",
+            roots.cache.display()
+        )
+    })?;
     // staging folders inside each destination root, so the final step is a rename
     let stage_of = |d: Dest| -> PathBuf {
         let base = match d {
@@ -862,7 +893,11 @@ pub fn install(
         for a in assets {
             // ---- download (or reuse a verified earlier download)
             let file = roots.cache.join(
-                a.url.rsplit('/').next().filter(|s| !s.is_empty()).unwrap_or("download"),
+                a.url
+                    .rsplit('/')
+                    .next()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("download"),
             );
             downloads.push(file.clone());
             let good = file.exists() && sha256_file(&file).is_ok_and(|h| h == a.sha256);
@@ -871,21 +906,27 @@ pub fn install(
                 let part = file.with_extension("part");
                 let mut f = std::fs::File::create(&part)
                     .map_err(|e| format!("couldn't create {} ({e})", part.display()))?;
-                let r = fetch.fetch(a.url, a.size, &mut f, &mut |n| on(State::Downloading, Some(base + n)), cancel);
+                let r = fetch.fetch(
+                    a.url,
+                    a.size,
+                    &mut f,
+                    &mut |n| on(State::Downloading, Some(base + n)),
+                    cancel,
+                );
                 drop(f);
                 if let Err(e) = r {
                     let _ = std::fs::remove_file(&part);
                     return Err(e);
                 }
                 on(State::Verifying, None);
-                let h = sha256_file(&part).map_err(|e| format!("couldn't read the download ({e})"))?;
+                let h =
+                    sha256_file(&part).map_err(|e| format!("couldn't read the download ({e})"))?;
                 if h != a.sha256 {
                     let _ = std::fs::remove_file(&part);
-                    return Err(format!(
-                        "the download didn't match the expected checksum (SHA-256): not installed. The creator may have replaced the file; use Open download page."
-                    ));
+                    return Err("the download didn't match the expected checksum (SHA-256): not installed. The creator may have replaced the file; use Open download page.".into());
                 }
-                std::fs::rename(&part, &file).map_err(|e| format!("couldn't keep the download ({e})"))?;
+                std::fs::rename(&part, &file)
+                    .map_err(|e| format!("couldn't keep the download ({e})"))?;
             }
             base += a.size;
             on(State::Installing, Some(base));
@@ -966,9 +1007,9 @@ pub fn install(
                     fin.display()
                 )
             })?;
-            std::fs::rename(st, fin).or_else(|_| copy_tree(st, fin)).map_err(|e| {
-                format!("couldn't install {} ({e})", fin.display())
-            })?;
+            std::fs::rename(st, fin)
+                .or_else(|_| copy_tree(st, fin))
+                .map_err(|e| format!("couldn't install {} ({e})", fin.display()))?;
             files.push(fin.display().to_string());
         }
         // licence + source notes next to every plugin folder we wrote to
@@ -994,11 +1035,13 @@ pub fn install(
         for r in roots_used {
             for (name, bytes) in &text {
                 let f = r.join(format!("{stem}-{name}"));
-                std::fs::write(&f, bytes).map_err(|e| format!("couldn't write {} ({e})", f.display()))?;
+                std::fs::write(&f, bytes)
+                    .map_err(|e| format!("couldn't write {} ({e})", f.display()))?;
                 files.push(f.display().to_string());
             }
             let f = r.join(format!("{stem}-SOURCE.txt"));
-            std::fs::write(&f, &src).map_err(|e| format!("couldn't write {} ({e})", f.display()))?;
+            std::fs::write(&f, &src)
+                .map_err(|e| format!("couldn't write {} ({e})", f.display()))?;
             files.push(f.display().to_string());
         }
         Ok(())
@@ -1103,22 +1146,28 @@ fn write_entry(
     cancel: &AtomicBool,
 ) -> Result<(), String> {
     if dir {
-        return std::fs::create_dir_all(to).map_err(|e| format!("couldn't create {} ({e})", to.display()));
+        return std::fs::create_dir_all(to)
+            .map_err(|e| format!("couldn't create {} ({e})", to.display()));
     }
     if let Some(par) = to.parent() {
-        std::fs::create_dir_all(par).map_err(|e| format!("couldn't create {} ({e})", par.display()))?;
+        std::fs::create_dir_all(par)
+            .map_err(|e| format!("couldn't create {} ({e})", par.display()))?;
     }
-    let mut f = std::fs::File::create(to).map_err(|e| format!("couldn't write {} ({e})", to.display()))?;
+    let mut f =
+        std::fs::File::create(to).map_err(|e| format!("couldn't write {} ({e})", to.display()))?;
     let mut buf = vec![0u8; 128 * 1024];
     loop {
         if cancel.load(Ordering::Relaxed) {
             return Err(CANCELLED.into());
         }
-        let k = rd.read(&mut buf).map_err(|e| format!("the archive is damaged ({e})"))?;
+        let k = rd
+            .read(&mut buf)
+            .map_err(|e| format!("the archive is damaged ({e})"))?;
         if k == 0 {
             break;
         }
-        f.write_all(&buf[..k]).map_err(|e| format!("couldn't write {} ({e})", to.display()))?;
+        f.write_all(&buf[..k])
+            .map_err(|e| format!("couldn't write {} ({e})", to.display()))?;
     }
     #[cfg(unix)]
     {
@@ -1140,11 +1189,13 @@ pub fn extract(
     cancel: &AtomicBool,
 ) -> Result<usize, String> {
     let mut n = 0;
-    let damaged = |e: &dyn std::fmt::Display| format!("couldn't open the download as an archive ({e})");
+    let damaged =
+        |e: &dyn std::fmt::Display| format!("couldn't open the download as an archive ({e})");
     match kind {
         Kind::Zip => {
             let f = std::fs::File::open(file).map_err(|e| damaged(&e))?;
-            let mut z = zip::ZipArchive::new(std::io::BufReader::new(f)).map_err(|e| damaged(&e))?;
+            let mut z =
+                zip::ZipArchive::new(std::io::BufReader::new(f)).map_err(|e| damaged(&e))?;
             for i in 0..z.len() {
                 let mut e = z.by_index(i).map_err(|e| damaged(&e))?;
                 let name = e.name().map_err(|e| damaged(&e))?.to_string();
@@ -1163,7 +1214,11 @@ pub fn extract(
             let mut t = tar::Archive::new(gz);
             for e in t.entries().map_err(|e| damaged(&e))? {
                 let mut e = e.map_err(|e| damaged(&e))?;
-                let name = e.path().map_err(|e| damaged(&e))?.to_string_lossy().to_string();
+                let name = e
+                    .path()
+                    .map_err(|e| damaged(&e))?
+                    .to_string_lossy()
+                    .to_string();
                 let Some(to) = target_for(&name, targets) else {
                     continue;
                 };

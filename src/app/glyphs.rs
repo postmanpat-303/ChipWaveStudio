@@ -79,7 +79,13 @@ pub(crate) fn paint(p: &Painter, r: Rect, g: Glyph, c: Color32) {
         }
         Glyph::Saw => {
             p.add(egui::Shape::line(
-                vec![at(0.0, 0.8), at(0.45, 0.2), at(0.45, 0.8), at(1.0, 0.2), at(1.0, 0.8)],
+                vec![
+                    at(0.0, 0.8),
+                    at(0.45, 0.2),
+                    at(0.45, 0.8),
+                    at(1.0, 0.2),
+                    at(1.0, 0.8),
+                ],
                 s,
             ));
         }
@@ -109,7 +115,15 @@ pub(crate) fn paint(p: &Painter, r: Rect, g: Glyph, c: Color32) {
         }
         Glyph::Spark => {
             p.add(egui::Shape::line(
-                vec![at(0.6, 0.0), at(0.25, 0.55), at(0.55, 0.55), at(0.4, 1.0), at(0.8, 0.4), at(0.5, 0.4), at(0.6, 0.0)],
+                vec![
+                    at(0.6, 0.0),
+                    at(0.25, 0.55),
+                    at(0.55, 0.55),
+                    at(0.4, 1.0),
+                    at(0.8, 0.4),
+                    at(0.5, 0.4),
+                    at(0.6, 0.0),
+                ],
                 s,
             ));
         }
@@ -137,7 +151,11 @@ pub(crate) fn paint(p: &Painter, r: Rect, g: Glyph, c: Color32) {
         Glyph::Grid => {
             for i in 0..3 {
                 for j in 0..3 {
-                    p.circle_filled(at(0.15 + i as f32 * 0.35, 0.15 + j as f32 * 0.35), w * 1.1, c);
+                    p.circle_filled(
+                        at(0.15 + i as f32 * 0.35, 0.15 + j as f32 * 0.35),
+                        w * 1.1,
+                        c,
+                    );
                 }
             }
         }
@@ -150,7 +168,13 @@ pub(crate) fn paint(p: &Painter, r: Rect, g: Glyph, c: Color32) {
         }
         Glyph::Sum => {
             p.add(egui::Shape::line(
-                vec![at(0.85, 0.1), at(0.15, 0.1), at(0.55, 0.5), at(0.15, 0.9), at(0.85, 0.9)],
+                vec![
+                    at(0.85, 0.1),
+                    at(0.15, 0.1),
+                    at(0.55, 0.5),
+                    at(0.15, 0.9),
+                    at(0.85, 0.9),
+                ],
                 s,
             ));
         }

@@ -436,7 +436,8 @@ fn build_cache(song: &Song, key: u64, old: Option<Cache>) -> Cache {
                 *m.entry(i).or_default() += n * passes;
             }
         }
-        if let (tl::ClipKind::Notes { data }, Some(m)) = (&c.kind, count.get_mut(c.track as usize)) {
+        if let (tl::ClipKind::Notes { data }, Some(m)) = (&c.kind, count.get_mut(c.track as usize))
+        {
             if let Some(d) = t.notes.get(*data as usize) {
                 for n in d.notes.iter().filter(|n| n.instr > 0) {
                     *m.entry(n.instr).or_default() += 1;
@@ -1301,12 +1302,7 @@ impl App {
                         if clip.muted {
                             name.push_str(" · muted");
                         }
-                        texts.push((
-                            r,
-                            Pos2::new(vis_l, hr.center().y),
-                            name,
-                            title_ink(head_c),
-                        ));
+                        texts.push((r, Pos2::new(vis_l, hr.center().y), name, title_ink(head_c)));
                     }
                     let body = Rect::from_min_max(
                         Pos2::new(r.left() + 1.0, hr.bottom() + 2.0),
@@ -1363,12 +1359,7 @@ impl App {
                     if clip.muted {
                         name.push_str(" · muted");
                     }
-                    texts.push((
-                        r,
-                        Pos2::new(vis_l, hr.center().y),
-                        name,
-                        title_ink(head_c),
-                    ));
+                    texts.push((r, Pos2::new(vis_l, hr.center().y), name, title_ink(head_c)));
                 }
                 // note preview
                 let body = Rect::from_min_max(
@@ -1494,7 +1485,11 @@ impl App {
                 Pos2::new(full.left() + HEAD_W, ruler.bottom()),
             );
             let cp = ui.painter_at(cap);
-            cp.rect_filled(cap.shrink2(egui::vec2(0.0, 1.0)), 3, t.cart_bot.gamma_multiply(0.7));
+            cp.rect_filled(
+                cap.shrink2(egui::vec2(0.0, 1.0)),
+                3,
+                t.cart_bot.gamma_multiply(0.7),
+            );
             for (r, txt) in [
                 (marks, "Markers"),
                 (ruler, if self.tlv.time_ruler { "Time" } else { "Bars" }),
@@ -1622,7 +1617,12 @@ impl App {
         // type tags per instrument slot (index 0 = none) for the icon tiles
         let kinds: Vec<&'static str> = self.with(|s| {
             std::iter::once("")
-                .chain(s.song.instruments.iter().map(|i| super::params::type_tag(&i.kind)))
+                .chain(
+                    s.song
+                        .instruments
+                        .iter()
+                        .map(|i| super::params::type_tag(&i.kind)),
+                )
                 .collect()
         });
         let sub = |tr: usize| -> String {
@@ -1699,17 +1699,9 @@ impl App {
                 Pos2::new(tx, hr.top()),
                 Pos2::new(hr.right() - 132.0, hr.bottom()),
             ));
-            let num = hp.layout_no_wrap(
-                format!("{:02}", tr + 1),
-                FontId::monospace(10.0),
-                t.ink2,
-            );
+            let num = hp.layout_no_wrap(format!("{:02}", tr + 1), FontId::monospace(10.0), t.ink2);
             let nw = num.size().x;
-            np.galley(
-                Pos2::new(tx, ty - num.size().y / 2.0),
-                num,
-                t.ink2,
-            );
+            np.galley(Pos2::new(tx, ty - num.size().y / 2.0), num, t.ink2);
             np.text(
                 Pos2::new(tx + nw + 5.0, ty),
                 egui::Align2::LEFT_CENTER,
@@ -2996,16 +2988,16 @@ impl TimelineUi {
         let clip = c.tl.clips.iter().find(|x| x.id == id)?.clone();
         let name = match &clip.kind {
             _ if clip.name.is_some() => clip.name.clone().unwrap_or_default(),
-            tl::ClipKind::Audio { asset } => c
-                .tl
-                .audio
-                .get(*asset as usize)
-                .map_or("audio".into(), |a| a.name.clone()),
-            tl::ClipKind::Notes { data } => c
-                .tl
-                .notes
-                .get(*data as usize)
-                .map_or("notes".into(), |d| d.name.clone()),
+            tl::ClipKind::Audio { asset } => {
+                c.tl.audio
+                    .get(*asset as usize)
+                    .map_or("audio".into(), |a| a.name.clone())
+            }
+            tl::ClipKind::Notes { data } => {
+                c.tl.notes
+                    .get(*data as usize)
+                    .map_or("notes".into(), |d| d.name.clone())
+            }
             _ => clip
                 .block()
                 .and_then(|(b, _)| c.names.get(b).cloned())
@@ -3016,7 +3008,9 @@ impl TimelineUi {
 
     /// the order-list entry a clip starts in (tracker mode; Enter uses it)
     pub(crate) fn entry_at(&self, t: Tick) -> usize {
-        self.cache.as_ref().map_or(usize::MAX, |c| c.map.entry_at(t).0)
+        self.cache
+            .as_ref()
+            .map_or(usize::MAX, |c| c.map.entry_at(t).0)
     }
 
     /// screen rect of clip `id` as last drawn (tests, M2 hit-testing)
