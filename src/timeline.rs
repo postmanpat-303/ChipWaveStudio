@@ -1039,6 +1039,61 @@ pub fn to_toml(tl: &Timeline) -> Result<String, String> {
     toml::to_string(tl).map_err(|e| e.to_string())
 }
 
+impl Timeline {
+    /// equal apart from the view (zoom, scroll): what undo compares
+    pub fn same_content(&self, o: &Timeline) -> bool {
+        self.tracks == o.tracks
+            && self.clips == o.clips
+            && self.notes == o.notes
+            && self.tempo == o.tempo
+            && self.signature == o.signature
+            && self.markers == o.markers
+            && self.loop_range == o.loop_range
+            && self.loop_on == o.loop_on
+            && self.end == o.end
+            && self.next_id == o.next_id
+    }
+
+    /// Make a loaded timeline safe for `song`: drop clips on missing tracks
+    /// or blocks, keep lengths positive, and leave the start tempo to the
+    /// song's BPM. Returns warnings for the user.
+    pub fn fix(&mut self, song: &Song) -> Vec<String> {
+        let nch = song.channels.clamp(1, MAX_CHANNELS);
+        let n = self.clips.len();
+        self.clips.retain(|c| {
+            (c.track as usize) < nch
+                && c.len > 0
+                && match c.kind {
+                    ClipKind::Block { pattern, col } => {
+                        pattern < song.patterns.len() && (col as usize) < MAX_CHANNELS
+                    }
+                    ClipKind::Notes { data } => (data as usize) < self.notes.len(),
+                }
+        });
+        for c in &mut self.clips {
+            c.start = c.start.max(0);
+            if c.loop_len.is_some_and(|l| l <= 0) {
+                c.loop_len = None;
+            }
+        }
+        self.tracks.resize_with(nch, Track::default);
+        for (t, name) in self.tracks.iter_mut().zip(&song.channel_names) {
+            if t.name.is_empty() {
+                t.name.clone_from(name);
+            }
+        }
+        self.tempo.retain(|p| p.tick > 0);
+        let dropped = n - self.clips.len();
+        if dropped > 0 {
+            vec![format!(
+                "timeline: {dropped} clip(s) referred to missing tracks or blocks and were removed"
+            )]
+        } else {
+            vec![]
+        }
+    }
+}
+
 pub fn from_toml(text: &str) -> Result<Timeline, String> {
     let mut tl: Timeline = toml::from_str(text).map_err(|e| e.to_string())?;
     tl.tracks.truncate(MAX_CHANNELS);

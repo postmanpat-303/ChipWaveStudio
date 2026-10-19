@@ -4,8 +4,10 @@
 //! until the song changes. One painter-based widget: clips, previews and
 //! grid go into a few meshes, only visible tracks and clips are touched
 //! (binary search per track), so hundreds or thousands of clips stay cheap.
-//! M2 makes it editable: the drawing takes a `Timeline` and hit-tests clips
-//! by id, so edits only need to replace the cached timeline.
+//! M2 (timeline mode): when the song has a timeline (`song.timeline`), the
+//! view shows and edits it: move, resize (loop), trim, split, duplicate,
+//! make unique, glue, delete and mute clips, snap, loop region and markers.
+//! In tracker mode the first edit asks to switch (undo puts it back).
 use super::*;
 use crate::timeline::{self as tl, Tick, PPQ, ROW};
 use std::collections::HashMap;
@@ -42,11 +44,17 @@ struct Preview {
 /// the derived timeline and everything the painter needs, rebuilt only when
 /// the song's content changes (fingerprint)
 pub(crate) struct Cache {
+    /// fingerprints: block contents (previews) and the timeline / order list
+    pkey: u64,
     key: u64,
+    /// the song is in timeline mode (`tl` is the song's own timeline)
+    pub(crate) mode: bool,
     pub(crate) tl: tl::Timeline,
     pub(crate) map: tl::OrderMap,
     idx: tl::TrackIndex,
     previews: HashMap<(usize, usize), Preview>,
+    /// the most used instrument of each (block, column) and how often
+    col_instr: HashMap<(usize, usize), (u8, usize)>,
     /// "02 Groove" per block
     names: Vec<String>,
     /// the instrument a track mostly plays
@@ -54,6 +62,66 @@ pub(crate) struct Cache {
     order: Vec<usize>,
     /// used[block][column]: the column has something in its played rows
     used: Vec<Vec<bool>>,
+    /// where the song ends (ticks)
+    pub(crate) end: Tick,
+}
+
+/// snap grid for clip edits
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Snap {
+    /// bar, beat or row, whatever is at least ~10 px wide at this zoom
+    Adaptive,
+    Bar,
+    Beat,
+    Row,
+}
+
+/// a mouse gesture in progress (timeline mode)
+#[derive(Clone, Debug)]
+enum DragKind {
+    /// move the selection (Alt at the start: copies)
+    Move { dup: bool },
+    /// right edge of clip `id`
+    End(u32),
+    /// left edge of clip `id`
+    Start(u32),
+    /// rubber band from this point
+    Band(Pos2),
+    /// marker index
+    Marker(usize),
+    /// Shift-drag on the ruler: loop region from this tick
+    Loop(Tick),
+}
+
+#[derive(Clone, Debug)]
+struct Drag {
+    kind: DragKind,
+    /// the timeline when the gesture started (edits are re-applied to it)
+    origin: tl::Timeline,
+    /// before Alt-copies were made (restored when the copy didn't move)
+    before: Option<tl::Timeline>,
+    grab_tick: f64,
+    grab_y: f32,
+    /// the clip under the mouse at the start (moves snap by its start)
+    anchor: Option<u32>,
+    moved: bool,
+}
+
+/// an edit that waits for the switch to timeline mode
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum TlOp {
+    Split(Tick),
+    Duplicate,
+    Delete,
+    Mute,
+    MakeUnique,
+    Glue,
+    LoopFromSelection,
+    ToggleLoop,
+    AddMarker(Tick),
+    NewClip(usize, Tick),
+    Speed(usize, u8),
+    SelectAll,
 }
 
 pub(crate) struct TimelineUi {
@@ -67,8 +135,22 @@ pub(crate) struct TimelineUi {
     /// start a new song's layout (a few bars, not "fit one empty block")
     new_song: bool,
     wheel: f32,
-    /// selected clip id (M2 edits act on it; M1: Enter opens it)
+    /// the clip clicked last (Enter opens it); always in `sels` when set
     pub(crate) sel: Option<u32>,
+    /// selected clips (edits act on these)
+    pub(crate) sels: Vec<u32>,
+    drag: Option<Drag>,
+    /// timeline-mode play marker (ticks, on a row)
+    pub(crate) cue: Tick,
+    pub(crate) snap: Snap,
+    /// "switch to timeline mode?" is open, with the edit that asked
+    pub(crate) ask_switch: Option<Option<TlOp>>,
+    /// "back to tracker mode?" is open
+    pub(crate) ask_leave: bool,
+    /// marker being renamed (index, text)
+    rename: Option<(usize, String)>,
+    /// mouse position in timeline terms (S splits here)
+    hover_at: Option<(usize, Tick)>,
     /// the ruler shows minutes:seconds instead of bars
     time_ruler: bool,
     ruler_drag: bool,
@@ -93,6 +175,14 @@ impl Default for TimelineUi {
             new_song: false,
             wheel: 0.0,
             sel: None,
+            sels: vec![],
+            drag: None,
+            cue: 0,
+            snap: Snap::Adaptive,
+            ask_switch: None,
+            ask_leave: false,
+            rename: None,
+            hover_at: None,
             time_ruler: false,
             ruler_drag: false,
             overview_drag: false,
@@ -113,6 +203,31 @@ impl TimelineUi {
         self.scroll = 0.0;
         self.scroll_y = 0.0;
         self.sel = None;
+        self.sels.clear();
+        self.cue = 0;
+        self.drag = None;
+    }
+
+    /// select exactly `id` (or nothing)
+    pub(crate) fn select_only(&mut self, id: Option<u32>) {
+        self.sel = id;
+        self.sels = id.into_iter().collect();
+    }
+
+    /// snap grid in ticks at pixels-per-tick `ppt` (`fine`: Shift = rows)
+    fn grid(&self, ppt: f64, bar: Tick, fine: bool) -> Tick {
+        if fine {
+            return ROW;
+        }
+        match self.snap {
+            Snap::Bar => bar,
+            Snap::Beat => PPQ,
+            Snap::Row => ROW,
+            Snap::Adaptive => [ROW, PPQ, bar, bar * 4]
+                .into_iter()
+                .find(|g| *g as f64 * ppt >= 10.0)
+                .unwrap_or(bar * 4),
+        }
     }
     fn th(&self) -> f32 {
         if self.track_h > 0.0 {
@@ -123,7 +238,7 @@ impl TimelineUi {
     }
 }
 
-/// cheap content hash of everything the derived timeline shows
+/// cheap content hash of the timeline / order list part of the view
 fn fingerprint(song: &Song) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     let mut put = |v: u64| {
@@ -136,6 +251,44 @@ fn fingerprint(song: &Song) -> u64 {
         put(o as u64);
     }
     put(u64::MAX);
+    if let Some(t) = &song.timeline {
+        put(tl::plan_key(song, t));
+        put(t.next_id as u64);
+        put(t.end as u64);
+        for m in &t.markers {
+            put(m.tick as u64);
+            for b in m.name.bytes() {
+                put(b as u64);
+            }
+        }
+        for c in &t.clips {
+            put(c.id as u64);
+        }
+    }
+    put(u64::MAX - 1);
+    for n in &song.channel_names {
+        for b in n.bytes() {
+            put(b as u64);
+        }
+        put(0x1_0000);
+    }
+    // block lengths and breaks change the derived clips
+    for p in &song.patterns {
+        put(p.rows as u64 | (p.role.map_or(0, |r| r as u64 + 1) << 32));
+        put(tl::effective_rows(p, song.channels) as u64);
+    }
+    put(pattern_key(song));
+    h
+}
+
+/// cheap content hash of the blocks and names (previews, labels)
+fn pattern_key(song: &Song) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut put = |v: u64| {
+        h ^= v;
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    };
+    put(song.channels as u64);
     for n in song
         .channel_names
         .iter()
@@ -162,16 +315,79 @@ fn fingerprint(song: &Song) -> u64 {
     h
 }
 
-fn build_cache(song: &Song, key: u64) -> Cache {
-    let (tl, map) = tl::from_order(song);
-    let nch = tl.tracks.len();
-    let idx = tl.index();
-    let mut previews = HashMap::new();
-    let mut used = vec![];
-    let mut instr_count: Vec<HashMap<u8, usize>> = vec![HashMap::new(); nch];
-    let plays: Vec<usize> = (0..song.patterns.len())
-        .map(|b| song.order.iter().filter(|&&o| o == b).count())
+/// Rebuild what changed: block previews only when the blocks changed, the
+/// clips whenever the timeline / order list did (a drag rebuilds only those).
+fn build_cache(song: &Song, key: u64, old: Option<Cache>) -> Cache {
+    let pkey = pattern_key(song);
+    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    let (previews, col_instr, used, names) = match old {
+        Some(o) if o.pkey == pkey => (o.previews, o.col_instr, o.used, o.names),
+        _ => build_previews(song, nch),
+    };
+    let (mut t, map) = tl::from_order(song);
+    let mode = song.timeline.is_some();
+    if let Some(own) = &song.timeline {
+        t = (**own).clone();
+        t.tracks.resize_with(nch, Default::default);
+        for (tr, n) in t.tracks.iter_mut().zip(&song.channel_names) {
+            tr.name.clone_from(n);
+        }
+    }
+    let idx = t.index();
+    let end = if mode { tl::play_end(&t) } else { map.end() };
+    // the instrument each track plays most: clips x their columns' instruments
+    let mut count: Vec<HashMap<u8, usize>> = vec![HashMap::new(); nch];
+    for c in &t.clips {
+        if let Some((b, col)) = c.block() {
+            if let (Some(&(i, n)), Some(m)) =
+                (col_instr.get(&(b, col)), count.get_mut(c.track as usize))
+            {
+                let passes = c.loop_len.map_or(1, |l| (c.len / l.max(1)).max(1) as usize);
+                *m.entry(i).or_default() += n * passes;
+            }
+        }
+    }
+    let instr = count
+        .iter()
+        .map(|m| {
+            m.iter()
+                .max_by_key(|(k, n)| (**n, std::cmp::Reverse(**k)))
+                .and_then(|(k, _)| {
+                    song.instruments
+                        .get(*k as usize - 1)
+                        .map(|i| format!("{k:02X} {}", i.name))
+                })
+                .unwrap_or_default()
+        })
         .collect();
+    Cache {
+        pkey,
+        key,
+        mode,
+        tl: t,
+        map,
+        idx,
+        previews,
+        col_instr,
+        names,
+        instr,
+        order: song.order.clone(),
+        used,
+        end,
+    }
+}
+
+type Previews = (
+    HashMap<(usize, usize), Preview>,
+    HashMap<(usize, usize), (u8, usize)>,
+    Vec<Vec<bool>>,
+    Vec<String>,
+);
+
+fn build_previews(song: &Song, nch: usize) -> Previews {
+    let mut previews = HashMap::new();
+    let mut col_instr = HashMap::new();
+    let mut used = vec![];
     for (b, p) in song.patterns.iter().enumerate() {
         let eff = tl::effective_rows(p, nch);
         let mut u = vec![false; nch];
@@ -181,13 +397,14 @@ fn build_cache(song: &Song, key: u64) -> Cache {
                 ..Default::default()
             };
             let mut open: Option<(usize, u8)> = None;
+            let mut ic: HashMap<u8, usize> = HashMap::new();
             for r in 0..eff {
                 let Some(cell) = p.cells.get(r).and_then(|row| row.get(c)) else {
                     continue;
                 };
                 u[c] |= !cell.is_empty();
-                if cell.instr > 0 && plays[b] > 0 {
-                    *instr_count[c].entry(cell.instr).or_default() += plays[b];
+                if cell.instr > 0 {
+                    *ic.entry(cell.instr).or_default() += 1;
                 }
                 if cell.note == 0 {
                     continue;
@@ -204,6 +421,9 @@ fn build_cache(song: &Song, key: u64) -> Cache {
             if let Some((r0, k)) = open {
                 pv.notes.push((r0 as u16, (eff - r0).max(1) as u16, k));
             }
+            if let Some((&i, &n)) = ic.iter().max_by_key(|(k, n)| (**n, std::cmp::Reverse(**k))) {
+                col_instr.insert((b, c), (i, n));
+            }
             if !pv.notes.is_empty() {
                 // at least an octave of range, centred
                 let span = pv.hi - pv.lo;
@@ -217,35 +437,13 @@ fn build_cache(song: &Song, key: u64) -> Cache {
         }
         used.push(u);
     }
-    let instr = instr_count
+    let names = song
+        .patterns
         .iter()
-        .map(|m| {
-            m.iter()
-                .max_by_key(|(k, n)| (**n, std::cmp::Reverse(**k)))
-                .and_then(|(k, _)| {
-                    song.instruments
-                        .get(*k as usize - 1)
-                        .map(|i| format!("{k:02X} {}", i.name))
-                })
-                .unwrap_or_default()
-        })
+        .enumerate()
+        .map(|(b, p)| format!("{b:02} {}", p.name))
         .collect();
-    Cache {
-        key,
-        names: song
-            .patterns
-            .iter()
-            .enumerate()
-            .map(|(b, p)| format!("{b:02} {}", p.name))
-            .collect(),
-        tl,
-        map,
-        idx,
-        previews,
-        instr,
-        order: song.order.clone(),
-        used,
-    }
+    (previews, col_instr, used, names)
 }
 
 /// what the painter reads from the engine and mixer once per frame
@@ -286,11 +484,15 @@ impl App {
         let s = audio::lock(&shared);
         let key = fingerprint(&s.song);
         if self.tlv.cache.as_ref().map(|c| c.key) != Some(key) {
-            self.tlv.cache = Some(build_cache(&s.song, key));
-            // a clip id may be gone
-            if let (Some(id), Some(c)) = (self.tlv.sel, &self.tlv.cache) {
-                if !c.tl.clips.iter().any(|x| x.id == id) {
-                    self.tlv.sel = None;
+            let old = self.tlv.cache.take();
+            self.tlv.cache = Some(build_cache(&s.song, key, old));
+            // clip ids may be gone
+            if let Some(c) = &self.tlv.cache {
+                self.tlv
+                    .sels
+                    .retain(|id| c.tl.clips.iter().any(|x| x.id == *id));
+                if self.tlv.sel.is_some_and(|id| !self.tlv.sels.contains(&id)) {
+                    self.tlv.sel = self.tlv.sels.last().copied();
                 }
             }
         }
@@ -298,6 +500,8 @@ impl App {
         let e = &s.engine;
         let head = if !e.playing {
             None
+        } else if c.mode {
+            e.tl_row().map(|_| e.song_pos as f64 * ROW as f64)
         } else if e.loop_pattern {
             c.order
                 .iter()

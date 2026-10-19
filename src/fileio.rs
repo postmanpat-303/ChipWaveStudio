@@ -150,7 +150,8 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
         z.write_all(b"application/x-chipwave-song")
             .map_err(|e| e.to_string())?;
         z.start_file("manifest.toml", defl).map_err(e)?;
-        z.write_all(format!("format = \"chipwave-song\"\nformat_version = 1\nmin_reader_version = 1\napp = \"ChipWave Studio {}\"\n", crate::VERSION).as_bytes()).map_err(|e| e.to_string())?;
+        let min_reader = if song.timeline.is_some() { 2 } else { 1 };
+        z.write_all(format!("format = \"chipwave-song\"\nformat_version = 1\nmin_reader_version = {min_reader}\napp = \"ChipWave Studio {}\"\n", crate::VERSION).as_bytes()).map_err(|e| e.to_string())?;
         let mut instruments = song.instruments.clone();
         for (i, inst) in instruments.iter_mut().enumerate() {
             if let InstrumentKind::Sample {
@@ -220,6 +221,11 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
             z.write_all(toml::to_string(lane).map_err(|e| e.to_string())?.as_bytes())
                 .map_err(|e| e.to_string())?;
         }
+        if let Some(tl) = &song.timeline {
+            z.start_file("timeline.toml", defl).map_err(e)?;
+            z.write_all(crate::timeline::to_toml(tl)?.as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
         z.start_file("arranger.toml", defl).map_err(e)?;
         z.write_all(
             toml::to_string(&ArrangerFile {
@@ -249,9 +255,10 @@ fn read_entry(z: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<Vec<
 }
 
 /// Newest `min_reader_version` this build can read. Tracker-mode songs write
-/// 1; timeline-mode songs (M2, docs/TIMELINE.md) will write 2, and builds
-/// older than the timeline refuse them instead of playing a stale order list.
-pub const READER_VERSION: u32 = 1;
+/// 1 (byte-identical to older versions); timeline-mode songs (docs/TIMELINE.md)
+/// write 2 plus `timeline.toml`, so builds older than the timeline refuse
+/// them instead of playing a stale order list.
+pub const READER_VERSION: u32 = 2;
 
 /// Start of the error for a song that needs a newer app (see [`is_too_new`]).
 const TOO_NEW: &str = "This song was made with a newer version of ChipWave Studio";
@@ -421,6 +428,18 @@ pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
             .unwrap_or(2.0),
         timeline: None,
     };
+    // timeline mode (docs/TIMELINE.md)
+    if let Ok(b) = read_entry(&mut z, "timeline.toml") {
+        match crate::timeline::from_toml(&String::from_utf8_lossy(&b)) {
+            Ok(mut tl) => {
+                warnings.extend(tl.fix(&song));
+                song.timeline = Some(Box::new(tl));
+            }
+            Err(e) => warnings.push(format!(
+                "timeline.toml could not be read ({e}): the song opens in tracker mode"
+            )),
+        }
+    }
     // hand-written lanes may name FX params by key ("instrument.2.fx.1.feedback")
     for k in 0..song.automation.len() {
         let id = song.automation[k].target.clone();
@@ -1014,6 +1033,13 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
         lane.sort();
         song.automation.push(lane);
     }
+    // optional [timeline] table: the song opens in timeline mode
+    if let Some(t) = v.get("timeline") {
+        let text = toml::to_string(t).map_err(|e| e.to_string())?;
+        let mut tl = crate::timeline::from_toml(&text)?;
+        tl.fix(&song);
+        song.timeline = Some(Box::new(tl));
+    }
     Ok(song)
 }
 
@@ -1144,12 +1170,12 @@ mod tests {
         with_manifest(
             &src,
             &newer,
-            Some("format = \"chipwave-song\"\nformat_version = 2\nmin_reader_version = 2\n"),
+            Some("format = \"chipwave-song\"\nformat_version = 3\nmin_reader_version = 3\n"),
         );
         let e = load_cwt(&newer).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(
-            e.contains("reader version 2") && e.contains("Check for updates"),
+            e.contains("reader version 3") && e.contains("Check for updates"),
             "{e}"
         );
         // a missing or odd manifest is treated as version 1
@@ -1164,6 +1190,61 @@ mod tests {
         let e = song_from_text(&format!("min_reader_version = 3\n{t}")).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(!is_too_new("zip error"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// timeline-mode songs save timeline.toml and need reader version 2;
+    /// tracker songs still write reader version 1 and no timeline.toml
+    #[test]
+    fn timeline_mode_round_trips_and_needs_reader_version_2() {
+        let dir = std::env::temp_dir().join(format!("cw_tlsave_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let entries = |p: &std::path::Path| {
+            let mut z = zip::ZipArchive::new(std::fs::File::open(p).unwrap()).unwrap();
+            let m = String::from_utf8(read_entry(&mut z, "manifest.toml").unwrap()).unwrap();
+            let names: Vec<String> = z
+                .file_names()
+                .filter_map(|n| n.ok())
+                .map(|n| n.to_string())
+                .collect();
+            (m, names)
+        };
+        let plain = dir.join("plain.cwt");
+        save_cwt(&demo_song(), &plain).unwrap();
+        let (m, names) = entries(&plain);
+        assert!(m.contains("min_reader_version = 1"), "{m}");
+        assert!(!names.iter().any(|n| n == "timeline.toml"), "{names:?}");
+        let mut song = demo_song();
+        crate::timeline::enter_timeline_mode(&mut song);
+        {
+            let t = song.timeline.as_mut().unwrap();
+            let id = t.clips[0].id;
+            crate::timeline::split(t, id, t.clips[0].start + crate::timeline::ROW * 4);
+            t.markers.push(crate::timeline::Marker {
+                tick: 960 * 8,
+                name: "Hook".into(),
+                ..Default::default()
+            });
+            t.loop_range = Some((0, 960 * 16));
+            t.loop_on = true;
+            t.tracks[1].speed = 3;
+        }
+        let tlp = dir.join("tl.cwt");
+        save_cwt(&song, &tlp).unwrap();
+        let (m, names) = entries(&tlp);
+        assert!(m.contains("min_reader_version = 2"), "{m}");
+        assert!(names.iter().any(|n| n == "timeline.toml"), "{names:?}");
+        let back = load_cwt(&tlp).unwrap();
+        let (a, b) = (
+            song.timeline.as_ref().unwrap(),
+            back.timeline.as_ref().unwrap(),
+        );
+        assert!(
+            a.same_content(b),
+            "timeline changed on the way through the file"
+        );
+        assert!(b.markers.iter().any(|m| m.name == "Hook"));
+        assert!(b.loop_on && b.tracks[1].speed == 3);
         std::fs::remove_dir_all(&dir).ok();
     }
 

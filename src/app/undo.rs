@@ -122,8 +122,22 @@ pub struct State {
     patterns: Vec<Arc<Pattern>>,
     instruments: Vec<Arc<Instrument>>,
     lanes: Vec<Arc<Lane>>,
+    /// timeline mode (None = tracker mode); the view (zoom, scroll) is not
+    /// part of the history
+    timeline: Option<Arc<crate::timeline::Timeline>>,
     /// approximate size of what this state added (not shared with its predecessor)
     bytes: usize,
+}
+
+fn same_timeline(
+    live: &Option<Box<crate::timeline::Timeline>>,
+    prev: &Option<Arc<crate::timeline::Timeline>>,
+) -> bool {
+    match (live, prev) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.same_content(b),
+        _ => false,
+    }
 }
 
 /// 256-bit field mask: 12 song fields + 5 bits per mixer channel (32 max)
@@ -136,6 +150,8 @@ pub struct Sig {
     meta: Mask,
     patterns: bool,
     lanes: bool,
+    /// the timeline (clips, markers, loop) or the song mode changed
+    timeline: bool,
     /// changed instrument slots (same count before and after)
     instruments: Vec<usize>,
     instruments_resized: bool,
@@ -144,7 +160,11 @@ pub struct Sig {
 impl Sig {
     /// only "parameter" changes: knob/slider-like edits that may coalesce
     fn mergeable(&self) -> bool {
-        !self.patterns && !self.lanes && !self.instruments_resized && !Meta::is_toggle(self.meta)
+        !self.patterns
+            && !self.lanes
+            && !self.timeline
+            && !self.instruments_resized
+            && !Meta::is_toggle(self.meta)
     }
 }
 
@@ -209,6 +229,7 @@ impl State {
             patterns: vec![],
             instruments: vec![],
             lanes: vec![],
+            timeline: None,
             bytes: 0,
         };
         empty.next(song).map(|(s, _)| s).unwrap_or(empty)
@@ -220,6 +241,7 @@ impl State {
             && same_items(&song.patterns, &self.patterns)
             && same_items(&song.instruments, &self.instruments)
             && same_items(&song.automation, &self.lanes)
+            && same_timeline(&song.timeline, &self.timeline)
     }
 
     /// the state for `song`, sharing unchanged items with `self`; None if equal
@@ -231,6 +253,20 @@ impl State {
         let (patterns, pb, pc) = share(&song.patterns, &self.patterns, |p, _| pattern_bytes(p));
         let (instruments, ib, ic) = share(&song.instruments, &self.instruments, instrument_bytes);
         let (lanes, lb, lc) = share(&song.automation, &self.lanes, |l, _| lane_bytes(l));
+        let tl_same = same_timeline(&song.timeline, &self.timeline);
+        let (timeline, tb) = if tl_same {
+            (self.timeline.clone(), 0)
+        } else {
+            match &song.timeline {
+                Some(t) => {
+                    let mut t = (**t).clone();
+                    t.view = Default::default();
+                    let b = 256 + t.clips.len() * std::mem::size_of::<crate::timeline::Clip>();
+                    (Some(Arc::new(t)), b)
+                }
+                None => (None, 64),
+            }
+        };
         let meta = if meta_same {
             self.meta.clone()
         } else {
@@ -244,16 +280,18 @@ impl State {
             },
             patterns: !pc.is_empty() || patterns.len() != self.patterns.len(),
             lanes: !lc.is_empty() || lanes.len() != self.lanes.len(),
+            timeline: !tl_same,
             instruments_resized: instruments.len() != self.instruments.len(),
             instruments: ic,
         };
-        let bytes = pb + ib + lb + if meta_same { 0 } else { meta.bytes() };
+        let bytes = pb + ib + lb + tb + if meta_same { 0 } else { meta.bytes() };
         Some((
             State {
                 meta,
                 patterns,
                 instruments,
                 lanes,
+                timeline,
                 bytes,
             },
             sig,
@@ -275,6 +313,15 @@ impl State {
         s.patterns = self.patterns.iter().map(|p| (**p).clone()).collect();
         s.instruments = self.instruments.iter().map(|p| (**p).clone()).collect();
         s.automation = self.lanes.iter().map(|p| (**p).clone()).collect();
+        // the timeline comes back with the live view (zoom, scroll) kept
+        let view = s.timeline.as_ref().map(|t| t.view);
+        s.timeline = self.timeline.as_ref().map(|t| {
+            let mut t = (**t).clone();
+            if let Some(v) = view {
+                t.view = v;
+            }
+            Box::new(t)
+        });
     }
 }
 
