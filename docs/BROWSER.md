@@ -32,11 +32,34 @@ From top to bottom (this is mockup B, `docs/mockups/src/browser_b.html`):
    | **MIDI** | `.mid` files in your locations (listed; MIDI file import is planned) |
 
 3. **Search:** every word must match the name, category, creator, details or tags (`bass chip`).
-4. **Tag chips:** Bass, Lead, Pad, Keys, Drums, FX, Chip, Analog, FM, Voice, Warm, Bright, Plucky, Evolving. Only the tags the tab has are shown; several chips narrow the list (all must match). Tags come from the names, categories and kinds.
+4. **Tag chips:** Bass, Lead, Pad, Keys, Drums, FX, Chip, Analog, FM, Voice, Warm, Bright, Plucky, Evolving, Showcase. Only the tags the tab has are shown; several chips narrow the list (all must match). Tags come from the names, categories and kinds.
 5. **Category, Creator and Location columns** with counts. Click a value to filter, **All** to clear. Location is *All*, *Library* (built in, your library, plugins), *This song*, *Favourites* and each folder you added.
 6. **Results**, sortable by **Name**, **Type** or **Rating**. Each row has a coloured stripe and a **badge** for its format, the name, a second line (kind, category, size…), its **stars** and a **heart**.
 7. **Preview bar:** ▶ / ■, "Preview on C-3 · plays through track NN …" and the **Auto** (auto-play) toggle.
 8. **Colour legend:** CWI instrument, VST3 plugin, CLAP plugin, WAV / FLAC / MP3 / OGG sample, CWT song, MOD/MED*, WT wavetable, GRID patch, MIDI* (* = import planned).
+
+## Showcase plugins
+
+The Plugins tab enriches a small built-in catalogue of well-known open-source instruments (and Surge XT Effects) once they appear in the plugin scan. Matching is by CLAP/VST3 plugin id when known, otherwise by display name. Matched plugins get:
+
+- a **category** such as Hybrid, FM, Analog, Pad, Bass, Drums, Sampler or Chip (instead of plain "Instrument")
+- a credited **creator**
+- the **Showcase** tag chip (plus related tags such as FM / Analog / Drums)
+
+Current catalogue (not bundled with ChipWave; install them yourself or via a future optional installer component):
+
+| Plugin | Creator | Licence | Formats | Category |
+|---|---|---|---|---|
+| Surge XT | Surge Synth Team | GPL-3.0 | CLAP+VST3 | Hybrid |
+| Dexed | Digital Suburban | GPL-3.0 | CLAP+VST3 | FM |
+| OB-Xf | Surge Synth Team | GPL-3.0 | CLAP+VST3 | Analog |
+| Odin 2 | The Wave Warden | GPL-3.0 | CLAP+VST3 | Pad |
+| Monique | Thomas Arndt / Surge Synth Team | GPL-3.0 / MIT | CLAP+VST3 | Bass |
+| Geonkick | Quamplex | GPL-3.0+ | VST3 | Drums |
+| sfizz | SFZTools | BSD-2 (engine) | VST3 | Sampler |
+| ADLplug | Jean Pierre Cimalando | BSL-1.0 | VST3 | Chip |
+
+The mapping lives in `src/browser/catalogue.rs` and is generic: any scanned plugin whose id or name matches is enriched. Binaries are **not** in the git repo.
 
 ## Favourites and ratings
 
@@ -122,6 +145,7 @@ The Browser only reads. Opening it changes nothing in a song (tested: an old son
 
 ## Under the hood (for developers)
 
+- `src/browser/catalogue.rs`: Showcase plugin metadata (id/name → category, creator, tags).
 - `src/browser.rs`: the item model (`Item`, `Tab`, `Fmt` with badge colours, `Loc`, `Src`), tags, the built-in / library / song / plugin item builders, the folder scanner (`scan_folder`, `classify`), the cached `Index` (`browser-index.json`), `filter` / `column_values`, and loading helpers (`instrument_of`, `sample_instrument`, `wave_instrument`, `grid_fx_device`, `preview_song`). Unit tests in `src/browser/tests.rs`.
 - `src/app/browserview.rs`: state (`BrowserUi`), the background scan and load jobs, actions (`br_load`, `br_instrument` with `Act`, `br_drop` with `DropAt`), preview and keys. `src/app/browserpanel.rs`: painting and input, the drag ghost and drop indicators. `src/app/plugsetup.rs`: Find plugins. `src/chanops.rs`: channel remapping (reorder, insert, assign). UI tests: `src/app/browser_tests.rs`.
 - Screenshots: `--screenshot out.png --view browser|browser-samples|plugin-setup --theme dark|amiga`.

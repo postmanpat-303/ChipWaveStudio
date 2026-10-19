@@ -227,7 +227,7 @@ impl Item {
 }
 
 /// tag chips: keyword -> tag (searched in the name, category and kind)
-const TAGS: [(&str, &[&str]); 14] = [
+const TAGS: [(&str, &[&str]); 15] = [
     ("Bass", &["bass", "sub", "reese", "808 boom"]),
     ("Lead", &["lead", "solo", "arp", "acid"]),
     ("Pad", &["pad", "string", "choir", "atmo", "drone"]),
@@ -275,11 +275,13 @@ const TAGS: [(&str, &[&str]); 14] = [
         "Evolving",
         &["evolv", "morph", "motion", "scan", "formant", "sweep"],
     ),
+    // applied by catalogue.rs for curated open-source plugins (not keyword-inferred)
+    ("Showcase", &[]),
 ];
 
-pub const TAG_NAMES: [&str; 14] = [
+pub const TAG_NAMES: [&str; 15] = [
     "Bass", "Lead", "Pad", "Keys", "Drums", "FX", "Chip", "Analog", "FM", "Voice", "Warm",
-    "Bright", "Plucky", "Evolving",
+    "Bright", "Plucky", "Evolving", "Showcase",
 ];
 
 /// tags for an item named `name` with extra words `more`
@@ -496,7 +498,9 @@ fn kind_label(k: &InstrumentKind) -> &'static str {
     }
 }
 
-/// scanned CLAP / VST3 plugins (instruments and effects)
+/// scanned CLAP / VST3 plugins (instruments and effects).
+/// Known open-source instruments get a richer category / creator and a
+/// Showcase tag from [`catalogue`] (Surge XT, Dexed, OB-Xf, …).
 pub fn plugin_items(c: &crate::plugin::scan::Cache) -> Vec<Item> {
     let mut v = vec![];
     for f in c.instruments().into_iter().chain(c.effects()) {
@@ -514,10 +518,20 @@ pub fn plugin_items(c: &crate::plugin::scan::Cache) -> Vec<Item> {
             .filter(|s| !matches!(*s, "instrument" | "audio-effect" | "stereo" | "mono"))
             .take(3)
             .collect();
-        let vendor = if f.desc.vendor.is_empty() {
+        let known = catalogue::lookup(&f.desc.id, &f.desc.name);
+        let vendor = if let Some(e) = known {
+            e.creator.to_string()
+        } else if f.desc.vendor.is_empty() {
             "Unknown".to_string()
         } else {
             f.desc.vendor.clone()
+        };
+        let category = if let Some(e) = known {
+            e.category
+        } else if inst {
+            "Instrument"
+        } else {
+            "Effect"
         };
         let detail = format!(
             "{} {}{}",
@@ -529,17 +543,25 @@ pub fn plugin_items(c: &crate::plugin::scan::Cache) -> Vec<Item> {
                 format!(" · {}", feats.join(", "))
             }
         );
-        v.push(item(
+        let mut it = item(
             format!("plugin:{}:{}", f.format, f.desc.id),
             f.desc.name.clone(),
             Tab::Plugins,
             fmt,
-            if inst { "Instrument" } else { "Effect" },
+            category,
             &vendor,
             Loc::Plugins,
             detail,
             Src::Plugin(f.clone()),
-        ));
+        );
+        if let Some(e) = known {
+            for t in e.tags {
+                if !it.tags.contains(t) {
+                    it.tags.push(*t);
+                }
+            }
+        }
+        v.push(it);
     }
     v
 }
@@ -1038,6 +1060,8 @@ pub fn preview_song(inst: &Instrument, base: &Song, ch: usize) -> Song {
     }
     s
 }
+
+mod catalogue;
 
 #[cfg(test)]
 mod tests;

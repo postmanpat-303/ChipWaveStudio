@@ -243,3 +243,90 @@ fn plugin_folder_search_finds_folders_and_skips_bundles() {
     );
     let _ = std::fs::remove_dir_all(&d);
 }
+
+
+#[test]
+fn plugin_catalogue_sets_category_creator_and_showcase_tag() {
+    use crate::plugin::clap::Desc;
+    use crate::plugin::scan::{Cache, Entry as ScanEntry, Found};
+    let mk = |id: &str, name: &str, vendor: &str, format: &str, instrument: bool| Found {
+        path: format!("/tmp/{name}.{format}"),
+        format: format.into(),
+        desc: Desc {
+            id: id.into(),
+            name: name.into(),
+            vendor: vendor.into(),
+            version: "1".into(),
+            features: if instrument {
+                vec!["instrument".into()]
+            } else {
+                vec!["audio-effect".into()]
+            },
+        },
+    };
+    let cache = Cache {
+        version: 2,
+        entries: vec![ScanEntry {
+            path: "/tmp".into(),
+            format: "dir".into(),
+            mtime: 0,
+            size: 0,
+            status: "ok".into(),
+            message: String::new(),
+            plugins: vec![
+                mk(
+                    "org.surge-synth-team.surge-xt",
+                    "Surge XT",
+                    "Surge Synth Team",
+                    "clap",
+                    true,
+                ),
+                mk(
+                    "com.digital-suburban.dexed",
+                    "Dexed",
+                    "Digital Suburban",
+                    "clap",
+                    true,
+                ),
+                mk(
+                    "AABBCCDDEEFF00112233445566778899",
+                    "Geonkick",
+                    "Quamplex",
+                    "vst3",
+                    true,
+                ),
+                mk(
+                    "deadbeefdeadbeefdeadbeefdeadbeef",
+                    "Mystery",
+                    "Acme",
+                    "vst3",
+                    true,
+                ),
+                mk(
+                    "org.surge-synth-team.surge-xt-fx",
+                    "Surge XT Effects",
+                    "Surge Synth Team",
+                    "clap",
+                    false,
+                ),
+            ],
+        }],
+    };
+    let items = plugin_items(&cache);
+    let surge = items.iter().find(|i| i.name == "Surge XT").unwrap();
+    assert_eq!(surge.category, "Hybrid");
+    assert_eq!(surge.creator, "Surge Synth Team");
+    assert!(surge.tags.contains(&"Showcase"));
+    let dexed = items.iter().find(|i| i.name == "Dexed").unwrap();
+    assert_eq!(dexed.category, "FM");
+    assert!(dexed.tags.contains(&"Showcase"));
+    let kick = items.iter().find(|i| i.name == "Geonkick").unwrap();
+    assert_eq!(kick.category, "Drums");
+    assert!(kick.tags.contains(&"Showcase"));
+    let mystery = items.iter().find(|i| i.name == "Mystery").unwrap();
+    assert_eq!(mystery.category, "Instrument");
+    assert!(!mystery.tags.contains(&"Showcase"));
+    let fx = items.iter().find(|i| i.name == "Surge XT Effects").unwrap();
+    assert_eq!(fx.category, "Effect");
+    assert!(fx.tags.contains(&"Showcase"));
+}

@@ -4,6 +4,9 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Browser Showcase catalogue
+- Well-known open-source plugins (Surge XT, Dexed, OB-Xf, Odin 2, Monique, Geonkick, sfizz, ADLplug) show a category (Hybrid / FM / Analog / Pad / Bass / Drums / Sampler / Chip), credited creator and a **Showcase** tag once scanned. Mapping in `src/browser/catalogue.rs`; binaries not bundled.
+
 ### Automation UX stages 3–8 (design A)
 - **Stage 3:** song lanes **migrate** onto track lanes when entering timeline mode; a **Song / Master** track holds tempo, master volume and returns; Tempo can be a track lane; old songs stay bit-exact.
 - **Stage 4:** per-track **Read / Touch / Latch / Write / Off** write modes; global **● Write** toggle in the Automation strip.
