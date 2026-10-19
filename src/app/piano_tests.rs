@@ -176,3 +176,191 @@ fn keys_delete_select_all_and_leave_effects_alone() {
     click_at(&mut h, Pos2::new(pr.center().x, pr.top() - 120.0));
     assert!(!h.state().pr_active());
 }
+
+// ---------------------------------------------------------------- M3b
+
+/// the demo in timeline mode on the Timeline view, 40 px a beat
+fn tl_setup() -> Harness<'static, App> {
+    let mut h = harness_with(fileio::demo_song());
+    key(&mut h, Key::T, egui::Modifiers::COMMAND);
+    h.state_mut().enter_timeline();
+    h.state_mut().undo_reset();
+    h.state_mut().tlv.zoom = 40.0;
+    h.state_mut().tlv.scroll = 0.0;
+    frame(&mut h);
+    frame(&mut h);
+    h
+}
+
+fn note_data(h: &Harness<'static, App>) -> tl::NoteClipData {
+    let id = h.state().tlv.sel.expect("a selected clip");
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref().unwrap();
+        let c = t.clips.iter().find(|c| c.id == id).unwrap();
+        let tl::ClipKind::Notes { data } = c.kind else {
+            panic!("not a note clip")
+        };
+        (*t.notes[data as usize]).clone()
+    })
+}
+
+#[test]
+fn shift_double_click_makes_a_note_clip_and_the_roll_draws_chords() {
+    let mut h = harness_with(fileio::demo_song());
+    h.state_mut().new_song();
+    frame(&mut h);
+    assert!(
+        h.state().with(|s| s.song.timeline.is_some()),
+        "new songs are in timeline mode"
+    );
+    h.state_mut().view = View::Timeline;
+    frame(&mut h);
+    frame(&mut h);
+    // empty space on track 2, Shift held
+    let lanes = h.state().tlv.lanes;
+    let p = Pos2::new(lanes.left() + 30.0, lanes.top() + 46.0 * 1.5);
+    let m = egui::Modifiers::SHIFT;
+    with_mods(&mut h, m, egui::Event::PointerMoved(p));
+    let mut t = h.ctx.input(|i| i.time);
+    for _ in 0..2 {
+        for pressed in [true, false] {
+            t += 0.05;
+            h.input_mut().time = Some(t);
+            with_mods(
+                &mut h,
+                m,
+                egui::Event::PointerButton {
+                    pos: p,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: m,
+                },
+            );
+        }
+    }
+    h.input_mut().time = None;
+    with_mods(&mut h, egui::Modifiers::NONE, egui::Event::PointerMoved(p));
+    frame(&mut h);
+    frame(&mut h);
+    let n0 = h
+        .state()
+        .with(|s| s.song.timeline.as_deref().unwrap().notes.len());
+    assert_eq!(n0, 1, "a note clip was made");
+    assert!(matches!(
+        h.state().pr_target(),
+        Some(pianoview::Target::Notes { .. })
+    ));
+    assert!(h.state().pr.open, "the piano roll opens");
+    // a chord: C major key, triad on the clicked D -> D F A
+    h.state()
+        .with(|s| s.song.info.key = Some(crate::chords::Key::new(0, crate::chords::Scale::Major)));
+    {
+        let a = h.state_mut();
+        a.pr.chord = Some(crate::chords::ChordKind::Triad);
+        a.pr.zoom = 20.0;
+        a.pr.scroll_x = 0.0;
+        a.pr.scroll_y = (120.0 - 55.0) * a.pr.key_h - a.pr.grid_rect.height() / 2.0;
+    }
+    frame(&mut h);
+    let q = at(&h, 2, 51, 3.0); // D-4
+    click_at(&mut h, q);
+    let d = note_data(&h);
+    let mut keys: Vec<u8> = d.notes.iter().map(|n| n.key).collect();
+    keys.sort();
+    assert_eq!(keys, vec![51, 54, 58], "D F A");
+    assert!(d.notes.iter().all(|n| n.start == 2 * tl::ROW));
+    // it plays: the plan has the three spans
+    let spans = h.state().with(|s| {
+        let t = s.song.timeline.as_deref().unwrap();
+        tl::build_plan(&s.song, t)
+            .notes
+            .iter()
+            .map(|v| v.len())
+            .sum::<usize>()
+    });
+    assert_eq!(spans, 3);
+    // free timing: grid off, nudge right by one tick, then Q quantises back
+    h.state_mut().pr.grid = 1;
+    key(&mut h, Key::ArrowRight, egui::Modifiers::NONE);
+    assert!(note_data(&h)
+        .notes
+        .iter()
+        .all(|n| n.start == 2 * tl::ROW + 1));
+    h.state_mut().pr.grid = tl::ROW;
+    key(&mut h, Key::Q, egui::Modifiers::NONE);
+    assert!(note_data(&h).notes.iter().all(|n| n.start == 2 * tl::ROW));
+    // drag one note's right edge: the selection (the chord) gets longer
+    let (a, b) = (at(&h, 2, 51, 18.0), at(&h, 6, 51, 1.0));
+    drag_m(&mut h, a, b, egui::Modifiers::NONE);
+    assert!(
+        note_data(&h).notes.iter().all(|n| n.len == 4 * tl::ROW),
+        "{:?}",
+        note_data(&h).notes
+    );
+    key(&mut h, Key::Delete, egui::Modifiers::NONE);
+    assert!(note_data(&h).notes.is_empty());
+}
+
+const PPQ_T: tl::Tick = tl::PPQ;
+
+#[test]
+fn midi_records_into_a_note_clip_while_the_timeline_plays_and_capture() {
+    let mut h = tl_setup();
+    {
+        let a = h.state_mut();
+        a.edit = true;
+        a.extra.midi.live_record = true;
+        a.extra.midi.velocity = true;
+        a.ch = 2;
+    }
+    h.state().with(|s| {
+        let audio::Shared { song, engine, .. } = s;
+        engine.start(song, 0, 20, false, 0);
+    });
+    let now = std::time::Instant::now();
+    h.state_mut().midi_note_on(60, 49, 0.5, now);
+    h.state_mut().midi_note_on(64, 53, 1.0, now);
+    h.state_mut().midi_note_off(60);
+    let d = note_data(&h);
+    assert_eq!(d.notes.len(), 2);
+    let id = h.state().tlv.sel.unwrap();
+    let clip = h.state().with(|s| {
+        s.song
+            .timeline
+            .as_deref()
+            .unwrap()
+            .clips
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap()
+            .clone()
+    });
+    assert_eq!(clip.track, 2, "the cursor track");
+    assert_eq!(clip.start, 16 * tl::ROW, "starts on the bar");
+    // row 20 (minus nothing: no audio device in tests) = 4 rows into the clip
+    assert!(
+        d.notes.iter().all(|n| (n.start - 4 * tl::ROW).abs() <= 2),
+        "{:?}",
+        d.notes
+    );
+    assert!((tl::roll::vel_f(d.notes[0].vel) - 0.5).abs() < 1e-3);
+    // stop: the take ends, the held note gets its length
+    h.state().with(|s| s.engine.stop());
+    frame(&mut h);
+    assert!(h.state().noterec_take_done());
+    // Capture: what was played becomes a clip at the given spot
+    h.state_mut()
+        .tl_apply(super::timeline::TlOp::Capture(3, 32 * PPQ_T));
+    frame(&mut h);
+    let d = note_data(&h);
+    assert_eq!(d.notes.len(), 2);
+    assert_eq!(d.notes[0].start, 0);
+    assert!(h.state().with(|s| s
+        .song
+        .timeline
+        .as_deref()
+        .unwrap()
+        .clips
+        .iter()
+        .any(|c| c.track == 3 && c.start == 32 * PPQ_T)));
+}

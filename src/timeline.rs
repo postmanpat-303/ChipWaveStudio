@@ -1120,4 +1120,6 @@ pub use plan::*;
 #[cfg(test)]
 mod m2_tests;
 #[cfg(test)]
+mod m3_tests;
+#[cfg(test)]
 mod tests;

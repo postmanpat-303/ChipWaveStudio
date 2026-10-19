@@ -146,6 +146,11 @@ impl App {
         let mut new_sel: Option<Vec<u32>> = None;
         let mut open: Option<(usize, usize)> = None;
         let mut rename: Option<usize> = None;
+        let mut open_roll = false;
+        let captured = match op {
+            TlOp::Capture(..) => self.capture_notes(),
+            _ => vec![],
+        };
         let msg: String = self.with(|s| {
             let song = &mut s.song;
             let msg = match op {
@@ -196,9 +201,15 @@ impl App {
                     let on = t.clips.iter().any(|c| sels.contains(&c.id) && c.muted);
                     format!("{} {} clip{}", if on { "Muted" } else { "Unmuted" }, sels.len(), plural(sels.len()))
                 }
+                TlOp::MakeUnique if sels.len() == 1 && tl::make_unique_notes(song.timeline.as_deref_mut().unwrap(), sels[0]).is_some() => {
+                    "The note clip now has its own notes (edits no longer change its copies)".into()
+                }
                 TlOp::MakeUnique => {
                     let mut made = vec![];
                     for &id in &sels {
+                        if tl::make_unique_notes(song.timeline.as_deref_mut().unwrap(), id).is_some() {
+                            continue;
+                        }
                         match tl::make_unique(song, id) {
                             Some(b) => made.push(b),
                             None => break,
@@ -246,6 +257,35 @@ impl App {
                     let p = t.bar_pos(at);
                     format!("Marker added at bar {}.{}", p.bar, p.beat)
                 }
+                TlOp::Capture(..) if captured.is_empty() => {
+                    "Nothing played on the MIDI keyboard to capture".into()
+                }
+                TlOp::Capture(tr, at) => match tl::new_note_clip(song, tr, at) {
+                    Some(id) => {
+                        let t = song.timeline.as_deref_mut().unwrap();
+                        let i = t.clips.iter().position(|c| c.id == id).unwrap();
+                        if let tl::ClipKind::Notes { data } = t.clips[i].kind {
+                            let d = t.notes[data as usize].make_mut();
+                            d.name = format!("Capture {}", data + 1);
+                            d.notes = captured.clone();
+                            let bar = 4 * PPQ;
+                            d.len = (d.fit_len() + bar - 1) / bar * bar;
+                            t.clips[i].len = d.len;
+                        }
+                        new_sel = Some(vec![id]);
+                        open_roll = true;
+                        format!("Captured {} notes into a note clip on track {:02}", captured.len(), tr + 1)
+                    }
+                    None => "No track there".into(),
+                },
+                TlOp::NewNotes(tr, at) => match tl::new_note_clip(song, tr, at) {
+                    Some(id) => {
+                        new_sel = Some(vec![id]);
+                        open_roll = true;
+                        format!("New note clip on track {:02}: draw notes in the piano roll (lower panel)", tr + 1)
+                    }
+                    None => "No track there".into(),
+                },
                 TlOp::NewClip(tr, at) => match tl::new_clip(song, tr, at) {
                     Some((b, id)) => {
                         new_sel = Some(vec![id]);
@@ -290,6 +330,9 @@ impl App {
             self.tlv.rename = name.map(|n| (i, n));
         }
         self.dirty = true;
+        if open_roll {
+            self.set_lower(3);
+        }
         if !msg.is_empty() {
             self.status = msg;
         }

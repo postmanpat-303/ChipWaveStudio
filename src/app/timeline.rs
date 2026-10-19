@@ -123,6 +123,10 @@ pub(crate) enum TlOp {
     ToggleLoop,
     AddMarker(Tick),
     NewClip(usize, Tick),
+    /// a new note clip (piano roll) on (track, tick)
+    NewNotes(usize, Tick),
+    /// the phrase just played on the MIDI keyboard as a note clip
+    Capture(usize, Tick),
     Speed(usize, u8),
     SelectAll,
 }
@@ -268,6 +272,12 @@ fn fingerprint(song: &Song) -> u64 {
         }
         for c in &t.clips {
             put(c.id as u64);
+        }
+        for d in &t.notes {
+            for b in d.name.bytes() {
+                put(b as u64);
+            }
+            put(0x1_0000);
         }
     }
     put(u64::MAX - 1);
@@ -1054,6 +1064,73 @@ impl App {
                         );
                     }
                 }
+                if let tl::ClipKind::Notes { data } = clip.kind {
+                    let Some(d) = c.tl.notes.get(data as usize) else {
+                        continue;
+                    };
+                    if r.width() > 26.0 {
+                        let vis_l = r.left().max(lanes.left()) + 4.0;
+                        let mut name = d.name.clone();
+                        if clip.muted {
+                            name.push_str(" · muted");
+                        }
+                        texts.push((
+                            r,
+                            Pos2::new(vis_l, hr.center().y),
+                            name,
+                            if th().light {
+                                Color32::BLACK
+                            } else {
+                                Color32::WHITE
+                            },
+                        ));
+                    }
+                    let body = Rect::from_min_max(
+                        Pos2::new(r.left() + 1.0, hr.bottom() + 2.0),
+                        Pos2::new(r.right() - 1.0, r.bottom() - 2.0),
+                    );
+                    if r.width() < 6.0 || body.height() < 5.0 || d.notes.is_empty() {
+                        continue;
+                    }
+                    let (lo, hi) = d
+                        .notes
+                        .iter()
+                        .fold((u8::MAX, 0u8), |(a, b), n| (a.min(n.key), b.max(n.key)));
+                    let range = (hi - lo + 1).max(12) as f32;
+                    let lo = lo.saturating_sub(((range as u8).saturating_sub(hi - lo + 1)) / 2);
+                    let nh = (body.height() / range).clamp(1.5, 4.0);
+                    let note_c = col.gamma_multiply(1.6 * k).to_opaque();
+                    let l = clip.loop_len.unwrap_or(Tick::MAX / 4);
+                    let p0 = clip.pass_at(clip.start.max(v0));
+                    let p1 = clip.pass_at((clip.end() - 1).min(v1));
+                    for pass in p0..=p1.min(p0 + 10_000) {
+                        let base = clip.start - clip.offset + pass as Tick * l;
+                        for n in &d.notes {
+                            if clip.loop_len.is_some() && n.start >= l {
+                                continue;
+                            }
+                            let a = base + n.start;
+                            let e = (a + n.len).min(base + l).min(clip.end());
+                            if e <= clip.start.max(v0) || a >= clip.end().min(v1) || a < clip.start
+                            {
+                                continue;
+                            }
+                            let xa = x_of(a as f64).max(body.left());
+                            let xe = x_of(e as f64).min(body.right()).max(xa + 1.0);
+                            let y = body.bottom()
+                                - ((n.key.saturating_sub(lo)) as f32 + 0.5) / range * body.height();
+                            quad(
+                                &mut notes,
+                                Rect::from_min_max(
+                                    Pos2::new(xa, y - nh * 0.5),
+                                    Pos2::new(xe - 0.5, y + nh * 0.5),
+                                ),
+                                note_c,
+                            );
+                        }
+                    }
+                    continue;
+                }
                 let Some((b, colm)) = clip.block() else {
                     continue;
                 };
@@ -1784,6 +1861,7 @@ impl App {
             end_drag = true;
         }
         let mut open: Option<(usize, usize, usize, usize)> = None; // block, col, row, entry
+        let mut open_roll = false;
         if cresp.clicked() || cresp.double_clicked() {
             if let Some(p) = cresp.interact_pointer_pos() {
                 let tk = tick_of(p.x);
@@ -1814,6 +1892,15 @@ impl App {
                         c.map.entry_at(tk).0
                     };
                     open = match hit.map(|i| &c.tl.clips[i]) {
+                        Some(cl) if cl.block().is_none() => {
+                            open_roll = true;
+                            None
+                        }
+                        None if mode && mods.shift => {
+                            // Shift+double-click: a new note clip
+                            ops.push(TlOp::NewNotes(tr, tk / bar_ticks * bar_ticks));
+                            None
+                        }
                         Some(cl) => cl
                             .block()
                             .map(|(b, col)| (b, col, (cl.source_at(tk) / ROW) as usize, entry)),
@@ -1858,6 +1945,7 @@ impl App {
                 Some((b, col, (cl.source_at(at) / ROW) as usize))
             });
         let mut menu_open_now = false;
+        let capture_empty = self.noterec.recent.is_empty();
         cresp.context_menu(|ui| {
             let snap_at = menu_at.map_or(0, |m| tl::snap(m.1, ROW));
             if !mode {
@@ -1874,6 +1962,10 @@ impl App {
                     .clicked()
                 {
                     menu_open_now = true;
+                    ui.close();
+                }
+                if ui.button("Open in the piano roll").clicked() {
+                    open_roll = true;
                     ui.close();
                 }
                 ui.separator();
@@ -1902,6 +1994,22 @@ impl App {
             } else if let Some((tr, tk)) = menu_at {
                 if ui.button("New clip here").clicked() {
                     ops.push(TlOp::NewClip(tr, tk / bar_ticks * bar_ticks));
+                    ui.close();
+                }
+                if ui
+                    .add(egui::Button::new("New note clip here").shortcut_text("Shift+double-click"))
+                    .clicked()
+                {
+                    ops.push(TlOp::NewNotes(tr, tk / bar_ticks * bar_ticks));
+                    ui.close();
+                }
+                if !capture_empty
+                    && ui
+                        .button("Capture played MIDI here")
+                        .on_hover_text("what you just played on the MIDI keyboard (recording or not) becomes a note clip")
+                        .clicked()
+                {
+                    ops.push(TlOp::Capture(tr, tk / bar_ticks * bar_ticks));
                     ui.close();
                 }
             }
@@ -2018,6 +2126,9 @@ impl App {
         }
         if let Some((b, col, row, entry)) = open {
             self.timeline_open(b, col, row, entry);
+        }
+        if open_roll {
+            self.set_lower(3);
         }
         if live.playing {
             ui.ctx().request_repaint();
@@ -2145,8 +2256,15 @@ impl App {
                         c.map.entry_at(cl.start).0,
                     ))
                 });
+                let notes = self.tlv.sel.and_then(|id| {
+                    let c = self.tlv.cache.as_ref()?;
+                    c.tl.clips
+                        .iter()
+                        .find(|x| x.id == id && x.block().is_none())
+                });
                 match hit {
                     Some((b, col, row, e)) => self.timeline_open(b, col, row, e),
+                    None if notes.is_some() => self.set_lower(3),
                     None => return false,
                 }
             }

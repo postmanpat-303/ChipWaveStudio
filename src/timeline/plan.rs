@@ -35,6 +35,21 @@ impl Seg {
     }
 }
 
+/// One note of a note clip, placed on the timeline (absolute ticks).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct NoteSpan {
+    pub start: Tick,
+    pub end: Tick,
+    /// tracker note number (1 = C-0)
+    pub key: u8,
+    /// 0..1
+    pub vel: f32,
+    /// instrument slot (1-based, 0 = the track's current one)
+    pub instr: u8,
+    /// detune in semitones
+    pub tune: f32,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Plan {
     /// [`plan_key`] of the timeline this was built from
@@ -49,9 +64,24 @@ pub struct Plan {
     pub speeds: Vec<u8>,
     /// the tempo map changes the tempo after the start
     pub tempo_changes: bool,
+    /// note-clip notes per track, sorted by start (M3b; empty for tracker
+    /// songs, so they play exactly as before)
+    pub notes: Vec<Vec<NoteSpan>>,
 }
 
 impl Plan {
+    /// any track has note-clip notes
+    pub fn has_notes(&self) -> bool {
+        self.notes.iter().any(|v| !v.is_empty())
+    }
+
+    /// index of the first note on `track` that starts at or after `t`
+    pub fn note_seek(&self, track: usize, t: Tick) -> usize {
+        self.notes
+            .get(track)
+            .map_or(0, |v| v.partition_point(|n| n.start < t))
+    }
+
     /// index of the segment at or after `row` on `track` (binary search)
     pub fn seek(&self, track: usize, row: usize) -> usize {
         self.tracks
@@ -87,7 +117,24 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
         (c.track, c.start, c.len, c.offset, c.loop_len, c.muted).hash(&mut h);
         match c.kind {
             ClipKind::Block { pattern, col } => (0u8, pattern, col).hash(&mut h),
-            ClipKind::Notes { data } => (1u8, data as usize, 0u8).hash(&mut h),
+            ClipKind::Notes { data } => {
+                (1u8, data as usize, c.seed).hash(&mut h);
+                if let Some(d) = tl.notes.get(data as usize) {
+                    d.len.hash(&mut h);
+                    for n in &d.notes {
+                        (
+                            n.start,
+                            n.len,
+                            n.key,
+                            n.vel,
+                            n.instr,
+                            n.chance,
+                            n.tune.to_bits(),
+                        )
+                            .hash(&mut h);
+                    }
+                }
+            }
         }
     }
     (tl.loop_range, tl.loop_on).hash(&mut h);
@@ -173,7 +220,72 @@ pub fn build_plan(song: &Song, tl: &Timeline) -> Plan {
             .map(|i| tl.tracks.get(i).map_or(0, |t| t.speed))
             .collect(),
         tempo_changes: tl.tempo.iter().any(|p| p.tick > 0),
+        notes: note_spans(tl, nch),
     }
+}
+
+/// Every note of the unmuted note clips, per track, in timeline ticks.
+/// Looped clips repeat their notes each pass; notes end at the clip end
+/// (and at the end of their loop pass). `chance` draws from
+/// `ClipRng::new(seed, pass)`, so every play, seek and export is the same.
+pub fn note_spans(tl: &Timeline, nch: usize) -> Vec<Vec<NoteSpan>> {
+    let mut out: Vec<Vec<NoteSpan>> = vec![vec![]; nch];
+    for c in &tl.clips {
+        let ClipKind::Notes { data } = c.kind else {
+            continue;
+        };
+        if c.len <= 0 || c.muted || c.track as usize >= nch {
+            continue;
+        }
+        let Some(d) = tl.notes.get(data as usize) else {
+            continue;
+        };
+        let v = &mut out[c.track as usize];
+        let push = |v: &mut Vec<NoteSpan>, n: &Note, u: Tick, cap: Tick, rng: &mut ClipRng| {
+            if n.chance > 0 && n.chance < 100 && rng.next_f32() * 100.0 >= n.chance as f32 {
+                return;
+            }
+            if u < 0 || u >= c.len {
+                return;
+            }
+            let end = (u + n.len.max(1)).min(cap).min(c.len);
+            if end <= u || n.key == 0 || n.key > 120 {
+                return;
+            }
+            v.push(NoteSpan {
+                start: c.start + u,
+                end: c.start + end,
+                key: n.key,
+                vel: n.vel as f32 / 65535.0,
+                instr: n.instr,
+                tune: n.tune,
+            });
+        };
+        match c.loop_len.filter(|l| *l > 0) {
+            Some(l) => {
+                // pass k plays source [k*l, (k+1)*l) at clip time k*l - offset
+                let off = c.offset.rem_euclid(l);
+                let passes = ((c.len + off) + l - 1) / l;
+                for k in 0..passes.min(100_000) {
+                    let mut rng = ClipRng::new(c.seed, k as u32);
+                    let base = k * l - off;
+                    for n in d.notes.iter().filter(|n| n.start >= 0 && n.start < l) {
+                        push(v, n, base + n.start, base + l, &mut rng);
+                    }
+                }
+            }
+            None => {
+                let mut rng = ClipRng::new(c.seed, 0);
+                for n in &d.notes {
+                    push(v, n, n.start - c.offset, Tick::MAX, &mut rng);
+                }
+            }
+        }
+    }
+    for v in &mut out {
+        v.sort_by_key(|n| (n.start, n.key));
+    }
+    out
 }
 
 /// The cell track `tr` plays at timeline row `row`, given the segment `s`

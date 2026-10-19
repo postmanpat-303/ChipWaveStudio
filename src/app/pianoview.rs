@@ -930,9 +930,25 @@ impl App {
             t.ink2,
         );
         // playhead (block loop or song in this block)
+        let clip = match target {
+            Target::Notes { clip: Some(id), .. } => self
+                .tlv
+                .cache
+                .as_ref()
+                .and_then(|c| c.tl.clips.iter().find(|x| x.id == id))
+                .cloned(),
+            _ => None,
+        };
         let ph = self.with(|s| {
             let e = &s.engine;
             match target {
+                Target::Notes { .. } => {
+                    let c = clip.as_ref()?;
+                    let t = e.tl_ticks()?;
+                    let tk = t as Tick;
+                    (tk >= c.start && tk < c.end())
+                        .then(|| c.source_at(tk) as f64 + (t - tk as f64))
+                }
                 Target::Block { pattern, .. }
                     if e.playing && e.pattern == pattern && s.song.timeline.is_none() =>
                 {

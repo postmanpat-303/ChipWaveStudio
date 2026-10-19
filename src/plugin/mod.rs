@@ -225,7 +225,7 @@ pub struct Rack {
     /// instruments that failed to load: (instrument, patch key, message)
     pub errors: Vec<(usize, String, String)>,
     /// live MIDI keys routed to plugins: (key, slot, sent note)
-    live: [(u8, u16, u8); 16],
+    live: [(u16, u16, u8); 64],
 }
 
 impl Default for Rack {
@@ -242,7 +242,7 @@ impl Rack {
             by_ch: [[0; PER_CH]; MAX_CHANNELS],
             by_ch_n: [0; MAX_CHANNELS],
             errors: vec![],
-            live: [(0, u16::MAX, 0); 16],
+            live: [(0, u16::MAX, 0); 64],
         }
     }
 
@@ -263,7 +263,7 @@ impl Rack {
                 }
             }
         }
-        self.live = [(0, u16::MAX, 0); 16];
+        self.live = [(0, u16::MAX, 0); 64];
     }
 
     pub fn slot(&self, instr: usize, ch: usize) -> Option<usize> {
@@ -344,7 +344,7 @@ impl Rack {
         }
     }
 
-    pub fn live_on(&mut self, instr: usize, ch: usize, key: u8, note: u8, vel: f32) -> bool {
+    pub fn live_on(&mut self, instr: usize, ch: usize, key: u16, note: u8, vel: f32) -> bool {
         let Some(i) = self.slot(instr, ch) else {
             return false;
         };
@@ -355,7 +355,7 @@ impl Rack {
         true
     }
 
-    pub fn live_off(&mut self, key: u8) {
+    pub fn live_off(&mut self, key: u16) {
         for l in self
             .live
             .iter_mut()

@@ -33,13 +33,14 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 29] = [
+pub const VIEWS: [&str; 30] = [
     "pattern",
     "arranger",
     "timeline",
     "timeline-new",
     "timeline-mode",
     "timeline-switch",
+    "timeline-notes",
     "mixer",
     "fx",
     "fill",
@@ -95,7 +96,7 @@ impl App {
         self.row = 0;
         match view {
             "arranger" | "cue" => self.view = View::Arranger,
-            "timeline" | "timeline-mode" => self.view = View::Timeline,
+            "timeline" | "timeline-mode" | "timeline-notes" => self.view = View::Timeline,
             "timeline-switch" => {
                 self.view = View::Timeline;
                 self.tlv.ask_switch = Some(None);
@@ -287,7 +288,7 @@ impl App {
             });
             // the play marker (where Play song started) stays behind it
             self.cue = (13.min(self.order_len().saturating_sub(1)), 32);
-        } else if view == "timeline-mode" {
+        } else if view == "timeline-mode" || view == "timeline-notes" {
             // timeline mode with a few edits: a loop region, a marker, a
             // muted clip, a track speed, two selected clips; playing from
             // order entry CHIPWAVE_SHOT_POS (default 8)
@@ -328,6 +329,9 @@ impl App {
             self.tlv.sel = sels.last().copied();
             self.tlv.sels = sels;
             self.tlv.cue = (row as i64) * crate::timeline::ROW;
+            if view == "timeline-notes" {
+                self.shot_note_clip(row);
+            }
         } else if view == "timeline" {
             // play the song from order entry CHIPWAVE_SHOT_POS (default 8)
             let pos = std::env::var("CHIPWAVE_SHOT_POS")
@@ -366,6 +370,16 @@ impl App {
                 "arranger" => self.set_lower(0),
                 "automation" => self.set_lower(2),
                 "piano" => self.set_lower(3),
+                "piano-ch" => {
+                    // the piano roll on channel CHIPWAVE_SHOT_SEL (1-based)
+                    self.set_lower(3);
+                    if let Some(c) = std::env::var("CHIPWAVE_SHOT_SEL")
+                        .ok()
+                        .and_then(|v| v.parse::<usize>().ok())
+                    {
+                        self.ch = c.saturating_sub(1);
+                    }
+                }
                 "full" => {
                     self.set_lower(0);
                     self.toggle_full_height();
@@ -530,6 +544,82 @@ impl App {
         } else if f > CAPTURE_AT + 300 {
             eprintln!("screenshot: no image from the renderer");
             std::process::exit(3);
+        }
+    }
+}
+
+impl App {
+    /// timeline-notes: a looped note clip (chords + an arpeggio in the song
+    /// key) on track 5 at the play position, selected, in the roll
+    fn shot_note_clip(&mut self, row: usize) {
+        use crate::chords::{self, ChordKind};
+        use crate::timeline::{self as tl, PPQ};
+        let bar = 4 * PPQ;
+        let at = (row as i64 * tl::ROW / bar) * bar;
+        let id = self.with(|s| {
+            let key = *s
+                .song
+                .info
+                .key
+                .get_or_insert(chords::Key::new(9, chords::Scale::Minor));
+            let tr = 4.min(s.song.channels.saturating_sub(1));
+            // room for it: the block clips there make way
+            if let Some(t) = s.song.timeline.as_deref_mut() {
+                t.clips.retain(|c| {
+                    !(c.track as usize == tr && c.start < at + 8 * bar && c.end() > at)
+                });
+            }
+            let pad = s
+                .song
+                .instruments
+                .iter()
+                .position(|i| i.kind.patch().is_some_and(|p| p.amp.s >= 0.5))
+                .map_or(1, |i| i as u8 + 1);
+            let id = tl::new_note_clip(&mut s.song, tr, at)?;
+            let t = s.song.timeline.as_deref_mut()?;
+            let c = t.clips.iter_mut().find(|c| c.id == id)?;
+            c.loop_len = Some(4 * bar);
+            c.len = 8 * bar;
+            let tl::ClipKind::Notes { data } = c.kind else {
+                return None;
+            };
+            let d = t.notes[data as usize].make_mut();
+            d.name = "Chords".into();
+            d.len = 4 * bar;
+            for (b, deg) in [0usize, 5, 2, 6].into_iter().enumerate() {
+                let ch = chords::diatonic(key, deg, ChordKind::Triad);
+                let base = b as i64 * bar;
+                for (k, n) in ch.notes(4, 0).into_iter().enumerate() {
+                    d.notes.push(tl::Note {
+                        start: base,
+                        len: bar - PPQ / 4,
+                        key: n,
+                        vel: tl::roll::vel_u16(0.55 + 0.1 * k as f32),
+                        instr: pad,
+                        ..Default::default()
+                    });
+                }
+                // an off-grid arpeggio an octave up (triplet eighths)
+                for (k, n) in ch.notes(5, 0).into_iter().cycle().take(6).enumerate() {
+                    d.notes.push(tl::Note {
+                        start: base + k as i64 * PPQ / 3 * 2,
+                        len: PPQ / 3,
+                        key: n,
+                        vel: tl::roll::vel_u16(0.9 - 0.08 * k as f32),
+                        instr: pad,
+                        ..Default::default()
+                    });
+                }
+            }
+            let crate::audio::Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
+            Some(id)
+        });
+        if let Some(id) = id {
+            self.tlv.sel = Some(id);
+            self.tlv.sels = vec![id];
+            self.set_lower(3);
+            self.pr.focus = false;
         }
     }
 }

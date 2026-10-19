@@ -197,6 +197,10 @@ impl App {
         if !self.midi.held.contains(&key) {
             self.midi.held.push(key);
         }
+        self.rec_remember_on(key, note, vel, at);
+        if self.rec_note_on(key, note, vel, at) {
+            return;
+        }
         if !self.edit || self.view != View::Pattern {
             return; // play only
         }
@@ -263,6 +267,8 @@ impl App {
 
     pub(super) fn midi_note_off(&mut self, key: u8) {
         self.midi.held.retain(|k| *k != key);
+        self.rec_remember_off(key);
+        self.rec_note_off(key);
         if self.midi.held.is_empty() && !self.midi.chord.is_empty() {
             self.midi.chord.clear();
             if self.midi.chord_step {

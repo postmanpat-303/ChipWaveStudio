@@ -223,6 +223,10 @@ impl Chan {
     }
 }
 
+mod notes;
+#[cfg(test)]
+pub use notes::NOTE_VOICES;
+
 /// voices for live MIDI play (separate from the pattern channels)
 pub const LIVE_VOICES: usize = 12;
 
@@ -372,6 +376,8 @@ pub struct Engine {
     panic_len: u32,
     /// timeline-mode transport (docs/TIMELINE.md)
     tl: TlState,
+    /// note-clip voices (engine/notes.rs)
+    nv: notes::NoteState,
 }
 
 /// Timeline-mode playback: the plan being played, the row position and the
@@ -450,6 +456,7 @@ impl Engine {
             meter: crate::master::Loudness::new(sr),
             loud: Default::default(),
             tl: TlState::default(),
+            nv: notes::NoteState::new(),
         }
     }
 
@@ -487,7 +494,7 @@ impl Engine {
                             self.plugins.live_on(
                                 i,
                                 ch as usize,
-                                key,
+                                key as u16,
                                 midi_key(n),
                                 inst.volume * vel,
                             );
@@ -495,7 +502,7 @@ impl Engine {
                         }
                     }
                 }
-                LiveEv::Off { key } => self.plugins.live_off(key),
+                LiveEv::Off { key } => self.plugins.live_off(key as u16),
                 LiveEv::AllOff => self.plugins.all_off(),
                 _ => {}
             }
@@ -735,6 +742,14 @@ impl Engine {
                     // cursors are re-found against the new segments
                     let row = self.tl.row;
                     self.tl_cursors(row);
+                    if let Some(p) = self.tl.plan.clone() {
+                        let t = if self.playing {
+                            self.nv.clock
+                        } else {
+                            (row as i64 * crate::timeline::ROW) as f64
+                        };
+                        self.nv.seek(&p, t);
+                    }
                 }
             }
             None => {
@@ -810,6 +825,7 @@ impl Engine {
                 self.trigger(song, ch, &cell, None);
             }
         }
+        self.notes_jump(song, to, chase);
     }
 
     /// state-only replay of one cell (chase): no sound, no plugin events
@@ -971,6 +987,7 @@ impl Engine {
         for v in &mut self.live.v {
             v.active = false;
         }
+        self.nv.silence();
         self.plugins.panic();
         self.fx_plugins.panic();
         self.panic_len = ((0.003 * self.sr) as u32).max(1);
@@ -1018,6 +1035,7 @@ impl Engine {
 
     pub fn stop(&mut self) {
         self.playing = false;
+        self.nv.release_all(&mut self.plugins);
         self.plugins.all_off();
         for c in &mut self.chans {
             c.synth.amp.release();
@@ -1440,6 +1458,7 @@ impl Engine {
             self.tl.row = next;
             if jump {
                 self.tl_cursors(next);
+                self.notes_jump(song, next, false);
             }
             self.process_row(song);
             return;
@@ -1827,6 +1846,8 @@ impl Engine {
         }
         let live_on = self.live.v.iter().any(|v| v.active);
         let nch = song.channels.clamp(1, MAX_CHANNELS);
+        // note clips (timeline mode): the plan can't change during a callback
+        let note_plan = self.tl.plan.clone().filter(|p| self.tl.on && p.has_notes());
         let live_ch = self.live.ch.min(nch - 1);
         let live_gain = {
             // fader + pan of the cursor channel, ignoring mute/solo
@@ -1880,6 +1901,20 @@ impl Engine {
                     self.do_tick(song);
                 }
                 self.samples_to_tick -= 1.0;
+                if let Some(p) = note_plan.as_deref() {
+                    if self.playing && self.tl.on {
+                        let t = self.tl_clock();
+                        notes::note_events(
+                            &mut self.nv,
+                            p,
+                            song,
+                            &mut self.chans,
+                            &mut self.plugins,
+                            nch,
+                            t,
+                        );
+                    }
+                }
             }
             // plugin chunks end where the next tick (new events) starts
             let chunk = if plugs {
@@ -1941,6 +1976,7 @@ impl Engine {
             } else {
                 (0.0, 0.0)
             };
+            let mut nv_alive = false;
             for (i, (c, chain)) in self
                 .chans
                 .iter_mut()
@@ -1977,6 +2013,19 @@ impl Engine {
                     c.active = alive;
                     s += v * c.vol;
                     s_r += vr * c.vol;
+                }
+                // note-clip voices of this track (before its insert chain)
+                if self.nv.any {
+                    let base = i * notes::NOTE_VOICES;
+                    for v in self.nv.v[base..base + notes::NOTE_VOICES]
+                        .iter_mut()
+                        .filter(|v| v.active)
+                    {
+                        let (x, xr) = v.render(song, sr, &self.auto, bpm);
+                        s += x;
+                        s_r += xr;
+                        nv_alive |= v.active;
+                    }
                 }
                 // plugin instruments on this channel (their own release tails)
                 if plugs {
@@ -2073,6 +2122,9 @@ impl Engine {
                 cpk[i] = cpk[i].max((sl.abs().max(sr2.abs()) * 0.6).min(1.5));
                 l += sl;
                 r += sr2;
+            }
+            if self.nv.any {
+                self.nv.any = nv_alive;
             }
             if pdc {
                 self.fx_plugins.pdc_advance();

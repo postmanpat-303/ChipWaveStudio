@@ -225,6 +225,50 @@ pub fn make_unique(song: &mut Song, id: u32) -> Option<usize> {
     Some(nb)
 }
 
+/// Make unique for a note clip: it gets its own copy of the note data.
+/// Returns the new data index.
+pub fn make_unique_notes(tl: &mut Timeline, id: u32) -> Option<usize> {
+    let i = find(tl, id)?;
+    let ClipKind::Notes { data } = tl.clips[i].kind else {
+        return None;
+    };
+    let mut d = (**tl.notes.get(data as usize)?).clone();
+    d.name = format!("{} copy", d.name);
+    tl.notes.push(Shared::new(d));
+    let nd = tl.notes.len() - 1;
+    tl.clips[i].kind = ClipKind::Notes { data: nd as u32 };
+    Some(nd)
+}
+
+/// A new empty note clip (piano roll, 4 bars) on `track` at `start`.
+/// Returns its id.
+pub fn new_note_clip(song: &mut Song, track: usize, start: Tick) -> Option<u32> {
+    let nch = song.channels.clamp(1, MAX_CHANNELS);
+    if track >= nch {
+        return None;
+    }
+    let tl = song.timeline.as_deref_mut()?;
+    let len = 16 * PPQ;
+    let n = tl.notes.len();
+    tl.notes.push(Shared::new(NoteClipData {
+        name: format!("Notes {}", n + 1),
+        len,
+        notes: vec![],
+    }));
+    let id = tl.new_id();
+    tl.clips.push(Clip {
+        id,
+        track: track as u16,
+        start: start.max(0),
+        len,
+        kind: ClipKind::Notes { data: n as u32 },
+        seed: seed_for(id),
+        ..Default::default()
+    });
+    tl.sort();
+    Some(id)
+}
+
 /// Glue: the selected clips on one track become one clip of a new block
 /// (written into the block's column for that track) that plays exactly what
 /// they played; gaps become empty rows. Returns the new clip id.

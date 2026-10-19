@@ -31,6 +31,7 @@ mod lanes;
 mod library;
 mod midiview;
 mod mixer;
+mod noterec;
 mod params;
 mod pattern;
 #[cfg(test)]
@@ -244,6 +245,8 @@ pub struct App {
     pub(crate) tlv: timeline::TimelineUi,
     /// piano roll in the lower panel (app/pianoview.rs)
     pub(crate) pr: pianoview::PianoUi,
+    /// MIDI recording into note clips and Capture (app/noterec.rs)
+    pub(crate) noterec: noterec::NoteRec,
     /// "made with a newer ChipWave Studio" message (open refused)
     too_new: Option<String>,
 }
@@ -521,6 +524,7 @@ impl App {
             plug: Default::default(),
             tlv: Default::default(),
             pr: Default::default(),
+            noterec: Default::default(),
             too_new: None,
         };
         let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
@@ -885,6 +889,7 @@ impl eframe::App for App {
         self.block_len_dialog(ui.ctx());
         self.chord_window(ui.ctx());
         self.pr_release(!self.pr.open);
+        self.rec_frame();
         if !self.pr.open {
             self.pr.focus = false;
         }
