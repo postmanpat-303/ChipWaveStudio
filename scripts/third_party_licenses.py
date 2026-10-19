@@ -196,6 +196,12 @@ Generators (src/gen.rs, src/ladder.rs, 0.2.3.12):
   2012-2018), swept by an LFO and mixed with the dry signal, the structure
   of analog phaser pedals such as the MXR Phase 90 and Electro-Harmonix
   Small Stone (idea only; no circuit or code copied).
+- Frequency shifter FX device (src/fxmod.rs, after 0.2.4.0), an independent
+  implementation of Harald Bode's single-sideband frequency shifter (a
+  Hilbert transformer and a quadrature oscillator). The Hilbert transformer
+  uses the published all-pass coefficients of Olli Niemitalo, "Hilbert
+  transform by IIR all-pass filters", https://yehar.com/blog/?p=368
+  (coefficients only; no code copied).
 - Chip FX (src/chipfx.rs, 0.2.3.13) is a port of sfxr by Tomas Pettersson
   (DrPetter), https://www.drpetter.se/project_sfxr.html , by way of its Rust
   reimplementation sfxr-rs by Teemu Erkkola, https://github.com/bzar/sfxr-rs

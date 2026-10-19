@@ -17,6 +17,7 @@ the DSP never allocates in the audio thread: buffers are built once when a chain
 | Compressor | 0.1.8 | feed-forward peak compressor |
 | Metal resonator, Digital distortion, Sub bass | 0.2.3.11 | the Voice Transform stages as devices ([VOICE.md](VOICE.md)) |
 | **Phaser** | Unreleased | 4–12 all-pass stages swept by an LFO |
+| **Frequency shifter** | Unreleased | Bode-style single-sideband shift, ±2000 Hz |
 
 ## Phaser (Unreleased)
 
@@ -49,3 +50,35 @@ Unit tests check those notch positions for 4/6/8/12 stages (gain under −30 dB 
 100 % wet is flat, that feedback sharpens the peaks, that the LFO sweeps the notch and that the
 stereo phase offsets the right channel. An engine test sweeps the Mix with an automation lane
 and checks that rendering doesn't allocate.
+
+## Frequency shifter (Unreleased)
+
+Unlike a pitch shifter, a frequency shifter moves **every partial by the same number of Hz**, so
+harmonic sounds turn inharmonic and metallic: a 100 Hz bass with partials at 100, 200, 300 Hz
+shifted +50 Hz has partials at 150, 250, 350 Hz. Small shifts (under ~5 Hz) give a slow phasing /
+stereo detune; with feedback, every pass shifts again, giving the endless "barber pole" spiral.
+
+| Knob | Range | Default | Notes |
+|---|---|---|---|
+| Shift | −2000 to +2000 Hz | +100 Hz | coarse |
+| Fine | −50 to +50 Hz | 0 | added to Shift; for slow phasing |
+| Output | up, down, both | up | upper sideband (input + shift), lower (input − shift), or both: left = up, right = down (Bode's two outputs) |
+| Feedback | 0–95 % | 0 | the output fed back into the input: repeated shifts |
+| Mix | 0–100 % | 50 % | |
+
+A negative Shift with Output = up is the same as a positive one with Output = down. Presets:
+**Barber pole**, **Metallic +170 Hz**, **Stereo detune**, **Alien down −600 Hz**. Factory patch files
+take `type = "freqshift"` with `shift_hz`, `output` (`"up"`, `"down"`, `"both"`), `feedback`, `mix`.
+
+**How it works** (`src/fxmod.rs`): Harald Bode's single-sideband modulator. A Hilbert transformer
+splits each channel into two signals 90° apart, using two chains of four second-order all-pass
+sections with the published coefficients of **Olli Niemitalo** ("Hilbert transform by IIR
+all-pass filters"; 90° ± ~0.7° over nearly the whole band; one path delayed by a sample). They are
+multiplied by a cosine / sine oscillator (double-precision phase, so long notes don't drift) and
+added (up) or subtracted (down). No allocation, no FFT, no latency beyond a few samples.
+
+Unit tests shift sines at 220 Hz–8 kHz by 7.5 Hz to ±2000 Hz and check the new tone is within
+1 Hz of input + shift at full level, with the mirror sideband and the original at least 34 dB
+down; that **down** and **both** pick the right sidebands; and that feedback adds the
+re-shifted copies (600, 700, 800 Hz from 500 Hz at +100 Hz) and stays bounded. The engine test
+sweeps the Mix with an automation lane, allocation-free.

@@ -155,6 +155,12 @@ pub const CREDITS: &[Credit] = &[
     c(Effects, "Analog phaser pedals", "e.g. MXR Phase 90, Electro-Harmonix Small Stone",
         "Phaser: swept all-pass stages mixed with the dry signal", "",
         "Idea only, no circuit or code copied", ""),
+    c(Effects, "Bode frequency shifter", "Harald Bode",
+        "Frequency shifter: the single-sideband (Hilbert + quadrature) design", "",
+        "Idea only, no circuit or code copied", "https://en.wikipedia.org/wiki/Harald_Bode"),
+    c(Research, "Niemitalo, Hilbert transform by IIR all-pass filters (2001)", "Olli Niemitalo",
+        "Frequency shifter: the all-pass coefficients of its 90° phase splitter", "",
+        "Published coefficients only, no code copied", "https://yehar.com/blog/?p=368"),
     // Plugin hosting
     c(Plugins, "CLAP", "the free-audio project (Alexandre Bique et al.)",
         "Plugin hosting: the plugin standard ChipWave hosts", "MIT", "",

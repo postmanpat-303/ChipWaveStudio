@@ -19,10 +19,12 @@ pub enum FxKind {
     Sub,
     /// all-pass phaser (crate::fxmod)
     Phaser,
+    /// Bode-style frequency shifter (crate::fxmod)
+    FreqShift,
 }
 
 impl FxKind {
-    pub const ALL: [FxKind; 11] = [
+    pub const ALL: [FxKind; 12] = [
         FxKind::Delay,
         FxKind::Reverb,
         FxKind::Drive,
@@ -34,6 +36,7 @@ impl FxKind {
         FxKind::Digital,
         FxKind::Sub,
         FxKind::Phaser,
+        FxKind::FreqShift,
     ];
     pub fn name(self) -> &'static str {
         match self {
@@ -48,6 +51,7 @@ impl FxKind {
             FxKind::Digital => "Digital distortion",
             FxKind::Sub => "Sub bass",
             FxKind::Phaser => "Phaser",
+            FxKind::FreqShift => "Frequency shifter",
         }
     }
     /// muted strip tint per device type
@@ -56,7 +60,7 @@ impl FxKind {
             FxKind::Delay | FxKind::Chorus | FxKind::Phaser => 0x6B5E8A, // time-based: violet
             FxKind::Reverb => 0x5E5A86,
             FxKind::Drive | FxKind::Bitcrusher | FxKind::Digital => 0x8A5A4E, // warm
-            FxKind::Resonator => 0x7A6E4E,
+            FxKind::Resonator | FxKind::FreqShift => 0x7A6E4E,
             FxKind::Sub => 0x4E5E7A,
             FxKind::Filter => 0x4E6A86,     // cool
             FxKind::Compressor => 0x5E6B7A, // neutral
@@ -222,6 +226,19 @@ pub const PHASER: [ParamInfo; 8] = [
     p("mix", "Mix", 0.0, 1.0, 0.5, false, "%"),
 ];
 
+pub const FREQ_SHIFT: [ParamInfo; 5] = [
+    p("coarse", "Shift", -2000.0, 2000.0, 100.0, false, "Hz"),
+    p("fine", "Fine", -50.0, 50.0, 0.0, false, "Hz"),
+    c(
+        "output",
+        "Output",
+        &["up", "down", "both (L up, R down)"],
+        0.0,
+    ),
+    p("feedback", "Feedback", 0.0, 0.95, 0.0, false, "%"),
+    p("mix", "Mix", 0.0, 1.0, 0.5, false, "%"),
+];
+
 pub fn params(k: FxKind) -> &'static [ParamInfo] {
     match k {
         FxKind::Delay => &DELAY,
@@ -235,6 +252,7 @@ pub fn params(k: FxKind) -> &'static [ParamInfo] {
         FxKind::Digital => &DIGITAL,
         FxKind::Sub => &SUB,
         FxKind::Phaser => &PHASER,
+        FxKind::FreqShift => &FREQ_SHIFT,
     }
 }
 
@@ -593,6 +611,46 @@ pub fn presets(k: FxKind) -> &'static [(&'static str, &'static [(&'static str, f
                 ],
             ),
         ],
+        FxKind::FreqShift => &[
+            (
+                "Barber pole",
+                &[
+                    ("coarse", 0.0),
+                    ("fine", 0.4),
+                    ("output", 0.0),
+                    ("feedback", 0.7),
+                    ("mix", 0.5),
+                ],
+            ),
+            (
+                "Metallic +170 Hz",
+                &[
+                    ("coarse", 170.0),
+                    ("fine", 0.0),
+                    ("output", 0.0),
+                    ("mix", 1.0),
+                ],
+            ),
+            (
+                "Stereo detune",
+                &[
+                    ("coarse", 0.0),
+                    ("fine", 3.0),
+                    ("output", 2.0),
+                    ("feedback", 0.0),
+                    ("mix", 0.4),
+                ],
+            ),
+            (
+                "Alien down -600 Hz",
+                &[
+                    ("coarse", 600.0),
+                    ("output", 1.0),
+                    ("feedback", 0.4),
+                    ("mix", 0.8),
+                ],
+            ),
+        ],
         FxKind::Compressor => &[
             (
                 "Glue",
@@ -633,6 +691,7 @@ pub fn from_preset(t: &toml::Value) -> Option<Device> {
         "digital" => FxKind::Digital,
         "sub" | "subbass" => FxKind::Sub,
         "phaser" => FxKind::Phaser,
+        "freqshift" | "frequency_shifter" | "freq_shift" => FxKind::FreqShift,
         _ => return None,
     };
     let num = |k: &str| {
@@ -723,6 +782,21 @@ pub fn from_preset(t: &toml::Value) -> Option<Device> {
             if let Some(v) = num("feedback") {
                 d.set_real("feedback", v);
             }
+        }
+        FxKind::FreqShift => {
+            if let Some(v) = num("shift_hz").or(num("shift")) {
+                d.set_real("coarse", v.round());
+                d.set_real("fine", v - v.round());
+            }
+            if let Some(v) = num("feedback") {
+                d.set_real("feedback", v);
+            }
+            let o = match t.get("output").and_then(|x| x.as_str()) {
+                Some("down") => 1.0,
+                Some("both") => 2.0,
+                _ => 0.0,
+            };
+            d.set_real("output", o);
         }
         FxKind::Bitcrusher => {
             if let Some(v) = num("bits") {
@@ -868,6 +942,7 @@ enum Dsp {
     },
     Stage(Box<crate::transform::FxStage>),
     Phaser(crate::fxmod::Phaser),
+    FreqShift(crate::fxmod::FreqShifter),
 }
 
 /// realtime state for one device instance
@@ -940,6 +1015,7 @@ impl FxState {
             FxKind::Compressor => Dsp::Comp { env: 0.0 },
             FxKind::Resonator | FxKind::Digital | FxKind::Sub => Dsp::Stage(Box::default()),
             FxKind::Phaser => Dsp::Phaser(Default::default()),
+            FxKind::FreqShift => Dsp::FreqShift(Default::default()),
         };
         let mut s = Self {
             kind: d.kind,
@@ -1014,6 +1090,7 @@ impl FxState {
             Dsp::Comp { env } => *env = 0.0,
             Dsp::Stage(st) => **st = crate::transform::FxStage::default(),
             Dsp::Phaser(ph) => *ph = Default::default(),
+            Dsp::FreqShift(f) => *f = Default::default(),
         }
         self.on_gain = if d.enabled { 1.0 } else { 0.0 };
         self.set_targets(d, |_| None);
@@ -1246,6 +1323,20 @@ impl FxState {
                     mix: p[7],
                 };
                 ph.process(l, r, &pp, sr)
+            }
+            Dsp::FreqShift(f) => {
+                use crate::fxmod::ShiftOut;
+                let sp = crate::fxmod::ShiftParams {
+                    hz: p[0] + p[1],
+                    out: match p[2] as usize {
+                        0 => ShiftOut::Up,
+                        1 => ShiftOut::Down,
+                        _ => ShiftOut::Both,
+                    },
+                    feedback: p[3],
+                    mix: p[4],
+                };
+                f.process(l, r, &sp, sr)
             }
             Dsp::Stage(st) => match self.kind {
                 FxKind::Resonator => st.resonator(l, r, &p, ctx.note, sr),

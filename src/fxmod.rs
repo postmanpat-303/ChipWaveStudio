@@ -9,6 +9,14 @@
 //!   feedback ("TPT") one-pole of Vadim Zavalishin, "The Art of VA Filter
 //!   Design" (Native Instruments, 2012-2018), so the sweep stays exact up to
 //!   Nyquist.
+//! - Frequency shifter: the single-sideband ("Bode") frequency shifter of
+//!   Harald Bode's 1960s analog designs: a Hilbert transformer splits the
+//!   signal into two copies 90° apart, which are ring-modulated by a
+//!   quadrature (cos / sin) oscillator and summed or subtracted for the upper
+//!   or lower sideband. The Hilbert transformer is a pair of all-pass chains
+//!   with the published coefficients of Olli Niemitalo, "Hilbert transform
+//!   by IIR all-pass filters" (yehar.com, about 2001): 90° ± about 0.7°
+//!   phase difference over almost the whole band (numbers only, no code).
 //!
 //! Everything here is allocation-free: fixed-size arrays, built once.
 use std::f32::consts::{PI, TAU};
@@ -84,6 +92,107 @@ impl Phaser {
             let fc = Self::sweep_hz(p.center, p.depth, lfo, sr);
             let g = (PI * fc / sr).tan();
             let y = self.ch[c].run(x, g, n, p.feedback);
+            *o = x * (1.0 - p.mix) + y * p.mix;
+        }
+        (out[0], out[1])
+    }
+}
+
+/// Olli Niemitalo's all-pass coefficients for the two Hilbert paths; each
+/// section is y[n] = c²·(x[n] + y[n-2]) − x[n-2]
+const HILBERT_A: [f32; 4] = [0.692_387_8, 0.936_065_43, 0.988_229_5, 0.998_748_8];
+const HILBERT_B: [f32; 4] = [0.402_192_12, 0.856_171_1, 0.972_290_95, 0.995_288_5];
+
+#[derive(Clone, Copy, Default)]
+struct Ap2 {
+    x1: f32,
+    x2: f32,
+    y1: f32,
+    y2: f32,
+}
+
+impl Ap2 {
+    #[inline]
+    fn run(&mut self, x: f32, c2: f32) -> f32 {
+        let y = c2 * (x + self.y2) - self.x2;
+        self.x2 = self.x1;
+        self.x1 = x;
+        self.y2 = self.y1;
+        self.y1 = y;
+        y
+    }
+}
+
+/// one channel of the Hilbert transformer: (in-phase, quadrature)
+#[derive(Clone, Copy, Default)]
+struct Hilbert {
+    a: [Ap2; 4],
+    b: [Ap2; 4],
+    /// path A's one-sample delay
+    bz: f32,
+}
+
+impl Hilbert {
+    #[inline]
+    fn run(&mut self, x: f32) -> (f32, f32) {
+        let mut i = x;
+        for (s, c) in self.a.iter_mut().zip(HILBERT_A) {
+            i = s.run(i, c * c);
+        }
+        let mut q = x;
+        for (s, c) in self.b.iter_mut().zip(HILBERT_B) {
+            q = s.run(q, c * c);
+        }
+        // Niemitalo: path A's output is the one delayed by a sample
+        let id = self.bz;
+        self.bz = i;
+        (id, q)
+    }
+}
+
+/// which sideband(s) the frequency shifter outputs
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShiftOut {
+    Up,
+    Down,
+    /// left = up, right = down (Bode's two outputs)
+    Both,
+}
+
+/// realtime state of a Frequency shifter device (both channels)
+#[derive(Clone, Copy, Default)]
+pub struct FreqShifter {
+    h: [Hilbert; 2],
+    /// oscillator phase 0..1 (f64: no drift over long notes)
+    ph: f64,
+    fb: [f32; 2],
+}
+
+pub struct ShiftParams {
+    /// total shift in Hz (coarse + fine), may be negative
+    pub hz: f32,
+    pub out: ShiftOut,
+    pub feedback: f32,
+    pub mix: f32,
+}
+
+impl FreqShifter {
+    pub fn process(&mut self, l: f32, r: f32, p: &ShiftParams, sr: f32) -> (f32, f32) {
+        self.ph = (self.ph + p.hz as f64 / sr as f64).rem_euclid(1.0);
+        let w = self.ph * std::f64::consts::TAU;
+        let (sn, cs) = (w.sin() as f32, w.cos() as f32);
+        let mut out = [0.0f32; 2];
+        for (c, (x, o)) in [l, r].into_iter().zip(out.iter_mut()).enumerate() {
+            let xin = (x + p.feedback * self.fb[c]).clamp(-4.0, 4.0);
+            let (i, q) = self.h[c].run(xin);
+            // path B lags path A by 90°, so A·cos + B·sin is the upper sideband
+            let up = i * cs + q * sn;
+            let down = i * cs - q * sn;
+            let y = match (p.out, c) {
+                (ShiftOut::Up, _) | (ShiftOut::Both, 0) => up,
+                _ => down,
+            };
+            self.fb[c] = y;
             *o = x * (1.0 - p.mix) + y * p.mix;
         }
         (out[0], out[1])
@@ -172,6 +281,114 @@ mod tests {
         assert!(peak / dip > 5.0, "notch {dip} vs peak {peak}");
         // negative feedback: the peaks fall and the notches widen
         assert!(gain(4, 1000.0, 0.5, -0.7, mid) < gain(4, 1000.0, 0.5, 0.0, mid));
+    }
+
+    /// amplitude of `hz` in `x` (single-bin DFT, Hann window against leakage)
+    fn bin(x: &[f32], hz: f32) -> f32 {
+        let (mut re, mut im, mut ws) = (0.0f64, 0.0f64, 0.0f64);
+        let n = x.len() as f64;
+        for (i, v) in x.iter().enumerate() {
+            let win = 0.5 - 0.5 * (std::f64::consts::TAU * i as f64 / n).cos();
+            let w = std::f64::consts::TAU * hz as f64 * i as f64 / SR as f64;
+            re += *v as f64 * win * w.cos();
+            im += *v as f64 * win * w.sin();
+            ws += win;
+        }
+        ((re * re + im * im).sqrt() * 2.0 / ws) as f32
+    }
+
+    fn shift_sine(input: f32, hz: f32, out: ShiftOut) -> (Vec<f32>, Vec<f32>) {
+        let mut fs = FreqShifter::default();
+        let p = ShiftParams {
+            hz,
+            out,
+            feedback: 0.0,
+            mix: 1.0,
+        };
+        let n = SR as usize;
+        let (mut l, mut r) = (Vec::with_capacity(n), Vec::with_capacity(n));
+        for i in 0..n {
+            let x = (i as f32 * input / SR * TAU).sin() * 0.5;
+            let (a, b) = fs.process(x, x, &p, SR);
+            if i >= n / 4 {
+                l.push(a);
+                r.push(b);
+            }
+        }
+        (l, r)
+    }
+
+    #[test]
+    fn frequency_shifter_moves_a_sine_by_n_hz() {
+        for (input, hz) in [
+            (1000.0, 200.0),
+            (440.0, -150.0),
+            (3000.0, 2000.0),
+            (2500.0, -2000.0),
+            (220.0, 7.5),
+            (8000.0, 1234.0),
+        ] {
+            let (l, _) = shift_sine(input, hz, ShiftOut::Up);
+            let want = bin(&l, input + hz);
+            let mirror = bin(&l, input - hz);
+            let orig = bin(&l, input);
+            assert!(
+                (want - 0.5).abs() < 0.03,
+                "{input} + {hz}: {want} at {} Hz",
+                input + hz
+            );
+            // the other sideband and the carrier are at least 34 dB down
+            assert!(mirror < want * 0.02, "{input} {hz}: mirror {mirror}");
+            assert!(orig < want * 0.02, "{input} {hz}: carrier {orig}");
+            // the measured peak sits within 1 Hz of input + shift
+            let best = (-20..=20)
+                .map(|k| input + hz + k as f32 * 0.25)
+                .max_by(|a, b| bin(&l, *a).total_cmp(&bin(&l, *b)))
+                .unwrap();
+            assert!(
+                (best - (input + hz)).abs() <= 1.0,
+                "{input} {hz}: peak {best}"
+            );
+        }
+    }
+
+    #[test]
+    fn frequency_shifter_down_and_both_outputs() {
+        let (l, _) = shift_sine(1000.0, 300.0, ShiftOut::Down);
+        assert!(bin(&l, 700.0) > 0.47 && bin(&l, 1300.0) < 0.01);
+        let (l, r) = shift_sine(1000.0, 300.0, ShiftOut::Both);
+        assert!(bin(&l, 1300.0) > 0.47 && bin(&l, 700.0) < 0.01, "left = up");
+        assert!(
+            bin(&r, 700.0) > 0.47 && bin(&r, 1300.0) < 0.01,
+            "right = down"
+        );
+        // 0 Hz shift is (up to the all-pass phase) the input itself
+        let (l, _) = shift_sine(1000.0, 0.0, ShiftOut::Up);
+        assert!((bin(&l, 1000.0) - 0.5).abs() < 0.02);
+    }
+
+    #[test]
+    fn frequency_shifter_feedback_adds_more_shifted_copies_and_stays_bounded() {
+        let mut fs = FreqShifter::default();
+        let p = ShiftParams {
+            hz: 100.0,
+            out: ShiftOut::Up,
+            feedback: 0.9,
+            mix: 1.0,
+        };
+        let mut l = vec![];
+        for i in 0..(SR as usize) {
+            let x = (i as f32 * 500.0 / SR * TAU).sin() * 0.5;
+            let (a, _) = fs.process(x, x, &p, SR);
+            assert!(a.is_finite() && a.abs() < 8.0);
+            if i > 12000 {
+                l.push(a);
+            }
+        }
+        // 600, 700, 800 Hz: the spiral of re-shifted copies
+        for hz in [600.0, 700.0, 800.0] {
+            assert!(bin(&l, hz) > 0.1, "{hz}: {}", bin(&l, hz));
+        }
     }
 
     #[test]

@@ -2853,7 +2853,13 @@ mod tests {
     #[test]
     fn phaser_renders_follows_its_automation_lane_and_is_allocation_free() {
         use crate::fx::FxKind;
-        let song = mod_fx_song(FxKind::Phaser, "mix");
+        for kind in [FxKind::Phaser, FxKind::FreqShift] {
+            mod_fx_renders_and_automates(kind);
+        }
+    }
+
+    fn mod_fx_renders_and_automates(kind: crate::fx::FxKind) {
+        let song = mod_fx_song(kind, "mix");
         let out = render_secs(&song, 2.0);
         assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
         // the lane takes the mix from 0 (dry) towards 1: the start of the
@@ -2873,7 +2879,10 @@ mod tests {
         // 120 BPM speed 6: 32 rows = 4 s, so the mix is ~1 % at 0.05 s and
         // ~45 % at 1.8 s
         let (early, late) = (diff(4000, 8000), diff(150_000, 190_000));
-        assert!(late > 0.01 && late > 8.0 * early, "{early} -> {late}");
+        assert!(
+            late > 0.01 && late > 8.0 * early,
+            "{kind:?}: {early} -> {late}"
+        );
         let mut e = Engine::new(48000.0);
         e.start(&song, 0, 0, false, 0);
         let mut buf = vec![0.0f32; 512];
