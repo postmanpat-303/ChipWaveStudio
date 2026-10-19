@@ -4,6 +4,15 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+- **VST3 hosting:** VST3 instruments and effects next to CLAP. Guide: [PLUGINS.md › VST3](PLUGINS.md#vst3-unreleased).
+  - **Same everything as CLAP:** the scan (crash-guarded child process, cache), the **Add plugin instrument** browser and the **Plugin effect ›** menus (marked VST3), the parameter list, 8 macros and 43xy, automation lanes, drag-to-modulate, plugin delay compensation, state saved in the song, missing-plugin placeholders, offline render and `--self-test`.
+  - **Editor:** the plugin's own VST3 editor is embedded in a ChipWave window on Windows, resizable both ways. Linux and macOS use the parameter list for now.
+  - **Portable songs:** plugins are saved by their VST3 class id in the SDK's text form, which is the same on every OS. Text songs take `patch = "vst3:<class id>"`. Songs without VST3 plugins open and render exactly as before.
+  - The audio thread stays allocation-free (preallocated event and parameter lists, tested). Parameters a plugin lists only as MIDI CC stand-ins (JUCE's 2,080) are hidden.
+  - **Licence:** the VST 3 SDK is MIT since 3.8.0 (Steinberg Media Technologies GmbH); its notice is in the credits, `LICENSES/VST3_SDK_LICENSE.txt` and THIRD_PARTY_LICENSES. New dependency: the `vst3` crate (bindings by Micah Johnston, MIT/Apache-2.0). No plugins are bundled.
+  - Tested with a new fixture (`plugins/cw-test-vst3`, which renders the same song as the CLAP fixture), Surge XT 1.3.4 VST3 (Linux, and the Windows build under Wine with its editor) and the VST 3 SDK samples (mda JX10/DX10/Piano/EPiano and effects, ADelay, AGain), built from source.
+  - Limits: no VST3 editor on Linux/macOS, no program lists, no note expressions other than tuning, no MIDI CC mapping, sidechains or extra buses; macOS loading is untested.
+
 - **Automation lanes on the timeline (Timeline M5):** guide: [TIMELINE.md › Automation lanes](TIMELINE.md#automation-lanes).
   - **Per-track lanes** under each track header, opened and closed with the **A** button. **+ lane** offers every automatable parameter: mixer, instrument, generator knobs, FX including plugin FX, return buses, master and modulation depths. Song lanes can be pinned to a track and unpinned again.
   - **Drawing:** click, drag, Ctrl-drag pencil, Alt-drag to **bend segments into curves**, double-click to delete, right-click for shapes.

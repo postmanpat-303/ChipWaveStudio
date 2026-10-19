@@ -293,7 +293,7 @@ Chord helper and key detection (src/chords.rs), independent implementations:
   Boutique (https://www.pluginboutique.com); no code, data or artwork from
   Scaler is used. Scales and chord names are standard music theory.
 
-Plugin instrument hosting (src/plugin/, 0.2.3.16):
+Plugin instrument hosting (src/plugin/, 0.2.3.16), CLAP:
 - CLAP, the CLever Audio Plug-in API by the free-audio project
   (Alexandre Bique and contributors), MIT licence.
   https://github.com/free-audio/clap . ChipWave talks to CLAP plugins
@@ -324,6 +324,38 @@ Plugin instrument hosting (src/plugin/, 0.2.3.16):
   DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
   USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+VST3 hosting (src/plugin/vst3.rs, Unreleased):
+- The VST 3 API of the VST 3 SDK by Steinberg Media Technologies GmbH,
+  MIT licence since SDK 3.8.0, https://github.com/steinbergmedia/vst3sdk .
+  ChipWave talks to VST3 plugins through the vst3 crate (Rust bindings
+  generated from the VST 3 SDK 3.8 headers) and com-scrape-types, both by
+  Micah Johnston (coupler-rs), MIT OR Apache-2.0,
+  https://github.com/coupler-rs/vst3-rs , listed with the crates below.
+  VST is a registered trademark of Steinberg Media Technologies GmbH.
+  With thanks, the VST 3 SDK licence:
+
+  MIT License
+
+  Copyright (c) 2026, Steinberg Media Technologies GmbH
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
 
 - Host design references (no code copied): the clap-host example and
   clap-helpers of the free-audio project (MIT), clack by Adrien Prokopowicz

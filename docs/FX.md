@@ -18,11 +18,11 @@ the DSP never allocates in the audio thread: buffers are built once when a chain
 | Metal resonator, Digital distortion, Sub bass | 0.2.3.11 | the Voice Transform stages as devices ([VOICE.md](VOICE.md)) |
 | **Phaser** | Unreleased | 4–12 all-pass stages swept by an LFO |
 | **Frequency shifter** | Unreleased | Bode-style single-sideband shift, ±2000 Hz |
-| **Plugin effect** | Unreleased | any installed CLAP effect, see [Plugin effects](#plugin-effects-clap-unreleased) |
+| **Plugin effect** | Unreleased | any installed CLAP or VST3 effect, see [Plugin effects](#plugin-effects-clap-unreleased) |
 
 ## Plugin effects (CLAP, Unreleased)
 
-Any CLAP **audio effect** installed on the computer can sit in an instrument's FX chain, next to
+Any CLAP or VST3 (Unreleased, [PLUGINS.md › VST3](PLUGINS.md#vst3-unreleased)) **audio effect** installed on the computer can sit in an instrument's FX chain, next to
 the built-in devices.
 
 - **Adding one:** every add-effect menu has a **Plugin effect ›** submenu: **+ Device** in the FX
@@ -36,7 +36,7 @@ the built-in devices.
   remove work as for built-in devices; presets live in the plugin's own editor.
 - **Automation:** right-click a parameter slider › **Add automation lane**, or **+ Lane** ›
   *instrument* › **FX n *plugin*** › parameter. Lanes run 0–100 % over the parameter's range and are
-  saved as `instrument.N.fx.D.p<CLAP param id>`. Lanes play in exports too.
+  saved as `instrument.N.fx.D.p<plugin param id>` (CLAP or VST3 parameter id). Lanes play in exports too.
 - **Saving:** the plugin's state is stored base64-encoded in the song (`.cwt`), in `.cwi`
   instrument files and in the library, with the plugin id, name, vendor, format and path.
   ChipWave asks the plugin for its state before save, autosave, export and copy. Duplicated or
@@ -45,7 +45,7 @@ the built-in devices.
   chain, shows a red notice and is **bypassed** (the dry signal passes unchanged). Its saved state is kept untouched, so saving the song on that computer loses nothing.
   A warning lists missing effects when the song opens. **Reload** tries again (also after a scan).
 - **Latency and delay compensation:** a plugin device works on 64-sample blocks, so it adds
-  64 samples plus the latency the plugin reports (CLAP `latency` extension). ChipWave delays the
+  64 samples plus the latency the plugin reports (CLAP `latency` extension, VST3 `getLatencySamples`). ChipWave delays the
   other channels by the difference, so every channel reaches the mixer in time (live, in WAV/MP3
   export and `--render`). Bypass keeps the same delay, so toggling it doesn't shift the timing.
 - **One instance per channel:** like plugin instruments, a device has an instance for each channel

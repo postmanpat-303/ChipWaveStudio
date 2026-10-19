@@ -1,6 +1,6 @@
-# Plugin instruments (0.2.3.16)
+# Plugin instruments (0.2.3.16) and VST3 (Unreleased)
 
-ChipWave 0.2.3.16 can play **CLAP** instrument plugins (Surge XT and so on) as ordinary instruments. They take notes from the pattern, velocity, glide and slides, run through the instrument's FX chain and the mixer, and are saved inside the song. This page covers what works today. The longer-term design (VST3, MIDI output, LV2) is in [MIDI_VST.md](MIDI_VST.md) and [PLUGIN_MANAGER.md](PLUGIN_MANAGER.md).
+ChipWave 0.2.3.16 can play **CLAP** instrument plugins (Surge XT and so on) as ordinary instruments. **VST3** instruments and effects work the same way since the Unreleased build (see [VST3](#vst3-unreleased)). They take notes from the pattern, velocity, glide and slides, run through the instrument's FX chain and the mixer, and are saved inside the song. This page covers what works today. The longer-term design (MIDI output, LV2) is in [MIDI_VST.md](MIDI_VST.md) and [PLUGIN_MANAGER.md](PLUGIN_MANAGER.md).
 
 ![Surge XT as an instrument: the plugin card and its eight macro knobs in the lower-panel editor (0.2.3.19)](screenshots/plugin-clap.png)
 
@@ -8,14 +8,14 @@ ChipWave 0.2.3.16 can play **CLAP** instrument plugins (Surge XT and so on) as o
 
 ## Formats
 
-| Format | 0.2.3.16 | Notes |
+| Format | Status | Notes |
 |---|---|---|
 | **CLAP** | **Hosted**: scan, play, parameters, macros, automation, state, native editor (embedded on Windows, floating where the plugin offers one), offline render | Open standard by the free-audio project (MIT). On macOS a `.clap` is a bundle folder; ChipWave loads `Contents/MacOS/<binary>` |
-| VST3 | **Listed, not hosted yet** | The scanner shows `.vst3` files as "VST3 hosting is not available yet (CLAP only in 0.2.3.16)". Still to do: VST3 COM hosting (IComponent / IAudioProcessor / IEditController), its parameter panel and IPlugView editor embedding |
+| **VST3** | **Hosted (Unreleased)**: instruments and effects, the same scan, menus, parameters, macros, automation, modulation, state, missing-plugin handling and offline render as CLAP; embedded editor on Windows | VST 3 SDK by Steinberg, MIT since 3.8.0. A `.vst3` is a bundle folder (`Contents/x86_64-win/<name>.vst3`, `Contents/x86_64-linux/<name>.so`, `Contents/MacOS/<name>`) or, for old Windows plugins, a single file. See [VST3](#vst3-unreleased) |
 | VST2 | Not supported | The SDK is discontinued and not covered by the VST3 MIT licence |
 | LV2 | Not planned yet | |
 
-Many plugins (Surge XT, Vital, Odin 2, …) ship a CLAP alongside their VST3, so install the CLAP too. **Dexed** (0.9.x) is VST3/AU/LV2 only and doesn't load until VST3 hosting lands.
+Many plugins (Surge XT, Vital, Odin 2, …) ship a CLAP alongside their VST3; either works, and the browser shows both, marked CLAP or VST3. VST3-only plugins such as **Dexed** (0.9.x) now load through VST3 (Dexed itself not tested yet).
 
 ## Finding plugins
 
@@ -26,11 +26,40 @@ ChipWave scans these folders recursively, plus any folders you add in **Settings
 | Windows | `%COMMONPROGRAMFILES%\CLAP`, `%LOCALAPPDATA%\Programs\Common\CLAP` (and the matching `VST3` folders) |
 | macOS | `/Library/Audio/Plug-Ins/CLAP`, `~/Library/Audio/Plug-Ins/CLAP` (and `…/VST3`) |
 | Linux | `~/.clap`, `/usr/lib/clap`, `/usr/local/lib/clap` (and `~/.vst3`, `/usr/lib/vst3`, `/usr/local/lib/vst3`) |
-| all | every folder in `CLAP_PATH` |
+| all | every folder in `CLAP_PATH` and `VST3_PATH` |
 
-**Crash guard.** Each plugin is checked in a separate ChipWave process (`chipwave --scan-plugin <file>`), so a plugin that crashes, throws or hangs can't take ChipWave down. The checker loads the plugin, reads its name, vendor, id and features, creates an instance at 48 kHz, activates it and renders a test note. After 20 seconds it is killed and the plugin is marked "timed out". On Windows the checker suppresses crash dialogs. Results are cached in `plugin-cache.json` next to the settings file, keyed by file size and date, so later scans only re-check files that changed. **Rescan** checks new and changed files; **Full rescan** checks everything again.
+**Crash guard.** Each plugin is checked in a separate ChipWave process (`chipwave --scan-plugin <file>`), so a plugin that crashes, throws or hangs can't take ChipWave down. The checker loads the plugin, reads its name, vendor, id and features, creates an instance at 48 kHz, activates it and renders a test note. After 20 seconds it is killed and the plugin is marked "timed out". On Windows the checker suppresses crash dialogs. Results are cached in `plugin-cache.json` next to the settings file, keyed by file size and date, so later scans only re-check files that changed. **Rescan** checks new and changed files; **Full rescan** checks everything again. (The VST3 build bumped the cache version, so the first scan after updating checks every file once.)
 
 The browser shows crashed, timed-out and unsupported files under "skipped" with the reason.
+
+## VST3 (Unreleased)
+
+VST3 plugins go through the same code paths as CLAP ones: one `Hosted` interface in `src/plugin/`, implemented by `clap.rs` and `vst3.rs`. Everything above it (instrument slots, FX chains, 43xy macros, automation lanes, drag-to-modulate, state in the song, missing-plugin placeholders, offline render, the self-test) doesn't care which format a plugin is.
+
+- **Scan:** the scanner child loads the module (`ModuleEntry` on Linux, `InitDll` on Windows, `BundleEntry` on macOS), reads the factory's "Audio Module Class" entries (name, vendor, version, sub-categories: `Instrument…` = instrument, `Fx…` = effect), and for instruments creates an instance and renders a test note, as for CLAP.
+- **Ids:** a VST3 plugin is saved as its class id in the SDK's text form, 32 hex digits (`ABCDEF019182FAEB566D624153675854` is Surge XT). The text is the same on every OS (Windows stores the bytes in GUID order; ChipWave converts), so a song made on Linux finds the plugin on Windows.
+- **Instances:** component + edit controller (separate or combined), connected both ways through `IConnectionPoint`, with a host context (`IHostApplication`, which also creates `IMessage` / `IAttributeList` for plugins that talk between their halves). Main stereo buses, 32-bit float, the device's sample rate and block size, realtime mode.
+- **Notes:** note-on / note-off events with note ids; glide and slides as the tuning note expression (`kTuningTypeID`), so they bend without retriggering.
+- **Parameters** are VST3's normalised 0–1 values, shown with the plugin's own value text and units, grouped by the plugin's units ("Scene A/Filter 1"). Hidden parameters and the "MIDI CC" stand-ins a plugin lists for `IMidiMapping` (JUCE plugins add 2,080 of them) are left out, so Surge XT shows the same 775 parameters as its CLAP. Automation, 43xy, modulation and UI edits reach the processor as `IParameterChanges` at the start of each block; the processor's values are mirrored back into the controller on the UI thread.
+- **Editor edits** arrive through `IComponentHandler` (`performEdit`, `restartComponent`, `setDirty`) and are queued for the audio thread without blocking it. A latency or bus change restarts the plugin; a parameter-list change re-reads it.
+- **State:** the component's and the controller's streams, packed together (`CWV3` + two length-prefixed blobs) and stored base64 in the song like a CLAP state.
+- **Latency** comes from `getLatencySamples` and feeds the same plugin delay compensation as CLAP effects.
+- **Allocation-free audio thread:** the event list, parameter queues and the mirror are preallocated; tested with the allocation counter, for instruments and effects.
+- **Editor:** on Windows the plugin's `IPlugView` is embedded in a ChipWave window (`HWND`), and resizes both ways (`IPlugFrame::resizeView`, `checkSizeConstraint`). On Linux and macOS the editor isn't offered yet, so use the parameter list.
+
+Text songs take `patch = "vst3:<class id>"`:
+
+```toml
+[[instrument]]
+slot = 2
+name = "Surge XT (VST3)"
+patch = "vst3:ABCDEF019182FAEB566D624153675854"
+plugin_path = '/usr/lib/vst3/Surge XT.vst3'   # optional; found by id otherwise
+```
+
+
+
+
 
 ## Adding one
 
@@ -52,7 +81,7 @@ From the command line: `chipwave --scan-plugins [folders…]` prints the scan re
 Select a plugin instrument to see, under the instrument list:
 
 - **Status:** the plugin's name, vendor and format, plus how many instances are loaded. A missing plugin shows a warning instead.
-- **Configure… / Close editor** opens the plugin's own editor window. On Windows it's embedded in a ChipWave window (or floating if the plugin only offers that). On macOS and Linux only floating editors are offered so far. Surge XT has only embedded editors there, so on those systems you use the parameter list.
+- **Configure… / Close editor** opens the plugin's own editor window. On Windows it's embedded in a ChipWave window (or floating if the plugin only offers that). On macOS and Linux only floating CLAP editors are offered so far, and no VST3 editors. Surge XT has only embedded editors there, so on those systems you use the parameter list.
 - **Reload** tries again after a plugin failed to load (for example after you installed it).
 - **Macros 1–8:** pick any plugin parameter for each of eight macros. By default these are the first eight automatable parameters. You can also right-click a parameter slider and choose **Put on macro K**.
 - **Parameters:** every parameter the plugin shows, as "name · group" (for example "Cutoff · Scene A/Filter 1"), with a slider, the plugin's own value text and a search box. Moving a slider changes the plugin straight away.
@@ -96,12 +125,16 @@ WAV/MP3 export and `--render` create their own plugin instances at the export sa
 | **cw-test-synth** (ChipWave's own tiny CLAP fixture, `plugins/cw-test-synth`) | Linux, Windows (Wine) | All tests: scan, play, state, macros, render, crash / hang guard copies |
 | **Surge XT 1.3.4** CLAP | Linux | 775 parameters, 50 KB state round-trip, renders, no allocation on the audio thread |
 | **Surge XT 1.3.4** CLAP (portable, with `SurgeXTData`) | Windows 11 build under Wine | Scans, plays, self-test PASS. Without its data folder Surge throws during the scan and is shown as crashed, which is the crash guard working |
-| Dexed | n/a | No CLAP build; needs VST3 hosting |
+| **cw-test-vst3** (ChipWave's VST3 fixture, `plugins/cw-test-vst3`: a synth and an effect, the same sound as the CLAP fixture, separate controller classes, a processor → controller message) | Linux, Windows (Wine) | All VST3 tests: scan, ids, notes, tuning, parameters, handler edits, state, macros, automation, modulation, latency / PDC, allocation, missing plugins, text songs; renders the same song as the CLAP fixture. Wine self-test PASS with it as instrument and effect |
+| **Surge XT 1.3.4** VST3 (instrument + Effects) | Linux | 775 parameters (CC stand-ins hidden), state round-trip, renders as instrument and effect |
+| **Surge XT 1.3.4** VST3 (portable) | Windows build under Wine | Scans (same class ids as on Linux), plays, editor embedded |
+| **VST 3 SDK 3.8 samples**, built from source: mda-vst3 (JX10, DX10, Piano, EPiano + 30 effects), ADelay, AGain Sample Accurate | Linux | All scan, render and round-trip state. AGain Sample Accurate's processor starts at gain 0 until its gain is moved (the sample's own default), and its "Advanced Tutorial" class rejects its own saved state (a bug in that sample) |
+| Dexed | not tested | VST3-only; should load now |
 | Vital | not tested | |
 
 ## Limitations in 0.2.3.16
 
-- CLAP only: VST3 files are listed but not hosted (see Formats).
+- VST3 (Unreleased): no editor on Linux or macOS yet; no VST3 program lists / preset browser, note expressions other than tuning, MIDI CC through `IMidiMapping`, sidechain or extra buses; the macOS module entry is written but untested (no Mac to try it on).
 - Plugin *effects* in the FX chain came later (Unreleased): see [FX.md › Plugin effects](FX.md#plugin-effects-clap-unreleased).
 - No embedded editors on macOS or Linux yet (floating ones work).
 - Plugin state changes made in the plugin's editor are not undo steps.
@@ -112,9 +145,11 @@ WAV/MP3 export and `--render` create their own plugin instances at the export sa
 
 - **CLAP** by the free-audio project (Alexandre Bique and contributors), MIT: <https://github.com/free-audio/clap>
 - **clap-sys** Rust bindings (MIT/Apache-2.0): <https://github.com/micahrj/clap-sys>
+- **VST 3 SDK** by Steinberg Media Technologies GmbH, MIT since 3.8.0: <https://github.com/steinbergmedia/vst3sdk> (licence text in `LICENSES/VST3_SDK_LICENSE.txt` and `THIRD_PARTY_LICENSES.txt`). VST is a registered trademark of Steinberg Media Technologies GmbH.
+- **vst3** and **com-scrape-types** Rust bindings by Micah Johnston (coupler-rs, MIT/Apache-2.0): <https://github.com/coupler-rs/vst3-rs>
 - **clack** (prokopyl, MIT/Apache-2.0), studied for host design: <https://github.com/prokopyl/clack>
 - **Carla** (Filipe Coelho / falkTX) and **Ardour** (GPL-2.0+): ideas for out-of-process scanning, no code copied: <https://github.com/falkTX/Carla>, <https://github.com/Ardour/ardour>
 - **libloading** (Simonas Kazlauskas, ISC) and **windows-sys** (Microsoft, MIT/Apache-2.0)
-- **Surge XT** (Surge Synth Team, GPL-3.0) used for testing: <https://surge-synthesizer.github.io/>
+- **Surge XT** (Surge Synth Team, GPL-3.0) and the VST 3 SDK samples (mda, ADelay, AGain) used for testing: <https://surge-synthesizer.github.io/>
 
 Full licence texts: `THIRD_PARTY_LICENSES.txt`.

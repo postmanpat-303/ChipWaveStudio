@@ -18,7 +18,13 @@
 //! bindings of the VST 3 API by Micah Johnston, MIT OR Apache-2.0,
 //! https://github.com/coupler-rs/vst3-rs); the VST 3 API is by Steinberg Media
 //! Technologies GmbH (MIT since SDK 3.8.0).
-#![allow(non_upper_case_globals, non_snake_case, clippy::missing_safety_doc)]
+// binding enum types differ per OS: the casts are needed on one of them
+#![allow(
+    non_upper_case_globals,
+    non_snake_case,
+    clippy::missing_safety_doc,
+    clippy::unnecessary_cast
+)]
 
 use std::cell::UnsafeCell;
 use std::ffi::{c_char, c_void, CStr};

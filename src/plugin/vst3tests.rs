@@ -220,7 +220,7 @@ fn per_note_tuning_moves_the_pitch() {
         v.windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count()
     }
     let mut i = synth();
-    let mut take = |i: &mut vst3::Vst3Inst| {
+    let take = |i: &mut vst3::Vst3Inst| {
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
         let mut all = vec![];
         for _ in 0..8 {
@@ -554,6 +554,9 @@ fn real_vst3_from_env() {
             ps.len(),
             a.latency()
         );
+        let ro = ps.iter().filter(|x| x.readonly).count();
+        let tail: Vec<&str> = ps.iter().rev().take(3).map(|x| x.name.as_str()).collect();
+        eprintln!("  {ro} read-only; last: {tail:?}");
         if let Some(k) = ps.iter().find(|x| !x.readonly && !x.stepped) {
             a.set_param_main(k.id, 0.37);
             let st = a.save_state().expect("state");

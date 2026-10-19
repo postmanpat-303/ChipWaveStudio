@@ -24,7 +24,10 @@
 //! into one instance at the same time; edits made in the plugin's own editor
 //! arrive through `IComponentHandler` on the UI thread and are handed to the
 //! audio thread through a small preallocated queue (`try_lock`, no waiting).
-#![allow(non_upper_case_globals, non_snake_case)]
+// The binding enums are i32 on Windows and u32 elsewhere (and the other way
+// round for some), so the casts are needed on one OS and "unnecessary" on
+// the other.
+#![allow(non_upper_case_globals, non_snake_case, clippy::unnecessary_cast)]
 
 use super::clap::{binary_path, Desc, HostFlags, AUDIO_THREAD};
 use super::{Hosted, ParamInfo, MAX_BLOCK};
@@ -223,6 +226,11 @@ impl Vst3Lib {
             return Ok(l);
         }
         let bin = binary_path(path);
+        if bin.is_dir() {
+            return Err(
+                "load: the bundle has no binary for this system (Contents/<arch>/<name>)".into(),
+            );
+        }
         #[cfg(all(unix, not(target_os = "macos")))]
         let (lib, handle) = {
             use libloading::os::unix::{Library, RTLD_LAZY, RTLD_LOCAL};
@@ -1294,6 +1302,19 @@ impl Vst3Inst {
             parts.reverse();
             parts.join("/")
         };
+        // parameters that only stand in for MIDI controllers (IMidiMapping;
+        // JUCE plugins add 16 x 130 "MIDI CC" ones) are left out of the list
+        let mut midi_proxies = std::collections::HashSet::new();
+        if let Some(m) = c.cast::<IMidiMapping>() {
+            for ch in 0..16i16 {
+                for cc in 0..ControllerNumbers_::kCountCtrlNumber as i16 {
+                    let mut id: ParamID = 0;
+                    if unsafe { m.getMidiControllerAssignment(0, ch, cc, &mut id) } == kResultTrue {
+                        midi_proxies.insert(id);
+                    }
+                }
+            }
+        }
         let n = unsafe { c.getParameterCount() }.clamp(0, 1 << 16);
         for i in 0..n {
             let mut pi: ParameterInfo = unsafe { std::mem::zeroed() };
@@ -1301,7 +1322,7 @@ impl Vst3Inst {
                 continue;
             }
             use ParameterInfo_::ParameterFlags_::*;
-            if pi.flags & kIsHidden as i32 != 0 {
+            if pi.flags & kIsHidden as i32 != 0 || midi_proxies.contains(&pi.id) {
                 continue;
             }
             let title = wbuf(&pi.title);
