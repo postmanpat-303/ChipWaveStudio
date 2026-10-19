@@ -10,13 +10,15 @@
 //! own lane. Positions: track lanes in rows from the song start, clip lanes
 //! in rows of the clip's source (so they move, trim and loop with it).
 use super::*;
-use crate::automation::{value_at, Lane, Point, Shape, Target, Units};
+use crate::automation::{
+    value_at, Lane, Point, Shape, Target, Units, POINT_R, POINT_R_HOT, SCALE_W,
+};
 
 /// height of one lane row and of the "+ lane" strip under the lanes
-pub(crate) const AUTO_H: f32 = 44.0;
+pub(crate) const AUTO_H: f32 = 56.0;
 pub(crate) const ADD_H: f32 = 20.0;
-/// point grab radius in pixels
-const HIT: f32 = 6.0;
+/// point grab radius in pixels (design A)
+const HIT: f32 = crate::automation::POINT_HIT;
 
 /// the lane a gesture edits
 #[derive(Clone, Debug, PartialEq)]
@@ -279,21 +281,30 @@ pub(crate) struct Geo<'a> {
     pub(crate) mode: bool,
 }
 
-/// lane label: the stored one, else the parameter's name
-fn label_of(c: &Cache, tr: usize, tgt: &str) -> String {
-    let own = track_lane(&c.tl, tr, tgt)
-        .map(|l| l.label.clone())
-        .or_else(|| {
-            c.tl.clips
-                .iter()
-                .filter(|x| x.track as usize == tr)
-                .find_map(|x| clip_lane(x, tgt).map(|l| l.label.clone()))
-        })
-        .unwrap_or_default();
-    if !own.is_empty() {
-        return own;
+/// lane label: Device > Parameter from the target (design A); stored label
+/// is kept in the file but not shown unless the target can't be parsed.
+fn label_of(song: &crate::model::Song, c: &Cache, tr: usize, tgt: &str) -> String {
+    if let Some(t) = Target::parse(tgt).or_else(|| Target::parse_in(tgt, song)) {
+        return t.header_label(song);
     }
-    Target::parse(tgt).map_or_else(|| tgt.to_string(), |t| t.param_name().to_string())
+    track_lane(&c.tl, tr, tgt)
+        .map(|l| l.label.clone())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| tgt.to_string())
+}
+
+fn lane_colour(song: &crate::model::Song, tgt: &str, fallback: Color32) -> Color32 {
+    Target::parse(tgt)
+        .or_else(|| Target::parse_in(tgt, song))
+        .map(|t| {
+            let rgb = t.family_in(song).colour();
+            Color32::from_rgb(
+                ((rgb >> 16) & 0xff) as u8,
+                ((rgb >> 8) & 0xff) as u8,
+                (rgb & 0xff) as u8,
+            )
+        })
+        .unwrap_or(fallback)
 }
 
 /// Paint and handle the lane rows and the "+ lane" strips of the visible
@@ -301,6 +312,7 @@ fn label_of(c: &Cache, tr: usize, tgt: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lanes_ui(
     ui: &mut egui::Ui,
+    song: &crate::model::Song,
     c: &Cache,
     lay: &Layout,
     g: &Geo,
@@ -332,7 +344,7 @@ pub(crate) fn lanes_ui(
         if !lay.open.get(tr).copied().unwrap_or(false) {
             continue;
         }
-        let col = track_colour(tr);
+        let _col = track_colour(tr);
         let n = lay.lanes[tr].len();
         // the whole folded-out block: absorbs clicks meant for the clip rows
         let y_block = g.lanes.top() + lay.lane_top(tr, 0) - g.sy;
@@ -399,7 +411,36 @@ pub(crate) fn lanes_ui(
             if row.bottom() < g.lanes.top() || row.top() > g.lanes.bottom() {
                 continue;
             }
-            let inner = row.shrink2(egui::vec2(0.0, 2.0));
+            let col = lane_colour(song, tgt, track_colour(tr));
+            let inner = Rect::from_min_max(
+                Pos2::new(row.left() + SCALE_W, row.top() + 2.0),
+                Pos2::new(row.right(), row.bottom() - 2.0),
+            );
+            // value scale on the left (design A)
+            {
+                let sr = Rect::from_min_max(
+                    Pos2::new(row.left(), row.top()),
+                    Pos2::new(row.left() + SCALE_W, row.bottom()),
+                );
+                lp.rect_filled(sr, 0, Color32::from_black_alpha(90));
+                if let Some(tg) = Target::parse(tgt).or_else(|| Target::parse_in(tgt, song)) {
+                    for &(nv, lab) in tg.scale_ticks() {
+                        let yy = y_of(inner, nv);
+                        lp.hline(
+                            egui::Rangef::new(sr.right() - 6.0, row.right()),
+                            yy,
+                            Stroke::new(1.0, t.crt_grid.gamma_multiply(0.7)),
+                        );
+                        lp.text(
+                            Pos2::new(sr.right() - 4.0, yy),
+                            egui::Align2::RIGHT_CENTER,
+                            lab,
+                            FontId::monospace(9.0),
+                            t.ink2,
+                        );
+                    }
+                }
+            }
             lp.hline(
                 row.x_range(),
                 row.bottom() - 0.5,
@@ -479,7 +520,7 @@ pub(crate) fn lanes_ui(
                 lp.add(egui::Shape::line(pts, Stroke::new(1.5, cc)));
                 for (_, px, pt) in point_xs(l, Some(cl), x_of, g.v0, g.v1) {
                     let v = value_at(&l.points, clip_pos(cl, pt as f64)).unwrap_or(0.0);
-                    lp.circle_filled(Pos2::new(px, y_of(inner, v)), 3.0, cc);
+                    lp.circle_filled(Pos2::new(px, y_of(inner, v)), POINT_R, cc);
                 }
             }
             // which lane and point the mouse is on
@@ -528,9 +569,10 @@ pub(crate) fn lanes_ui(
                             && d.kind == AutoDragKind::Point(i)
                     });
                     if hot == Some(i) || dragging {
-                        lp.circle_filled(pp, 4.5, t.selection_outline);
+                        lp.circle_filled(pp, POINT_R_HOT, t.selection_outline);
+                        lp.circle_filled(pp, POINT_R, lc);
                     } else {
-                        lp.circle_filled(pp, 3.0, lc);
+                        lp.circle_filled(pp, POINT_R, lc);
                     }
                 }
             }
@@ -550,7 +592,7 @@ pub(crate) fn lanes_ui(
                 np.text(
                     Pos2::new(hr.left() + 8.0, hr.top() + 11.0),
                     egui::Align2::LEFT_CENTER,
-                    label_of(c, tr, tgt),
+                    label_of(song, c, tr, tgt),
                     FontId::proportional(11.5),
                     if enabled { t.ink } else { t.ink2 },
                 );
@@ -651,7 +693,7 @@ pub(crate) fn lanes_ui(
                     )
                     .on_hover_text(format!(
                         "{} · {}\nright-click: unpin to the song lanes, clear, remove",
-                        label_of(c, tr, tgt),
+                        label_of(song, c, tr, tgt),
                         tgt
                     ));
                 let has = tlane.is_some();
@@ -768,17 +810,14 @@ pub(crate) fn lanes_ui(
             if resp.drag_stopped() {
                 ops.push(AutoOp::EndDrag);
             }
+            // design A: double-click empty = add; double-click a point = delete;
+            // a plain click on empty space does nothing (drag-from-empty still adds)
             if resp.double_clicked() {
                 if let Some(p) = resp.interact_pointer_pos() {
                     let (r, _) = lane_at(p.x);
                     if let Some(i) = point_at(p, &r) {
                         ops.push(AutoOp::Delete(r, i));
-                    }
-                }
-            } else if resp.clicked() {
-                if let Some(p) = resp.interact_pointer_pos() {
-                    let (r, _) = lane_at(p.x);
-                    if point_at(p, &r).is_none() {
+                    } else {
                         let pos = pos_in(&r, snap_pos(p.x));
                         ops.push(AutoOp::Add(r, pos, v_of(inner, p.y), None));
                     }
@@ -835,7 +874,7 @@ pub(crate) fn lanes_ui(
                     }
                 } else if drag.is_none() {
                     resp.clone().on_hover_text(
-                        "click: add a point · drag a point: move (Shift: off the grid) · Ctrl-drag: draw · Alt-drag a segment: bend · double-click: delete · right-click: more",
+                        "double-click: add a point · drag a point: move (Shift: off the grid) · Ctrl-drag: draw · Alt-drag a segment: bend · double-click a point: delete · right-click: more",
                     );
                 }
             }
@@ -1075,7 +1114,8 @@ impl App {
                                 curve: 0.0,
                             });
                             x.auto.push(l);
-                            status = format!("Added track lane '{label}' (click to add points)");
+                            status =
+                                format!("Added track lane '{label}' (double-click to add points)");
                         }
                         if *tr < 32 {
                             t.view.auto_open |= 1 << tr;

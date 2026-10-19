@@ -100,6 +100,9 @@ Audio files play on the timeline as **audio clips (M4)**, on any track, mixed in
 
 ## Automation lanes
 
+**Stage 1 (Unreleased, design A):** lane headers show Device > Parameter; colour by parameter family; value scale on the left; double-click to add points; searchable "+ lane" menu. See [AUTOMATION.md](AUTOMATION.md) and [research/automation-ux.md](research/automation-ux.md).
+
+
 In timeline mode every track can show **automation lanes (M5)** under its header.
 
 - **Open and close:** click the **A** button on a track header (sage when open). The lanes fold away with it; which tracks are open is saved with the song but isn't part of undo. In tracker mode the button offers to switch to timeline mode.

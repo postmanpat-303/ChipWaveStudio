@@ -1,5 +1,9 @@
 //! Automation lanes: breakpoints over song position (lines), evaluated by the
 //! engine while playing (and in WAV export). See docs/AUTOMATION.md.
+
+mod ux;
+pub use ux::{POINT_HIT, POINT_R, POINT_R_HOT, SCALE_W};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

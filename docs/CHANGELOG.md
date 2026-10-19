@@ -4,6 +4,16 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Automation UX stage 1 (design A)
+- Timeline lane headers show **Device > Parameter** (generated from the target).
+- Lane colour follows the **parameter family** (cutoff cyan, resonance magenta, volume green, pan amber, FX mix violet, plugins teal).
+- A **value scale** with units sits on the left of each timeline lane (log Hz for cutoff).
+- Bigger points; **double-click** adds a point (plain click no longer drops one); hit radius 10 px.
+- "+ Lane" menu has a **search** box.
+- **Add automation lane** from a knob in timeline mode creates a **track** lane, keeps the Instrument editor open, and does not duplicate an existing lane.
+- Research: [research/automation-ux.md](research/automation-ux.md).
+
+
 - **The Browser:** a long panel on the right (**Ctrl+B** or the toolbar's **Browser** button; resizable, remembered) that lists everything ChipWave can load and is now the main way to load things. Guide: [BROWSER.md](BROWSER.md).
   - **8 category tabs:** Instruments (blank synths, every generator preset, your `.cwi` library, this song's instruments), Plugins (CLAP and VST3 instruments and effects from the scan), Samples (WAV / FLAC / MP3 / Ogg), Songs (demos, `.cwt` / `.cwt.toml`; MOD/MED listed, import planned), Presets, Grid (starter patches and Grid FX), Wavetables (built-in and imported WAV tables) and MIDI (listed, import planned).
   - **Search, tag chips** (Bass, Lead, Pad, Drums, Chip, FM…), **Category / Creator / Location columns** with counts, sort by name, type or rating, **colour-coded format badges** with a legend, **favourites** (heart) and **1–5 star ratings**, saved in the settings.

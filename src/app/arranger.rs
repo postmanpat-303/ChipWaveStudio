@@ -837,6 +837,7 @@ impl App {
                 let clip_x = ui.clip_rect().x_range();
                 let to_x = |pos: f32| rect.left() + pad + pos * zoom;
                 let to_pos = |x: f32| ((x - rect.left() - pad) / zoom).max(0.0);
+                let song_snap = self.with(|s| s.song.clone());
                 for (k, lane) in lanes.iter().enumerate() {
                     let lr = Rect::from_min_size(
                         Pos2::new(lrect.left(), lrect.top() + 4.0 + k as f32 * (LANE_H + 4.0)),
@@ -859,8 +860,11 @@ impl App {
                         );
                         r += 16;
                     }
-                    let target = crate::automation::Target::parse(&lane.target);
-                    let col = hex(LANE_COLOURS[k % LANE_COLOURS.len()]);
+                    let target = crate::automation::Target::parse(&lane.target)
+                        .or_else(|| crate::automation::Target::parse_in(&lane.target, &song_snap));
+                    let col = target
+                        .map(|tg| hex(tg.family_in(&song_snap).colour()))
+                        .unwrap_or_else(|| hex(LANE_COLOURS[k % LANE_COLOURS.len()]));
                     // curve, sampled every 2 px across the visible range
                     let (x0, x1) = (clip_x.min.max(lr.left()), clip_x.max.min(lr.right()));
                     let mut pts = vec![];
@@ -887,9 +891,18 @@ impl App {
                     for (i, pt) in lane.points.iter().enumerate() {
                         let c = Pos2::new(to_x(pt.pos), to_y(pt.value));
                         let sel = self.auto_sel == Some((k, i));
-                        p.circle_filled(c, if sel { 5.0 } else { 3.5 }, col);
+                        let r = if sel {
+                            crate::automation::POINT_R_HOT
+                        } else {
+                            crate::automation::POINT_R
+                        };
+                        p.circle_filled(c, r, col);
                         if sel {
-                            p.circle_stroke(c, 7.0, Stroke::new(1.5, th().selection_outline));
+                            p.circle_stroke(
+                                c,
+                                r + 2.0,
+                                Stroke::new(1.5, th().selection_outline),
+                            );
                         }
                     }
                     // playhead (stopped: the play marker)
@@ -903,7 +916,8 @@ impl App {
                         ui.interact(lr, ui.scope_id().with(("lane", k)), Sense::click_and_drag());
                     let hit = |pp: Pos2| {
                         lane.points.iter().position(|pt| {
-                            Pos2::new(to_x(pt.pos), to_y(pt.value)).distance(pp) < 8.0
+                            Pos2::new(to_x(pt.pos), to_y(pt.value)).distance(pp)
+                                < crate::automation::POINT_HIT
                         })
                     };
                     // label: name and value (at the playhead, or under the mouse)
@@ -929,7 +943,9 @@ impl App {
                         format!(
                             "{}{}   {}",
                             if self.auto_lane == k { "> " } else { "" },
-                            lane.label,
+                            target
+                                .map(|tg| tg.header_label(&song_snap))
+                                .unwrap_or_else(|| lane.label.clone()),
                             readout
                         ),
                         FontId::proportional(11.5),
@@ -940,12 +956,18 @@ impl App {
                         self.arr_focus = true;
                     }
                     let snap = |pos: f32| if shift { pos } else { pos.round() };
-                    if resp.clicked() {
+                    if resp.double_clicked() {
+                        if let Some(pp) = resp.interact_pointer_pos() {
+                            if let Some(i) = hit(pp) {
+                                lane_ops.push(LaneOp::Delete(k, i));
+                            } else {
+                                lane_ops.push(LaneOp::Add(k, snap(to_pos(pp.x)), to_n(pp.y)));
+                            }
+                        }
+                    } else if resp.clicked() {
                         if let Some(pp) = resp.interact_pointer_pos() {
                             if let Some(i) = hit(pp) {
                                 self.auto_sel = Some((k, i));
-                            } else {
-                                lane_ops.push(LaneOp::Add(k, snap(to_pos(pp.x)), to_n(pp.y)));
                             }
                         }
                     }

@@ -1,5 +1,5 @@
 //! Automation lanes in the Timeline view (M5): unfolding a track, adding a
-//! lane, clicking / dragging / drawing / bending points, clip lanes winning
+//! lane, double-clicking / dragging / drawing / bending points, clip lanes winning
 //! inside their clip, undo, and tracker mode asking first.
 use super::timeline::autolanes::{AutoOp, LaneRef, AUTO_H};
 use super::timeline_m2_tests::{click_at, drag_m};
@@ -88,7 +88,7 @@ fn clicking_adds_a_point_dragging_moves_it_and_clips_stay_put() {
     with_lane(&mut h);
     let clips = timeline(&h).clips.clone();
     let p = lane_pt(&h, 1, 0, 8 * tl::PPQ, 0.9);
-    click_at(&mut h, p);
+    double_click(&mut h, p);
     let l = timeline(&h).tracks[1].auto[0].clone();
     assert_eq!(l.points.len(), 2, "{}", h.state().status);
     let q = l.points.iter().find(|p| p.pos > 0.0).unwrap();
@@ -142,7 +142,9 @@ fn ctrl_drag_draws_and_alt_drag_bends_a_segment() {
     let mid_t = ((p0.pos + p1.pos) / 2.0 * tl::ROW as f32) as tl::Tick;
     let mid = lane_pt(&h, 1, 0, mid_t, (p0.value + p1.value) / 2.0);
     // the segment must be wide enough to grab between its points
-    if (p1.pos - p0.pos) * tl::ROW as f32 * 40.0 / tl::PPQ as f32 > 2.0 * 6.0 + 4.0 {
+    if (p1.pos - p0.pos) * tl::ROW as f32 * 40.0 / tl::PPQ as f32
+        > 2.0 * crate::automation::POINT_HIT + 4.0
+    {
         drag_m(
             &mut h,
             mid,
@@ -199,11 +201,11 @@ fn a_clip_lane_wins_inside_its_clip_and_edits_go_there() {
         .unwrap()
         .clone();
     assert_eq!(c2.auto.len(), 1, "{}", h.state().status);
-    // a click inside the clip edits the clip's lane, not the track's
+    // a double-click inside the clip edits the clip's lane, not the track's
     // (half way through its first pass: a looped clip wraps at loop_len)
     let at = (cl.start + cl.loop_len.unwrap_or(cl.len).min(cl.len) / 2) / tl::ROW * tl::ROW;
     let p = lane_pt(&h, 1, 0, at, 0.75);
-    click_at(&mut h, p);
+    double_click(&mut h, p);
     let t = timeline(&h);
     let c3 = t.clips.iter().find(|c| c.id == cl.id).unwrap();
     assert_eq!(
@@ -251,4 +253,47 @@ fn in_tracker_mode_the_a_button_asks_to_switch() {
     click_at(&mut h, p);
     assert!(h.state().tlv.ask_switch.is_some());
     assert!(h.state().with(|s| s.song.timeline.is_none()));
+}
+
+#[test]
+fn add_lane_from_a_knob_goes_on_the_track_and_keeps_the_instrument_panel() {
+    let mut h = setup(true);
+    h.state_mut().extra.lower_inst = true;
+    // mixer volume for channel 1 (= track 1)
+    h.state_mut().add_lane(Target::ChanVolume(1));
+    frame(&mut h);
+    let t = timeline(&h);
+    assert_eq!(t.tracks[1].auto.len(), 1, "{}", h.state().status);
+    assert_eq!(t.tracks[1].auto[0].target, "mixer.ch.2.volume");
+    assert!(t.view.auto_open & 0b10 != 0, "track unfolds");
+    assert!(h.state().extra.lower_inst, "instrument editor stays open");
+    assert!(
+        h.state().with(|s| {
+            !s.song
+                .automation
+                .iter()
+                .any(|l| l.target == "mixer.ch.2.volume")
+        }),
+        "volume went on the track, not a song lane"
+    );
+    // second call focuses, does not duplicate
+    h.state_mut().add_lane(Target::ChanVolume(1));
+    assert_eq!(timeline(&h).tracks[1].auto.len(), 1);
+}
+
+#[test]
+fn lane_colour_follows_the_parameter_not_the_index() {
+    let mut h = setup(true);
+    h.state_mut()
+        .auto_op(AutoOp::AddLane(1, Target::ChanVolume(1)));
+    h.state_mut()
+        .auto_op(AutoOp::AddLane(1, Target::ChanPan(1)));
+    frame(&mut h);
+    let t = timeline(&h);
+    assert_eq!(t.tracks[1].auto.len(), 2);
+    let v = crate::automation::Target::ChanVolume(1).family().colour();
+    let p = crate::automation::Target::ChanPan(1).family().colour();
+    assert_ne!(v, p, "volume and pan have different colours");
+    assert_eq!(v, 0x6FD07A);
+    assert_eq!(p, 0xE0A060);
 }

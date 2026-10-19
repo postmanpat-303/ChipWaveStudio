@@ -870,10 +870,12 @@ impl App {
                 Pos2::new(lanes.right(), y + lane_h),
             )
         };
-        let (song_lanes, units) = if lay.open.iter().any(|o| *o) {
-            self.lanes_view_data()
+        let (song_lanes, units, song_for_lanes) = if lay.open.iter().any(|o| *o) {
+            let (sl, u) = self.lanes_view_data();
+            let song = self.with(|s| s.song.clone());
+            (sl, u, Some(song))
         } else {
-            (vec![], vec![])
+            (vec![], vec![], None)
         };
         let mut auto_ops: Vec<autolanes::AutoOp> = vec![];
         let painter = ui.painter_at(full);
@@ -2054,19 +2056,22 @@ impl App {
                 at: live.head.unwrap_or(cue_tick as f64),
                 mode,
             };
-            autolanes::lanes_ui(
-                ui,
-                c,
-                &lay,
-                &geo,
-                first_tr..last_tr,
-                self.tlv.auto_drag.as_ref(),
-                self.tlv.auto_menu.as_ref(),
-                self.tlv.lane_menu.as_ref().map(|m| &m.1),
-                &song_lanes,
-                &units,
-                &mut auto_ops,
-            );
+            if let Some(ref song) = song_for_lanes {
+                autolanes::lanes_ui(
+                    ui,
+                    song,
+                    c,
+                    &lay,
+                    &geo,
+                    first_tr..last_tr,
+                    self.tlv.auto_drag.as_ref(),
+                    self.tlv.auto_menu.as_ref(),
+                    self.tlv.lane_menu.as_ref().map(|m| &m.1),
+                    &song_lanes,
+                    &units,
+                    &mut auto_ops,
+                );
+            }
         }
         // which part of a clip is under p: 0 body, 1 left edge, 2 right
         // edge, 3 fade-in handle, 4 fade-out handle (audio clips)

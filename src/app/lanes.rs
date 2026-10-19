@@ -116,12 +116,48 @@ impl App {
         }
     }
 
+    /// Prefer a timeline track lane when in timeline mode (design A §3.4).
+    /// Does not switch the lower panel away from the instrument editor, and
+    /// does not create a second lane for a target that already has one.
     pub(super) fn add_lane(&mut self, t: crate::automation::Target) {
         use crate::automation::Lane;
         let label = self.lane_label(t);
+        let id = t.id();
+        // timeline mode: attach to the track that owns this parameter
+        if self.with(|s| s.song.timeline.is_some()) {
+            if let Some(tr) = self.track_for_target(t) {
+                // focus / create via the same path as "+ lane"
+                use super::timeline::autolanes::AutoOp;
+                self.auto_op(AutoOp::AddLane(tr, t));
+                // already had one: still open the fold and point at it
+                self.with(|s| {
+                    if let Some(tl) = s.song.timeline.as_deref_mut() {
+                        if tr < 32 {
+                            tl.view.auto_open |= 1 << tr;
+                        }
+                    }
+                });
+                self.status = format!(
+                    "Automation '{label}' on track {:02} (double-click the lane to add points)",
+                    tr + 1
+                );
+                return;
+            }
+        }
+        // song lane: skip if this target already has one
+        let existing = self.with(|s| {
+            s.song.automation.iter().position(|l| {
+                l.target == id || crate::automation::Target::parse(&l.target) == Some(t)
+            })
+        });
+        if let Some(k) = existing {
+            self.auto_lane = k;
+            self.show_auto = true;
+            self.status = format!("Showing existing lane '{label}'");
+            return;
+        }
         self.snapshot();
         let n = self.with(|s| {
-            // start flat at the current value
             let cur = lane_start_value(s, t);
             let mut lane = Lane::new(t, label.clone());
             lane.points.push(crate::automation::Point {
@@ -135,19 +171,72 @@ impl App {
         });
         self.auto_lane = n;
         self.show_auto = true;
-        self.pr.open = false;
-        // the lower panel shows the new lane (it opens on the instrument
-        // editor by default, where lanes aren't drawn)
-        if self.extra.lower_inst {
-            self.extra.lower_inst = false;
-            self.save_settings();
-        }
-        self.status = format!("Added lane '{label}' (click to add points, Pencil to draw)");
+        // keep the instrument editor open (design A: don't yank the lower panel)
+        self.status = format!("Added lane '{label}' (double-click to add points, Pencil to draw)");
     }
 
-    /// "02 Lead - Filter cutoff": a lane's label for target `t`
+    /// track that should own automation for `t` (timeline mode). Mixer
+    /// channel targets map 1:1; instrument targets go to the track that
+    /// plays that instrument most, else the one with `track.instr` set.
+    pub(super) fn track_for_target(&self, t: crate::automation::Target) -> Option<usize> {
+        use crate::automation::Target;
+        let ntr = self.with(|s| s.song.timeline.as_deref().map(|t| t.tracks.len()))?;
+        let tr = match t {
+            Target::ChanVolume(c) | Target::ChanPan(c) | Target::Send(c, _) => c,
+            Target::Cutoff(i)
+            | Target::Resonance(i)
+            | Target::Drive(i)
+            | Target::Level(i)
+            | Target::Fx(i, ..)
+            | Target::Macro(i, _)
+            | Target::Gen(i, _)
+            | Target::Patch(i, _) => {
+                let slot = (i + 1) as u8;
+                let by_flag = self.with(|s| {
+                    s.song
+                        .timeline
+                        .as_deref()
+                        .and_then(|tl| tl.tracks.iter().position(|x| x.instr == slot))
+                });
+                if let Some(tr) = by_flag {
+                    tr
+                } else {
+                    let mut counts = vec![0usize; ntr];
+                    self.with(|s| {
+                        for p in &s.song.patterns {
+                            for row in &p.cells {
+                                for (tr, c) in row.iter().enumerate() {
+                                    if tr < ntr && c.instr == slot {
+                                        counts[tr] += 1;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    counts
+                        .iter()
+                        .enumerate()
+                        .max_by_key(|(_, n)| *n)
+                        .filter(|(_, n)| **n > 0)
+                        .map(|(tr, _)| tr)
+                        .unwrap_or(self.ch.min(ntr.saturating_sub(1)))
+                }
+            }
+            // Master / Tempo / Returns / ModAmount stay song-level until stage 3
+            Target::Master | Target::Tempo | Target::Ret(..) | Target::ModAmount(_) => {
+                return None;
+            }
+        };
+        (tr < ntr).then_some(tr)
+    }
+
+    /// "Bass · Analog > Filter cutoff": a lane's label for target `t`
     pub(super) fn lane_label(&self, t: crate::automation::Target) -> String {
         use crate::automation::Target;
+        // generated Device > Parameter (design A); plugins still need live names
+        if !matches!(t, Target::Fx(_, _, _) | Target::Macro(_, _)) {
+            return self.with(|s| t.header_label(&s.song));
+        }
         // plugin effect parameter: its name from the running instance
         let plug_name = match t {
             Target::Fx(i, d, p) => self
@@ -480,7 +569,25 @@ pub(super) fn lane_menu_ui(
         ..
     } = m;
     let nch = *nch;
-    ui.set_max_height(320.0);
+    ui.set_max_height(360.0);
+    // search box (design A Device > Parameter picker)
+    let filter = {
+        let id = ui.make_persistent_id("lane_menu_filter");
+        let mut q = ui
+            .ctx()
+            .data_mut(|d| d.get_temp::<String>(id).unwrap_or_default());
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut q)
+                .hint_text("search…")
+                .desired_width(220.0),
+        );
+        if r.changed() || r.lost_focus() || r.has_focus() {
+            ui.ctx().data_mut(|d| d.insert_temp(id, q.clone()));
+        }
+        q
+    };
+    let q = filter.trim().to_ascii_lowercase();
+    let hit = |s: &str| q.is_empty() || s.to_ascii_lowercase().contains(&q);
     egui::ScrollArea::vertical().show(ui, |ui| {
         for (i, (n, synth)) in synths.iter().enumerate() {
             let mut ts = vec![Target::Level(i)];
@@ -502,7 +609,7 @@ pub(super) fn lane_menu_ui(
                     }
                     _ => format!("{:02X} {n} - {}", i + 1, t.param_name()),
                 };
-                if ui.button(txt).clicked() {
+                if hit(&txt) && ui.button(txt).clicked() {
                     *add = Some(t);
                     ui.close();
                 }
@@ -617,7 +724,7 @@ pub(super) fn lane_menu_ui(
             if track && t == Target::Tempo {
                 continue;
             }
-            if ui.button(t.param_name()).clicked() {
+            if hit(t.param_name()) && ui.button(t.param_name()).clicked() {
                 *add = Some(t);
                 ui.close();
             }
