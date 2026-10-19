@@ -1,6 +1,6 @@
 # ChipWave Studio: DAW Timeline Plan (plus the other big roadmap items)
 
-**Status:** plan only, nothing built yet (written 19 Oct 2026, after 0.2.4.0). This page covers the Bitwig-style sideways-scrolling **Timeline** that Del asked for. It also has short roadmaps for the other approved big items: VST3 hosting, plugin effects, a wavetable synth, drag-to-modulate and a modular Grid. The last section suggests an order for all of them.
+**Status:** **M0 and M1 are built** (19 Oct 2026, unreleased): the timeline model and converters, the reader-version check, and a read-only **Timeline view** (Ctrl+T). See [TIMELINE.md](TIMELINE.md) for how it works and what is still missing. M2 (editing and timeline mode) is next. The plan was written 19 Oct 2026, after 0.2.4.0. This page covers the Bitwig-style sideways-scrolling **Timeline** that Del asked for. It also has short roadmaps for the other approved big items: VST3 hosting, plugin effects, a wavetable synth, drag-to-modulate and a modular Grid. The last section suggests an order for all of them.
 
 ![Timeline mockup: track headers with M/S/arm and volume on the left, per-track clips on a bar ruler with markers and a loop region, a track automation lane under Bass, an audio track with waveforms and fades, the browser on the right and the device chain plus the lower-panel instrument editor at the bottom](mockups/daw_timeline.png)
 
@@ -41,9 +41,23 @@ The timeline is **another view of the same song**. **Tracks are channels.** Trac
 | **Tracker mode** (every song today) | `order` + blocks. The Timeline view shows a *derived*, read-only layout of it (M1) | Default. Old songs open here |
 | **Timeline mode** | `song.timeline` (tracks, clips, tempo map, markers, loop). Blocks are still the content of tracker clips. The order list is hidden (it no longer describes the song) | The first timeline edit (moving, resizing or splitting a clip, adding an audio or note clip) asks once: "Switch this song to timeline mode? (Undo puts it back)". Conversion is lossless (§1.6) |
 
+**Decisions (Del, 19 Oct 2026):**
+- **Tracks are mixer channels** (§7 question 1).
+- **New songs start on the timeline** (§7 question 2). In M1 this means File › New opens on the Timeline view with 8 tracks and 16 bars in view; the song is still in tracker mode. From M2 a new song starts in **timeline mode**. A setting (**Settings › New songs › Open on the Timeline view**) turns it off.
+- **Old songs open as they are**, in tracker mode, and keep playing bit-exactly. They switch only when you make a timeline edit and confirm.
+
 The pattern editor works in both modes. In timeline mode its block selector lists blocks as before, and a "used by 3 clips" hint shows where each block is placed. **Play block** loops the block in isolation (as now). **Play song** plays the timeline.
 
 ### 1.3 Data model (new, all `serde(default)`, saved as `timeline.toml` in the `.cwt`)
+> **As built in M0** (`src/timeline.rs`, described in [TIMELINE.md](TIMELINE.md#the-model-srctimeliners)). It follows the sketch below, with these additions from §8:
+> - `Note.vel` and `rel_vel` are 16-bit (MIDI 2.0 M2-115 scaling to and from 7 bits). Notes also have `tune` (semitones), `chance` (%) and `expr`, per-note expression lanes numbered like CLAP note expressions.
+> - `Clip.seed` with `ClipRng::new(seed, pass)`, under the rule that a random result depends only on the seed and the loop pass.
+> - `TempoPoint.ramp` (exact seconds through ramps), a `SigPoint` time-signature map, and `Marker.track` for per-track markers.
+> - Automation values are stored as 0–1 floats and converted at the output. The **innermost lane wins** (clip, then track, then song).
+> - `notes` are `Shared<NoteClipData>` (an `Arc`), so linked clips and undo snapshots are cheap.
+> - `Track.auto` and `Clip.auto` lanes.
+>
+> Not yet included: `audio`/`AudioAsset`/`Warp` (M4) and `Track.fx` (M4). Fields still at their default aren't written.
 ```rust
 /// 960 ticks per quarter note: a row (16th) = 240 ticks; triplets and 1/64 swing are exact.
 pub type Tick = i64;
@@ -219,7 +233,7 @@ Today a channel is one voice. Note clips need chords. Plan: split `Chan` into **
 └──────────────────────────┴───────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **View:** a new top-level **Timeline** view (Ctrl+3). The existing single-lane **Arranger** remains as the tracker-mode song overview and becomes the timeline's "Blocks" summary lane in tracker mode, so nothing familiar disappears.
+- **View:** a new top-level **Timeline** view (**Ctrl+T** as built; Ctrl+3 is the Mixer). The existing single-lane **Arranger** remains as the tracker-mode song overview and becomes the timeline's "Blocks" summary lane in tracker mode, so nothing familiar disappears.
 - **Left column:** track headers in the top area. In the bottom area the instrument list becomes a compact **device chain** for the selected track (instrument → insert FX → track FX → fader/sends). Each card opens in the lower panel. The classic instrument list stays one click away (a toggle at the top, and in the Pattern view as now).
 - **Lower panel:** the existing knob-card editor, plus two new tabs: **Piano roll** and **Pattern** (an embedded pattern editor for the selected block clip). Selecting a clip selects its track's instrument, so the panel always shows "what this clip plays".
 - **Right browser** (collapsible, Ctrl+B): tabs for *Sounds* (factory sounds, the user library and song instruments, from the Instrument Library), *Samples* (folders, with preview), *Plugins* (CLAP now, VST3 later) and *Files* (songs, MIDI, audio). Drag onto a track header to set its instrument, onto empty space to create a track, onto the timeline to create an audio clip, or onto the lower panel to load a preset. The preview plays through the cursor track's channel, using the same path as live MIDI.
@@ -252,8 +266,8 @@ Estimates are focused build days for one developer at the pace of recent ChipWav
 
 | # | Milestone | What ships | Tests / done when | Size |
 |---|---|---|---|---|
-| **M0** | Groundwork | `Tick`/`PPQ`, the `Timeline` model and serde, the order→timeline converter and consolidator (not yet in the UI), the **`min_reader_version` check**, and a fix for the `lines_per_beat` vs 4-rows-per-beat mismatch in `arrange.rs` | Unit tests: convert → consolidate → **bit-exact render** for the three demos and the test songs. Old songs load unchanged | 2–3 d, ~1.2k LOC |
-| **M1** | Read-only Timeline view | The Timeline view of the current song: tracks = channels with headers (M/S, volume and meters wired to the mixer), per-track block clips with previews, ruler (bars/time), markers from the arranger, zoom/scroll/follow, mini-map, playhead and ruler seek. Double-click opens the pattern editor at that block and column | Kittest snapshots. The performance benchmark scene. Clicking the ruler seeks exactly as in the arranger | 3–4 d, ~1.8k LOC |
+| **M0** ✅ | Groundwork | `Tick`/`PPQ`, the `Timeline` model and serde, the order→timeline converter and consolidator (not yet in the UI), the **`min_reader_version` check**, and a fix for the `lines_per_beat` vs 4-rows-per-beat mismatch in `arrange.rs` | Unit tests: convert → consolidate → **bit-exact render** for the three demos and the test songs. Old songs load unchanged | 2–3 d, ~1.2k LOC |
+| **M1** ✅ | Read-only Timeline view | The Timeline view of the current song: tracks = channels with headers (M/S, volume and meters wired to the mixer), per-track block clips with previews, ruler (bars/time), markers from the arranger, zoom/scroll/follow, mini-map, playhead and ruler seek. Double-click opens the pattern editor at that block and column | Kittest snapshots. The performance benchmark scene. Clicking the ruler seeks exactly as in the arranger | 3–4 d, ~1.8k LOC |
 | **M2** | Editable timeline and engine scheduler | Timeline mode (switch prompt and undo), the tick transport with per-track cursors and state chase, per-track `09` speed. Move, resize (loop), left-trim, split, duplicate (linked), make unique, glue, delete and mute. Snapping, loop region, markers, range select, insert/delete time. Save/load `timeline.toml`, export of a tracker-compatible copy, MOD/MMD export via consolidate. The browser panel (Sounds tab) | Engine tests: a clip at bar N plays at frame X. Loop wrap is sample-exact. Seek chase gives the same output as playing from the start. Allocation-free render. Round trips | 7–9 d, ~4k LOC |
 | **M3a** | Piano roll (mono, on block columns) | A Piano roll tab that edits a block clip's column as bars on the row grid (draw, move, resize = note-off, velocity → volume column), with effect-command badges | Edits round-trip to identical pattern cells | 3 d, ~1.5k LOC |
 | **M3b** | Note clips (polyphonic) | The `ChanCtl`/`Voice` split with per-track voice pools, `Notes` clips with free timing, the full piano roll (velocity lane, quantise, scale highlight, chord stamp from `chords.rs`), MIDI file import into note clips (`midly`, Unlicense), and live MIDI recording into note clips | Polyphony tests (chords, voice stealing). Tracker songs render bit-exact after the voice split. CLAP gets note ids | 7–9 d, ~3.5k LOC |
@@ -262,6 +276,8 @@ Estimates are focused build days for one developer at the pace of recent ChipWav
 | **M5** | Track and clip automation | Lanes under each track (fold/unfold), pin any lane to a track, clip automation drawn on clips (moves with the clip), pencil/line/curve tools, the tempo map lane, and "record knobs" in timeline mode | Evaluator tests for clip lanes relative to the clip, and for tempo-map seconds ↔ ticks | 4–5 d, ~2k LOC |
 | **M6** | Clip launcher (optional) | Slot grid per track, scenes, launch quantise (bar/beat), "record launcher to timeline" | Launch timing tests | 6–8 d, ~3k LOC |
 | **M7** | DAWproject import/export (optional) | Exchange with Bitwig, Studio One and Cubase: tracks, clips, notes, audio, automation (plugin states where the format allows) | Round trip with the official example files | 4–5 d, ~2k LOC |
+
+**Done (19 Oct 2026):** M0 and M1. Every song renders bit-exactly through order list → timeline → consolidated order list. That covers the three demos, two fixture songs from 0.2.3.5/0.2.3.6, and a synthetic song with breaks, odd lengths and a 300-row block. The Timeline view has kittest UI tests and a frame-time test with more than 9,000 clips. The shortcut is **Ctrl+T** (Ctrl+3 was already Mixer). Limits and what M2 needs: [TIMELINE.md § Limits](TIMELINE.md#limits-in-this-version).
 
 **Core timeline (M0–M5): about 33–43 days.** Del gets something useful after M1 (about a week) and a real DAW workflow after M2 (about 2.5 weeks).
 
@@ -321,10 +337,12 @@ Estimates are focused build days for one developer at the pace of recent ChipWav
 Each step ends in a normal release (installer, notes, screenshots). The timeline steps keep tracker mode bit-exact, which is checked by the demo-render tests on every build.
 
 ## 7. Open questions for Del
+*Answered by Del on 19 Oct 2026: tracks are channels; new songs start on the timeline; old songs open as they are and stay bit-exact (§1.2).*
+
 1. **Track = channel (recommended)**, or tracks per instrument? Channels keep all tracker semantics and the mixer as they are. A per-instrument view could later be a filter on the track list.
 2. Should **timeline mode be the default for new songs** once M2 ships, or stay opt-in? (Recommended: opt-in until M3b.)
 3. Is the audio memory cap OK (a few minutes per clip embedded, streaming in M4b), or should streaming move earlier?
 4. Name for the wavetable instrument ("Wave", "Spectra", or something else; not "Vital").
 
 ## 8. MIDI ideas (from Microsoft's Windows MIDI Services)
-Research on [microsoft/MIDI](https://github.com/microsoft/MIDI), including Microsoft's own MIDI 2.0 timeline app (Windows MIDI Sequencer, 960 PPQ like ours), is in [research/microsoft-midi.md](research/microsoft-midi.md). Proposed for **M0** (cheap now, a format migration later): `Note.vel` as 16-bit plus release velocity, per-note tuning, chance and per-note expression (maps onto CLAP note expressions), tempo ramps, per-track markers, and a `Clip.seed` with the rule "random results depend only on seed + pass" (keeps export bit-exact). It also proposes recording with **Capture** in M3b, and a new "M2.5 MIDI out" step after M2: look-ahead scheduler, per-device offset, MIDI clock/SPP/MTC.
+Research on [microsoft/MIDI](https://github.com/microsoft/MIDI), including Microsoft's own MIDI 2.0 timeline app (Windows MIDI Sequencer, 960 PPQ like ours), is in [research/microsoft-midi.md](research/microsoft-midi.md). Proposed for **M0** (cheap now, a format migration later): `Note.vel` as 16-bit plus release velocity, per-note tuning, chance and per-note expression (maps onto CLAP note expressions), tempo ramps, per-track markers, and a `Clip.seed` with the rule "random results depend only on seed + pass" (keeps export bit-exact). **In M0 (19 Oct 2026):** all of these are in the model and saved with defaults. The engine doesn't use them yet. It also proposes recording with **Capture** in M3b, and a new "M2.5 MIDI out" step after M2: look-ahead scheduler, per-device offset, MIDI clock/SPP/MTC.

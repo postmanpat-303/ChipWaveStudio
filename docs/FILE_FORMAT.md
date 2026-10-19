@@ -80,7 +80,7 @@ size = 812
 crc32 = "8a1f22c0"
 blake3 = "…"
 ```
-- Readers open any file with `min_reader_version <= their version`. Newer optional data goes in new keys or files, which older readers **keep as-is when re-saving** (unknown keys and files are preserved, not dropped).
+- Readers open any file with `min_reader_version <= their version`. **Enforced since the Timeline M0 work (Unreleased):** this version reads version 1. A `.cwt` whose `manifest.toml`, or a `.cwt.toml` whose top level or `[song]` table, asks for more is refused with "made with a newer ChipWave Studio, please update" and a Check for updates button, instead of loading half the song. Timeline-mode songs (M2, `timeline.toml`) will write `min_reader_version = 2` ([TIMELINE.md](TIMELINE.md#file-format-and-older-versions)). Newer optional data goes in new keys or files, which older readers **keep as-is when re-saving** (unknown keys and files are preserved, not dropped).
 - Each loader has migration steps `v1 → v2 → …`, tested with stored example files.
 
 ## 3. Integrity

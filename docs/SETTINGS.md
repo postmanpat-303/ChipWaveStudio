@@ -54,6 +54,7 @@ These are set from the View menu and the lower panel, and saved in `settings.tom
 - Full-height pattern (`full_height`)
 - the classic sidebar instrument editor (`classic_editor`)
 - the collapsed instrument-editor cards (`cards_closed`, as "Type/Card")
+- whether File › New opens on the Timeline view (`new_in_timeline`, default on; **Settings › New songs**, Unreleased). See [TIMELINE.md](TIMELINE.md#new-songs)
 
 Older settings files get the defaults.
 

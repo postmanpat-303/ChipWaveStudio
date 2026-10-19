@@ -232,6 +232,7 @@ On Linux, build it from source (below).
 | `Alt +` / `Alt -` (Shift = octave) | transpose selection or channel (also the Block bar **-12 -1 +1 +12** buttons and **Edit › Transpose**, which has *Transpose by…* for -24…+24) |
 | `F9` / `F10` | mute / solo channel |
 | `Ctrl+1`…`5`, `Ctrl+Tab` | Pattern / Arranger / Mixer / FX / Sample view |
+| `Ctrl+T` | Timeline view (tracks and clips, [TIMELINE.md](docs/TIMELINE.md)) |
 | `Ctrl+Shift+F` | Fill to length |
 | `Ctrl+Shift+PgDn` / `Ctrl+Shift+PgUp` | double / halve the block length (or the Length field in the Block bar) |
 | `Ctrl+N` / `Ctrl+O` / `Ctrl+S` | new / open / save |
@@ -282,7 +283,9 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md) — the full OctaMED feature blueprint
 - [SOUND_DESIGN.md](docs/SOUND_DESIGN.md) — the synth and effects
 - [FX.md](docs/FX.md) — the FX devices (Phaser and the rest)
-- [ARRANGER.md](docs/ARRANGER.md) — the timeline
+- [ARRANGER.md](docs/ARRANGER.md) — the arranger (the order list as a lane of blocks)
+- [TIMELINE.md](docs/TIMELINE.md) — the Timeline view (Ctrl+T): tracks and clips like a DAW
+- [DAW_TIMELINE_PLAN.md](docs/DAW_TIMELINE_PLAN.md) — the DAW timeline plan and milestones
 - [AUTO_ARRANGE.md](docs/AUTO_ARRANGE.md) — fill-to-length auto arrange and quick-start fun features
 - [EXPORT.md](docs/EXPORT.md) — WAV/MP3 export
 - [FILE_FORMAT.md](docs/FILE_FORMAT.md) — the `.cwt` song format
