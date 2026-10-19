@@ -106,6 +106,27 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ));
         d > 1.0
     };
+    // Timeline (M0): order list -> clips -> order list renders bit-exact,
+    // and a song that needs a newer reader is refused
+    let timeline_ok = {
+        let (tl, _) = timeline::from_order(&song);
+        let back = timeline::consolidated_song(&song, &tl);
+        let same = back
+            .as_ref()
+            .is_ok_and(|b| engine::render_song(b, 22050) == engine::render_song(&song, 22050));
+        let refused = fileio::song_from_text("min_reader_version = 999\n")
+            .err()
+            .is_some_and(|e| fileio::is_too_new(&e));
+        report.push_str(&format!(
+            "  timeline: {} tracks, {} clips, bit-exact round trip {}, newer song refused {} ({})\n",
+            tl.tracks.len(),
+            tl.clips.len(),
+            if same { "yes" } else { "NO" },
+            if refused { "yes" } else { "NO" },
+            if same && refused { "ok" } else { "FAILED" }
+        ));
+        same && refused
+    };
     // MP3 export through the statically linked LAME, with ID3 tags
     let mp3_ok = {
         let p = std::env::temp_dir().join("chipwave_selftest.mp3");
@@ -493,6 +514,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         && rt_ok
         && tempo_ok
         && auto_ok
+        && timeline_ok
         && mp3_ok;
     report.push_str(if ok {
         "RESULT: PASS\n"

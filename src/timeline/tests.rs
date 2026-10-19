@@ -339,7 +339,7 @@ fn derived_timeline_merges_runs_skips_empty_columns_and_maps_positions() {
         ]
     );
     // track 2: the two Break entries at the end merge into one looped clip
-    let last = tl.clips.iter().filter(|c| c.track == 2).last().unwrap();
+    let last = tl.clips.iter().rev().find(|c| c.track == 2).unwrap();
     assert_eq!(
         (last.start / ROW, last.len / ROW, last.loop_len),
         (371, 20, Some(10 * ROW))

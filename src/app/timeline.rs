@@ -524,6 +524,22 @@ impl App {
             )
         };
         let painter = ui.painter_at(full);
+        // text on the dark CRT areas (ruler, lanes, overview): the theme inks
+        // are dark in light themes (Amiga), so lift them there
+        let lum = |c: Color32| {
+            (0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32) / 255.0
+        };
+        let crt_dark = lum(t.crt_top) < 0.35;
+        let crt_ink = if crt_dark && lum(t.ink2) < 0.45 {
+            Color32::from_rgb(0xB4, 0xC4, 0xDC)
+        } else {
+            t.ink2
+        };
+        let crt_ink_hi = if crt_dark && lum(t.ink) < 0.45 {
+            Color32::from_rgb(0xEC, 0xF1, 0xF8)
+        } else {
+            t.ink
+        };
         // backgrounds
         painter.rect_filled(lanes, 4, t.crt_bot);
         painter.rect_filled(ruler.union(marks), 3, t.crt_top);
@@ -570,7 +586,7 @@ impl App {
                 rp.vline(
                     x,
                     ruler.top() + if major { 2.0 } else { 12.0 }..=ruler.bottom(),
-                    Stroke::new(1.0, t.ink2.gamma_multiply(if major { 0.8 } else { 0.4 })),
+                    Stroke::new(1.0, crt_ink.gamma_multiply(if major { 0.8 } else { 0.4 })),
                 );
             }
             if major {
@@ -584,7 +600,7 @@ impl App {
                     egui::Align2::LEFT_TOP,
                     label,
                     FontId::monospace(11.0),
-                    t.ink2,
+                    crt_ink,
                 );
             }
         }
@@ -633,20 +649,20 @@ impl App {
                             lr.bottom() - 3.0,
                         ),
                     );
-                    outlines.push((r, Stroke::new(1.0, t.ink2.gamma_multiply(0.18))));
+                    outlines.push((r, Stroke::new(1.0, crt_ink.gamma_multiply(0.18))));
                     if r.width() > 60.0 {
                         texts.push((
                             r,
                             r.left_top() + egui::vec2(6.0, 9.0),
                             c.names[b].clone(),
-                            t.ink2.gamma_multiply(0.8),
+                            crt_ink.gamma_multiply(0.8),
                         ));
                         if r.height() > 30.0 {
                             texts.push((
                                 r,
                                 r.left_bottom() + egui::vec2(6.0, -9.0),
                                 "empty · double-click to write".into(),
-                                t.ink2.gamma_multiply(0.55),
+                                crt_ink.gamma_multiply(0.55),
                             ));
                         }
                     }
@@ -816,7 +832,7 @@ impl App {
                 egui::Align2::LEFT_CENTER,
                 &m.name,
                 FontId::proportional(11.0),
-                t.ink,
+                crt_ink_hi,
             );
             lp.vline(
                 x,
@@ -887,7 +903,7 @@ impl App {
         op.rect_stroke(
             win,
             2,
-            Stroke::new(1.5, t.ink.gamma_multiply(0.8)),
+            Stroke::new(1.5, crt_ink_hi.gamma_multiply(0.8)),
             egui::StrokeKind::Inside,
         );
         if let Some(h) = live.head {

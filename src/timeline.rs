@@ -847,6 +847,9 @@ pub fn from_order(song: &Song) -> (Timeline, OrderMap) {
 /// segment; segments that play the same source rows on every track share
 /// one block. Where clips overlap on a track, the later one plays. Block
 /// clips must sit on the row grid. Returns (blocks, order).
+/// a consolidated segment: rows + per-track (block, col, first row) sources
+type SegKey = (usize, Vec<Option<(usize, usize, usize)>>);
+
 pub fn consolidate(song: &Song, tl: &Timeline) -> Result<(Vec<Pattern>, Vec<usize>), String> {
     let nch = song.channels.clamp(1, MAX_CHANNELS);
     let mut clips: Vec<&Clip> = vec![];
@@ -896,7 +899,7 @@ pub fn consolidate(song: &Song, tl: &Timeline) -> Result<(Vec<Pattern>, Vec<usiz
         .map(|p| effective_rows(p, nch))
         .collect();
     let mut blocks: Vec<Pattern> = vec![];
-    let mut seen: HashMap<(usize, Vec<Option<(usize, usize, usize)>>), usize> = HashMap::new();
+    let mut seen: HashMap<SegKey, usize> = HashMap::new();
     let mut order = vec![];
     for w in cuts.windows(2) {
         let (mut a, b) = (w[0], w[1]);

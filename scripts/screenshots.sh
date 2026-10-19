@@ -28,6 +28,10 @@ CHIPWAVE_SHOT_LOWER=instrument CHIPWAVE_SHOT_TAB=fx CHIPWAVE_SHOT_INSTR=8 CHIPWA
 CHIPWAVE_SHOT_LOWER=full CHIPWAVE_SHOT_BLOCK=6 shot "$OUT/dark-pattern-full.png" pattern dark $DISCO
 CHIPWAVE_SHOT_BLOCK=6 shot "$OUT/dark-mixer-limiter.png" mixer dark $DISCO
 shot "$OUT/dark-arranger-play-marker.png" cue dark $DISCO
+# Timeline view (Ctrl+T): the disco demo playing from entry 8, Amiga from entry 20, and a new song
+CHIPWAVE_SHOT_LOWER=instrument CHIPWAVE_SHOT_INSTR=11 shot "$OUT/dark-timeline.png" timeline dark $DISCO
+CHIPWAVE_SHOT_LOWER=arranger CHIPWAVE_SHOT_POS=20 shot "$OUT/amiga-timeline.png" timeline amiga $DISCO
+CHIPWAVE_SHOT_LOWER=instrument shot "$OUT/dark-timeline-new-song.png" timeline-new dark
 CHIPWAVE_SHOT_BLOCK=6 shot "$OUT/dark-chord-helper.png" chords dark $DISCO
 CHIPWAVE_SHOT_ABOUT_TAB=credits shot "$OUT/dark-about.png" about dark $DISCO
 for v in fill settings library; do
