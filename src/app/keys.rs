@@ -131,6 +131,14 @@ impl App {
             if self.br_active() && self.br_key(key, m, ctx) {
                 continue;
             }
+            // I: the Inspector (no text field has focus here: those keep
+            // their keys). The pattern editor types a note with I, so there
+            // it is Alt+I (which works everywhere).
+            if key == Key::I && !cmd && !m.shift && !repeat && (m.alt || self.view != View::Pattern)
+            {
+                self.toggle_inspector();
+                continue;
+            }
             // Timeline view: its own keys; plain keys never type into the pattern
             if self.view == View::Timeline {
                 if self.timeline_key(key, m) {

@@ -31,6 +31,9 @@ mod fxplugview;
 mod fxview;
 mod genview;
 mod glyphs;
+mod inspector;
+#[cfg(test)]
+mod inspector_tests;
 mod instpanel;
 #[cfg(test)]
 mod instpanel_tests;
@@ -272,6 +275,8 @@ pub struct App {
     pub(crate) noterec: noterec::NoteRec,
     /// "made with a newer ChipWave Studio" message (open refused)
     too_new: Option<String>,
+    /// the left Inspector (I; app/inspector.rs)
+    insp: inspector::InspectorUi,
 }
 
 pub fn run(open: Option<PathBuf>) -> Result<(), String> {
@@ -553,6 +558,7 @@ impl App {
             pr: Default::default(),
             noterec: Default::default(),
             too_new: None,
+            insp: Default::default(),
         };
         let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
         app.midi_apply(connect);
@@ -757,7 +763,7 @@ impl App {
                     ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Ctrl+Shift+F", "fill to length (auto arrange)"), ("1-7 / 0 in arranger", "tag block role / clear"), ("Alt +/- (Shift = octave)", "transpose selection or channel (also the Block bar -12 -1 +1 +12 buttons, Edit > Transpose)"), ("F9 / F10", "mute / solo channel"),
                     ("Numpad - / +", "base octave down / up"), ("Ctrl+Shift+PgDn / PgUp", "double / halve the block length (Length field in the Block bar; Song > Block: set length, stretch, squash)"), ("Row numbers", "decimal 00-63 by default; View > Row numbers or Settings > Look switches to hex 00-3F. Effect values stay hex"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
                     ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Delete (with selection)", "clear selection"),
-                    ("Ctrl+Tab, Ctrl+1..5", "views: pattern / arranger / mixer / FX / sample"), ("F12", "this key list"), ("F11", "full-height pattern (hide / show the lower panel)"), ("Ctrl+I", "instrument editor in the lower panel"), ("Ctrl+F", "search instrument parameters"), ("knob: Ctrl-drag / double-click", "fine adjust / default"), ("Ctrl+Q", "quit"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"),
+                    ("Ctrl+Tab, Ctrl+1..5", "views: pattern / arranger / mixer / FX / sample"), ("I (Alt+I in the pattern editor)", "Inspector: the selected track or clip (View > Inspector)"), ("F12", "this key list"), ("F11", "full-height pattern (hide / show the lower panel)"), ("Ctrl+I", "instrument editor in the lower panel"), ("Ctrl+F", "search instrument parameters"), ("knob: Ctrl-drag / double-click", "fine adjust / default"), ("Ctrl+Q", "quit"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"),
                     ("Arranger (click it to focus)", "click / Shift+click / Ctrl+click select; Ctrl+X/C/V cut/copy/paste after selection; Ctrl+Shift+V paste as new blocks; Del; Ctrl+A; right-click menu"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
                     ("Arranger: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
                     ("Arranger ruler (bar numbers)", "click = move the play marker to that bar (jumps there while playing), drag = scrub, Alt = exact row; Play song starts from the marker"),
@@ -1060,6 +1066,11 @@ impl eframe::App for App {
                 });
             });
         });
+        if self.extra.inspector_open {
+            self.inspector_side(ui);
+        } else {
+            self.insp.rect = None;
+        }
         egui::Panel::left("side")
             .exact_size(330.0)
             .resizable(false)

@@ -111,7 +111,7 @@ impl App {
 
     /// timeline mode: move the play marker to tick `t` (a row); running
     /// playback jumps there with the state chased
-    pub(super) fn timeline_seek(&mut self, t: Tick) {
+    pub(crate) fn timeline_seek(&mut self, t: Tick) {
         let t = t.max(0) / ROW * ROW;
         self.tlv.cue = t;
         let row = (t / ROW) as usize;

@@ -407,6 +407,20 @@ impl App {
                     }
                 }
                 ui.separator();
+                if ui
+                    .add(
+                        egui::Button::selectable(self.extra.inspector_open, "Inspector")
+                            .shortcut_text("I"),
+                    )
+                    .on_hover_text(
+                        "the panel on the left that shows the selected track or clip \
+                         (I; in the pattern editor, where I types a note: Alt+I)",
+                    )
+                    .clicked()
+                {
+                    self.toggle_inspector();
+                    ui.close();
+                }
                 ui.checkbox(&mut self.show_auto, "Automation lanes");
                 ui.checkbox(&mut self.dock_arranger, "Dock lower panel under pattern");
                 let full = !self.lower_visible();

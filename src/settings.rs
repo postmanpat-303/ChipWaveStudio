@@ -131,6 +131,9 @@ pub struct Extra {
     /// the one-time prompt for existing users)
     #[serde(default)]
     pub plugin_setup_done: bool,
+    /// the left Inspector is shown (I; docs/INSPECTOR.md)
+    #[serde(default)]
+    pub inspector_open: bool,
 }
 
 fn browser_w() -> f32 {
@@ -179,6 +182,7 @@ impl Default for Extra {
             browser_ratings: Default::default(),
             browser_autoplay: true,
             plugin_setup_done: false,
+            inspector_open: false,
         }
     }
 }

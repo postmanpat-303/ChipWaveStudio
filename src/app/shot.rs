@@ -532,6 +532,23 @@ impl App {
         {
             self.extra.lower_h = h;
         }
+        // CHIPWAVE_SHOT_FLAT=1: the Flat interface style
+        if std::env::var_os("CHIPWAVE_SHOT_FLAT").is_some() {
+            self.extra.flat_ui = true;
+            self.apply_theme(ctx);
+        }
+        // CHIPWAVE_SHOT_INSPECTOR=track | clip: the left Inspector open on
+        // the cursor track (CHIPWAVE_SHOT_SEL, 1-based) or the selected clip
+        if let Ok(m) = std::env::var("CHIPWAVE_SHOT_INSPECTOR") {
+            self.extra.inspector_open = true;
+            if let Some(c) = std::env::var("CHIPWAVE_SHOT_SEL")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+            {
+                self.ch = c.saturating_sub(1);
+            }
+            self.inspector_shot(m == "clip");
+        }
         if let Ok(tb) = std::env::var("CHIPWAVE_SHOT_TAB") {
             // keep the tab (a Grid would open on its patch)
             self.gen_ui.inst = (self.instr as usize).saturating_sub(1);
