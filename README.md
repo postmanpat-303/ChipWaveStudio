@@ -278,6 +278,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 <a id="documentation"></a>
 ## Documentation
 
+- [ROADMAP.md](docs/ROADMAP.md) — things to add in the future, with good first picks; [CONTRIBUTING.md](CONTRIBUTING.md) — how to build, test and send a pull request
 - [PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md) — the core pattern editor, keymap, 32 channels and all effect commands (00–43)
 - [PACKAGING.md](docs/PACKAGING.md) — Windows/Linux/macOS packages and CI
 - [MACOS.md](docs/MACOS.md): the universal Mac build, installing it, first launch, and building it

@@ -56,6 +56,9 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 - Browser › **Files**: Home / Music / Desktop / Downloads, a **Drives** list (local, USB and mapped network drives with their UNC path; not-connected and not-responding drives marked; read with a timeout), back / forward / up, a breadcrumb you can type a path into (UNC paths work), sort and favourite folders.
 - **Fix: mapped network drives were missing** when ChipWave was started from the setup's finish page. That copy ran as administrator, which can't see your mapped drives. The setup now starts ChipWave unelevated.
 
+### Roadmap and contributing
+- **New [docs/ROADMAP.md](ROADMAP.md):** the things to add in the future, by area, each with a size (easy / medium / big) and a file to start from, plus good first picks; and a new [CONTRIBUTING.md](../CONTRIBUTING.md) with the build steps and the checks to run before a pull request.
+
 ### Fixes
 - **Windows: heavy songs no longer stutter ("331 ms · 1000+ underruns").** The Windows build used the mingw/msvcrt maths functions (`sin`, `exp`, `pow`, `tan`, `floor`…), which are 10–30x slower than on Linux and macOS, so the Chrome Throat demo needed about 130 % of a CPU core to play and the audio engine fell behind for good. Windows now uses fast, accurate maths (Rust's `libm`): Chrome Throat renders about 3x faster (roughly 45 % of real time on the test machine, close to Linux). Sound is unchanged apart from last-bit rounding on Windows; Linux and macOS output is bit-identical.
 - **Faster effects everywhere:** Filter, Compressor, Delay, Drive and Reverb devices no longer recompute their coefficients (`tan`, `exp`, `pow`) every sample while a knob holds still, and a Filter with no LFO sweep skips its sine and power. The output is bit-identical (checked by a test and by rendering the demos before and after).
