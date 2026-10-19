@@ -1061,7 +1061,7 @@ pub fn preview_song(inst: &Instrument, base: &Song, ch: usize) -> Song {
     s
 }
 
-mod catalogue;
+pub(crate) mod catalogue;
 
 #[cfg(test)]
 mod tests;

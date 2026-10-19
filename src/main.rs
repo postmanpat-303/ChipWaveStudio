@@ -37,6 +37,7 @@ mod prompt;
 mod recovery;
 mod sample;
 mod settings;
+mod showcase;
 mod speech;
 mod synth;
 mod theme;
