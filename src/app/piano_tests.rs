@@ -615,10 +615,7 @@ fn right_drag_erases_in_one_undo_step_with_smoke() {
         right_path(&mut h, &pts);
     }
     assert_eq!(lens(&h), vec![(8 * r, 66, r)], "only the far note is left");
-    assert!(
-        !h.state().pr.smoke.is_empty() || !crate::theme::polished(),
-        "notes go up in smoke"
-    );
+    assert!(!h.state().pr.smoke.is_empty(), "notes go up in smoke");
     h.state_mut().do_undo(false);
     frame(&mut h);
     assert_eq!(
@@ -640,14 +637,13 @@ fn right_drag_erases_in_one_undo_step_with_smoke() {
     }
     assert_eq!(note_data(&h).notes.len(), 4);
     // Flat style: no smoke
-    crate::theme::set_polished(false);
+    h.state_mut().extra.flat_ui = true;
     h.state_mut().pr.smoke.clear();
     {
         let p0 = at(&h, 0, 60, 5.0);
         let p1 = at(&h, 0, 60, 5.0);
         right_drag(&mut h, p0, p1);
     }
-    crate::theme::set_polished(true);
     assert!(h.state().pr.smoke.is_empty());
     assert_eq!(note_data(&h).notes.len(), 3);
 }

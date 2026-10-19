@@ -683,7 +683,8 @@ impl App {
         self.pr.sel.clear();
         self.pr_write(t, src);
         self.status = format!("{} note(s) deleted", self.pr.erased);
-        if crate::theme::polished() {
+        // the app's own setting, not the global (parallel tests flip that)
+        if !self.extra.flat_ui {
             let born = Instant::now();
             for n in hit {
                 self.pr.smoke.push(Puff {
