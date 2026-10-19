@@ -1,4 +1,4 @@
-//! Devices (0.2.4, requested by Del (postmanpat) after a MorningDAW reference): a lower-panel
+//! Devices (0.2.4, requested by Del (postmanpat) inspired by other DAWs): a lower-panel
 //! tab next to the piano roll that shows the selected track's sound chain
 //! left to right: its instrument (the lower-panel instrument editor in a
 //! card), then every insert effect as a card with its key controls inline

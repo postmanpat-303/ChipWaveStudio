@@ -1,6 +1,6 @@
 # Advanced Edit (tracker)
 
-A panel of block operations for the tracker (pattern editor), inspired by MorningDAW's **A<>E** panel. Open it with **Ctrl+Shift+A** (Cmd+Shift+A on a Mac), the **A<>E** toggle at the right of the Block bar, or **View › Advanced Edit**. It docks on the right of the pattern. **Float** turns it into a window you can move, and **Dock** puts it back. Whether it is open, and docked or floating, is saved in the settings.
+A panel of block operations for the tracker (pattern editor), inspired by the advanced edit panels in other DAWs. Open it with **Ctrl+Shift+A** (Cmd+Shift+A on a Mac), the **A<>E** toggle at the right of the Block bar, or **View › Advanced Edit**. It docks on the right of the pattern. **Float** turns it into a window you can move, and **Dock** puts it back. Whether it is open, and docked or floating, is saved in the settings.
 
 The line under the title says what the next button will change, for example *block 08 · channels 1–2 · rows 4–19 · Note + Inst + Vol + FX#*, or why it can't (nothing selected, mask empty).
 
