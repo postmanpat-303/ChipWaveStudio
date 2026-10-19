@@ -2,6 +2,8 @@
 
 ![Automation mockup](mockups/automation.png) (SVG: [`mockups/automation.svg`](mockups/automation.svg))
 
+> **Redesign proposal (Oct 2026):** [research/automation-ux.md](research/automation-ux.md): lanes under each track with a Device ▸ Parameter picker, value scale, Read/Touch/Latch, clip envelopes and a unified Filter card.
+
 Automation lanes sit **under the arranger blocks** ([ARRANGER.md](ARRANGER.md)), drawn as glowing curves on dark CRT-style lanes: the "visually cool" part. Curve colours are functional (one saturated colour per lane), while block colours stay muted ([DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md)).
 
 ## 1. Lanes
