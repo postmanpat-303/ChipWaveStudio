@@ -20,6 +20,7 @@ mod fxmod;
 mod gen;
 mod gen2;
 mod gen_wave;
+mod grid;
 mod input;
 mod instfile;
 mod keymap;

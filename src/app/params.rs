@@ -25,12 +25,21 @@ pub(crate) enum Tab {
     Modulation,
     Fx,
     Advanced,
+    /// the Grid generator's patching canvas
+    Grid,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 4] = [Tab::Main, Tab::Modulation, Tab::Fx, Tab::Advanced];
+    pub const ALL: [Tab; 5] = [
+        Tab::Grid,
+        Tab::Main,
+        Tab::Modulation,
+        Tab::Fx,
+        Tab::Advanced,
+    ];
     pub fn name(self) -> &'static str {
         match self {
+            Tab::Grid => "Grid",
             Tab::Main => "Main",
             Tab::Modulation => "Modulation",
             Tab::Fx => "FX",
@@ -66,6 +75,8 @@ pub(crate) enum Custom {
     Modulators,
     /// Wave generator: import / clear a table for oscillator 0 or 1
     WaveTable(u8),
+    /// Grid generator: the patching canvas (drawn over the whole tab)
+    GridCanvas,
     /// drag-to-modulate: every routing with its depth
     Routings,
 }
@@ -231,7 +242,6 @@ impl Layout {
     pub fn tab_has(&self, t: Tab) -> bool {
         self.cards.iter().any(|c| c.tab == t)
     }
-    #[cfg(test)]
     pub fn find(&self, key: &str) -> Option<&Param> {
         self.params.iter().find(|p| p.key == key)
     }
@@ -259,6 +269,7 @@ pub(crate) fn type_tag(k: &InstrumentKind) -> &'static str {
             GenEngine::Fm(_) => "FM-4",
             GenEngine::Noise(_) => "Noise",
             GenEngine::Wave(_) => "Wave",
+            GenEngine::Grid(_) => "Grid",
         },
     }
 }
@@ -280,6 +291,7 @@ fallback!(d_an, crate::gen2::AnalogP, Default::default());
 fallback!(d_fm, crate::gen2::FmP, Default::default());
 fallback!(d_nz, crate::gen2::NoiseP, Default::default());
 fallback!(d_wv, crate::gen_wave::WaveP, Default::default());
+fallback!(d_gd, crate::grid::GridP, crate::grid::GridP::empty());
 fallback!(d_sfx, crate::chipfx::SfxP, Default::default());
 
 fn me(i: &Instrument) -> &Instrument {
@@ -343,6 +355,7 @@ engine_acc!(an, an_mut, Analog, crate::gen2::AnalogP, d_an);
 engine_acc!(fm, fm_mut, Fm, crate::gen2::FmP, d_fm);
 engine_acc!(nz, nz_mut, Noise, crate::gen2::NoiseP, d_nz);
 engine_acc!(wv, wv_mut, Wave, crate::gen_wave::WaveP, d_wv);
+engine_acc!(gd, gd_mut, Grid, crate::grid::GridP, d_gd);
 engine_acc!(sfx, sfx_mut, ChipFx, crate::chipfx::SfxP, d_sfx);
 
 fn drum(i: &Instrument, sel: usize) -> DrumP {
@@ -1622,6 +1635,7 @@ fn generator(b: &mut B, g: &GenPatch, sel: usize) {
         GenEngine::Fm(_) => fm4(b),
         GenEngine::Noise(_) => noise(b),
         GenEngine::Wave(_) => wave(b),
+        GenEngine::Grid(x) => grid(b, x),
     }
     if !g.engine.own_env() {
         // release + optional filter (drums, kit, chip FX)
@@ -2205,6 +2219,79 @@ fn wave(b: &mut B) {
     for k in [17, 18, 19, 20] {
         gen_knob!(b, "wv", wv, wv_mut, WAVE, k);
     }
+}
+
+/// a Grid knob slot `s` (macro or module parameter) with its default
+fn gd_knob(b: &mut B, s: usize, def: &'static crate::gen::MacroDef, dflt: f32) {
+    let bit = 1u64 << s;
+    let gs: (Get, Set) = (
+        Box::new(move |i| gd(i).p.get(s).copied().unwrap_or(0.0)),
+        Box::new(move |i, v| {
+            if let Some(x) = gd_mut(i).and_then(|g| g.p.get_mut(s)) {
+                *x = v.clamp(0.0, 1.0);
+            }
+        }),
+    );
+    let lock: LockFns = (
+        Box::new(move |i| gd(i).locks & bit != 0),
+        Box::new(move |i| {
+            if let Some(x) = gd_mut(i) {
+                x.locks ^= bit;
+            }
+        }),
+    );
+    let p = b.mac(&format!("gd.{s}"), def, gs, lock, (s < 8).then_some(s), s);
+    if let Ctl::Knob { def, .. } = &mut p.ctl {
+        *def = dflt;
+    }
+}
+
+fn grid(b: &mut B, g: &crate::grid::GridP) {
+    use crate::grid::{spec, MACROS, MACRO_DEFS};
+    b.card(Tab::Grid, "Grid");
+    b.custom("gd.canvas", "Grid", Custom::GridCanvas)
+        .tip("the patch: right-click to add modules, drag from an output to an input to cable");
+    b.card(Tab::Main, "Macros");
+    for (k, d) in MACRO_DEFS.iter().enumerate().take(MACROS) {
+        gd_knob(b, k, d, 0.0);
+    }
+    for m in &g.modules {
+        let sp = spec(m.kind);
+        if sp.params.is_empty() {
+            continue;
+        }
+        b.card(Tab::Main, &g.label(m.id));
+        for (j, d) in sp.params.iter().enumerate() {
+            let s = m.slots[j] as usize;
+            if s < crate::gen::GEN_KNOBS {
+                gd_knob(b, s, d, d.unmap(sp.defaults[j]));
+            }
+        }
+    }
+    b.card(Tab::Main, "Voice");
+    b.knob(
+        "gd.level",
+        "Level",
+        0.0,
+        4.0,
+        false,
+        1.0,
+        "",
+        fld!(gd, gd_mut, level),
+    );
+    b.knob(
+        "gen.glide",
+        "Glide",
+        0.0,
+        1000.0,
+        false,
+        60.0,
+        "ms",
+        flds!(1000.0, pa, pa_mut, glide),
+    )
+    .tip("portamento time (with Legato, or 3C in the pattern)");
+    b.toggle("gen.legato", "Legato", fldb!(pa, pa_mut, legato))
+        .tip("overlapping notes glide instead of retriggering (mono)");
 }
 
 /// the instrument's FX chain: one card per device on the FX tab

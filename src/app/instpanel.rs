@@ -6,6 +6,8 @@ use super::knob::{self, KnobArgs, CELL};
 use super::params::{self, Ctl, Custom, Layout, Param, Tab};
 use super::*;
 
+mod gridcanvas;
+
 /// lower-panel switch bar height
 const BAR_H: f32 = 26.0;
 /// card header height
@@ -34,6 +36,8 @@ pub(super) struct InstUi {
     pub collapse_pending: bool,
     /// the selected modulator (its depth is what Alt-drag edits)
     pub mod_sel: Option<u32>,
+    /// the Grid canvas (cable being dragged, add position)
+    grid: gridcanvas::GridUi,
 }
 
 pub(super) struct Ab {
@@ -103,6 +107,7 @@ pub(super) fn tag_colour(tag: &str) -> Color32 {
         "FM-4" => hex(0x7FCFC0),
         "Noise" => hex(0xB4BCC8),
         "Wave" => hex(0xC79AF0),
+        "Grid" => hex(0xF0A86A),
         "Moog" => hex(0x6FB0E8),
         _ => hex(0x4FC3D9),
     }
@@ -420,6 +425,12 @@ impl App {
                 inst: idx,
                 ..Default::default()
             };
+            // a Grid opens on its patch
+            if let InstrumentKind::Gen(g) = &inst.kind {
+                if matches!(g.engine, crate::gen::GenEngine::Grid(_)) {
+                    self.ip.tab = Tab::Grid;
+                }
+            }
         }
         if self.ip.ab.as_ref().is_some_and(|a| a.inst != idx) {
             self.ip.ab = None;
@@ -591,18 +602,22 @@ impl App {
         let avail = ui.available_height();
         cx.card_h = (avail - 14.0).max(90.0);
         let cards: Vec<&params::Card> = layout.cards.iter().filter(|c| c.tab == tab).collect();
-        egui::ScrollArea::horizontal()
-            .id_salt(("inst_cards", idx, tab))
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
-                    ui.add_space(2.0);
-                    for c in cards {
-                        self.card_ui(ui, &layout, c, &mut inst, &mut cx);
-                    }
+        if tab == Tab::Grid {
+            self.grid_canvas(ui, &layout, &mut inst, &mut cx);
+        } else {
+            egui::ScrollArea::horizontal()
+                .id_salt(("inst_cards", idx, tab))
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        ui.add_space(2.0);
+                        for c in cards {
+                            self.card_ui(ui, &layout, c, &mut inst, &mut cx);
+                        }
+                    });
                 });
-            });
+        }
         if let Some(k) = cx.toggle_card.take() {
             if let Some(p) = self.extra.cards_closed.iter().position(|x| *x == k) {
                 self.extra.cards_closed.remove(p);
@@ -860,6 +875,7 @@ fn custom_size(c: Custom, card_h: f32) -> (f32, f32) {
         Custom::SampleInfo => (270.0, 84.0),
         Custom::FxChain => (210.0, 64.0),
         Custom::WaveTable(_) => (210.0, 64.0),
+        Custom::GridCanvas => (210.0, 40.0),
         Custom::Modulators => (300.0, card_h - HEAD_H - 10.0),
         Custom::Routings => (330.0, card_h - HEAD_H - 10.0),
     }

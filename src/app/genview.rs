@@ -179,6 +179,8 @@ pub(super) fn gen_panel(
                 "GENERATOR · NOISE"
             } else if matches!(g.engine, GenEngine::Wave(_)) {
                 "GENERATOR · WAVETABLE"
+            } else if matches!(g.engine, GenEngine::Grid(_)) {
+                "GENERATOR · GRID"
             } else {
                 "GENERATOR · DRUM SYNTH"
             })
@@ -827,6 +829,11 @@ impl App {
                 "2 wavetable oscillators, unison, sub + noise, ladder; import WAV tables",
                 3,
             ),
+            (
+                "Generator (grid)",
+                "modular: patch oscillators, filters, envelopes, LFOs, math and delays with cables",
+                4,
+            ),
         ] {
             ui.menu_button(menu, |ui| {
                 ui.label(egui::RichText::new(tip).small().color(th().ink2));
@@ -835,7 +842,8 @@ impl App {
                         0 => matches!(p.engine, GenEngine::Analog(_)),
                         1 => matches!(p.engine, GenEngine::Fm(_)),
                         2 => matches!(p.engine, GenEngine::Noise(_)),
-                        _ => matches!(p.engine, GenEngine::Wave(_)),
+                        3 => matches!(p.engine, GenEngine::Wave(_)),
+                        _ => matches!(p.engine, GenEngine::Grid(_)),
                     };
                     if !ok {
                         continue;

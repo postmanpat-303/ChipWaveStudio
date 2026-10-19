@@ -543,6 +543,7 @@ impl SynthVoice {
         let mut gmo = self.gmo;
         let own = gp.engine.own_env();
         self.gen.gate = self.amp.gate();
+        self.gen.vel = self.vel;
         // 38xx etc. on the engine's own ladder (Analog: Cutoff = knob 0,
         // Res = knob 1; Wave: knobs 2 and 3, when its filter is on)
         let own_lad: Option<(&[f32], &[crate::gen::MacroDef], usize)> = match &gp.engine {
