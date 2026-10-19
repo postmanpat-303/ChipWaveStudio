@@ -18,6 +18,55 @@ the DSP never allocates in the audio thread: buffers are built once when a chain
 | Metal resonator, Digital distortion, Sub bass | 0.2.3.11 | the Voice Transform stages as devices ([VOICE.md](VOICE.md)) |
 | **Phaser** | Unreleased | 4–12 all-pass stages swept by an LFO |
 | **Frequency shifter** | Unreleased | Bode-style single-sideband shift, ±2000 Hz |
+| **Plugin effect** | Unreleased | any installed CLAP effect, see [Plugin effects](#plugin-effects-clap-unreleased) |
+
+## Plugin effects (CLAP, Unreleased)
+
+Any CLAP **audio effect** installed on the computer can sit in an instrument's FX chain, next to
+the built-in devices.
+
+- **Adding one:** every add-effect menu has a **Plugin effect ›** submenu: **+ Device** in the FX
+  view, **+ Add effect** on the instrument editor's FX tab, and right-click an instrument ›
+  **Add effect**. It lists the effects the plugin scan found (Settings › Plugins; the folders are
+  the same as for plugin instruments, see [PLUGINS.md](PLUGINS.md#finding-plugins)). **Scan for
+  plugins** at the bottom looks again.
+- **The device** shows the plugin's name in the strip. Its panel has the vendor and format, the
+  load status with the latency, **Editor…** (the plugin's own window), **Reload**, and every
+  parameter as a slider (double-click = default). Power (bypass), reorder, collapse, duplicate and
+  remove work as for built-in devices; presets live in the plugin's own editor.
+- **Automation:** right-click a parameter slider › **Add automation lane**, or **+ Lane** ›
+  *instrument* › **FX n *plugin*** › parameter. Lanes run 0–100 % over the parameter's range and are
+  saved as `instrument.N.fx.D.p<CLAP param id>`. Lanes play in exports too.
+- **Saving:** the plugin's state is stored base64-encoded in the song (`.cwt`), in `.cwi`
+  instrument files and in the library, with the plugin id, name, vendor, format and path.
+  ChipWave asks the plugin for its state before save, autosave, export and copy. Duplicated or
+  pasted devices start from the same state as their own instance.
+- **Missing plugins:** when an effect isn't installed (or fails to load), the device stays in the
+  chain, shows a red notice and is **bypassed** (the dry signal passes unchanged). Its saved state is kept untouched, so saving the song on that computer loses nothing.
+  A warning lists missing effects when the song opens. **Reload** tries again (also after a scan).
+- **Latency and delay compensation:** a plugin device works on 64-sample blocks, so it adds
+  64 samples plus the latency the plugin reports (CLAP `latency` extension). ChipWave delays the
+  other channels by the difference, so every channel reaches the mixer in time (live, in WAV/MP3
+  export and `--render`). Bypass keeps the same delay, so toggling it doesn't shift the timing.
+- **One instance per channel:** like plugin instruments, a device has an instance for each channel
+  its instrument plays on (all channels in timeline mode) plus one for live playing; parameter
+  edits go to all of them.
+- The audio thread never allocates: instances are created and dropped on the UI thread, and the
+  plugin's parameter events use pre-allocated queues (tested).
+
+**Limits (Unreleased):** only instrument chains have devices; the return buses (fixed Delay /
+Reverb) and the master (limiter) don't have FX chains yet, so plugins can't go there. Plugin
+*instruments* aren't latency-compensated. Live playing (the jam chain) isn't compensated either.
+Plugin effect parameters can't be MIDI-learned yet, and `.cwt.toml` text songs can't describe plugin
+devices. A song with a plugin device saves `min_reader_version = 2`: builds with the reader check
+refuse it with "please update", and 0.2.4.0 and older report a load error (the same goes for `.cwi`
+files with plugin devices, which have no version check). Mono-only or
+sidechain ports: only the first (main) stereo input and output are used.
+
+**Tested with:** ChipWave's own fixture effect (`ChipWave Test FX` in `plugins/cw-test-synth`:
+gain, polarity flip and a 32-sample reported latency) in the automatic tests, and **Surge XT
+Effects 1.3.4** (GPL-3, built from source, not bundled) on Linux (self-test with
+`CHIPWAVE_SELFTEST_PLUGIN_FX=<file.clap>`, screenshot). Nothing is bundled with ChipWave.
 
 ## Phaser (Unreleased)
 

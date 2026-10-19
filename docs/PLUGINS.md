@@ -102,7 +102,7 @@ WAV/MP3 export and `--render` create their own plugin instances at the export sa
 ## Limitations in 0.2.3.16
 
 - CLAP only: VST3 files are listed but not hosted (see Formats).
-- Instrument plugins only; plugin *effects* in the FX chain are not hosted yet.
+- Plugin *effects* in the FX chain came later (Unreleased): see [FX.md › Plugin effects](FX.md#plugin-effects-clap-unreleased).
 - No embedded editors on macOS or Linux yet (floating ones work).
 - Plugin state changes made in the plugin's editor are not undo steps.
 - Note expressions other than tuning (pressure, brightness …) and polyphonic modulation aren't sent yet.

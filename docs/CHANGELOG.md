@@ -4,6 +4,15 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+- **Plugin effects (CLAP FX):** any installed CLAP audio effect can go into an instrument's FX chain. Guide: [FX.md › Plugin effects](FX.md#plugin-effects-clap-unreleased).
+  - Every add-effect menu (FX view **+ Device**, the FX tab's **+ Add effect**, right-click an instrument › **Add effect**) has a **Plugin effect ›** list from the plugin scan, with **Scan for plugins**.
+  - The device panel shows the plugin's status and latency, **Editor…** (its own window), **Reload** and every parameter as a slider. Bypass, reorder, duplicate and remove work like built-in devices.
+  - **Automation:** right-click a parameter › **Add automation lane**, or **+ Lane** › *instrument* › FX › parameter. Lanes also play in exports.
+  - The plugin's state is saved with the song (and in `.cwi` / the library). A missing plugin is **bypassed with a notice**, keeps its saved state, and is listed when the song opens; **Reload** retries.
+  - **Plugin delay compensation:** a plugin device adds 64 samples plus the latency it reports, and the other channels are delayed to match, live and in export. Bypass keeps the timing.
+  - The audio thread stays allocation-free (tested). Songs without plugin effects play exactly as before; songs with them save `min_reader_version = 2`.
+  - Limits: no plugin effects on the return buses or the master yet (they have no device chains), plugin instruments and live playing aren't compensated, no MIDI learn on plugin effect parameters, `.cwt.toml` can't describe plugin devices.
+  - Tests: a fixture CLAP effect (`ChipWave Test FX`: gain, polarity flip, 32-sample latency) checks processing, automation, bypass timing, delay compensation, allocation-free rendering, missing plugins, state round trips and file compatibility, plus a UI test. `--self-test` checks a missing effect; `CHIPWAVE_SELFTEST_PLUGIN_FX=<file.clap>` runs a real one (checked with Surge XT Effects, not bundled).
 - **Timeline mode (Timeline M2):** songs can now be arranged with clips. A song is in **tracker mode** (the order list plays, as before) or **timeline mode** (the clips are the song). Full guide in [TIMELINE.md](TIMELINE.md#timeline-mode).
   - **Switching:** **Switch to timeline mode** in the Timeline toolbar, or any clip edit in a tracker-mode song, asks first. The switch plays the same samples, and Undo puts it back (the switch and the edit are separate steps). **Back to tracker mode…** turns the clips into blocks and an order list. **New songs start in timeline mode** (Del's decision; off with Settings › New songs). Old songs open in tracker mode and play bit-exactly.
   - **Clip editing:** drag to move (across tracks, snapped; Shift = rows), **Alt-drag** to copy, drag the right edge to resize (past the block it **loops**) and the left edge to **trim**. **S** split, **Ctrl+D** duplicate (linked), **Ctrl+Shift+D** make unique, **Ctrl+J** glue, **M** mute, **Del** delete, Ctrl/Shift-click and box selection, Ctrl+A. Double-click empty space for a new block there. Right-click menus for clips, markers and tracks.

@@ -286,6 +286,7 @@ Estimates are focused build days for one developer at the pace of recent ChipWav
 ## 5. Roadmaps for the other approved big items
 
 ### 5.1 Plugin effects (CLAP FX in the FX chains), *do first, it's small*
+**Built (19 Oct 2026, unreleased)** for the instrument FX chains: `FxKind::Plugin` devices, the effect list from the scanner, the device panel (status, editor, parameters), automation lanes per CLAP parameter, state in the song, missing plugins bypassed with a notice, and plugin delay compensation (also in export). Return buses and the master have no device chains yet, so plugins can't go there until those chains (or M4's track chains) exist. Guide and limits: [FX.md › Plugin effects](FX.md#plugin-effects-clap-unreleased).
 - Add an `FxKind::Plugin` device (holding a `PluginPatch`, `src/fx.rs`) so a CLAP effect can sit in any instrument chain, the new track chain, the return buses and the master. This reuses `plugin::clap::ClapInst` (stereo in/out audio ports, params, state, native GUI) and the out-of-process scanner (filter on the `audio-effect` feature).
 - Its parameters appear as knob cards and automation targets, the same as plugin instruments' macros and the *Advanced* list.
 - **Latency:** read the `latency` extension. Report it per chain and add **plugin delay compensation** per track (delay the other tracks), also in export.

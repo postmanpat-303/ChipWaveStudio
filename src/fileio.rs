@@ -150,7 +150,13 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
         z.write_all(b"application/x-chipwave-song")
             .map_err(|e| e.to_string())?;
         z.start_file("manifest.toml", defl).map_err(e)?;
-        let min_reader = if song.timeline.is_some() { 2 } else { 1 };
+        // version 2: timeline mode, or plugin effect devices (an older
+        // reader can't parse `FxKind::Plugin`)
+        let min_reader = if song.timeline.is_some() || crate::plugin::fxrack::song_has_fx(song) {
+            2
+        } else {
+            1
+        };
         z.write_all(format!("format = \"chipwave-song\"\nformat_version = 1\nmin_reader_version = {min_reader}\napp = \"ChipWave Studio {}\"\n", crate::VERSION).as_bytes()).map_err(|e| e.to_string())?;
         let mut instruments = song.instruments.clone();
         for (i, inst) in instruments.iter_mut().enumerate() {
@@ -257,7 +263,8 @@ fn read_entry(z: &mut zip::ZipArchive<std::fs::File>, name: &str) -> Result<Vec<
 /// Newest `min_reader_version` this build can read. Tracker-mode songs write
 /// 1 (byte-identical to older versions); timeline-mode songs (docs/TIMELINE.md)
 /// write 2 plus `timeline.toml`, so builds older than the timeline refuse
-/// them instead of playing a stale order list.
+/// them instead of playing a stale order list. Songs with plugin effect
+/// devices also write 2.
 pub const READER_VERSION: u32 = 2;
 
 /// Start of the error for a song that needs a newer app (see [`is_too_new`]).

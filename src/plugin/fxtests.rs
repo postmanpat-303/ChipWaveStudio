@@ -274,6 +274,11 @@ fn missing_plugin_effect_is_bypassed_with_a_notice_and_keeps_its_state() {
     let f = dir.join("missing.cwt");
     crate::fileio::save_cwt(&song, &f).unwrap();
     let back = crate::fileio::load_cwt(&f).unwrap();
+    // older readers can't parse a plugin device: the song asks for reader 2
+    let mut z = zip::ZipArchive::new(std::fs::File::open(&f).unwrap()).unwrap();
+    let mut m = String::new();
+    std::io::Read::read_to_string(&mut z.by_name("manifest.toml").unwrap(), &mut m).unwrap();
+    assert!(m.contains("min_reader_version = 2"), "{m}");
     let d = &back.instruments[0].fx[0];
     assert_eq!(d.kind, FxKind::Plugin);
     assert_eq!(d.uid, 7);

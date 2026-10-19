@@ -10,7 +10,7 @@ Automation lanes sit **under the arranger blocks** ([ARRANGER.md](ARRANGER.md)),
   - generator knobs: Drum/Kit macros, Chip FX, Analog, FM-4 and Noise (`instrument.N.gen.K`, see [GENERATORS.md](GENERATORS.md#automation-lanes-on-generator-knobs))
   - FX devices
   - mixer faders, pans and sends
-  - CLAP/VST3/LV2 plugin parameters
+  - CLAP/VST3/LV2 plugin parameters (CLAP effect parameters: `instrument.N.fx.D.p<param id>`, 0–1 over the parameter's range, see [FX.md](FX.md#plugin-effects-clap-unreleased))
   - tempo
 - **Adding a lane:** "＋ Add lane…" (searchable, using the same list as the effect autocomplete in [PATTERN_EDITOR.md §6](PATTERN_EDITOR.md)), right-click a knob → "Automate", or just move a knob while recording.
 - **Lane header:** name, current value in real units, the matching effect command (e.g. `cmd Fcxx`), the curve type, and **R** (read) / **W** (write) toggles. Lanes can be collapsed, reordered, coloured and grouped per channel.
