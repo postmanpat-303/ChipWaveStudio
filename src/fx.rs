@@ -21,13 +21,15 @@ pub enum FxKind {
     Phaser,
     /// Bode-style frequency shifter (crate::fxmod)
     FreqShift,
+    /// a modular Grid patch (`Device::grid`, crate::grid) fed by the audio
+    Grid,
     /// a CLAP or VST3 effect plugin (`Device::plugin`); not in `ALL` (its menu lists
     /// the scanned effects instead). Runs in `crate::plugin::fxrack`.
     Plugin,
 }
 
 impl FxKind {
-    pub const ALL: [FxKind; 12] = [
+    pub const ALL: [FxKind; 13] = [
         FxKind::Delay,
         FxKind::Reverb,
         FxKind::Drive,
@@ -40,6 +42,7 @@ impl FxKind {
         FxKind::Sub,
         FxKind::Phaser,
         FxKind::FreqShift,
+        FxKind::Grid,
     ];
     pub fn name(self) -> &'static str {
         match self {
@@ -55,6 +58,7 @@ impl FxKind {
             FxKind::Sub => "Sub bass",
             FxKind::Phaser => "Phaser",
             FxKind::FreqShift => "Frequency shifter",
+            FxKind::Grid => "Grid FX",
             FxKind::Plugin => "Plugin effect",
         }
     }
@@ -69,6 +73,7 @@ impl FxKind {
             FxKind::Filter => 0x4E6A86,     // cool
             FxKind::Compressor => 0x5E6B7A, // neutral
             FxKind::Plugin => 0x4E7A66,     // plugins: green-grey
+            FxKind::Grid => 0x8A6A4E,       // the Grid's amber
         }
     }
 }
@@ -231,6 +236,19 @@ pub const PHASER: [ParamInfo; 8] = [
     p("mix", "Mix", 0.0, 1.0, 0.5, false, "%"),
 ];
 
+/// Grid FX: the patch's 8 macros (read by its Macro modules) + dry / wet
+pub const GRID_FX: [ParamInfo; 9] = [
+    p("m1", "Macro 1", 0.0, 1.0, 0.0, false, "%"),
+    p("m2", "Macro 2", 0.0, 1.0, 0.0, false, "%"),
+    p("m3", "Macro 3", 0.0, 1.0, 0.0, false, "%"),
+    p("m4", "Macro 4", 0.0, 1.0, 0.0, false, "%"),
+    p("m5", "Macro 5", 0.0, 1.0, 0.0, false, "%"),
+    p("m6", "Macro 6", 0.0, 1.0, 0.0, false, "%"),
+    p("m7", "Macro 7", 0.0, 1.0, 0.0, false, "%"),
+    p("m8", "Macro 8", 0.0, 1.0, 0.0, false, "%"),
+    p("mix", "Mix", 0.0, 1.0, 1.0, false, "%"),
+];
+
 pub const FREQ_SHIFT: [ParamInfo; 5] = [
     p("coarse", "Shift", -2000.0, 2000.0, 100.0, false, "Hz"),
     p("fine", "Fine", -50.0, 50.0, 0.0, false, "Hz"),
@@ -258,6 +276,7 @@ pub fn params(k: FxKind) -> &'static [ParamInfo] {
         FxKind::Sub => &SUB,
         FxKind::Phaser => &PHASER,
         FxKind::FreqShift => &FREQ_SHIFT,
+        FxKind::Grid => &GRID_FX,
         // plugin parameters come from the instance (ids, not indices)
         FxKind::Plugin => &[],
     }
@@ -325,6 +344,9 @@ pub struct Device {
     /// device keeps its running instance (0 = none)
     #[serde(default, skip_serializing_if = "is_zero")]
     pub uid: u32,
+    /// `FxKind::Grid`: the patch (its AudioIn module carries the input)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid: Option<Box<crate::grid::GridP>>,
 }
 
 fn is_zero(v: &u32) -> bool {
@@ -345,6 +367,7 @@ impl Device {
             params,
             plugin: None,
             uid: 0,
+            grid: (kind == FxKind::Grid).then(|| Box::new(crate::grid::fx_default())),
         }
     }
     /// a plugin effect device for `p` (a fresh uid)
@@ -369,6 +392,13 @@ impl Device {
             *d = s.clamp(0.0, 1.0);
         }
         self.params = v;
+        if self.kind == FxKind::Grid {
+            self.grid
+                .get_or_insert_with(|| Box::new(crate::grid::fx_default()))
+                .fix();
+        } else {
+            self.grid = None;
+        }
     }
     #[allow(dead_code)]
     pub fn real(&self, i: usize) -> f32 {
@@ -416,7 +446,8 @@ pub fn new_uid() -> u32 {
 /// Device presets (folder icon): name + real values by key.
 pub fn presets(k: FxKind) -> &'static [(&'static str, &'static [(&'static str, f32)])] {
     match k {
-        FxKind::Plugin => &[],
+        // Grid FX: its patches are in the patch editor (crate::grid::fx_presets)
+        FxKind::Plugin | FxKind::Grid => &[],
         FxKind::Delay => &[
             (
                 "1/8 dotted ping-pong",
@@ -1003,6 +1034,9 @@ enum Dsp {
     Stage(Box<crate::transform::FxStage>),
     Phaser(crate::fxmod::Phaser),
     FreqShift(crate::fxmod::FreqShifter),
+    /// the device's patch (a copy: structure changes rebuild the chain,
+    /// knob values are copied in place) and its state
+    Grid(Box<(crate::grid::GridP, crate::grid::GridState)>),
 }
 
 /// realtime state for one device instance
@@ -1081,6 +1115,13 @@ impl FxState {
             FxKind::Resonator | FxKind::Digital | FxKind::Sub => Dsp::Stage(Box::default()),
             FxKind::Phaser => Dsp::Phaser(Default::default()),
             FxKind::FreqShift => Dsp::FreqShift(Default::default()),
+            FxKind::Grid => Dsp::Grid(Box::new((
+                d.grid
+                    .as_deref()
+                    .cloned()
+                    .unwrap_or_else(crate::grid::fx_default),
+                Default::default(),
+            ))),
         };
         let mut s = Self {
             kind: d.kind,
@@ -1161,6 +1202,7 @@ impl FxState {
             Dsp::Stage(st) => **st = crate::transform::FxStage::default(),
             Dsp::Phaser(ph) => *ph = Default::default(),
             Dsp::FreqShift(f) => *f = Default::default(),
+            Dsp::Grid(b) => b.1 = Default::default(),
         }
         self.on_gain = if d.enabled { 1.0 } else { 0.0 };
         self.set_targets(d, |_| None);
@@ -1176,6 +1218,13 @@ impl FxState {
             if !info.choices.is_empty() {
                 self.cur[i] = self.tgt[i];
             }
+        }
+        // the Grid's knob values (same length: no allocation)
+        if let (Dsp::Grid(b), Some(g)) = (&mut self.dsp, d.grid.as_deref()) {
+            if b.0.p.len() == g.p.len() {
+                b.0.p.copy_from_slice(&g.p);
+            }
+            b.0.level = g.level;
         }
     }
 
@@ -1409,6 +1458,22 @@ impl FxState {
                 };
                 f.process(l, r, &sp, sr)
             }
+            Dsp::Grid(b) => {
+                let (g, st) = &mut **b;
+                let mut mac = [0.0f32; 8];
+                mac.copy_from_slice(&p[..8]);
+                let ov = crate::gen::Ov {
+                    mac: &mac,
+                    knob: &crate::gen::NO_KNOBS,
+                };
+                let f = if ctx.note > 0.0 {
+                    ctx.note
+                } else {
+                    crate::grid::C4
+                };
+                let (wl, wr, _) = st.render(g, ov, f, sr, true, 1.0, (l, r));
+                (l + (wl - l) * p[8], r + (wr - r) * p[8])
+            }
             Dsp::Stage(st) => match self.kind {
                 FxKind::Resonator => st.resonator(l, r, &p, ctx.note, sr),
                 FxKind::Digital => st.digital(l, r, &p, ctx.note, sr),
@@ -1422,19 +1487,28 @@ impl FxState {
 #[derive(Default)]
 pub struct ChainState {
     /// structure signature (kinds) the states were built for
-    sig: Vec<FxKind>,
+    sig: Vec<(FxKind, u64)>,
     pub states: Vec<FxState>,
     pub owner: usize,
     /// chains of instruments that played on this channel before, kept so a
     /// mid-song instrument switch reuses their buffers instead of allocating
-    spare: Vec<(usize, Vec<FxKind>, Vec<FxState>)>,
+    spare: Vec<(usize, Vec<(FxKind, u64)>, Vec<FxState>)>,
 }
 
 /// spare chains kept per channel
 const SPARE_CHAINS: usize = 6;
 
-fn same_sig(sig: &[FxKind], devs: &[Device]) -> bool {
-    sig.len() == devs.len() && sig.iter().zip(devs).all(|(k, d)| *k == d.kind)
+/// a device's structure: its kind (+ a Grid patch's modules and cables)
+fn dev_sig(d: &Device) -> (FxKind, u64) {
+    let fp = match (&d.kind, &d.grid) {
+        (FxKind::Grid, Some(g)) => g.fingerprint(),
+        _ => 0,
+    };
+    (d.kind, fp)
+}
+
+fn same_sig(sig: &[(FxKind, u64)], devs: &[Device]) -> bool {
+    sig.len() == devs.len() && sig.iter().zip(devs).all(|(k, d)| *k == dev_sig(d))
 }
 
 impl ChainState {
@@ -1466,7 +1540,7 @@ impl ChainState {
             self.sig = sig;
             self.states = states;
         } else {
-            self.sig = devs.iter().map(|d| d.kind).collect();
+            self.sig = devs.iter().map(dev_sig).collect();
             self.states = devs.iter().map(|d| FxState::new(d, sr)).collect();
         }
         self.owner = owner;

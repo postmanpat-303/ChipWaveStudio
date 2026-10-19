@@ -2304,6 +2304,9 @@ fn fx_chain(b: &mut B, inst: &Instrument, idx: usize) {
         if d.kind == crate::fx::FxKind::Plugin {
             card.note = "plugin effect: parameters and editor in the FX view".into();
         }
+        if d.kind == crate::fx::FxKind::Grid {
+            card.note = "Grid FX: edit its patch in the FX view".into();
+        }
         let gs: (Get, Set) = (
             Box::new(move |i| {
                 if i.fx.get(j).is_some_and(|d| d.enabled) {

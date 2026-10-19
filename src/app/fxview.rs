@@ -17,6 +17,8 @@ pub(super) enum FxOp {
     Preset(usize, usize),
     /// device, param, normalised value, starts a new undo step
     Param(usize, usize, f32, bool),
+    /// a Grid FX device's new patch, starts a new undo step
+    Grid(usize, Box<crate::grid::GridP>, bool),
 }
 
 fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
@@ -197,7 +199,87 @@ impl App {
                     self.fx_drag = None;
                 }
             });
+        self.grid_fx_window(ui.ctx(), idx, &chain, &mut ops);
         self.apply_fx_ops(idx, ops);
+    }
+
+    /// the patch editor of a Grid FX device (a window over the FX view)
+    fn grid_fx_window(
+        &mut self,
+        ctx: &egui::Context,
+        idx: usize,
+        chain: &[Device],
+        ops: &mut Vec<FxOp>,
+    ) {
+        let Some((o, di)) = self.ip.grid_fx else {
+            return;
+        };
+        let Some(mut g) = chain
+            .get(di)
+            .filter(|d| o == idx && d.kind == FxKind::Grid)
+            .and_then(|d| d.grid.clone())
+        else {
+            self.ip.grid_fx = None;
+            return;
+        };
+        let mut open = true;
+        let mut st = std::mem::take(&mut self.ip.grid_fx_ui);
+        let mut changed = false;
+        let patches = crate::grid::fx_presets();
+        egui::Window::new(format!("Grid FX · device {}", di + 1))
+            .open(&mut open)
+            .default_size([980.0, 560.0])
+            .resizable(true)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                ui.label(
+                    egui::RichText::new(
+                        "Audio In carries the signal into the patch; Note follows the channel's note. \
+                         The device's Macro 1-8 and Mix are automatable and drag-to-modulate targets.",
+                    )
+                    .small()
+                    .color(th().ink2),
+                );
+                changed = super::instpanel::gridcanvas::grid_editor(
+                    ui,
+                    &mut g,
+                    &mut st,
+                    0x6F00 + di,
+                    &patches,
+                    &mut |ui, s, def, dflt, v| {
+                        let text = def.show(*v);
+                        super::knob::knob(
+                            ui,
+                            ui.make_persistent_id(("gfx_knob", di, s)),
+                            v,
+                            super::knob::KnobArgs {
+                                name: def.name,
+                                value_text: text,
+                                default: dflt,
+                                steps: 0.0,
+                                enabled: true,
+                                highlight: false,
+                                badge: None,
+                                locked: None,
+                                tip: def.tip,
+                                rings: &[],
+                                live: None,
+                            },
+                        );
+                    },
+                );
+            });
+        self.ip.grid_fx_ui = st;
+        let held = ctx.input(|i| i.pointer.any_down());
+        if changed {
+            ops.push(FxOp::Grid(di, g, !self.ip.grid_fx_held));
+            self.ip.grid_fx_held = held;
+        } else if !held {
+            self.ip.grid_fx_held = false;
+        }
+        if !open {
+            self.ip.grid_fx = None;
+        }
     }
 
     pub(super) fn apply_fx_ops(&mut self, idx: usize, ops: Vec<FxOp>) {
@@ -211,7 +293,7 @@ impl App {
                 self.plug.state_dirty = true;
                 self.capture_plugins();
             }
-            if !matches!(op, FxOp::Param(_, _, _, false)) {
+            if !matches!(op, FxOp::Param(_, _, _, false) | FxOp::Grid(_, _, false)) {
                 self.snapshot();
             }
             let msg = self.with(|s| {
@@ -259,6 +341,12 @@ impl App {
                     FxOp::Preset(i, p) if i < c.len() => {
                         apply_preset(&mut c[i], p);
                         format!("Preset: {}", fx::presets(c[i].kind)[p].0)
+                    }
+                    FxOp::Grid(i, g, _) => {
+                        if let Some(d) = c.get_mut(i).filter(|d| d.kind == FxKind::Grid) {
+                            d.grid = Some(g);
+                        }
+                        String::new()
                     }
                     FxOp::Param(i, p, v, _) => {
                         if let Some(x) = c.get_mut(i).and_then(|d| d.params.get_mut(p)) {
@@ -513,6 +601,17 @@ impl App {
                 let owner = (self.instr as usize).wrapping_sub(1);
                 self.plugin_fx_body(ui, owner, i, d);
                 return;
+            }
+            if d.kind == FxKind::Grid {
+                let owner = (self.instr as usize).wrapping_sub(1);
+                let n = d.grid.as_ref().map_or(0, |g| g.modules.len());
+                if ui
+                    .button(format!("Edit patch… ({n} modules)"))
+                    .on_hover_text("open the Grid FX patch editor")
+                    .clicked()
+                {
+                    self.ip.grid_fx = Some((owner, i));
+                }
             }
             ui.add_space(2.0);
             ui.spacing_mut().slider_width = inner.width() - 4.0;

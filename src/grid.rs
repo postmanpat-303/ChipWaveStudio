@@ -37,7 +37,7 @@ pub const DELAY_LEN: usize = 4096;
 pub const MAX_DELAYS: usize = 2;
 pub const MAX_LADDERS: usize = 4;
 pub const NONE: u8 = 255;
-const C4: f32 = 261.625_58;
+pub const C4: f32 = 261.625_58;
 /// knob values are re-read every CR samples (control rate)
 const CR: u32 = 16;
 
@@ -1054,6 +1054,94 @@ pub fn presets() -> Vec<(&'static str, &'static str, GridP, f32, bool)> {
         false,
     ));
     v
+}
+
+/// Grid FX patches: (name, tip, patch); the first is a new device's
+pub fn fx_presets() -> Vec<(&'static str, &'static str, GridP)> {
+    use Kind::*;
+    let mut v = vec![];
+    // ---- Auto-Filter: an LFO (+ Macro 1) sweeps two low-passes
+    let mut b = B(GridP::empty());
+    let a = b.m(AudioIn, 0.0, 0.0, 0, &[]);
+    let lfo = b.m(Lfo, 0.0, 1.5, 1, &[(0, 0.25)]);
+    let mc = b.m(Macro, 0.0, 3.0, 0, &[]);
+    let sum = b.m(Math, 1.0, 1.5, 1, &[]);
+    let fl = b.m(
+        Filter,
+        2.0,
+        0.0,
+        0,
+        &[(0, 700.0), (1, 0.35), (2, 2.0), (3, 0.0)],
+    );
+    let fr = b.m(
+        Filter,
+        2.0,
+        2.5,
+        0,
+        &[(0, 700.0), (1, 0.35), (2, 2.0), (3, 0.0)],
+    );
+    let out = b.m(Out, 3.0, 0.0, 0, &[(0, 1.0)]);
+    b.c(lfo, 0, sum, 0);
+    b.c(mc, 0, sum, 1);
+    b.c(a, 0, fl, 0);
+    b.c(a, 1, fr, 0);
+    b.c(sum, 0, fl, 1);
+    b.c(sum, 0, fr, 1);
+    b.c(fl, 0, out, 0);
+    b.c(fr, 0, out, 1);
+    v.push((
+        "Auto-Filter",
+        "an LFO plus Macro 1 sweep a resonant low-pass on each side",
+        b.0,
+    ));
+    // ---- Ring Mod: the input times a sine tuned to the channel's note
+    let mut b = B(GridP::empty());
+    let a = b.m(AudioIn, 0.0, 0.0, 0, &[]);
+    let n = b.m(Note, 0.0, 1.5, 0, &[]);
+    let o = b.m(Osc, 1.0, 1.5, 0, &[(0, 7.0)]);
+    let vl = b.m(Vca, 2.0, 0.0, 0, &[]);
+    let vr = b.m(Vca, 2.0, 1.5, 0, &[]);
+    let out = b.m(Out, 3.0, 0.0, 0, &[(0, 1.0)]);
+    b.c(n, 0, o, 0);
+    b.c(a, 0, vl, 0);
+    b.c(a, 1, vr, 0);
+    b.c(o, 0, vl, 1);
+    b.c(o, 0, vr, 1);
+    b.c(vl, 0, out, 0);
+    b.c(vr, 0, out, 1);
+    v.push((
+        "Ring Mod",
+        "the input times a sine a fifth above the channel's note",
+        b.0,
+    ));
+    // ---- Comb Resonator: a feedback delay tuned to the channel's note
+    let mut b = B(GridP::empty());
+    let a = b.m(AudioIn, 0.0, 0.0, 0, &[]);
+    let n = b.m(Note, 0.0, 1.5, 0, &[]);
+    let d = b.m(
+        Delay,
+        1.0,
+        0.0,
+        0,
+        &[(0, 1000.0 / C4), (1, 0.9), (2, 0.6), (3, 0.2)],
+    );
+    let sh = b.m(Shaper, 2.0, 0.0, 0, &[(0, 0.1), (1, 1.0)]);
+    let out = b.m(Out, 3.0, 0.0, 0, &[(0, 0.8)]);
+    b.c(a, 0, d, 0);
+    b.c(n, 0, d, 1);
+    b.c(d, 0, sh, 0);
+    b.c(sh, 0, out, 0);
+    v.push((
+        "Comb Resonator",
+        "a feedback delay tuned to the channel's note rings with the input (mono)",
+        b.0,
+    ));
+    v
+}
+
+/// a new Grid FX device's patch
+pub fn fx_default() -> GridP {
+    fx_presets().swap_remove(0).2
 }
 
 // ------------------------------------------------------------------ engine

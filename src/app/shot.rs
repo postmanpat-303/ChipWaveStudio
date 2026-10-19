@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 36] = [
+pub const VIEWS: [&str; 37] = [
     "pattern",
     "arranger",
     "timeline",
@@ -70,6 +70,7 @@ pub const VIEWS: [&str; 36] = [
     "modulate-fx",
     "wave",
     "grid",
+    "grid-fx",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -279,6 +280,25 @@ impl App {
                         eprintln!("editor: {r:?}");
                     }
                 }
+            }
+            // a Grid FX device (Comb Resonator patch) on the Supersaw Pad,
+            // its patch window open in the FX view
+            "grid-fx" => {
+                self.with(|s| {
+                    if let Some(i) = s.song.instruments.get_mut(6) {
+                        let mut d = crate::fx::Device::new(crate::fx::FxKind::Grid);
+                        d.grid = crate::grid::fx_presets()
+                            .into_iter()
+                            .nth(2)
+                            .map(|x| Box::new(x.2));
+                        i.fx.push(d);
+                    }
+                });
+                self.instr = 7;
+                self.view = View::Fx;
+                let n = self.with(|s| s.song.instruments.get(6).map_or(1, |i| i.fx.len()));
+                self.ip.grid_fx = Some((6, n - 1));
+                self.dirty = false;
             }
             // the "Add plugin instrument" browser (cache: CHIPWAVE_PLUGIN_CACHE)
             "plugins" => {

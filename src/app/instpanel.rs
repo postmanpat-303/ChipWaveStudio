@@ -6,7 +6,7 @@ use super::knob::{self, KnobArgs, CELL};
 use super::params::{self, Ctl, Custom, Layout, Param, Tab};
 use super::*;
 
-mod gridcanvas;
+pub(super) mod gridcanvas;
 
 /// lower-panel switch bar height
 const BAR_H: f32 = 26.0;
@@ -38,6 +38,11 @@ pub(super) struct InstUi {
     pub mod_sel: Option<u32>,
     /// the Grid canvas (cable being dragged, add position)
     grid: gridcanvas::GridUi,
+    /// the Grid FX patch window: (instrument, device) and its canvas state
+    pub grid_fx: Option<(usize, usize)>,
+    pub grid_fx_ui: gridcanvas::GridUi,
+    /// a knob / module drag is going on in that window (one undo step)
+    pub grid_fx_held: bool,
 }
 
 pub(super) struct Ab {
