@@ -4,6 +4,13 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Drum Patterns, Files and network drives
+- Browser › **Drum Patterns**: 67 grooves in 14 style folders (psytrance, techno, house, trance, DnB, breakbeat, hip-hop / lo-fi, trap, disco, synthwave, reggaeton, chip, afro / latin, fills), each with its bars, BPM range and one of 13 synthesised kits (808, 909, lo-fi, chip, acoustic-ish …; no samples). Rows have hover Play, a step thumbnail, a heart and a PATTERN tag.
+- **Synced preview:** while the song plays, a pattern starts on the next bar at the song's tempo and follows its position. While stopped, it loops. Click again or press Esc to stop. Has a Volume slider.
+- **Drag to the timeline:** below the last track makes a drum track with the kit and the clip on the bar. Onto a track, it places the clip there. Undo is one step.
+- Browser › **Files**: Home / Music / Desktop / Downloads, a **Drives** list (local, USB and mapped network drives with their UNC path; not-connected and not-responding drives marked; read with a timeout), back / forward / up, a breadcrumb you can type a path into (UNC paths work), sort and favourite folders.
+- **Fix: mapped network drives were missing** when ChipWave was started from the setup's finish page. That copy ran as administrator, which can't see your mapped drives. The setup now starts ChipWave unelevated.
+
 ### Fixes
 - **Leaving timeline mode keeps automation exactly as it was:** a track lane that is the only lane for its parameter now goes back to the song unchanged (curves, disabled lanes and labels included) instead of being resampled row by row, so a song plays bit-identically after entering and leaving timeline mode. Parameters that also have clip lanes are still combined and sampled as before.
 - **Reordering or inserting tracks no longer drops the Song / Master track** (tempo, master and return automation) in timeline mode, which changed playback.

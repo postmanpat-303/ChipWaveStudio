@@ -99,6 +99,45 @@ Libraries: `ureq` (HTTPS), `zip`, `tar` + `flate2` (.tar.gz), `sevenz-rust2` (.7
 
 The mapping lives in `src/browser/catalogue.rs` and is generic: any scanned plugin whose id or name matches is enriched. Binaries are **not** in the git repo.
 
+## Drum Patterns
+
+The **Drum Patterns** tab (grid icon) holds 67 ready-made grooves in 14 style folders: Psytrance / Dark psy (6), Techno (5), House (5), Trance (4), DnB / Jungle (5), Breakbeat (4), Hip-hop / Lo-fi (6), Trap (4), Disco / Funk (4), Synthwave / 80s (4), Reggaeton / Dembow (4), Amiga / Chip (4), Afro / Latin (5) and Fills (7). Each pattern has a name, a length in bars (1, 2 or 4), a suggested BPM range and a paired kit.
+
+- **Rows:** a step-grid icon that turns into **Play** on hover, the name, a **step thumbnail** of the first bar (hats on top, snares and claps in the middle, the kick at the bottom), the heart, and a **PATTERN** tag. The pattern playing has an accent bar, a **Stop** icon and a progress line under the row.
+- **Navigation:** click a style folder to open it, **Up** or the breadcrumb (`Drum Patterns › Techno`) to go back. Searching looks through every style at once (name, style, kit, BPM). **Favourites** shows only hearted patterns.
+- **Kits (13):** Psy, 808, 909, Techno, Trap, Lo-fi, Chip, Acoustic-ish, Disco, Latin, DnB, Synthwave and Dembow. Every kit is a ChipWave **Drum Synth** in kit mode (the note picks the drum: C kick, D snare, D# clap, F# closed hat, A# open hat, toms and percs in between), so no samples are shipped and every kit is ours to ship under the GPL. The drum recipes follow the analog-drum models credited in About › Credits (sc808, Plaits / DaisySP).
+
+### Preview (synced to the song)
+
+Click the Play icon on a row, select a row while **Auto** is on, or press Space.
+
+- **While the song plays**, the preview waits for the **next bar** and then plays at the song's tempo, locked to the song position. A jump or loop in the song re-aligns it.
+- **While stopped**, it loops at the song's tempo.
+- Click it again, press **Esc**, or preview anything else to stop. The bar at the bottom shows what is playing and whether it is waiting for the bar. It also has **Play / Stop** and a **Volume** slider (saved as `pattern_vol`). **Auto** previews each row as you select it.
+- The song is never changed by a preview. The preview is mixed after the song, so it doesn't go through track effects.
+
+### Placing a pattern
+
+- **Drag a row below the last track** of the Timeline: a new drum track named after the kit is made, the kit is added as an instrument, and the pattern becomes a note clip starting on the bar under the mouse.
+- **Drag onto an existing track:** the clip goes there, on the bar. If that track already plays a drum kit, the notes play on it. Otherwise the pattern's kit is used (an instrument of the same name in the song is reused).
+- **Double-click / Load** puts it on a new drum track at the play marker.
+- The notes are stored in ticks, so the clip follows the song's tempo and any tempo changes. A tracker-mode song asks to switch to timeline mode first, as other clip edits do. One undo step removes the track, clip and instrument together.
+- The clip is a normal note clip: edit it in the piano roll, and **Ctrl/Cmd+D** duplicates it after itself (as for any clip).
+
+## Files and drives
+
+The **Files** tab is a small file browser:
+
+- **Quick locations:** Home, Music, Desktop, Downloads (OneDrive folders are used when Windows moved them there).
+- **Drives** opens a list of every drive: local, USB / removable, and **mapped network drives** (tagged NET, with their `\\server\share` path). Drives are read in the background with a 2.5 s timeout, so a sleeping NAS never freezes the app; one that doesn't answer shows *not responding*, and a disconnected mapping shows *not connected*.
+- **Back / Forward / Up**, a clickable **breadcrumb**, **Refresh**, **Sort** (name, type, size) and **Favourites** (heart a folder to list it there).
+- **Typing a path:** click the breadcrumb to type a path and press Enter (Esc cancels). Normal paths, `~`, `Z:` and UNC paths such as `\\nas\music\loops` all work.
+- Folders come first. Double-click a folder to open it and a song to load it. Samples, instruments and other files can be previewed and dragged like in the other tabs. **+ Locations** adds the current folder to the scanned Locations.
+
+### Mapped network drives (Windows)
+
+Mapped drives (such as Z:) belong to your normal, unelevated Windows sign-in. A program running **as administrator** can't see them. Up to 0.2.4.0 the setup's *Start ChipWave Studio* checkbox started ChipWave with the setup's administrator rights, so that copy saw no network drives in its folder dialogs. The setup now starts ChipWave as you, unelevated, through Explorer. ChipWave also lists drives itself (`GetLogicalDrives` / `GetDriveTypeW`, with `WNetGetConnectionW` for the UNC path). If it ever runs elevated, the Drives list warns about this and you can still type the UNC path. If drives are still missing, close ChipWave and start it from the Start menu.
+
 ## Favourites and ratings
 
 Click the **heart** at the end of a row (or right-click › Add to favourites) and the **stars** (1–5; click the same number again to clear). Both are saved in `settings.toml` (`browser_favs`, `browser_ratings`) under the item's key: a file's path, or a name for built-in items. The heart in the header, the **Favourites · n** chip (first in the tag row, with the count for this tab) and the *Favourites* location show only favourites; **Sort: Rating** puts the best first.
@@ -179,6 +218,9 @@ The Browser only reads. Opening it changes nothing in a song (tested: an old son
 - No waveform display or tempo-synced preview of samples; previews are one note, about 2.4 s.
 - Ratings and favourites of files are keyed by path: moving a file forgets them.
 - Dropping onto the mixer view or a specific FX slot position isn't supported (effects go to the end of the chain).
+- Drum Patterns has no step editor yet, so there are no Euclid / Rotate / Random tools. Edit placed patterns in the piano roll.
+- The pattern preview plays the pattern's own kit, not the instrument on a track, and isn't heard through track effects.
+- The Files tab shows one folder at a time (no tree), and you can't rename, move or delete files there.
 - Tag chips are inferred from names and categories; you can't add your own tags yet.
 
 ## Under the hood (for developers)
@@ -187,4 +229,5 @@ The Browser only reads. Opening it changes nothing in a song (tested: an old son
 - `src/showcase/mod.rs`: the Get showcase instruments manifest and installer; `src/app/showcase.rs`: its dialog.
 - `src/browser.rs`: the item model (`Item`, `Tab`, `Fmt` with badge colours, `Loc`, `Src`), tags, the built-in / library / song / plugin item builders, the folder scanner (`scan_folder`, `classify`), the cached `Index` (`browser-index.json`), `filter` / `column_values`, and loading helpers (`instrument_of`, `sample_instrument`, `wave_instrument`, `grid_fx_device`, `preview_song`). Unit tests in `src/browser/tests.rs`.
 - `src/app/browserview.rs`: state (`BrowserUi`), the background scan and load jobs, actions (`br_load`, `br_instrument` with `Act`, `br_drop` with `DropAt`), preview and keys. `src/app/browserpanel.rs`: painting and input, the drag ghost and drop indicators. `src/app/plugsetup.rs`: Find plugins. `src/chanops.rs`: channel remapping (reorder, insert, assign). UI tests: `src/app/browser_tests.rs`.
-- Screenshots: `--screenshot out.png --view browser|browser-samples|plugin-setup --theme dark|amiga`.
+- `src/drumpat.rs` (+ `drumpat/library.rs`): the pattern model, step strings, kits; `src/engine/patprev.rs`: the synced preview voice; `src/app/drumpat.rs`: the Drum Patterns and Files tabs, placement (`TlOp::DrumPattern`); `src/drives.rs`: drive list, UNC, quick folders. Tests: `src/drumpat/tests.rs`, `src/app/drumpat_tests.rs`.
+- Screenshots: `--screenshot out.png --view browser|browser-samples|browser-patterns|browser-patterns-styles|browser-patterns-drop|browser-files|plugin-setup --theme dark|amiga`.
