@@ -513,6 +513,20 @@ fn round_trip_renders_bit_exact() {
                     .zip(&b)
                     .position(|(x, y)| x.to_bits() != y.to_bits());
                 assert_eq!(first, None, "{name}: first differing sample");
+                // timeline mode: the engine plays the clips directly
+                let mut m = s.clone();
+                enter_timeline_mode(&mut m);
+                let d = crate::engine::render_song(&m, 22050);
+                assert_eq!(a.len(), d.len(), "{name}: timeline-mode length");
+                let first = a
+                    .iter()
+                    .zip(&d)
+                    .position(|(x, y)| x.to_bits() != y.to_bits());
+                assert_eq!(first, None, "{name}: timeline mode, first differing sample");
+                // and back to tracker mode
+                leave_timeline_mode(&mut m).unwrap();
+                let e = crate::engine::render_song(&m, 22050);
+                assert!(a == e, "{name}: back in tracker mode");
                 eprintln!(
                     "{name}: {} blocks -> {} blocks, {:.1} s audio, bit-exact ({:.1} s)",
                     s.patterns.len(),

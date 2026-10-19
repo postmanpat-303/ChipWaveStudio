@@ -419,6 +419,7 @@ pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
             .and_then(|b| toml::from_str::<ArrangerFile>(&String::from_utf8_lossy(&b)).ok())
             .map(|a| a.zoom.clamp(0.25, 16.0))
             .unwrap_or(2.0),
+        timeline: None,
     };
     // hand-written lanes may name FX params by key ("instrument.2.fx.1.feedback")
     for k in 0..song.automation.len() {

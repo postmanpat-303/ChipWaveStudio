@@ -104,6 +104,13 @@ pub struct Timeline {
     pub signature: Vec<SigPoint>,
     pub markers: Vec<Marker>,
     pub loop_range: Option<(Tick, Tick)>,
+    /// playback wraps at the end of `loop_range`
+    #[serde(skip_serializing_if = "is_default")]
+    pub loop_on: bool,
+    /// song end (0 = the end of the last clip); the song never ends before
+    /// its last clip. Keeps trailing silence of converted songs.
+    #[serde(skip_serializing_if = "is_default")]
+    pub end: Tick,
     /// UI only (zoom, scroll)
     pub view: TimelineView,
     /// next clip id to hand out
@@ -135,6 +142,10 @@ pub struct Track {
     pub folded: bool,
     #[serde(skip_serializing_if = "is_default")]
     pub armed: bool,
+    /// effect speed of this track in ticks per row (slides, volume and
+    /// filter sweeps step this often); 0 = the song's speed (`09xx`)
+    #[serde(skip_serializing_if = "is_default")]
+    pub speed: u8,
     /// track automation (positions in rows from the song start, values 0..=1)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub auto: Vec<Lane>,
@@ -499,7 +510,8 @@ impl Timeline {
     pub fn bpm_at(&self, t: Tick, song_bpm: f32) -> f32 {
         let k = self.tempo.partition_point(|p| p.tick <= t);
         if k == 0 {
-            return self.tempo.first().map_or(song_bpm, |p| p.bpm);
+            // before the first point: the song's BPM
+            return song_bpm;
         }
         let a = self.tempo[k - 1];
         match self.tempo.get(k) {
@@ -514,7 +526,7 @@ impl Timeline {
     /// Seconds from tick 0 to `t` through the tempo map.
     pub fn seconds_at(&self, t: Tick, song_bpm: f32) -> f64 {
         let secs = |ticks: f64, bpm: f64| ticks * 60.0 / (PPQ as f64 * bpm.max(1.0));
-        let first_bpm = self.tempo.first().map_or(song_bpm, |p| p.bpm) as f64;
+        let first_bpm = song_bpm as f64;
         let Some(first) = self.tempo.first() else {
             return secs(t as f64, song_bpm as f64);
         };
@@ -837,6 +849,7 @@ pub fn from_order(song: &Song) -> (Timeline, OrderMap) {
         }
         t += len;
     }
+    tl.end = map.end();
     tl.sort();
     (tl, map)
 }
@@ -1040,6 +1053,11 @@ pub fn from_toml(text: &str) -> Result<Timeline, String> {
     tl.next_id = tl.next_id.max(max_id + 1);
     Ok(tl)
 }
+
+mod edit;
+mod plan;
+pub use edit::*;
+pub use plan::*;
 
 #[cfg(test)]
 mod tests;

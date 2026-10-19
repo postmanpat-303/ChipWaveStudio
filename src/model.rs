@@ -269,6 +269,10 @@ pub struct Song {
     pub automation: Vec<crate::automation::Lane>,
     /// song info (artist, album, year, comment); used for export tags
     pub info: SongInfo,
+    /// Some = **timeline mode** (docs/TIMELINE.md): the clips are the song
+    /// and the order list is not played. Saved as `timeline.toml`.
+    #[serde(skip)]
+    pub timeline: Option<Box<crate::timeline::Timeline>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -431,7 +435,13 @@ impl Song {
             arranger_zoom: 2.0,
             automation: vec![],
             info: SongInfo::default(),
+            timeline: None,
         }
+    }
+
+    /// the song plays its timeline (clips), not the order list
+    pub fn is_timeline(&self) -> bool {
+        self.timeline.is_some()
     }
 
     /// seconds per row: 4 rows per beat at the given BPM, as the engine plays
@@ -441,6 +451,9 @@ impl Song {
     }
 
     pub fn length_seconds(&self) -> f64 {
+        if let Some(tl) = &self.timeline {
+            return tl.seconds_at(crate::timeline::play_end(tl), self.bpm);
+        }
         let rows: usize = self
             .order
             .iter()

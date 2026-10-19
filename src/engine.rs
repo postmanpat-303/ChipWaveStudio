@@ -368,6 +368,41 @@ pub struct Engine {
     /// panic fade-out frames left / total
     panic_fade: u32,
     panic_len: u32,
+    /// timeline-mode transport (docs/TIMELINE.md)
+    tl: TlState,
+}
+
+/// Timeline-mode playback: the plan being played, the row position and the
+/// per-track cursors. Row boundaries stay global (every channel steps on the
+/// same row clock), so every effect command keeps its tracker meaning.
+struct TlState {
+    /// playing the song's timeline (not the order list / a block loop)
+    on: bool,
+    plan: Option<std::sync::Arc<crate::timeline::Plan>>,
+    /// timeline row being played
+    row: usize,
+    /// per track: index of the current segment in the plan
+    cur: [usize; MAX_CHANNELS],
+    /// per track: segment the `limit` belongs to (usize::MAX = none)
+    seg_of: [usize; MAX_CHANNELS],
+    /// per track: rows of the segment's block that play (pattern break)
+    limit: [usize; MAX_CHANNELS],
+    /// per track with its own speed: effect steps done in this row
+    steps: [u8; MAX_CHANNELS],
+}
+
+impl Default for TlState {
+    fn default() -> Self {
+        Self {
+            on: false,
+            plan: None,
+            row: 0,
+            cur: [0; MAX_CHANNELS],
+            seg_of: [usize::MAX; MAX_CHANNELS],
+            limit: [0; MAX_CHANNELS],
+            steps: [0; MAX_CHANNELS],
+        }
+    }
 }
 
 impl Engine {
@@ -411,6 +446,7 @@ impl Engine {
             lim: crate::master::Limiter::new(sr),
             meter: crate::master::Loudness::new(sr),
             loud: Default::default(),
+            tl: TlState::default(),
         }
     }
 
@@ -642,6 +678,10 @@ impl Engine {
     ) {
         self.playing = true;
         self.loop_pattern = loop_pattern;
+        self.tl.on = !loop_pattern && song.timeline.is_some();
+        if self.tl.on {
+            self.ensure_plan(song);
+        }
         self.order_pos = order_pos.min(song.order.len().saturating_sub(1));
         self.pattern = if loop_pattern {
             pattern
@@ -672,7 +712,192 @@ impl Engine {
                 c.fade_to_tail();
             }
         }
+        if self.tl.on {
+            // timeline mode: `row` is the timeline row (order_pos unused)
+            self.tl_jump(song, row, true);
+        }
         self.process_row(song);
+    }
+
+    /// Timeline mode: (re)build the playback plan when the timeline changed
+    /// since the last call. Called on the UI thread (start, seek, every
+    /// frame), never by the audio thread, which only reads the plan.
+    pub fn ensure_plan(&mut self, song: &Song) {
+        match &song.timeline {
+            Some(tl) => {
+                let key = crate::timeline::plan_key(song, tl);
+                if self.tl.plan.as_ref().is_none_or(|p| p.key != key) {
+                    self.tl.plan = Some(std::sync::Arc::new(crate::timeline::build_plan(song, tl)));
+                    // cursors are re-found against the new segments
+                    let row = self.tl.row;
+                    self.tl_cursors(row);
+                }
+            }
+            None => {
+                self.tl.plan = None;
+                if self.tl.on {
+                    self.tl.on = false;
+                    self.playing = false;
+                }
+            }
+        }
+    }
+
+    /// The timeline row being played (timeline mode only).
+    pub fn tl_row(&self) -> Option<usize> {
+        (self.tl.on && self.playing).then_some(self.tl.row)
+    }
+
+    /// put every track's cursor on `row` (binary search, no allocation)
+    fn tl_cursors(&mut self, row: usize) {
+        let Some(plan) = self.tl.plan.as_deref() else {
+            return;
+        };
+        for ch in 0..MAX_CHANNELS {
+            self.tl.cur[ch] = plan.seek(ch, row);
+            self.tl.seg_of[ch] = usize::MAX;
+        }
+    }
+
+    /// Jump to timeline row `to` with state chase: tempo, speed, instrument,
+    /// volume and filter / Transform / macro overrides are replayed from the
+    /// song start, so playing from anywhere sounds like playing through.
+    /// Held notes of sustaining instruments are struck again at `to`;
+    /// decaying ones (drums, plucks, samples) are not. Runs on the UI thread.
+    fn tl_jump(&mut self, song: &Song, to: usize, chase: bool) {
+        let Some(plan) = self.tl.plan.clone() else {
+            self.playing = false;
+            return;
+        };
+        let to = to.min(plan.end.saturating_sub(1));
+        let nch = song.channels.min(MAX_CHANNELS);
+        let mut held = [0u8; MAX_CHANNELS];
+        if chase && to > 0 {
+            self.speed = song.speed.max(1);
+            self.bpm = song.bpm;
+            self.tl_cursors(0);
+            for row in 0..to {
+                self.tl.row = row;
+                self.tl_tempo(song, &plan, row);
+                for (ch, h) in held.iter_mut().enumerate().take(nch) {
+                    let cell = self.tl_cell(song, &plan, ch, row);
+                    if cell.note == NOTE_OFF {
+                        *h = 0;
+                    } else if cell.note > 0 {
+                        *h = cell.note;
+                    }
+                    self.chase_cell(song, ch, &cell);
+                }
+            }
+        }
+        self.tl.row = to;
+        self.tl_cursors(to);
+        for (ch, &note) in held.iter().enumerate().take(nch) {
+            let sustains = song
+                .instruments
+                .get(self.chans[ch].instr)
+                .and_then(|i| i.kind.patch())
+                .is_some_and(|p| p.amp.s >= 0.05);
+            if note > 0 && sustains {
+                let cell = Cell {
+                    note,
+                    ..Default::default()
+                };
+                self.trigger(song, ch, &cell, None);
+            }
+        }
+    }
+
+    /// state-only replay of one cell (chase): no sound, no plugin events
+    fn chase_cell(&mut self, song: &Song, ch: usize, cell: &Cell) {
+        let c = &mut self.chans[ch];
+        if cell.instr > 0 && (cell.instr as usize) <= song.instruments.len() {
+            if c.instr != cell.instr as usize - 1 {
+                c.fm = Default::default();
+                c.tfo = crate::transform::NO_OVERRIDES;
+                c.gmo = [-1.0; 8];
+            }
+            c.instr = cell.instr as usize - 1;
+            c.vol = song.instruments[c.instr].volume;
+        }
+        if cell.vol > 0 {
+            c.vol = (cell.vol - 1) as f32 / 64.0;
+        }
+        match cell.fx {
+            0x09 if cell.fxp > 0 => self.speed = cell.fxp as u32,
+            0x0C => c.vol = (cell.fxp.min(0x40)) as f32 / 64.0,
+            0x0F if cell.fxp > 0 && cell.fxp <= 0xF0 => self.bpm = cell.fxp as f32,
+            0x38 => {
+                c.fm.cut_oct = 0.0;
+                c.fm.cut_abs = if cell.fxp == 0 {
+                    0.0
+                } else {
+                    cutoff_from_code(cell.fxp)
+                };
+            }
+            0x39 => {
+                c.fm.res = if cell.fxp == 0 {
+                    -1.0
+                } else {
+                    (cell.fxp - 1) as f32 / 254.0
+                };
+            }
+            0x3F..=0x42 => c.tfo[(cell.fx - 0x3F) as usize] = tf_amount(cell.fxp),
+            0x43 => match cell.fxp >> 4 {
+                0 => c.gmo = [-1.0; 8],
+                x @ 1..=8 => c.gmo[x as usize - 1] = (cell.fxp & 15) as f32 / 15.0,
+                _ => {}
+            },
+            _ => {}
+        }
+        c.synth.vel = c.vol;
+    }
+
+    /// tempo-map changes at timeline row `row` (`0Fxx` in a cell still
+    /// overrides until the map changes again)
+    fn tl_tempo(&mut self, song: &Song, plan: &crate::timeline::Plan, row: usize) {
+        if !plan.tempo_changes {
+            return;
+        }
+        let Some(tl) = &song.timeline else { return };
+        let t = crate::timeline::rows_to_ticks(row);
+        let cur = tl.bpm_at(t, song.bpm);
+        let prev = if row == 0 {
+            song.bpm
+        } else {
+            tl.bpm_at(t - crate::timeline::ROW, song.bpm)
+        };
+        if cur.to_bits() != prev.to_bits() {
+            self.bpm = cur.clamp(20.0, 400.0);
+        }
+    }
+
+    /// the cell track `ch` plays at timeline row `row` (advances its cursor)
+    fn tl_cell(
+        &mut self,
+        song: &Song,
+        plan: &crate::timeline::Plan,
+        ch: usize,
+        row: usize,
+    ) -> Cell {
+        let Some(segs) = plan.tracks.get(ch) else {
+            return Cell::default();
+        };
+        let mut k = self.tl.cur[ch];
+        while k < segs.len() && segs[k].end <= row {
+            k += 1;
+        }
+        self.tl.cur[ch] = k;
+        match segs.get(k) {
+            Some(s) if s.start <= row => {
+                if self.tl.seg_of[ch] != k {
+                    self.tl.seg_of[ch] = k;
+                    self.tl.limit[ch] = crate::timeline::source_limit(song, s.pattern);
+                }
+                crate::timeline::plan_cell(song, s, row, self.tl.limit[ch])
+            }
+            _ => Cell::default(),
+        }
     }
 
     /// Jump the running playback to `order_pos` / `row` (arranger ruler
@@ -681,6 +906,22 @@ impl Engine {
     /// otherwise playback switches to the song order. Stopped: does nothing.
     pub fn seek(&mut self, song: &Song, order_pos: usize, row: usize) {
         if !self.playing || song.order.is_empty() {
+            return;
+        }
+        if self.tl.on {
+            // timeline mode: `row` is the timeline row; state is chased
+            self.ensure_plan(song);
+            self.tick = 0;
+            self.song_ended = false;
+            for c in &mut self.chans {
+                if c.active {
+                    c.fade_to_tail();
+                }
+            }
+            self.tl_jump(song, row, true);
+            self.samples_to_tick = self.tick_len();
+            self.process_row(song);
+            self.song_pos = self.calc_song_pos(song);
             return;
         }
         let op = order_pos.min(song.order.len() - 1);
@@ -966,6 +1207,10 @@ impl Engine {
     }
 
     fn process_row(&mut self, song: &Song) {
+        if self.tl.on {
+            self.process_tl_row(song);
+            return;
+        }
         let Some(pat) = song.patterns.get(self.pattern) else {
             self.playing = false;
             return;
@@ -976,6 +1221,51 @@ impl Engine {
         let mut brk = false;
         for ch in 0..song.channels.min(MAX_CHANNELS) {
             let cell = cells.get(ch).copied().unwrap_or_default();
+            brk |= self.process_cell(song, ch, cell);
+        }
+        if brk {
+            self.row = pat.rows;
+        } // jump to next pattern at advance
+    }
+
+    /// Timeline mode: every track's cell at the current timeline row. A
+    /// `0F00` pattern break only ends its clip's source (it never jumps).
+    fn process_tl_row(&mut self, song: &Song) {
+        let Some(plan) = self.tl.plan.clone() else {
+            self.playing = false;
+            return;
+        };
+        let row = self.tl.row;
+        self.tl_tempo(song, &plan, row);
+        let nch = song.channels.min(MAX_CHANNELS);
+        let mut shown = None;
+        for ch in 0..nch {
+            let cell = self.tl_cell(song, &plan, ch, row);
+            self.process_cell(song, ch, cell);
+            self.tl.steps[ch] = 0;
+            // the pattern editor follows the cursor track's clip (or the first)
+            if let Some(s) = plan
+                .tracks
+                .get(ch)
+                .and_then(|v| v.get(self.tl.cur[ch]))
+                .filter(|s| s.start <= row)
+            {
+                if shown.is_none() || ch == self.live.ch {
+                    shown = Some((s.pattern, s.src_row(row)));
+                }
+            }
+        }
+        if let Some((p, r)) = shown {
+            self.pattern = p;
+            self.row = r;
+        }
+    }
+
+    /// One channel's cell on a row: trigger plus effect commands. Returns
+    /// true for a `0F00` pattern break.
+    fn process_cell(&mut self, song: &Song, ch: usize, cell: Cell) -> bool {
+        let mut brk = false;
+        {
             self.chans[ch].slide = 0.0;
             self.chans[ch].vol_slide = 0.0;
             self.chans[ch].cut_slide = 0.0;
@@ -1063,9 +1353,7 @@ impl Engine {
                 _ => {}
             }
         }
-        if brk {
-            self.row = pat.rows;
-        } // jump to next pattern at advance
+        brk
     }
 
     /// Voice / glitch effects 30-37 (docs/PATTERN_EDITOR.md). 33/34 work
@@ -1124,6 +1412,32 @@ impl Engine {
     }
 
     fn advance_row(&mut self, song: &Song) {
+        if self.tl.on {
+            self.rows_played += 1;
+            let (end, lp) = match self.tl.plan.as_deref() {
+                Some(p) => (p.end, p.loop_rows),
+                None => (0, None),
+            };
+            let mut next = self.tl.row + 1;
+            let mut jump = false;
+            if let Some((a, b)) = lp {
+                if next == b {
+                    next = a;
+                    jump = true;
+                }
+            }
+            if next >= end {
+                next = 0;
+                jump = true;
+                self.song_ended = true;
+            }
+            self.tl.row = next;
+            if jump {
+                self.tl_cursors(next);
+            }
+            self.process_row(song);
+            return;
+        }
         self.row += 1;
         self.rows_played += 1;
         let rows = song
@@ -1146,6 +1460,10 @@ impl Engine {
     }
 
     fn do_tick(&mut self, song: &Song) {
+        if self.tl.on {
+            self.do_tl_tick(song);
+            return;
+        }
         self.tick += 1;
         if self.tick >= self.speed {
             self.tick = 0;
@@ -1162,6 +1480,52 @@ impl Engine {
                     c.vol = (c.vol + c.vol_slide / 64.0).clamp(0.0, 1.0);
                 }
             }
+        }
+    }
+
+    /// Timeline mode tick: tracks with their own speed (Track::speed) step
+    /// their slides that many times per row, spread over the song's ticks.
+    fn do_tl_tick(&mut self, song: &Song) {
+        self.tick += 1;
+        let ss = self.speed.max(1);
+        let row_end = self.tick >= ss;
+        let nch = song.channels.min(MAX_CHANNELS);
+        for i in 0..nch {
+            let own = self
+                .tl
+                .plan
+                .as_deref()
+                .and_then(|p| p.speeds.get(i).copied())
+                .unwrap_or(0) as u32;
+            let n = if own == 0 {
+                u32::from(!row_end)
+            } else {
+                let total = own.saturating_sub(1);
+                let due = if row_end || ss <= 1 {
+                    total
+                } else {
+                    ((self.tick * total) as f32 / (ss - 1) as f32).round() as u32
+                };
+                let done = self.tl.steps[i] as u32;
+                self.tl.steps[i] = due.min(255) as u8;
+                due.saturating_sub(done)
+            };
+            let c = &mut self.chans[i];
+            for _ in 0..n {
+                if c.slide != 0.0 {
+                    c.freq *= 2f32.powf(c.slide / 192.0);
+                }
+                if c.cut_slide != 0.0 {
+                    c.fm.cut_oct = (c.fm.cut_oct + c.cut_slide).clamp(-10.0, 10.0);
+                }
+                if c.vol_slide != 0.0 {
+                    c.vol = (c.vol + c.vol_slide / 64.0).clamp(0.0, 1.0);
+                }
+            }
+        }
+        if row_end {
+            self.tick = 0;
+            self.advance_row(song);
         }
     }
 
@@ -1186,6 +1550,11 @@ impl Engine {
 
     /// Song position in lines (fractional, includes the tick phase).
     fn calc_song_pos(&self, song: &Song) -> f32 {
+        if self.tl.on {
+            let tl = self.tick_len().max(1.0);
+            let tick_frac = (1.0 - self.samples_to_tick / tl).clamp(0.0, 1.0);
+            return self.tl.row as f32 + (self.tick as f32 + tick_frac as f32) / self.speed as f32;
+        }
         let idx = if self.loop_pattern {
             song.order.iter().position(|&b| b == self.pattern)
         } else {
