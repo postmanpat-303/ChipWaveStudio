@@ -104,11 +104,11 @@ The mapping lives in `src/browser/catalogue.rs` and is generic: any scanned plug
 On the **Plugins** tab each row can show a small screenshot of the plugin's own editor:
 
 1. When a plugin first appears, ChipWave draws a tidy **card** (category colour, name, creator, format tag) so the list is never empty.
-2. In the background a crash-guarded child (`chipwave --capture-thumb …`) opens the editor **off-screen**, captures it (Windows / Wine: `PrintWindow` / `BitBlt` of the HWND), downscales it to 256 px on the long side and caches a PNG in `<config>/plugin-thumbs/` keyed by format + plugin id + version.
+2. In the background a crash-guarded child (`chipwave --capture-thumb …`, one plugin at a time, killed after 25 s) opens the editor, briefly, in the top-left corner of the screen, and captures it: `PrintWindow` of the editor window first, then a copy of its area of the screen for OpenGL editors that `PrintWindow` can't see. A blank capture counts as failed. The image is downscaled to 256 px on its long side and cached as a PNG (plus a small `.json` saying captured / card / failed) in `<config>/plugin-thumbs/`, keyed by format + plugin id + version, so an update captures again.
 3. Hover a row for a larger preview; right-click › **Refresh thumbnail** forces a new capture. **Rescan plugins** does not wipe the cache; only Refresh does.
 4. ••• › **Plugin thumbnails** turns the feature off (list only, as before). Setting: `browser_thumbs` in `settings.toml` (default on).
 
-Plugins with no editor, a failed capture, or a non-Windows host keep the generated card. Showcase catalogue entries do not ship credited screenshots (licence-clear capture at install time is enough). Capture is one plugin at a time so the UI stays responsive.
+Plugins with no editor, a failed or timed-out capture, or a non-Windows host keep the generated card (and are not retried until **Refresh thumbnail**). The editor window flashes up for about 3 s on the first capture. Showcase catalogue entries do not ship credited screenshots (licence-clear capture at install time is enough). Capture is one plugin at a time so the UI stays responsive.
 
 ## Drum Patterns
 

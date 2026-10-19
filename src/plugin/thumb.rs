@@ -358,7 +358,7 @@ pub fn write_card(k: &str, name: &str, vendor: &str, format: &str, kind: Kind, m
 
 /// run in the child: load, open editor, capture, write PNG. Exit code 0 = ok.
 pub fn cli_capture(args: &[String]) -> i32 {
-    // --capture-thumb <format> <path> <id> <out.png> [--name N] [--vendor V] [--version V]
+    // --capture-thumb <format> <path> <id> <out.png> [--name N] [--vendor V] [--plugin-version V]
     let Some(i) = args.iter().position(|a| a == "--capture-thumb") else {
         return 2;
     };
@@ -380,7 +380,14 @@ pub fn cli_capture(args: &[String]) -> i32 {
     };
     let name = flag("--name");
     let vendor = flag("--vendor");
-    let version = flag("--version");
+    let version = {
+        let v = flag("--plugin-version");
+        if v.is_empty() {
+            flag("--version")
+        } else {
+            v
+        }
+    };
     let name = if name.is_empty() { id.clone() } else { name };
     let k = key(format, id, &version);
 
@@ -391,6 +398,27 @@ pub fn cli_capture(args: &[String]) -> i32 {
     }
 
     let deadline = Instant::now() + timeout();
+    {
+        // a hanging plugin must not keep the child alive: write the card, exit
+        let (k2, n2, v2, f2, out2) = (
+            k.clone(),
+            name.clone(),
+            vendor.clone(),
+            format.clone(),
+            out.clone(),
+        );
+        let limit = timeout() + Duration::from_secs(2);
+        std::thread::spawn(move || {
+            std::thread::sleep(limit);
+            write_card(&k2, &n2, &v2, &f2, Kind::Failed, "timed out");
+            if let Some(p) = png_path(&k2) {
+                if p != Path::new(&out2) {
+                    let _ = std::fs::copy(&p, &out2);
+                }
+            }
+            std::process::exit(3);
+        });
+    }
     let result = (|| -> Result<(), String> {
         let path_buf = PathBuf::from(path);
         if !path_buf.exists() {
@@ -405,33 +433,33 @@ pub fn cli_capture(args: &[String]) -> i32 {
             return Err("no editor".into());
         }
         inst.open_editor(&format!("{name} – ChipWave thumb"))?;
-        // let the plugin paint
+        // let the plugin paint (on-screen: BitBlt of off-screen HWNDs is black under Wine)
         let mut pumps = 0;
-        while Instant::now() < deadline && pumps < 40 {
+        while Instant::now() < deadline && pumps < 60 {
             inst.poll_main();
             pump_messages();
             std::thread::sleep(Duration::from_millis(50));
             pumps += 1;
         }
         let hwnd = editor_hwnd(&*inst).ok_or("no editor window to capture")?;
-        // park off-screen so the user barely sees it
-        #[cfg(windows)]
-        unsafe {
-            use windows_sys::Win32::UI::WindowsAndMessaging::*;
-            SetWindowPos(
-                hwnd as _,
-                std::ptr::null_mut(),
-                -32000,
-                -32000,
-                0,
-                0,
-                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW,
-            );
-        }
         inst.poll_main();
         pump_messages();
-        std::thread::sleep(Duration::from_millis(100));
-        let (w, h, rgba) = capture_hwnd(hwnd)?;
+        std::thread::sleep(Duration::from_millis(150));
+        place_top_left(hwnd);
+        for _ in 0..10 {
+            inst.poll_main();
+            pump_messages();
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let (mut w, mut h, mut rgba) = capture_hwnd(hwnd)?;
+        if is_mostly_blank(&rgba) {
+            // OpenGL / layered editors: copy the window's area of the screen
+            let (sw, sh, s) = capture_screen_area(hwnd)?;
+            (w, h, rgba) = (sw, sh, s);
+        }
+        if is_mostly_blank(&rgba) {
+            return Err("editor capture was blank".into());
+        }
         let (w, h, rgba) = downscale(w, h, &rgba, MAX_SIDE);
         save_png(Path::new(out), w, h, &rgba)?;
         write_meta(
@@ -474,6 +502,21 @@ pub fn cli_capture(args: &[String]) -> i32 {
             1
         }
     }
+}
+
+/// true when >98 % of pixels are near-black (failed / off-screen capture)
+fn is_mostly_blank(rgba: &[u8]) -> bool {
+    if rgba.len() < 16 {
+        return true;
+    }
+    let mut dark = 0usize;
+    let n = rgba.len() / 4;
+    for px in rgba.as_chunks::<4>().0 {
+        if px[0] < 8 && px[1] < 8 && px[2] < 8 {
+            dark += 1;
+        }
+    }
+    dark * 100 / n > 98
 }
 
 fn pump_messages() {
@@ -554,7 +597,7 @@ pub fn capture_hwnd(hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
             return Err("GetDIBits failed".into());
         }
         // BGRA → RGBA
-        for px in bgra.chunks_exact_mut(4) {
+        for px in bgra.as_chunks_mut::<4>().0 {
             px.swap(0, 2);
             px[3] = 255;
         }
@@ -574,6 +617,82 @@ fn print_window(hwnd: isize, hdc: windows_sys::Win32::Graphics::Gdi::HDC) -> i32
         ) -> windows_sys::core::BOOL;
     }
     unsafe { PrintWindow(hwnd as _, hdc, 2) }
+}
+
+/// put the editor on-screen, top-left and topmost (so nothing covers it)
+fn place_top_left(_hwnd: isize) {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::UI::WindowsAndMessaging::*;
+        SetWindowPos(
+            _hwnd as _,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOSIZE | SWP_SHOWWINDOW,
+        );
+    }
+}
+
+#[cfg(windows)]
+fn capture_screen_area(hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
+    use windows_sys::Win32::Foundation::*;
+    use windows_sys::Win32::Graphics::Gdi::*;
+    use windows_sys::Win32::UI::WindowsAndMessaging::*;
+    unsafe {
+        let mut rc: RECT = std::mem::zeroed();
+        if GetClientRect(hwnd as HWND, &mut rc) == 0 {
+            return Err("GetClientRect failed".into());
+        }
+        let mut pt = POINT { x: 0, y: 0 };
+        ClientToScreen(hwnd as HWND, &mut pt);
+        let w = (rc.right - rc.left).max(1);
+        let h = (rc.bottom - rc.top).max(1);
+        let sdc = GetDC(std::ptr::null_mut());
+        if sdc.is_null() {
+            return Err("GetDC(screen) failed".into());
+        }
+        let mem = CreateCompatibleDC(sdc);
+        let bmp = CreateCompatibleBitmap(sdc, w, h);
+        let old = SelectObject(mem, bmp as _);
+        BitBlt(mem, 0, 0, w, h, sdc, pt.x, pt.y, SRCCOPY);
+        let mut bmi: BITMAPINFO = std::mem::zeroed();
+        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = w;
+        bmi.bmiHeader.biHeight = -h;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        let got = GetDIBits(
+            mem,
+            bmp,
+            0,
+            h as u32,
+            px.as_mut_ptr() as *mut _,
+            &mut bmi,
+            DIB_RGB_COLORS,
+        );
+        SelectObject(mem, old);
+        DeleteObject(bmp as _);
+        DeleteDC(mem);
+        ReleaseDC(std::ptr::null_mut(), sdc);
+        if got == 0 {
+            return Err("GetDIBits(screen) failed".into());
+        }
+        for c in px.as_chunks_mut::<4>().0 {
+            c.swap(0, 2);
+            c[3] = 255;
+        }
+        Ok((w as u32, h as u32, px))
+    }
+}
+
+#[cfg(not(windows))]
+fn capture_screen_area(_hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
+    Err("editor capture is Windows-only for now".into())
 }
 
 #[cfg(not(windows))]
@@ -712,7 +831,7 @@ impl Queue {
                         &p.name,
                         "--vendor",
                         &p.vendor,
-                        "--version",
+                        "--plugin-version",
                         &p.version,
                     ])
                     .stdin(Stdio::null())

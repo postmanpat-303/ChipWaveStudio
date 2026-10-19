@@ -1129,6 +1129,10 @@ fn main() {
         attach_console();
     }
     let args: Vec<String> = std::env::args().collect();
+    // before --version: capture-thumb takes --version <plugin ver>
+    if args.iter().any(|a| a == "--capture-thumb") {
+        std::process::exit(plugin::thumb::cli_capture(&args));
+    }
     if args.iter().any(|a| a == "--version") {
         println!("ChipWave Studio {}", crate::VERSION);
         return;
@@ -1157,9 +1161,6 @@ fn main() {
             }
         }
         return;
-    }
-    if args.iter().any(|a| a == "--capture-thumb") {
-        std::process::exit(plugin::thumb::cli_capture(&args));
     }
     if let Some(i) = args.iter().position(|a| a == "--scan-plugin") {
         // child process of the plugin scanner: check one file, print JSON
