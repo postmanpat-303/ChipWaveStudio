@@ -150,6 +150,12 @@ pub struct Extra {
     /// the view tab bar at the bottom is shown (View menu)
     #[serde(default = "yes")]
     pub view_bar: bool,
+    /// the tracker's Advanced Edit panel is shown (Ctrl+Shift+A; docs/ADVANCED_EDIT.md)
+    #[serde(default)]
+    pub adv_edit_open: bool,
+    /// ... as a floating window instead of docked right of the pattern
+    #[serde(default)]
+    pub adv_edit_float: bool,
 }
 
 fn pattern_vol() -> f32 {
@@ -208,6 +214,8 @@ impl Default for Extra {
             plugin_setup_done: false,
             inspector_open: false,
             view_bar: true,
+            adv_edit_open: false,
+            adv_edit_float: false,
         }
     }
 }

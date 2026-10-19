@@ -1,6 +1,49 @@
 //! The pattern (block) editor view.
 use super::*;
 
+/// channel header height (colour bar, name + Play/M/S, instrument)
+const HDR_H: f32 = 36.0;
+
+/// a channel-header button
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum HdrOp {
+    Play,
+    /// Shift+click Play: only this channel, block from the top (again: un-solo)
+    SoloPlay,
+    Mute,
+    Solo,
+}
+
+/// per channel, worked out once a frame
+pub(super) struct Headers {
+    pub(super) colours: Vec<Color32>,
+    /// "01 909 Kick" ("" = none)
+    pub(super) instruments: Vec<String>,
+    /// the instrument slot (1-based, 0 = none)
+    pub(super) slots: Vec<u8>,
+}
+
+/// `s` cut with "…" to fit `w` points
+fn fit(p: &egui::Painter, s: &str, f: &FontId, w: f32) -> String {
+    let width = |t: &str| {
+        p.layout_no_wrap(t.to_string(), f.clone(), Color32::WHITE)
+            .size()
+            .x
+    };
+    if width(s) <= w {
+        return s.to_string();
+    }
+    let mut v: Vec<char> = s.chars().collect();
+    while !v.is_empty() {
+        v.pop();
+        let t: String = v.iter().collect::<String>() + "…";
+        if width(&t) <= w {
+            return t;
+        }
+    }
+    String::new()
+}
+
 impl App {
     pub(super) fn pattern_view(&mut self, ui: &mut egui::Ui) {
         let (song_snapshot, play_pat, play_row, playing) = self.with(|s| {
@@ -28,7 +71,7 @@ impl App {
         // full height on the right, the order list in between (clipped when it
         // does not fit). Narrower windows move the right group to a second
         // line, then transpose too (a third line only in very narrow windows).
-        const RIGHT_W: f32 = 430.0; // the right-hand group
+        const RIGHT_W: f32 = 455.0; // the right-hand group
         const TRANSPOSE_W: f32 = 270.0; // separator, "Transpose", -12 -1 +1 +12
         let (mut wrap, mut tr_later) = (false, false);
         ui.horizontal(|ui| {
@@ -85,7 +128,14 @@ impl App {
             });
         }
 
-        let full = ui.available_rect_before_wrap();
+        let mut full = ui.available_rect_before_wrap();
+        // Advanced Edit docked on the right (Ctrl+Shift+A)
+        if self.extra.adv_edit_open && !self.extra.adv_edit_float {
+            let w = super::advedit::ADV_W.min(full.width() * 0.45);
+            let pr = Rect::from_min_max(Pos2::new(full.right() - w, full.top()), full.max);
+            full.max.x = pr.left() - 6.0;
+            self.adv_docked(ui, pr);
+        }
         let font = FontId::monospace(14.0);
         let cw = ui.fonts_mut(|f| f.glyph_width(&font, '0'));
         let chan_w = cw * 15.0 + 10.0; // "C-4 01 40 0C20" + gap
@@ -149,7 +199,7 @@ impl App {
         let rh = 19.0;
         let x0 = x0_of(avail);
         let header_y = avail.top() + 6.0;
-        let top = header_y + 26.0;
+        let top = header_y + HDR_H + 4.0;
         let visible = (((avail.bottom() - top) / rh) as usize).max(1);
         let start = (self.row as isize - visible as isize / 2)
             .clamp(0, (pat.rows as isize - visible as isize).max(0)) as usize;
@@ -182,52 +232,139 @@ impl App {
                 painter.vline(x.round() + 0.5, top..=grid_bot, Stroke::new(1.0, line));
             }
         }
+        // channel headers: a colour bar in the track's colour, number + name,
+        // the channel's instrument, and Play (audition; Shift = solo-play) / M / S
+        let hdr = self.channel_headers(channels);
+        let mut hdr_ops: Vec<(usize, HdrOp)> = vec![];
+        self.hdr_hits.clear();
         for (vi, ch) in (first_ch..channels).enumerate() {
             let x = x0 + vi as f32 * chan_w;
             if x > avail.right() {
                 break;
             }
-            let hr = Rect::from_min_size(Pos2::new(x, header_y), egui::vec2(chan_w - 8.0, 22.0));
-            painter.rect_filled(
-                hr,
-                6,
-                if !mixer.audible(ch) {
-                    hex(0x4A525E)
-                } else {
-                    th().slate
-                },
-            );
+            let hr = Rect::from_min_size(Pos2::new(x, header_y), egui::vec2(chan_w - 8.0, HDR_H));
+            let audible = mixer.audible(ch);
+            let (mute, solo) = (mixer.channels[ch].mute, mixer.channels[ch].solo);
+            let t = th();
+            painter.rect_filled(hr, 6, if !audible { hex(0x4A525E) } else { t.slate });
             if alt && ch % 2 == 1 {
                 painter.rect_filled(hr, 6, tint);
             }
+            let colour = hdr.colours[ch];
+            painter.rect_filled(
+                Rect::from_min_size(hr.min, egui::vec2(hr.width(), 4.0)),
+                egui::CornerRadius {
+                    nw: 6,
+                    ne: 6,
+                    sw: 0,
+                    se: 0,
+                },
+                if audible {
+                    colour
+                } else {
+                    colour.gamma_multiply(0.45)
+                },
+            );
+            // Play, M, S on the right of the first line
+            let bs = 15.0;
+            let by = hr.top() + 6.0;
+            let b = |k: f32| {
+                Rect::from_min_size(
+                    Pos2::new(hr.right() - 4.0 - (k + 1.0) * (bs + 2.0) + 2.0, by),
+                    egui::vec2(bs, bs),
+                )
+            };
+            let (rp, rm, rs) = (b(2.0), b(1.0), b(0.0));
+            for (r, id, op, on, label, on_col) in [
+                (rp, "p", HdrOp::Play, false, "", t.accent),
+                (rm, "m", HdrOp::Mute, mute, "M", hex(0xE0A040)),
+                (rs, "s", HdrOp::Solo, solo, "S", hex(0x6FBF73)),
+            ] {
+                self.hdr_hits.push((ch, op, r));
+                let resp = ui
+                    .interact(r, egui::Id::unique(("chhdr", ch, id)), Sense::click())
+                    .on_hover_text(match op {
+                        HdrOp::Play => "audition this channel's instrument (C-4)\nShift+click: solo-play this channel (again: un-solo)",
+                        HdrOp::SoloPlay => "",
+                        HdrOp::Mute => "mute (F9)",
+                        HdrOp::Solo => "solo (F10)",
+                    });
+                let fill = if on {
+                    on_col
+                } else if resp.hovered() {
+                    theme::shade(&t, 0.22)
+                } else {
+                    theme::shade(&t, 0.12)
+                };
+                painter.rect_filled(r, 3, fill);
+                if op == HdrOp::Play {
+                    super::browserpanel::icon(
+                        &painter,
+                        super::browserpanel::Icon::Play,
+                        r.center() + egui::vec2(0.5, 0.0),
+                        9.0,
+                        if resp.hovered() {
+                            t.accent
+                        } else {
+                            Color32::WHITE
+                        },
+                    );
+                } else {
+                    painter.text(
+                        r.center(),
+                        egui::Align2::CENTER_CENTER,
+                        label,
+                        FontId::proportional(10.0),
+                        if on { Color32::BLACK } else { Color32::WHITE },
+                    );
+                }
+                if resp.clicked() {
+                    let shift = ui.input(|i| i.modifiers.shift);
+                    hdr_ops.push((
+                        ch,
+                        if op == HdrOp::Play && shift {
+                            HdrOp::SoloPlay
+                        } else {
+                            op
+                        },
+                    ));
+                }
+            }
+            // number + name (truncated to fit before the buttons), instrument below
+            let name_w = rp.left() - hr.left() - 9.0;
+            let name = format!("{} {}", ch + 1, names.get(ch).cloned().unwrap_or_default());
+            let f1 = FontId::proportional(12.5);
             painter.text(
-                hr.left_center() + egui::vec2(6.0, 0.0),
+                Pos2::new(hr.left() + 6.0, by + bs / 2.0),
                 egui::Align2::LEFT_CENTER,
-                format!("{} {}", ch + 1, names.get(ch).cloned().unwrap_or_default()),
-                FontId::proportional(13.0),
+                fit(&painter, &name, &f1, name_w),
+                f1,
                 Color32::WHITE,
+            );
+            let f2 = FontId::proportional(10.5);
+            let inst = &hdr.instruments[ch];
+            painter.text(
+                Pos2::new(hr.left() + 6.0, hr.bottom() - 8.0),
+                egui::Align2::LEFT_CENTER,
+                fit(&painter, inst, &f2, hr.width() - 12.0),
+                f2,
+                if inst.is_empty() {
+                    t.ink2
+                } else {
+                    hex(0xC9D3DE)
+                },
             );
             if ch == self.ch {
                 // current channel: an accent underline on its header
                 painter.hline(
                     hr.x_range().shrink(4.0),
                     hr.bottom() + 1.0,
-                    Stroke::new(2.0, th().accent),
+                    Stroke::new(2.0, t.accent),
                 );
             }
-            painter.text(
-                hr.right_center() - egui::vec2(6.0, 0.0),
-                egui::Align2::RIGHT_CENTER,
-                if mixer.channels[ch].solo {
-                    "SOLO"
-                } else if mixer.channels[ch].mute {
-                    "MUTED"
-                } else {
-                    ""
-                },
-                FontId::proportional(11.0),
-                hex(0xFFB4AE),
-            );
+        }
+        for (ch, op) in hdr_ops {
+            self.header_op(ch, op, &hdr);
         }
         for vi in 0..visible {
             let r = start + vi;
@@ -471,6 +608,16 @@ impl App {
     fn block_bar_right(&mut self, ui: &mut egui::Ui, channels: usize) {
         let full = !self.lower_visible();
         if ui
+            .selectable_label(self.extra.adv_edit_open, "A<>E")
+            .on_hover_text(
+                "Advanced Edit (Ctrl+Shift+A): flip, shrink, expand, mix-paste, safe transpose, \
+                 mirror, volume fades and instrument replace over a section, with a content mask",
+            )
+            .clicked()
+        {
+            self.toggle_adv_edit();
+        }
+        if ui
             .selectable_label(full, "Full height")
             .on_hover_text(if full {
                 "show the lower panel again (F11)"
@@ -540,5 +687,102 @@ impl App {
             ui.add(egui::Label::new(egui::RichText::new(&txt).monospace()).truncate())
                 .on_hover_text(txt.clone());
         });
+    }
+}
+
+impl App {
+    /// colours and instruments of the channel headers: the timeline track's
+    /// colour (or the palette's), the track's instrument, else the one its
+    /// notes use most (as `track_slot`), in one pass over the song
+    pub(super) fn channel_headers(&self, channels: usize) -> Headers {
+        self.with(|s| {
+            let song = &s.song;
+            let mut count = vec![[0u32; 256]; channels];
+            for p in &song.patterns {
+                for row in &p.cells {
+                    for (ch, c) in row.iter().enumerate().take(channels) {
+                        if c.instr > 0 {
+                            count[ch][c.instr as usize] += 1;
+                        }
+                    }
+                }
+            }
+            let tl = song.timeline.as_deref();
+            let mut h = Headers {
+                colours: vec![],
+                instruments: vec![],
+                slots: vec![],
+            };
+            for (ch, cnt) in count.iter().enumerate() {
+                h.colours.push(match tl {
+                    Some(t) => super::timeline::track_colour_in(t, ch),
+                    None => super::timeline::track_colour(ch),
+                });
+                let own = tl.and_then(|t| t.tracks.get(ch)).map_or(0, |t| t.instr);
+                let slot = if own > 0 {
+                    own
+                } else {
+                    match (1..256).max_by_key(|&i| cnt[i]) {
+                        Some(i) if cnt[i] > 0 => i as u8,
+                        _ => 0,
+                    }
+                };
+                let name = song
+                    .instruments
+                    .get((slot as usize).wrapping_sub(1))
+                    .map(|i| format!("{slot:02X} {}", i.name))
+                    .unwrap_or_default();
+                h.slots.push(if name.is_empty() { 0 } else { slot });
+                h.instruments.push(name);
+            }
+            h
+        })
+    }
+
+    /// a channel-header button: Play auditions the channel's instrument
+    /// (Shift+click = solo-play: solo this channel only and play the block
+    /// from the top), M / S toggle mute and solo like F9 / F10
+    pub(super) fn header_op(&mut self, ch: usize, op: HdrOp, hdr: &Headers) {
+        self.ch = ch;
+        match op {
+            HdrOp::Play => {
+                let slot = hdr.slots.get(ch).copied().unwrap_or(0);
+                if slot == 0 {
+                    self.status = format!("Channel {} has no instrument yet", ch + 1);
+                    return;
+                }
+                self.preview_notes(&[49], slot, ch as u8);
+                self.status = format!("Audition: {} on channel {}", hdr.instruments[ch], ch + 1);
+            }
+            HdrOp::SoloPlay => {
+                let only = self.with(|s| {
+                    let m = &s.song.mixer.channels;
+                    m[ch].solo && m.iter().enumerate().all(|(i, c)| i == ch || !c.solo)
+                });
+                self.with(|s| {
+                    for (i, c) in s.song.mixer.channels.iter_mut().enumerate() {
+                        c.solo = !only && i == ch;
+                    }
+                });
+                self.dirty = true;
+                if only {
+                    self.status = format!("Channel {} un-soloed", ch + 1);
+                } else {
+                    self.play(3);
+                    self.status = format!(
+                        "Solo-play: channel {} only (Shift+click Play again to un-solo)",
+                        ch + 1
+                    );
+                }
+            }
+            HdrOp::Mute => {
+                self.with(|s| s.song.mixer.channels[ch].mute ^= true);
+                self.dirty = true;
+            }
+            HdrOp::Solo => {
+                self.with(|s| s.song.mixer.channels[ch].solo ^= true);
+                self.dirty = true;
+            }
+        }
     }
 }

@@ -36,8 +36,10 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 49] = [
+pub const VIEWS: [&str; 51] = [
     "pattern",
+    "advedit",
+    "advedit-headers",
     "arranger",
     "timeline",
     "timeline-new",
@@ -250,6 +252,24 @@ impl App {
                 let _ = std::fs::write(d.join("Night drive.cwt"), b"");
                 self.br.filter.tab = crate::browser::Tab::Files;
                 self.files_go(d, false);
+            }
+            "advedit" | "advedit-headers" => {
+                // the tracker: Advanced Edit docked on the right with a selection,
+                // or the coloured channel headers (one muted, the lower panel hidden)
+                self.view = View::Pattern;
+                self.extra.full_height = true;
+                if view == "advedit" {
+                    self.extra.adv_edit_open = true;
+                    self.extra.adv_edit_float = false;
+                    self.sel = Some(((4, 0), (19, 1)));
+                    self.row = 19;
+                    self.adv.section = crate::advedit::Section::Selection;
+                    self.adv.mask.set(crate::advedit::Field::FxVal, false);
+                    self.status = "Advanced Edit: Ctrl+Shift+A".into();
+                } else {
+                    self.with(|s| s.song.mixer.channels[2].mute = true);
+                    self.extra.full_height = true;
+                }
             }
             "plugin-setup" => {
                 self.view = View::Timeline;

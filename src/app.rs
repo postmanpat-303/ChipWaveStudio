@@ -11,6 +11,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod about;
+mod advedit;
+#[cfg(test)]
+mod advedit_tests;
 mod arranger;
 #[cfg(test)]
 mod audioclip_tests;
@@ -148,6 +151,10 @@ pub struct App {
     /// mouse drag-select anchor
     drag_anchor: Option<Pos>,
     clip: Vec<Vec<Cell>>,
+    /// the Advanced Edit panel's settings (src/app/advedit.rs)
+    adv: advedit::AdvUi,
+    /// tracker channel-header buttons as last drawn (channel, button, rect), for tests
+    hdr_hits: Vec<(usize, pattern::HdrOp, Rect)>,
     view: View,
     dock_arranger: bool,
     arr_sel: usize,
@@ -489,6 +496,8 @@ impl App {
             sel: None,
             drag_anchor: None,
             clip: vec![],
+            adv: Default::default(),
+            hdr_hits: vec![],
             view: View::Pattern,
             dock_arranger: true,
             arr_sel: 0,
@@ -785,7 +794,7 @@ impl App {
                     ("Space", "play / stop current block (loop)"), ("Shift+Space", "play / stop song (from the arranger play marker)"), ("Enter / Ctrl+Enter", "restart block / play from row"), ("Ctrl+= / Ctrl+- / Ctrl+0", "UI scale up / down / 100 %"), ("Esc", "edit mode on/off"),
                     ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Ctrl+Shift+F", "fill to length (auto arrange)"), ("1-7 / 0 in arranger", "tag block role / clear"), ("Alt +/- (Shift = octave)", "transpose selection or channel (also the Block bar -12 -1 +1 +12 buttons, Edit > Transpose)"), ("F9 / F10", "mute / solo channel"),
                     ("Numpad - / +", "base octave down / up"), ("Ctrl+Shift+PgDn / PgUp", "double / halve the block length (Length field in the Block bar; Song > Block: set length, stretch, squash)"), ("Row numbers", "decimal 00-63 by default; View > Row numbers or Settings > Look switches to hex 00-3F. Effect values stay hex"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
-                    ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Delete (with selection)", "clear selection"),
+                    ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Ctrl+Shift+A", "Advanced Edit panel (tracker): section, content mask, flip / shrink / expand, mix-paste, safe transpose, mirror, volume fade, replace instrument"), ("Delete (with selection)", "clear selection"),
                     ("Ctrl+Tab, Ctrl+1..5", "views: pattern / arranger / mixer / FX / sample"), ("Ctrl+6", "Timeline + piano roll: the default layout (View > Reset to default layout)"), ("I (Alt+I in the pattern editor)", "Inspector: the selected track or clip (View > Inspector)"), ("View tab bar (bottom)", "TIMELINE / TRACKER / ARRANGER / PIANO / INST / AUTO / MIX / FX / SAMPLE; View > View tab bar hides it"), ("F12", "this key list"), ("F11", "full-height pattern (hide / show the lower panel)"), ("Ctrl+I", "instrument editor in the lower panel"), ("Ctrl+F", "search instrument parameters"), ("knob: Ctrl-drag / double-click", "fine adjust / default"), ("Ctrl+Q", "quit"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "arranger: duplicate clip / as new block (when visible)"),
                     ("Arranger (click it to focus)", "click / Shift+click / Ctrl+click select; Ctrl+X/C/V cut/copy/paste after selection; Ctrl+Shift+V paste as new blocks; Del; Ctrl+A; right-click menu"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
                     ("Arranger: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
@@ -1187,6 +1196,7 @@ impl eframe::App for App {
         if self.show_help {
             self.help(&ctx);
         }
+        self.adv_window(&ctx);
         self.poll_updates(&ctx);
         self.dialogs(&ctx);
         self.update_window(&ctx);

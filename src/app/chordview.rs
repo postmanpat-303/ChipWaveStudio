@@ -76,6 +76,12 @@ impl App {
     /// play `notes` with the current instrument for ~0.7 s
     pub(super) fn preview_chord(&mut self, notes: &[u8]) {
         let (ins, ch) = (self.instr, self.ch as u8);
+        self.preview_notes(notes, ins, ch);
+    }
+
+    /// play `notes` with instrument `ins` through channel `ch` for ~0.7 s
+    /// (the chord helper, the tracker's channel-header Play button)
+    pub(super) fn preview_notes(&mut self, notes: &[u8], ins: u8, ch: u8) {
         let now = Instant::now();
         // release a previous preview first
         let old: Vec<u8> = self.chords.offs.drain(..).map(|(_, k)| k).collect();
@@ -202,7 +208,9 @@ impl App {
     }
 
     pub(super) fn chord_window(&mut self, ctx: &egui::Context) {
-        self.release_previews(!self.chords.open);
+        // previews end on their own timer (also the tracker header Play button,
+        // which plays while the chord helper is closed)
+        self.release_previews(false);
         if !self.chords.offs.is_empty() {
             ctx.request_repaint_after(Duration::from_millis(50));
         }

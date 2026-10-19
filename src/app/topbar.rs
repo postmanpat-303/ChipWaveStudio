@@ -431,6 +431,17 @@ impl App {
                 ui.separator();
                 if ui
                     .add(
+                        egui::Button::selectable(self.extra.adv_edit_open, "Advanced Edit")
+                            .shortcut_text("Ctrl+Shift+A"),
+                    )
+                    .on_hover_text("the tracker's block operations panel (docked right of the pattern)")
+                    .clicked()
+                {
+                    self.toggle_adv_edit();
+                    ui.close();
+                }
+                if ui
+                    .add(
                         egui::Button::selectable(self.extra.inspector_open, "Inspector")
                             .shortcut_text("I"),
                     )
