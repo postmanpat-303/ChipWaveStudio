@@ -1041,6 +1041,13 @@ fn file_demo_songs_menu_and_help_load_demo_song() {
     assert_eq!(song(&mut h, |s| s.title.clone()), disco.title);
     assert_eq!(song(&mut h, |s| s.bpm), 104.0);
     assert!(!h.state().dirty);
+    // the psy demo "Chrome Throat" too
+    click_exact(&mut h, "File");
+    click_exact(&mut h, "Demo songs");
+    click_exact(&mut h, "Chrome Throat");
+    assert!(song(&mut h, |s| s.title.clone()).starts_with("Chrome Throat"));
+    assert_eq!(song(&mut h, |s| s.bpm), 145.0);
+    assert!(!h.state().dirty);
     click_exact(&mut h, "File");
     click_exact(&mut h, "Demo songs");
     click_exact(&mut h, "Lumen Drift");

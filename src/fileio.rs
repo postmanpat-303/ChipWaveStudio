@@ -726,6 +726,11 @@ pub const DEMOS: &[(&str, &str, &str)] = &[
         "disco, F minor, 104 BPM (voice, phaser strings, filter sweeps)",
         include_str!("../demos/disco.cwt.toml"),
     ),
+    (
+        "Chrome Throat",
+        "psy / dark trance, F# Phrygian, 145 BPM (voices, liquid-chrome throat, acid)",
+        include_str!("../demos/chrome_throat.cwt.toml"),
+    ),
 ];
 
 /// demo `i` of `DEMOS` (falls back to the first)
@@ -1289,6 +1294,118 @@ mod tests {
         // ~3:25: 22 blocks of 64 lines at 104 BPM
         let secs = s.order.len() as f32 * 64.0 * 60.0 / (104.0 * 4.0);
         assert!((180.0..240.0).contains(&secs), "{secs}");
+    }
+    /// the psy demo "Chrome Throat": in File > Demo songs, every voice, FX device,
+    /// automation lane and modulation route loads
+    #[test]
+    fn chrome_throat_demo_loads_from_menu() {
+        use crate::fx::FxKind;
+        let i = DEMOS
+            .iter()
+            .position(|d| d.0 == "Chrome Throat")
+            .expect("chrome throat demo registered in File > Demo songs");
+        let text = DEMOS[i].2;
+        let s = demo_song_n(i);
+        assert!(s.title.starts_with("Chrome Throat"));
+        assert_eq!(s.bpm, 145.0);
+        assert_eq!(s.channels, 13);
+        assert_eq!(s.mixer.duck_key, 0);
+        assert!(s.mixer.channels[1].duck > 0.5, "bass ducked off the kick");
+        let l = &s.mixer.limiter;
+        assert!(l.enabled && l.ceiling_db <= -1.0 && (l.target_lufs + 14.0).abs() < 0.5);
+        let voices: Vec<_> = s
+            .instruments
+            .iter()
+            .filter_map(|i| match &i.kind {
+                InstrumentKind::Voice(v) => Some((i, v)),
+                _ => None,
+            })
+            .collect();
+        assert!(voices.len() >= 5, "chant, drone, whispers, chops, chrome");
+        let (chrome, cv) = voices
+            .iter()
+            .find(|(i, _)| i.name == "Chrome Throat")
+            .expect("chrome throat voice");
+        assert!(cv.throat && cv.words.len() >= 6);
+        let kinds: Vec<FxKind> = chrome.fx.iter().map(|d| d.kind).collect();
+        for k in [FxKind::Resonator, FxKind::FreqShift, FxKind::Phaser] {
+            assert!(kinds.contains(&k), "chrome fx {k:?}");
+        }
+        // Wave wavetable shimmer and Grid pad
+        let gen = |n: &str| {
+            s.instruments
+                .iter()
+                .any(|i| i.name == n && matches!(i.kind, InstrumentKind::Gen(_)))
+        };
+        assert!(gen("Chrome Shimmer") && gen("Grid Pad"));
+        // the text names every lane and route; none was dropped on load
+        assert_eq!(s.automation.len(), text.matches("[[automation]]").count());
+        assert!(s.automation.len() >= 14);
+        assert_eq!(
+            s.modulation.routes.len(),
+            text.matches("[[modulation.route]]").count()
+        );
+        assert!(s.modulation.mods.len() >= 4 && s.modulation.routes.len() >= 5);
+        // acid: 303 glide and accent commands; voices: words, throat and transform commands
+        for cmd in [
+            " 3C01", " 3D30", " 38", " 3A", " 3E0", " 32", " 3F", " 40", " 42", " 37",
+        ] {
+            assert!(text.contains(cmd), "uses {cmd}");
+        }
+        // 4-5 minutes: blocks of 64 lines at 145 BPM
+        let secs = s.order.len() as f32 * 64.0 * 60.0 / (145.0 * 4.0);
+        assert!((240.0..300.0).contains(&secs), "{secs}");
+    }
+    /// the chrome breakdown renders (finite, audible, no clipping), and the chrome
+    /// voice is "swallowed": alone, it is much darker in "Chrome swallow" than in
+    /// "Chrome mirror" (the formants slide down)
+    #[test]
+    fn chrome_throat_breakdown_renders_and_swallows() {
+        let i = DEMOS.iter().position(|d| d.0 == "Chrome Throat").unwrap();
+        let s = demo_song_n(i);
+        let blk = |n: &str| s.patterns.iter().position(|p| p.name == n).unwrap();
+        let (mirror, swallow, pour) = (
+            blk("Chrome mirror"),
+            blk("Chrome swallow"),
+            blk("Chrome pour"),
+        );
+        let mut part = s.clone();
+        part.order = vec![swallow, pour];
+        part.automation.clear();
+        let a = crate::engine::render_song(&part, 22050);
+        assert!(a.iter().all(|x| x.is_finite()));
+        let peak = a.iter().fold(0f32, |m, x| m.max(x.abs()));
+        let rms = (a.iter().map(|x| x * x).sum::<f32>() / a.len() as f32).sqrt();
+        assert!(peak <= 1.0 && rms > 0.01, "peak {peak} rms {rms}");
+        // the chrome voice alone (channel 10), block by block
+        let ch = s.channel_names.iter().position(|n| n == "Chrome").unwrap();
+        let mut solo = s.clone();
+        for p in &mut solo.patterns {
+            for row in &mut p.cells {
+                for (k, c) in row.iter_mut().enumerate() {
+                    if k != ch {
+                        *c = Default::default();
+                    }
+                }
+            }
+        }
+        solo.automation.clear();
+        solo.mixer.returns.iter_mut().for_each(|r| r.level = 0.0);
+        // brightness: energy of the first difference over the energy (mono, 22.05 kHz)
+        let bright = |b: usize| {
+            let mut t = solo.clone();
+            t.order = vec![b];
+            let x = crate::engine::render_song(&t, 22050);
+            let m: Vec<f32> = x.chunks(2).map(|f| f[0] + f[1]).collect();
+            let n = (64.0 * 60.0 / (145.0 * 4.0) * 22050.0) as usize;
+            let m = &m[..n.min(m.len())];
+            let e: f32 = m.iter().map(|v| v * v).sum();
+            let d: f32 = m.windows(2).map(|w| (w[1] - w[0]).powi(2)).sum();
+            assert!(e > 1e-3, "block {b} silent");
+            d / e
+        };
+        let (open, closed) = (bright(mirror), bright(swallow));
+        assert!(closed < open * 0.6, "open {open} closed {closed}");
     }
     /// arbitrary (non-ASCII, garbage) text must never panic the parsers
     #[test]
