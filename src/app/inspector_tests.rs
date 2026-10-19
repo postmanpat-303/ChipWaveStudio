@@ -112,3 +112,33 @@ fn clip_section_mutes_the_selected_clip_and_undo_brings_it_back() {
     frames(&mut h, 2);
     assert_eq!(h.state().insp.focus, super::inspector::Focus::Track);
 }
+
+#[test]
+fn view_tab_bar_switches_views_and_the_old_ways_still_work() {
+    let mut h = tl_harness();
+    assert!(h.state().extra.view_bar);
+    h.get_by_label("MIX").click();
+    frames(&mut h, 2);
+    assert!(h.state().view == View::Mixer);
+    h.get_by_label("TRACKER").click();
+    frames(&mut h, 2);
+    assert!(h.state().view == View::Pattern);
+    h.get_by_label("INST").click();
+    frames(&mut h, 2);
+    assert!(h.state().extra.lower_inst && h.state().lower_visible());
+    assert_eq!(h.state().vtab_current(), Some(super::viewbar::VTab::Inst));
+    h.get_by_label("ARRANGER").click();
+    frames(&mut h, 2);
+    assert!(h.state().view == View::Arranger);
+    // the shortcuts and the toolbar keep working
+    key(&mut h, Key::T, egui::Modifiers::COMMAND);
+    frames(&mut h, 2);
+    assert!(h.state().view == View::Timeline);
+    assert_eq!(
+        h.state().vtab_current().map(|t| t != super::viewbar::VTab::Arranger),
+        Some(true)
+    );
+    key(&mut h, Key::Num3, egui::Modifiers::COMMAND);
+    frames(&mut h, 2);
+    assert_eq!(h.state().vtab_current(), Some(super::viewbar::VTab::Mix));
+}

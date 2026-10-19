@@ -168,7 +168,7 @@ fn group(ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
         });
 }
 
-fn hdr_text() -> Color32 {
+pub(super) fn hdr_text() -> Color32 {
     if th().light {
         Color32::WHITE
     } else {
@@ -176,7 +176,7 @@ fn hdr_text() -> Color32 {
     }
 }
 
-fn hdr_dim() -> Color32 {
+pub(super) fn hdr_dim() -> Color32 {
     if th().light {
         Color32::from_white_alpha(190)
     } else {
@@ -420,6 +420,13 @@ impl App {
                 {
                     self.toggle_inspector();
                     ui.close();
+                }
+                if ui
+                    .checkbox(&mut self.extra.view_bar, "View tab bar")
+                    .on_hover_text("the TIMELINE / TRACKER / ... tabs and transport along the bottom")
+                    .changed()
+                {
+                    self.save_settings();
                 }
                 ui.checkbox(&mut self.show_auto, "Automation lanes");
                 ui.checkbox(&mut self.dock_arranger, "Dock lower panel under pattern");

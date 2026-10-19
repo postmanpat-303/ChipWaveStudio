@@ -244,6 +244,7 @@ On Linux, build it from source (below).
 | `Ctrl+,` | settings |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | UI scale up / down / 100 % |
 | `Ctrl+I` | instrument editor in the lower panel (again: back to the arranger) |
+| `I` (`Alt+I` in the pattern editor) | show / hide the Inspector: the selected track or clip ([INSPECTOR.md](docs/INSPECTOR.md)) |
 | `Ctrl+B` | show / hide the Browser (instruments, plugins, samples, songs…; [BROWSER.md](docs/BROWSER.md)) |
 | `Ctrl+F` | search the instrument's parameters |
 | `F11` | Full-height pattern: hide / show the lower panel |
@@ -290,6 +291,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [FX.md](docs/FX.md) — the FX devices (Phaser and the rest)
 - [ARRANGER.md](docs/ARRANGER.md) — the arranger (the order list as a lane of blocks)
 - [TIMELINE.md](docs/TIMELINE.md) — the Timeline view (Ctrl+T) and timeline mode: arrange tracks and clips like a DAW
+- [INSPECTOR.md](docs/INSPECTOR.md) — the Inspector (I) and the view tab bar along the bottom
 - [BROWSER.md](docs/BROWSER.md) — the Browser (Ctrl+B): find and load instruments, plugins, samples, songs, presets, Grid patches and wavetables; drag them onto tracks; Find plugins
 - [DAW_TIMELINE_PLAN.md](docs/DAW_TIMELINE_PLAN.md) — the DAW timeline plan and milestones
 - [AUTO_ARRANGE.md](docs/AUTO_ARRANGE.md) — fill-to-length auto arrange and quick-start fun features

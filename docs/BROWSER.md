@@ -34,7 +34,7 @@ From top to bottom (this is mockup B, `docs/mockups/src/browser_b.html`):
 3. **Search:** every word must match the name, category, creator, details or tags (`bass chip`).
 4. **Tag chips:** Bass, Lead, Pad, Keys, Drums, FX, Chip, Analog, FM, Voice, Warm, Bright, Plucky, Evolving, Showcase. Only the tags the tab has are shown; several chips narrow the list (all must match). Tags come from the names, categories and kinds.
 5. **Category, Creator and Location columns** with counts. Click a value to filter, **All** to clear. Location is *All*, *Library* (built in, your library, plugins), *This song*, *Favourites* and each folder you added.
-6. **Results**, sortable by **Name**, **Type** or **Rating**. Each row has a coloured stripe and a **badge** for its format, the name, a second line (kind, category, size…), its **stars** and a **heart**.
+6. **Results**, sortable by **Name**, **Type** or **Rating**. Each row has a coloured stripe and an outlined **text tag** for its format (CWI, CLAP, VST3, WAV …), the name, a second line (kind, category, size…), its **stars** and a **heart**.
 7. **Preview bar:** ▶ / ■, "Preview on C-3 · plays through track NN …" and the **Auto** (auto-play) toggle.
 8. **Colour legend:** CWI instrument, VST3 plugin, CLAP plugin, WAV / FLAC / MP3 / OGG sample, CWT song, MOD/MED*, WT wavetable, GRID patch, MIDI* (* = import planned).
 
@@ -63,7 +63,7 @@ The mapping lives in `src/browser/catalogue.rs` and is generic: any scanned plug
 
 ## Favourites and ratings
 
-Click the **heart** at the end of a row (or right-click › Add to favourites) and the **stars** (1–5; click the same number again to clear). Both are saved in `settings.toml` (`browser_favs`, `browser_ratings`) under the item's key: a file's path, or a name for built-in items. **♥** in the header and the *Favourites* location show only favourites; **Sort: Rating** puts the best first.
+Click the **heart** at the end of a row (or right-click › Add to favourites) and the **stars** (1–5; click the same number again to clear). Both are saved in `settings.toml` (`browser_favs`, `browser_ratings`) under the item's key: a file's path, or a name for built-in items. The heart in the header, the **Favourites · n** chip (first in the tag row, with the count for this tab) and the *Favourites* location show only favourites; **Sort: Rating** puts the best first.
 
 ## Locations (your folders)
 

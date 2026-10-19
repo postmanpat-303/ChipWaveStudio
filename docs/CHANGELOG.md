@@ -4,12 +4,19 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Inspired layout (Del's picks A, E, F from the reference screenshots)
+- **Timeline polish (mockup B):** clips have a **solid title bar** in the track colour over a softer body (notes and waveforms keep their saturation); track headers get a rounded **icon tile** with the instrument type's glyph (synth, drum, voice, sample, wave, Grid, plugin, audio, Song/Master); the marker row shows each marker as a **section band** up to the next one, with **Markers** / **Bars** captions over the header column; a slimmer timeline tool strip; header width 232 → 250 px so names fit. Track colours can now be set per track (saved with the song). Dark Circuit, Amiga and the Flat style all keep their look.
+- **Browser:** format badges are now outlined **text tags** (CWI, CLAP, VST3, WAV …) and a **Favourites · n** chip sits first in the tag row.
+- **Inspector (new, I):** a collapsible panel on the left showing the selected track (name, colour, volume, pan, M/S, sends, duck, instrument with Edit / Browse) or Timeline clip (mute, gain, fades and shape for audio, Piano roll / Pattern editor). Only existing settings; undoable; names commit on click-away and Esc cancels. **Alt+I** in the pattern editor, where I types a note. Guide: [INSPECTOR.md](INSPECTOR.md).
+- **View tab bar (new):** transport, position and tempo, then TIMELINE · TRACKER · ARRANGER · PIANO · INST · AUTO · MIX · FX · SAMPLE tabs and the Inspector / Browser toggles along the bottom. The toolbar, View menu and shortcuts still switch views as before. View › View tab bar hides it.
+- The Automation strip's Write toggle no longer uses a "●" the bundled font can't draw.
+
 ### Browser Showcase catalogue
 - Well-known open-source plugins (Surge XT, Dexed, OB-Xf, Odin 2, Monique, Geonkick, sfizz, ADLplug) show a category (Hybrid / FM / Analog / Pad / Bass / Drums / Sampler / Chip), credited creator and a **Showcase** tag once scanned. Mapping in `src/browser/catalogue.rs`; binaries not bundled.
 
 ### Automation UX stages 3–8 (design A)
 - **Stage 3:** song lanes **migrate** onto track lanes when entering timeline mode; a **Song / Master** track holds tempo, master volume and returns; Tempo can be a track lane; old songs stay bit-exact.
-- **Stage 4:** per-track **Read / Touch / Latch / Write / Off** write modes; global **● Write** toggle in the Automation strip.
+- **Stage 4:** per-track **Read / Touch / Latch / Write / Off** write modes; global **Write** toggle in the Automation strip.
 - **Stage 5:** timeline tools **Pointer / Pencil / Line / Shape** (shape stamp); bigger hit targets from stage 1.
 - **Stage 6:** clip envelopes **Absolute / Relative + / Relative ×**; Glue **keeps and merges** clip automation; relative lanes draw blue/dashed.
 - **Stage 7:** **38xx–3Bxx** command diamonds on cutoff/resonance lanes; **modulation band** (± depth) around the curve.

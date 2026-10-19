@@ -134,6 +134,9 @@ pub struct Extra {
     /// the left Inspector is shown (I; docs/INSPECTOR.md)
     #[serde(default)]
     pub inspector_open: bool,
+    /// the view tab bar at the bottom is shown (View menu)
+    #[serde(default = "yes")]
+    pub view_bar: bool,
 }
 
 fn browser_w() -> f32 {
@@ -183,6 +186,7 @@ impl Default for Extra {
             browser_autoplay: true,
             plugin_setup_done: false,
             inspector_open: false,
+            view_bar: true,
         }
     }
 }
