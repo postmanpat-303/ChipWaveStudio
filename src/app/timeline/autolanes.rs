@@ -11,7 +11,7 @@
 //! in rows of the clip's source (so they move, trim and loop with it).
 use super::*;
 use crate::automation::{
-    value_at, Lane, Point, Shape, Target, Units, POINT_R, POINT_R_HOT, SCALE_W,
+    value_at, ClipMode, Lane, Point, Shape, Target, Units, WriteMode, POINT_R, POINT_R_HOT, SCALE_W,
 };
 
 /// height of one lane row and of the "+ lane" strip under the lanes
@@ -45,6 +45,10 @@ pub(crate) enum AutoDragKind {
     Draw,
     /// bend segment `i` (curve at the start, value rising?)
     Bend(usize, f32, bool),
+    /// line tool: start pos/value stored; end follows mouse
+    Line(f32, f32),
+    /// shape stamp: start pos, depth from vertical drag
+    Stamp(f32, f32),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -94,10 +98,75 @@ pub(crate) enum AutoOp {
     Curve(LaneRef, usize, f32),
     /// pencil: set the value at `pos` (points within `w` rows are replaced)
     Pencil(LaneRef, f32, f32, f32),
+    /// line tool: two endpoints (pos0,v0,pos1,v1) replace the span
+    Line(LaneRef, f32, f32, f32, f32),
+    /// shape stamp over [pos0,pos1] with depth and rate (cycles)
+    Stamp(LaneRef, f32, f32, f32, f32, StampShape),
+    /// track write mode
+    SetWriteMode(usize, WriteMode),
+    /// clip lane combine mode
+    SetClipMode(u32, String, ClipMode),
     Snapshot,
     StartDrag(AutoDrag),
     EndDrag,
     Menu(AutoMenu),
+}
+
+/// shape-stamp waveforms (design A §3.2)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)]
+pub(crate) enum StampShape {
+    Sine,
+    Tri,
+    Saw,
+    Square,
+    Random,
+}
+
+impl StampShape {
+    #[allow(dead_code)]
+    pub(crate) const ALL: [StampShape; 5] = [
+        StampShape::Sine,
+        StampShape::Tri,
+        StampShape::Saw,
+        StampShape::Square,
+        StampShape::Random,
+    ];
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            StampShape::Sine => "Sine",
+            StampShape::Tri => "Triangle",
+            StampShape::Saw => "Saw",
+            StampShape::Square => "Square",
+            StampShape::Random => "Random",
+        }
+    }
+    fn at(self, t: f32, seed: u32) -> f32 {
+        let t = t.fract();
+        match self {
+            StampShape::Sine => (t * std::f32::consts::TAU).sin() * 0.5 + 0.5,
+            StampShape::Tri => {
+                if t < 0.5 {
+                    t * 2.0
+                } else {
+                    2.0 - t * 2.0
+                }
+            }
+            StampShape::Saw => t,
+            StampShape::Square => {
+                if t < 0.5 {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            StampShape::Random => {
+                let mut x = seed.wrapping_add((t * 1000.0) as u32).wrapping_mul(0x9E37);
+                x ^= x >> 16;
+                x as f32 / u32::MAX as f32
+            }
+        }
+    }
 }
 
 /// Vertical layout of the track area: each track's clip row, then (when
@@ -138,7 +207,7 @@ impl Layout {
         let mut y = 0.0;
         for tr in 0..n {
             top.push(y);
-            let o = mode && tr < 32 && t.view.auto_open >> tr & 1 == 1;
+            let o = mode && tr < 64 && t.view.auto_open >> tr & 1 == 1;
             let l = if o { track_targets(t, tr) } else { vec![] };
             y += clip_h;
             if o {
@@ -328,6 +397,7 @@ pub(crate) fn lanes_ui(
     units: &[Units],
     follow_touch: bool,
     has_last_touch: bool,
+    tool: crate::automation::AutoTool,
     ops: &mut Vec<AutoOp>,
 ) {
     let t = th();
@@ -409,6 +479,19 @@ pub(crate) fn lanes_ui(
                     {
                         ops.push(AutoOp::ShowLastTouch);
                     }
+                    // write mode chip (design A §3.3)
+                    let wm = c.tl.tracks.get(tr).map(|x| x.write_mode).unwrap_or_default();
+                    ui.menu_button(egui::RichText::new(wm.name()).small(), |ui| {
+                        ui.label(egui::RichText::new("Automation write").small().color(t.ink2));
+                        for m in WriteMode::ALL {
+                            if ui.selectable_label(wm == m, m.name()).clicked() {
+                                ops.push(AutoOp::SetWriteMode(tr, m));
+                                ui.close();
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("Read / Touch / Latch / Write / Off — recording mode for this track");
                     if !song_lanes.is_empty() {
                         ui.menu_button(egui::RichText::new("pin song lane").small(), |ui| {
                             ui.label(
@@ -530,7 +613,12 @@ pub(crate) fn lanes_ui(
                     Stroke::new(1.0, col.gamma_multiply(0.9 * k_m)),
                     egui::StrokeKind::Inside,
                 );
-                let cc = Color32::from_rgb(0xF2, 0xE6, 0xB8).gamma_multiply(k_m);
+                let relative = l.mode != ClipMode::Absolute;
+                let cc = if relative {
+                    Color32::from_rgb(0x6A, 0xB0, 0xF2).gamma_multiply(k_m)
+                } else {
+                    Color32::from_rgb(0xF2, 0xE6, 0xB8).gamma_multiply(k_m)
+                };
                 let mut pts = vec![];
                 let mut x = br.left();
                 while x <= br.right() {
@@ -542,7 +630,14 @@ pub(crate) fn lanes_ui(
                     }
                     x += 2.0;
                 }
-                lp.add(egui::Shape::line(pts, Stroke::new(1.5, cc)));
+                if relative {
+                    // dashed: draw every other segment
+                    for w in pts.windows(2).step_by(2) {
+                        lp.line_segment([w[0], w[1]], Stroke::new(1.5, cc));
+                    }
+                } else {
+                    lp.add(egui::Shape::line(pts, Stroke::new(1.5, cc)));
+                }
                 for (_, px, pt) in point_xs(l, Some(cl), x_of, g.v0, g.v1) {
                     let v = value_at(&l.points, clip_pos(cl, pt as f64)).unwrap_or(0.0);
                     lp.circle_filled(Pos2::new(px, y_of(inner, v)), POINT_R, cc);
@@ -601,6 +696,99 @@ pub(crate) fn lanes_ui(
                     }
                 }
             }
+
+            // command diamonds (38xx–3Bxx) on cutoff / resonance lanes (design A §3.7)
+            if let Some(tg) = Target::parse(tgt).or_else(|| Target::parse_in(tgt, song)) {
+                let cmd = match tg {
+                    Target::Cutoff(_) => Some((0x38u8, 0x3Au8, 0x3Bu8)),
+                    Target::Resonance(_) => Some((0x39u8, 0, 0)),
+                    _ => None,
+                };
+                if let Some((set, up, down)) = cmd {
+                    let nch = song.channels.clamp(1, crate::model::MAX_CHANNELS);
+                    if tr < nch {
+                        for (bi, pat) in song.patterns.iter().enumerate() {
+                            for (row, cells) in pat.cells.iter().enumerate() {
+                                let Some(cell) = cells.get(tr) else { continue };
+                                let fx = cell.fx;
+                                if fx != set && fx != up && fx != down {
+                                    continue;
+                                }
+                                // diamond at the first clip that plays this block on this track
+                                let tick = row as i64 * ROW;
+                                for cidx in c.idx.visible(&c.tl, tr, tick, tick + 1) {
+                                    let cl = &c.tl.clips[cidx];
+                                    let crate::timeline::ClipKind::Block { pattern, .. } = cl.kind
+                                    else {
+                                        continue;
+                                    };
+                                    if pattern != bi {
+                                        continue;
+                                    }
+                                    let x = x_of(cl.start as f64 + tick as f64);
+                                    if x < g.lanes.left() - 4.0 || x > g.lanes.right() + 4.0 {
+                                        continue;
+                                    }
+                                    let nv = cell.fxp as f32 / 255.0;
+                                    let y = y_of(inner, nv);
+                                    let d = 4.0;
+                                    let diamond = [
+                                        Pos2::new(x, y - d),
+                                        Pos2::new(x + d, y),
+                                        Pos2::new(x, y + d),
+                                        Pos2::new(x - d, y),
+                                    ];
+                                    lp.add(egui::Shape::convex_polygon(
+                                        diamond.to_vec(),
+                                        Color32::from_rgb(0xE0, 0xC0, 0x40).gamma_multiply(0.85),
+                                        Stroke::new(1.0, Color32::from_rgb(0xFF, 0xE0, 0x80)),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // modulation band: value ± depth where a route targets this param (design A §3.7)
+            if let Some(tg) = Target::parse(tgt) {
+                let id = tg.id();
+                let depths: Vec<f32> = song
+                    .modulation
+                    .routes
+                    .iter()
+                    .filter(|r| r.target == id)
+                    .map(|r| r.amount.abs())
+                    .collect();
+                if let Some(depth) = depths
+                    .into_iter()
+                    .fold(None, |a: Option<f32>, d| Some(a.map_or(d, |x| x.max(d))))
+                {
+                    if depth > 0.01 {
+                        if let Some(l) = tlane.filter(|l| !l.points.is_empty()) {
+                            let mut band = egui::Mesh::default();
+                            let mut x = g.lanes.left();
+                            while x <= g.lanes.right() + 3.0 {
+                                let pos = (tick_of(x) / ROW as f64) as f32;
+                                if let Some(v) = value_at(&l.points, pos) {
+                                    let lo = y_of(inner, (v - depth * 0.5).clamp(0.0, 1.0));
+                                    let hi = y_of(inner, (v + depth * 0.5).clamp(0.0, 1.0));
+                                    quad(
+                                        &mut band,
+                                        Rect::from_min_max(
+                                            Pos2::new(x, hi.min(lo)),
+                                            Pos2::new(x + 3.0, lo.max(hi)),
+                                        ),
+                                        Color32::from_white_alpha(18),
+                                    );
+                                }
+                                x += 3.0;
+                            }
+                            lp.add(egui::Shape::mesh(band));
+                        }
+                    }
+                }
+            }
+
             // ---- lane header
             let hr = Rect::from_min_max(
                 Pos2::new(g.heads.left() + 10.0, y + 1.0),
@@ -796,7 +984,7 @@ pub(crate) fn lanes_ui(
                                 }));
                             }
                         }
-                    } else if mods.command {
+                    } else if mods.command || tool == crate::automation::AutoTool::Pencil {
                         ops.push(AutoOp::Snapshot);
                         ops.push(AutoOp::Pencil(r.clone(), pos, v, 0.5));
                         ops.push(AutoOp::StartDrag(AutoDrag {
@@ -805,8 +993,24 @@ pub(crate) fn lanes_ui(
                             grab_y: p.y,
                             row: (tr, k),
                         }));
+                    } else if tool == crate::automation::AutoTool::Line {
+                        ops.push(AutoOp::Snapshot);
+                        ops.push(AutoOp::StartDrag(AutoDrag {
+                            lane: r,
+                            kind: AutoDragKind::Line(pos, v),
+                            grab_y: p.y,
+                            row: (tr, k),
+                        }));
+                    } else if tool == crate::automation::AutoTool::Shape {
+                        ops.push(AutoOp::Snapshot);
+                        ops.push(AutoOp::StartDrag(AutoDrag {
+                            lane: r,
+                            kind: AutoDragKind::Stamp(pos, v),
+                            grab_y: p.y,
+                            row: (tr, k),
+                        }));
                     } else {
-                        // a new point that follows the mouse
+                        // Pointer: new point that follows the mouse (drag from empty)
                         ops.push(AutoOp::Add(r, pos, v, Some((p.y, (tr, k)))));
                     }
                 }
@@ -828,11 +1032,39 @@ pub(crate) fn lanes_ui(
                                 let cv = (c0 + if rising { dy } else { -dy }).clamp(-1.0, 1.0);
                                 ops.push(AutoOp::Curve(d.lane.clone(), i, cv));
                             }
+                            AutoDragKind::Line(..) | AutoDragKind::Stamp(..) => {
+                                // committed on drag_stopped
+                            }
                         }
                     }
                 }
             }
             if resp.drag_stopped() {
+                if let (Some(p), Some(d)) = (resp.interact_pointer_pos(), drag) {
+                    if d.row == (tr, k) {
+                        let v1 = v_of(inner, p.y);
+                        let pos1 = pos_in(&d.lane, snap_pos(p.x));
+                        match d.kind {
+                            AutoDragKind::Line(p0, v0) => {
+                                ops.push(AutoOp::Line(d.lane.clone(), p0, v0, pos1, v1));
+                            }
+                            AutoDragKind::Stamp(p0, _) => {
+                                let depth =
+                                    ((d.grab_y - p.y).abs() / inner.height()).clamp(0.1, 1.0);
+                                let cycles = ((pos1 - p0).abs() / 4.0).max(1.0);
+                                ops.push(AutoOp::Stamp(
+                                    d.lane.clone(),
+                                    p0,
+                                    pos1,
+                                    depth,
+                                    cycles,
+                                    StampShape::Sine,
+                                ));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
                 ops.push(AutoOp::EndDrag);
             }
             // design A: double-click empty = add; double-click a point = delete;
@@ -949,6 +1181,16 @@ pub(crate) fn lanes_ui(
                         }
                     }
                     None => {}
+                }
+                if let Some((id, true)) = m.clip {
+                    ui.separator();
+                    ui.label(egui::RichText::new("Clip envelope").strong());
+                    for mode in [ClipMode::Absolute, ClipMode::RelAdd, ClipMode::RelMul] {
+                        if ui.button(format!("Mode: {}", mode.name())).clicked() {
+                            ops.push(AutoOp::SetClipMode(id, tgt.clone(), mode));
+                            ui.close();
+                        }
+                    }
                 }
                 if m.has_track_lane && ui.button("Clear the track lane").clicked() {
                     ops.push(AutoOp::Clear(LaneRef::Track(tr, tgt.clone())));
@@ -1111,7 +1353,7 @@ impl App {
         }
         let discrete = !matches!(
             op,
-            AutoOp::Move(..) | AutoOp::Pencil(..) | AutoOp::Curve(..)
+            AutoOp::Move(..) | AutoOp::Pencil(..) | AutoOp::Curve(..) | AutoOp::Line(..)
         );
         if discrete && !matches!(op, AutoOp::Toggle(_)) {
             self.snapshot();
@@ -1140,13 +1382,22 @@ impl App {
             };
             match &op {
                 AutoOp::Toggle(tr) => {
-                    if *tr < 32 {
+                    if *tr < 64 {
                         t.view.auto_open ^= 1 << tr;
                     }
                 }
                 AutoOp::AddLane(tr, tg) => {
                     let id = tg.id();
-                    if let Some(x) = t.tracks.get_mut(*tr) {
+                    let nch = s.song.channels.clamp(1, crate::model::MAX_CHANNELS);
+                    let tr = if matches!(
+                        *tg,
+                        Target::Master | Target::Tempo | Target::Ret(..) | Target::ModAmount(_)
+                    ) {
+                        crate::timeline::ensure_master_track(t, nch)
+                    } else {
+                        *tr
+                    };
+                    if let Some(x) = t.tracks.get_mut(tr) {
                         if !x.auto.iter().any(|l| l.target == id) {
                             let mut l = Lane::new(*tg, label.clone());
                             l.points.push(Point {
@@ -1159,7 +1410,7 @@ impl App {
                             status =
                                 format!("Added track lane '{label}' (double-click to add points)");
                         }
-                        if *tr < 32 {
+                        if tr < 64 {
                             t.view.auto_open |= 1 << tr;
                         }
                     }
@@ -1337,6 +1588,86 @@ impl App {
                                 curve: 0.0,
                             },
                         );
+                    }
+                }
+                AutoOp::Line(r, p0, v0, p1, v1) => {
+                    let hi = max_pos(t, r);
+                    let (a, b, va, vb) = if *p0 <= *p1 {
+                        (*p0, *p1, *v0, *v1)
+                    } else {
+                        (*p1, *p0, *v1, *v0)
+                    };
+                    if let Some(l) = lane_mut(t, r, &label, va, true) {
+                        let a = a.clamp(0.0, hi);
+                        let b = b.clamp(0.0, hi);
+                        l.points.retain(|p| p.pos < a - 1e-4 || p.pos > b + 1e-4);
+                        let k = l.points.partition_point(|p| p.pos <= a);
+                        l.points.insert(
+                            k,
+                            Point {
+                                pos: a,
+                                value: va,
+                                shape: Shape::Linear,
+                                curve: 0.0,
+                            },
+                        );
+                        l.points.insert(
+                            k + 1,
+                            Point {
+                                pos: b.max(a + 1e-3),
+                                value: vb,
+                                shape: Shape::Linear,
+                                curve: 0.0,
+                            },
+                        );
+                        status = "Line drawn".into();
+                    }
+                }
+                AutoOp::Stamp(r, p0, p1, depth, cycles, sh) => {
+                    let hi = max_pos(t, r);
+                    let (a, b) = if *p0 <= *p1 { (*p0, *p1) } else { (*p1, *p0) };
+                    if let Some(l) = lane_mut(t, r, &label, 0.5, true) {
+                        let a = a.clamp(0.0, hi);
+                        let b = b.clamp(a + 0.25, hi);
+                        let n = ((*cycles).max(1.0) * 8.0).ceil() as usize;
+                        let n = n.clamp(4, 64);
+                        let mid = value_at(&l.points, (a + b) * 0.5).unwrap_or(0.5);
+                        l.points.retain(|p| p.pos < a - 1e-4 || p.pos > b + 1e-4);
+                        let seed = (a.to_bits()).wrapping_add(b.to_bits());
+                        for i in 0..=n {
+                            let tfrac = i as f32 / n as f32;
+                            let pos = a + (b - a) * tfrac;
+                            let w = sh.at(tfrac * cycles.max(1.0), seed);
+                            let v = (mid + (w - 0.5) * depth.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+                            let k = l.points.partition_point(|p| p.pos <= pos);
+                            l.points.insert(
+                                k,
+                                Point {
+                                    pos,
+                                    value: v,
+                                    shape: Shape::Smooth,
+                                    curve: 0.0,
+                                },
+                            );
+                        }
+                        status = format!("{} stamp", sh.name());
+                    }
+                }
+                AutoOp::SetWriteMode(tr, m) => {
+                    if let Some(x) = t.tracks.get_mut(*tr) {
+                        x.write_mode = *m;
+                        status = format!("Write mode: {}", m.name());
+                    }
+                }
+                AutoOp::SetClipMode(id, tg, m) => {
+                    if let Some(l) = t
+                        .clips
+                        .iter_mut()
+                        .find(|c| c.id == *id)
+                        .and_then(|c| c.auto.iter_mut().find(|l| l.target == *tg))
+                    {
+                        l.mode = *m;
+                        status = format!("Clip envelope: {}", m.name());
                     }
                 }
                 _ => {}

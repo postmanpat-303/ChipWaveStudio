@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::automation::Lane;
+use crate::automation::{Lane, WriteMode};
 use crate::model::{Cell, Pattern, Song, MAX_CHANNELS, ROWS, ROWS_PER_BEAT};
 
 /// Musical time: 960 ticks per quarter note (the same PPQ as Microsoft's
@@ -177,6 +177,8 @@ pub enum TrackKind {
     Note,
     /// audio clips (M4)
     Audio,
+    /// Song / Master row: tempo, master volume, returns (not a mixer channel)
+    Master,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -202,6 +204,9 @@ pub struct Track {
     /// track automation (positions in rows from the song start, values 0..=1)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub auto: Vec<Lane>,
+    /// automation write mode while recording (design A §3.3); Read = default
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub write_mode: WriteMode,
     /// the instrument slot this track was given (Browser drop, "Add track
     /// with instrument"; 1-based, 0 = none): the header shows it while the
     /// track is empty and selecting the track makes it the current one
@@ -662,7 +667,7 @@ pub struct TimelineView {
     pub track_h: f32,
     /// tracks whose automation lanes are unfolded (bit per track, M5)
     #[serde(skip_serializing_if = "is_default")]
-    pub auto_open: u32,
+    pub auto_open: u64,
 }
 
 impl Default for TimelineView {
@@ -672,7 +677,7 @@ impl Default for TimelineView {
             scroll: 0,
             scroll_y: 0.0,
             track_h: 46.0,
-            auto_open: 0,
+            auto_open: 0u64,
         }
     }
 }
@@ -1293,6 +1298,8 @@ pub fn from_toml(text: &str) -> Result<Timeline, String> {
 
 mod autoplan;
 mod edit;
+mod migrate;
+pub use migrate::{ensure_master_track, migrate_song_lanes};
 mod plan;
 pub mod roll;
 pub use autoplan::*;

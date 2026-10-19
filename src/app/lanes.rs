@@ -132,7 +132,7 @@ impl App {
                 // already had one: still open the fold and point at it
                 self.with(|s| {
                     if let Some(tl) = s.song.timeline.as_deref_mut() {
-                        if tr < 32 {
+                        if tr < 64 {
                             tl.view.auto_open |= 1 << tr;
                         }
                     }
@@ -222,9 +222,21 @@ impl App {
                         .unwrap_or(self.ch.min(ntr.saturating_sub(1)))
                 }
             }
-            // Master / Tempo / Returns / ModAmount stay song-level until stage 3
             Target::Master | Target::Tempo | Target::Ret(..) | Target::ModAmount(_) => {
-                return None;
+                // Song / Master track (created on demand)
+                let nch = self.with(|s| s.song.channels.clamp(1, crate::model::MAX_CHANNELS));
+                return self.with(|s| {
+                    let tl = s.song.timeline.as_deref()?;
+                    tl.tracks
+                        .iter()
+                        .enumerate()
+                        .find(|(i, t)| *i >= nch && t.kind == crate::timeline::TrackKind::Master)
+                        .map(|(i, _)| i)
+                        .or_else(|| {
+                            // not created yet: add_lane will open fold on last track; migrate creates it
+                            Some(tl.tracks.len().saturating_sub(1).max(nch))
+                        })
+                });
             }
         };
         (tr < ntr).then_some(tr)
@@ -508,10 +520,39 @@ impl App {
                 self.add_lane(t);
             }
             ui.separator();
-            ui.selectable_value(&mut self.auto_pencil, false, "Select")
-                .on_hover_text("click = add point, drag point = move, right-click = delete");
-            ui.selectable_value(&mut self.auto_pencil, true, "Pencil")
-                .on_hover_text("drag on a lane to draw (one point per line)");
+            let write = ui
+                .selectable_label(self.auto_write, "● Write")
+                .on_hover_text(
+                    "global Automation write: when on, Touch/Latch/Write track modes record knob moves while playing",
+                );
+            if write.clicked() {
+                self.auto_write = !self.auto_write;
+            }
+            ui.separator();
+            for tool in crate::automation::AutoTool::ALL {
+                let on = self.auto_tool == tool;
+                if ui
+                    .selectable_label(on, tool.name())
+                    .on_hover_text(match tool {
+                        crate::automation::AutoTool::Pointer => {
+                            "select / move points; double-click to add; drag empty for rubber band"
+                        }
+                        crate::automation::AutoTool::Pencil => {
+                            "freehand draw (Ctrl-drag also works)"
+                        }
+                        crate::automation::AutoTool::Line => {
+                            "drag to draw a straight ramp (replaces the span)"
+                        }
+                        crate::automation::AutoTool::Shape => {
+                            "drag a range to stamp a sine / triangle / saw / square / random"
+                        }
+                    })
+                    .clicked()
+                {
+                    self.auto_tool = tool;
+                    self.auto_pencil = tool == crate::automation::AutoTool::Pencil;
+                }
+            }
             ui.label("Shape");
             let mut shape = self
                 .auto_sel

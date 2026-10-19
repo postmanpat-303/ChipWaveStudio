@@ -340,3 +340,143 @@ mod tests {
         );
     }
 }
+
+/// Timeline automation editing tool (design A §3.2)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AutoTool {
+    #[default]
+    Pointer,
+    Pencil,
+    Line,
+    /// shape stamp: sine / tri / saw / square / random over a dragged range
+    Shape,
+}
+
+impl AutoTool {
+    pub const ALL: [AutoTool; 4] = [
+        AutoTool::Pointer,
+        AutoTool::Pencil,
+        AutoTool::Line,
+        AutoTool::Shape,
+    ];
+    pub fn name(self) -> &'static str {
+        match self {
+            AutoTool::Pointer => "Pointer",
+            AutoTool::Pencil => "Pencil",
+            AutoTool::Line => "Line",
+            AutoTool::Shape => "Shape",
+        }
+    }
+}
+
+/// Write mode for recording knob moves into a lane (design A §3.3)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum WriteMode {
+    #[default]
+    Read,
+    Touch,
+    Latch,
+    Write,
+    Off,
+}
+
+impl WriteMode {
+    pub const ALL: [WriteMode; 5] = [
+        WriteMode::Read,
+        WriteMode::Touch,
+        WriteMode::Latch,
+        WriteMode::Write,
+        WriteMode::Off,
+    ];
+    pub fn name(self) -> &'static str {
+        match self {
+            WriteMode::Read => "Read",
+            WriteMode::Touch => "Touch",
+            WriteMode::Latch => "Latch",
+            WriteMode::Write => "Write",
+            WriteMode::Off => "Off",
+        }
+    }
+}
+
+/// How a clip lane combines with the track lane (design A §3.5)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum ClipMode {
+    /// replaces the track lane inside the clip (current behaviour)
+    #[default]
+    Absolute,
+    /// adds ±50 % of the parameter range to the track value
+    RelAdd,
+    /// multiplies the track value (0..1 → 0 %..100 %)
+    RelMul,
+}
+
+impl ClipMode {
+    pub fn is_absolute(m: &ClipMode) -> bool {
+        matches!(m, ClipMode::Absolute)
+    }
+    pub fn name(self) -> &'static str {
+        match self {
+            ClipMode::Absolute => "Absolute",
+            ClipMode::RelAdd => "Relative +",
+            ClipMode::RelMul => "Relative ×",
+        }
+    }
+}
+
+/// Combine track + clip values per clip mode.
+pub fn combine_clip(track: Option<f32>, clip: Option<f32>, mode: ClipMode) -> Option<f32> {
+    match (track, clip, mode) {
+        (_, Some(c), ClipMode::Absolute) => Some(c),
+        (Some(t), Some(c), ClipMode::RelAdd) => Some((t + (c - 0.5)).clamp(0.0, 1.0)),
+        (Some(t), Some(c), ClipMode::RelMul) => Some((t * c).clamp(0.0, 1.0)),
+        (t, None, _) => t,
+        (None, c, _) => c,
+    }
+}
+
+#[cfg(test)]
+mod clip_mode_tests {
+    use super::*;
+
+    #[test]
+    fn combine_clip_absolute_replaces() {
+        assert_eq!(
+            combine_clip(Some(0.2), Some(0.9), ClipMode::Absolute),
+            Some(0.9)
+        );
+        assert_eq!(combine_clip(None, Some(0.9), ClipMode::Absolute), Some(0.9));
+        assert_eq!(combine_clip(Some(0.2), None, ClipMode::Absolute), Some(0.2));
+    }
+
+    #[test]
+    fn combine_clip_rel_add_and_mul() {
+        assert_eq!(
+            combine_clip(Some(0.5), Some(0.75), ClipMode::RelAdd),
+            Some(0.75)
+        );
+        assert_eq!(
+            combine_clip(Some(0.5), Some(0.25), ClipMode::RelAdd),
+            Some(0.25)
+        );
+        assert_eq!(
+            combine_clip(Some(0.8), Some(0.5), ClipMode::RelMul),
+            Some(0.4)
+        );
+        assert_eq!(
+            combine_clip(Some(0.8), Some(1.0), ClipMode::RelMul),
+            Some(0.8)
+        );
+    }
+
+    #[test]
+    fn write_mode_names() {
+        assert_eq!(WriteMode::Read.name(), "Read");
+        assert_eq!(WriteMode::Touch.name(), "Touch");
+        assert_eq!(ClipMode::RelMul.name(), "Relative ×");
+    }
+}

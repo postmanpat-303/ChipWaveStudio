@@ -263,8 +263,8 @@ fn curves_and_targets_of_every_kind_compile() {
         tl(&mut s).tracks[0].auto.push(l);
     }
     let p = build_auto(&s, s.timeline.as_deref().unwrap());
-    // tempo is song-wide and "nonsense" is no target: 8 + the volume lane
-    assert!(!p.targets.contains(&Target::Tempo));
+    // tempo is allowed on track / Song-Master lanes (design A); "nonsense" is dropped
+    assert!(p.targets.contains(&Target::Tempo));
     assert!(p.targets.contains(&Target::ModAmount(0)));
     assert!(p.targets.contains(&Target::Fx(0, 0, 0)));
     assert_eq!(p.layers.len(), p.targets.len());
@@ -418,4 +418,125 @@ fn deleting_an_instrument_renumbers_timeline_lanes() {
     let t = s.timeline.as_deref().unwrap();
     assert_eq!(t.tracks[0].auto[0].target, Target::Cutoff(1).id());
     assert!(t.clips.iter().all(|c| c.auto.is_empty()));
+}
+
+#[test]
+fn glue_keeps_clip_automation() {
+    use crate::timeline::edit::glue;
+    let mut s = crate::fileio::demo_song();
+    crate::timeline::enter_timeline_mode(&mut s);
+    let (id0, id1, pts) = {
+        let tl = s.timeline.as_deref_mut().unwrap();
+        let clips: Vec<_> = tl
+            .clips
+            .iter()
+            .filter(|c| c.track == 0 && c.block().is_some())
+            .take(2)
+            .cloned()
+            .collect();
+        assert!(clips.len() >= 2, "need two block clips");
+        let id0 = clips[0].id;
+        let id1 = clips[1].id;
+        let mut lane = vol_lane(&[(0.0, 0.2), (4.0, 0.8)]);
+        lane.mode = crate::automation::ClipMode::Absolute;
+        let pts = lane.points.clone();
+        if let Some(c) = tl.clips.iter_mut().find(|c| c.id == id0) {
+            c.auto = vec![lane];
+        }
+        (id0, id1, pts)
+    };
+    let nid = glue(&mut s, &[id0, id1]).expect("glue");
+    let tl = s.timeline.as_deref().unwrap();
+    let c = tl.clips.iter().find(|c| c.id == nid).expect("glued clip");
+    assert!(
+        !c.auto.is_empty(),
+        "glued clip should keep automation lanes"
+    );
+    assert_eq!(c.auto[0].points.len(), pts.len());
+}
+
+#[test]
+fn relative_clip_mode_combines_with_track() {
+    use crate::automation::{ClipMode, Point, Shape, Target};
+    use crate::timeline::autoplan::build_auto;
+    let mut s = crate::fileio::demo_song();
+    crate::timeline::enter_timeline_mode(&mut s);
+    let start = {
+        let tl = s.timeline.as_deref_mut().unwrap();
+        let mut track = Lane::new(Target::ChanVolume(0), "vol".into());
+        track.points = vec![
+            Point {
+                pos: 0.0,
+                value: 0.5,
+                shape: Shape::Linear,
+                curve: 0.0,
+            },
+            Point {
+                pos: 64.0,
+                value: 0.5,
+                shape: Shape::Linear,
+                curve: 0.0,
+            },
+        ];
+        tl.tracks[0].auto = vec![track];
+        let clip = tl.clips.iter_mut().find(|c| c.track == 0).unwrap();
+        let mut cl = Lane::new(Target::ChanVolume(0), "vol".into());
+        cl.mode = ClipMode::RelMul;
+        cl.points = vec![
+            Point {
+                pos: 0.0,
+                value: 0.5,
+                shape: Shape::Linear,
+                curve: 0.0,
+            },
+            Point {
+                pos: (clip.len / crate::timeline::ROW) as f32,
+                value: 0.5,
+                shape: Shape::Linear,
+                curve: 0.0,
+            },
+        ];
+        let start = clip.start;
+        clip.auto = vec![cl];
+        start
+    };
+    let plan = build_auto(&s, s.timeline.as_deref().unwrap());
+    let slot = plan.slot(Target::ChanVolume(0)).unwrap();
+    let v = plan.value(slot, start as f64 + 1.0).unwrap();
+    assert!((v - 0.25).abs() < 1e-4, "got {v}");
+}
+
+#[test]
+fn absolute_clip_mode_stays_bit_exact_with_innermost() {
+    use crate::automation::{ClipMode, Point, Shape, Target};
+    use crate::timeline::autoplan::build_auto;
+    let mut s = crate::fileio::demo_song();
+    crate::timeline::enter_timeline_mode(&mut s);
+    let start = {
+        let tl = s.timeline.as_deref_mut().unwrap();
+        let mut track = Lane::new(Target::ChanVolume(0), "vol".into());
+        track.points = vec![Point {
+            pos: 0.0,
+            value: 0.1,
+            shape: Shape::Step,
+            curve: 0.0,
+        }];
+        tl.tracks[0].auto = vec![track];
+        let clip = tl.clips.iter_mut().find(|c| c.track == 0).unwrap();
+        let mut cl = Lane::new(Target::ChanVolume(0), "vol".into());
+        cl.mode = ClipMode::Absolute;
+        cl.points = vec![Point {
+            pos: 0.0,
+            value: 0.9,
+            shape: Shape::Step,
+            curve: 0.0,
+        }];
+        let start = clip.start;
+        clip.auto = vec![cl];
+        start
+    };
+    let plan = build_auto(&s, s.timeline.as_deref().unwrap());
+    let slot = plan.slot(Target::ChanVolume(0)).unwrap();
+    let v = plan.value(slot, start as f64 + 1.0).unwrap();
+    assert_eq!(v.to_bits(), 0.9f32.to_bits());
 }

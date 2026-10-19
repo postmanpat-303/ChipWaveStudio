@@ -225,6 +225,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
                     curve: 0.0,
                 }],
                 enabled: true,
+                mode: Default::default(),
             };
             let peak = |a: &[f32]| a.iter().fold(0.0f32, |p, x| p.max(x.abs()));
             let mut n = m.clone();

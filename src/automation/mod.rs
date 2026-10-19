@@ -2,7 +2,9 @@
 //! engine while playing (and in WAV export). See docs/AUTOMATION.md.
 
 mod ux;
-pub use ux::{POINT_HIT, POINT_R, POINT_R_HOT, SCALE_W};
+pub use ux::{
+    combine_clip, AutoTool, ClipMode, WriteMode, POINT_HIT, POINT_R, POINT_R_HOT, SCALE_W,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -62,6 +64,9 @@ pub struct Lane {
     pub points: Vec<Point>,
     #[serde(default = "yes")]
     pub enabled: bool,
+    /// clip envelope combine mode (track lanes ignore this; Absolute = bit-exact)
+    #[serde(default, skip_serializing_if = "ClipMode::is_absolute")]
+    pub mode: ClipMode,
 }
 
 fn yes() -> bool {
@@ -75,6 +80,7 @@ impl Lane {
             label,
             points: vec![],
             enabled: true,
+            mode: ClipMode::Absolute,
         }
     }
     pub fn sort(&mut self) {

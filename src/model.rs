@@ -779,6 +779,7 @@ mod tests {
             label: String::new(),
             points: vec![],
             enabled: true,
+            mode: Default::default(),
         };
         s.automation = vec![
             lane("instrument.2.cutoff"),

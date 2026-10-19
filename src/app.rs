@@ -26,6 +26,7 @@ mod dialogs;
 mod edit;
 mod file;
 mod fillview;
+mod filtercard;
 mod fxplugview;
 mod fxview;
 mod genview;
@@ -201,6 +202,10 @@ pub struct App {
     key_log: Option<std::collections::VecDeque<String>>,
     show_auto: bool,
     auto_pencil: bool,
+    /// global ● Automation write (design A §3.3)
+    auto_write: bool,
+    /// timeline lane tool (Pointer / Pencil / Line / Shape)
+    auto_tool: crate::automation::AutoTool,
     auto_shape: crate::automation::Shape,
     /// selected lane (for Delete lane / shape) and selected point
     auto_lane: usize,
@@ -503,6 +508,8 @@ impl App {
             key_log: None,
             show_auto: true,
             auto_pencil: false,
+            auto_write: false,
+            auto_tool: crate::automation::AutoTool::Pointer,
             auto_shape: crate::automation::Shape::Linear,
             auto_lane: 0,
             auto_sel: None,

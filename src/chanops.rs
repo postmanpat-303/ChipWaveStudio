@@ -87,9 +87,9 @@ pub fn remap_channels(song: &mut Song, map: &[usize], n: usize, new_name: &str) 
             }
         }
         let bits = tl.view.auto_open;
-        let mut nb = 0u32;
-        for (i, &m) in map.iter().enumerate().take(old_n.min(32)) {
-            if bits >> i & 1 == 1 && m < 32 {
+        let mut nb = 0u64;
+        for (i, &m) in map.iter().enumerate().take(old_n.min(64)) {
+            if bits >> i & 1 == 1 && m < 64 {
                 nb |= 1 << m;
             }
         }

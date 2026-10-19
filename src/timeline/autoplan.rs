@@ -8,7 +8,7 @@
 use std::hash::{Hash, Hasher};
 
 use super::{Clip, Tick, Timeline, ROW};
-use crate::automation::{value_at, Lane, Point, Target};
+use crate::automation::{combine_clip, value_at, ClipMode, Lane, Point, Target};
 use crate::model::{Song, MAX_CHANNELS};
 
 /// One enabled lane on a track or a clip.
@@ -18,6 +18,8 @@ pub struct AutoLayer {
     pub slot: u32,
     /// a clip lane (positions relative to the clip's source)
     pub clip: bool,
+    /// how a clip lane combines with the track (Absolute = previous behaviour)
+    pub mode: ClipMode,
     /// clip span on the timeline (track lanes: the whole song)
     pub start: Tick,
     pub end: Tick,
@@ -40,9 +42,9 @@ pub struct AutoPlan {
     pub points: Vec<Point>,
 }
 
-/// can a track or clip lane drive this target (tempo is song-wide)
-pub fn track_target(t: Target) -> bool {
-    !matches!(t, Target::Tempo)
+/// can a track or clip lane drive this target (tempo lives on Song/Master)
+pub fn track_target(_t: Target) -> bool {
+    true
 }
 
 impl AutoLayer {
@@ -69,12 +71,17 @@ impl AutoPlan {
         self.layers.is_empty()
     }
 
-    /// The innermost raw value (no smoothing) of slot `k` at tick `t`.
+    /// The combined raw value (no smoothing) of slot `k` at tick `t`.
+    /// Track layers set the base; clip Absolute replaces; Rel+/Rel× combine.
     pub fn value(&self, k: usize, t: f64) -> Option<f32> {
         let mut v = None;
         for l in self.layers.iter().filter(|l| l.slot as usize == k) {
             if let Some(x) = l.value(&self.points, t) {
-                v = Some(x);
+                if !l.clip {
+                    v = Some(x);
+                } else {
+                    v = combine_clip(v, Some(x), l.mode);
+                }
             }
         }
         v
@@ -87,7 +94,7 @@ impl AutoPlan {
 }
 
 fn hash_lane(l: &Lane, h: &mut impl Hasher) {
-    (l.target.as_str(), l.enabled, l.points.len()).hash(h);
+    (l.target.as_str(), l.enabled, l.points.len(), l.mode as u8).hash(h);
     for p in &l.points {
         (
             p.pos.to_bits(),
@@ -165,6 +172,7 @@ pub fn build_auto(song: &Song, tl: &Timeline) -> AutoPlan {
             None => AutoLayer {
                 slot,
                 clip: false,
+                mode: ClipMode::Absolute,
                 start: Tick::MIN,
                 end: Tick::MAX,
                 offset: 0,
@@ -175,6 +183,7 @@ pub fn build_auto(song: &Song, tl: &Timeline) -> AutoPlan {
             Some(c) => AutoLayer {
                 slot,
                 clip: true,
+                mode: lane.mode,
                 start: c.start,
                 end: c.end(),
                 offset: c.offset,
@@ -184,9 +193,11 @@ pub fn build_auto(song: &Song, tl: &Timeline) -> AutoPlan {
             },
         });
     };
-    for t in tl.tracks.iter().take(nch) {
-        for l in &t.auto {
-            add(&mut p, l, None);
+    for (i, t) in tl.tracks.iter().enumerate() {
+        if i < nch || t.kind == crate::timeline::TrackKind::Master {
+            for l in &t.auto {
+                add(&mut p, l, None);
+            }
         }
     }
     let mut clips: Vec<&Clip> = tl

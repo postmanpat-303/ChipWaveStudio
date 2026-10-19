@@ -319,7 +319,7 @@ fn fingerprint(song: &Song) -> u64 {
         }
         // automation lanes (M5): points, labels, which tracks are unfolded
         put(tl::auto_key(song, t));
-        put(t.view.auto_open as u64);
+        put(t.view.auto_open);
         for l in t
             .tracks
             .iter()
@@ -395,9 +395,14 @@ fn build_cache(song: &Song, key: u64, old: Option<Cache>) -> Cache {
     let mode = song.timeline.is_some();
     if let Some(own) = &song.timeline {
         t = (**own).clone();
-        t.tracks.resize_with(nch, Default::default);
+        // keep Song/Master tracks past the mixer channels
+        if t.tracks.len() < nch {
+            t.tracks.resize_with(nch, Default::default);
+        }
         for (tr, n) in t.tracks.iter_mut().zip(&song.channel_names) {
-            tr.name.clone_from(n);
+            if tr.kind != tl::TrackKind::Master {
+                tr.name.clone_from(n);
+            }
         }
     }
     let idx = t.index();
@@ -414,7 +419,7 @@ fn build_cache(song: &Song, key: u64, old: Option<Cache>) -> Cache {
             }
         }
     }
-    let instr = count
+    let mut instr: Vec<String> = count
         .iter()
         .map(|m| {
             m.iter()
@@ -427,6 +432,10 @@ fn build_cache(song: &Song, key: u64, old: Option<Cache>) -> Cache {
                 .unwrap_or_default()
         })
         .collect();
+    // Song/Master tracks past nch have no mixer instrument subtitle
+    while instr.len() < t.tracks.len() {
+        instr.push(String::new());
+    }
     Cache {
         pkey,
         key,
@@ -547,6 +556,15 @@ fn quad(mesh: &mut egui::Mesh, r: Rect, c: Color32) {
 impl App {
     /// derived timeline for the current song (rebuilt when the song changed)
     fn timeline_refresh(&mut self) -> Live {
+        // design A: pin remaining song lanes onto tracks / Song-Master
+        if self.with(|s| s.song.timeline.is_some() && !s.song.automation.is_empty()) {
+            self.with(|s| {
+                let n = crate::timeline::migrate_song_lanes(&mut s.song);
+                if n > 0 {
+                    s.engine.ensure_plan(&s.song);
+                }
+            });
+        }
         let shared = self.shared.clone();
         let s = audio::lock(&shared);
         let key = fingerprint(&s.song);
@@ -1512,7 +1530,8 @@ impl App {
                 .collect()
         };
         let sub = |tr: usize| -> String {
-            if c.instr[tr].is_empty() {
+            // Master / Song tracks sit past mixer channels — c.instr is nch long
+            if c.instr.get(tr).is_none_or(|s| s.is_empty()) {
                 given.get(tr).cloned().unwrap_or_default()
             } else {
                 c.instr[tr].clone()
@@ -2077,6 +2096,7 @@ impl App {
                     &units,
                     self.tlv.follow_touch,
                     self.tlv.last_touch.is_some(),
+                    self.auto_tool,
                     &mut auto_ops,
                 );
             }

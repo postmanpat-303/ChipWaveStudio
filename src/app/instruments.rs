@@ -393,6 +393,7 @@ impl App {
             return;
         };
         let mut bake = false;
+        let mut open_filter_lanes = false;
         let is_voice = voice.is_some();
         let mut learn: Vec<(egui::Response, crate::automation::Target)> = vec![];
         // edit a copy without holding the audio lock, commit only on change
@@ -497,33 +498,50 @@ impl App {
                         ui.end_row();
                     }
                     ui.label("   Filter");
-                    egui::ComboBox::from_id_salt("fmode")
-                        .selected_text(format!("{:?}", p.filter))
-                        .show_ui(ui, |ui| {
-                            for m in [FilterMode::Lp, FilterMode::Hp, FilterMode::Bp] {
-                                changed |= ui
-                                    .selectable_value(&mut p.filter, m, format!("{m:?}"))
-                                    .changed();
-                            }
-                        });
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt("fmode")
+                            .selected_text(super::filtercard::mode_name(p.filter))
+                            .show_ui(ui, |ui| {
+                                for m in [FilterMode::Lp, FilterMode::Hp, FilterMode::Bp] {
+                                    changed |= ui
+                                        .selectable_value(
+                                            &mut p.filter,
+                                            m,
+                                            super::filtercard::mode_name(m),
+                                        )
+                                        .changed();
+                                }
+                            });
+                        ui.label(egui::RichText::new("Cmd 38xx").small().weak())
+                            .on_hover_text(
+                                "38xx cutoff · 39xx resonance · 3Axx/3Bxx cutoff slides",
+                            );
+                        if ui
+                            .small_button("A")
+                            .on_hover_text("open Cutoff and Reso lanes on the track")
+                            .clicked()
+                        {
+                            open_filter_lanes = true;
+                        }
+                    });
                     ui.end_row();
                     ui.label("   Model");
                     ui.horizontal(|ui| {
                         changed |= super::genview::filter_model_combo(ui, "fmodel", p);
                     });
                     ui.end_row();
-                    ui.label("   Cutoff Hz");
+                    ui.label(format!("   {}", super::filtercard::LABEL_CUTOFF));
                     let r =
                         ui.add(egui::Slider::new(&mut p.cutoff, 20.0..=18000.0).logarithmic(true));
                     changed |= r.changed();
                     learn.push((r, crate::automation::Target::Cutoff(idx.wrapping_sub(1))));
                     ui.end_row();
-                    ui.label("   Resonance");
+                    ui.label(format!("   {}", super::filtercard::LABEL_RESO));
                     let r = ui.add(egui::Slider::new(&mut p.resonance, 0.0..=0.98));
                     changed |= r.changed();
                     learn.push((r, crate::automation::Target::Resonance(idx.wrapping_sub(1))));
                     ui.end_row();
-                    ui.label("   Env amount");
+                    ui.label(format!("   {}", super::filtercard::LABEL_ENV));
                     changed |= ui
                         .add(egui::Slider::new(&mut p.env_amount, -1.0..=1.0))
                         .changed();
@@ -551,7 +569,7 @@ impl App {
                         .add(egui::Slider::new(&mut p.fenv.d, 0.001..=3.0).logarithmic(true))
                         .changed();
                     ui.end_row();
-                    ui.label("   Drive");
+                    ui.label(format!("   {}", super::filtercard::LABEL_DRIVE));
                     let r = ui.add(egui::Slider::new(&mut p.drive, 0.0..=1.0));
                     changed |= r.changed();
                     learn.push((r, crate::automation::Target::Drive(idx.wrapping_sub(1))));
@@ -737,6 +755,11 @@ impl App {
         }
         for (r, tg) in learn {
             self.learn_menu(&r, tg);
+        }
+        if open_filter_lanes {
+            let i = idx.wrapping_sub(1);
+            self.add_lane(crate::automation::Target::Cutoff(i));
+            self.add_lane(crate::automation::Target::Resonance(i));
         }
         if bake {
             self.bake_gen(idx.wrapping_sub(1));

@@ -37,6 +37,8 @@ pub fn enter_timeline_mode(song: &mut Song) {
         }
     }
     song.timeline = Some(Box::new(tl));
+    // design A: song lanes become track / Song-Master lanes
+    let _ = super::migrate_song_lanes(song);
 }
 
 /// Back to tracker mode: the timeline is consolidated into blocks and an
@@ -416,6 +418,38 @@ pub fn glue(song: &mut Song, ids: &[u32]) -> Result<u32, String> {
     }
     song.patterns.push(p);
     let nb = song.patterns.len() - 1;
+    // merge clip automation onto the glued clip (design A §3.5): remap
+    // each source clip's lane points into the glued span (rows from glue start)
+    let mut glued_auto: Vec<crate::automation::Lane> = vec![];
+    for c in &sel {
+        let shift = ((c.start - a) as f32) / ROW as f32;
+        for lane in &c.auto {
+            let mut pts: Vec<crate::automation::Point> = lane
+                .points
+                .iter()
+                .map(|p| {
+                    let mut q = *p;
+                    q.pos = p.pos + shift;
+                    q
+                })
+                .collect();
+            if let Some(dst) = glued_auto.iter_mut().find(|l| l.target == lane.target) {
+                dst.points.append(&mut pts);
+                dst.sort();
+                // Absolute wins if either side is Absolute or modes differ
+                if dst.mode != lane.mode
+                    || dst.mode == crate::automation::ClipMode::Absolute
+                    || lane.mode == crate::automation::ClipMode::Absolute
+                {
+                    dst.mode = crate::automation::ClipMode::Absolute;
+                }
+            } else {
+                let mut l = lane.clone();
+                l.points = pts;
+                glued_auto.push(l);
+            }
+        }
+    }
     let tl = song.timeline.as_deref_mut().ok_or("not in timeline mode")?;
     tl.clips.retain(|c| !sel.iter().any(|s| s.id == c.id));
     let id = tl.new_id();
@@ -429,6 +463,7 @@ pub fn glue(song: &mut Song, ids: &[u32]) -> Result<u32, String> {
             col: col as u8,
         },
         seed: seed_for(id),
+        auto: glued_auto,
         ..Default::default()
     });
     tl.sort();

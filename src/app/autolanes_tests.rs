@@ -10,7 +10,11 @@ use crate::timeline as tl;
 use egui_kittest::Harness;
 
 fn setup(mode: bool) -> Harness<'static, App> {
-    let mut h = harness_with(fileio::demo_song());
+    let mut song = fileio::demo_song();
+    // design A migrates song lanes onto tracks on enter — clear them so these
+    // UI tests start with empty track folds (playback bit-exact tests cover migrate)
+    song.automation.clear();
+    let mut h = harness_with(song);
     key(&mut h, Key::T, egui::Modifiers::COMMAND);
     if mode {
         h.state_mut().enter_timeline();

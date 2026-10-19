@@ -292,6 +292,7 @@ fn timeline_toml_round_trip_with_every_field_and_shared_notes() {
                 curve: 0.0,
             }],
             enabled: true,
+            mode: Default::default(),
         }],
         ..Default::default()
     });

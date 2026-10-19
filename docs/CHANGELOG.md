@@ -4,6 +4,14 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Automation UX stages 3–8 (design A)
+- **Stage 3:** song lanes **migrate** onto track lanes when entering timeline mode; a **Song / Master** track holds tempo, master volume and returns; Tempo can be a track lane; old songs stay bit-exact.
+- **Stage 4:** per-track **Read / Touch / Latch / Write / Off** write modes; global **● Write** toggle in the Automation strip.
+- **Stage 5:** timeline tools **Pointer / Pencil / Line / Shape** (shape stamp); bigger hit targets from stage 1.
+- **Stage 6:** clip envelopes **Absolute / Relative + / Relative ×**; Glue **keeps and merges** clip automation; relative lanes draw blue/dashed.
+- **Stage 7:** **38xx–3Bxx** command diamonds on cutoff/resonance lanes; **modulation band** (± depth) around the curve.
+- **Stage 8:** unified **Filter** labels (Cutoff / Reso / Env amt / Drive), LP/BP/HP names, **Cmd 38xx** hint and **A** (open lanes) on the instrument Filter block.
+
 ### Automation UX stage 2 (design A)
 - Knobs with a lane show a **coloured LED** (family colour).
 - Right-click › **Show automation** (or Add) opens the track lane without leaving the Instrument editor.
