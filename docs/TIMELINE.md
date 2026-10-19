@@ -65,18 +65,31 @@ Timeline-mode songs save a `timeline.toml` and need this version to open (older 
 
 The lower panel has a **Piano roll** tab (next to Arranger / Instrument / Automation). It edits the clip selected on the Timeline, or the current block column in the pattern editor. Clicking into it gives it the keyboard; clicking elsewhere gives it back.
 
+**Toolbar and editing (Unreleased, all targets):** one row, left to right:
+- the clip / block **chip** (track colour) and **ALL** (select every note, Ctrl+A);
+- the tools: **Pointer** (key **1**, the default: click empty space draws a note, drag a note moves it, its right edge resizes it), **Select** (**2**: drag a box on empty space; never draws) and **Pencil** (**3**: click draws, dragging paints a run of notes, each the remembered length, at the mouse's pitch);
+- note clips: the **snap** menu (Bar, Beat, 1/8, 1/16, 1/32, 1/16T, **Smart** = follows the zoom, off), **Quantize** (Q), **Chords** (draws the song key's chord on the clicked note; the menu next to it picks the type);
+- **Fit** (F: zoom to the notes); **Scale** turns the song key on or off (its notes are highlighted; the same key as the Chords window) with the **key** and **scale** menus;
+- **Len**: the length the next click draws (also a menu).
+
+**Single-click entry:** one click on empty grid draws a note **the length of the last note you drew, resized or clicked** (the grid step at first), snapped to the grid. Drag while drawing to set its length; that becomes the new length. A slightly long or wobbly click keeps the remembered length (it only changes once the mouse moves half a grid step). Double-clicking still works (the second click selects the new note). Clicking a note selects it and never draws.
+
+**Selection:** a plain click selects only that note. **Shift+click** (or Ctrl+click) adds a note to the selection or takes it out; **Shift+drag** on empty space draws a box that adds to the selection. Shift+click on empty space never draws. Dragging a selected note moves the whole selection; dragging the right edge resizes the whole selection (note clips).
+
+**Eraser:** **right-click** a note deletes it; **right-drag** deletes every note the mouse passes over (the cursor becomes an eraser). The whole swipe is **one undo step**. Deleted notes break into small pixels of their colour that drift up and fade (about half a second; purely visual, skipped with **Settings › Look › Flat**). Right-click on empty space does nothing.
+
 **Block clips and block columns (M3a)** are shown as notes on the row grid, one at a time, as the tracker plays them:
-- Click to draw a note (current instrument, a note-off at its end). Drag while drawing to set its length.
+- Click to draw a note (current instrument, a note-off at its end), the length of the last one. Drag while drawing to set its length.
 - Drag a note to move it (time and pitch), and drag its right edge to resize it (this moves the note-off).
-- Right-click deletes a note. Ctrl+click adds to the selection, and Shift-drag selects with a box.
+- Right-click (or right-drag) erases notes. Shift/Ctrl+click toggles a note in the selection, and Shift-drag adds a box to it.
 - The **velocity lane** sets the volume column.
 - Effect commands show as badges above the grid. Edit the selected note's instrument, velocity and effect in the bar at the top.
-- Keys: **Del** deletes, **arrows** move (Shift+Up/Down = octave), **Ctrl+A** selects all, **+/−** zooms, **Esc** clears the selection. Ctrl+wheel zooms; wheel and Shift+wheel scroll.
+- Keys: **Del** deletes, **arrows** move (Shift+Up/Down = octave), **Ctrl+A** selects all, **1 / 2 / 3** pick Pointer / Select / Pencil, **F** fits, **Q** quantises (note clips), **+/−** zooms, **Esc** clears the selection. Ctrl+wheel zooms; wheel and Shift+wheel scroll.
 - Only the cells of the notes you touch change. Drawing a note into silence and deleting it again leaves identical cells.
 
 **Note clips (M3b)** are polyphonic, with free timing:
 - To make one: right-click empty space › **New note clip here**, or **Shift+double-click** empty space. Double-click or **Enter** on a note clip opens it in the roll; double-click opens block clips there too (see [Finding your way around](#finding-your-way-around)).
-- **Grid** sets the snap (1/4 … 1/32, 1/16T, off), and **Q** / **Quantise** snaps the selection (or every note).
+- The **snap** menu sets the grid (Bar, Beat, 1/8 … 1/32, 1/16T, Smart, off), and **Q** / **Quantize** snaps the selection (or every note).
 - **Chord** draws the song key's chord on the clicked scale degree (set the key in the Chords window). Notes in the song key are highlighted.
 - Dragging the edge of a note resizes the whole selection.
 - Note clips loop, trim, split, duplicate (linked) and **make unique** like block clips. They play **on top of** block clips on the same track; they don't replace them.

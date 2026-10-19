@@ -24,6 +24,12 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 - **View tab bar (new):** transport, position and tempo, then TIMELINE · TRACKER · ARRANGER · PIANO · INST · AUTO · MIX · FX · SAMPLE tabs and the Inspector / Browser toggles along the bottom. The toolbar, View menu and shortcuts still switch views as before. View › View tab bar hides it.
 - The Automation strip's Write toggle no longer uses a "●" the bundled font can't draw.
 
+### Piano roll: single-click entry, eraser, tools and a tidy toolbar
+- **One click draws a note** the length of the last note drawn, resized or clicked (grid step at first); drag while drawing sets the length and is remembered. A long or wobbly click no longer shortens it. **Len** in the toolbar shows (and sets) it.
+- **Shift+click** toggles notes in the selection, **Shift+drag** adds a box; Shift on empty space never draws. A plain click selects just that note; dragging moves / resizes the whole selection.
+- **Right-drag eraser:** every note the mouse passes over is deleted (one undo step), with an eraser cursor; deleted notes go up in **pixel smoke** (skipped with the Flat look).
+- **Toolbar** in one row: clip chip, **ALL**, **Pointer / Select / Pencil** (keys 1 2 3; Pencil paints runs of notes), snap menu with **Bar / Beat / 1/8 / 1/16 / 1/32 / 1/16T / Smart** (follows the zoom), **Quantize**, **Fit** (F), **Chords**, **Scale** + key + scale. Same-size buttons, highlighted active state, tooltips with shortcuts.
+
 ### Browser Showcase catalogue
 - Well-known open-source plugins (Surge XT, Dexed, OB-Xf, Odin 2, Monique, Geonkick, sfizz, ADLplug) show a category (Hybrid / FM / Analog / Pad / Bass / Drums / Sampler / Chip), credited creator and a **Showcase** tag once scanned. Mapping in `src/browser/catalogue.rs`; binaries not bundled.
 

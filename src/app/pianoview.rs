@@ -58,6 +58,22 @@ enum DragK {
     Resize,
     /// rubber band from this screen point
     Band(Pos2),
+    /// Pencil: painting a run of notes from this start, one per length
+    Paint(Tick),
+}
+
+/// the roll's tools (toolbar; keys 1 2 3 while the roll has the keyboard)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub(crate) enum PrTool {
+    /// smart: click empty space draws a note, drag a note moves it, its
+    /// right edge resizes it
+    #[default]
+    Pointer,
+    /// drag on empty space draws a selection box
+    Select,
+    /// like Pointer, but dragging on empty space paints a run of notes
+    /// (each the remembered length, pitch following the mouse)
+    Pencil,
 }
 
 #[derive(Clone)]
@@ -73,17 +89,43 @@ struct PrDrag {
     len: Tick,
     /// pitch auditioned last while moving
     heard: u8,
+    /// the pointer has left the press point by half a grid step: a drawn
+    /// note's length now follows it (until then it keeps the remembered
+    /// length, so a slightly long or wobbly click doesn't shorten it)
+    moved: bool,
 }
 
-/// note-clip snap grids (ticks, label)
-const GRIDS: [(Tick, &str); 6] = [
-    (PPQ, "1/4"),
+/// a deleted note going up in smoke (purely visual)
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Puff {
+    pub(crate) rect: Rect,
+    pub(crate) colour: Color32,
+    pub(crate) born: Instant,
+}
+
+/// how long a puff of smoke lasts
+const SMOKE_S: f32 = 0.5;
+
+/// note-clip snap grids (ticks, label); 0 = Smart (follows the zoom)
+const GRIDS: [(Tick, &str); 8] = [
+    (4 * PPQ, "Bar"),
+    (PPQ, "Beat"),
     (PPQ / 2, "1/8"),
     (ROW, "1/16"),
     (ROW / 2, "1/32"),
     (PPQ / 6, "1/16T"),
+    (0, "Smart"),
     (1, "off"),
 ];
+
+/// Smart snap: the finest of 1/32 … bar that is at least 12 px wide
+fn smart_grid(zoom: f32) -> Tick {
+    let ppt = zoom as f64 / ROW as f64;
+    [ROW / 2, ROW, PPQ / 2, PPQ, 4 * PPQ]
+        .into_iter()
+        .find(|g| *g as f64 * ppt >= 12.0)
+        .unwrap_or(4 * PPQ)
+}
 
 pub(crate) struct PianoUi {
     /// the lower panel shows the piano roll
@@ -106,8 +148,22 @@ pub(crate) struct PianoUi {
     pub(crate) grid: Tick,
     /// draw whole chords (note clips)
     pub(crate) chord: Option<chords::ChordKind>,
-    last_len: Tick,
+    /// the chord type the Chords button turns back on
+    chord_kind: chords::ChordKind,
+    pub(crate) tool: PrTool,
+    /// the song key the Scale button turns back on
+    last_key: Option<chords::Key>,
+    /// length of the next drawn note: the last one drawn, resized or
+    /// clicked (per session; starts at the grid step)
+    pub(crate) last_len: Tick,
     last_vel: f32,
+    /// right-drag eraser: the pointer's last position in this swipe
+    erase: Option<Pos2>,
+    /// this swipe has deleted something (its undo point is set), and how many
+    erase_started: bool,
+    erased: usize,
+    /// notes going up in smoke
+    pub(crate) smoke: Vec<Puff>,
     offs: Vec<(Instant, u8)>,
     /// screen rect of the note grid as last drawn (tests)
     pub(crate) grid_rect: Rect,
@@ -129,8 +185,15 @@ impl Default for PianoUi {
             drag: None,
             grid: ROW,
             chord: None,
+            chord_kind: chords::ChordKind::Triad,
+            tool: PrTool::Pointer,
+            last_key: None,
             last_len: ROW,
             last_vel: 1.0,
+            erase: None,
+            erase_started: false,
+            erased: 0,
+            smoke: vec![],
             offs: vec![],
             grid_rect: Rect::NOTHING,
             vel_rect: Rect::NOTHING,
@@ -369,9 +432,15 @@ impl App {
         self.pr.open && self.pr.focus && self.lower_visible() && !self.extra.lower_inst
     }
 
+    #[cfg(test)]
+    pub(super) fn pr_grid_now(&self) -> Tick {
+        self.pr_grid()
+    }
+
     /// snap grid in ticks for the current target
     fn pr_grid(&self) -> Tick {
         match self.pr.target {
+            Some(Target::Notes { .. }) if self.pr.grid == 0 => smart_grid(self.pr.zoom),
             Some(Target::Notes { .. }) => self.pr.grid.max(1),
             _ => ROW,
         }
@@ -412,7 +481,7 @@ impl App {
                         roll::move_note(p, col, d.id, to, k);
                         self.pr.sel = vec![to];
                     }
-                    DragK::Band(_) => return,
+                    DragK::Band(_) | DragK::Paint(_) => return,
                 }
             }
             (Source::Notes(n), Target::Notes { .. }) => match d.kind {
@@ -453,7 +522,7 @@ impl App {
                         }
                     }
                 }
-                DragK::Band(_) => return,
+                DragK::Band(_) | DragK::Paint(_) => return,
             },
             _ => return,
         }
@@ -491,6 +560,101 @@ impl App {
         self.pr.sel.clear();
         self.pr_write(t, src);
         self.status = format!("{n} note(s) deleted");
+    }
+
+    /// write a new note (or the chord stamp) into `s2`; selects it (`add`:
+    /// adds to the selection) and returns its id
+    #[allow(clippy::too_many_arguments)]
+    fn pr_put(
+        &mut self,
+        s2: &mut Source,
+        target: Target,
+        start: Tick,
+        len: Tick,
+        key: u8,
+        song_key: Option<chords::Key>,
+        add: bool,
+    ) -> usize {
+        if !add {
+            self.pr.sel.clear();
+        }
+        match (s2, target) {
+            (Source::Block(p), Target::Block { col, .. }) => {
+                let row = (start / ROW) as usize;
+                let ln = ((len + ROW - 1) / ROW).max(1) as usize;
+                let vol = if self.pr.last_vel < 1.0 {
+                    roll::vel_to_vol(self.pr.last_vel)
+                } else {
+                    0
+                };
+                roll::put_note(p, col, row, ln, key, self.instr, vol);
+                if !self.pr.sel.contains(&row) {
+                    self.pr.sel.push(row);
+                }
+                row
+            }
+            (Source::Notes(nd), _) => {
+                for kk in self.pr_chord_keys(key, song_key) {
+                    nd.notes.push(tl::Note {
+                        start,
+                        len,
+                        key: kk,
+                        vel: roll::vel_u16(self.pr.last_vel),
+                        ..Default::default()
+                    });
+                    self.pr.sel.push(nd.notes.len() - 1);
+                }
+                nd.notes.len().saturating_sub(1)
+            }
+            _ => 0,
+        }
+    }
+
+    /// the eraser: delete these notes at once (no undo boundary inside a
+    /// swipe, so the whole swipe is one undo step) and send them up in smoke
+    fn pr_erase(&mut self, t: Target, hit: &[RNote], colour: &dyn Fn(&RNote) -> Color32) {
+        let Some(mut src) = self.pr_read(t) else {
+            return;
+        };
+        let ids: Vec<usize> = hit.iter().map(|n| n.id).collect();
+        match (&mut src, t) {
+            (Source::Block(p), Target::Block { col, .. }) => {
+                let mut rows = ids.clone();
+                rows.sort_unstable();
+                rows.dedup();
+                for r in rows.into_iter().rev() {
+                    roll::delete_note(p, col, r);
+                }
+            }
+            (Source::Notes(d), _) => {
+                let mut i = 0;
+                d.notes.retain(|_| {
+                    i += 1;
+                    !ids.contains(&(i - 1))
+                });
+            }
+            _ => return,
+        }
+        if !self.pr.erase_started {
+            // the state before the swipe is the undo point
+            self.snapshot();
+            self.pr.erase_started = true;
+            self.pr.erased = 0;
+        }
+        self.pr.erased += ids.len();
+        self.pr.sel.clear();
+        self.pr_write(t, src);
+        self.status = format!("{} note(s) deleted", self.pr.erased);
+        if crate::theme::polished() {
+            let born = Instant::now();
+            for n in hit {
+                self.pr.smoke.push(Puff {
+                    rect: note_rect(&self.pr, n),
+                    colour: colour(n),
+                    born,
+                });
+            }
+        }
     }
 
     /// move the selection by `dt` ticks and `dk` semitones (keys)
@@ -560,7 +724,7 @@ impl App {
         } else {
             self.pr.sel.clone()
         };
-        let g = self.pr.grid.max(ROW / 2);
+        let g = self.pr_grid().max(ROW / 2);
         roll::quantise(&mut d.notes, &idx, g, 1.0, false);
         self.status = format!("{} note(s) quantised to {}", idx.len(), grid_name(g));
         self.pr_write(t, Source::Notes(d));
@@ -584,6 +748,10 @@ impl App {
                 }
             }
             Key::Q if !m.command => self.pr_quantise(),
+            Key::Num1 if !m.command => self.pr.tool = PrTool::Pointer,
+            Key::Num2 if !m.command => self.pr.tool = PrTool::Select,
+            Key::Num3 if !m.command => self.pr.tool = PrTool::Pencil,
+            Key::F if !m.command => self.pr.fit = true,
             Key::Escape => {
                 if self.pr.sel.is_empty() {
                     self.pr.focus = false;
@@ -613,6 +781,9 @@ impl App {
             self.pr.sel.clear();
             self.pr.drag = None;
             self.pr.fit = true;
+            self.pr.smoke.clear();
+            self.pr.erase = None;
+            self.pr.erase_started = false;
         }
         let Some(src) = self.pr_read(target) else {
             ui.label("Nothing to edit here");
@@ -663,54 +834,161 @@ impl App {
             let want = grid_r.width() / (len as f32 / ROW as f32).max(1.0);
             self.pr.zoom = want.clamp(4.0, 40.0);
         }
-        // ---- toolbar (target, inspector)
+        // ---- toolbar (target, tools, snap, key, inspector)
+        let chip_col = match target {
+            Target::Notes { clip: Some(id), .. } => self
+                .tlv
+                .cache
+                .as_ref()
+                .and_then(|c| c.tl.clips.iter().find(|x| x.id == id))
+                .map_or(t.note, |c| super::timeline::track_colour(c.track as usize)),
+            _ => t.note,
+        };
         let sel_note = (self.pr.sel.len() == 1)
             .then(|| notes.iter().find(|n| n.id == self.pr.sel[0]).copied())
             .flatten();
         let mut tool_edit: Option<RNote> = None;
         ui.scope_builder(egui::UiBuilder::new().max_rect(tool.shrink2(egui::vec2(6.0, 1.0))), |ui| {
             ui.horizontal_centered(|ui| {
-                let label = match target {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                // the clip / block chip: colour dot + name
+                let (label, tip) = match target {
                     Target::Block { pattern, col } => {
                         let name = self.with(|s| s.song.patterns.get(pattern).map(|p| p.name.clone()).unwrap_or_default());
-                        format!("Block {pattern:02} {name} · channel {}", col + 1)
+                        (
+                            format!("Block {pattern:02} {name} · ch {}", col + 1),
+                            format!("block {pattern:02} {name}, channel {}", col + 1),
+                        )
                     }
                     Target::Notes { .. } => {
                         let name = match &src {
                             Source::Notes(d) => d.name.clone(),
                             _ => String::new(),
                         };
-                        format!("Note clip {name} · {} notes", notes.len())
+                        let name = if name.is_empty() { "Note clip".to_string() } else { name };
+                        (name.clone(), format!("note clip {name} · {} notes", notes.len()))
                     }
                 };
-                ui.label(egui::RichText::new(label).strong());
+                pr_chip(ui, chip_col, &label).on_hover_text(tip);
+                if pr_btn(ui, "ALL", false, true, "select every note (Ctrl+A)").clicked() {
+                    self.pr.sel = notes.iter().map(|n| n.id).collect();
+                    self.pr.focus = true;
+                }
+                ui.add_space(6.0);
+                // tools
+                for (tool, tip) in [
+                    (PrTool::Pointer, "Pointer (1): click empty space to draw a note, drag a note to move it, its right edge to resize"),
+                    (PrTool::Select, "Select (2): drag a box to select notes; Shift adds to the selection"),
+                    (PrTool::Pencil, "Pencil (3): click to draw, drag to paint a run of notes at the note length"),
+                ] {
+                    if pr_tool_btn(ui, tool, self.pr.tool == tool, tip).clicked() {
+                        self.pr.tool = tool;
+                    }
+                }
+                ui.add_space(6.0);
                 if let Target::Notes { .. } = target {
-                    ui.separator();
-                    ui.label("Grid");
+                    let shown = if self.pr.grid == 0 {
+                        format!("Smart · {}", len_name(smart_grid(self.pr.zoom)))
+                    } else {
+                        grid_name(self.pr.grid).to_string()
+                    };
                     egui::ComboBox::from_id_salt("pr_grid")
-                        .width(56.0)
-                        .selected_text(grid_name(self.pr.grid))
+                        .width(92.0)
+                        .selected_text(shown)
                         .show_ui(ui, |ui| {
                             for (g, n) in GRIDS {
-                                ui.selectable_value(&mut self.pr.grid, g, n);
-                            }
-                        });
-                    ui.label("Chord");
-                    egui::ComboBox::from_id_salt("pr_chord")
-                        .width(64.0)
-                        .selected_text(self.pr.chord.map_or("off", |c| c.name()))
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut self.pr.chord, None, "off");
-                            for k in chords::ChordKind::ALL {
-                                ui.selectable_value(&mut self.pr.chord, Some(k), k.name());
+                                let r = ui.selectable_value(&mut self.pr.grid, g, n);
+                                match g {
+                                    0 => r.on_hover_text("follows the zoom: finer as you zoom in"),
+                                    x if x == PPQ => r.on_hover_text("a beat (1/4)"),
+                                    _ => r,
+                                };
                             }
                         })
                         .response
-                        .on_hover_text("draw the chord of the song key on the clicked note (Chords window sets the key)");
-                    if ui.button("Quantise  Q").on_hover_text("snap the selected notes (or all) to the grid").clicked() {
+                        .on_hover_text("snap grid");
+                    if pr_btn(ui, "Quantize", false, true, "snap the selected notes (or all) to the grid (Q)").clicked() {
                         self.pr_quantise();
                     }
                 }
+                if pr_btn(ui, "Fit", false, true, "zoom to the notes (F)").clicked() {
+                    self.pr.fit = true;
+                }
+                if let Target::Notes { .. } = target {
+                    let on = self.pr.chord.is_some();
+                    if pr_btn(ui, "Chords", on, true, "draw the song key's chord on the clicked note").clicked() {
+                        self.pr.chord = if on { None } else { Some(self.pr.chord_kind) };
+                        if !on && song_key.is_none() {
+                            self.status = "Chords need a song key: turn on Scale".into();
+                        }
+                    }
+                    if let Some(mut k) = self.pr.chord {
+                        egui::ComboBox::from_id_salt("pr_chord")
+                            .width(64.0)
+                            .selected_text(k.name())
+                            .show_ui(ui, |ui| {
+                                for c in chords::ChordKind::ALL {
+                                    ui.selectable_value(&mut k, c, c.name());
+                                }
+                            })
+                            .response
+                            .on_hover_text("chord type");
+                        self.pr.chord = Some(k);
+                        self.pr.chord_kind = k;
+                    }
+                }
+                // the song key: highlights its notes (and sets the Chords key)
+                let on = song_key.is_some();
+                if pr_btn(ui, "Scale", on, true, "highlight the song key's notes (the same key as the Chords window)").clicked() {
+                    let k = if on { None } else { Some(self.pr.last_key.unwrap_or(chords::Key::new(0, chords::Scale::Major))) };
+                    self.with(|s| s.song.info.key = k);
+                    self.dirty = true;
+                }
+                if let Some(sk) = song_key {
+                    let mut k = sk;
+                    egui::ComboBox::from_id_salt("pr_key_root")
+                        .width(40.0)
+                        .selected_text(k.note_name(k.root))
+                        .show_ui(ui, |ui| {
+                            for r in 0..12u8 {
+                                ui.selectable_value(&mut k.root, r, sk.note_name(r));
+                            }
+                        })
+                        .response
+                        .on_hover_text("key");
+                    egui::ComboBox::from_id_salt("pr_key_scale")
+                        .width(92.0)
+                        .selected_text(k.scale.name())
+                        .show_ui(ui, |ui| {
+                            for sc in chords::Scale::ALL {
+                                ui.selectable_value(&mut k.scale, sc, sc.name());
+                            }
+                        })
+                        .response
+                        .on_hover_text("scale");
+                    if k != sk {
+                        let k = chords::Key::new(k.root, k.scale);
+                        self.with(|s| s.song.info.key = Some(k));
+                        self.dirty = true;
+                    }
+                    self.pr.last_key = Some(sk);
+                }
+                ui.add_space(6.0);
+                // the remembered length of the next drawn note
+                ui.label(egui::RichText::new("Len").color(t.ink2));
+                let gstep = self.pr_grid();
+                egui::ComboBox::from_id_salt("pr_len")
+                    .width(52.0)
+                    .selected_text(len_name(self.pr.last_len.max(gstep)))
+                    .show_ui(ui, |ui| {
+                        for l in [ROW / 2, ROW, PPQ / 2, 3 * ROW, PPQ, 2 * PPQ, 4 * PPQ] {
+                            if l >= gstep {
+                                ui.selectable_value(&mut self.pr.last_len, l, len_name(l));
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("length of the next note you click in: the last note drawn, resized or clicked");
                 ui.separator();
                 match sel_note {
                     Some(n) => {
@@ -741,7 +1019,7 @@ impl App {
                         let tip = if n > 1 {
                             format!("{n} notes selected · arrows move, Del deletes")
                         } else {
-                            "click: draw · drag a note: move · its right edge: length · right-click: delete · Ctrl+click: select more".into()
+                            "click: draw (same length as the last note) · drag a note: move · its right edge: length · right-click or right-drag: erase · Ctrl+click: select more".into()
                         };
                         ui.label(egui::RichText::new(tip).small().color(t.ink2));
                     }
@@ -909,6 +1187,17 @@ impl App {
                 notes_p.circle_filled(Pos2::new(r.left() + 2.5, r.top() + 2.5), 2.0, t.fx);
             }
         }
+        // ---- deleted notes going up in smoke
+        let now = Instant::now();
+        self.pr
+            .smoke
+            .retain(|p| now.duration_since(p.born).as_secs_f32() < SMOKE_S);
+        for puff in &self.pr.smoke {
+            paint_smoke(&notes_p, puff, now.duration_since(puff.born).as_secs_f32() / SMOKE_S);
+        }
+        if !self.pr.smoke.is_empty() {
+            ui.ctx().request_repaint();
+        }
         // ---- velocity lane
         for n in &notes {
             let x = self.pr.x_of(n.start);
@@ -1014,14 +1303,31 @@ impl App {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
             }
         }
-        if resp.secondary_clicked() {
-            if let Some((n, _)) = resp
-                .interact_pointer_pos()
-                .and_then(|p| hit_note(&self.pr, &notes, p))
-            {
-                self.pr.sel = vec![n.id];
-                self.pr_delete();
+        // ---- right-click deletes; right-drag erases every note it passes
+        let (sec_down, sec_pressed, latest) = ui.input(|i| {
+            (
+                i.pointer.secondary_down(),
+                i.pointer.button_pressed(egui::PointerButton::Secondary),
+                i.pointer.latest_pos(),
+            )
+        });
+        if sec_pressed && press_pos.is_some_and(|p| grid_r.contains(p)) {
+            self.pr.erase = press_pos;
+        }
+        if let (Some(from), true) = (self.pr.erase, sec_down || sec_pressed) {
+            let to = latest.unwrap_or(from);
+            let hit = swept_notes(&self.pr, &notes, from, to);
+            if !hit.is_empty() {
+                let colour = |n: &RNote| base.gamma_multiply(0.45 + 0.55 * n.vel);
+                self.pr_erase(target, &hit, &colour);
             }
+            self.pr.erase = Some(to);
+            // the eraser cursor
+            ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+            paint_eraser(ui.ctx(), to);
+        } else if self.pr.erase.take().is_some() {
+            self.pr.erase_started = false;
+            ui.ctx().request_repaint();
         }
         if resp.drag_started_by(egui::PointerButton::Primary) || resp.clicked() {
             let pos = press_pos
@@ -1040,10 +1346,12 @@ impl App {
                 key: k as u8,
                 len: 0,
                 heard: 0,
+                moved: false,
             };
             match hit {
                 Some((n, edge)) => {
-                    if mods.command {
+                    if mods.shift || mods.command {
+                        // Shift (or Ctrl) + click toggles it in the selection
                         if let Some(i) = self.pr.sel.iter().position(|&x| x == n.id) {
                             if resp.clicked() {
                                 self.pr.sel.remove(i);
@@ -1051,7 +1359,9 @@ impl App {
                         } else {
                             self.pr.sel.push(n.id);
                         }
-                    } else if !self.pr.sel.contains(&n.id) {
+                    } else if resp.clicked() || !self.pr.sel.contains(&n.id) {
+                        // a plain click selects only this note; dragging a
+                        // selected note moves the whole selection
                         self.pr.sel = vec![n.id];
                     }
                     if !edge {
@@ -1063,14 +1373,17 @@ impl App {
                     d.key = n.key;
                     d.len = n.len;
                     d.heard = n.key;
+                    d.moved = true;
                     self.pr.last_len = n.len;
                     if !n.no_vel {
                         self.pr.last_vel = n.vel;
                     }
                 }
-                None if mods.shift || mods.command => {
+                // Shift (or Ctrl) on empty space: a box that adds to the
+                // selection (never a new note); the Select tool: a new box
+                None if mods.shift || mods.command || self.pr.tool == PrTool::Select => {
                     d.kind = DragK::Band(pos);
-                    if !mods.command {
+                    if !(mods.shift || mods.command) {
                         self.pr.sel.clear();
                     }
                 }
@@ -1081,39 +1394,12 @@ impl App {
                     let key = k as u8;
                     // write the new note(s) now; the drag sets the length
                     let mut s2 = src.clone();
-                    match (&mut s2, target) {
-                        (Source::Block(p), Target::Block { col, .. }) => {
-                            let row = (start / ROW) as usize;
-                            let ln = ((d.len + ROW - 1) / ROW).max(1) as usize;
-                            let vol = if self.pr.last_vel < 1.0 {
-                                roll::vel_to_vol(self.pr.last_vel)
-                            } else {
-                                0
-                            };
-                            roll::put_note(p, col, row, ln, key, self.instr, vol);
-                            d.id = row;
-                            self.pr.sel = vec![row];
-                        }
-                        (Source::Notes(nd), _) => {
-                            let keys = self.pr_chord_keys(key, song_key);
-                            self.pr.sel.clear();
-                            for kk in keys {
-                                nd.notes.push(tl::Note {
-                                    start,
-                                    len: d.len,
-                                    key: kk,
-                                    vel: roll::vel_u16(self.pr.last_vel),
-                                    ..Default::default()
-                                });
-                                self.pr.sel.push(nd.notes.len() - 1);
-                            }
-                            d.id = nd.notes.len() - 1;
-                        }
-                        _ => {}
-                    }
+                    d.id = self.pr_put(&mut s2, target, start, d.len, key, song_key, false);
                     // the drag re-applies its length to this state
                     d.origin = s2.clone();
-                    if let Source::Block(_) = s2 {
+                    if self.pr.tool == PrTool::Pencil {
+                        d.kind = DragK::Paint(start);
+                    } else if let Source::Block(_) = s2 {
                         d.kind = DragK::Resize;
                     }
                     self.pr_write(target, s2);
@@ -1151,8 +1437,38 @@ impl App {
                         }
                     }
                     DragK::Resize | DragK::Draw => {
-                        self.pr_apply_drag(&d, target, tk, k, grid_t);
-                        self.pr.last_len = (tl::snap(tk as Tick, grid_t) - d.start).max(grid_t);
+                        // a new note keeps the remembered length until the
+                        // pointer really moves (half a grid step)
+                        let go = d.moved || (tk - d.grab_tick).abs() >= grid_t as f64 / 2.0;
+                        if go {
+                            if let Some(x) = self.pr.drag.as_mut() {
+                                x.moved = true;
+                            }
+                            self.pr_apply_drag(&d, target, tk, k, grid_t);
+                            self.pr.last_len =
+                                (tl::snap(tk as Tick, grid_t) - d.start).max(grid_t);
+                        }
+                    }
+                    DragK::Paint(from) => {
+                        // one more note each time the mouse reaches the next
+                        // length step (either way), at the mouse's pitch
+                        let step = d.len.max(1);
+                        let at = from + ((tk as Tick - from).div_euclid(step)) * step;
+                        if at != d.start
+                            && at >= 0
+                            && at < len
+                            && !notes.iter().any(|n| n.start == at && n.key == k as u8)
+                        {
+                            if let Some(mut s2) = self.pr_read(target) {
+                                let id = self.pr_put(&mut s2, target, at, step, k as u8, song_key, true);
+                                self.pr_write(target, s2);
+                                self.pr_audition(k as u8, 0, self.pr.last_vel);
+                                if let Some(x) = self.pr.drag.as_mut() {
+                                    x.start = at;
+                                    x.id = id;
+                                }
+                            }
+                        }
                     }
                     DragK::Move => {
                         self.pr_apply_drag(&d, target, tk, k, grid_t);
@@ -1271,6 +1587,91 @@ fn hit_note(pr: &PianoUi, notes: &[RNote], p: Pos2) -> Option<(RNote, bool)> {
     })
 }
 
+/// the notes the segment `a`→`b` passes over (sampled every 2 px)
+fn swept_notes(pr: &PianoUi, notes: &[RNote], a: Pos2, b: Pos2) -> Vec<RNote> {
+    let steps = ((b - a).length() / 2.0).ceil().max(1.0) as usize;
+    let mut out: Vec<RNote> = vec![];
+    for k in 0..=steps {
+        let p = a + (b - a) * (k as f32 / steps as f32);
+        for n in notes {
+            if note_rect(pr, n).expand(1.0).contains(p) && !out.iter().any(|m| m.id == n.id) {
+                out.push(*n);
+            }
+        }
+    }
+    out
+}
+
+/// a small integer hash -> 0..1
+fn h01(a: u32, b: u32, c: u32) -> f32 {
+    let mut x = a
+        .wrapping_mul(0x9E37_79B1)
+        ^ b.wrapping_mul(0x85EB_CA77)
+        ^ c.wrapping_mul(0xC2B2_AE3D);
+    x ^= x >> 15;
+    x = x.wrapping_mul(0x2C1B_3C6D);
+    x ^= x >> 12;
+    (x & 0xFFFF) as f32 / 65535.0
+}
+
+/// a deleted note at `age` (0..1 of its life): it breaks into square pixels
+/// of its colour that drift up and sideways and fade out
+fn paint_smoke(p: &egui::Painter, puff: &Puff, age: f32) {
+    let r = puff.rect;
+    let px = (r.height() / 2.0).clamp(2.0, 4.0);
+    let cols = ((r.width() / px).ceil() as usize).clamp(1, 64);
+    let rows = ((r.height() / px).ceil() as usize).clamp(1, 4);
+    let (cw, ch) = (r.width() / cols as f32, r.height() / rows as f32);
+    let seed = (r.left() as i32 as u32) ^ ((r.top() as i32 as u32) << 11);
+    for i in 0..cols {
+        for j in 0..rows {
+            let (iu, ju) = (i as u32, j as u32);
+            // each pixel has its own life: the note dissolves, not blinks
+            let life = 0.45 + 0.55 * h01(iu, ju, seed);
+            if age >= life {
+                continue;
+            }
+            let a = age / life;
+            let c0 = Pos2::new(
+                r.left() + (i as f32 + 0.5) * cw,
+                r.top() + (j as f32 + 0.5) * ch,
+            );
+            let drift = egui::vec2(
+                (h01(iu, ju, seed ^ 0x51) - 0.5) * 56.0 * age,
+                -(10.0 + 34.0 * h01(iu, ju, seed ^ 0xA7)) * age - 14.0 * age * age,
+            );
+            let sz = px * (1.0 - 0.45 * a);
+            let alpha = (1.0 - a).powf(1.3);
+            p.rect_filled(
+                Rect::from_center_size(c0 + drift, egui::vec2(sz, sz)),
+                0.0,
+                puff.colour.gamma_multiply(alpha),
+            );
+        }
+    }
+}
+
+/// the eraser cursor (tip at `at`) while right-dragging in the roll
+fn paint_eraser(ctx: &egui::Context, at: Pos2) {
+    let p = ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Tooltip,
+        egui::Id::unique("pr_eraser"),
+    ));
+    // a tilted block eraser: pink rubber at the tip, a pale sleeve behind
+    let (u, v) = (egui::vec2(0.82, -0.57), egui::vec2(0.57, 0.82));
+    let quad = |a: f32, b: f32| {
+        vec![
+            at + u * a - v * 4.5,
+            at + u * b - v * 4.5,
+            at + u * b + v * 4.5,
+            at + u * a + v * 4.5,
+        ]
+    };
+    let edge = Stroke::new(1.0, Color32::from_black_alpha(200));
+    p.add(egui::Shape::convex_polygon(quad(0.0, 8.0), Color32::from_rgb(0xF2, 0x8C, 0xA8), edge));
+    p.add(egui::Shape::convex_polygon(quad(8.0, 18.0), Color32::from_rgb(0xE8, 0xEC, 0xF2), edge));
+}
+
 fn set_vel(src: &mut Source, t: Target, id: usize, v: f32) {
     match (src, t) {
         (Source::Block(p), Target::Block { col, .. }) => {
@@ -1283,6 +1684,137 @@ fn set_vel(src: &mut Source, t: Target, id: usize, v: f32) {
         }
         _ => {}
     }
+}
+
+/// a note length as a fraction of a bar ("1/4", "3/16", "1 bar", "2 bars")
+pub(crate) fn len_name(l: Tick) -> String {
+    let bar = 4 * PPQ;
+    if l > 0 && l % bar == 0 {
+        let n = l / bar;
+        return if n == 1 { "1 bar".into() } else { format!("{n} bars") };
+    }
+    fn gcd(a: Tick, b: Tick) -> Tick {
+        if b == 0 { a } else { gcd(b, a % b) }
+    }
+    let g = gcd(l.max(1), bar);
+    format!("{}/{}", l.max(1) / g, bar / g)
+}
+
+const BTN_H: f32 = 20.0;
+
+/// a toolbar text button with a highlighted active state
+fn pr_btn(ui: &mut egui::Ui, label: &str, on: bool, enabled: bool, tip: &str) -> egui::Response {
+    let t = th();
+    let font = FontId::proportional(12.0);
+    let g = ui
+        .painter()
+        .layout_no_wrap(label.to_string(), font, Color32::PLACEHOLDER);
+    let w = (g.size().x + 16.0).max(30.0);
+    let (r, resp) = ui.allocate_exact_size(
+        egui::vec2(w, BTN_H),
+        if enabled { Sense::click() } else { Sense::hover() },
+    );
+    if ui.is_rect_visible(r) {
+        btn_back(ui.painter(), r, &resp, on);
+        let col = if !enabled {
+            t.ink2.gamma_multiply(0.5)
+        } else if on {
+            if t.light { t.ink } else { Color32::WHITE }
+        } else {
+            t.ink
+        };
+        ui.painter().galley(r.center() - g.size() / 2.0, g, col);
+    }
+    resp.on_hover_text(tip)
+}
+
+fn btn_back(p: &egui::Painter, r: Rect, resp: &egui::Response, on: bool) {
+    let t = th();
+    let fill = if on {
+        t.sel
+    } else if resp.hovered() {
+        Color32::from_white_alpha(18)
+    } else {
+        Color32::from_black_alpha(50)
+    };
+    p.rect_filled(r, 4.0, fill);
+    p.rect_stroke(
+        r,
+        4.0,
+        Stroke::new(1.0, if on { t.accent } else { t.border }),
+        egui::StrokeKind::Inside,
+    );
+    theme::raise(p, r, 4.0, on || resp.is_pointer_button_down_on());
+}
+
+/// a tool button with a painted icon
+fn pr_tool_btn(ui: &mut egui::Ui, tool: PrTool, on: bool, tip: &str) -> egui::Response {
+    let t = th();
+    let (r, resp) = ui.allocate_exact_size(egui::vec2(26.0, BTN_H), Sense::click());
+    if ui.is_rect_visible(r) {
+        let p = ui.painter();
+        btn_back(p, r, &resp, on);
+        let col = if on && !t.light { Color32::WHITE } else { t.ink };
+        let c = r.center();
+        let v = egui::vec2;
+        match tool {
+            PrTool::Pointer => {
+                // an arrow
+                let pts = vec![
+                    c + v(-4.0, -7.0),
+                    c + v(-4.0, 5.0),
+                    c + v(-1.0, 2.0),
+                    c + v(1.5, 7.0),
+                    c + v(3.5, 6.0),
+                    c + v(1.0, 1.0),
+                    c + v(5.0, 1.0),
+                ];
+                p.add(egui::Shape::closed_line(pts, Stroke::new(1.4, col)));
+            }
+            PrTool::Select => {
+                // a dashed box
+                let b = Rect::from_center_size(c, v(13.0, 11.0));
+                let corners = [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()];
+                for k in 0..4 {
+                    let (a, z) = (corners[k], corners[(k + 1) % 4]);
+                    p.extend(egui::Shape::dashed_line(&[a, z], Stroke::new(1.3, col), 2.5, 2.0));
+                }
+            }
+            PrTool::Pencil => {
+                // a pencil, point down-left
+                let (u, w) = (v(0.707, -0.707), v(0.707, 0.707));
+                let tip = c + v(-6.0, 6.0);
+                let body = |a: f32, b: f32| {
+                    vec![tip + u * a - w * 2.3, tip + u * b - w * 2.3, tip + u * b + w * 2.3, tip + u * a + w * 2.3]
+                };
+                p.add(egui::Shape::closed_line(body(4.0, 15.0), Stroke::new(1.3, col)));
+                p.add(egui::Shape::convex_polygon(
+                    vec![tip, tip + u * 4.0 - w * 2.3, tip + u * 4.0 + w * 2.3],
+                    col,
+                    Stroke::NONE,
+                ));
+            }
+        }
+    }
+    resp.on_hover_text(tip)
+}
+
+/// the clip / block name chip with its colour dot
+fn pr_chip(ui: &mut egui::Ui, col: Color32, label: &str) -> egui::Response {
+    let t = th();
+    let font = FontId::proportional(12.0);
+    let g = ui
+        .painter()
+        .layout_no_wrap(label.to_string(), font, t.ink);
+    let w = (g.size().x + 26.0).min(220.0);
+    let (r, resp) = ui.allocate_exact_size(egui::vec2(w, BTN_H), Sense::hover());
+    if ui.is_rect_visible(r) {
+        let p = ui.painter_at(r);
+        p.rect_filled(r, 4.0, Color32::from_black_alpha(70));
+        p.circle_filled(Pos2::new(r.left() + 10.0, r.center().y), 4.0, col);
+        p.galley(Pos2::new(r.left() + 19.0, r.center().y - g.size().y / 2.0), g, t.ink);
+    }
+    resp
 }
 
 fn grid_name(g: Tick) -> &'static str {
