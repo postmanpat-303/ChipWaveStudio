@@ -28,6 +28,21 @@ pub(crate) enum Act {
     Preview,
 }
 
+/// after a Browser load: open the instrument panel or a plugin editor
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum OpenAfter {
+    None,
+    /// built-in / sample / .cwi: show the instrument editor panel
+    InstPanel,
+    /// plugin instrument at slot index (0-based)
+    PluginEditor(usize),
+    /// plugin effect on instrument slot (1-based) with device uid
+    FxEditor {
+        slot: u8,
+        uid: u32,
+    },
+}
+
 /// where a Browser drag would land
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DropAt {
@@ -53,6 +68,7 @@ pub(crate) struct LoadJob {
     rx: mpsc::Receiver<Result<Instrument, String>>,
     act: Act,
     name: String,
+    open_after: OpenAfter,
 }
 
 pub(crate) struct BrowserUi {
@@ -93,6 +109,14 @@ pub(crate) struct BrowserUi {
     /// Drum Patterns and Files tabs (app/drumpat.rs)
     pub(crate) pat: super::drumpat::PatUi,
     pub(crate) files: super::drumpat::FilesUi,
+    /// open the editor / instrument panel after the next load settles
+    pub(crate) open_after: OpenAfter,
+    /// retries left while waiting for a plugin instance to appear
+    pub(crate) open_tries: u8,
+    /// loaded plugin thumbnails (cache key → texture)
+    pub(crate) thumb_tex: std::collections::HashMap<String, egui::TextureHandle>,
+    /// keys we already asked the capture queue for this session
+    pub(crate) thumb_asked: std::collections::HashSet<String>,
 }
 
 impl Default for BrowserUi {
@@ -126,6 +150,10 @@ impl Default for BrowserUi {
             shot_drop: false,
             pat: Default::default(),
             files: Default::default(),
+            open_after: OpenAfter::None,
+            open_tries: 0,
+            thumb_tex: Default::default(),
+            thumb_asked: Default::default(),
         }
     }
 }
@@ -290,7 +318,12 @@ impl App {
                 Ok(r) => {
                     let j = self.br.load.take().unwrap();
                     match r {
-                        Ok(inst) => self.br_place(inst, j.act),
+                        Ok(inst) => {
+                            self.br_place(inst, j.act);
+                            self.br.open_after = j.open_after;
+                            self.br.open_tries = 30;
+                            self.br_try_open_after(ctx);
+                        }
                         Err(e) => self.status = format!("Couldn't load {}: {e}", j.name),
                     }
                 }
@@ -299,6 +332,12 @@ impl App {
                 }
                 Err(mpsc::TryRecvError::Disconnected) => self.br.load = None,
             }
+        }
+        if self.br.open_after != OpenAfter::None {
+            self.br_try_open_after(ctx);
+        }
+        if self.extra.browser_thumbs && self.extra.browser_open {
+            self.br_poll_thumbs(ctx);
         }
         if self.br.preview_until.is_some_and(|t| Instant::now() >= t) {
             self.br_stop_preview();
@@ -468,6 +507,7 @@ impl App {
                     rx,
                     act,
                     name: it.name.clone(),
+                    open_after: OpenAfter::None,
                 });
             }
             _ => match self.with(|s| br::instrument_of(it, &s.song)) {
@@ -501,7 +541,7 @@ impl App {
         if plugin {
             let extra = (self.instr as usize).checked_sub(1).map(|i| (i, self.ch));
             crate::plugin::sync(&self.shared, extra);
-            if matches!(act, Act::New) {
+            if matches!(act, Act::New | Act::NewTrack(_) | Act::Track(_)) {
                 self.default_macros();
             }
         }
@@ -614,7 +654,7 @@ impl App {
         self.br_stop_preview();
         if let Some(at) = self.br.new_track_at.take() {
             if is_instrumentish(it) {
-                self.br_instrument(it, Act::NewTrack(at));
+                self.br_load_new_track(it, at);
                 return;
             }
         }
@@ -632,7 +672,9 @@ impl App {
             return;
         }
         if it.is_effect() {
-            self.br_effect(it, self.instr);
+            let slot = self.instr;
+            self.br_effect(it, slot);
+            self.br_schedule_fx_editor(slot);
             return;
         }
         match &it.src {
@@ -655,13 +697,247 @@ impl App {
                         Act::New
                     },
                 );
+                self.show_instrument_panel();
             }
             Src::Table(i) => {
                 if !self.br_set_table(Some(*i)) {
-                    self.br_instrument(it, Act::New);
+                    self.br_load_new_track_or_slot(it);
                 }
             }
+            // plugin / built-in / .cwi / generators: new track + open editor
+            _ if is_instrumentish(it) => self.br_load_new_track_or_slot(it),
             _ => self.br_instrument(it, Act::New),
+        }
+    }
+
+    /// new track at the end (or a plain slot when all 32 tracks are used)
+    fn br_load_new_track_or_slot(&mut self, it: &Item) {
+        let n = self.with(|s| s.song.channels);
+        if n >= crate::model::MAX_CHANNELS {
+            self.status = "All 32 tracks are used: loaded as a new instrument slot instead".into();
+            self.br_instrument(it, Act::New);
+            self.br_schedule_after_instrument(it);
+        } else {
+            self.br_load_new_track(it, n);
+        }
+    }
+
+    fn br_load_new_track(&mut self, it: &Item, at: usize) {
+        // file loads finish on a worker: stamp open_after onto the job
+        let open = self.br_open_kind(it);
+        self.br_instrument(it, Act::NewTrack(at));
+        if self.br.load.is_some() {
+            if let Some(j) = self.br.load.as_mut() {
+                j.open_after = open;
+            }
+        } else {
+            self.br.open_after = open;
+            self.br.open_tries = 30;
+        }
+    }
+
+    fn br_open_kind(&self, it: &Item) -> OpenAfter {
+        match &it.src {
+            Src::Plugin(f) if f.desc.is_instrument() => {
+                // slot is not known yet; br_try_open_after uses self.instr
+                OpenAfter::PluginEditor(usize::MAX)
+            }
+            _ => OpenAfter::InstPanel,
+        }
+    }
+
+    fn br_schedule_after_instrument(&mut self, it: &Item) {
+        self.br.open_after = self.br_open_kind(it);
+        self.br.open_tries = 30;
+    }
+
+    fn br_schedule_fx_editor(&mut self, slot: u8) {
+        let uid = self.with(|s| {
+            let i = (slot as usize).wrapping_sub(1);
+            s.song.instruments.get(i)?.fx.last().map(|d| d.uid)
+        });
+        if let Some(uid) = uid {
+            self.br.open_after = OpenAfter::FxEditor { slot, uid };
+            self.br.open_tries = 30;
+        }
+    }
+
+    /// load ready PNGs and keep the capture queue moving
+    fn br_poll_thumbs(&mut self, ctx: &egui::Context) {
+        let exe = std::env::current_exe().unwrap_or_default();
+        let finished = {
+            let mut g = crate::plugin::thumb::queue();
+            let q = g.get_or_insert_with(Default::default);
+            q.poll(&exe)
+        };
+        if finished {
+            // drop textures whose files changed so they reload
+            self.br.thumb_tex.clear();
+            ctx.request_repaint();
+        }
+        if crate::plugin::thumb::queue()
+            .as_ref()
+            .is_some_and(|q| q.pending_len() > 0)
+        {
+            ctx.request_repaint_after(Duration::from_millis(200));
+        }
+    }
+
+    /// ensure a texture for this plugin key (loads PNG or enqueues capture)
+    pub(crate) fn br_thumb(
+        &mut self,
+        ctx: &egui::Context,
+        f: &crate::plugin::scan::Found,
+    ) -> Option<egui::TextureHandle> {
+        if !self.extra.browser_thumbs {
+            return None;
+        }
+        let format = f.format.as_str();
+        let path = f.path.as_str();
+        let id = f.desc.id.as_str();
+        let version = f.desc.version.as_str();
+        let name = f.desc.name.as_str();
+        let vendor = f.desc.vendor.as_str();
+        let k = crate::plugin::thumb::key(format, id, version);
+        if let Some(t) = self.br.thumb_tex.get(&k) {
+            return Some(t.clone());
+        }
+        if let Some(p) = crate::plugin::thumb::png_path(&k) {
+            if p.is_file() {
+                if let Ok((w, h, rgba)) = crate::plugin::thumb::load_png(&p) {
+                    let img =
+                        egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+                    let tex = ctx.load_texture(
+                        format!("plug_thumb_{k}"),
+                        img,
+                        egui::TextureOptions::LINEAR,
+                    );
+                    self.br.thumb_tex.insert(k.clone(), tex.clone());
+                    return Some(tex);
+                }
+            }
+        }
+        // enqueue a capture once
+        if self.br.thumb_asked.insert(k.clone()) {
+            // immediate generated card so the row isn't empty
+            let (w, h, rgba) = crate::plugin::thumb::generate_card(
+                name,
+                vendor,
+                format,
+                match format {
+                    "clap" => [0x6E, 0xC6, 0xA8],
+                    "vst3" => [0x7A, 0xA2, 0xE8],
+                    _ => [0xB0, 0xB8, 0xC4],
+                },
+            );
+            if let Some(p) = crate::plugin::thumb::png_path(&k) {
+                let _ = crate::plugin::thumb::save_png(&p, w, h, &rgba);
+            }
+            let img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+            let tex =
+                ctx.load_texture(format!("plug_thumb_{k}"), img, egui::TextureOptions::LINEAR);
+            self.br.thumb_tex.insert(k.clone(), tex.clone());
+            {
+                let mut g = crate::plugin::thumb::queue();
+                let q = g.get_or_insert_with(Default::default);
+                q.enqueue(format, path, id, version, name, vendor);
+            }
+            return Some(tex);
+        }
+        self.br.thumb_tex.get(&k).cloned()
+    }
+
+    /// try to open the pending editor / panel (retries while a plugin loads)
+    fn br_try_open_after(&mut self, ctx: &egui::Context) {
+        match self.br.open_after.clone() {
+            OpenAfter::None => {}
+            OpenAfter::InstPanel => {
+                self.show_instrument_panel();
+                self.br.open_after = OpenAfter::None;
+                self.br.open_tries = 0;
+            }
+            OpenAfter::PluginEditor(_) => {
+                let i = (self.instr as usize).wrapping_sub(1);
+                crate::plugin::sync(&self.shared, Some((i, self.ch)));
+                let title = self.with(|s| {
+                    s.song
+                        .instruments
+                        .get(i)
+                        .map(|x| format!("{} – ChipWave", x.name))
+                });
+                let Some(title) = title else {
+                    self.br.open_after = OpenAfter::None;
+                    return;
+                };
+                let r = self.with(|s| {
+                    let k = s.engine.plugins.primary(i)?;
+                    Some(s.engine.plugins.slots[k].inst.open_editor(&title))
+                });
+                match r {
+                    Some(Ok(())) => {
+                        self.br.open_after = OpenAfter::None;
+                        self.br.open_tries = 0;
+                        self.show_instrument_panel();
+                    }
+                    Some(Err(e)) => {
+                        self.status = format!("Plugin editor: {e}");
+                        self.br.open_after = OpenAfter::None;
+                        self.br.open_tries = 0;
+                        self.show_instrument_panel();
+                    }
+                    None => {
+                        self.show_instrument_panel();
+                        if self.br.open_tries > 0 {
+                            self.br.open_tries -= 1;
+                            ctx.request_repaint_after(Duration::from_millis(50));
+                        } else {
+                            self.br.open_after = OpenAfter::None;
+                        }
+                    }
+                }
+            }
+            OpenAfter::FxEditor { slot, uid } => {
+                let idx = (slot as usize).wrapping_sub(1);
+                self.sync_fx_plugins();
+                let title = self.with(|s| {
+                    s.song
+                        .instruments
+                        .get(idx)
+                        .and_then(|i| i.fx.iter().find(|d| d.uid == uid))
+                        .and_then(|d| d.plugin.as_ref())
+                        .map(|p| format!("{} – ChipWave", p.name))
+                });
+                let Some(title) = title else {
+                    self.br.open_after = OpenAfter::None;
+                    return;
+                };
+                let r = self.with(|s| {
+                    let k = s.engine.fx_plugins.primary(idx, uid)?;
+                    Some(s.engine.fx_plugins.slots[k].inst.open_editor(&title))
+                });
+                match r {
+                    Some(Ok(())) => {
+                        self.view = View::Fx;
+                        self.br.open_after = OpenAfter::None;
+                        self.br.open_tries = 0;
+                    }
+                    Some(Err(e)) => {
+                        self.status = format!("Plugin editor: {e}");
+                        self.view = View::Fx;
+                        self.br.open_after = OpenAfter::None;
+                        self.br.open_tries = 0;
+                    }
+                    None => {
+                        self.view = View::Fx;
+                        if self.br.open_tries > 0 {
+                            self.br.open_tries -= 1;
+                            ctx.request_repaint_after(Duration::from_millis(50));
+                        } else {
+                            self.br.open_after = OpenAfter::None;
+                        }
+                    }
+                }
+            }
         }
     }
 

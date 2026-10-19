@@ -59,7 +59,7 @@ These are set from the View menu and the lower panel, and saved in `settings.tom
 - what double-clicking a clip on the Timeline opens (`dblclick_roll`, default on = the piano roll; **Settings › Double-click a clip**, Unreleased; off = the pattern editor; Alt+double-click does the other one). See [TIMELINE.md](TIMELINE.md#finding-your-way-around)
 
 - **Inspector and view tab bar** (Unreleased, [INSPECTOR.md](INSPECTOR.md)): `inspector_open` (default off; **I**, Alt+I in the pattern editor) and `view_bar` (default on; View › View tab bar).
-- **The Browser** (Unreleased, [BROWSER.md](BROWSER.md)): whether it is shown (`browser_open`, default on; **Ctrl+B** or the toolbar's **Browser** button), its width (`browser_w`, default 340), your locations (`browser_dirs`), favourites (`browser_favs`, item keys), ratings (`browser_ratings`, key = 1–5) and **Auto-play on select** (`browser_autoplay`, default on). The folder scan is cached in `browser-index.json` next to `settings.toml`.
+- **The Browser** (Unreleased, [BROWSER.md](BROWSER.md)): whether it is shown (`browser_open`, default on; **Ctrl+B** or the toolbar's **Browser** button), its width (`browser_w`, default 340), your locations (`browser_dirs`), favourites (`browser_favs`, item keys), ratings (`browser_ratings`, key = 1–5) **Auto-play on select** (`browser_autoplay`, default on), **Plugin thumbnails** (`browser_thumbs`, default on), Drum Patterns preview volume (`pattern_vol`) and the Files tab's last folder (`files_dir`). The folder scan is cached in `browser-index.json` next to `settings.toml`.
 
 Older settings files get the defaults.
 

@@ -47,7 +47,7 @@ VST3 plugins go through the same code paths as CLAP ones: one `Hosted` interface
 - **State:** the component's and the controller's streams, packed together (`CWV3` + two length-prefixed blobs) and stored base64 in the song like a CLAP state.
 - **Latency** comes from `getLatencySamples` and feeds the same plugin delay compensation as CLAP effects.
 - **Allocation-free audio thread:** the event list, parameter queues and the mirror are preallocated; tested with the allocation counter, for instruments and effects.
-- **Editor:** on Windows the plugin's `IPlugView` is embedded in a ChipWave window (`HWND`), and resizes both ways (`IPlugFrame::resizeView`, `checkSizeConstraint`). On Linux and macOS the editor isn't offered yet, so use the parameter list.
+- **Editor:** on Windows the plugin's `IPlugView` is embedded in a ChipWave window (`HWND`), and resizes both ways (`IPlugFrame::resizeView`, `checkSizeConstraint`). On Linux and macOS the editor isn't offered yet, so use the parameter list. The Browser can capture that HWND for a **thumbnail** (`chipwave --capture-thumb`, see [BROWSER.md › Plugin thumbnails](BROWSER.md#plugin-thumbnails)).
 
 Text songs take `patch = "vst3:<class id>"`:
 

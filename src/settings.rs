@@ -131,6 +131,9 @@ pub struct Extra {
     /// selecting a sample or sound plays it
     #[serde(default = "yes")]
     pub browser_autoplay: bool,
+    /// Plugins tab: show editor thumbnails (captured or generated cards)
+    #[serde(default = "yes")]
+    pub browser_thumbs: bool,
     /// Drum Patterns preview volume 0..1.5 (docs/BROWSER.md)
     #[serde(default = "pattern_vol")]
     pub pattern_vol: f32,
@@ -199,6 +202,7 @@ impl Default for Extra {
             browser_favs: vec![],
             browser_ratings: Default::default(),
             browser_autoplay: true,
+            browser_thumbs: true,
             pattern_vol: pattern_vol(),
             files_dir: String::new(),
             plugin_setup_done: false,

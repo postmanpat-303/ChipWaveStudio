@@ -412,4 +412,9 @@ pub mod win {
             DestroyWindow(hwnd as HWND);
         }
     }
+
+    /// most recently created editor HWND (for thumbnail capture)
+    pub fn last_hwnd() -> Option<isize> {
+        WINDOWS.lock().ok()?.last().map(|e| e.hwnd)
+    }
 }

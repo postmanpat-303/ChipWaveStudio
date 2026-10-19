@@ -99,6 +99,17 @@ Libraries: `ureq` (HTTPS), `zip`, `tar` + `flate2` (.tar.gz), `sevenz-rust2` (.7
 
 The mapping lives in `src/browser/catalogue.rs` and is generic: any scanned plugin whose id or name matches is enriched. Binaries are **not** in the git repo.
 
+## Plugin thumbnails
+
+On the **Plugins** tab each row can show a small screenshot of the plugin's own editor:
+
+1. When a plugin first appears, ChipWave draws a tidy **card** (category colour, name, creator, format tag) so the list is never empty.
+2. In the background a crash-guarded child (`chipwave --capture-thumb …`) opens the editor **off-screen**, captures it (Windows / Wine: `PrintWindow` / `BitBlt` of the HWND), downscales it to 256 px on the long side and caches a PNG in `<config>/plugin-thumbs/` keyed by format + plugin id + version.
+3. Hover a row for a larger preview; right-click › **Refresh thumbnail** forces a new capture. **Rescan plugins** does not wipe the cache; only Refresh does.
+4. ••• › **Plugin thumbnails** turns the feature off (list only, as before). Setting: `browser_thumbs` in `settings.toml` (default on).
+
+Plugins with no editor, a failed capture, or a non-Windows host keep the generated card. Showcase catalogue entries do not ship credited screenshots (licence-clear capture at install time is enough). Capture is one plugin at a time so the UI stays responsive.
+
 ## Drum Patterns
 
 The **Drum Patterns** tab (grid icon) holds 67 ready-made grooves in 14 style folders: Psytrance / Dark psy (6), Techno (5), House (5), Trance (4), DnB / Jungle (5), Breakbeat (4), Hip-hop / Lo-fi (6), Trap (4), Disco / Funk (4), Synthwave / 80s (4), Reggaeton / Dembow (4), Amiga / Chip (4), Afro / Latin (5) and Fills (7). Each pattern has a name, a length in bars (1, 2 or 4), a suggested BPM range and a paired kit.
@@ -154,10 +165,10 @@ The instrument library folder ([INSTRUMENT_LIBRARY.md](INSTRUMENT_LIBRARY.md)) i
 
 | Item | Double-click / Enter |
 |---|---|
-| Instrument, generator preset, `.cwi`, Grid instrument | a **new instrument slot** (it becomes the current instrument) |
+| Instrument, generator preset, `.cwi`, Grid instrument | a **new track** playing it, and the instrument editor opens |
 | Preset (Presets tab) | **replaces the current instrument's sound**; its notes are kept |
-| Plugin instrument | a new plugin instrument, loaded at once |
-| Plugin effect, Grid FX | added to the **current instrument's FX chain** (max. 16 devices) |
+| Plugin instrument | a **new track** with it loaded, and its **editor window** opens (Windows; elsewhere the parameter list) |
+| Plugin effect, Grid FX | added to the **current instrument's FX chain** (max. 16 devices) and its **editor** opens |
 | Sample | Timeline view: an **audio clip** on the current track at the play marker. Elsewhere: a new sample instrument |
 | Wavetable | the current instrument is a Wave generator: oscillator A plays it. Otherwise a new Wave instrument with that table |
 | Song, demo | opens it, with the usual "save changes?" prompt |
@@ -215,6 +226,7 @@ The Browser only reads. Opening it changes nothing in a song (tested: an old son
 
 - MIDI files and MOD / MED modules are listed but can't be imported yet.
 - Plugins aren't previewed, and plugin presets (`.vstpreset`, CLAP preset files) aren't listed.
+- Plugin editor **thumbnails** capture on Windows (and Wine) only; other OSes show generated cards. VST3 editors themselves still open on Windows only; CLAP floating editors work where the plugin offers them.
 - No waveform display or tempo-synced preview of samples; previews are one note, about 2.4 s.
 - Ratings and favourites of files are keyed by path: moving a file forgets them.
 - Dropping onto the mixer view or a specific FX slot position isn't supported (effects go to the end of the chain).
@@ -225,6 +237,7 @@ The Browser only reads. Opening it changes nothing in a song (tested: an old son
 
 ## Under the hood (for developers)
 
+- `src/plugin/thumb.rs`: thumbnail cache, generated cards, capture child and queue; `src/app/browserview.rs` / `browserpanel.rs` show them and open editors on double-click.
 - `src/browser/catalogue.rs`: Showcase plugin metadata (id/name → category, creator, tags).
 - `src/showcase/mod.rs`: the Get showcase instruments manifest and installer; `src/app/showcase.rs`: its dialog.
 - `src/browser.rs`: the item model (`Item`, `Tab`, `Fmt` with badge colours, `Loc`, `Src`), tags, the built-in / library / song / plugin item builders, the folder scanner (`scan_folder`, `classify`), the cached `Index` (`browser-index.json`), `filter` / `column_values`, and loading helpers (`instrument_of`, `sample_instrument`, `wave_instrument`, `grid_fx_device`, `preview_song`). Unit tests in `src/browser/tests.rs`.

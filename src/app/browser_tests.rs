@@ -143,11 +143,15 @@ fn search_tags_and_filters_narrow_the_results() {
 fn double_click_loads_and_enter_loads_the_selection() {
     let mut h = tl_harness();
     let n0 = song(&mut h, |s| s.instruments.len());
+    let ch0 = song(&mut h, |s| s.channels);
     let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "808 Boom");
     dbl(&mut h, p);
     assert_eq!(song(&mut h, |s| s.instruments.len()), n0 + 1);
     assert_eq!(h.state().instr as usize, n0 + 1);
     assert_eq!(song(&mut h, |s| s.instruments[n0].name.clone()), "808 Boom");
+    // double-click makes a new track playing it and opens the instrument panel
+    assert_eq!(song(&mut h, |s| s.channels), ch0 + 1);
+    assert!(h.state().extra.lower_inst && h.state().lower_visible());
     // keyboard: the Browser has it after a click; Down + Enter loads the next
     super::ui_tests::click_at(&mut h, p);
     frames(&mut h, 2);
@@ -156,12 +160,14 @@ fn double_click_loads_and_enter_loads_the_selection() {
     frames(&mut h, 2);
     key(&mut h, Key::ArrowDown, egui::Modifiers::NONE);
     let sel = h.state().br_selected().expect("a selection").name;
+    let ch1 = song(&mut h, |s| s.channels);
     key(&mut h, Key::Enter, egui::Modifiers::NONE);
     frames(&mut h, 2);
     assert_eq!(
         song(&mut h, |s| s.instruments.last().unwrap().name.clone()),
         sel
     );
+    assert_eq!(song(&mut h, |s| s.channels), ch1 + 1);
     // undo takes the load back
     ctrl(&mut h, Key::Z);
     frames(&mut h, 2);
@@ -479,4 +485,19 @@ fn interface_style_switch_still_works_with_the_browser_open() {
         assert!(h.state().br.rect.width() > 250.0);
         assert!(!h.state().br.row_rects.is_empty());
     }
+}
+
+#[test]
+fn plugin_thumbnails_setting_defaults_on() {
+    let h = tl_harness();
+    assert!(h.state().extra.browser_thumbs);
+    let (w, hgt, rgba) = crate::plugin::thumb::generate_card(
+        "Dexed",
+        "Digital Suburban",
+        "vst3",
+        [0x7A, 0xA2, 0xE8],
+    );
+    assert!(w >= 64 && hgt >= 64 && rgba.len() == (w * hgt * 4) as usize);
+    let k = crate::plugin::thumb::key("vst3", "ABCDEF", "1.0");
+    assert!(k.contains("vst3"));
 }

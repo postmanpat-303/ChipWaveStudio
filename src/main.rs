@@ -1158,6 +1158,9 @@ fn main() {
         }
         return;
     }
+    if args.iter().any(|a| a == "--capture-thumb") {
+        std::process::exit(plugin::thumb::cli_capture(&args));
+    }
     if let Some(i) = args.iter().position(|a| a == "--scan-plugin") {
         // child process of the plugin scanner: check one file, print JSON
         let Some(p) = args.get(i + 1) else {

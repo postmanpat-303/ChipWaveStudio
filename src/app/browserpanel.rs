@@ -253,6 +253,7 @@ enum Op {
     FindPlugins,
     GetShowcase,
     PluginRescan,
+    RefreshThumb(Item),
     Close,
 }
 
@@ -402,6 +403,10 @@ impl App {
                     }
                     ui.separator();
                     ui.checkbox(&mut self.extra.browser_autoplay, "Auto-play on select");
+                    ui.checkbox(&mut self.extra.browser_thumbs, "Plugin thumbnails")
+                        .on_hover_text(
+                            "show a small screenshot of each plugin's editor (or a generated card)",
+                        );
                     let dirs = self.extra.browser_dirs.clone();
                     if !dirs.is_empty() {
                         ui.separator();
@@ -841,7 +846,21 @@ impl App {
         let legend_rows = Fmt::ALL.len().div_ceil(3);
         let bottom_h = 30.0 + 18.0 + legend_rows as f32 * 15.0 + 10.0;
         let list_h = (ui.available_height() - bottom_h).max(60.0);
-        let row_h = 32.0;
+        let thumbs = self.extra.browser_thumbs && self.br.filter.tab == Tab::Plugins;
+        let row_h = if thumbs { 40.0 } else { 32.0 };
+        // prefetch thumbnails for the rows about to be drawn
+        if thumbs {
+            let first = (self.br.list_off / row_h).floor().max(0.0) as usize;
+            let vis = ((list_h / row_h).ceil() as usize).saturating_add(3);
+            let ctx = ui.ctx().clone();
+            for k in first..n.min(first + vis) {
+                let it = &self.br.items[self.br.results[k]];
+                if let Src::Plugin(f) = &it.src {
+                    let f = f.clone();
+                    let _ = self.br_thumb(&ctx, &f);
+                }
+            }
+        }
         let sel = self.br.sel.clone();
         let scroll_to = std::mem::take(&mut self.br.scroll_sel)
             .then(|| {
@@ -872,6 +891,13 @@ impl App {
         let cur_slot = self.instr;
         let view_tl = self.view == View::Timeline;
         let ch = self.ch;
+        // snapshot so the row closure does not borrow self.br twice
+        let thumb_tex: std::collections::HashMap<String, (egui::TextureId, egui::Vec2)> = self
+            .br
+            .thumb_tex
+            .iter()
+            .map(|(k, t)| (k.clone(), (t.id(), t.size_vec2())))
+            .collect();
         let mut row_rects: Vec<(String, Rect)> = vec![];
         let out = sa.show_rows(ui, row_h, n, |ui, range| {
             ui.spacing_mut().item_spacing.y = 0.0;
@@ -899,14 +925,41 @@ impl App {
                     0,
                     c,
                 );
-                badge(
-                    p,
-                    Rect::from_center_size(
-                        Pos2::new(r.left() + 30.0, r.center().y),
-                        egui::vec2(40.0, 15.0),
-                    ),
-                    it.fmt,
-                );
+                let mut thumb_id: Option<egui::TextureId> = None;
+                let mut thumb_size = egui::vec2(0.0, 0.0);
+                if thumbs {
+                    if let Src::Plugin(f) = &it.src {
+                        let k = crate::plugin::thumb::key(&f.format, &f.desc.id, &f.desc.version);
+                        if let Some((tid, s)) = thumb_tex.get(&k) {
+                            thumb_id = Some(*tid);
+                            let side = crate::plugin::thumb::ROW;
+                            let scale = (side / s.x).min(side / s.y);
+                            thumb_size = *s * scale;
+                        }
+                    }
+                }
+                if let Some(tid) = thumb_id {
+                    let tr = Rect::from_center_size(
+                        Pos2::new(r.left() + 28.0, r.center().y),
+                        thumb_size,
+                    );
+                    p.rect_filled(tr.expand(1.5), 3.0, t.border);
+                    p.image(
+                        tid,
+                        tr,
+                        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                        Color32::WHITE,
+                    );
+                } else {
+                    badge(
+                        p,
+                        Rect::from_center_size(
+                            Pos2::new(r.left() + 30.0, r.center().y),
+                            egui::vec2(40.0, 15.0),
+                        ),
+                        it.fmt,
+                    );
+                }
                 // stars and heart on the right
                 let heart = Rect::from_center_size(
                     Pos2::new(r.right() - 12.0, r.center().y),
@@ -986,11 +1039,40 @@ impl App {
                     ops.push(Op::Select(it.clone()));
                     self.br.drag = Some(it.clone());
                 }
-                let resp = resp.on_hover_text(match &it.src {
-                    Src::File(p) => p.display().to_string(),
-                    Src::Plugin(f) => f.path.clone(),
-                    _ => format!("{} · {}", it.fmt.what(), it.category),
-                });
+                let resp = if thumbs {
+                    if let Src::Plugin(f) = &it.src {
+                        let k = crate::plugin::thumb::key(&f.format, &f.desc.id, &f.desc.version);
+                        let tip_path = f.path.clone();
+                        let tip_name = it.name.clone();
+                        let tip_detail = format!("{} · {}", it.fmt.what(), it.category);
+                        if let Some((tid, s)) = thumb_tex.get(&k).copied() {
+                            resp.on_hover_ui(move |ui| {
+                                ui.label(egui::RichText::new(&tip_name).strong());
+                                ui.label(egui::RichText::new(&tip_detail).small());
+                                let side = crate::plugin::thumb::PREVIEW;
+                                let scale = (side / s.x).min(side / s.y).min(1.0);
+                                ui.add(
+                                    egui::Image::new((tid, s * scale)).maintain_aspect_ratio(true),
+                                );
+                                ui.label(egui::RichText::new(&tip_path).small().weak());
+                            })
+                        } else {
+                            resp.on_hover_text(tip_path)
+                        }
+                    } else {
+                        resp.on_hover_text(match &it.src {
+                            Src::File(p) => p.display().to_string(),
+                            Src::Plugin(f) => f.path.clone(),
+                            _ => format!("{} · {}", it.fmt.what(), it.category),
+                        })
+                    }
+                } else {
+                    resp.on_hover_text(match &it.src {
+                        Src::File(p) => p.display().to_string(),
+                        Src::Plugin(f) => f.path.clone(),
+                        _ => format!("{} · {}", it.fmt.what(), it.category),
+                    })
+                };
                 resp.context_menu(|ui| {
                     ui.label(egui::RichText::new(&it.name).strong());
                     let inst = !it.is_effect()
@@ -1053,6 +1135,11 @@ impl App {
                             ops.push(Op::Preview(it.clone()));
                             ui.close();
                         }
+                    }
+                    if matches!(it.src, Src::Plugin(_)) && ui.button("Refresh thumbnail").clicked()
+                    {
+                        ops.push(Op::RefreshThumb(it.clone()));
+                        ui.close();
                     }
                     ui.separator();
                     if ui
@@ -1233,6 +1320,24 @@ impl App {
                 Op::FindPlugins => self.open_plugin_setup(false),
                 Op::GetShowcase => self.open_showcase(),
                 Op::PluginRescan => self.start_plugin_scan(true),
+                Op::RefreshThumb(it) => {
+                    if let Src::Plugin(f) = &it.src {
+                        let mut g = crate::plugin::thumb::queue();
+                        let q = g.get_or_insert_with(Default::default);
+                        q.force_refresh(
+                            &f.format,
+                            &f.path,
+                            &f.desc.id,
+                            &f.desc.version,
+                            &f.desc.name,
+                            &f.desc.vendor,
+                        );
+                        let k = crate::plugin::thumb::key(&f.format, &f.desc.id, &f.desc.version);
+                        self.br.thumb_tex.remove(&k);
+                        self.br.thumb_asked.remove(&k);
+                        self.status = format!("Refreshing thumbnail for {}…", f.desc.name);
+                    }
+                }
                 Op::Close => self.toggle_browser(),
             }
         }

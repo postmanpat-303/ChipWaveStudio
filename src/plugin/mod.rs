@@ -15,6 +15,7 @@ pub mod clap;
 pub mod fxrack;
 pub mod gui;
 pub mod scan;
+pub mod thumb;
 pub mod vst3;
 
 use crate::model::{InstrumentKind, Song, MAX_CHANNELS};

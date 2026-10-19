@@ -4,6 +4,10 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Plugin thumbnails and double-click load
+- **Plugins tab thumbnails:** each plugin row can show a small screenshot of its editor (or a generated card). Captured off-screen in a crash-guarded child, cached under `plugin-thumbs/`, refreshable from the row menu; ••• › Plugin thumbnails toggles them (`browser_thumbs`).
+- **Double-click / Enter** a plugin instrument or built-in instrument: creates a **new track** with it and opens its editor (plugin window on Windows, or the instrument panel). Double-click an effect: adds it to the current instrument's FX chain and opens its editor. Undoable.
+
 ### Drum Patterns, Files and network drives
 - Browser › **Drum Patterns**: 67 grooves in 14 style folders (psytrance, techno, house, trance, DnB, breakbeat, hip-hop / lo-fi, trap, disco, synthwave, reggaeton, chip, afro / latin, fills), each with its bars, BPM range and one of 13 synthesised kits (808, 909, lo-fi, chip, acoustic-ish …; no samples). Rows have hover Play, a step thumbnail, a heart and a PATTERN tag.
 - **Synced preview:** while the song plays, a pattern starts on the next bar at the song's tempo and follows its position. While stopped, it loops. Click again or press Esc to stop. Has a Volume slider.
