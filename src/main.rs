@@ -4,6 +4,7 @@
 /// Display version (Cargo: 0.2.4+fix.0 -> "0.2.4.0"; the updater compares it part by part).
 pub const VERSION: &str = "0.2.4.0";
 
+mod advedit;
 mod app;
 mod arrange;
 mod audio;
