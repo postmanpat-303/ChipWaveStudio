@@ -2088,6 +2088,7 @@ fn noise(b: &mut B) {
     }
 }
 
+#[allow(clippy::needless_range_loop)] // `o` is captured by the closures
 fn wave(b: &mut B) {
     use crate::gen_wave::{USER, WAVE};
     use crate::wavetable::BUILTIN;

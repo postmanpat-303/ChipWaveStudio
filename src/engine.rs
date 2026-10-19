@@ -3743,8 +3743,10 @@ mod tests {
     #[test]
     fn wave_position_follows_lanes_and_modulators_allocation_free() {
         use crate::automation::{Lane, Point, Target};
-        let mut w = crate::gen_wave::WaveP::default();
-        w.filter_on = false;
+        let mut w = crate::gen_wave::WaveP {
+            filter_on: false,
+            ..Default::default()
+        };
         w.p[0] = 0.0; // Pos A: sine
         w.set(&[
             0.0, 0.0, 6000.0, 0.0, 0.0, 0.3, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 8.0,

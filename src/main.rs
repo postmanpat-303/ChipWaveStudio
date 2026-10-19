@@ -763,8 +763,10 @@ fn self_test(out: Option<PathBuf>) -> i32 {
     // Serum-style 3-frame WAV imports and survives a .cwt round trip
     let wt_ok = {
         let tables = wavetable::init().len();
-        let mut w = gen_wave::WaveP::default();
-        w.filter_on = false;
+        let mut w = gen_wave::WaveP {
+            filter_on: false,
+            ..Default::default()
+        };
         w.p[0] = gen_wave::WAVE[0].unmap(0.67); // saw
         let mut st = gen_wave::WaveState::default();
         let (mac, knob) = ([-1.0f32; 8], gen::NO_KNOBS);

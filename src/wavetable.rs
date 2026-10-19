@@ -365,7 +365,7 @@ fn builtin_cycle(i: usize, t: f64) -> Vec<f32> {
                 let y = (TAU * x).sin() * g;
                 // triangle fold into -1..1
                 let z = ((y + 1.0) * 0.25).rem_euclid(1.0);
-                tri(z) * -1.0
+                -tri(z)
             })
         }
         // sine quantised to 2^bits levels, 8 bits -> 1 bit
@@ -511,8 +511,10 @@ impl<'de> Deserialize<'de> for UserTable {
             .decode(u.data.as_bytes())
             .map_err(serde::de::Error::custom)?;
         let samples: Vec<i16> = bytes
-            .chunks_exact(2)
-            .map(|b| i16::from_le_bytes([b[0], b[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| i16::from_le_bytes(*b))
             .collect();
         if u.frame_len == 0 || samples.len() < u.frame_len {
             return Err(serde::de::Error::custom("empty wavetable"));

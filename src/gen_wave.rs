@@ -533,8 +533,8 @@ impl WaveState {
         }
         // position smoothing (~5 ms): automation steps don't click
         let a = (dt * 200.0).min(1.0);
-        for o in 0..2 {
-            self.pos[o] += (target[o] - self.pos[o]) * a;
+        for (p, t) in self.pos.iter_mut().zip(target) {
+            *p += (t - *p) * a;
         }
         let f0 = freq.max(1.0);
         let n = (v(13).round() as usize).clamp(1, MAX_UNISON);
@@ -729,8 +729,10 @@ mod tests {
     }
 
     fn plain() -> WaveP {
-        let mut w = WaveP::default();
-        w.filter_on = false;
+        let mut w = WaveP {
+            filter_on: false,
+            ..Default::default()
+        };
         w.set(&[
             0.67, 0.0, 6000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
         ]);
