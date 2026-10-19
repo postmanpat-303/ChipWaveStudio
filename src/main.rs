@@ -140,7 +140,40 @@ fn self_test(out: Option<PathBuf>) -> i32 {
                 "FAILED"
             }
         ));
-        let same = same && mode_same && mode_saved;
+        // note clips (M3b): a chord in a note clip plays, the same every time
+        let notes_ok = {
+            let mut n = m.clone();
+            let tr = n.channels.saturating_sub(1);
+            let id = timeline::new_note_clip(&mut n, tr, 0);
+            let t = n.timeline.as_deref_mut();
+            if let (Some(id), Some(t)) = (id, t) {
+                if let Some(timeline::ClipKind::Notes { data }) =
+                    t.clips.iter().find(|c| c.id == id).map(|c| c.kind.clone())
+                {
+                    t.notes[data as usize].make_mut().notes = [49u8, 53, 56]
+                        .iter()
+                        .map(|&key| timeline::Note {
+                            len: 4 * timeline::PPQ,
+                            key,
+                            instr: 1,
+                            ..Default::default()
+                        })
+                        .collect();
+                }
+            }
+            let a = engine::render_song(&n, 22050);
+            let b = engine::render_song(&n, 22050);
+            let plays = a != want && a.iter().all(|x| x.is_finite());
+            let ok = plays && a == b;
+            report.push_str(&format!(
+                "  note clips: a chord plays {}, repeatable {} ({})\n",
+                if plays { "yes" } else { "NO" },
+                if a == b { "yes" } else { "NO" },
+                if ok { "ok" } else { "FAILED" }
+            ));
+            ok
+        };
+        let same = same && mode_same && mode_saved && notes_ok;
         let refused = fileio::song_from_text("min_reader_version = 999\n")
             .err()
             .is_some_and(|e| fileio::is_too_new(&e));
