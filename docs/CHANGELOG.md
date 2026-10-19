@@ -4,6 +4,9 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### No demo song on start
+- **ChipWave now starts with the clean song of File › New** (timeline mode, only Song / Master, Timeline on top with the piano roll below) instead of loading the Lumen Drift demo, on first run and every normal start. Nothing to undo or save until you change something. Opening a file (double-click, `chipwave song.cwt`) works as before. The demos stay in **File › Demo songs** and **Help › Load demo song**. With **Settings › New songs** off it's the tracker-mode empty song, like File › New. (`--screenshot`, `--render demo`, `--self-test` and `--play-test` still use the demo.)
+
 ### Devices: the track's chain along the bottom
 - **Devices tab** in the lower panel, next to Piano roll (also **DEVICES** in the view tab bar, **View › Devices in lower panel**, **Ctrl+7**): the selected track's instrument and effects **left to right**. First the **instrument card** (the lower-panel instrument editor, foldable to a slim strip), then one **card per insert effect**, then a **+** card that opens Browser › Effects. Scrolls sideways when the chain is long.
 - Effect cards have their key controls inline: **EQ** with its curve and a draggable dot per band, **Compressor** with its transfer curve, **Filter** with its response, **Delay** with its echo taps, **Reverb** with its decay, knobs for the rest. Plugin effects show their **thumbnail**, **Editor…** (double-click the thumbnail too), status and parameters. Every card: **power** (bypass), **collapse**, **×** remove, and drag the **title** to move it (an insertion marker shows where). Right-click a card for duplicate, move, presets.

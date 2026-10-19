@@ -277,3 +277,42 @@ fn opening_a_timeline_song_shows_the_default_layout() {
     assert!(h.state().is_default_layout());
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn startup_without_a_file_is_the_clean_song_not_a_demo() {
+    // the song run_with() starts from: clean (timeline) or empty (tracker
+    // setting); only --screenshot still starts from the Lumen Drift demo
+    let s = super::startup_song(false, true);
+    let tl = s.timeline.as_ref().expect("timeline mode");
+    assert_eq!((s.channels, s.instruments.len()), (0, 0));
+    assert_eq!(
+        tl.tracks.iter().map(|t| t.kind).collect::<Vec<_>>(),
+        vec![crate::timeline::TrackKind::Master]
+    );
+    assert_eq!(s.title, Song::clean().title);
+    assert_ne!(s.title, fileio::demo_song().title);
+    let e = super::startup_song(false, false);
+    assert_eq!(e.instruments.len(), 0, "tracker setting: empty, no demo");
+    assert_eq!(
+        super::startup_song(true, true).title,
+        fileio::demo_song().title,
+        "screenshots load the demo explicitly"
+    );
+    // the startup step: File > New's layout, nothing to undo or save,
+    // the audio line kept
+    let mut h = harness_with(super::startup_song(false, true));
+    h.state_mut().status = "Audio: test @ 48000 Hz.".into();
+    h.state_mut().start_clean();
+    frames(&mut h, 3);
+    assert_eq!(h.state().view, View::Timeline);
+    assert!(h.state().pr.open, "Timeline + piano roll layout");
+    assert!(!h.state().dirty);
+    assert!(!h.state().hist.can_undo());
+    assert!(
+        h.state().status.starts_with("Audio: test"),
+        "{}",
+        h.state().status
+    );
+    assert!(h.state().status.contains("Browser"), "{}", h.state().status);
+    assert_eq!(song(&mut h, |s| (s.channels, s.instruments.len())), (0, 0));
+}

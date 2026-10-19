@@ -321,7 +321,10 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
     let song = match &open {
         Some(p) if p.to_string_lossy().ends_with(".toml") => fileio::load_text_song(p)?,
         Some(p) => fileio::load_cwt(p)?,
-        None => fileio::demo_song(),
+        None => startup_song(
+            shot.is_some(),
+            crate::settings::load().extra.new_in_timeline,
+        ),
     };
     let shared: SharedRef = Arc::new(Mutex::new(Shared {
         song,
@@ -363,7 +366,7 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
     };
     let status = match (&audio, &audio_err) {
         (Some(a), _) => format!(
-            "Audio: {} @ {} Hz. Press Space to play the demo.",
+            "Audio: {} @ {} Hz. Demo songs are in File > Demo songs.",
             a.device_name, a.sample_rate
         ),
         (_, Some(e)) => format!("No audio ({e}). Editing and WAV export still work."),
@@ -386,6 +389,10 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
     // the default workspace on start: Timeline on top, piano roll below
     if shot.is_none() {
         app.default_layout();
+        if app.path.is_none() {
+            // nothing opened: the same clean song as File > New
+            app.start_clean();
+        }
     }
     let set = crate::settings::load();
     let mut vb = egui::ViewportBuilder::default().with_inner_size([1360.0, 800.0]);
@@ -415,6 +422,19 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
     };
     eframe::run_native("ChipWave Studio", opts, Box::new(|_cc| Ok(Box::new(app))))
         .map_err(|e| e.to_string())
+}
+
+/// The song ChipWave starts with when no file is given: the clean song of
+/// File > New (no demo since 0.2.4.0; demos are in File > Demo songs).
+/// Screenshots (`--screenshot`) still start from the Lumen Drift demo.
+pub(crate) fn startup_song(shot: bool, timeline: bool) -> Song {
+    if shot {
+        fileio::demo_song()
+    } else if timeline {
+        Song::clean()
+    } else {
+        Song::empty()
+    }
 }
 
 /// On panic: try one emergency snapshot of the song, then the default hook.
@@ -645,6 +665,18 @@ impl App {
         } else if mouse {
             // e.g. a click that changes the song one frame later
             self.mouse_since_commit = true;
+        }
+    }
+
+    /// Startup with nothing to open: exactly File > New, with the audio
+    /// status kept, and nothing to undo or save.
+    pub(super) fn start_clean(&mut self) {
+        let audio = std::mem::take(&mut self.status);
+        self.new_song();
+        self.undo_reset();
+        self.dirty = false;
+        if !audio.is_empty() {
+            self.status = format!("{audio} · {}", self.status);
         }
     }
 

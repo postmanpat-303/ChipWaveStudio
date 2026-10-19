@@ -169,7 +169,7 @@ When all 32 tracks are used, the add commands are greyed out with "all 32 tracks
 
 ## The default layout: Timeline + piano roll
 
-ChipWave starts with the **Timeline on top and the piano roll docked below** (about 40 % of the height; drag the splitter to resize). File › New and opening a timeline-mode song show the same layout; tracker-mode songs open in the view you are in.
+ChipWave starts with the clean song of File › New (no demo; the demos are in File › Demo songs), with the **Timeline on top and the piano roll docked below** (about 40 % of the height; drag the splitter to resize). File › New and opening a timeline-mode song show the same layout; tracker-mode songs open in the view you are in.
 
 - The piano roll follows the selection: **click a clip** and its notes are in the roll; double-click still opens it focused. With nothing selected it shows the selected track's first clip, or an empty roll with a hint.
 - **Back to it in one step:** **Ctrl+6**, **View › Reset to default layout** (also the panel height), or **TIMELINE + PIANO** at the left of the view tab bar. The Inspector (I) and the Browser stay as they are.
