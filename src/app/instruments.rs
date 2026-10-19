@@ -1026,7 +1026,7 @@ fn instrument_row(
             t.ink2,
         );
         let nx = x0 + font.size * 1.9;
-        // type tag on the right (Drum, Analog, FM-4, Voice, CLAP...)
+        // type tag on the right (Drum, Analog, FM-4, Voice, CLAP, VST3...)
         let tf = egui::FontId::proportional((font.size * 0.82).max(9.0));
         let tg = ui.fonts_mut(|f| {
             f.layout_no_wrap(

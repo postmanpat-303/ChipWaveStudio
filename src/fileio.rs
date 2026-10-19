@@ -1001,9 +1001,14 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
             });
             continue;
         }
-        // patch = "clap:<plugin id>": a CLAP plugin instrument; optional
-        // `plugin_path`, `state` (base64) and `macros` = [param ids]
-        if let Some(pid) = src.strip_prefix("clap:") {
+        // patch = "clap:<plugin id>" / "vst3:<class id>": a plugin
+        // instrument; optional `plugin_path`, `state` (base64) and
+        // `macros` = [param ids]
+        let plug = src
+            .strip_prefix("clap:")
+            .map(|p| ("clap", p))
+            .or_else(|| src.strip_prefix("vst3:").map(|p| ("vst3", p)));
+        if let Some((pformat, pid)) = plug {
             let mut fx = vec![];
             for f in i.get("fx").and_then(|x| x.as_array()).into_iter().flatten() {
                 let kind = f
@@ -1017,7 +1022,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
             }
             let st = |k: &str| i.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
             let pp = crate::plugin::PluginPatch {
-                format: "clap".into(),
+                format: pformat.into(),
                 id: pid.into(),
                 name: name.into(),
                 vendor: String::new(),

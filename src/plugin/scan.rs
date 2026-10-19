@@ -1,4 +1,4 @@
-//! Plugin scanner: finds `.clap` (and lists `.vst3`) files in the standard
+//! Plugin scanner: finds `.clap` and `.vst3` files in the standard
 //! and user folders, checks each one in a separate process
 //! (`chipwave --scan-plugin <file>`) so a crashing or hanging plugin cannot
 //! take ChipWave down, and caches the results by path, size and modification
@@ -12,7 +12,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// bump when the scan logic changes: every file is checked again
-const CACHE_VERSION: u32 = 1;
+const CACHE_VERSION: u32 = 2;
 pub const TIMEOUT: Duration = Duration::from_secs(20);
 
 /// per-file scan timeout (`CHIPWAVE_SCAN_TIMEOUT` seconds overrides, for tests)
@@ -149,8 +149,10 @@ pub fn default_dirs() -> Vec<PathBuf> {
             v.push(d.into());
         }
     }
-    if let Some(cp) = std::env::var_os("CLAP_PATH") {
-        v.extend(std::env::split_paths(&cp));
+    for k in ["CLAP_PATH", "VST3_PATH"] {
+        if let Some(cp) = std::env::var_os(k) {
+            v.extend(std::env::split_paths(&cp));
+        }
     }
     v
 }
@@ -213,29 +215,34 @@ pub fn check_file(path: &Path) -> Report {
         Some(e) if e.eq_ignore_ascii_case("vst3") => "vst3",
         _ => "?",
     };
-    if format != "clap" {
-        return Report {
-            ok: false,
-            message: "VST3 hosting is not available yet (CLAP only in 0.2.3.16)".into(),
-            plugins: vec![],
-        };
-    }
-    let lib = match ClapLib::load(path) {
-        Ok(l) => l,
-        Err(e) => {
-            return Report {
-                ok: false,
-                message: e,
-                plugins: vec![],
-            }
-        }
+    let fail = |message: String| Report {
+        ok: false,
+        message,
+        plugins: vec![],
     };
-    let descs = lib.descriptors();
+    let descs = match format {
+        "clap" => match ClapLib::load(path) {
+            Ok(l) => l.descriptors(),
+            Err(e) => return fail(e),
+        },
+        "vst3" => match super::vst3::Vst3Lib::load(path) {
+            Ok(l) => l.descriptors(),
+            Err(e) => return fail(e),
+        },
+        _ => return fail("not a CLAP or VST3 plugin".into()),
+    };
     let mut plugins = vec![];
     for d in descs {
         if d.is_instrument() {
             use super::Hosted;
-            let mut inst = match super::clap::ClapInst::new(path, &d.id, 48000.0) {
+            let made: Result<Box<dyn Hosted>, String> = if format == "vst3" {
+                super::vst3::Vst3Inst::new(path, &d.id, 48000.0)
+                    .map(|i| Box::new(i) as Box<dyn Hosted>)
+            } else {
+                super::clap::ClapInst::new(path, &d.id, 48000.0)
+                    .map(|i| Box::new(i) as Box<dyn Hosted>)
+            };
+            let mut inst = match made {
                 Ok(i) => i,
                 Err(e) => {
                     return Report {
@@ -286,11 +293,6 @@ pub fn scan_file(exe: &Path, path: &Path, format: &str, timeout: Duration) -> En
         message: String::new(),
         plugins: vec![],
     };
-    if format == "vst3" {
-        e.status = "unsupported".into();
-        e.message = "VST3 hosting is not available yet (CLAP only in 0.2.3.16)".into();
-        return e;
-    }
     let mut cmd = std::process::Command::new(exe);
     cmd.arg("--scan-plugin")
         .arg(path)

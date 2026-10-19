@@ -1,6 +1,7 @@
 //! Plugin editor windows. Windows: a top-level Win32 window that the plugin
-//! embeds its editor into (CLAP gui ext, api "win32"); a plugin that only
-//! offers a floating window gets that. Other platforms: floating editors only
+//! embeds its editor into (CLAP gui ext, api "win32"; VST3 `IPlugView`
+//! attached to the HWND, see vst3.rs); a CLAP plugin that only offers a
+//! floating window gets that. Other platforms: floating editors only
 //! (x11 / cocoa), otherwise the parameter list is the editor. CLAP gui
 //! extension: free-audio CLAP (MIT) via clap-sys (MIT OR Apache-2.0); Win32
 //! through windows-sys (Microsoft, MIT OR Apache-2.0).
@@ -33,6 +34,14 @@ pub struct Window {
 }
 
 impl Window {
+    /// a ChipWave window the editor was embedded into (VST3)
+    #[cfg(windows)]
+    pub fn embedded(hwnd: isize) -> Window {
+        Window {
+            floating: false,
+            hwnd,
+        }
+    }
     pub fn closed(&self) -> bool {
         #[cfg(windows)]
         if !self.floating {
@@ -92,6 +101,14 @@ pub fn open(
     }
 }
 
+/// destroy the window an editor was embedded into (VST3: after `removed`)
+#[cfg(windows)]
+pub fn destroy_window(w: Window) {
+    if !w.floating {
+        win::destroy(w.hwnd);
+    }
+}
+
 pub fn close(p: *const clap_plugin, g: *const clap_plugin_gui, w: Window) {
     unsafe {
         let gui = &*g;
@@ -110,19 +127,28 @@ pub fn close(p: *const clap_plugin, g: *const clap_plugin_gui, w: Window) {
 }
 
 #[cfg(windows)]
-mod win {
+pub mod win {
     use super::*;
     use std::sync::Mutex;
     use windows_sys::Win32::Foundation::*;
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
-    /// (hwnd, plugin, gui ext, closed by the user)
+    /// whose editor a window holds (raw pointers kept as integers)
+    #[derive(Clone, Copy)]
+    pub enum Owner {
+        /// CLAP plugin + gui extension
+        Clap { p: usize, g: usize },
+        /// VST3 `IPlugView`
+        Vst3 { view: usize },
+    }
+
+    /// (hwnd, owner, closed by the user, resized by the plugin itself)
     struct Entry {
         hwnd: isize,
-        p: usize,
-        g: usize,
+        owner: Owner,
         closed: bool,
+        quiet: bool,
     }
     static WINDOWS: Mutex<Vec<Entry>> = Mutex::new(Vec::new());
 
@@ -144,11 +170,15 @@ mod win {
             }
             WM_SIZE => {
                 let (w, hh) = ((lp & 0xFFFF) as u32, ((lp >> 16) & 0xFFFF) as u32);
-                let found = WINDOWS
-                    .lock()
-                    .ok()
-                    .and_then(|v| v.iter().find(|e| e.hwnd == h as isize).map(|e| (e.p, e.g)));
-                if let Some((p, g)) = found {
+                let found = WINDOWS.lock().ok().and_then(|v| {
+                    v.iter()
+                        .find(|e| e.hwnd == h as isize && !e.quiet)
+                        .map(|e| e.owner)
+                });
+                if let Some(Owner::Vst3 { view }) = found {
+                    vst3_size(view, w, hh);
+                }
+                if let Some(Owner::Clap { p, g }) = found {
                     let (p, g) = (p as *const clap_plugin, g as *const clap_plugin_gui);
                     if (*g).can_resize.map(|c| c(p)).unwrap_or(false) && w > 0 && hh > 0 {
                         let (mut aw, mut ah) = (w, hh);
@@ -163,6 +193,27 @@ mod win {
                 DefWindowProcW(h, msg, wp, lp)
             }
             _ => DefWindowProcW(h, msg, wp, lp),
+        }
+    }
+
+    /// the user resized a VST3 editor window: let the view follow if it can
+    fn vst3_size(view: usize, w: u32, h: u32) {
+        use vst3::Steinberg::{IPlugView, IPlugViewTrait, ViewRect};
+        let Some(v) = (unsafe { vst3::ComRef::from_raw(view as *mut IPlugView) }) else {
+            return;
+        };
+        if w == 0 || h == 0 || unsafe { v.canResize() } != vst3::Steinberg::kResultTrue {
+            return;
+        }
+        let mut r = ViewRect {
+            left: 0,
+            top: 0,
+            right: w as i32,
+            bottom: h as i32,
+        };
+        unsafe {
+            v.checkSizeConstraint(&mut r);
+            v.onSize(&mut r);
         }
     }
 
@@ -199,14 +250,75 @@ mod win {
         }
     }
 
+    /// a top-level window with a client area of `w` x `h` for an editor
+    pub fn create(
+        title: &str,
+        w: u32,
+        h: u32,
+        resizable: bool,
+        owner: Owner,
+    ) -> Result<isize, String> {
+        let st = style(resizable);
+        let mut r = RECT {
+            left: 0,
+            top: 0,
+            right: w as i32,
+            bottom: h as i32,
+        };
+        let t = wide(title);
+        let hwnd = unsafe {
+            AdjustWindowRectEx(&mut r, st, 0, 0);
+            CreateWindowExW(
+                0,
+                class(),
+                t.as_ptr(),
+                st,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                r.right - r.left,
+                r.bottom - r.top,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                GetModuleHandleW(std::ptr::null()),
+                std::ptr::null(),
+            )
+        };
+        if hwnd.is_null() {
+            return Err("could not create the editor window".into());
+        }
+        if let Ok(mut v) = WINDOWS.lock() {
+            v.push(Entry {
+                hwnd: hwnd as isize,
+                owner,
+                closed: false,
+                quiet: false,
+            });
+        }
+        Ok(hwnd as isize)
+    }
+
+    /// resize for the plugin (no size callback back into it)
+    pub fn resize_quiet(hwnd: isize, w: u32, h: u32) {
+        let set = |q: bool| {
+            if let Ok(mut v) = WINDOWS.lock() {
+                for e in v.iter_mut().filter(|e| e.hwnd == hwnd) {
+                    e.quiet = q;
+                }
+            }
+        };
+        set(true);
+        resize(hwnd, w, h);
+        set(false);
+    }
+
     pub unsafe fn open_embedded(
         p: *const clap_plugin,
         g: *const clap_plugin_gui,
         title: &str,
     ) -> Result<Window, String> {
         let gui = &*g;
-        let create = gui.create.ok_or("no editor")?;
-        if !create(p, API.as_ptr(), false) {
+        let make = gui.create.ok_or("no editor")?;
+        if !make(p, API.as_ptr(), false) {
             return Err("the plugin could not create its editor".into());
         }
         if let Some(s) = gui.set_scale {
@@ -217,43 +329,24 @@ mod win {
             gs(p, &mut w, &mut h);
         }
         let resizable = gui.can_resize.map(|c| c(p)).unwrap_or(false);
-        let st = style(resizable);
-        let mut r = RECT {
-            left: 0,
-            top: 0,
-            right: w as i32,
-            bottom: h as i32,
-        };
-        AdjustWindowRectEx(&mut r, st, 0, 0);
-        let t = wide(title);
-        let hwnd = CreateWindowExW(
-            0,
-            class(),
-            t.as_ptr(),
-            st,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            r.right - r.left,
-            r.bottom - r.top,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            GetModuleHandleW(std::ptr::null()),
-            std::ptr::null(),
-        );
-        if hwnd.is_null() {
-            if let Some(d) = gui.destroy {
-                d(p);
-            }
-            return Err("could not create the editor window".into());
-        }
-        if let Ok(mut v) = WINDOWS.lock() {
-            v.push(Entry {
-                hwnd: hwnd as isize,
+        let hwnd = match create(
+            title,
+            w,
+            h,
+            resizable,
+            Owner::Clap {
                 p: p as usize,
                 g: g as usize,
-                closed: false,
-            });
-        }
+            },
+        ) {
+            Ok(h) => h as HWND,
+            Err(e) => {
+                if let Some(d) = gui.destroy {
+                    d(p);
+                }
+                return Err(e);
+            }
+        };
         let win = clap_window {
             api: API.as_ptr(),
             specific: clap_window_handle { win32: hwnd },

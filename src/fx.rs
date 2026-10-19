@@ -21,7 +21,7 @@ pub enum FxKind {
     Phaser,
     /// Bode-style frequency shifter (crate::fxmod)
     FreqShift,
-    /// a CLAP effect plugin (`Device::plugin`); not in `ALL` (its menu lists
+    /// a CLAP or VST3 effect plugin (`Device::plugin`); not in `ALL` (its menu lists
     /// the scanned effects instead). Runs in `crate::plugin::fxrack`.
     Plugin,
 }
@@ -318,7 +318,7 @@ pub struct Device {
     /// normalised parameter values, indexed like `params(kind)`
     #[serde(default)]
     pub params: Vec<f32>,
-    /// `FxKind::Plugin`: the CLAP effect (id, path, saved state)
+    /// `FxKind::Plugin`: the CLAP / VST3 effect (id, path, saved state)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin: Option<Box<crate::plugin::PluginPatch>>,
     /// `FxKind::Plugin`: stable id of this device in its chain, so a moved

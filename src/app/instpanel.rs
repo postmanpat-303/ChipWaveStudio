@@ -96,7 +96,7 @@ pub(super) fn tag_colour(tag: &str) -> Color32 {
     match tag {
         "Sample" => hex(0xE8C35A),
         "Voice" => hex(0xD98AD0),
-        "CLAP" => hex(0x9AA8F0),
+        "CLAP" | "VST3" => hex(0x9AA8F0),
         "Drum" | "Kit" => hex(0xE08A5C),
         "Chip FX" => hex(0xD8D070),
         "Analog" => hex(0x8FD9A3),

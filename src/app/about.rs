@@ -382,7 +382,7 @@ impl App {
                 egui::RichText::new(
                     "ChipWave Studio is a free music DAW in the tradition of OctaMED: a pattern \
                      tracker with an arranger, mixer, master limiter and loudness meter, synths, \
-                     Voice, generators, samples and CLAP plugins.",
+                     Voice, generators, samples and CLAP / VST3 plugins.",
                 )
                 .size(13.0),
             )

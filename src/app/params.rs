@@ -240,6 +240,7 @@ pub(crate) fn type_tag(k: &InstrumentKind) -> &'static str {
     match k {
         InstrumentKind::Sample { .. } => "Sample",
         InstrumentKind::Voice(_) => "Voice",
+        InstrumentKind::Plugin(p) if p.format == "vst3" => "VST3",
         InstrumentKind::Plugin(_) => "CLAP",
         InstrumentKind::Synth(p) => {
             if p.filter_model == crate::ladder::FilterModel::Svf {
@@ -2378,7 +2379,7 @@ pub(crate) mod tests {
                 r.extend((0..crate::gen2::NN).map(|k| format!("nz.{k}")));
             }
             "Sample" => r.push("sample.info".into()),
-            "CLAP" => r.extend(s(&["plugin.status", "plugin.macros", "plugin.params"])),
+            "CLAP" | "VST3" => r.extend(s(&["plugin.status", "plugin.macros", "plugin.params"])),
             _ => panic!("unknown type {tag}"),
         }
         r

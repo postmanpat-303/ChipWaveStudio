@@ -1,7 +1,7 @@
 //! Plugin instruments in the app (0.2.3.16): the "Plugin instrument" browser,
 //! the plugin panel (Configure / parameters / macros), Settings > Plugins and
 //! the per-frame housekeeping that keeps the engine's plugin rack in step
-//! with the song. Hosting itself lives in src/plugin/ (CLAP via clap-sys).
+//! with the song. Hosting itself lives in src/plugin/ (CLAP via clap-sys, VST3 via the vst3 crate).
 use super::*;
 use crate::plugin::{self, scan, ParamInfo, PluginPatch, NO_PARAM};
 use std::sync::mpsc::Receiver;
@@ -198,7 +198,7 @@ impl App {
     pub(super) fn new_plugin_menu_item(&mut self, ui: &mut egui::Ui) {
         if ui
             .button("Plugin instrument…")
-            .on_hover_text("a CLAP instrument plugin installed on this computer")
+            .on_hover_text("a CLAP or VST3 instrument plugin installed on this computer")
             .clicked()
         {
             self.plug.browser = true;
@@ -257,7 +257,7 @@ impl App {
                             ui.label(if self.plug.scan.is_some() {
                             "Scanning…"
                         } else {
-                            "No plugin instruments found. Install a CLAP instrument (for example \
+                            "No plugin instruments found. Install a CLAP or VST3 instrument (for example \
                              Surge XT) or add its folder in Settings > Plugins, then Rescan."
                         });
                         }
@@ -631,7 +631,7 @@ impl App {
         let bad = c.entries.iter().filter(|e| e.status != "ok").count();
         (
             vec![
-                "CLAP instruments".into(),
+                "Plugin instruments".into(),
                 if c.entries.is_empty() {
                     "not scanned yet".into()
                 } else {
@@ -644,7 +644,7 @@ impl App {
     }
 
     pub(super) fn plugin_settings(&mut self, ui: &mut egui::Ui) {
-        ui.label("ChipWave looks for CLAP instrument plugins in the standard folders and in your own folders below.");
+        ui.label("ChipWave looks for CLAP and VST3 instrument plugins in the standard folders and in your own folders below.");
         ui.label(
             egui::RichText::new(
                 "Each file is tested in a separate process; plugins that crash or hang are skipped and listed.",

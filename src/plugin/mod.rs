@@ -1,6 +1,9 @@
-//! Plugin instruments (0.2.3.16): CLAP hosting (src/plugin/clap.rs), the
-//! out-of-process scanner and cache (scan.rs), editor windows (gui.rs) and
-//! the engine-side rack that runs the instances.
+//! Plugin instruments (0.2.3.16): CLAP hosting (src/plugin/clap.rs), VST3
+//! hosting (vst3.rs, Unreleased), the out-of-process scanner and cache
+//! (scan.rs), editor windows (gui.rs) and the engine-side rack that runs the
+//! instances. Both formats implement [`Hosted`], so everything above this
+//! layer (instruments, FX chains, macros, automation, modulation, state in
+//! the song) treats them alike.
 //!
 //! One plugin instance runs per (instrument, channel) pair that the song
 //! uses, so each instance's stereo output goes through that channel's insert
@@ -12,6 +15,7 @@ pub mod clap;
 pub mod fxrack;
 pub mod gui;
 pub mod scan;
+pub mod vst3;
 
 use crate::model::{InstrumentKind, Song, MAX_CHANNELS};
 use base64::Engine as _;
@@ -28,9 +32,9 @@ pub const NO_PARAM: u32 = u32::MAX;
 /// A plugin instrument in the song (`InstrumentKind::Plugin`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PluginPatch {
-    /// "clap"
+    /// "clap" or "vst3"
     pub format: String,
-    /// plugin id (CLAP: reverse-DNS id)
+    /// plugin id (CLAP: reverse-DNS id; VST3: the class id as 32 hex digits)
     pub id: String,
     pub name: String,
     #[serde(default)]
@@ -38,7 +42,8 @@ pub struct PluginPatch {
     /// where it was found last; on another machine the scan cache finds it by id
     #[serde(default)]
     pub path: String,
-    /// plugin state (CLAP state extension), base64
+    /// plugin state (CLAP state extension; VST3 component + controller
+    /// streams), base64
     #[serde(default)]
     pub state: String,
     /// parameter values for plugins without a state extension (id, value)
@@ -93,7 +98,7 @@ pub struct ParamInfo {
     pub readonly: bool,
 }
 
-/// A running plugin instance (CLAP today). Audio-thread methods: note_on,
+/// A running plugin instance (CLAP or VST3). Audio-thread methods: note_on,
 /// note_off, tuning, param, process. Everything else: UI / main thread.
 pub trait Hosted: Send {
     fn note_on(&mut self, key: u8, vel: f32);
@@ -142,6 +147,7 @@ pub fn instantiate(p: &PluginPatch, sr: f32) -> Result<Box<dyn Hosted>, String> 
     })?;
     let mut inst: Box<dyn Hosted> = match p.format.as_str() {
         "clap" => Box::new(clap::ClapInst::new(&path, &p.id, sr)?),
+        "vst3" => Box::new(vst3::Vst3Inst::new(&path, &p.id, sr)?),
         f => return Err(format!("plugin format {f} is not supported yet")),
     };
     if let Some(st) = p.state_bytes() {
@@ -789,3 +795,5 @@ pub fn set_macro_norm(s: &mut crate::audio::Shared, instr: usize, k: usize, n: f
 mod fxtests;
 #[cfg(test)]
 pub mod tests;
+#[cfg(test)]
+mod vst3tests;

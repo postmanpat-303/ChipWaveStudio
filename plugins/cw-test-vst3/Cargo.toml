@@ -1,0 +1,19 @@
+[package]
+name = "cw-test-vst3"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Tiny VST3 test instrument + effect used by ChipWave Studio's plugin-hosting tests"
+publish = false
+
+# standalone (not part of a workspace): built by the tests with its own lock file
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+vst3 = "0.3"
+
+[profile.release]
+opt-level = 2

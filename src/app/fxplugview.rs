@@ -7,7 +7,7 @@ use super::*;
 use crate::fx::FxKind;
 use crate::plugin::{fxrack, scan, ParamInfo, PluginPatch};
 
-/// a scanned CLAP effect as a fresh device patch
+/// a scanned CLAP / VST3 effect as a fresh device patch
 pub(super) fn patch_of(f: scan::Found) -> PluginPatch {
     PluginPatch {
         format: f.format,
@@ -33,7 +33,7 @@ impl App {
                     egui::RichText::new(if self.plug.scan.is_some() {
                         "Scanning…"
                     } else {
-                        "No CLAP effects found yet"
+                        "No CLAP or VST3 effects found yet"
                     })
                     .color(th().ink2),
                 );
@@ -48,7 +48,12 @@ impl App {
                         f.desc.version,
                         f.path
                     );
-                    if ui.button(&f.desc.name).on_hover_text(tip).clicked() {
+                    let label = if f.format == "vst3" {
+                        format!("{} (VST3)", f.desc.name)
+                    } else {
+                        f.desc.name.clone()
+                    };
+                    if ui.button(label).on_hover_text(tip).clicked() {
                         pick = Some(patch_of(f));
                         ui.close();
                     }

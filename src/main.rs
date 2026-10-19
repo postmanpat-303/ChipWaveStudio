@@ -577,8 +577,8 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         ok
     };
     // plugin host (0.2.3.16): a missing plugin stays a silent placeholder;
-    // the scan cache is listed; CHIPWAVE_SELFTEST_PLUGIN=<file.clap> also
-    // plays a note through that plugin and needs sound
+    // the scan cache is listed; CHIPWAVE_SELFTEST_PLUGIN=<file.clap|.vst3>
+    // also plays a note through that plugin and needs sound
     let plug_ok = {
         let mut s = fileio::demo_song();
         s.instruments[0].kind = model::InstrumentKind::Plugin(plugin::PluginPatch {
@@ -591,19 +591,33 @@ fn self_test(out: Option<PathBuf>) -> i32 {
             params: vec![],
             macros: vec![],
         });
+        // and a missing VST3 one (VST3 hosting, Unreleased)
+        if s.instruments.len() > 1 {
+            s.instruments[1].kind = model::InstrumentKind::Plugin(plugin::PluginPatch {
+                format: "vst3".into(),
+                id: "00000000000000000000000000C0FFEE".into(),
+                name: "Missing VST3".into(),
+                vendor: String::new(),
+                path: "/nonexistent/missing.vst3".into(),
+                state: String::new(),
+                params: vec![],
+                macros: vec![],
+            });
+        }
         s.order.truncate(1);
         let warn = plugin::missing_warnings(&s);
         let pcm = engine::render_song(&s, 22050);
-        let missing_ok = warn.len() == 1 && pcm.iter().all(|x| x.is_finite());
+        let want = s.instruments.len().min(2);
+        let missing_ok = warn.len() == want && pcm.iter().all(|x| x.is_finite());
         let found = plugin::scan::cache().instruments();
         report.push_str(&format!(
-            "  plugins: missing plugin = silent placeholder + warning ({}); {} cached CLAP instrument(s){}\n",
+            "  plugins: missing plugin = silent placeholder + warning ({}); {} cached plugin instrument(s){}\n",
             if missing_ok { "ok" } else { "FAILED" },
             found.len(),
             found
                 .iter()
                 .take(6)
-                .map(|f| format!(", {}", f.desc.name))
+                .map(|f| format!(", {} ({})", f.desc.name, f.format.to_uppercase()))
                 .collect::<String>()
         ));
         let mut ok = missing_ok;
@@ -614,7 +628,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
             let rendered = inst.map(|f| {
                 let mut s = fileio::demo_song();
                 s.instruments[0].kind = model::InstrumentKind::Plugin(plugin::PluginPatch {
-                    format: "clap".into(),
+                    format: f.format.clone(),
                     id: f.desc.id.clone(),
                     name: f.desc.name.clone(),
                     vendor: f.desc.vendor.clone(),
@@ -641,7 +655,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
             ok &= good;
         }
         // plugin effects: a missing one is bypassed (the song still plays);
-        // CHIPWAVE_SELFTEST_PLUGIN_FX=<file.clap> runs the demo through that
+        // CHIPWAVE_SELFTEST_PLUGIN_FX=<file.clap|.vst3> runs the demo through that
         // effect and needs sound
         let fx_song = |patch: plugin::PluginPatch| {
             let mut s = fileio::demo_song();
@@ -665,7 +679,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         let fx_ok = warn.len() == 1 && rms > 0.003 && pcm.iter().all(|x| x.is_finite());
         let found = plugin::scan::cache().effects();
         report.push_str(&format!(
-            "  plugin effects: missing effect = bypassed + warning, rms {rms:.4} ({}); {} cached CLAP effect(s)\n",
+            "  plugin effects: missing effect = bypassed + warning, rms {rms:.4} ({}); {} cached plugin effect(s)\n",
             if fx_ok { "ok" } else { "FAILED" },
             found.len()
         ));
@@ -675,7 +689,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
             let r = plugin::scan::check_file(&p);
             let rendered = r.plugins.iter().find(|x| x.desc.is_effect()).map(|f| {
                 let s = fx_song(plugin::PluginPatch {
-                    format: "clap".into(),
+                    format: f.format.clone(),
                     id: f.desc.id.clone(),
                     name: f.desc.name.clone(),
                     vendor: f.desc.vendor.clone(),

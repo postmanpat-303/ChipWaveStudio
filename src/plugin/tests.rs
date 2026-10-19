@@ -100,7 +100,7 @@ pub fn plugin_song() -> Song {
     s
 }
 
-fn rms(v: &[f32]) -> f32 {
+pub(super) fn rms(v: &[f32]) -> f32 {
     (v.iter().map(|x| x * x).sum::<f32>() / v.len().max(1) as f32).sqrt()
 }
 

@@ -1,4 +1,4 @@
-//! Plugin effect (CLAP FX) tests against the ChipWave Test FX fixture (the
+//! Plugin effect (CLAP FX; VST3 FX in vst3tests.rs) tests against the ChipWave Test FX fixture (the
 //! second plugin in plugins/cw-test-synth): gain 0-2 (id 10), polarity flip
 //! (id 11), a 32-sample delay it reports as latency.
 use super::fxrack::{self, FxRack, FX_BLOCK};
@@ -26,7 +26,7 @@ pub fn fx_patch() -> PluginPatch {
 }
 
 /// a plain saw synth on instrument 1, C-4 on channels 0 (and 1 if `two`)
-fn synth_song(two: bool) -> Song {
+pub(super) fn synth_song(two: bool) -> Song {
     let mut s = crate::fileio::demo_song();
     s.automation.clear();
     s.timeline = None;
@@ -82,7 +82,7 @@ fn synth_song(two: bool) -> Song {
     s
 }
 
-fn with_fx(mut s: Song, params: Vec<(u32, f64)>) -> Song {
+pub(super) fn with_fx(mut s: Song, params: Vec<(u32, f64)>) -> Song {
     let mut p = fx_patch();
     p.params = params;
     let mut d = Device::plugin(p);
@@ -91,18 +91,18 @@ fn with_fx(mut s: Song, params: Vec<(u32, f64)>) -> Song {
     s
 }
 
-fn render(song: &Song, secs: f32) -> Vec<f32> {
+pub(super) fn render(song: &Song, secs: f32) -> Vec<f32> {
     let mut out = crate::engine::render_song(song, SR);
     out.truncate((secs * SR as f32) as usize * 2);
     out
 }
 
-fn left(v: &[f32]) -> Vec<f32> {
+pub(super) fn left(v: &[f32]) -> Vec<f32> {
     v.chunks(2).map(|f| f[0]).collect()
 }
 
 /// max |a[i] - g * b[i - lag]| over a window
-fn err_at(a: &[f32], b: &[f32], lag: usize, g: f32, from: usize, to: usize) -> f32 {
+pub(super) fn err_at(a: &[f32], b: &[f32], lag: usize, g: f32, from: usize, to: usize) -> f32 {
     (from..to)
         .map(|i| (a[i] - g * b[i - lag]).abs())
         .fold(0.0, f32::max)

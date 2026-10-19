@@ -220,7 +220,7 @@ pub enum InstrumentKind {
     Voice(crate::voice::VoicePatch),
     /// Generator (drum synth, kit; src/gen.rs)
     Gen(crate::gen::GenPatch),
-    /// CLAP plugin instrument (src/plugin/, 0.2.3.16)
+    /// CLAP (0.2.3.16) or VST3 (Unreleased) plugin instrument (src/plugin/)
     Plugin(crate::plugin::PluginPatch),
 }
 
