@@ -498,6 +498,10 @@ pub struct NoteClipData {
     pub name: String,
     pub len: Tick,
     pub notes: Vec<Note>,
+    /// the piano roll's chord lane (markers only; they don't play).
+    /// Not written when empty, so songs without chords save as before.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub chords: Vec<crate::chordgen::ChordMark>,
 }
 
 /// One piano-roll note. Velocity is 16-bit (MIDI 2.0); tracker volumes and

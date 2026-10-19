@@ -24,6 +24,11 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 - **View tab bar (new):** transport, position and tempo, then TIMELINE · TRACKER · ARRANGER · PIANO · INST · AUTO · MIX · FX · SAMPLE tabs and the Inspector / Browser toggles along the bottom. The toolbar, View menu and shortcuts still switch views as before. View › View tab bar hides it.
 - The Automation strip's Write toggle no longer uses a "●" the bundled font can't draw.
 
+### Piano roll chord lane, chord pies and Generate chord progression
+- **Chord lane** above the notes of a note clip: double-click adds, drag draws / moves / resizes, click plays on the track's instrument, slash chords (*Gsus2/E*) and roman numerals. Saved with the clip (songs without chords save as before).
+- **Chord pie** (round menu) on right-click: empty lane = styles with their progressions in an outer ring (hover previews, click inserts); a chord = Play, Transpose, Chord type, Suggestions, Write notes (8 voicings), Generate, Select, Delete, Edit. **Settings › Chord menus › List** for ordinary menus (with *Detect chords from the notes*). Reusable radial widget.
+- **Generate chord progression** dialog: 17 styles with common progressions, key + Any/Major/Minor, length, chord speed, start bar, Colour and Variation, walking bass, Another one, Preview, optional voice-led notes. One undo step. Guide: [CHORDS.md › Chord lane](CHORDS.md#chord-lane-in-the-piano-roll-unreleased).
+
 ### Piano roll: single-click entry, eraser, tools and a tidy toolbar
 - **One click draws a note** the length of the last note drawn, resized or clicked (grid step at first); drag while drawing sets the length and is remembered. A long or wobbly click no longer shortens it. **Len** in the toolbar shows (and sets) it.
 - **Shift+click** toggles notes in the selection, **Shift+drag** adds a box; Shift on empty space never draws. A plain click selects just that note; dragging moves / resizes the whole selection.

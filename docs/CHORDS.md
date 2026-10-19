@@ -41,6 +41,31 @@ Writes the progression into the current block with the current instrument, start
 - **Arp**: one channel; pattern up, down, up-down or random, one note every N rows, over 1–3 octaves.
 - **Bass**: one channel, the chord roots two octaves down; rhythm whole, 8ths, offbeat, rolling 16ths or octaves.
 
+## Chord lane in the piano roll (Unreleased)
+
+![Chord lane](screenshots/pianoroll-chords-lane.png)
+
+Note clips show a **chord lane** between the piano roll's toolbar and the notes (the toolbar's **Chords** button shows or hides it). Chords on the lane are markers: they don't play by themselves, they guide you and can write notes. They're saved with the clip and move, loop and copy with it. Songs without chords save exactly as before.
+
+- **Double-click** empty lane: add the key's home chord (one bar). **Drag** on empty lane: draw a chord, its length follows the mouse. **Drag** a chord to move it, its right edge to change its length (snaps to the grid, at least a beat). **Click** a chord: play it on the track's instrument (and select it). **Del** deletes the selected chord.
+- Names show as chord symbols with slash basses for inversions (*Gsus2/E*) and the roman numeral in the song key (*bVII*). Colours follow the degree.
+- **Right-click** empty lane: the **chord pie** (a round menu: point at a wedge to open its ring). The inner wedges are styles (Pop, Rock, Blues, Jazz, Trance, Dark psy, House, Synthwave, Lo-fi), plus **Add chord** and **More…** (the Generate dialog). The outer ring lists the style's progressions (*I–V–vi–IV*, *i–bII* …); pointing at one plays it, clicking inserts it at the bar you right-clicked, in the song key, with the Generate dialog's speed, colour and "write the notes" choices. Esc, the centre or a click outside closes it.
+- **Right-click a chord:** its own pie, with the chord in the centre (*Em / Minor*): **Play**, **Transpose** (±1, ±2, ±5 semitones or a scale step; pointing previews), **Chord type** (maj, min, sus2, sus4, 7, maj7, m7, dim, add9, m9, maj9, 5), **Suggestions** (relative and parallel swaps, colour, borrowed bVI / bVII, the V7 and the chord's own dominant; pointing previews), **Generate** (the dialog, starting at this chord), **Select** (the notes under it), **Delete**, **Write notes** (ring: Full, Triads, Shell, Bass only, Pad, Light, Open, Power) and **Edit** (root, type, bass, length).
+- **Settings › Chord menus › List** uses ordinary list menus instead of the pies (the list also has **Detect chords from the notes**: one chord per bar from the clip's notes).
+- The radial menu is a reusable widget (`src/app/radial.rs`).
+
+### Generate chord progression
+
+![Generate chord progression](screenshots/pianoroll-chord-generate.png)
+
+**Generate** in the toolbar (or **More…** / **Generate** in a pie) opens the dialog:
+- **Style:** Cinematic, Ambient, Indie Pop, Emo, Pop, Lo-fi / Neo Soul, Synthwave, EDM / Trance, Dark / Horror, Folk / Country, Blues, Heroic / Game, Dark psy, House, Jazz, Rock and Classical, each with a one-line description. Every style has a table of common progressions (for example Pop I–V–vi–IV and vi–IV–I–V, Rock I–bVII–IV, the 12-bar blues, Jazz ii–V–I and I–vi–ii–V, Trance vi–IV–I–V and i–VI–III–VII, Dark psy i–bII and i–bII–i–bVII, House i–iv and ii9–V9, Synthwave i–bVI–bIII–bVII, Lo-fi IVmaj7–iii7–vi7 and ii9–V13–Imaj9, the Andalusian i–bVII–bVI–V and the canon I–V–vi–iii–IV–I–IV–V). These are generic, centuries-old or genre-standard progressions.
+- **Key:** C … B, and **Any / Major / Minor** (which of the style's progressions may be picked).
+- **Length** 4 / 8 / 16 / 32 bars (the progression repeats), **Chord speed** Slower / Style / Faster, **Starts at bar** with − / +.
+- **Colour** turns plain chords into 7ths, 9ths, add9 and sus chords; **Variation** swaps in related chords (relative minor / major, sus, 7ths), never the first one. **Walking bass (inversions)** picks slash basses so the bass moves to the nearest chord tone.
+- The result shows the key and the numerals (*E minor  i - bIII - bVII - iv*) and coloured blocks with names. **Another one** rolls a new one (seeded, so the same settings give the same result), **Preview** plays it on the track's instrument.
+- **Also write the notes on <instrument>** with a voicing (Full, Triads, Shell, Bass only, Pad, Light, Open, Power) and an octave writes voice-led notes too (each chord moves to the nearest inversion of the next). **Apply** replaces the chords it covers and is one undo step; a clip shorter than the progression grows to fit. With no song key yet, Apply sets it.
+
 ## Scale lock
 
 **Scale lock** (in the chord helper; shown as *lock A minor* in the block bar) snaps every note typed on the computer keyboard and every MIDI note (played and recorded) to the nearest note of the song key; ties go down. Note-offs are not changed. It is a setting, so it stays on until you turn it off; it does nothing while the song has no key.

@@ -109,6 +109,10 @@ pub struct Extra {
     /// before the polish pass)
     #[serde(default)]
     pub flat_ui: bool,
+    /// piano roll chord lane: right-click opens a list menu instead of the
+    /// pie (Settings › Chord menus)
+    #[serde(default)]
+    pub chord_list_menu: bool,
     /// the file browser on the right is shown (Ctrl+B; docs/BROWSER.md)
     #[serde(default = "yes")]
     pub browser_open: bool,
@@ -178,6 +182,7 @@ impl Default for Extra {
             new_in_timeline: true,
             dblclick_roll: true,
             flat_ui: false,
+            chord_list_menu: false,
             browser_open: true,
             browser_w: browser_w(),
             browser_dirs: vec![],

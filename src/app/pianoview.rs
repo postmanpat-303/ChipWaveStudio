@@ -45,7 +45,7 @@ pub(crate) struct RNote {
 
 /// the target's contents, read once per frame
 #[derive(Clone)]
-enum Source {
+pub(super) enum Source {
     Block(Pattern),
     Notes(tl::NoteClipData),
 }
@@ -140,7 +140,7 @@ pub(crate) struct PianoUi {
     pub(crate) scroll_y: f32,
     /// selected notes (ids)
     pub(crate) sel: Vec<usize>,
-    target: Option<Target>,
+    pub(crate) target: Option<Target>,
     /// scroll to the notes on the next frame
     fit: bool,
     drag: Option<PrDrag>,
@@ -148,8 +148,6 @@ pub(crate) struct PianoUi {
     pub(crate) grid: Tick,
     /// draw whole chords (note clips)
     pub(crate) chord: Option<chords::ChordKind>,
-    /// the chord type the Chords button turns back on
-    chord_kind: chords::ChordKind,
     pub(crate) tool: PrTool,
     /// the song key the Scale button turns back on
     last_key: Option<chords::Key>,
@@ -185,7 +183,6 @@ impl Default for PianoUi {
             drag: None,
             grid: ROW,
             chord: None,
-            chord_kind: chords::ChordKind::Triad,
             tool: PrTool::Pointer,
             last_key: None,
             last_len: ROW,
@@ -262,7 +259,7 @@ fn block_notes(p: &Pattern, col: usize) -> Vec<RNote> {
 }
 
 /// all notes of the target (sorted as stored) and its length in ticks
-fn notes_of(src: &Source, t: Target) -> (Vec<RNote>, Tick) {
+pub(super) fn notes_of(src: &Source, t: Target) -> (Vec<RNote>, Tick) {
     match (src, t) {
         (Source::Block(p), Target::Block { col, .. }) => {
             (block_notes(p, col), tl::rows_to_ticks(p.rows))
@@ -325,7 +322,7 @@ impl App {
         })
     }
 
-    fn pr_read(&self, t: Target) -> Option<Source> {
+    pub(super) fn pr_read(&self, t: Target) -> Option<Source> {
         self.with(|s| match t {
             Target::Block { pattern, col } => {
                 let p = s.song.patterns.get(pattern)?;
@@ -341,7 +338,7 @@ impl App {
     }
 
     /// write the edited source back (and refresh the timeline plan)
-    fn pr_write(&mut self, t: Target, src: Source) {
+    pub(super) fn pr_write(&mut self, t: Target, src: Source) {
         self.with(|s| {
             match (t, src) {
                 (Target::Block { pattern, .. }, Source::Block(p)) => {
@@ -403,6 +400,47 @@ impl App {
         self.pr
             .offs
             .push((Instant::now() + Duration::from_millis(350), AUDITION_KEY));
+    }
+
+    /// play several keys at once for `ms` (chords from the chord lane)
+    pub(super) fn pr_audition_keys(&mut self, keys: &[u8], ms: u64) {
+        let ch = match self.pr.target {
+            Some(Target::Notes { clip: Some(id), .. }) => self
+                .tlv
+                .cache
+                .as_ref()
+                .and_then(|c| c.tl.clips.iter().find(|x| x.id == id))
+                .map_or(self.ch, |c| c.track as usize),
+            Some(Target::Block { col, .. }) => col,
+            _ => self.ch,
+        } as u8;
+        let ins = self.instr.max(1);
+        let old: Vec<u8> = self.pr.offs.drain(..).map(|(_, k)| k).collect();
+        self.with(|s| {
+            let audio::Shared { song, engine, .. } = s;
+            for k in old {
+                engine.live_event(song, crate::midi::LiveEv::Off { key: k });
+            }
+            if engine.playing {
+                return;
+            }
+            for (i, &note) in keys.iter().take(12).enumerate() {
+                engine.live_event(
+                    song,
+                    crate::midi::LiveEv::On {
+                        key: AUDITION_KEY + i as u8,
+                        note,
+                        vel: 0.7,
+                        instr: ins,
+                        ch,
+                    },
+                );
+            }
+        });
+        let end = Instant::now() + Duration::from_millis(ms.clamp(80, 3000));
+        for i in 0..keys.len().min(12) {
+            self.pr.offs.push((end, AUDITION_KEY + i as u8));
+        }
     }
 
     /// release auditions that are due (every frame)
@@ -734,6 +772,9 @@ impl App {
     pub(super) fn pr_key(&mut self, key: Key, m: egui::Modifiers) -> bool {
         let grid = self.pr_grid();
         match key {
+            Key::Delete | Key::Backspace if self.pr.sel.is_empty() && self.cl.sel.is_some() => {
+                self.cl_delete_sel()
+            }
             Key::Delete | Key::Backspace => self.pr_delete(),
             Key::ArrowUp => self.pr_nudge(0, if m.shift { 12 } else { 1 }),
             Key::ArrowDown => self.pr_nudge(0, if m.shift { -12 } else { -1 }),
@@ -784,6 +825,9 @@ impl App {
             self.pr.smoke.clear();
             self.pr.erase = None;
             self.pr.erase_started = false;
+            self.cl.sel = None;
+            self.cl.pie = None;
+            self.cl.list = None;
         }
         let Some(src) = self.pr_read(target) else {
             ui.label("Nothing to edit here");
@@ -795,10 +839,22 @@ impl App {
         let (song_key, ninstr) = self.with(|s| (s.song.info.key, s.song.instruments.len()));
         // ---- layout
         let tool = Rect::from_min_size(full.min, egui::vec2(full.width(), TOOL_H));
-        let fx_r = Rect::from_min_max(
+        // the chord lane (note clips, Chords on)
+        let lane_h = if matches!(target, Target::Notes { .. }) && !self.cl.hidden {
+            super::chordlane::LANE_H
+        } else {
+            0.0
+        };
+        let lane_r = Rect::from_min_max(
             Pos2::new(full.left() + KEYS_W, tool.bottom()),
-            Pos2::new(full.right(), tool.bottom() + FX_H),
+            Pos2::new(full.right(), tool.bottom() + lane_h),
         );
+        let fx_r = Rect::from_min_max(
+            Pos2::new(full.left() + KEYS_W, lane_r.bottom()),
+            Pos2::new(full.right(), lane_r.bottom() + FX_H),
+        );
+        // a pie or list menu is open: it has the mouse
+        let modal = self.cl.pie.is_some() || self.cl.list.is_some();
         let vel_r = Rect::from_min_max(
             Pos2::new(full.left() + KEYS_W, full.bottom() - VEL_H),
             full.max,
@@ -915,26 +971,31 @@ impl App {
                     self.pr.fit = true;
                 }
                 if let Target::Notes { .. } = target {
-                    let on = self.pr.chord.is_some();
-                    if pr_btn(ui, "Chords", on, true, "draw the song key's chord on the clicked note").clicked() {
-                        self.pr.chord = if on { None } else { Some(self.pr.chord_kind) };
-                        if !on && song_key.is_none() {
-                            self.status = "Chords need a song key: turn on Scale".into();
-                        }
+                    let on = !self.cl.hidden;
+                    if pr_btn(ui, "Chords", on, true, "show the chord lane above the notes").clicked() {
+                        self.cl.hidden = on;
                     }
-                    if let Some(mut k) = self.pr.chord {
-                        egui::ComboBox::from_id_salt("pr_chord")
-                            .width(64.0)
-                            .selected_text(k.name())
-                            .show_ui(ui, |ui| {
-                                for c in chords::ChordKind::ALL {
-                                    ui.selectable_value(&mut k, c, c.name());
-                                }
-                            })
-                            .response
-                            .on_hover_text("chord type");
-                        self.pr.chord = Some(k);
-                        self.pr.chord_kind = k;
+                    if pr_btn(ui, "Generate", false, true, "Generate chord progression… (styles, key, length, colour)").clicked() {
+                        let at = self.cl.sel.and_then(|i| self.cl_marks(target).get(i).map(|m| m.start)).unwrap_or(0);
+                        self.cl_open_gen_at(at);
+                    }
+                    let mut k = self.pr.chord;
+                    egui::ComboBox::from_id_salt("pr_chord")
+                        .width(58.0)
+                        .selected_text(k.map_or("Stamp", |c| c.name()))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut k, None, "off");
+                            for c in chords::ChordKind::ALL {
+                                ui.selectable_value(&mut k, Some(c), c.name());
+                            }
+                        })
+                        .response
+                        .on_hover_text("chord stamp: a click draws the song key's chord on the clicked note");
+                    if k != self.pr.chord {
+                        if k.is_some() && song_key.is_none() {
+                            self.status = "The chord stamp needs a song key: turn on Scale".into();
+                        }
+                        self.pr.chord = k;
                     }
                 }
                 // the song key: highlights its notes (and sets the Chords key)
@@ -1193,7 +1254,11 @@ impl App {
             .smoke
             .retain(|p| now.duration_since(p.born).as_secs_f32() < SMOKE_S);
         for puff in &self.pr.smoke {
-            paint_smoke(&notes_p, puff, now.duration_since(puff.born).as_secs_f32() / SMOKE_S);
+            paint_smoke(
+                &notes_p,
+                puff,
+                now.duration_since(puff.born).as_secs_f32() / SMOKE_S,
+            );
         }
         if !self.pr.smoke.is_empty() {
             ui.ctx().request_repaint();
@@ -1291,11 +1356,19 @@ impl App {
                 self.pr.scroll_y = (self.pr.scroll_y - dy).clamp(0.0, max_y);
             }
         }
+        // ---- chord lane (draws and takes its own clicks)
+        if lane_h > 0.0 {
+            self.chord_lane(ui, lane_r, target, grid_t, len, modal);
+        }
         // ---- input: grid
         let resp = ui.interact(
             grid_r,
             egui::Id::unique("piano_grid"),
-            Sense::click_and_drag(),
+            if modal {
+                Sense::hover()
+            } else {
+                Sense::click_and_drag()
+            },
         );
         let mods = ui.input(|i| i.modifiers);
         if let Some(h) = resp.hover_pos() {
@@ -1311,7 +1384,7 @@ impl App {
                 i.pointer.latest_pos(),
             )
         });
-        if sec_pressed && press_pos.is_some_and(|p| grid_r.contains(p)) {
+        if sec_pressed && !modal && press_pos.is_some_and(|p| grid_r.contains(p)) {
             self.pr.erase = press_pos;
         }
         if let (Some(from), true) = (self.pr.erase, sec_down || sec_pressed) {
@@ -1445,8 +1518,7 @@ impl App {
                                 x.moved = true;
                             }
                             self.pr_apply_drag(&d, target, tk, k, grid_t);
-                            self.pr.last_len =
-                                (tl::snap(tk as Tick, grid_t) - d.start).max(grid_t);
+                            self.pr.last_len = (tl::snap(tk as Tick, grid_t) - d.start).max(grid_t);
                         }
                     }
                     DragK::Paint(from) => {
@@ -1460,7 +1532,8 @@ impl App {
                             && !notes.iter().any(|n| n.start == at && n.key == k as u8)
                         {
                             if let Some(mut s2) = self.pr_read(target) {
-                                let id = self.pr_put(&mut s2, target, at, step, k as u8, song_key, true);
+                                let id =
+                                    self.pr_put(&mut s2, target, at, step, k as u8, song_key, true);
                                 self.pr_write(target, s2);
                                 self.pr_audition(k as u8, 0, self.pr.last_vel);
                                 if let Some(x) = self.pr.drag.as_mut() {
@@ -1491,7 +1564,11 @@ impl App {
         let vresp = ui.interact(
             vel_r,
             egui::Id::unique("piano_vel"),
-            Sense::click_and_drag(),
+            if modal {
+                Sense::hover()
+            } else {
+                Sense::click_and_drag()
+            },
         );
         if vresp.is_pointer_button_down_on() {
             if let Some(pos) = vresp.interact_pointer_pos() {
@@ -1518,6 +1595,10 @@ impl App {
                     self.status = format!("Velocity {}", (v * 127.0).round());
                 }
             }
+        }
+        // pies, list menu, Generate dialog
+        if let Target::Notes { .. } = target {
+            self.chord_popups(ui.ctx(), target);
         }
     }
 
@@ -1604,10 +1685,8 @@ fn swept_notes(pr: &PianoUi, notes: &[RNote], a: Pos2, b: Pos2) -> Vec<RNote> {
 
 /// a small integer hash -> 0..1
 fn h01(a: u32, b: u32, c: u32) -> f32 {
-    let mut x = a
-        .wrapping_mul(0x9E37_79B1)
-        ^ b.wrapping_mul(0x85EB_CA77)
-        ^ c.wrapping_mul(0xC2B2_AE3D);
+    let mut x =
+        a.wrapping_mul(0x9E37_79B1) ^ b.wrapping_mul(0x85EB_CA77) ^ c.wrapping_mul(0xC2B2_AE3D);
     x ^= x >> 15;
     x = x.wrapping_mul(0x2C1B_3C6D);
     x ^= x >> 12;
@@ -1668,8 +1747,16 @@ fn paint_eraser(ctx: &egui::Context, at: Pos2) {
         ]
     };
     let edge = Stroke::new(1.0, Color32::from_black_alpha(200));
-    p.add(egui::Shape::convex_polygon(quad(0.0, 8.0), Color32::from_rgb(0xF2, 0x8C, 0xA8), edge));
-    p.add(egui::Shape::convex_polygon(quad(8.0, 18.0), Color32::from_rgb(0xE8, 0xEC, 0xF2), edge));
+    p.add(egui::Shape::convex_polygon(
+        quad(0.0, 8.0),
+        Color32::from_rgb(0xF2, 0x8C, 0xA8),
+        edge,
+    ));
+    p.add(egui::Shape::convex_polygon(
+        quad(8.0, 18.0),
+        Color32::from_rgb(0xE8, 0xEC, 0xF2),
+        edge,
+    ));
 }
 
 fn set_vel(src: &mut Source, t: Target, id: usize, v: f32) {
@@ -1691,10 +1778,18 @@ pub(crate) fn len_name(l: Tick) -> String {
     let bar = 4 * PPQ;
     if l > 0 && l % bar == 0 {
         let n = l / bar;
-        return if n == 1 { "1 bar".into() } else { format!("{n} bars") };
+        return if n == 1 {
+            "1 bar".into()
+        } else {
+            format!("{n} bars")
+        };
     }
     fn gcd(a: Tick, b: Tick) -> Tick {
-        if b == 0 { a } else { gcd(b, a % b) }
+        if b == 0 {
+            a
+        } else {
+            gcd(b, a % b)
+        }
     }
     let g = gcd(l.max(1), bar);
     format!("{}/{}", l.max(1) / g, bar / g)
@@ -1712,14 +1807,22 @@ fn pr_btn(ui: &mut egui::Ui, label: &str, on: bool, enabled: bool, tip: &str) ->
     let w = (g.size().x + 16.0).max(30.0);
     let (r, resp) = ui.allocate_exact_size(
         egui::vec2(w, BTN_H),
-        if enabled { Sense::click() } else { Sense::hover() },
+        if enabled {
+            Sense::click()
+        } else {
+            Sense::hover()
+        },
     );
     if ui.is_rect_visible(r) {
         btn_back(ui.painter(), r, &resp, on);
         let col = if !enabled {
             t.ink2.gamma_multiply(0.5)
         } else if on {
-            if t.light { t.ink } else { Color32::WHITE }
+            if t.light {
+                t.ink
+            } else {
+                Color32::WHITE
+            }
         } else {
             t.ink
         };
@@ -1754,7 +1857,11 @@ fn pr_tool_btn(ui: &mut egui::Ui, tool: PrTool, on: bool, tip: &str) -> egui::Re
     if ui.is_rect_visible(r) {
         let p = ui.painter();
         btn_back(p, r, &resp, on);
-        let col = if on && !t.light { Color32::WHITE } else { t.ink };
+        let col = if on && !t.light {
+            Color32::WHITE
+        } else {
+            t.ink
+        };
         let c = r.center();
         let v = egui::vec2;
         match tool {
@@ -1774,10 +1881,20 @@ fn pr_tool_btn(ui: &mut egui::Ui, tool: PrTool, on: bool, tip: &str) -> egui::Re
             PrTool::Select => {
                 // a dashed box
                 let b = Rect::from_center_size(c, v(13.0, 11.0));
-                let corners = [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()];
+                let corners = [
+                    b.left_top(),
+                    b.right_top(),
+                    b.right_bottom(),
+                    b.left_bottom(),
+                ];
                 for k in 0..4 {
                     let (a, z) = (corners[k], corners[(k + 1) % 4]);
-                    p.extend(egui::Shape::dashed_line(&[a, z], Stroke::new(1.3, col), 2.5, 2.0));
+                    p.extend(egui::Shape::dashed_line(
+                        &[a, z],
+                        Stroke::new(1.3, col),
+                        2.5,
+                        2.0,
+                    ));
                 }
             }
             PrTool::Pencil => {
@@ -1785,9 +1902,17 @@ fn pr_tool_btn(ui: &mut egui::Ui, tool: PrTool, on: bool, tip: &str) -> egui::Re
                 let (u, w) = (v(0.707, -0.707), v(0.707, 0.707));
                 let tip = c + v(-6.0, 6.0);
                 let body = |a: f32, b: f32| {
-                    vec![tip + u * a - w * 2.3, tip + u * b - w * 2.3, tip + u * b + w * 2.3, tip + u * a + w * 2.3]
+                    vec![
+                        tip + u * a - w * 2.3,
+                        tip + u * b - w * 2.3,
+                        tip + u * b + w * 2.3,
+                        tip + u * a + w * 2.3,
+                    ]
                 };
-                p.add(egui::Shape::closed_line(body(4.0, 15.0), Stroke::new(1.3, col)));
+                p.add(egui::Shape::closed_line(
+                    body(4.0, 15.0),
+                    Stroke::new(1.3, col),
+                ));
                 p.add(egui::Shape::convex_polygon(
                     vec![tip, tip + u * 4.0 - w * 2.3, tip + u * 4.0 + w * 2.3],
                     col,
@@ -1803,16 +1928,18 @@ fn pr_tool_btn(ui: &mut egui::Ui, tool: PrTool, on: bool, tip: &str) -> egui::Re
 fn pr_chip(ui: &mut egui::Ui, col: Color32, label: &str) -> egui::Response {
     let t = th();
     let font = FontId::proportional(12.0);
-    let g = ui
-        .painter()
-        .layout_no_wrap(label.to_string(), font, t.ink);
+    let g = ui.painter().layout_no_wrap(label.to_string(), font, t.ink);
     let w = (g.size().x + 26.0).min(220.0);
     let (r, resp) = ui.allocate_exact_size(egui::vec2(w, BTN_H), Sense::hover());
     if ui.is_rect_visible(r) {
         let p = ui.painter_at(r);
         p.rect_filled(r, 4.0, Color32::from_black_alpha(70));
         p.circle_filled(Pos2::new(r.left() + 10.0, r.center().y), 4.0, col);
-        p.galley(Pos2::new(r.left() + 19.0, r.center().y - g.size().y / 2.0), g, t.ink);
+        p.galley(
+            Pos2::new(r.left() + 19.0, r.center().y - g.size().y / 2.0),
+            g,
+            t.ink,
+        );
     }
     resp
 }

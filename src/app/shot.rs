@@ -12,6 +12,8 @@ pub struct Shot {
     saved: bool,
     /// `--hold <secs>`: keep running (for screen recording) instead of capturing
     pub hold: Option<f32>,
+    /// scripted input for piano roll shots: (frame, event)
+    script: Vec<(u32, egui::Event)>,
     start: Option<std::time::Instant>,
     last: Option<std::time::Instant>,
     image: std::sync::Arc<std::sync::Mutex<Option<std::sync::Arc<egui::ColorImage>>>>,
@@ -25,6 +27,7 @@ impl Shot {
             frame: 0,
             saved: false,
             hold: None,
+            script: vec![],
             start: None,
             last: None,
             image: Default::default(),
@@ -701,9 +704,26 @@ impl App {
                 modifiers: Default::default(),
             });
         }
-        if sh.frame == SETUP_AT + 40 {
+        let f = sh.frame;
+        let scripted = !sh.script.is_empty();
+        if f == SETUP_AT + 40 && !scripted {
             // park the pointer away from the widgets (no hover highlights)
             raw.events.push(egui::Event::PointerGone);
+        }
+        if let Some(sh) = &mut self.shot {
+            let (now, later): (Vec<_>, Vec<_>) =
+                sh.script.drain(..).partition(|(at, _)| *at == f + 1);
+            sh.script = later;
+            for (_, e) in now {
+                if let egui::Event::PointerButton { modifiers, .. } = &e {
+                    raw.events.push(egui::Event::ModifiersChanged(*modifiers));
+                }
+                raw.events.push(e);
+            }
+            if sh.script.is_empty() && scripted {
+                // keep a sentinel so the pointer stays where the script left it
+                sh.script.push((u32::MAX, egui::Event::PointerGone));
+            }
         }
     }
 
@@ -715,6 +735,11 @@ impl App {
         ctx.request_repaint();
         if f == SETUP_AT {
             self.shot_setup(ctx, &view);
+        }
+        if f == SETUP_AT + 14 {
+            if let Ok(m) = std::env::var("CHIPWAVE_SHOT_PR") {
+                self.shot_pr(ctx, &m);
+            }
         }
         // no audio device: advance the engine from the UI at real-time speed
         let now = std::time::Instant::now();
@@ -1050,6 +1075,217 @@ impl App {
             self.tlv.sels = vec![id];
             self.set_lower(3);
             self.pr.focus = false;
+        }
+    }
+}
+
+impl App {
+    /// CHIPWAVE_SHOT_PR=click | erase | select | chords | chord-pie |
+    /// chord-block-pie | chord-generate (view timeline-notes): piano roll
+    /// shots with scripted mouse input
+    fn shot_pr(&mut self, ctx: &egui::Context, mode: &str) {
+        use super::chordlane::PieOn;
+        use crate::chordgen as cg;
+        use crate::timeline::{self as tl, PPQ, ROW};
+        self.with(|s| s.engine.stop());
+        let Some(t) = self.pr_target() else { return };
+        let bar = 4 * PPQ;
+        self.pr.zoom = 22.0;
+        self.pr.scroll_x = 0.0;
+        self.pr.focus = true;
+        let key_y = |a: &App, k: u8| a.pr.y_of(k) + a.pr.key_h / 2.0;
+        let x = |a: &App, tk: tl::Tick| a.pr.x_of(tk);
+        let mut sc: Vec<(u32, egui::Event)> = vec![];
+        let base = CAPTURE_AT.saturating_sub(100);
+        let mv = |p: Pos2| egui::Event::PointerMoved(p);
+        let btn = |p: Pos2, b: egui::PointerButton, down: bool, m: egui::Modifiers| {
+            egui::Event::PointerButton {
+                pos: p,
+                button: b,
+                pressed: down,
+                modifiers: m,
+            }
+        };
+        let none = egui::Modifiers::NONE;
+        let prim = egui::PointerButton::Primary;
+        match mode {
+            "click" | "erase" | "select" => {
+                if mode == "click" {
+                    // an empty clip: the script draws into it
+                    if let Some(super::pianoview::Source::Notes(mut d)) = self.pr_read(t) {
+                        d.notes.clear();
+                        self.pr_write(t, super::pianoview::Source::Notes(d));
+                    }
+                }
+                self.pr.scroll_y =
+                    (120.0 - 62.0) * self.pr.key_h - self.pr.grid_rect.height() / 2.0;
+            }
+            _ => {
+                self.pr.scroll_y =
+                    (120.0 - 50.0) * self.pr.key_h - self.pr.grid_rect.height() / 2.0;
+            }
+        }
+        // the layout follows the scroll next frame; positions from the new scroll
+        let gy = self.pr.grid_rect;
+        let _ = gy;
+        match mode {
+            "click" => {
+                let (r, k0) = (ROW, 58u8);
+                // 1: click a note; 2: drag its edge to 4 rows; 3..: single clicks
+                let p0 = Pos2::new(x(self, 0) + 5.0, key_y(self, k0));
+                let e0 = Pos2::new(x(self, r) - 2.0, key_y(self, k0));
+                let e1 = Pos2::new(x(self, 4 * r) + 1.0, key_y(self, k0));
+                let mut f = base;
+                for e in [
+                    mv(p0),
+                    btn(p0, prim, true, none),
+                    btn(p0, prim, false, none),
+                ] {
+                    f += 3;
+                    sc.push((f, e));
+                }
+                f += 6;
+                sc.push((f, mv(e0)));
+                f += 3;
+                sc.push((f, btn(e0, prim, true, none)));
+                for k in 1..=6 {
+                    f += 2;
+                    sc.push((f, mv(e0 + (e1 - e0) * (k as f32 / 6.0))));
+                }
+                f += 2;
+                sc.push((f, btn(e1, prim, false, none)));
+                for (i, (row, key)) in [
+                    (4usize, 61u8),
+                    (8, 65),
+                    (12, 63),
+                    (16, 58),
+                    (20, 61),
+                    (24, 65),
+                    (28, 70),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let p = Pos2::new(x(self, row as i64 * r) + 6.0, key_y(self, key));
+                    f += 4;
+                    sc.push((f, mv(p)));
+                    f += 2;
+                    sc.push((f, btn(p, prim, true, none)));
+                    f += 2;
+                    sc.push((f, btn(p, prim, false, none)));
+                    let _ = i;
+                }
+                f += 4;
+                sc.push((f, mv(Pos2::new(x(self, 34 * r), key_y(self, 66)))));
+            }
+            "erase" => {
+                // a right-drag over the arpeggio, still held at the capture
+                let notes = match self.pr_read(t) {
+                    Some(super::pianoview::Source::Notes(d)) => d.notes.clone(),
+                    _ => vec![],
+                };
+                let mut arp: Vec<&tl::Note> = notes
+                    .iter()
+                    .filter(|n| n.len < PPQ && n.start < 2 * bar)
+                    .collect();
+                arp.sort_by_key(|n| n.start);
+                let pts: Vec<Pos2> = arp
+                    .iter()
+                    .take(9)
+                    .map(|n| Pos2::new(x(self, n.start) + 4.0, key_y(self, n.key)))
+                    .collect();
+                if pts.len() >= 2 {
+                    // fast: the last notes are still smoking at the capture
+                    let sec = egui::PointerButton::Secondary;
+                    let mut f = CAPTURE_AT - 14;
+                    sc.push((f, mv(pts[0])));
+                    f += 1;
+                    sc.push((f, btn(pts[0], sec, true, none)));
+                    for w in pts.windows(2) {
+                        f += 1;
+                        sc.push((f, mv(w[0] + (w[1] - w[0]) * 0.5)));
+                        f += 1;
+                        sc.push((f, mv(w[1])));
+                    }
+                }
+            }
+            "select" => {
+                // Select tool, a Shift box in progress
+                self.pr.tool = super::pianoview::PrTool::Select;
+                let a = Pos2::new(x(self, bar) - 6.0, key_y(self, 72));
+                let b = Pos2::new(x(self, 3 * bar - PPQ), key_y(self, 54));
+                let sh = egui::Modifiers::SHIFT;
+                let mut f = CAPTURE_AT - 30;
+                sc.push((f, mv(a)));
+                f += 2;
+                sc.push((f, btn(a, prim, true, sh)));
+                for k in 1..=10 {
+                    f += 1;
+                    sc.push((f, mv(a + (b - a) * (k as f32 / 10.0))));
+                }
+            }
+            _ => {
+                // chord shots: a Cinematic progression in E minor on the lane
+                self.with(|s| {
+                    s.song.info.key = Some(crate::chords::Key::new(4, crate::chords::Scale::Minor))
+                });
+                if let Some(super::pianoview::Source::Notes(mut d)) = self.pr_read(t) {
+                    d.notes.clear();
+                    self.pr_write(t, super::pianoview::Source::Notes(d));
+                }
+                let o = cg::GenOpts {
+                    style: 0,
+                    root: 4,
+                    mode: cg::Mode::Minor,
+                    bars: 8,
+                    prog: Some(1),
+                    colour: 0.55,
+                    variation: 0.3,
+                    walking_bass: true,
+                    seed: 3,
+                    ..Default::default()
+                };
+                let marks = cg::generate(&o).marks;
+                self.cl_insert(t, marks.clone(), true, cg::Voicing::Pad, 4);
+                self.cl.gen.opts = o;
+                self.pr.zoom = 10.0;
+                let lane = self.cl.rect;
+                let ly = lane.center().y;
+                match mode {
+                    "chord-pie" => {
+                        let at = Pos2::new(x(self, 5 * bar) + 20.0, ly);
+                        self.cl_open_menu(ctx, at, PieOn::Lane(4 * bar), t);
+                        if let Some((pie, _)) = &self.cl.pie {
+                            // hover Dark psy, then its second progression
+                            let wi = 5;
+                            let (w, c) = (pie.wedge_centre(wi, 75.0), pie.child_centre(wi, 1));
+                            sc.push((CAPTURE_AT - 30, mv(w)));
+                            sc.push((CAPTURE_AT - 20, mv(c)));
+                        }
+                    }
+                    "chord-block-pie" => {
+                        let m = marks.get(2).cloned().unwrap_or_default();
+                        let at = Pos2::new(x(self, m.start) + 30.0, ly);
+                        self.cl.sel = Some(2);
+                        self.cl_open_menu(ctx, at, PieOn::Mark(2), t);
+                        if let Some((pie, _)) = &self.cl.pie {
+                            let wi = 7; // Write notes
+                            let (w, c) = (pie.wedge_centre(wi, 75.0), pie.child_centre(wi, 6));
+                            sc.push((CAPTURE_AT - 30, mv(w)));
+                            sc.push((CAPTURE_AT - 20, mv(c)));
+                        }
+                    }
+                    "chord-generate" => {
+                        self.cl_open_gen_at(0);
+                        self.cl.gen.opts = o;
+                        self.cl.gen.write = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if let Some(sh) = &mut self.shot {
+            sh.script = sc;
         }
     }
 }

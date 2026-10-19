@@ -21,6 +21,7 @@ mod blocklen;
 mod browser_tests;
 mod browserpanel;
 mod browserview;
+mod chordlane;
 mod chordview;
 mod dialogs;
 mod edit;
@@ -56,6 +57,7 @@ mod piano_tests;
 mod pianoview;
 mod pluginview;
 mod plugsetup;
+mod radial;
 mod sampleview;
 mod settingsview;
 pub mod showcase;
@@ -277,6 +279,8 @@ pub struct App {
     pub(crate) tlv: timeline::TimelineUi,
     /// piano roll in the lower panel (app/pianoview.rs)
     pub(crate) pr: pianoview::PianoUi,
+    /// the piano roll's chord lane, pies and Generate dialog
+    pub(crate) cl: chordlane::LaneUi,
     /// MIDI recording into note clips and Capture (app/noterec.rs)
     pub(crate) noterec: noterec::NoteRec,
     /// "made with a newer ChipWave Studio" message (open refused)
@@ -563,6 +567,7 @@ impl App {
             plug: Default::default(),
             tlv: Default::default(),
             pr: Default::default(),
+            cl: Default::default(),
             noterec: Default::default(),
             too_new: None,
             insp: Default::default(),

@@ -275,6 +275,7 @@ pub fn new_note_clip(song: &mut Song, track: usize, start: Tick) -> Option<u32> 
         name: format!("Notes {}", n + 1),
         len,
         notes: vec![],
+        chords: vec![],
     }));
     let id = tl.new_id();
     tl.clips.push(Clip {

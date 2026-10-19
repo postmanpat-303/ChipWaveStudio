@@ -430,7 +430,11 @@ fn right_path(h: &mut Harness<'static, App>, pts: &[Pos2]) {
     with_mods(h, m, btn(pts[0], true));
     for w in pts.windows(2) {
         for k in 1..=6 {
-            with_mods(h, m, egui::Event::PointerMoved(w[0] + (w[1] - w[0]) * (k as f32 / 6.0)));
+            with_mods(
+                h,
+                m,
+                egui::Event::PointerMoved(w[0] + (w[1] - w[0]) * (k as f32 / 6.0)),
+            );
         }
     }
     let last = *pts.last().unwrap();
@@ -443,30 +447,60 @@ fn a_single_click_draws_a_note_the_length_of_the_last_one() {
     let mut h = clip_setup();
     let r = tl::ROW;
     // the first note: one grid step (1/16)
-    { let p0 = at(&h, 0, 60, 5.0); click_at(&mut h, p0); }
+    {
+        let p0 = at(&h, 0, 60, 5.0);
+        click_at(&mut h, p0);
+    }
     assert_eq!(lens(&h), vec![(0, 60, r)]);
     // stretch it to 4 rows: the next click draws 4 rows
-    { let p0 = at(&h, 0, 60, 18.0); let p1 = at(&h, 4, 60, 1.0); drag_m(&mut h, p0, p1, egui::Modifiers::NONE); }
+    {
+        let p0 = at(&h, 0, 60, 18.0);
+        let p1 = at(&h, 4, 60, 1.0);
+        drag_m(&mut h, p0, p1, egui::Modifiers::NONE);
+    }
     assert_eq!(h.state().pr.last_len, 4 * r);
-    { let p0 = at(&h, 8, 62, 5.0); click_at(&mut h, p0); }
-    assert_eq!(lens(&h)[1], (8 * r, 62, 4 * r), "same length as the last note");
+    {
+        let p0 = at(&h, 8, 62, 5.0);
+        click_at(&mut h, p0);
+    }
+    assert_eq!(
+        lens(&h)[1],
+        (8 * r, 62, 4 * r),
+        "same length as the last note"
+    );
     // a click on an existing note selects it (no new note) and takes its length
-    h.state()
-        .with(|s| {
-            let t = s.song.timeline.as_deref_mut().unwrap();
-            let d = t.notes.last_mut().unwrap().make_mut();
-            d.notes.push(tl::Note { start: 16 * r, len: 2 * r, key: 64, vel: tl::roll::vel_u16(1.0), ..Default::default() });
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        let d = t.notes.last_mut().unwrap().make_mut();
+        d.notes.push(tl::Note {
+            start: 16 * r,
+            len: 2 * r,
+            key: 64,
+            vel: tl::roll::vel_u16(1.0),
+            ..Default::default()
         });
+    });
     frame(&mut h);
-    { let p0 = at(&h, 16, 64, 5.0); click_at(&mut h, p0); }
-    assert_eq!(note_data(&h).notes.len(), 3, "clicking a note doesn't add one");
+    {
+        let p0 = at(&h, 16, 64, 5.0);
+        click_at(&mut h, p0);
+    }
+    assert_eq!(
+        note_data(&h).notes.len(),
+        3,
+        "clicking a note doesn't add one"
+    );
     assert_eq!(h.state().pr.last_len, 2 * r);
     // a slightly long, wobbly click (becomes a tiny drag) keeps that length
     let p = at(&h, 20, 65, 5.0);
     drag_m(&mut h, p, p + egui::vec2(3.0, 1.0), egui::Modifiers::NONE);
     assert!(lens(&h).contains(&(20 * r, 65, 2 * r)), "{:?}", lens(&h));
     // dragging while drawing sets the length and is remembered
-    { let p0 = at(&h, 24, 67, 5.0); let p1 = at(&h, 27, 67, 1.0); drag_m(&mut h, p0, p1, egui::Modifiers::NONE); }
+    {
+        let p0 = at(&h, 24, 67, 5.0);
+        let p1 = at(&h, 27, 67, 1.0);
+        drag_m(&mut h, p0, p1, egui::Modifiers::NONE);
+    }
     assert!(lens(&h).contains(&(24 * r, 67, 3 * r)), "{:?}", lens(&h));
     assert_eq!(h.state().pr.last_len, 3 * r);
     // the toolbar shows it
@@ -483,39 +517,78 @@ fn shift_click_toggles_the_selection_and_never_draws() {
     let mut h = clip_setup();
     let r = tl::ROW;
     for (row, key) in [(0, 60), (4, 62), (8, 64)] {
-        { let p0 = at(&h, row, key, 5.0); click_at(&mut h, p0); }
+        {
+            let p0 = at(&h, row, key, 5.0);
+            click_at(&mut h, p0);
+        }
     }
     let id_of = |h: &Harness<'static, App>, s: tl::Tick| {
-        note_data(h).notes.iter().position(|n| n.start == s).unwrap()
+        note_data(h)
+            .notes
+            .iter()
+            .position(|n| n.start == s)
+            .unwrap()
     };
     let shift = egui::Modifiers::SHIFT;
     let sclick = |h: &mut Harness<'static, App>, p: Pos2| {
         with_mods(h, shift, egui::Event::PointerMoved(p));
         for pressed in [true, false] {
-            with_mods(h, shift, egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: shift });
+            with_mods(
+                h,
+                shift,
+                egui::Event::PointerButton {
+                    pos: p,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: shift,
+                },
+            );
         }
         with_mods(h, egui::Modifiers::NONE, egui::Event::PointerMoved(p));
         frame(h);
     };
-    { let p0 = at(&h, 0, 60, 5.0); click_at(&mut h, p0); }
-    { let p0 = at(&h, 4, 62, 5.0); sclick(&mut h, p0); }
+    {
+        let p0 = at(&h, 0, 60, 5.0);
+        click_at(&mut h, p0);
+    }
+    {
+        let p0 = at(&h, 4, 62, 5.0);
+        sclick(&mut h, p0);
+    }
     let mut sel = h.state().pr.sel.clone();
     sel.sort();
     assert_eq!(sel, vec![id_of(&h, 0), id_of(&h, 4 * r)]);
     // Shift+click again takes it out
-    { let p0 = at(&h, 4, 62, 5.0); sclick(&mut h, p0); }
+    {
+        let p0 = at(&h, 4, 62, 5.0);
+        sclick(&mut h, p0);
+    }
     assert_eq!(h.state().pr.sel, vec![id_of(&h, 0)]);
     // Shift+click on empty space draws nothing
-    { let p0 = at(&h, 12, 70, 5.0); sclick(&mut h, p0); }
+    {
+        let p0 = at(&h, 12, 70, 5.0);
+        sclick(&mut h, p0);
+    }
     assert_eq!(note_data(&h).notes.len(), 3);
     // Shift+box adds the other two
-    { let p0 = at(&h, 3, 65, 2.0); let p1 = at(&h, 10, 61, 2.0); drag_m(&mut h, p0, p1, shift); }
+    {
+        let p0 = at(&h, 3, 65, 2.0);
+        let p1 = at(&h, 10, 61, 2.0);
+        drag_m(&mut h, p0, p1, shift);
+    }
     assert_eq!(h.state().pr.sel.len(), 3);
     // moving drags the whole selection; a plain click selects just one
-    { let p0 = at(&h, 4, 62, 5.0); let p1 = at(&h, 6, 62, 5.0); drag_m(&mut h, p0, p1, egui::Modifiers::NONE); }
+    {
+        let p0 = at(&h, 4, 62, 5.0);
+        let p1 = at(&h, 6, 62, 5.0);
+        drag_m(&mut h, p0, p1, egui::Modifiers::NONE);
+    }
     let starts: Vec<tl::Tick> = lens(&h).iter().map(|x| x.0).collect();
     assert_eq!(starts, vec![2 * r, 6 * r, 10 * r]);
-    { let p0 = at(&h, 6, 62, 5.0); click_at(&mut h, p0); }
+    {
+        let p0 = at(&h, 6, 62, 5.0);
+        click_at(&mut h, p0);
+    }
     assert_eq!(h.state().pr.sel.len(), 1);
 }
 
@@ -523,26 +596,57 @@ fn shift_click_toggles_the_selection_and_never_draws() {
 fn right_drag_erases_in_one_undo_step_with_smoke() {
     let mut h = clip_setup();
     let r = tl::ROW;
-    for (row, key) in [(0, 60), (2, 61), (4, 60), (6, 61), (8, 72)] {
-        { let p0 = at(&h, row, key, 5.0); click_at(&mut h, p0); }
+    for (row, key) in [(0, 60), (2, 61), (4, 60), (6, 61), (8, 66)] {
+        {
+            let p0 = at(&h, row, key, 5.0);
+            click_at(&mut h, p0);
+        }
     }
     h.state_mut().undo_reset();
     assert_eq!(note_data(&h).notes.len(), 5);
     // swipe across the first four (zig-zag between keys 60 and 61)
-    { let pts = [at(&h, 0, 60, 2.0), at(&h, 2, 61, 5.0), at(&h, 4, 60, 5.0), at(&h, 6, 61, 5.0)]; right_path(&mut h, &pts); }
-    assert_eq!(lens(&h), vec![(8 * r, 72, r)], "only the far note is left");
-    assert!(!h.state().pr.smoke.is_empty() || !crate::theme::polished(), "notes go up in smoke");
+    {
+        let pts = [
+            at(&h, 0, 60, 2.0),
+            at(&h, 2, 61, 5.0),
+            at(&h, 4, 60, 5.0),
+            at(&h, 6, 61, 5.0),
+        ];
+        right_path(&mut h, &pts);
+    }
+    assert_eq!(lens(&h), vec![(8 * r, 66, r)], "only the far note is left");
+    assert!(
+        !h.state().pr.smoke.is_empty() || !crate::theme::polished(),
+        "notes go up in smoke"
+    );
     h.state_mut().do_undo(false);
-    assert_eq!(note_data(&h).notes.len(), 5, "one undo brings the whole swipe back");
+    frame(&mut h);
+    assert_eq!(
+        note_data(&h).notes.len(),
+        5,
+        "one undo brings the whole swipe back"
+    );
     // a plain right-click deletes one note; on empty space it does nothing
-    { let p0 = at(&h, 8, 72, 5.0); let p1 = at(&h, 8, 72, 5.0); right_drag(&mut h, p0, p1); }
+    {
+        let p0 = at(&h, 8, 66, 5.0);
+        let p1 = at(&h, 8, 66, 5.0);
+        right_drag(&mut h, p0, p1);
+    }
     assert_eq!(note_data(&h).notes.len(), 4);
-    { let p0 = at(&h, 20, 50, 5.0); let p1 = at(&h, 20, 50, 5.0); right_drag(&mut h, p0, p1); }
+    {
+        let p0 = at(&h, 20, 50, 5.0);
+        let p1 = at(&h, 20, 50, 5.0);
+        right_drag(&mut h, p0, p1);
+    }
     assert_eq!(note_data(&h).notes.len(), 4);
     // Flat style: no smoke
     crate::theme::set_polished(false);
     h.state_mut().pr.smoke.clear();
-    { let p0 = at(&h, 0, 60, 5.0); let p1 = at(&h, 0, 60, 5.0); right_drag(&mut h, p0, p1); }
+    {
+        let p0 = at(&h, 0, 60, 5.0);
+        let p1 = at(&h, 0, 60, 5.0);
+        right_drag(&mut h, p0, p1);
+    }
     crate::theme::set_polished(true);
     assert!(h.state().pr.smoke.is_empty());
     assert_eq!(note_data(&h).notes.len(), 3);
@@ -554,14 +658,27 @@ fn tools_pencil_paints_select_boxes_and_smart_snap() {
     let r = tl::ROW;
     h.state_mut().pr.last_len = 2 * r;
     h.state_mut().pr.tool = pianoview::PrTool::Pencil;
-    { let p0 = at(&h, 0, 60, 3.0); let p1 = at(&h, 7, 60, 2.0); drag_m(&mut h, p0, p1, egui::Modifiers::NONE); }
+    {
+        let p0 = at(&h, 0, 60, 3.0);
+        let p1 = at(&h, 7, 60, 2.0);
+        drag_m(&mut h, p0, p1, egui::Modifiers::NONE);
+    }
     assert_eq!(
         lens(&h),
-        vec![(0, 60, 2 * r), (2 * r, 60, 2 * r), (4 * r, 60, 2 * r), (6 * r, 60, 2 * r)]
+        vec![
+            (0, 60, 2 * r),
+            (2 * r, 60, 2 * r),
+            (4 * r, 60, 2 * r),
+            (6 * r, 60, 2 * r)
+        ]
     );
     // Select tool: a box on empty space selects, never draws
     h.state_mut().pr.tool = pianoview::PrTool::Select;
-    { let p0 = at(&h, 1, 62, 2.0); let p1 = at(&h, 5, 58, 2.0); drag_m(&mut h, p0, p1, egui::Modifiers::NONE); }
+    {
+        let p0 = at(&h, 1, 62, 2.0);
+        let p1 = at(&h, 5, 58, 2.0);
+        drag_m(&mut h, p0, p1, egui::Modifiers::NONE);
+    }
     assert_eq!(note_data(&h).notes.len(), 4);
     assert_eq!(h.state().pr.sel.len(), 3);
     // keys 1 2 3 pick the tools
@@ -578,10 +695,162 @@ fn tools_pencil_paints_select_boxes_and_smart_snap() {
 #[test]
 fn block_roll_remembers_the_length_too() {
     let (mut h, _) = setup(3);
-    { let p0 = at(&h, 0, 61, 5.0); click_at(&mut h, p0); }
-    { let p0 = at(&h, 0, 61, 18.0); let p1 = at(&h, 3, 61, 2.0); drag_m(&mut h, p0, p1, egui::Modifiers::NONE); }
-    { let p0 = at(&h, 8, 63, 5.0); click_at(&mut h, p0); }
+    {
+        let p0 = at(&h, 0, 61, 5.0);
+        click_at(&mut h, p0);
+    }
+    {
+        let p0 = at(&h, 0, 61, 18.0);
+        let p1 = at(&h, 3, 61, 2.0);
+        drag_m(&mut h, p0, p1, egui::Modifiers::NONE);
+    }
+    {
+        let p0 = at(&h, 8, 63, 5.0);
+        click_at(&mut h, p0);
+    }
     let p = pat(&h);
     assert_eq!(p.cells[8][3].note, 63);
-    assert_eq!(p.cells[11][3].note, NOTE_OFF, "three rows, like the last note");
+    assert_eq!(
+        p.cells[11][3].note, NOTE_OFF,
+        "three rows, like the last note"
+    );
+}
+
+// ------------------------------------------------------------ chord lane
+
+fn marks(h: &Harness<'static, App>) -> Vec<crate::chordgen::ChordMark> {
+    note_data(h).chords
+}
+
+fn lane_at(h: &Harness<'static, App>, tick: tl::Tick) -> Pos2 {
+    let r = h.state().cl.rect;
+    Pos2::new(h.state().pr.x_of(tick) + 6.0, r.center().y)
+}
+
+fn dbl(h: &mut Harness<'static, App>, p: Pos2) {
+    with_mods(h, egui::Modifiers::NONE, egui::Event::PointerMoved(p));
+    let mut t = h.ctx.input(|i| i.time);
+    for _ in 0..2 {
+        for pressed in [true, false] {
+            t += 0.05;
+            h.input_mut().time = Some(t);
+            with_mods(
+                h,
+                egui::Modifiers::NONE,
+                egui::Event::PointerButton {
+                    pos: p,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: Default::default(),
+                },
+            );
+        }
+    }
+    h.input_mut().time = None;
+    frame(h);
+    frame(h);
+}
+
+#[test]
+fn chord_lane_adds_inserts_from_the_pie_and_undoes() {
+    let mut h = clip_setup();
+    h.state()
+        .with(|s| s.song.info.key = Some(crate::chords::Key::new(4, crate::chords::Scale::Minor)));
+    h.state_mut().pr.zoom = 8.0;
+    frame(&mut h);
+    assert!(
+        h.state().cl.rect.height() > 10.0,
+        "the lane shows on note clips"
+    );
+    let bar = 4 * PPQ_T;
+    // double-click: the home chord, one bar
+    let p = lane_at(&h, 0);
+    dbl(&mut h, p);
+    let m = marks(&h);
+    assert_eq!(m.len(), 1, "{m:?}");
+    assert_eq!(
+        (m[0].start, m[0].len, m[0].root, m[0].q),
+        (0, bar, 4, crate::chordgen::Quality::Min)
+    );
+    // right-click at bar 2: the style pie; Pop's first progression
+    let p = lane_at(&h, 2 * bar);
+    with_mods(&mut h, egui::Modifiers::NONE, egui::Event::PointerMoved(p));
+    for pressed in [true, false] {
+        with_mods(
+            &mut h,
+            egui::Modifiers::NONE,
+            egui::Event::PointerButton {
+                pos: p,
+                button: egui::PointerButton::Secondary,
+                pressed,
+                modifiers: Default::default(),
+            },
+        );
+    }
+    frame(&mut h);
+    let (w, c) = {
+        let (pie, _) = h.state().cl.pie.as_ref().expect("the pie opened");
+        (pie.wedge_centre(0, 75.0), pie.child_centre(0, 0))
+    };
+    with_mods(&mut h, egui::Modifiers::NONE, egui::Event::PointerMoved(w));
+    with_mods(&mut h, egui::Modifiers::NONE, egui::Event::PointerMoved(c));
+    assert_eq!(
+        h.state()
+            .cl
+            .pie
+            .as_ref()
+            .map(|p| (p.0.hover, p.0.hover_child)),
+        Some((Some(0), Some(0)))
+    );
+    click_at(&mut h, c);
+    assert!(h.state().cl.pie.is_none(), "picking closes it");
+    let m = marks(&h);
+    assert_eq!(m.len(), 5, "{m:?}");
+    assert_eq!(m[1].start, 2 * bar);
+    assert_eq!(
+        note_data(&h).notes.len(),
+        0,
+        "markers only (Write notes is off)"
+    );
+    // right-click a chord: its pie; Delete
+    let p = lane_at(&h, 0);
+    with_mods(&mut h, egui::Modifiers::NONE, egui::Event::PointerMoved(p));
+    for pressed in [true, false] {
+        with_mods(
+            &mut h,
+            egui::Modifiers::NONE,
+            egui::Event::PointerButton {
+                pos: p,
+                button: egui::PointerButton::Secondary,
+                pressed,
+                modifiers: Default::default(),
+            },
+        );
+    }
+    frame(&mut h);
+    let d = h
+        .state()
+        .cl
+        .pie
+        .as_ref()
+        .expect("chord pie")
+        .0
+        .wedge_centre(6, 75.0);
+    with_mods(&mut h, egui::Modifiers::NONE, egui::Event::PointerMoved(d));
+    click_at(&mut h, d);
+    assert_eq!(marks(&h).len(), 4);
+    assert_eq!(marks(&h)[0].start, 2 * bar);
+    // one undo per action
+    h.state_mut().do_undo(false);
+    assert_eq!(marks(&h).len(), 5);
+    h.state_mut().do_undo(false);
+    assert_eq!(marks(&h).len(), 1);
+    // empty chord lists save exactly as before
+    let d = tl::NoteClipData {
+        name: "x".into(),
+        len: 8,
+        ..Default::default()
+    };
+    let s = toml::to_string(&d).unwrap();
+    assert!(!s.contains("chords"), "{s}");
 }

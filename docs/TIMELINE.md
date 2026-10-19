@@ -68,9 +68,10 @@ The lower panel has a **Piano roll** tab (next to Arranger / Instrument / Automa
 **Toolbar and editing (Unreleased, all targets):** one row, left to right:
 - the clip / block **chip** (track colour) and **ALL** (select every note, Ctrl+A);
 - the tools: **Pointer** (key **1**, the default: click empty space draws a note, drag a note moves it, its right edge resizes it), **Select** (**2**: drag a box on empty space; never draws) and **Pencil** (**3**: click draws, dragging paints a run of notes, each the remembered length, at the mouse's pitch);
-- note clips: the **snap** menu (Bar, Beat, 1/8, 1/16, 1/32, 1/16T, **Smart** = follows the zoom, off), **Quantize** (Q), **Chords** (draws the song key's chord on the clicked note; the menu next to it picks the type);
+- note clips: the **snap** menu (Bar, Beat, 1/8, 1/16, 1/32, 1/16T, **Smart** = follows the zoom, off), **Quantize** (Q);
 - **Fit** (F: zoom to the notes); **Scale** turns the song key on or off (its notes are highlighted; the same key as the Chords window) with the **key** and **scale** menus;
 - **Len**: the length the next click draws (also a menu).
+- note clips: **Chords** shows the **chord lane** above the notes, **Generate** opens *Generate chord progression*, and **Stamp** picks the chord the click draws (see [CHORDS.md › Chord lane](CHORDS.md#chord-lane-in-the-piano-roll-unreleased)).
 
 **Single-click entry:** one click on empty grid draws a note **the length of the last note you drew, resized or clicked** (the grid step at first), snapped to the grid. Drag while drawing to set its length; that becomes the new length. A slightly long or wobbly click keeps the remembered length (it only changes once the mouse moves half a grid step). Double-clicking still works (the second click selects the new note). Clicking a note selects it and never draws.
 

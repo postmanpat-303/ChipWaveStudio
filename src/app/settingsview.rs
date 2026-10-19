@@ -465,6 +465,17 @@ impl App {
                     changed |= a.changed() || b.changed();
                 });
                 ui.end_row();
+                ui.label("Chord menus");
+                ui.horizontal(|ui| {
+                    let a = ui
+                        .selectable_value(&mut self.extra.chord_list_menu, false, "Pie")
+                        .on_hover_text("Piano roll chord lane: right-click opens a round menu you point at");
+                    let b = ui
+                        .selectable_value(&mut self.extra.chord_list_menu, true, "List")
+                        .on_hover_text("Piano roll chord lane: right-click opens a normal list menu");
+                    changed |= a.changed() || b.changed();
+                });
+                ui.end_row();
                 ui.label("Row numbers");
                 ui.horizontal(|ui| {
                     let a = ui

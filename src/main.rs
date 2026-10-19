@@ -12,6 +12,7 @@ mod automation;
 mod browser;
 mod chanops;
 mod chipfx;
+mod chordgen;
 mod chords;
 mod credits;
 mod engine;

@@ -268,6 +268,7 @@ fn timeline_toml_round_trip_with_every_field_and_shared_notes() {
                 points: vec![(0, 0.1), (ROW, 0.9)],
             }],
         }],
+        chords: vec![],
     }));
     let id = tl.new_id();
     tl.clips.push(Clip {
