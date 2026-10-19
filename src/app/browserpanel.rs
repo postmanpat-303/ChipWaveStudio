@@ -195,9 +195,9 @@ fn icon_button(ui: &mut egui::Ui, ic: Icon, on: bool, enabled: bool, tip: &str) 
         if on {
             t.sel
         } else if resp.hovered() && enabled {
-            t.crt_top.gamma_multiply(1.5)
+            well(&t, 1.5)
         } else {
-            t.crt_top
+            well(&t, 1.0)
         },
     );
     p.rect_stroke(
@@ -213,6 +213,7 @@ fn icon_button(ui: &mut egui::Ui, ic: Icon, on: bool, enabled: bool, tip: &str) 
     } else {
         t.ink2
     };
+    theme::raise(p, r, 4.0, on);
     icon(p, ic, r.center(), 12.0, col);
     resp.on_hover_text(tip)
 }
@@ -234,8 +235,29 @@ enum Op {
     Close,
 }
 
+/// The panel's inset "well" colour: the dark screen colour in dark themes,
+/// a pale pill in light ones (so ink stays readable), shaded by `k`.
+fn well(t: &theme::Theme, k: f32) -> Color32 {
+    if t.light {
+        theme::tone(
+            t.pill,
+            if k >= 1.0 {
+                (k - 1.0) * 0.5
+            } else {
+                (k - 1.0) * 0.12
+            },
+        )
+    } else {
+        t.crt_top.gamma_multiply(k)
+    }
+}
+
 fn badge(p: &egui::Painter, r: Rect, f: Fmt) {
-    p.rect_filled(r, 3, rgb(f.colour()));
+    if theme::polished() {
+        theme::block(p, r, rgb(f.colour()));
+    } else {
+        p.rect_filled(r, 3, rgb(f.colour()));
+    }
     p.text(
         r.center(),
         egui::Align2::CENTER_CENTER,
@@ -276,6 +298,22 @@ impl App {
         let t = th();
         let full = ui.max_rect().expand2(egui::vec2(6.0, 4.0));
         self.br.rect = full;
+        if theme::polished() {
+            // the polished look: a soft gradient and a shadow along the left edge
+            theme::gradient(
+                ui.painter(),
+                full,
+                theme::tone(t.cart_top, 0.03),
+                t.cart_bot,
+            );
+            for (k, a) in [(0.0f32, 70u8), (1.0, 40), (2.0, 18)] {
+                ui.painter().vline(
+                    full.left() + k,
+                    full.y_range(),
+                    egui::Stroke::new(1.0, Color32::from_black_alpha(a)),
+                );
+            }
+        }
         // accent edge (the panel's spine)
         ui.painter().rect_filled(
             Rect::from_min_max(Pos2::new(full.right() - 3.0, full.top()), full.max),
@@ -382,13 +420,29 @@ impl App {
                         r,
                         5,
                         if on {
-                            t.crt_top.gamma_multiply(1.6)
+                            well(&t, 1.6)
                         } else if resp.hovered() {
-                            t.crt_top.gamma_multiply(1.3)
+                            well(&t, 1.3)
                         } else {
-                            t.crt_top
+                            well(&t, 1.0)
                         },
                     );
+                    if theme::polished() {
+                        let bg = if on {
+                            well(&t, 1.6)
+                        } else if resp.hovered() {
+                            well(&t, 1.3)
+                        } else {
+                            well(&t, 1.0)
+                        };
+                        let mut m = egui::Mesh::default();
+                        theme::round_mesh(&mut m, r, [5.0; 4], theme::tone(bg, 0.07), theme::tone(bg, -0.10));
+                        p.add(egui::Shape::mesh(m));
+                        theme::raise(p, r, 5.0, on);
+                        if on {
+                            theme::glow(p, r, 5, c.gamma_multiply(0.6));
+                        }
+                    }
                     if on {
                         p.rect_filled(
                             Rect::from_min_max(Pos2::new(r.left() + 4.0, r.bottom() - 2.0), Pos2::new(r.right() - 4.0, r.bottom())),
@@ -459,7 +513,7 @@ impl App {
                             .color(if on { t.ink } else { t.ink2 });
                     let b = egui::Button::new(txt)
                         .corner_radius(9)
-                        .fill(if on { t.sel } else { t.crt_top })
+                        .fill(if on { t.sel } else { well(&t, 1.0) })
                         .stroke(egui::Stroke::new(1.0, if on { t.accent } else { t.border }))
                         .small();
                     if ui.add(b).clicked() {
@@ -517,7 +571,7 @@ impl App {
                     ui.painter().rect_filled(
                         Rect::from_min_size(r.min, egui::vec2(colw, col_h)),
                         3,
-                        t.crt_top.gamma_multiply(0.8),
+                        well(&t, 0.8),
                     );
                     ui.label(
                         egui::RichText::new(title.to_uppercase())
@@ -539,7 +593,7 @@ impl App {
                                     if on {
                                         p.rect_filled(rr, 2, t.sel);
                                     } else if resp.hovered() {
-                                        p.rect_filled(rr, 2, t.crt_top.gamma_multiply(1.4));
+                                        p.rect_filled(rr, 2, well(&t, 1.4));
                                     }
                                     let lp = p.with_clip_rect(rr.shrink2(egui::vec2(2.0, 0.0)));
                                     lp.text(
@@ -595,7 +649,7 @@ impl App {
             ui.scope_builder(egui::UiBuilder::new().max_rect(col_rect(2)), |ui| {
                 ui.set_width(colw);
                 let r = ui.max_rect();
-                ui.painter().rect_filled(Rect::from_min_size(r.min, egui::vec2(colw, col_h)), 3, t.crt_top.gamma_multiply(0.8));
+                ui.painter().rect_filled(Rect::from_min_size(r.min, egui::vec2(colw, col_h)), 3, well(&t, 0.8));
                 ui.label(egui::RichText::new("LOCATION").size(10.0).color(t.ink2));
                 egui::ScrollArea::vertical().id_salt("br_loc").max_height(col_h - 18.0).auto_shrink([false, true]).show(ui, |ui| {
                     for (lf, label, n) in &locs {
@@ -605,7 +659,7 @@ impl App {
                         if on {
                             p.rect_filled(rr, 2, t.sel);
                         } else if resp.hovered() {
-                            p.rect_filled(rr, 2, t.crt_top.gamma_multiply(1.4));
+                            p.rect_filled(rr, 2, well(&t, 1.4));
                         }
                         let lp = p.with_clip_rect(rr.shrink2(egui::vec2(2.0, 0.0)));
                         lp.text(Pos2::new(rr.left() + 4.0, rr.center().y), egui::Align2::LEFT_CENTER, label, FontId::proportional(11.5), t.ink);
@@ -745,9 +799,9 @@ impl App {
                 if on {
                     p.rect_filled(r, 0, t.sel);
                 } else if resp.hovered() {
-                    p.rect_filled(r, 0, t.crt_top.gamma_multiply(1.4));
+                    p.rect_filled(r, 0, well(&t, 1.4));
                 } else if k % 2 == 1 {
-                    p.rect_filled(r, 0, t.crt_top.gamma_multiply(0.6));
+                    p.rect_filled(r, 0, well(&t, 0.6));
                 }
                 let c = rgb(it.fmt.colour());
                 p.rect_filled(
@@ -963,8 +1017,7 @@ impl App {
             Pos2::new(self.br.rect.left(), bar_top),
             Pos2::new(self.br.rect.right() - 3.0, bar_top + 30.0),
         );
-        ui.painter()
-            .rect_filled(bar, 0, t.crt_top.gamma_multiply(0.9));
+        ui.painter().rect_filled(bar, 0, well(&t, 0.9));
         let selected = self.br_selected();
         let playing = self.br.preview_active();
         ui.scope_builder(
@@ -1012,7 +1065,7 @@ impl App {
             Pos2::new(self.br.rect.right() - 3.0, self.br.rect.bottom()),
         );
         let p = ui.painter();
-        p.rect_filled(lg, 0, t.crt_top.gamma_multiply(0.7));
+        p.rect_filled(lg, 0, well(&t, 0.7));
         p.text(
             Pos2::new(lg.left() + 8.0, lg.top() + 10.0),
             egui::Align2::LEFT_CENTER,
@@ -1133,13 +1186,21 @@ impl App {
         let Some(it) = self.br.drag.clone() else {
             return;
         };
-        let (pos, down, released) = ctx.input(|i| {
-            (
-                i.pointer.latest_pos(),
-                i.pointer.primary_down(),
-                i.pointer.primary_released(),
-            )
-        });
+        let (pos, down, released) = if self.br.shot_drop {
+            let p = Pos2::new(
+                self.tlv.lanes.left() + 260.0,
+                self.tlv.tracks_bottom() + 40.0,
+            );
+            (Some(p), true, false)
+        } else {
+            ctx.input(|i| {
+                (
+                    i.pointer.latest_pos(),
+                    i.pointer.primary_down(),
+                    i.pointer.primary_released(),
+                )
+            })
+        };
         let target = pos.and_then(|p| self.br_drop_at(p));
         let hint = target.as_ref().and_then(|d| self.br_drop_hint(&it, d));
         if released || !down {
@@ -1184,8 +1245,16 @@ impl App {
                     egui::Stroke::new(2.5, t.accent),
                 );
                 if let Some(h) = &hint {
+                    // in the lanes, clear of the "+ Add track" button under the headers
+                    let g = p.layout_no_wrap(h.to_string(), FontId::proportional(13.0), t.accent);
+                    let at = Pos2::new(self.tlv.lanes.left() + 10.0, y + 12.0);
+                    let bg = Rect::from_min_size(
+                        at - egui::vec2(6.0, g.size().y / 2.0 + 3.0),
+                        g.size() + egui::vec2(12.0, 6.0),
+                    );
+                    p.rect_filled(bg, 4, t.cart_top);
                     p.text(
-                        Pos2::new(x0 + 10.0, y + 12.0),
+                        at,
                         egui::Align2::LEFT_CENTER,
                         h,
                         FontId::proportional(13.0),

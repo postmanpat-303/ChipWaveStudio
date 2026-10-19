@@ -467,3 +467,16 @@ fn opening_the_browser_leaves_an_old_song_untouched() {
     let _ = std::fs::remove_dir_all(&d);
     assert!(!h.state().dirty);
 }
+
+#[test]
+fn interface_style_switch_still_works_with_the_browser_open() {
+    let mut h = tl_harness();
+    for flat in [true, false] {
+        h.state_mut().extra.flat_ui = flat;
+        let ctx = h.ctx.clone();
+        h.state().apply_theme(&ctx);
+        frames(&mut h, 3);
+        assert!(h.state().br.rect.width() > 250.0);
+        assert!(!h.state().br.row_rects.is_empty());
+    }
+}

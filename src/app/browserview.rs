@@ -88,6 +88,8 @@ pub(crate) struct BrowserUi {
     pub(crate) list_off: f32,
     /// result rows as last drawn (item key, rect), for tests
     pub(crate) row_rects: Vec<(String, Rect)>,
+    /// screenshot mode: hold the drag below the last track
+    pub(crate) shot_drop: bool,
 }
 
 impl Default for BrowserUi {
@@ -118,6 +120,7 @@ impl Default for BrowserUi {
             search_focus: false,
             list_off: 0.0,
             row_rects: vec![],
+            shot_drop: false,
         }
     }
 }

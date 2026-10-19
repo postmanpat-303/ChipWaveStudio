@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 40] = [
+pub const VIEWS: [&str; 41] = [
     "pattern",
     "arranger",
     "timeline",
@@ -73,6 +73,7 @@ pub const VIEWS: [&str; 40] = [
     "grid-fx",
     "browser",
     "browser-samples",
+    "browser-drop",
     "plugin-setup",
 ];
 const SETUP_AT: u32 = 4;
@@ -161,6 +162,17 @@ impl App {
                 }
                 self.br.filter.tab = crate::browser::Tab::Samples;
                 self.br_add_folder(d);
+            }
+            "browser-drop" => {
+                // dragging an instrument below the last track: "New track: …"
+                self.view = View::Timeline;
+                self.br.filter.tab = crate::browser::Tab::Instruments;
+                self.br.filter.query = "808 Boom".into();
+                self.br_refresh();
+                let it = self.br_result_items().first().map(|i| (*i).clone());
+                self.br.sel = it.as_ref().map(|i| i.key.clone());
+                self.br.drag = it;
+                self.br.shot_drop = true;
             }
             "plugin-setup" => {
                 self.view = View::Timeline;
