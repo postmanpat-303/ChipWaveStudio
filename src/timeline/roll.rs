@@ -182,6 +182,49 @@ pub fn move_note(p: &mut Pattern, col: usize, row: usize, to_row: usize, key: u8
     put_note(p, col, to_row, n.len, key, n.instr, n.vol);
 }
 
+/// Move the notes starting at `rows` together by `drow` rows and `dk`
+/// semitones, keeping their spacing: the shift is clamped so none goes
+/// before row 0, past the block's last row or outside keys 1..=120.
+/// Returns the notes' new rows (the selection).
+pub fn move_notes(p: &mut Pattern, col: usize, rows: &[usize], drow: i64, dk: i32) -> Vec<usize> {
+    let ns: Vec<MonoNote> = col_notes(p, col)
+        .into_iter()
+        .filter(|n| rows.contains(&n.row))
+        .collect();
+    if ns.is_empty() {
+        return vec![];
+    }
+    let last = p.rows.max(1) as i64 - 1;
+    let lo_r = ns.iter().map(|n| n.row as i64).min().unwrap_or(0);
+    let hi_r = ns.iter().map(|n| n.row as i64).max().unwrap_or(0);
+    let drow = drow.clamp(-lo_r, last - hi_r);
+    let lo_k = ns.iter().map(|n| n.key as i32).min().unwrap_or(1);
+    let hi_k = ns.iter().map(|n| n.key as i32).max().unwrap_or(120);
+    let dk = dk.clamp(1 - lo_k, 120 - hi_k);
+    // take them all out (with their note-offs), then put them back moved
+    for n in &ns {
+        if let Some(c) = cell_mut(p, n.row, col) {
+            c.note = 0;
+            c.instr = 0;
+            c.vol = 0;
+        }
+        if n.off {
+            if let Some(c) = cell_mut(p, n.row + n.len, col) {
+                if c.note == NOTE_OFF {
+                    c.note = 0;
+                }
+            }
+        }
+    }
+    let mut out = vec![];
+    for n in &ns {
+        let to = (n.row as i64 + drow) as usize;
+        put_note(p, col, to, n.len, (n.key as i32 + dk) as u8, n.instr, n.vol);
+        out.push(to);
+    }
+    out
+}
+
 /// Set the volume column of the note at `row` (velocity, 0 = none).
 pub fn set_note_vol(p: &mut Pattern, col: usize, row: usize, vol: u8) {
     if let Some(c) = cell_mut(p, row, col) {

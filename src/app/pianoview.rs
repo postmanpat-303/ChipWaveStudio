@@ -89,10 +89,49 @@ struct PrDrag {
     len: Tick,
     /// pitch auditioned last while moving
     heard: u8,
+    /// the selection when the drag began (block notes' ids are their rows,
+    /// so a group move re-reads them from the original state)
+    sel: Vec<usize>,
     /// the pointer has left the press point by half a grid step: a drawn
     /// note's length now follows it (until then it keeps the remembered
     /// length, so a slightly long or wobbly click doesn't shorten it)
     moved: bool,
+}
+
+/// A left press on empty grid held this long without moving turns into a
+/// hand-grab pan (seconds)
+pub(crate) const HOLD_S: f64 = 0.25;
+/// ... and "without moving" means within this many pixels (egui's own
+/// click / drag distance, so a quick drag starts exactly as before)
+pub(crate) const HOLD_PX: f32 = 6.0;
+
+/// What a left press on empty grid is so far (see [`press_decision`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Press {
+    /// still deciding (held still, not long enough yet)
+    Pending,
+    /// released quickly without moving: a click (adds a note)
+    Click,
+    /// held still for [`HOLD_S`]: pan
+    Hold,
+    /// moved more than [`HOLD_PX`] before [`HOLD_S`]: the usual drag
+    /// (draw / marquee / paint)
+    Drag,
+}
+
+/// Click vs hold vs drag for a press `elapsed` seconds ago that has moved
+/// `moved` pixels from where it went down; `down` = the button is still
+/// held. Movement wins over time (a quick drag stays a drag).
+pub(crate) fn press_decision(elapsed: f64, moved: f32, down: bool) -> Press {
+    if moved > HOLD_PX {
+        Press::Drag
+    } else if elapsed >= HOLD_S {
+        Press::Hold
+    } else if !down {
+        Press::Click
+    } else {
+        Press::Pending
+    }
 }
 
 /// a deleted note going up in smoke (purely visual)
@@ -166,6 +205,11 @@ pub(crate) struct PianoUi {
     /// screen rect of the note grid as last drawn (tests)
     pub(crate) grid_rect: Rect,
     pub(crate) vel_rect: Rect,
+    /// a left press on empty grid that may become a pan: (where, when)
+    /// (wall-clock: the app's frames and the test harness's steps alike)
+    press: Option<(Pos2, Instant)>,
+    /// panning (hand grab): the pointer's last position
+    pub(crate) pan: Option<Pos2>,
 }
 
 impl Default for PianoUi {
@@ -194,6 +238,8 @@ impl Default for PianoUi {
             offs: vec![],
             grid_rect: Rect::NOTHING,
             vel_rect: Rect::NOTHING,
+            press: None,
+            pan: None,
         }
     }
 }
@@ -540,11 +586,16 @@ impl App {
                         }
                     }
                     DragK::Move => {
+                        // the whole selection moves as a group (clamped)
                         let dt = tl::snap((tick - d.grab_tick) as Tick, ROW);
-                        let to = row_of(d.start + dt);
-                        let k = (d.key as i32 + key - d.grab_key).clamp(1, 120) as u8;
-                        roll::move_note(p, col, d.id, to, k);
-                        self.pr.sel = vec![to];
+                        let drow = (row_of(d.start + dt) as i64) - (d.start / ROW);
+                        let dk = key - d.grab_key;
+                        let rows: Vec<usize> = if d.sel.contains(&d.id) {
+                            d.sel.clone()
+                        } else {
+                            vec![d.id]
+                        };
+                        self.pr.sel = roll::move_notes(p, col, &rows, drow, dk);
                     }
                     DragK::Band(_) | DragK::Paint(_) => return,
                 }
@@ -580,6 +631,20 @@ impl App {
                         .min()
                         .unwrap_or(0);
                     let dt = dt.max(-min_start);
+                    // keep the chord shape: clamp the group, not each note
+                    let (lo, hi) = self
+                        .pr
+                        .sel
+                        .iter()
+                        .filter_map(|&i| n.notes.get(i))
+                        .fold((120i32, 1i32), |(a, b), x| {
+                            (a.min(x.key as i32), b.max(x.key as i32))
+                        });
+                    let dk = if lo <= hi {
+                        dk.clamp(1 - lo, 120 - hi)
+                    } else {
+                        dk
+                    };
                     for &i in &self.pr.sel {
                         if let Some(x) = n.notes.get_mut(i) {
                             x.start += dt;
@@ -1257,22 +1322,63 @@ impl App {
                 .unwrap_or(t.note),
             _ => t.note,
         };
+        // a group being moved: ghosts where the notes were
+        if let Some(d) = self.pr.drag.as_ref().filter(|d| d.kind == DragK::Move) {
+            let ids: &[usize] = if d.sel.contains(&d.id) {
+                &d.sel
+            } else {
+                std::slice::from_ref(&d.id)
+            };
+            for n in notes_of(&d.origin, target)
+                .0
+                .iter()
+                .filter(|n| ids.contains(&n.id))
+            {
+                let r = note_rect(&self.pr, n);
+                if r.intersects(grid_r) {
+                    notes_p.rect_filled(r, 2.0, sel_note_colours(&t, n.vel).0.gamma_multiply(0.18));
+                    notes_p.rect_stroke(
+                        r,
+                        2.0,
+                        Stroke::new(1.0, sel_note_colours(&t, 1.0).1.gamma_multiply(0.5)),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+            }
+        }
+        let hover_at = ui
+            .input(|i| i.pointer.hover_pos())
+            .filter(|h| grid_r.contains(*h));
+        let hovered = hover_at
+            .and_then(|h| hit_note(&self.pr, &notes, h))
+            .map(|(n, _)| n.id);
         for n in &notes {
             let r = note_rect(&self.pr, n);
             if !r.intersects(grid_r) {
                 continue;
             }
             let sel = self.pr.sel.contains(&n.id);
-            let c = base.gamma_multiply(0.45 + 0.55 * n.vel);
-            notes_p.rect_filled(r, 2.0, c);
+            let hot = hovered == Some(n.id);
+            let (fill, edge, ink) = if sel {
+                sel_note_colours(&t, n.vel)
+            } else {
+                (
+                    base.gamma_multiply(0.45 + 0.55 * n.vel),
+                    Color32::from_black_alpha(120),
+                    Color32::WHITE,
+                )
+            };
+            // hover: a slight lighten
+            let fill = if hot {
+                crate::theme::mix(fill, Color32::WHITE, 0.18)
+            } else {
+                fill
+            };
+            notes_p.rect_filled(r, 2.0, fill);
             notes_p.rect_stroke(
                 r,
                 2.0,
-                if sel {
-                    Stroke::new(2.0, t.selection_outline)
-                } else {
-                    Stroke::new(1.0, Color32::from_black_alpha(120))
-                },
+                Stroke::new(if sel { 1.5 } else { 1.0 }, edge),
                 egui::StrokeKind::Inside,
             );
             if r.width() > 26.0 && self.pr.key_h >= 9.0 {
@@ -1281,7 +1387,7 @@ impl App {
                     egui::Align2::LEFT_CENTER,
                     note_name(n.key),
                     FontId::monospace(self.pr.key_h.clamp(7.0, 10.0)),
-                    Color32::WHITE,
+                    ink,
                 );
             }
             if n.fx.is_some() {
@@ -1311,7 +1417,11 @@ impl App {
             }
             let h = (vel_r.height() - 4.0) * n.vel;
             let sel = self.pr.sel.contains(&n.id);
-            let c = if sel { t.selection_outline } else { base };
+            let c = if sel {
+                sel_note_colours(&t, 1.0).0
+            } else {
+                base
+            };
             let top = vel_r.bottom() - 2.0 - h;
             p.vline(
                 x + 1.0,
@@ -1442,7 +1552,54 @@ impl App {
             self.pr.erase_started = false;
             ui.ctx().request_repaint();
         }
-        if resp.drag_started_by(egui::PointerButton::Primary) || resp.clicked() {
+        // ---- hold-to-pan (left press held still on empty grid), middle-drag
+        let now = Instant::now();
+        let (prim_down, mid_down, prim_pressed, mid_pressed) = ui.input(|i| {
+            (
+                i.pointer.primary_down(),
+                i.pointer.middle_down(),
+                i.pointer.button_pressed(egui::PointerButton::Primary),
+                i.pointer.button_pressed(egui::PointerButton::Middle),
+            )
+        });
+        if !modal {
+            if let Some(p) = press_pos.filter(|p| grid_r.contains(*p)) {
+                if prim_pressed
+                    && !(mods.shift || mods.command)
+                    && hit_note(&self.pr, &notes, p).is_none()
+                {
+                    self.pr.press = Some((p, now));
+                }
+                if mid_pressed {
+                    self.pr.pan = Some(p);
+                }
+            }
+        }
+        if let (Some((p0, t0)), None) = (self.pr.press, self.pr.pan) {
+            let moved = latest.map_or(0.0, |l| l.distance(p0));
+            match press_decision(now.duration_since(t0).as_secs_f64(), moved, prim_down) {
+                Press::Hold => self.pr.pan = Some(latest.unwrap_or(p0)),
+                Press::Pending => ui.ctx().request_repaint(),
+                Press::Click | Press::Drag => self.pr.press = None,
+            }
+        }
+        let panning = self.pr.pan.is_some();
+        if let Some(last) = self.pr.pan {
+            if prim_down || mid_down {
+                let to = latest.unwrap_or(last);
+                let d = to - last;
+                self.pr_pan_by(d, grid_r, len);
+                self.pr.pan = Some(to);
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            } else {
+                self.pr.pan = None;
+                self.pr.press = None;
+            }
+        }
+        if panning {
+            // the pan owns this press: no note, no box, no draw
+        } else if resp.drag_started_by(egui::PointerButton::Primary) || resp.clicked() {
+            self.pr.press = None;
             let pos = press_pos
                 .or(resp.interact_pointer_pos())
                 .unwrap_or(grid_r.center());
@@ -1459,6 +1616,7 @@ impl App {
                 key: k as u8,
                 len: 0,
                 heard: 0,
+                sel: vec![],
                 moved: false,
             };
             match hit {
@@ -1481,6 +1639,7 @@ impl App {
                         self.pr_audition(n.key, n.instr, n.vel);
                     }
                     d.kind = if edge { DragK::Resize } else { DragK::Move };
+                    d.sel = self.pr.sel.clone();
                     d.id = n.id;
                     d.start = n.start;
                     d.key = n.key;
@@ -1525,7 +1684,7 @@ impl App {
             } else {
                 self.pr.drag = Some(d);
             }
-        } else if resp.dragged() {
+        } else if resp.dragged_by(egui::PointerButton::Primary) {
             if let (Some(d), Some(pos)) = (self.pr.drag.clone(), resp.interact_pointer_pos()) {
                 let tk = self.pr.tick_at(pos.x);
                 let k = self.pr.key_at(pos.y).clamp(1, 120);
@@ -1642,6 +1801,19 @@ impl App {
         }
     }
 
+    /// Scroll the roll by a pointer move `d` (the grid follows the hand),
+    /// kept inside the block / clip and the key range.
+    fn pr_pan_by(&mut self, d: egui::Vec2, grid_r: Rect, len: Tick) {
+        let ppt = self.pr.ppt();
+        // up to half a screen past the end, never before the start
+        let view = grid_r.width() as f64 / ppt;
+        let max_x = (len as f64 - view).max(0.0) + view / 2.0;
+        self.pr.scroll_x =
+            (self.pr.scroll_x - d.x as f64 / ppt).clamp(0.0, max_x.max(self.pr.scroll_x));
+        let max_y = (120.0 * self.pr.key_h - grid_r.height()).max(0.0);
+        self.pr.scroll_y = (self.pr.scroll_y - d.y).clamp(0.0, max_y);
+    }
+
     /// keys of what a click at `key` draws: the note, or with a chord type
     /// the song key's chord on that scale degree
     fn pr_chord_keys(&self, key: u8, song_key: Option<chords::Key>) -> Vec<u8> {
@@ -1688,6 +1860,32 @@ impl App {
         }
         self.pr_write(t, src);
     }
+}
+
+/// Selected notes: an orange fill (darker for quiet notes, so velocity
+/// still reads), a lighter outline and dark text. Theme-aware: Amiga's
+/// light chrome gets a deeper orange.
+pub(crate) fn sel_note_colours(t: &crate::theme::Theme, vel: f32) -> (Color32, Color32, Color32) {
+    let (lo, hi, edge) = if t.light {
+        (
+            Color32::from_rgb(0xA8, 0x4C, 0x0C),
+            Color32::from_rgb(0xF5, 0x82, 0x1F),
+            Color32::from_rgb(0xFF, 0xE2, 0xBC),
+        )
+    } else {
+        (
+            Color32::from_rgb(0xB0, 0x5A, 0x14),
+            Color32::from_rgb(0xFF, 0xA2, 0x3A),
+            Color32::from_rgb(0xFF, 0xE0, 0xB4),
+        )
+    };
+    let fill = crate::theme::mix(lo, hi, vel.clamp(0.0, 1.0));
+    let ink = if crate::theme::luma(fill) > 0.5 {
+        Color32::from_rgb(0x20, 0x14, 0x08)
+    } else {
+        Color32::WHITE
+    };
+    (fill, edge, ink)
 }
 
 fn note_rect(pr: &PianoUi, n: &RNote) -> Rect {

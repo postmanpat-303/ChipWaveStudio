@@ -4,6 +4,11 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Piano roll: hold to pan, selected colour, group moves
+- **Hold to pan:** press and hold empty grid for ¼ s (within 6 px) and drag to scroll time and pitch together (grab hand; nothing is drawn). Quick clicks and quick drags work as before. **Middle-drag** pans too.
+- **Selected notes are orange** (velocity still shades them, lighter outline; Dark and Amiga), also in note clips on the Timeline; hover lightens a note.
+- **Group moves:** pressing any selected note (e.g. after Ctrl+A) drags the whole selection in time and pitch, snapped, keeping its shape, clamped at bar 0, the block end and the key range, as one undo step, with ghosts at the old spot. A press without moving keeps the selection. Block columns now move the whole selection too (before: only the grabbed note).
+
 ### Timeline + piano roll by default
 - The app starts with the **Timeline on top and the piano roll in the lower panel** (about 40 %, resizable). New songs and timeline-mode songs open in it; tracker-mode songs keep their view.
 - The piano roll follows the selected clip; with nothing selected, the selected track's first clip, or an empty roll with a hint.

@@ -1174,6 +1174,23 @@ impl App {
             self.tlv.sels = vec![id];
             self.set_lower(3);
             self.pr.focus = false;
+            // CHIPWAVE_SHOT_PRSEL=1: the first two bars' notes selected
+            if std::env::var_os("CHIPWAVE_SHOT_PRSEL").is_some() {
+                let data = self.with(|s| {
+                    let t = s.song.timeline.as_deref()?;
+                    match t.clips.iter().find(|c| c.id == id)?.kind {
+                        crate::timeline::ClipKind::Notes { data } => Some(data as usize),
+                        _ => None,
+                    }
+                });
+                if let Some(data) = data {
+                    self.pr.target = Some(super::pianoview::Target::Notes {
+                        data,
+                        clip: Some(id),
+                    });
+                    self.pr.sel = (0..18).collect();
+                }
+            }
         }
     }
 }

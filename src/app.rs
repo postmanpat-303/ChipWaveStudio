@@ -61,6 +61,8 @@ mod piano_tests;
 mod pianoview;
 mod pluginview;
 mod plugsetup;
+#[cfg(test)]
+mod prollpan_tests;
 mod radial;
 mod sampleview;
 mod settingsview;

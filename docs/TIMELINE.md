@@ -75,13 +75,17 @@ The lower panel has a **Piano roll** tab (next to Arranger / Instrument / Automa
 
 **Single-click entry:** one click on empty grid draws a note **the length of the last note you drew, resized or clicked** (the grid step at first), snapped to the grid. Drag while drawing to set its length; that becomes the new length. A slightly long or wobbly click keeps the remembered length (it only changes once the mouse moves half a grid step). Double-clicking still works (the second click selects the new note). Clicking a note selects it and never draws.
 
-**Selection:** a plain click selects only that note. **Shift+click** (or Ctrl+click) adds a note to the selection or takes it out; **Shift+drag** on empty space draws a box that adds to the selection. Shift+click on empty space never draws. Dragging a selected note moves the whole selection; dragging the right edge resizes the whole selection (note clips).
+**Selection:** a plain click selects only that note. **Shift+click** (or Ctrl+click) adds a note to the selection or takes it out; **Shift+drag** on empty space draws a box that adds to the selection. Shift+click on empty space never draws. Selected notes are **orange** (darker when quiet, so velocity still reads; a lighter outline), also in the clip on the Timeline; the note under the mouse lightens a little.
+
+**Moving a selection:** press on **any selected note** (after Ctrl+A too) and drag: the whole selection moves together in time and pitch, snapped to the grid, keeping its shape, as **one undo step**; faint ghosts stay at the old spot while you drag. The group stops at bar 0, at the block's last row and at the top and bottom keys (no note gets squashed). Pressing a selected note without moving keeps the selection; a click on it (press and release) selects just that note. Dragging the right edge resizes the whole selection (note clips; block columns resize the grabbed note).
+
+**Navigating (hold to pan):** **press and hold** on empty grid for **¼ s** without moving (6 px), and the cursor becomes a grab hand: drag to scroll time and pitch together; let go and nothing is drawn. A quick click still draws a note, and a quick press-and-drag still draws / boxes / paints as before. **Middle-drag** pans straight away. The pan stops at the start, half a screen past the end and the key range. (Space+drag is not a pan: Space is play / stop.)
 
 **Eraser:** **right-click** a note deletes it; **right-drag** deletes every note the mouse passes over (the cursor becomes an eraser). The whole swipe is **one undo step**. Deleted notes break into small pixels of their colour that drift up and fade (about half a second; purely visual, skipped with **Settings › Look › Flat**). Right-click on empty space does nothing.
 
 **Block clips and block columns (M3a)** are shown as notes on the row grid, one at a time, as the tracker plays them:
 - Click to draw a note (current instrument, a note-off at its end), the length of the last one. Drag while drawing to set its length.
-- Drag a note to move it (time and pitch), and drag its right edge to resize it (this moves the note-off).
+- Drag a note (or a selection, together) to move it (time and pitch), and drag its right edge to resize it (this moves the note-off).
 - Right-click (or right-drag) erases notes. Shift/Ctrl+click toggles a note in the selection, and Shift-drag adds a box to it.
 - The **velocity lane** sets the volume column.
 - Effect commands show as badges above the grid. Edit the selected note's instrument, velocity and effect in the bar at the top.

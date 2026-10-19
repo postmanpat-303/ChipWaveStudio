@@ -1326,12 +1326,22 @@ impl App {
                     let lo = lo.saturating_sub(((range as u8).saturating_sub(hi - lo + 1)) / 2);
                     let nh = (body.height() / range).clamp(1.5, 4.0);
                     let note_c = col.gamma_multiply(1.6 * k).to_opaque();
+                    // the notes selected in the piano roll, in its colour
+                    let roll_sel: &[usize] = match self.pr.target {
+                        Some(super::pianoview::Target::Notes { clip: Some(id), .. })
+                            if id == clip.id && self.pr.open =>
+                        {
+                            &self.pr.sel
+                        }
+                        _ => &[],
+                    };
+                    let sel_c = super::pianoview::sel_note_colours(&t, 1.0).0;
                     let l = clip.loop_len.unwrap_or(Tick::MAX / 4);
                     let p0 = clip.pass_at(clip.start.max(v0));
                     let p1 = clip.pass_at((clip.end() - 1).min(v1));
                     for pass in p0..=p1.min(p0 + 10_000) {
                         let base = clip.start - clip.offset + pass as Tick * l;
-                        for n in &d.notes {
+                        for (ni, n) in d.notes.iter().enumerate() {
                             if clip.loop_len.is_some() && n.start >= l {
                                 continue;
                             }
@@ -1351,7 +1361,11 @@ impl App {
                                     Pos2::new(xa, y - nh * 0.5),
                                     Pos2::new(xe - 0.5, y + nh * 0.5),
                                 ),
-                                note_c,
+                                if roll_sel.contains(&ni) {
+                                    sel_c
+                                } else {
+                                    note_c
+                                },
                             );
                         }
                     }
