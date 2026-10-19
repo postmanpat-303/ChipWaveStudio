@@ -18,8 +18,8 @@ mod edit;
 use edit::DragEdit;
 
 /// track header column width
-pub(crate) const HEAD_W: f32 = 232.0;
-const MARK_H: f32 = 16.0;
+pub(crate) const HEAD_W: f32 = 250.0;
+const MARK_H: f32 = 18.0;
 const RULER_H: f32 = 20.0;
 const OVERVIEW_H: f32 = 18.0;
 const VBAR_W: f32 = 10.0;
@@ -36,6 +36,19 @@ const TRACK_COLOURS: [u32; 12] = [
 
 pub(crate) fn track_colour(i: usize) -> Color32 {
     hex(TRACK_COLOURS[i % TRACK_COLOURS.len()])
+}
+
+/// track `i`'s colour: its own (Inspector › Colour) or the palette's
+pub(crate) fn track_colour_in(t: &tl::Timeline, i: usize) -> Color32 {
+    match t.tracks.get(i).and_then(|x| x.colour) {
+        Some(c) => hex(c & 0xFF_FFFF),
+        None => track_colour(i),
+    }
+}
+
+/// the palette offered for a track's colour (Inspector)
+pub(crate) fn track_palette() -> impl Iterator<Item = u32> {
+    TRACK_COLOURS.iter().copied()
 }
 
 /// what a block column looks like in a clip: note bars (row, rows, key)
@@ -64,6 +77,8 @@ pub(crate) struct Cache {
     names: Vec<String>,
     /// the instrument a track mostly plays
     instr: Vec<String>,
+    /// ... as its slot (1-based; 0 = none): header icon tiles, Inspector
+    pub(crate) instr_ix: Vec<u8>,
     order: Vec<usize>,
     /// used[block][column]: the column has something in its played rows
     used: Vec<Vec<bool>>,
@@ -320,6 +335,9 @@ fn fingerprint(song: &Song) -> u64 {
         // automation lanes (M5): points, labels, which tracks are unfolded
         put(tl::auto_key(song, t));
         put(t.view.auto_open);
+        for x in &t.tracks {
+            put(x.colour.map_or(u64::MAX, |c| c as u64) ^ (x.instr as u64) << 40);
+        }
         for l in t
             .tracks
             .iter()
@@ -418,7 +436,24 @@ fn build_cache(song: &Song, key: u64, old: Option<Cache>) -> Cache {
                 *m.entry(i).or_default() += n * passes;
             }
         }
+        if let (tl::ClipKind::Notes { data }, Some(m)) = (&c.kind, count.get_mut(c.track as usize)) {
+            if let Some(d) = t.notes.get(*data as usize) {
+                for n in d.notes.iter().filter(|n| n.instr > 0) {
+                    *m.entry(n.instr).or_default() += 1;
+                }
+            }
+        }
     }
+    let instr_ix: Vec<u8> = (0..t.tracks.len())
+        .map(|tr| {
+            count
+                .get(tr)
+                .and_then(|m| m.iter().max_by_key(|(k, n)| (**n, std::cmp::Reverse(**k))))
+                .map(|(k, _)| *k)
+                .filter(|k| (*k as usize) <= song.instruments.len())
+                .unwrap_or_else(|| t.tracks[tr].instr)
+        })
+        .collect();
     let mut instr: Vec<String> = count
         .iter()
         .map(|m| {
@@ -447,6 +482,7 @@ fn build_cache(song: &Song, key: u64, old: Option<Cache>) -> Cache {
         col_instr,
         names,
         instr,
+        instr_ix,
         order: song.order.clone(),
         used,
         end,
@@ -542,6 +578,15 @@ fn bar_step(bar_px: f32, min_px: f32) -> i64 {
     s
 }
 
+/// readable text on a clip title bar of colour `c`
+fn title_ink(c: Color32) -> Color32 {
+    if theme::luma(c) > 0.58 {
+        Color32::from_rgb(0x14, 0x16, 0x19)
+    } else {
+        Color32::WHITE
+    }
+}
+
 fn mmss(secs: f64) -> String {
     let s = secs.max(0.0);
     format!("{}:{:04.1}", (s / 60.0) as u32, s % 60.0)
@@ -635,10 +680,16 @@ impl App {
         // ---- toolbar
         let mut fit = false;
         ui.horizontal(|ui| {
+            // a slim tool strip (0.2.4 polish): tighter buttons, one line
+            let sp = ui.spacing_mut();
+            sp.button_padding = egui::vec2(5.0, 0.0);
+            sp.item_spacing.x = 5.0;
+            sp.interact_size.y = 17.0;
             ui.label(
                 egui::RichText::new(" TIMELINE ")
                     .strong()
                     .monospace()
+                    .size(10.5)
                     .color(Color32::from_rgb(0x1A, 0x1C, 0x1F))
                     .background_color(t.accent),
             );
@@ -1084,7 +1135,7 @@ impl App {
         let px_row = ROW as f32 * ppt as f32;
         for tr in first_tr..last_tr {
             let lr = lane_rect(tr);
-            let col = track_colour(tr);
+            let col = track_colour_in(&c.tl, tr);
             let muted = !live
                 .mix
                 .get(tr)
@@ -1107,11 +1158,15 @@ impl App {
                 } else {
                     1.0
                 };
-                let body_c = col.gamma_multiply(0.42 * k).to_opaque();
-                let head_c = col
-                    .gamma_multiply(if hot { 1.0 } else { 0.85 } * k)
-                    .to_opaque();
-                let hh = (lane_h * 0.3).clamp(9.0, 15.0);
+                // solid title bar in the track colour over a softer body
+                // (the musical data keeps the saturation; 0.2.4 polish)
+                let body_c = theme::mix(t.crt_bot, col, 0.34 * k);
+                let head_c = theme::mix(
+                    t.crt_bot,
+                    if hot { theme::tone(col, 0.10) } else { col },
+                    k.max(0.3),
+                );
+                let hh = (lane_h * 0.32).clamp(10.0, 16.0);
                 let hr = Rect::from_min_max(r.min, Pos2::new(r.right(), r.top() + hh));
                 if pol {
                     // rounded body with a gentle gradient, header rounded on top,
@@ -1127,8 +1182,8 @@ impl App {
                         &mut bodies,
                         hr,
                         [3.0, 3.0, 0.0, 0.0],
-                        theme::tone(head_c, 0.12),
-                        head_c,
+                        theme::tone(head_c, 0.08),
+                        theme::tone(head_c, -0.04),
                     );
                     if sel {
                         glows.push(r);
@@ -1206,11 +1261,7 @@ impl App {
                                 hr.center().y,
                             ),
                             name,
-                            if th().light {
-                                Color32::BLACK
-                            } else {
-                                Color32::WHITE
-                            },
+                            title_ink(head_c),
                         ));
                     }
                     let body = Rect::from_min_max(
@@ -1254,11 +1305,7 @@ impl App {
                             r,
                             Pos2::new(vis_l, hr.center().y),
                             name,
-                            if th().light {
-                                Color32::BLACK
-                            } else {
-                                Color32::WHITE
-                            },
+                            title_ink(head_c),
                         ));
                     }
                     let body = Rect::from_min_max(
@@ -1320,11 +1367,7 @@ impl App {
                         r,
                         Pos2::new(vis_l, hr.center().y),
                         name,
-                        if th().light {
-                            Color32::BLACK
-                        } else {
-                            Color32::WHITE
-                        },
+                        title_ink(head_c),
                     ));
                 }
                 // note preview
@@ -1398,34 +1441,81 @@ impl App {
                 colr,
             );
         }
-        // ---- markers
+        // ---- markers: each one a section band up to the next (0.2.4 polish)
         let mp = ui.painter_at(marks);
-        for m in &c.tl.markers {
-            if m.tick < v0 - bar_ticks * 16 || m.tick > v1 {
+        let song_end = if mode { c.end } else { c.map.end() };
+        let nm = c.tl.markers.len();
+        for (i, m) in c.tl.markers.iter().enumerate() {
+            let next = c.tl.markers[i + 1..]
+                .iter()
+                .map(|n| n.tick)
+                .find(|&tk| tk > m.tick)
+                .unwrap_or(song_end.max(m.tick + bar_ticks));
+            if next < v0 || m.tick > v1 {
                 continue;
             }
             let x = x_of(m.tick as f64);
+            let xe = x_of(next as f64);
             let colr = t.ochre;
+            let band = Rect::from_min_max(
+                Pos2::new(x + 1.0, marks.top() + 1.0),
+                Pos2::new((xe - 1.0).max(x + 4.0), marks.bottom() - 1.0),
+            );
             mp.rect_filled(
-                Rect::from_min_max(
-                    Pos2::new(x, marks.top() + 1.0),
-                    Pos2::new(x + 3.0, marks.bottom()),
-                ),
-                0,
+                band,
+                if pol { 3 } else { 0 },
+                crt_ink.gamma_multiply(if i % 2 == 0 { 0.13 } else { 0.08 }),
+            );
+            mp.rect_filled(
+                Rect::from_min_max(band.min, Pos2::new(x + 3.0, band.bottom())),
+                if pol { 1 } else { 0 },
                 colr,
             );
-            mp.text(
-                Pos2::new(x + 6.0, marks.center().y),
-                egui::Align2::LEFT_CENTER,
-                &m.name,
-                FontId::proportional(11.0),
-                crt_ink_hi,
-            );
+            let lx = x.max(marks.left() + 2.0) + 6.0;
+            if lx < band.right() - 6.0 || nm == 1 {
+                mp.with_clip_rect(band.intersect(marks)).text(
+                    Pos2::new(lx, marks.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    &m.name,
+                    FontId::proportional(11.0),
+                    crt_ink_hi,
+                );
+            }
             lp.vline(
                 x,
                 lanes.y_range(),
                 Stroke::new(1.0, colr.gamma_multiply(0.25)),
             );
+        }
+        // captions for the marker and ruler rows, over the header column
+        {
+            let cap = Rect::from_min_max(
+                Pos2::new(full.left(), full.top()),
+                Pos2::new(full.left() + HEAD_W, ruler.bottom()),
+            );
+            let cp = ui.painter_at(cap);
+            cp.rect_filled(cap.shrink2(egui::vec2(0.0, 1.0)), 3, t.cart_bot.gamma_multiply(0.7));
+            for (r, txt) in [
+                (marks, "Markers"),
+                (ruler, if self.tlv.time_ruler { "Time" } else { "Bars" }),
+            ] {
+                cp.text(
+                    Pos2::new(cap.right() - 8.0, r.center().y),
+                    egui::Align2::RIGHT_CENTER,
+                    txt,
+                    FontId::proportional(10.5),
+                    t.ink2,
+                );
+            }
+            if nm == 0 && mode {
+                cp.text(
+                    Pos2::new(cap.left() + 8.0, marks.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    "Shift+M adds one",
+                    FontId::proportional(10.0),
+                    t.ink2.gamma_multiply(0.7),
+                );
+            }
         }
         // ---- playhead / play marker
         let ph = live.head.unwrap_or(cue_tick as f64);
@@ -1476,7 +1566,7 @@ impl App {
                     Pos2::new(x0, y),
                     Pos2::new(x1.max(x0 + 1.0), y + rows_h.max(1.0)),
                 ),
-                track_colour(clip.track as usize).gamma_multiply(0.75),
+                track_colour_in(&c.tl, clip.track as usize).gamma_multiply(0.75),
             );
         }
         op.add(egui::Shape::mesh(om));
@@ -1529,6 +1619,12 @@ impl App {
                 })
                 .collect()
         };
+        // type tags per instrument slot (index 0 = none) for the icon tiles
+        let kinds: Vec<&'static str> = self.with(|s| {
+            std::iter::once("")
+                .chain(s.song.instruments.iter().map(|i| super::params::type_tag(&i.kind)))
+                .collect()
+        });
         let sub = |tr: usize| -> String {
             // Master / Song tracks sit past mixer channels — c.instr is nch long
             if c.instr.get(tr).is_none_or(|s| s.is_empty()) {
@@ -1546,7 +1642,7 @@ impl App {
             if hr.bottom() < heads.top() || hr.top() > heads.bottom() {
                 continue;
             }
-            let colr = track_colour(tr);
+            let colr = track_colour_in(&c.tl, tr);
             let cur = self.ch == tr;
             hp.rect_filled(
                 hr,
@@ -1560,7 +1656,7 @@ impl App {
                 },
             );
             hp.rect_filled(
-                Rect::from_min_max(hr.min, Pos2::new(hr.left() + 4.0, hr.bottom())),
+                Rect::from_min_max(hr.min, Pos2::new(hr.left() + 3.0, hr.bottom())),
                 2,
                 colr,
             );
@@ -1572,19 +1668,50 @@ impl App {
             } else {
                 hr.top() + 12.0
             };
-            hp.text(
-                Pos2::new(hr.left() + 10.0, ty),
-                egui::Align2::LEFT_CENTER,
-                format!("{:02}", tr + 1),
-                FontId::monospace(11.0),
-                t.ink2,
+            // icon tile: the instrument type's glyph on the track colour
+            let ts = if one_line {
+                (hr.height() - 6.0).clamp(12.0, 22.0)
+            } else {
+                (hr.height() - 10.0).clamp(18.0, 28.0)
+            };
+            let tile_r = Rect::from_min_size(
+                Pos2::new(hr.left() + 7.0, hr.center().y - ts / 2.0),
+                egui::vec2(ts, ts),
             );
+            let kind = match c.tl.tracks[tr].kind {
+                tl::TrackKind::Audio => "Audio",
+                tl::TrackKind::Master => "Master",
+                tl::TrackKind::Note => kinds
+                    .get(c.instr_ix.get(tr).copied().unwrap_or(0) as usize)
+                    .copied()
+                    .unwrap_or(""),
+            };
+            super::glyphs::tile(
+                &hp,
+                tile_r,
+                super::glyphs::glyph_for(kind),
+                colr,
+                title_ink(colr),
+                pol,
+            );
+            let tx = tile_r.right() + 6.0;
             let np = hp.with_clip_rect(Rect::from_min_max(
-                Pos2::new(hr.left() + 30.0, hr.top()),
+                Pos2::new(tx, hr.top()),
                 Pos2::new(hr.right() - 132.0, hr.bottom()),
             ));
+            let num = hp.layout_no_wrap(
+                format!("{:02}", tr + 1),
+                FontId::monospace(10.0),
+                t.ink2,
+            );
+            let nw = num.size().x;
+            np.galley(
+                Pos2::new(tx, ty - num.size().y / 2.0),
+                num,
+                t.ink2,
+            );
             np.text(
-                Pos2::new(hr.left() + 32.0, ty),
+                Pos2::new(tx + nw + 5.0, ty),
                 egui::Align2::LEFT_CENTER,
                 name,
                 FontId::proportional(13.0),
@@ -1592,7 +1719,7 @@ impl App {
             );
             if !one_line {
                 np.text(
-                    Pos2::new(hr.left() + 32.0, hr.top() + 28.0),
+                    Pos2::new(tx, hr.top() + 28.0),
                     egui::Align2::LEFT_CENTER,
                     sub(tr),
                     FontId::proportional(10.5),
@@ -2863,6 +2990,35 @@ fn clip_at(
 }
 
 impl TimelineUi {
+    /// what a clip is called in the view (block name, note clip, audio file)
+    pub(crate) fn clip_label(&self, id: u32) -> Option<(tl::Clip, String)> {
+        let c = self.cache.as_ref()?;
+        let clip = c.tl.clips.iter().find(|x| x.id == id)?.clone();
+        let name = match &clip.kind {
+            _ if clip.name.is_some() => clip.name.clone().unwrap_or_default(),
+            tl::ClipKind::Audio { asset } => c
+                .tl
+                .audio
+                .get(*asset as usize)
+                .map_or("audio".into(), |a| a.name.clone()),
+            tl::ClipKind::Notes { data } => c
+                .tl
+                .notes
+                .get(*data as usize)
+                .map_or("notes".into(), |d| d.name.clone()),
+            _ => clip
+                .block()
+                .and_then(|(b, _)| c.names.get(b).cloned())
+                .unwrap_or_default(),
+        };
+        Some((clip, name))
+    }
+
+    /// the order-list entry a clip starts in (tracker mode; Enter uses it)
+    pub(crate) fn entry_at(&self, t: Tick) -> usize {
+        self.cache.as_ref().map_or(usize::MAX, |c| c.map.entry_at(t).0)
+    }
+
     /// screen rect of clip `id` as last drawn (tests, M2 hit-testing)
     #[allow(dead_code)]
     pub(crate) fn clip_rect(&self, id: u32) -> Option<Rect> {

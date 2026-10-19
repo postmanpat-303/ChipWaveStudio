@@ -871,8 +871,11 @@ impl App {
                 .tlv
                 .cache
                 .as_ref()
-                .and_then(|c| c.tl.clips.iter().find(|x| x.id == id))
-                .map_or(t.note, |c| super::timeline::track_colour(c.track as usize)),
+                .and_then(|c| {
+                    let x = c.tl.clips.iter().find(|x| x.id == id)?;
+                    Some(super::timeline::track_colour_in(&c.tl, x.track as usize))
+                })
+                .unwrap_or(t.note),
             _ => t.note,
         };
         for n in &notes {

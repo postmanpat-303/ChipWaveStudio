@@ -30,6 +30,7 @@ mod filtercard;
 mod fxplugview;
 mod fxview;
 mod genview;
+mod glyphs;
 mod instpanel;
 #[cfg(test)]
 mod instpanel_tests;

@@ -521,7 +521,15 @@ impl App {
             }
             ui.separator();
             let write = ui
-                .selectable_label(self.auto_write, "● Write")
+                .selectable_label(
+                    self.auto_write,
+                    // (no "●": the bundled UI font has no such glyph)
+                    egui::RichText::new("Write").color(if self.auto_write {
+                        th().ink
+                    } else {
+                        th().brick
+                    }),
+                )
                 .on_hover_text(
                     "global Automation write: when on, Touch/Latch/Write track modes record knob moves while playing",
                 );

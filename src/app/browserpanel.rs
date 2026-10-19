@@ -252,18 +252,30 @@ fn well(t: &theme::Theme, k: f32) -> Color32 {
     }
 }
 
+/// the format as a compact text tag (CWI / CLAP / VST3 / WAV ...): a tinted
+/// pill with a coloured outline and coloured text (0.2.4 polish)
 fn badge(p: &egui::Painter, r: Rect, f: Fmt) {
-    if theme::polished() {
-        theme::block(p, r, rgb(f.colour()));
+    let c = rgb(f.colour());
+    let light = th().light;
+    let ink = if light {
+        theme::tone(c, -0.55)
     } else {
-        p.rect_filled(r, 3, rgb(f.colour()));
-    }
+        theme::tone(c, 0.15)
+    };
+    let rad = if theme::polished() { 4 } else { 2 };
+    p.rect_filled(r, rad, c.gamma_multiply(if light { 0.30 } else { 0.16 }));
+    p.rect_stroke(
+        r,
+        rad,
+        Stroke::new(1.0, c.gamma_multiply(if light { 1.0 } else { 0.85 })),
+        egui::StrokeKind::Inside,
+    );
     p.text(
         r.center(),
         egui::Align2::CENTER_CENTER,
         f.badge(),
         FontId::proportional(9.5),
-        Color32::from_rgb(0x15, 0x17, 0x1a),
+        ink,
     );
 }
 
@@ -502,9 +514,43 @@ impl App {
                     .any(|i| i.tab == tab && i.tags.contains(tg))
             })
             .collect();
-        if !present.is_empty() {
+        let n_fav = self
+            .br
+            .items
+            .iter()
+            .filter(|i| i.tab == tab && self.extra.browser_favs.contains(&i.key))
+            .count();
+        {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(3.0, 3.0);
+                // Favourites first: the same filter as the heart button
+                let on = self.br.filter.loc == LocFilter::Favourites;
+                let gold = Color32::from_rgb(0xE0, 0xC4, 0x6C);
+                let txt = egui::RichText::new(format!("Favourites · {n_fav}"))
+                    .size(11.0)
+                    .color(if on {
+                        t.ink
+                    } else if t.light {
+                        t.ink2
+                    } else {
+                        gold.gamma_multiply(0.9)
+                    });
+                let b = egui::Button::new(txt)
+                    .corner_radius(9)
+                    .fill(if on { t.sel } else { well(&t, 1.0) })
+                    .stroke(egui::Stroke::new(1.0, if on { t.accent } else { t.border }))
+                    .small();
+                if ui
+                    .add(b)
+                    .on_hover_text("show only your favourites (the heart on a row adds one)")
+                    .clicked()
+                {
+                    self.br.filter.loc = if on {
+                        LocFilter::All
+                    } else {
+                        LocFilter::Favourites
+                    };
+                }
                 for tg in present {
                     let on = self.br.filter.tags.contains(&tg);
                     let txt =
