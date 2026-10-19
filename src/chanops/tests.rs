@@ -116,3 +116,29 @@ fn assign_instrument_rewrites_the_tracks_notes() {
     assert!(changed > 0);
     assert_eq!(song.timeline.as_ref().unwrap().tracks[0].instr, 2);
 }
+
+/// The Song / Master track (tempo, master and return lanes, after the
+/// channels) survives a reorder or an insert and keeps its lanes, so the
+/// music still plays the same.
+#[test]
+fn reorder_and_insert_keep_the_song_master_track() {
+    use crate::timeline::TrackKind;
+    let mut s = crate::fileio::demo_song_n(0);
+    crate::timeline::enter_timeline_mode(&mut s); // song lanes -> tracks
+    let lanes = |s: &Song| {
+        let tl = s.timeline.as_deref().unwrap();
+        let i = tl.tracks.iter().position(|t| t.kind == TrackKind::Master);
+        i.map(|i| (i, tl.tracks[i].auto.len()))
+    };
+    let (mi, ml) = lanes(&s).expect("demo has a Song / Master track");
+    assert_eq!(mi, s.channels);
+    assert!(ml > 0, "the demo's return lane lives on Song / Master");
+    let a = render(&s, 4.0);
+    let mut m = s.clone();
+    assert!(move_channel(&mut m, 0, 2));
+    assert_eq!(lanes(&m), Some((m.channels, ml)));
+    assert!(max_diff(&a, &render(&m, 4.0)) < 1e-4);
+    assert!(insert_channel(&mut m, 1, "New"));
+    assert_eq!(lanes(&m), Some((m.channels, ml)));
+    assert_eq!(m.timeline.as_deref().unwrap().tracks.len(), m.channels + 1);
+}

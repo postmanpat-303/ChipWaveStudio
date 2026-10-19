@@ -71,9 +71,15 @@ pub fn remap_channels(song: &mut Song, map: &[usize], n: usize, new_name: &str) 
                 ..Default::default()
             })
             .collect();
-        for (i, t) in std::mem::take(&mut tl.tracks).into_iter().enumerate() {
+        // tracks past the channels (the Song / Master track with tempo,
+        // master and return lanes) stay after them
+        let old = std::mem::take(&mut tl.tracks);
+        let tail_from = old_n.max(song.channels);
+        for (i, t) in old.into_iter().enumerate() {
             if i < old_n {
                 tracks[map[i]] = t;
+            } else if i >= tail_from {
+                tracks.push(t);
             }
         }
         tl.tracks = tracks;
@@ -89,6 +95,12 @@ pub fn remap_channels(song: &mut Song, map: &[usize], n: usize, new_name: &str) 
         let bits = tl.view.auto_open;
         let mut nb = 0u64;
         for (i, &m) in map.iter().enumerate().take(old_n.min(64)) {
+            if bits >> i & 1 == 1 && m < 64 {
+                nb |= 1 << m;
+            }
+        }
+        for i in tail_from..64 {
+            let m = n + (i - tail_from);
             if bits >> i & 1 == 1 && m < 64 {
                 nb |= 1 << m;
             }
