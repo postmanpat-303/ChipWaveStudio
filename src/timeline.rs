@@ -1267,7 +1267,13 @@ impl Timeline {
                 c.loop_len = None;
             }
         }
+        // the Song / Master track sits after the channel tracks: keep it
+        // (with its tempo / master / return lanes) while fitting the rest
+        let master = (nch..self.tracks.len())
+            .find(|&i| self.tracks[i].kind == TrackKind::Master)
+            .map(|i| self.tracks.remove(i));
         self.tracks.resize_with(nch, Track::default);
+        self.tracks.extend(master);
         for (t, name) in self.tracks.iter_mut().zip(&song.channel_names) {
             if t.name.is_empty() {
                 t.name.clone_from(name);

@@ -2295,3 +2295,34 @@ slope = 12
         assert_eq!(old.info.key, None);
     }
 }
+#[cfg(test)]
+mod master_track_tests {
+    /// a timeline-mode song keeps its Song / Master track (and its lanes)
+    /// through save and load (the 0.2.4.1 self-test caught it being dropped)
+    #[test]
+    fn master_track_survives_save_and_load() {
+        let mut m = super::demo_song();
+        crate::timeline::enter_timeline_mode(&mut m);
+        let y = m.timeline.as_deref().unwrap();
+        assert!(y
+            .tracks
+            .iter()
+            .any(|t| t.kind == crate::timeline::TrackKind::Master));
+        let tmp = std::env::temp_dir().join(format!("cw-master-{}.cwt", std::process::id()));
+        super::save_cwt(&m, &tmp).unwrap();
+        let b = super::load_cwt(&tmp).unwrap();
+        std::fs::remove_file(&tmp).ok();
+        let x = b.timeline.as_deref().unwrap();
+        assert_eq!(x.tracks, y.tracks);
+        assert!(x.same_content(y));
+        // a clean new song (zero channel tracks) too
+        let c = crate::model::Song::clean();
+        super::save_cwt(&c, &tmp).unwrap();
+        let b = super::load_cwt(&tmp).unwrap();
+        std::fs::remove_file(&tmp).ok();
+        assert_eq!(
+            b.timeline.as_deref().unwrap().tracks,
+            c.timeline.as_deref().unwrap().tracks
+        );
+    }
+}
