@@ -1916,7 +1916,9 @@ vintage = true
         };
         assert!(w.tables == [3, 6] && w.vintage && w.p == pre.p);
         // an imported table is stored in the .cwt and comes back identical
-        let cyc: Vec<i16> = (0..2048 * 2).map(|i| ((i * 37) % 4096) as i16 * 8 - 16384).collect();
+        let cyc: Vec<i16> = (0..2048 * 2)
+            .map(|i| ((i * 37) % 4096) as i16 * 8 - 16384)
+            .collect();
         w.user[0] = Some(crate::wavetable::UserTable::new("ramp", 2048, cyc));
         w.tables[0] = crate::gen_wave::USER;
         let p = std::env::temp_dir().join("cw_wave_rt.cwt");
