@@ -694,9 +694,9 @@ impl App {
                         if playing { t.accent } else { t.ink },
                     );
                     let detail = if flat {
-                        format!("{} · {} · {}", STYLES[p.style], p.kit, p.bpm_tag())
+                        format!("{} · {} · {}", STYLES[p.style], p.kit.trim_end_matches(" Kit"), p.bpm_tag())
                     } else {
-                        format!("{} · {} bar{} · {}", p.kit, p.bars, if p.bars == 1 { "" } else { "s" }, p.bpm_tag())
+                        format!("{} · {} bar{} · {}", p.kit.trim_end_matches(" Kit"), p.bars, if p.bars == 1 { "" } else { "s" }, p.bpm_tag())
                     };
                     tp.text(Pos2::new(text_r.left(), r.top() + 25.0), egui::Align2::LEFT_CENTER, detail, FontId::proportional(10.5), t.ink2);
                     if playing {
@@ -1018,12 +1018,18 @@ impl App {
             if nav_button(ui, 2, cwd.parent().is_some(), "up one folder").clicked() {
                 ops.push(FOp::Up);
             }
-            let w = (ui.available_width() - 60.0).max(80.0);
+            // leave room for Refresh and Sort: a bar wider than the space
+            // left would widen the panel, and then itself, every frame
+            let sort_w = ui.fonts_mut(|f| {
+                f.layout_no_wrap("Sort".into(), FontId::proportional(12.5), t.ink).size().x
+            });
+            let reserve = 24.0 + sort_w + 2.0 * ui.spacing().button_padding.x + 3.0 * 3.0 + 10.0;
+            let w = (ui.available_width() - reserve).max(80.0);
             if let Some(mut s) = self.br.files.edit.clone() {
                 let r = ui.add(
                     egui::TextEdit::singleline(&mut s)
                         .id_salt("files_path")
-                        .desired_width(w)
+                        .desired_width(w - 2.0 * ui.spacing().button_padding.x)
                         .hint_text("C:\\Music, Z:\\, \\\\server\\share, ~/Music"),
                 );
                 r.request_focus();
