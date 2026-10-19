@@ -162,6 +162,20 @@ pub(super) fn icon(p: &egui::Painter, ic: Icon, c: Pos2, s: f32, col: Color32) {
                 ));
             }
         }
+        Icon::Tab(Tab::Patterns) => {
+            for i in 0..4 {
+                for j in 0..2 {
+                    let q = c + v((i as f32 - 1.5) * s * 0.24, (j as f32 - 0.5) * s * 0.3);
+                    let on = (i + j * 3) % 3 == 0;
+                    p.rect_filled(
+                        Rect::from_center_size(q, v(s * 0.17, s * 0.2)),
+                        1,
+                        if on { col } else { col.gamma_multiply(0.4) },
+                    );
+                }
+            }
+        }
+        Icon::Tab(Tab::Files) => super::drumpat::folder_icon(p, c, s, col),
         Icon::Tab(Tab::Midi) => {
             let r = Rect::from_center_size(c, v(s * 0.8, s * 0.6));
             p.rect_stroke(r, 1, st, egui::StrokeKind::Inside);
@@ -178,7 +192,13 @@ pub(super) fn icon(p: &egui::Painter, ic: Icon, c: Pos2, s: f32, col: Color32) {
 }
 
 /// an icon button (`on`: highlighted)
-fn icon_button(ui: &mut egui::Ui, ic: Icon, on: bool, enabled: bool, tip: &str) -> egui::Response {
+pub(super) fn icon_button(
+    ui: &mut egui::Ui,
+    ic: Icon,
+    on: bool,
+    enabled: bool,
+    tip: &str,
+) -> egui::Response {
     let t = th();
     let (r, resp) = ui.allocate_exact_size(
         egui::vec2(22.0, 20.0),
@@ -238,7 +258,7 @@ enum Op {
 
 /// The panel's inset "well" colour: the dark screen colour in dark themes,
 /// a pale pill in light ones (so ink stays readable), shaded by `k`.
-fn well(t: &theme::Theme, k: f32) -> Color32 {
+pub(super) fn well(t: &theme::Theme, k: f32) -> Color32 {
     if t.light {
         theme::tone(
             t.pill,
@@ -471,7 +491,7 @@ impl App {
                     p.text(
                         Pos2::new(r.center().x, r.bottom() - 10.0),
                         egui::Align2::CENTER_CENTER,
-                        tb.name(),
+                        if tb == Tab::Patterns { "Patterns" } else { tb.name() },
                         FontId::proportional(11.0),
                         if on { t.ink } else { t.ink2 },
                     );
@@ -484,6 +504,8 @@ impl App {
                         Tab::Grid => "Grid starter patches (instruments and FX)",
                         Tab::Wavetables => "built-in wavetables and imported wavetable WAVs",
                         Tab::Midi => "MIDI files in your locations (import planned)",
+                        Tab::Patterns => "Drum Patterns: ready-made grooves by style with their own kit; preview in time with the song, drag onto the timeline",
+                        Tab::Files => "your drives and folders: Home, Music, Desktop, Downloads, network drives",
                     });
                     if resp.clicked() && !on {
                         self.br.filter.tab = tb;
@@ -507,6 +529,16 @@ impl App {
         );
         if std::mem::take(&mut self.br.search_focus) {
             se.request_focus();
+        }
+        // ---- Drum Patterns / Files: their own body (app/drumpat.rs)
+        if matches!(tab, Tab::Patterns | Tab::Files) {
+            if tab == Tab::Patterns {
+                self.patterns_body(ui);
+            } else {
+                self.files_body(ui);
+            }
+            self.br_apply_ops(ops, &ctx);
+            return;
         }
         // ---- tag chips (the ones this tab has)
         let present: Vec<&'static str> = br::TAG_NAMES
@@ -1152,7 +1184,10 @@ impl App {
                 t.ink2,
             );
         }
-        // ---- apply
+        self.br_apply_ops(ops, &ctx);
+    }
+
+    fn br_apply_ops(&mut self, ops: Vec<Op>, ctx: &egui::Context) {
         for op in ops {
             match op {
                 Op::Select(it) => {
@@ -1166,7 +1201,7 @@ impl App {
                         self.br_preview(&it);
                     }
                 }
-                Op::Load(it) => self.br_load(&it, &ctx),
+                Op::Load(it) => self.br_load(&it, ctx),
                 Op::Act(it, Act::NewTrack(_)) => {
                     let n = self.with(|s| s.song.channels);
                     if n >= crate::model::MAX_CHANNELS {
@@ -1178,7 +1213,7 @@ impl App {
                 Op::Act(it, a) => self.br_instrument(&it, a),
                 Op::Effect(it) => {
                     let slot = self.instr;
-                    self.br_drop(&it, DropAt::Fx, &ctx);
+                    self.br_drop(&it, DropAt::Fx, ctx);
                     let _ = slot;
                 }
                 Op::Preview(it) => self.br_preview(&it),

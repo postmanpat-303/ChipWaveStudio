@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 43] = [
+pub const VIEWS: [&str; 47] = [
     "pattern",
     "arranger",
     "timeline",
@@ -77,6 +77,10 @@ pub const VIEWS: [&str; 43] = [
     "browser",
     "browser-samples",
     "browser-drop",
+    "browser-patterns",
+    "browser-patterns-styles",
+    "browser-patterns-drop",
+    "browser-files",
     "plugin-setup",
     "showcase",
     "showcase-progress",
@@ -178,6 +182,45 @@ impl App {
                 self.br.sel = it.as_ref().map(|i| i.key.clone());
                 self.br.drag = it;
                 self.br.shot_drop = true;
+            }
+            "browser-patterns" | "browser-patterns-styles" | "browser-patterns-drop" => {
+                // Browser › Drum Patterns: the styles, or the Psytrance folder
+                // with one pattern previewing (the song stays stopped)
+                use crate::drumpat::PATTERNS;
+                self.view = View::Timeline;
+                self.br.filter.tab = crate::browser::Tab::Patterns;
+                if view != "browser-patterns-styles" {
+                    let i = PATTERNS.iter().position(|p| p.style == 0).unwrap_or(0);
+                    self.br.pat.folder = Some(PATTERNS[i].style);
+                    for p in PATTERNS.iter().filter(|p| p.style == 0).take(2) {
+                        self.extra.browser_favs.push(p.key());
+                    }
+                    if view == "browser-patterns" {
+                        self.pat_toggle(i + 1);
+                    } else {
+                        let it = super::drumpat::pattern_item(i);
+                        self.br.sel = it.as_ref().map(|i| i.key.clone());
+                        self.br.drag = it;
+                        self.br.shot_drop = true;
+                    }
+                }
+            }
+            "browser-files" => {
+                // Browser › Files in a made-up music folder
+                self.view = View::Timeline;
+                let d = std::env::temp_dir()
+                    .join(format!("chipwave-shot-files-{}", std::process::id()))
+                    .join("Music");
+                for sub in ["Projects", "Samples", "Stems"] {
+                    let _ = std::fs::create_dir_all(d.join(sub));
+                }
+                for (n, len) in [("Kick 909.wav", 9600usize), ("Lead loop.wav", 48000)] {
+                    let data = vec![0.0f32; len * 2];
+                    let _ = crate::engine::write_wav(&d.join(n), &data, 48000);
+                }
+                let _ = std::fs::write(d.join("Night drive.cwt"), b"");
+                self.br.filter.tab = crate::browser::Tab::Files;
+                self.files_go(d, false);
             }
             "plugin-setup" => {
                 self.view = View::Timeline;

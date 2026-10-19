@@ -131,6 +131,12 @@ pub struct Extra {
     /// selecting a sample or sound plays it
     #[serde(default = "yes")]
     pub browser_autoplay: bool,
+    /// Drum Patterns preview volume 0..1.5 (docs/BROWSER.md)
+    #[serde(default = "pattern_vol")]
+    pub pattern_vol: f32,
+    /// the Files tab's last folder (empty = Home)
+    #[serde(default)]
+    pub files_dir: String,
     /// the plugin setup ("Find plugins…") was shown once (first run, or
     /// the one-time prompt for existing users)
     #[serde(default)]
@@ -141,6 +147,10 @@ pub struct Extra {
     /// the view tab bar at the bottom is shown (View menu)
     #[serde(default = "yes")]
     pub view_bar: bool,
+}
+
+fn pattern_vol() -> f32 {
+    0.8
 }
 
 fn browser_w() -> f32 {
@@ -189,6 +199,8 @@ impl Default for Extra {
             browser_favs: vec![],
             browser_ratings: Default::default(),
             browser_autoplay: true,
+            pattern_vol: pattern_vol(),
+            files_dir: String::new(),
             plugin_setup_done: false,
             inspector_open: false,
             view_bar: true,

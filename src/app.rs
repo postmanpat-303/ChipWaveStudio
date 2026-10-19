@@ -24,6 +24,9 @@ mod browserview;
 mod chordlane;
 mod chordview;
 mod dialogs;
+mod drumpat;
+#[cfg(test)]
+mod drumpat_tests;
 mod edit;
 mod file;
 mod fillview;

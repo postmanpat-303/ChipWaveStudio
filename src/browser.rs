@@ -30,6 +30,8 @@ pub enum Fmt {
     Grid,
     /// .mid (import planned)
     Midi,
+    /// a built-in drum pattern (Drum Patterns tab; not in the legend)
+    Pattern,
 }
 
 impl Fmt {
@@ -61,6 +63,7 @@ impl Fmt {
             Fmt::Wavetable => "WT",
             Fmt::Grid => "GRID",
             Fmt::Midi => "MID",
+            Fmt::Pattern => "PAT",
         }
     }
     /// legend text
@@ -74,6 +77,7 @@ impl Fmt {
             Fmt::Wavetable => "wavetable",
             Fmt::Grid => "Grid patch",
             Fmt::Midi => "MIDI*",
+            Fmt::Pattern => "drum pattern",
         }
     }
     /// badge colour (0xRRGGBB), the same in every theme (dark text on it)
@@ -91,6 +95,7 @@ impl Fmt {
             Fmt::Wavetable => 0xC9CF52,
             Fmt::Grid => 0xE06C6C,
             Fmt::Midi => 0x6C8FE8,
+            Fmt::Pattern => 0xE8A25C,
         }
     }
     pub fn is_sample(self) -> bool {
@@ -114,10 +119,14 @@ pub enum Tab {
     Grid,
     Wavetables,
     Midi,
+    /// built-in drum grooves by style (src/drumpat.rs)
+    Patterns,
+    /// the file system: drives, quick locations, folders (src/drives.rs)
+    Files,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 8] = [
+    pub const ALL: [Tab; 10] = [
         Tab::Instruments,
         Tab::Plugins,
         Tab::Samples,
@@ -126,6 +135,8 @@ impl Tab {
         Tab::Grid,
         Tab::Wavetables,
         Tab::Midi,
+        Tab::Patterns,
+        Tab::Files,
     ];
     pub fn name(self) -> &'static str {
         match self {
@@ -137,6 +148,8 @@ impl Tab {
             Tab::Grid => "Grid",
             Tab::Wavetables => "Wavetables",
             Tab::Midi => "MIDI",
+            Tab::Patterns => "Drum Patterns",
+            Tab::Files => "Files",
         }
     }
     /// the tab's colour (the format it is mostly about)
@@ -149,6 +162,8 @@ impl Tab {
             Tab::Grid => Fmt::Grid,
             Tab::Wavetables => Fmt::Wavetable,
             Tab::Midi => Fmt::Midi,
+            Tab::Patterns => Fmt::Pattern,
+            Tab::Files => Fmt::Song,
         }
     }
 }
@@ -187,6 +202,8 @@ pub enum Src {
     Demo(usize),
     /// a file on disk (.cwi, sample, wavetable WAV, song, MIDI, module)
     File(PathBuf),
+    /// a built-in drum pattern (`drumpat::PATTERNS` index)
+    Pattern(usize),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -218,6 +235,7 @@ impl Item {
     pub fn previewable(&self) -> bool {
         match &self.src {
             Src::Plugin(_) | Src::Demo(_) | Src::GridFx(_) => false,
+            Src::Pattern(_) => true,
             Src::File(_) => {
                 self.fmt == Fmt::Cwi || self.fmt.is_sample() || self.fmt == Fmt::Wavetable
             }
@@ -423,6 +441,7 @@ pub fn builtin_items() -> Vec<Item> {
             Src::Table(i as u8),
         ));
     }
+    v.extend(pattern_items());
     for (i, (name, tip, _)) in crate::fileio::DEMOS.iter().enumerate() {
         v.push(item(
             format!("demo:{name}"),
@@ -437,6 +456,39 @@ pub fn builtin_items() -> Vec<Item> {
         ));
     }
     v
+}
+
+/// the built-in drum patterns (Drum Patterns tab): category = style,
+/// creator = ChipWave, details = kit · bars · BPM range
+pub fn pattern_items() -> Vec<Item> {
+    use crate::drumpat::{PATTERNS, STYLES};
+    PATTERNS
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let mut it = item(
+                p.key(),
+                p.name.into(),
+                Tab::Patterns,
+                Fmt::Pattern,
+                STYLES[p.style],
+                "ChipWave",
+                Loc::Library,
+                format!(
+                    "{} · {} bar{} · {}",
+                    p.kit,
+                    p.bars,
+                    if p.bars == 1 { "" } else { "s" },
+                    p.bpm_tag()
+                ),
+                Src::Pattern(i),
+            );
+            if !it.tags.contains(&"Drums") {
+                it.tags.push("Drums");
+            }
+            it
+        })
+        .collect()
 }
 
 /// .cwi files of the instrument library (`instfile::scan`)

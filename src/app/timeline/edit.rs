@@ -140,6 +140,10 @@ impl App {
             self.tlv.ask_switch = Some(Some(op));
             return;
         }
+        if let TlOp::DrumPattern { pat, track, at } = op {
+            self.pat_place_now(pat as usize, track, at);
+            return;
+        }
         let sels = self.tlv.sels.clone();
         let needs_sel = matches!(
             op,
@@ -327,6 +331,7 @@ impl App {
                         format!("Track {:02} speed {v} (its effects step {v} times a row)", tr + 1)
                     }
                 }
+                TlOp::DrumPattern { .. } => String::new(),
                 TlOp::PlaceAudio => {
                     let (msg, ids) = App::place_ready_audio(song, ready);
                     if !ids.is_empty() {

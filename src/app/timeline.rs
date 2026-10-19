@@ -150,6 +150,13 @@ pub(crate) enum TlOp {
     SelectAll,
     /// place the decoded audio imports (`TimelineUi::ready_audio`)
     PlaceAudio,
+    /// a Browser drum pattern (`drumpat::PATTERNS` index) as a note clip on
+    /// `track` (u8::MAX = a new drum track below the last) at `at`
+    DrumPattern {
+        pat: u16,
+        track: u8,
+        at: Tick,
+    },
 }
 
 pub(crate) struct TimelineUi {

@@ -90,6 +90,9 @@ pub(crate) struct BrowserUi {
     pub(crate) row_rects: Vec<(String, Rect)>,
     /// screenshot mode: hold the drag below the last track
     pub(crate) shot_drop: bool,
+    /// Drum Patterns and Files tabs (app/drumpat.rs)
+    pub(crate) pat: super::drumpat::PatUi,
+    pub(crate) files: super::drumpat::FilesUi,
 }
 
 impl Default for BrowserUi {
@@ -121,6 +124,8 @@ impl Default for BrowserUi {
             list_off: 0.0,
             row_rects: vec![],
             shot_drop: false,
+            pat: Default::default(),
+            files: Default::default(),
         }
     }
 }
@@ -145,7 +150,7 @@ pub(crate) fn plugin_instrument(f: &crate::plugin::scan::Found) -> Instrument {
 fn is_instrumentish(it: &Item) -> bool {
     match &it.src {
         Src::Plugin(f) => f.desc.is_instrument(),
-        Src::GridFx(_) | Src::Demo(_) => false,
+        Src::GridFx(_) | Src::Demo(_) | Src::Pattern(_) => false,
         Src::File(_) => it.fmt == Fmt::Cwi || it.fmt.is_sample() || it.fmt == Fmt::Wavetable,
         _ => true,
     }
@@ -538,6 +543,7 @@ impl App {
     }
 
     fn br_preview_inst(&mut self, inst: &Instrument) {
+        self.pat_stop();
         let ch = self.ch;
         self.with(|s| {
             let song = br::preview_song(inst, &s.song, ch);
@@ -550,6 +556,7 @@ impl App {
     }
 
     pub(crate) fn br_stop_preview(&mut self) {
+        self.pat_stop();
         if self.br.preview_until.take().is_some() {
             self.with(|s| {
                 if s.preview.is_some() {
@@ -561,6 +568,10 @@ impl App {
     }
 
     pub(crate) fn br_preview(&mut self, it: &Item) {
+        if let Src::Pattern(i) = it.src {
+            self.pat_toggle(i);
+            return;
+        }
         if it.previewable() {
             self.br_instrument(it, Act::Preview);
         }
@@ -606,6 +617,11 @@ impl App {
                 self.br_instrument(it, Act::NewTrack(at));
                 return;
             }
+        }
+        if let Src::Pattern(i) = it.src {
+            // a new drum track at the play marker
+            self.pat_place(i, None, None);
+            return;
         }
         if it.fmt.planned() {
             self.status = format!(
@@ -710,6 +726,9 @@ impl App {
     pub(super) fn br_drop_hint(&self, it: &Item, d: &DropAt) -> Option<String> {
         let inst = is_instrumentish(it);
         let n = self.with(|s| s.song.channels);
+        if let Src::Pattern(i) = it.src {
+            return self.pat_drop_hint(i, d);
+        }
         Some(match d {
             DropAt::Slot(s) if inst => format!("Replace instrument {s:02X}"),
             DropAt::Slot(s) if it.is_effect() => format!("Add to instrument {s:02X}'s FX chain"),
@@ -767,6 +786,12 @@ impl App {
     }
 
     pub(crate) fn br_drop(&mut self, it: &Item, d: DropAt, ctx: &egui::Context) {
+        if let Src::Pattern(i) = it.src {
+            // the preview keeps playing until the clip is placed
+            self.pat_stop();
+            self.pat_drop(i, d);
+            return;
+        }
         self.br_stop_preview();
         let inst = is_instrumentish(it);
         match d {
