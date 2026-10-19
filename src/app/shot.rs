@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 35] = [
+pub const VIEWS: [&str; 36] = [
     "pattern",
     "arranger",
     "timeline",
@@ -69,6 +69,7 @@ pub const VIEWS: [&str; 35] = [
     "modulate",
     "modulate-fx",
     "wave",
+    "grid",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -143,7 +144,7 @@ impl App {
                 self.dirty = false;
                 super::voiceview::TF_SCROLL.with(|f| f.set(true));
             }
-            "drums" | "kit" | "chipfx" | "analog" | "fm" | "noise" | "wave" => {
+            "drums" | "kit" | "chipfx" | "analog" | "fm" | "noise" | "wave" | "grid" => {
                 // a Generator (0.2.3.12): the Zap kick or the Psy Kit;
                 // Chip FX (0.2.3.13): the Psy Laser
                 let name = match view {
@@ -153,6 +154,7 @@ impl App {
                     "fm" => "Metallic Bell",
                     "noise" => "White Riser",
                     "wave" => "Wave Vowel Bass",
+                    "grid" => "Grid Saw Bass",
                     _ => "Psy Zap Kick",
                 };
                 // CHIPWAVE_SHOT_PRESET=<name>: another generator preset
@@ -399,7 +401,7 @@ impl App {
             self.play(3);
         }
         // the lower panel (0.2.3.19): CHIPWAVE_SHOT_LOWER=instrument | arranger |
-        // automation | full, CHIPWAVE_SHOT_TAB=main | modulation | fx | advanced,
+        // automation | full, CHIPWAVE_SHOT_TAB=main | modulation | fx | advanced | grid,
         // CHIPWAVE_SHOT_SEARCH=<query>, CHIPWAVE_SHOT_CLASSIC=1 (old sidebar editor)
         if let Ok(m) = std::env::var("CHIPWAVE_SHOT_LOWER") {
             match m.as_str() {
@@ -427,11 +429,21 @@ impl App {
         if view.starts_with("timeline") {
             self.view = View::Timeline;
         }
+        // CHIPWAVE_SHOT_LOWER_H=<px>: the lower panel's height
+        if let Some(h) = std::env::var("CHIPWAVE_SHOT_LOWER_H")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+        {
+            self.extra.lower_h = h;
+        }
         if let Ok(tb) = std::env::var("CHIPWAVE_SHOT_TAB") {
+            // keep the tab (a Grid would open on its patch)
+            self.gen_ui.inst = (self.instr as usize).saturating_sub(1);
             self.ip.tab = match tb.as_str() {
                 "modulation" => super::params::Tab::Modulation,
                 "fx" => super::params::Tab::Fx,
                 "advanced" => super::params::Tab::Advanced,
+                "grid" => super::params::Tab::Grid,
                 _ => super::params::Tab::Main,
             };
         }

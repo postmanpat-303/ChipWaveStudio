@@ -66,6 +66,7 @@ impl MacroDef {
         let x = self.map(v);
         match self.unit {
             "Hz" if x >= 1000.0 => format!("{:.1} kHz", x / 1000.0),
+            "Hz" if x < 10.0 => format!("{x:.2} Hz"),
             "Hz" => format!("{x:.0} Hz"),
             "s" if x < 1.0 => format!("{:.0} ms", x * 1000.0),
             "s" => format!("{x:.2} s"),
