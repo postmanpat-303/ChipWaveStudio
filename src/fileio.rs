@@ -157,7 +157,16 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
             .timeline
             .as_deref()
             .is_some_and(|t| !t.audio.is_empty() || t.clips.iter().any(|c| c.audio().is_some()));
-        let min_reader = if has_audio {
+        // version 4: track and clip automation lanes, curved segments (M5)
+        let curved = |l: &crate::automation::Lane| l.points.iter().any(|p| p.curve != 0.0);
+        let has_tl_auto = song.automation.iter().any(curved)
+            || song.timeline.as_deref().is_some_and(|t| {
+                t.tracks.iter().any(|x| !x.auto.is_empty())
+                    || t.clips.iter().any(|c| !c.auto.is_empty())
+            });
+        let min_reader = if has_tl_auto {
+            4
+        } else if has_audio {
             3
         } else if song.timeline.is_some() || crate::plugin::fxrack::song_has_fx(song) {
             2
@@ -406,8 +415,9 @@ pub fn sanitize_modulation(
 /// 1 (byte-identical to older versions); timeline-mode songs (docs/TIMELINE.md)
 /// write 2 plus `timeline.toml`, so builds older than the timeline refuse
 /// them instead of playing a stale order list. Songs with plugin effect
-/// devices also write 2; songs with audio clips (M4) write 3.
-pub const READER_VERSION: u32 = 3;
+/// devices also write 2; songs with audio clips (M4) write 3; songs with
+/// track or clip automation lanes or curved segments (M5) write 4.
+pub const READER_VERSION: u32 = 4;
 
 /// Start of the error for a song that needs a newer app (see [`is_too_new`]).
 const TOO_NEW: &str = "This song was made with a newer version of ChipWave Studio";
@@ -1207,7 +1217,12 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
                 None => target.to_norm(val),
             };
             let shape = shape_of(p.get("shape").and_then(|x| x.as_str()).or(deflt));
-            lane.points.push(Point { pos, value, shape });
+            lane.points.push(Point {
+                pos,
+                value,
+                shape,
+                curve: 0.0,
+            });
         }
         lane.sort();
         song.automation.push(lane);
@@ -1356,12 +1371,12 @@ mod tests {
         with_manifest(
             &src,
             &newer,
-            Some("format = \"chipwave-song\"\nformat_version = 4\nmin_reader_version = 4\n"),
+            Some("format = \"chipwave-song\"\nformat_version = 4\nmin_reader_version = 5\n"),
         );
         let e = load_cwt(&newer).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(
-            e.contains("reader version 4") && e.contains("Check for updates"),
+            e.contains("reader version 5") && e.contains("Check for updates"),
             "{e}"
         );
         // a missing or odd manifest is treated as version 1
@@ -1373,7 +1388,7 @@ mod tests {
         // text songs: the same rule
         let t = include_str!("../demos/first_run.cwt.toml");
         assert!(song_from_text(t).is_ok());
-        let e = song_from_text(&format!("min_reader_version = 4\n{t}")).unwrap_err();
+        let e = song_from_text(&format!("min_reader_version = 5\n{t}")).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(!is_too_new("zip error"));
         std::fs::remove_dir_all(&dir).ok();

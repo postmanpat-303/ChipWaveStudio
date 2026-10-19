@@ -289,6 +289,7 @@ fn timeline_toml_round_trip_with_every_field_and_shared_notes() {
                 pos: 1.5,
                 value: 0.75,
                 shape: crate::automation::Shape::Smooth,
+                curve: 0.0,
             }],
             enabled: true,
         }],

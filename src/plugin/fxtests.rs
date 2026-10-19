@@ -159,6 +159,7 @@ fn plugin_effect_parameters_follow_automation_lanes() {
             pos,
             value,
             shape: Shape::Linear,
+            curve: 0.0,
         });
     }
     song.automation = vec![l];
@@ -175,6 +176,7 @@ fn plugin_effect_parameters_follow_automation_lanes() {
         pos: 0.0,
         value: 1.0,
         shape: Shape::Step,
+        curve: 0.0,
     });
     f.automation = vec![l];
     let inv = left(&render(&f, 0.6));
@@ -275,11 +277,13 @@ fn plugin_effect_rendering_is_allocation_free() {
         pos: 0.0,
         value: 0.3,
         shape: Shape::Linear,
+        curve: 0.0,
     });
     l.points.push(Point {
         pos: 16.0,
         value: 0.9,
         shape: Shape::Linear,
+        curve: 0.0,
     });
     song.automation = vec![l];
     let mut e = crate::engine::Engine::new(48000.0);

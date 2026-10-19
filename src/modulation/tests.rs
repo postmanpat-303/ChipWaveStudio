@@ -351,6 +351,7 @@ fn zero_depth_and_unrouted_modulators_leave_the_sound_unchanged() {
         pos: 0.0,
         value: 0.5,
         shape: Shape::Step,
+        curve: 0.0,
     });
     c.automation.push(l);
     let got = render(&c, 1.0);
@@ -374,6 +375,7 @@ fn modulation_adds_on_top_of_an_automation_lane() {
         pos: 0.0,
         value: 0.2,
         shape: Shape::Step,
+        curve: 0.0,
     });
     base.automation.push(l);
     let mut s = routed(base.clone(), ModKind::Macro, "instrument.1.cutoff", 0.5);
@@ -470,11 +472,13 @@ fn rendering_with_modulation_is_allocation_free() {
         pos: 0.0,
         value: 0.2,
         shape: Shape::Linear,
+        curve: 0.0,
     });
     l.points.push(Point {
         pos: 16.0,
         value: 0.9,
         shape: Shape::Linear,
+        curve: 0.0,
     });
     s.automation.push(l);
     // notes on every 4th row keep the envelopes busy

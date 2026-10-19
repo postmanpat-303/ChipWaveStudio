@@ -410,6 +410,12 @@ struct TlState {
     limit: [usize; MAX_CHANNELS],
     /// per track with its own speed: effect steps done in this row
     steps: [u8; MAX_CHANNELS],
+    /// track and clip automation (M5); None or empty for other songs
+    auto: Option<std::sync::Arc<crate::timeline::AutoPlan>>,
+    /// per `auto` slot: smoothed value (NaN = not driven) and this
+    /// evaluation's raw value; sized when `auto` is swapped
+    auto_v: Vec<f32>,
+    auto_raw: Vec<f32>,
 }
 
 impl Default for TlState {
@@ -422,6 +428,9 @@ impl Default for TlState {
             seg_of: [usize::MAX; MAX_CHANNELS],
             limit: [0; MAX_CHANNELS],
             steps: [0; MAX_CHANNELS],
+            auto: None,
+            auto_v: vec![],
+            auto_raw: vec![],
         }
     }
 }
@@ -768,6 +777,17 @@ impl Engine {
     pub fn ensure_plan(&mut self, song: &Song) {
         match &song.timeline {
             Some(tl) => {
+                // track / clip automation: its own plan, so drawing points
+                // doesn't re-seek the notes and audio clips
+                let akey = crate::timeline::auto_key(song, tl);
+                if self.tl.auto.as_ref().is_none_or(|a| a.key != akey) {
+                    let a = crate::timeline::build_auto(song, tl);
+                    let n = a.targets.len();
+                    // (an empty plan is kept too, so its key isn't rebuilt)
+                    self.tl.auto = Some(std::sync::Arc::new(a));
+                    self.tl.auto_v = vec![f32::NAN; n];
+                    self.tl.auto_raw = vec![f32::NAN; n];
+                }
                 let key = crate::timeline::plan_key(song, tl);
                 if self.tl.plan.as_ref().is_none_or(|p| p.key != key) {
                     self.tl.plan = Some(std::sync::Arc::new(crate::timeline::build_plan(song, tl)));
@@ -793,6 +813,7 @@ impl Engine {
             }
             None => {
                 self.tl.plan = None;
+                self.tl.auto = None;
                 if self.tl.on {
                     self.tl.on = false;
                     self.playing = false;
@@ -1667,7 +1688,8 @@ impl Engine {
             }
         }
         a.level.iter_mut().for_each(|l| *l = 1.0);
-        let lanes = self.playing && !song.automation.is_empty();
+        let tla = self.tl.on && self.tl.auto.as_ref().is_some_and(|p| !p.is_empty());
+        let lanes = self.playing && (!song.automation.is_empty() || tla);
         let modm = &song.modulation;
         let modded = !modm.routes.is_empty() && !modm.mods.is_empty();
         if !lanes && !modded {
@@ -1715,6 +1737,9 @@ impl Engine {
                     _ if a.pend.len() < PEND_CAP => a.pend.push((t, *v)),
                     _ => {}
                 }
+            }
+            if tla {
+                self.eval_tl_auto(pos);
             }
         } else {
             self.auto.vals.clear();
@@ -1786,6 +1811,63 @@ impl Engine {
         for (i, p) in self.auto.patches.iter_mut().enumerate() {
             if i >= used.len() || !used[i] {
                 *p = None;
+            }
+        }
+    }
+
+    /// Track and clip lanes at timeline row `pos` (innermost wins: a later
+    /// layer replaces an earlier one, and either replaces a song lane's
+    /// value in `pend`). Allocation-free.
+    fn eval_tl_auto(&mut self, pos: f32) {
+        use crate::automation::Target;
+        let Engine { tl, auto: a, .. } = self;
+        let Some(plan) = tl.auto.as_deref() else {
+            return;
+        };
+        let n = plan
+            .targets
+            .len()
+            .min(tl.auto_v.len())
+            .min(tl.auto_raw.len());
+        let t = pos as f64 * crate::timeline::ROW as f64;
+        let raw = &mut tl.auto_raw[..n];
+        raw.iter_mut().for_each(|x| *x = f32::NAN);
+        for l in &plan.layers {
+            let k = l.slot as usize;
+            if k < n {
+                if let Some(v) = l.value(&plan.points, t) {
+                    raw[k] = v;
+                }
+            }
+        }
+        for k in 0..n {
+            let r = tl.auto_raw[k];
+            let sm = &mut tl.auto_v[k];
+            if r.is_nan() {
+                *sm = f32::NAN;
+                continue;
+            }
+            let tg = plan.targets[k];
+            let held = a.pend.iter().position(|e| e.0 == tg);
+            if sm.is_nan() {
+                // pick up from the song lane's value (no jump), else start here
+                *sm = held.map_or(r, |i| a.pend[i].1);
+            }
+            // smoothing: ~1.5 ms time constant at 32-frame steps (as song lanes)
+            *sm += (r - *sm) * 0.5;
+            let v = *sm;
+            match tg {
+                Target::Tempo => {}
+                Target::ModAmount(m) => {
+                    if let Some(x) = a.mod_amt.get_mut(m) {
+                        *x = tg.to_real(v);
+                    }
+                }
+                _ => match held {
+                    Some(i) => a.pend[i].1 = v,
+                    None if a.pend.len() < PEND_CAP => a.pend.push((tg, v)),
+                    None => {}
+                },
             }
         }
     }
@@ -2594,6 +2676,7 @@ mod tests {
             pos: 0.0,
             value: 0.0,
             shape: Shape::Linear,
+            curve: 0.0,
         });
         song.automation = vec![l];
         let out = render_song(&song, 22050);
@@ -3538,6 +3621,7 @@ mod tests {
                 pos,
                 value,
                 shape: Shape::Linear,
+                curve: 0.0,
             });
         }
         song.automation = vec![l];
@@ -3623,6 +3707,7 @@ mod tests {
                 pos,
                 value,
                 shape: Shape::Linear,
+                curve: 0.0,
             });
         }
         song.automation = vec![l];
@@ -3685,6 +3770,7 @@ mod tests {
             pos: 0.0,
             value: 1.0,
             shape: Default::default(),
+            curve: 0.0,
         });
         song.automation = vec![l];
         let moved = render(&song);

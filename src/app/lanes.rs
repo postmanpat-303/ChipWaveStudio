@@ -16,7 +16,12 @@ impl App {
                     self.snapshot();
                     let idx = self.with(|s| {
                         let lane = &mut s.song.automation[k];
-                        lane.points.push(Point { pos, value, shape });
+                        lane.points.push(Point {
+                            pos,
+                            value,
+                            shape,
+                            curve: 0.0,
+                        });
                         lane.sort();
                         lane.points
                             .iter()
@@ -54,7 +59,12 @@ impl App {
                         {
                             p.value = value;
                         } else {
-                            lane.points.push(Point { pos, value, shape });
+                            lane.points.push(Point {
+                                pos,
+                                value,
+                                shape,
+                                curve: 0.0,
+                            });
                             lane.sort();
                         }
                     });
@@ -222,6 +232,7 @@ impl App {
                 pos: 0.0,
                 value: cur,
                 shape: crate::automation::Shape::Linear,
+                curve: 0.0,
             });
             s.song.automation.push(lane);
             s.song.automation.len() - 1

@@ -499,8 +499,8 @@ impl Song {
             map.push(if k { Some(n) } else { None });
             n += k as usize;
         }
-        self.automation
-            .retain_mut(|l| match crate::automation::Target::parse(&l.target) {
+        for lanes in self.lane_lists_mut() {
+            lanes.retain_mut(|l| match crate::automation::Target::parse(&l.target) {
                 Some(crate::automation::Target::ModAmount(r)) => {
                     match map.get(r).copied().flatten() {
                         Some(nr) => {
@@ -512,6 +512,22 @@ impl Song {
                 }
                 _ => true,
             });
+        }
+    }
+
+    /// every list of automation lanes: the song's, then each timeline
+    /// track's and clip's (M5), for edits that renumber targets
+    pub fn lane_lists_mut(&mut self) -> Vec<&mut Vec<crate::automation::Lane>> {
+        let mut v = vec![&mut self.automation];
+        if let Some(tl) = self.timeline.as_deref_mut() {
+            for t in &mut tl.tracks {
+                v.push(&mut t.auto);
+            }
+            for c in &mut tl.clips {
+                v.push(&mut c.auto);
+            }
+        }
+        v
     }
     /// remove modulator `k` with its routes (and their depth lanes)
     pub fn remove_modulator(&mut self, k: usize) {
@@ -546,8 +562,8 @@ impl Song {
             p.cells.iter_mut().flatten().for_each(fix);
             p.cache.iter_mut().flatten().for_each(fix);
         }
-        self.automation
-            .retain_mut(|l| match lane_instrument(&l.target) {
+        for lanes in self.lane_lists_mut() {
+            lanes.retain_mut(|l| match lane_instrument(&l.target) {
                 Some(i) if i == idx => false,
                 Some(i) if i > idx => {
                     l.target = with_lane_instrument(&l.target, i - 1);
@@ -555,6 +571,7 @@ impl Song {
                 }
                 _ => true,
             });
+        }
         let keep = self.modulation.delete_instrument(idx);
         self.routes_changed(&keep);
         used
@@ -597,10 +614,12 @@ impl Song {
             p.cells.iter_mut().flatten().for_each(fix);
             p.cache.iter_mut().flatten().for_each(fix);
         }
-        for l in &mut self.automation {
-            if let Some(i) = lane_instrument(&l.target) {
-                if let Some(&n) = map.get(i) {
-                    l.target = with_lane_instrument(&l.target, n);
+        for lanes in self.lane_lists_mut() {
+            for l in lanes.iter_mut() {
+                if let Some(i) = lane_instrument(&l.target) {
+                    if let Some(&n) = map.get(i) {
+                        l.target = with_lane_instrument(&l.target, n);
+                    }
                 }
             }
         }

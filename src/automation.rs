@@ -30,6 +30,22 @@ pub struct Point {
     /// shape of the segment from this point to the next
     #[serde(default)]
     pub shape: Shape,
+    /// bend of a Linear segment to the next point, -1..1 (0 = straight;
+    /// > 0 rises early, < 0 late). Timeline lanes draw it with Alt-drag.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub curve: f32,
+}
+
+fn is_zero(x: &f32) -> bool {
+    *x == 0.0
+}
+
+/// Bend `t` (0..1) by `curve` (-1..1): a power curve, exactly `t` at 0.
+pub fn bend(t: f32, curve: f32) -> f32 {
+    if curve == 0.0 {
+        return t;
+    }
+    t.powf(2f32.powf(-2.5 * curve.clamp(-1.0, 1.0)))
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -78,7 +94,7 @@ pub fn value_at(points: &[Point], pos: f32) -> Option<f32> {
             let span = (b.pos - a.pos).max(1e-6);
             let t = ((pos - a.pos) / span).clamp(0.0, 1.0);
             let t = match a.shape {
-                Shape::Linear => t,
+                Shape::Linear => bend(t, a.curve),
                 Shape::Step => 0.0,
                 Shape::Smooth => t * t * (3.0 - 2.0 * t),
             };
@@ -450,8 +466,29 @@ fn param_ix(kind: crate::fx::FxKind, key: &str) -> Option<usize> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn curves_bend_linear_segments_only_when_set() {
+        let mut lin = [p(0.0, 0.0, Shape::Linear), p(10.0, 1.0, Shape::Linear)];
+        let straight = value_at(&lin, 2.5).unwrap();
+        assert_eq!(straight, 0.25);
+        lin[0].curve = 0.6;
+        let up = value_at(&lin, 2.5).unwrap();
+        lin[0].curve = -0.6;
+        let down = value_at(&lin, 2.5).unwrap();
+        assert!(up > 0.4 && down < 0.1, "{up} {down}");
+        // the end points stay put
+        assert_eq!(value_at(&lin, 0.0), Some(0.0));
+        assert!((value_at(&lin, 9.9999).unwrap() - 1.0).abs() < 1e-3);
+        assert_eq!(bend(0.37, 0.0), 0.37);
+    }
+
     fn p(pos: f32, value: f32, shape: Shape) -> Point {
-        Point { pos, value, shape }
+        Point {
+            pos,
+            value,
+            shape,
+            curve: 0.0,
+        }
     }
 
     #[test]

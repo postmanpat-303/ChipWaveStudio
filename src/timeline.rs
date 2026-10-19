@@ -655,6 +655,9 @@ pub struct TimelineView {
     pub scroll_y: f32,
     /// default track height in points
     pub track_h: f32,
+    /// tracks whose automation lanes are unfolded (bit per track, M5)
+    #[serde(skip_serializing_if = "is_default")]
+    pub auto_open: u32,
 }
 
 impl Default for TimelineView {
@@ -664,6 +667,7 @@ impl Default for TimelineView {
             scroll: 0,
             scroll_y: 0.0,
             track_h: 46.0,
+            auto_open: 0,
         }
     }
 }
@@ -1282,9 +1286,11 @@ pub fn from_toml(text: &str) -> Result<Timeline, String> {
     Ok(tl)
 }
 
+mod autoplan;
 mod edit;
 mod plan;
 pub mod roll;
+pub use autoplan::*;
 pub use edit::*;
 pub use plan::*;
 
@@ -1294,5 +1300,7 @@ mod m2_tests;
 mod m3_tests;
 #[cfg(test)]
 mod m4_tests;
+#[cfg(test)]
+mod m5_tests;
 #[cfg(test)]
 mod tests;

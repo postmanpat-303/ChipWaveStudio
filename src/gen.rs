@@ -2431,6 +2431,7 @@ mod features {
                     pos,
                     value,
                     shape: Shape::Linear,
+                    curve: 0.0,
                 });
             }
             l

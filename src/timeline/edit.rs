@@ -49,7 +49,10 @@ pub fn leave_timeline_mode(song: &mut Song) -> Result<(), String> {
     let (patterns, order) = consolidate(song, tl)?;
     song.patterns = patterns;
     song.order = order;
-    song.timeline = None;
+    // track and clip lanes become song lanes (sampled per row)
+    if let Some(tl) = song.timeline.take() {
+        bake_into_song(song, &tl);
+    }
     Ok(())
 }
 
