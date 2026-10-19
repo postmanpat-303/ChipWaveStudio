@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.4.1" date="2026-10-19">
+      <description><p>Timeline with clips, piano roll, automation lanes and audio clips; VST3 and plugin effects; the Browser; Devices; Wave and Grid generators; Advanced Edit; starts on an empty song; faster audio engine.</p></description>
+    </release>
     <release version="0.2.4.0" date="2026-10-18">
       <description><p>Renamed from ChipWave Tracker to ChipWave Studio. Transpose buttons and Edit › Transpose.</p></description>
     </release>

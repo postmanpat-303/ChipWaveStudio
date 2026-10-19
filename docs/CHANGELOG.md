@@ -2,7 +2,7 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
-## Unreleased
+## 0.2.4.1: Timeline, Browser, Devices and a faster engine
 
 ### No demo song on start
 - **ChipWave now starts with the clean song of File › New** (timeline mode, only Song / Master, Timeline on top with the piano roll below) instead of loading the Lumen Drift demo, on first run and every normal start. Nothing to undo or save until you change something. Opening a file (double-click, `chipwave song.cwt`) works as before. The demos stay in **File › Demo songs** and **Help › Load demo song**. With **Settings › New songs** off it's the tracker-mode empty song, like File › New. (`--screenshot`, `--render demo`, `--self-test` and `--play-test` still use the demo.)
