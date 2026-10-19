@@ -26,6 +26,7 @@ mod browserpanel;
 mod browserview;
 mod chordlane;
 mod chordview;
+mod devcards;
 mod devices;
 #[cfg(test)]
 mod devices_tests;

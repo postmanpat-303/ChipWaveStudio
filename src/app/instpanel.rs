@@ -694,8 +694,21 @@ impl App {
             }
             self.save_settings();
         }
+        self.finish_edit(idx, inst, &orig, &orig_modm, cx);
+    }
+
+    /// write an edited instrument (and the song's modulation) back, then run
+    /// the editor's actions; shared by the editor and the Devices card
+    fn finish_edit(
+        &mut self,
+        idx: usize,
+        mut inst: Instrument,
+        orig: &Instrument,
+        orig_modm: &crate::modulation::Modulation,
+        mut cx: Cx,
+    ) {
         // ---- write back, then the actions ----
-        if cx.changed && inst != orig {
+        if cx.changed && inst != *orig {
             if let InstrumentKind::Voice(v) = &mut inst.kind {
                 v.fix();
             }
@@ -711,7 +724,7 @@ impl App {
             });
             self.dirty = true;
         }
-        if cx.modm != orig_modm {
+        if cx.modm != *orig_modm {
             let m = cx.modm.clone();
             self.with(|s| s.song.modulation = m);
             self.dirty = true;
@@ -1716,5 +1729,100 @@ impl App {
             self.dirty = true;
         }
         self.plugin_macro_assign(ui, i, pp, &params);
+    }
+}
+
+/// the instrument's key controls for the compact Devices card: the
+/// preferred keys for its type that are enabled, then the first enabled
+/// knobs of the Main tab (volume and transpose stay in the full editor)
+pub(super) fn key_inst_params<'a>(l: &'a Layout, inst: &Instrument, max: usize) -> Vec<&'a Param> {
+    let prefer: &[&str] = match params::type_tag(&inst.kind) {
+        "Synth" | "Moog" | "Voice" => &["cutoff", "detune_cents", "amp.a", "amp.r"],
+        _ => &["cutoff", "amp.a", "amp.r", "gen.release"],
+    };
+    let knob = |p: &&Param| matches!(p.ctl, Ctl::Knob { .. }) && p.is_on(inst);
+    let mut out: Vec<&Param> = prefer
+        .iter()
+        .filter_map(|k| l.find(k))
+        .filter(|p| knob(p))
+        .collect();
+    for p in l.params.iter().filter(|p| p.tab == Tab::Main) {
+        if out.len() >= max {
+            break;
+        }
+        if knob(&p)
+            && !["volume", "transpose"].contains(&p.key.as_str())
+            && !out.iter().any(|q| q.key == p.key)
+        {
+            out.push(p);
+        }
+    }
+    out.truncate(max);
+    out
+}
+
+impl App {
+    /// the compact Devices instrument card's knobs, wired exactly like the
+    /// editor's (modulation rings, right-click menu, undo, automation)
+    pub(super) fn inst_key_knobs(&mut self, ui: &mut egui::Ui, idx: usize, max: usize) -> usize {
+        let Some(inst) = self.with(|s| s.song.instruments.get(idx).cloned()) else {
+            return 0;
+        };
+        let orig = inst.clone();
+        let mut inst = inst;
+        let layout = params::build(&inst, idx, self.gen_ui.sel.min(7));
+        let mut cx = Cx {
+            idx,
+            tag: params::type_tag(&inst.kind),
+            words: vec![],
+            changed: false,
+            touch: None,
+            acts: vec![],
+            flash: None,
+            jump: None,
+            card_h: 0.0,
+            toggle_card: None,
+            modm: Default::default(),
+            live: [0.0; crate::modulation::MAX_MODS],
+            labels: vec![],
+            mod_out: Default::default(),
+        };
+        (cx.modm, cx.live, cx.labels) = self.with(|s| {
+            let m = &s.song.modulation;
+            (
+                m.clone(),
+                s.engine.mods.out,
+                m.routes
+                    .iter()
+                    .map(|r| super::modview::target_label(&s.song, &r.target))
+                    .collect(),
+            )
+        });
+        let orig_modm = cx.modm.clone();
+        let keys = key_inst_params(&layout, &inst, max);
+        let n = keys.len();
+        let pad = ((ui.available_width() - n as f32 * CELL.x) / 2.0).max(0.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            ui.add_space(pad);
+            for p in keys {
+                self.knob_ui(ui, p, &mut inst, &mut cx);
+            }
+        });
+        self.finish_edit(idx, inst, &orig, &orig_modm, cx);
+        n
+    }
+
+    /// the picture for the compact instrument card: the first Main-tab
+    /// card's graph (the oscillator wave for synths)
+    pub(super) fn inst_card_viz(&self, idx: usize) -> Option<params::Viz> {
+        self.with(|s| {
+            let inst = s.song.instruments.get(idx)?;
+            let l = params::build(inst, idx, 0);
+            l.cards
+                .iter()
+                .filter(|c| c.tab == Tab::Main)
+                .find_map(|c| c.viz.as_ref().map(|f| f(inst)))
+        })
     }
 }
