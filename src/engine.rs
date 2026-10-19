@@ -363,6 +363,8 @@ pub struct Engine {
     pub loud: crate::master::Readout,
     /// plugin instrument instances (src/plugin/), one per instrument x channel
     pub plugins: crate::plugin::Rack,
+    /// plugin effects in the FX chains (crate::plugin::fxrack)
+    pub fx_plugins: crate::plugin::fxrack::FxRack,
     /// panic request (any thread sets it; the audio thread acts on it)
     pub panic_req: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// panic fade-out frames left / total
@@ -440,6 +442,7 @@ impl Engine {
             tone_ph: 0.0,
             live: Live::new(),
             plugins: crate::plugin::Rack::new(),
+            fx_plugins: crate::plugin::fxrack::FxRack::new(),
             panic_req: Default::default(),
             panic_fade: 0,
             panic_len: 1,
@@ -612,6 +615,7 @@ impl Engine {
     /// new index. Voices of a removed instrument stop.
     pub fn remap_instruments(&mut self, f: &dyn Fn(usize) -> Option<usize>) {
         drop(self.plugins.remap(f));
+        drop(self.fx_plugins.remap(f));
         for c in &mut self.chans {
             if c.instr != usize::MAX {
                 match f(c.instr) {
@@ -968,6 +972,7 @@ impl Engine {
             v.active = false;
         }
         self.plugins.panic();
+        self.fx_plugins.panic();
         self.panic_len = ((0.003 * self.sr) as u32).max(1);
         self.panic_fade = self.panic_len;
     }
@@ -1008,6 +1013,7 @@ impl Engine {
         }
         self.lim.clear();
         self.plugins.panic();
+        self.fx_plugins.panic();
     }
 
     pub fn stop(&mut self) {
@@ -1712,6 +1718,7 @@ impl Engine {
                 .map(|x| x.fx.as_slice())
                 .unwrap_or(&[]);
             ch.sync(devs, owner, sr);
+            resolve_plugins(&mut self.fx_plugins, ch, devs, i, owner, &a.fx);
             let tfo = c.tfo;
             for (d, (st, dev)) in ch.states.iter_mut().zip(devs).enumerate() {
                 // 40-42 set the mix of this channel's Resonator / Digital / Sub
@@ -1731,6 +1738,13 @@ impl Engine {
                 });
             }
         }
+        let nch = song.channels.min(MAX_CHANNELS);
+        self.fx_plugins.max_lat = self.fx_plugins.ch_lat[..nch]
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or(0)
+            .min(crate::plugin::fxrack::PDC_MAX as u32 - 1);
         let lv = &mut self.live;
         if lv.owner != usize::MAX {
             let owner = lv.owner;
@@ -1740,6 +1754,14 @@ impl Engine {
                 .map(|x| x.fx.as_slice())
                 .unwrap_or(&[]);
             lv.chain.sync(devs, owner, sr);
+            resolve_plugins(
+                &mut self.fx_plugins,
+                &mut lv.chain,
+                devs,
+                crate::plugin::fxrack::LIVE,
+                owner,
+                &a.fx,
+            );
             for (d, (st, dev)) in lv.chain.states.iter_mut().zip(devs).enumerate() {
                 st.set_targets(dev, |p| {
                     a.fx.iter()
@@ -1795,6 +1817,7 @@ impl Engine {
             self.start_panic();
         }
         let plugs = !self.plugins.is_empty();
+        let pdc = self.fx_plugins.pdc_active();
         // live MIDI events (lock-free queue, filled by the MIDI thread)
         if let Some(mut rx) = self.live.rx.take() {
             while let Ok(ev) = rx.pop() {
@@ -1912,7 +1935,7 @@ impl Engine {
                         bpm,
                         note: note.unwrap_or(0.0),
                     };
-                    lv.chain.process(s, s_r, &lctx)
+                    lv.chain.process_with(s, s_r, &lctx, &mut self.fx_plugins)
                 };
                 (fl * live_gain.0, fr * live_gain.1)
             } else {
@@ -2025,7 +2048,14 @@ impl Engine {
                         bpm,
                         note: if c.active { c.freq } else { 0.0 },
                     };
-                    chain.process(s, s_r, &cctx)
+                    chain.process_with(s, s_r, &cctx, &mut self.fx_plugins)
+                };
+                // plugin delay compensation: channels with less plugin
+                // latency wait for the slowest chain
+                let (fl, fr) = if pdc {
+                    self.fx_plugins.compensate(i, fl, fr)
+                } else {
+                    (fl, fr)
                 };
                 let duck = song.mixer.channels.get(i).map(|m| m.duck).unwrap_or(0.0);
                 let dg = 1.0 - duck.clamp(0.0, 1.0) * duck_env;
@@ -2043,6 +2073,9 @@ impl Engine {
                 cpk[i] = cpk[i].max((sl.abs().max(sr2.abs()) * 0.6).min(1.5));
                 l += sl;
                 r += sr2;
+            }
+            if pdc {
+                self.fx_plugins.pdc_advance();
             }
             // return buses (100 % wet devices) into the master
             for (b, ch) in self.rets.iter_mut().enumerate() {
@@ -2104,10 +2137,46 @@ impl Engine {
     }
 }
 
+/// Point the plugin devices of a chain at their running instances (or none:
+/// passed through), send their automation, and note the chain's latency.
+/// Engine thread; no allocation.
+fn resolve_plugins(
+    rack: &mut crate::plugin::fxrack::FxRack,
+    ch: &mut crate::fx::ChainState,
+    devs: &[crate::fx::Device],
+    chain: usize,
+    owner: usize,
+    auto: &[(usize, usize, usize, f32)],
+) {
+    let mut lat = 0;
+    for (d, (st, dev)) in ch.states.iter_mut().zip(devs).enumerate() {
+        if st.kind != crate::fx::FxKind::Plugin {
+            continue;
+        }
+        st.uid = dev.uid;
+        st.plug = if rack.is_empty() {
+            u16::MAX
+        } else {
+            rack.find(chain, owner, dev.uid)
+        };
+        if st.plug == u16::MAX {
+            continue;
+        }
+        lat += rack.slots[st.plug as usize].latency;
+        for o in auto.iter().filter(|o| o.0 == owner && o.1 == d) {
+            rack.automate(st.plug, o.2 as u32, o.3);
+        }
+    }
+    if chain < MAX_CHANNELS {
+        rack.ch_lat[chain] = lat;
+    }
+}
+
 /// Render the whole song once (order list) offline.
 pub fn render_song(song: &Song, sr: u32) -> Vec<f32> {
     let mut e = Engine::new(sr as f32);
     crate::plugin::prepare(&mut e.plugins, song, sr as f32);
+    crate::plugin::fxrack::prepare(&mut e.fx_plugins, song, sr as f32);
     e.start(song, 0, 0, false, 0);
     let mut out = Vec::new();
     let mut buf = vec![0.0f32; 1024];

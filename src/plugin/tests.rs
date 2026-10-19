@@ -108,7 +108,10 @@ fn rms(v: &[f32]) -> f32 {
 fn scan_check_lists_the_fixture_as_an_instrument() {
     let r = scan::check_file(&fixture());
     assert!(r.ok, "{}", r.message);
-    assert_eq!(r.plugins.len(), 1);
+    // the library also holds the Test FX effect (plugin FX tests)
+    assert_eq!(r.plugins.len(), 2);
+    assert!(r.plugins[1].desc.is_effect() && !r.plugins[1].desc.is_instrument());
+    assert!(!r.plugins[0].desc.is_effect());
     let p = &r.plugins[0];
     assert_eq!(p.desc.id, TEST_ID);
     assert_eq!(p.desc.name, "ChipWave Test Synth");

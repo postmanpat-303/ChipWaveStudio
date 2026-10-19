@@ -156,13 +156,16 @@ pub fn start_with(
         let rx = s.engine.take_live_input();
         // plugin instances survive a device change (re-activated at the new rate)
         let mut rack = std::mem::take(&mut s.engine.plugins);
+        let mut fxr = std::mem::take(&mut s.engine.fx_plugins);
         rack.all_off();
         if s.engine.sr != sample_rate as f32 {
             rack.set_sample_rate(sample_rate as f32);
+            fxr.set_sample_rate(sample_rate as f32);
         }
         s.engine = Engine::new(sample_rate as f32);
         s.engine.set_live_input(rx);
         s.engine.plugins = rack;
+        s.engine.fx_plugins = fxr;
     }
     let stats = Arc::new(Stats::default());
     // start with ~2x the device buffer, at least 1024 frames (~21 ms @ 48k)
@@ -303,10 +306,12 @@ pub(crate) fn render_chunk(shared: &SharedRef, buf: &mut [f32], sr: f32) {
         let rx = s.engine.take_live_input();
         // never destroy plugin instances on the audio thread: keep the rack
         let mut rack = std::mem::take(&mut s.engine.plugins);
+        let fxr = std::mem::take(&mut s.engine.fx_plugins);
         rack.all_off();
         s.engine = Engine::new(sr);
         s.engine.set_live_input(rx);
         s.engine.plugins = rack;
+        s.engine.fx_plugins = fxr;
     }
 }
 

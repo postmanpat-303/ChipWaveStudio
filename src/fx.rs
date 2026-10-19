@@ -21,6 +21,9 @@ pub enum FxKind {
     Phaser,
     /// Bode-style frequency shifter (crate::fxmod)
     FreqShift,
+    /// a CLAP effect plugin (`Device::plugin`); not in `ALL` (its menu lists
+    /// the scanned effects instead). Runs in `crate::plugin::fxrack`.
+    Plugin,
 }
 
 impl FxKind {
@@ -52,6 +55,7 @@ impl FxKind {
             FxKind::Sub => "Sub bass",
             FxKind::Phaser => "Phaser",
             FxKind::FreqShift => "Frequency shifter",
+            FxKind::Plugin => "Plugin effect",
         }
     }
     /// muted strip tint per device type
@@ -64,6 +68,7 @@ impl FxKind {
             FxKind::Sub => 0x4E5E7A,
             FxKind::Filter => 0x4E6A86,     // cool
             FxKind::Compressor => 0x5E6B7A, // neutral
+            FxKind::Plugin => 0x4E7A66,     // plugins: green-grey
         }
     }
 }
@@ -253,6 +258,8 @@ pub fn params(k: FxKind) -> &'static [ParamInfo] {
         FxKind::Sub => &SUB,
         FxKind::Phaser => &PHASER,
         FxKind::FreqShift => &FREQ_SHIFT,
+        // plugin parameters come from the instance (ids, not indices)
+        FxKind::Plugin => &[],
     }
 }
 
@@ -311,6 +318,17 @@ pub struct Device {
     /// normalised parameter values, indexed like `params(kind)`
     #[serde(default)]
     pub params: Vec<f32>,
+    /// `FxKind::Plugin`: the CLAP effect (id, path, saved state)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<Box<crate::plugin::PluginPatch>>,
+    /// `FxKind::Plugin`: stable id of this device in its chain, so a moved
+    /// device keeps its running instance (0 = none)
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub uid: u32,
+}
+
+fn is_zero(v: &u32) -> bool {
+    *v == 0
 }
 
 fn yes() -> bool {
@@ -325,6 +343,22 @@ impl Device {
             enabled: true,
             collapsed: false,
             params,
+            plugin: None,
+            uid: 0,
+        }
+    }
+    /// a plugin effect device for `p` (a fresh uid)
+    pub fn plugin(p: crate::plugin::PluginPatch) -> Self {
+        let mut d = Device::new(FxKind::Plugin);
+        d.plugin = Some(Box::new(p));
+        d.uid = new_uid();
+        d
+    }
+    /// the device's display name (a plugin's own name)
+    pub fn title(&self) -> String {
+        match &self.plugin {
+            Some(p) if self.kind == FxKind::Plugin => p.name.clone(),
+            _ => self.kind.name().to_string(),
         }
     }
     /// fix lengths / ranges after loading
@@ -356,9 +390,25 @@ impl Device {
     }
 }
 
+/// a fresh non-zero device uid (time + counter; unique within a session and
+/// practically unique across songs)
+pub fn new_uid() -> u32 {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static N: AtomicU32 = AtomicU32::new(0);
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() ^ d.as_secs() as u32)
+        .unwrap_or(1);
+    let v = t
+        .wrapping_mul(2654435761)
+        .wrapping_add(N.fetch_add(0x9E37, Ordering::Relaxed));
+    v.max(1)
+}
+
 /// Device presets (folder icon): name + real values by key.
 pub fn presets(k: FxKind) -> &'static [(&'static str, &'static [(&'static str, f32)])] {
     match k {
+        FxKind::Plugin => &[],
         FxKind::Delay => &[
             (
                 "1/8 dotted ping-pong",
@@ -904,6 +954,8 @@ impl Allpass {
 }
 
 enum Dsp {
+    /// a plugin effect: runs in `crate::plugin::fxrack` (see ChainState::process_with)
+    Plugin,
     Delay {
         l: Vec<f32>,
         r: Vec<f32>,
@@ -955,6 +1007,10 @@ pub struct FxState {
     cur: [f32; MAX_PARAMS],
     k: f32,
     dsp: Dsp,
+    /// plugin effects: the device uid and its slot in the engine's
+    /// `FxRack` (`u16::MAX` = no running instance: passed through)
+    pub uid: u32,
+    pub plug: u16,
 }
 
 pub struct Ctx {
@@ -969,6 +1025,7 @@ impl FxState {
         let n = |s: f32| (s * sr) as usize + 4;
         let scale = sr / 44100.0;
         let dsp = match d.kind {
+            FxKind::Plugin => Dsp::Plugin,
             FxKind::Delay => Dsp::Delay {
                 l: vec![0.0; n(2.1)],
                 r: vec![0.0; n(2.1)],
@@ -1026,6 +1083,8 @@ impl FxState {
             cur: [0.0; MAX_PARAMS],
             k: 1.0 - (-1.0 / (0.01 * sr)).exp(),
             dsp,
+            uid: d.uid,
+            plug: u16::MAX,
         };
         s.set_targets(d, |_| None);
         s.cur = s.tgt;
@@ -1036,7 +1095,10 @@ impl FxState {
     /// allocating: buffers are zeroed in place (kind must match).
     pub fn reset(&mut self, d: &Device) {
         debug_assert_eq!(self.kind, d.kind);
+        self.uid = d.uid;
+        self.plug = u16::MAX;
         match &mut self.dsp {
+            Dsp::Plugin => {}
             Dsp::Delay {
                 l,
                 r,
@@ -1147,6 +1209,7 @@ impl FxState {
         let p = self.cur;
         let sr = self.sr;
         match &mut self.dsp {
+            Dsp::Plugin => (l, r),
             Dsp::Delay {
                 l: bl,
                 r: br,
@@ -1428,6 +1491,29 @@ impl ChainState {
         }
         (l, r)
     }
+    /// like `process`, with plugin devices running in `rack` (a plugin device
+    /// without a running instance passes the audio through)
+    pub fn process_with(
+        &mut self,
+        mut l: f32,
+        mut r: f32,
+        ctx: &Ctx,
+        rack: &mut crate::plugin::fxrack::FxRack,
+    ) -> (f32, f32) {
+        for s in &mut self.states {
+            (l, r) = if s.kind == FxKind::Plugin {
+                if s.plug == u16::MAX {
+                    (l, r)
+                } else {
+                    let step = 1.0 / (0.005 * s.sr);
+                    rack.process(s.plug, l, r, s.on, step)
+                }
+            } else {
+                s.process(l, r, ctx)
+            };
+        }
+        (l, r)
+    }
 }
 
 #[cfg(test)]
@@ -1654,6 +1740,8 @@ mod tests {
             enabled: true,
             collapsed: false,
             params: vec![0.5, 0.5, 0.1, 1.0, 1.0],
+            plugin: None,
+            uid: 0,
         };
         d.fix();
         assert_eq!(d.params.len(), 7);

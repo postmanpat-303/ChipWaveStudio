@@ -66,6 +66,20 @@ impl Cache {
     }
 }
 
+impl Cache {
+    /// scanned audio effects (FX chain menu)
+    pub fn effects(&self) -> Vec<Found> {
+        let mut v: Vec<Found> = self
+            .entries
+            .iter()
+            .filter(|e| e.status == "ok")
+            .flat_map(|e| e.plugins.iter().filter(|p| p.desc.is_effect()).cloned())
+            .collect();
+        v.sort_by_key(|f| (f.desc.name.to_lowercase(), f.format.clone()));
+        v
+    }
+}
+
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
 
 /// `CHIPWAVE_PLUGIN_CACHE` (tests) or <config>/plugin-cache.json

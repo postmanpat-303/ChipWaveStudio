@@ -79,6 +79,10 @@ impl Desc {
     pub fn is_instrument(&self) -> bool {
         self.features.iter().any(|f| f == "instrument")
     }
+    /// an audio effect (CLAP feature "audio-effect"), for FX chains
+    pub fn is_effect(&self) -> bool {
+        !self.is_instrument() && self.features.iter().any(|f| f == "audio-effect")
+    }
 }
 
 unsafe fn cstr(p: *const c_char) -> String {
@@ -420,6 +424,9 @@ pub struct ClapInst {
     params: *const clap_plugin_params,
     state: *const clap_plugin_state,
     gui: *const clap_plugin_gui,
+    latency_ext: *const clap_sys::ext::latency::clap_plugin_latency,
+    /// latency the plugin reported at activation (samples)
+    lat: u32,
     midi_notes: bool,
     sr: f32,
     active: bool,
@@ -494,6 +501,8 @@ impl ClapInst {
         let params = ext(CLAP_EXT_PARAMS) as *const clap_plugin_params;
         let state = ext(CLAP_EXT_STATE) as *const clap_plugin_state;
         let gui = ext(CLAP_EXT_GUI) as *const clap_plugin_gui;
+        let latency_ext = ext(clap_sys::ext::latency::CLAP_EXT_LATENCY)
+            as *const clap_sys::ext::latency::clap_plugin_latency;
         // note dialect: CLAP notes if the first input port speaks them, else MIDI
         let np = ext(CLAP_EXT_NOTE_PORTS) as *const clap_plugin_note_ports;
         let midi_notes = unsafe {
@@ -561,6 +570,8 @@ impl ClapInst {
             params,
             state,
             gui,
+            latency_ext,
+            lat: 0,
             midi_notes,
             sr,
             active: false,
@@ -623,6 +634,18 @@ impl ClapInst {
         }
         self.active = true;
         self.sleeping = false;
+        // clap.latency get is [main-thread & active]
+        self.lat = unsafe {
+            if self.latency_ext.is_null() {
+                0
+            } else {
+                (*self.latency_ext)
+                    .get
+                    .map(|g| g(self.plugin))
+                    .unwrap_or(0)
+                    .min(1 << 20)
+            }
+        };
         Ok(())
     }
 
@@ -643,6 +666,73 @@ impl ClapInst {
                     d(self.plugin);
                 }
                 self.active = false;
+            }
+        }
+    }
+
+    /// one process call; `loud` = the audio input is not silent (effects:
+    /// a sleeping plugin is woken by input)
+    fn run(&mut self, n: usize, out_l: &mut [f32], out_r: &mut [f32], loud: bool) {
+        let n = n.min(MAX_BLOCK).min(out_l.len()).min(out_r.len());
+        if !self.active {
+            out_l[..n].fill(0.0);
+            out_r[..n].fill(0.0);
+            self.ev.v.clear();
+            return;
+        }
+        if self.sleeping && self.ev.v.is_empty() && !loud {
+            out_l[..n].fill(0.0);
+            out_r[..n].fill(0.0);
+            return;
+        }
+        unsafe {
+            if !self.processing {
+                self.processing = (*self.plugin)
+                    .start_processing
+                    .map(|s| s(self.plugin))
+                    .unwrap_or(true);
+                if !self.processing {
+                    out_l[..n].fill(0.0);
+                    out_r[..n].fill(0.0);
+                    return;
+                }
+            }
+            let pr = clap_process {
+                steady_time: self.steady,
+                frames_count: n as u32,
+                transport: std::ptr::null(),
+                audio_inputs: self.in_bufs.as_ptr(),
+                audio_outputs: self.out_bufs.as_mut_ptr(),
+                audio_inputs_count: self.in_bufs.len() as u32,
+                audio_outputs_count: self.out_bufs.len() as u32,
+                in_events: &self.in_list,
+                out_events: &self.out_list,
+            };
+            let st = (*self.plugin)
+                .process
+                .map(|p| p(self.plugin, &pr))
+                .unwrap_or(CLAP_PROCESS_ERROR);
+            self.steady += n as i64;
+            self.ev.v.clear();
+            self.sleeping = st == CLAP_PROCESS_SLEEP;
+            let o = &self.out_data[0];
+            let r = if o.len() > 1 { 1 } else { 0 };
+            for i in 0..n {
+                let (a, b) = (o[0][i], o[r][i]);
+                out_l[i] = if a.is_finite() {
+                    a.clamp(-8.0, 8.0)
+                } else {
+                    0.0
+                };
+                out_r[i] = if b.is_finite() {
+                    b.clamp(-8.0, 8.0)
+                } else {
+                    0.0
+                };
+            }
+            if st == CLAP_PROCESS_ERROR {
+                out_l[..n].fill(0.0);
+                out_r[..n].fill(0.0);
             }
         }
     }
@@ -801,68 +891,35 @@ impl Hosted for ClapInst {
     }
 
     fn process(&mut self, n: usize, out_l: &mut [f32], out_r: &mut [f32]) {
-        let n = n.min(MAX_BLOCK).min(out_l.len()).min(out_r.len());
-        if !self.active {
-            out_l[..n].fill(0.0);
-            out_r[..n].fill(0.0);
-            self.ev.v.clear();
-            return;
-        }
-        if self.sleeping && self.ev.v.is_empty() {
-            out_l[..n].fill(0.0);
-            out_r[..n].fill(0.0);
-            return;
-        }
-        unsafe {
-            if !self.processing {
-                self.processing = (*self.plugin)
-                    .start_processing
-                    .map(|s| s(self.plugin))
-                    .unwrap_or(true);
-                if !self.processing {
-                    out_l[..n].fill(0.0);
-                    out_r[..n].fill(0.0);
-                    return;
+        self.run(n, out_l, out_r, false);
+    }
+
+    fn process_fx(
+        &mut self,
+        n: usize,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+    ) {
+        let n = n.min(MAX_BLOCK).min(in_l.len()).min(in_r.len());
+        let mut loud = false;
+        for (p, port) in self.in_data.iter_mut().enumerate() {
+            for (c, ch) in port.iter_mut().enumerate() {
+                if p == 0 {
+                    let src = if c % 2 == 0 { in_l } else { in_r };
+                    ch[..n].copy_from_slice(&src[..n]);
+                    loud = loud || src[..n].iter().any(|x| *x != 0.0);
+                } else {
+                    ch[..n].fill(0.0);
                 }
             }
-            let pr = clap_process {
-                steady_time: self.steady,
-                frames_count: n as u32,
-                transport: std::ptr::null(),
-                audio_inputs: self.in_bufs.as_ptr(),
-                audio_outputs: self.out_bufs.as_mut_ptr(),
-                audio_inputs_count: self.in_bufs.len() as u32,
-                audio_outputs_count: self.out_bufs.len() as u32,
-                in_events: &self.in_list,
-                out_events: &self.out_list,
-            };
-            let st = (*self.plugin)
-                .process
-                .map(|p| p(self.plugin, &pr))
-                .unwrap_or(CLAP_PROCESS_ERROR);
-            self.steady += n as i64;
-            self.ev.v.clear();
-            self.sleeping = st == CLAP_PROCESS_SLEEP;
-            let o = &self.out_data[0];
-            let r = if o.len() > 1 { 1 } else { 0 };
-            for i in 0..n {
-                let (a, b) = (o[0][i], o[r][i]);
-                out_l[i] = if a.is_finite() {
-                    a.clamp(-8.0, 8.0)
-                } else {
-                    0.0
-                };
-                out_r[i] = if b.is_finite() {
-                    b.clamp(-8.0, 8.0)
-                } else {
-                    0.0
-                };
-            }
-            if st == CLAP_PROCESS_ERROR {
-                out_l[..n].fill(0.0);
-                out_r[..n].fill(0.0);
-            }
         }
+        self.run(n, out_l, out_r, loud);
+    }
+
+    fn latency(&self) -> u32 {
+        self.lat
     }
 
     fn params(&self) -> Vec<ParamInfo> {

@@ -9,6 +9,7 @@
 //! into the engine under the audio lock; the audio thread only feeds events
 //! and pulls audio (no allocation, no locks).
 pub mod clap;
+pub mod fxrack;
 pub mod gui;
 pub mod scan;
 
@@ -52,7 +53,7 @@ impl PluginPatch {
     pub fn macro_id(&self, k: usize) -> u32 {
         self.macros.get(k).copied().unwrap_or(NO_PARAM)
     }
-    fn key(&self) -> String {
+    pub(crate) fn key(&self) -> String {
         format!("{}|{}|{}", self.format, self.id, self.path)
     }
     pub fn state_bytes(&self) -> Option<Vec<u8>> {
@@ -104,6 +105,15 @@ pub trait Hosted: Send {
     fn panic(&mut self);
     /// render `n` frames (<= MAX_BLOCK) with the queued events at frame 0
     fn process(&mut self, n: usize, l: &mut [f32], r: &mut [f32]);
+    /// effect: process `n` frames of input into the output (plugin FX)
+    fn process_fx(&mut self, n: usize, in_l: &[f32], in_r: &[f32], l: &mut [f32], r: &mut [f32]) {
+        let _ = (in_l, in_r);
+        self.process(n, l, r);
+    }
+    /// processing latency the plugin reports (samples)
+    fn latency(&self) -> u32 {
+        0
+    }
     fn params(&self) -> Vec<ParamInfo>;
     fn value(&self, id: u32) -> Option<f64>;
     fn value_text(&self, id: u32, value: f64) -> Option<String>;
@@ -775,5 +785,7 @@ pub fn set_macro_norm(s: &mut crate::audio::Shared, instr: usize, k: usize, n: f
     true
 }
 
+#[cfg(test)]
+mod fxtests;
 #[cfg(test)]
 pub mod tests;
