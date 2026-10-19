@@ -1,4 +1,4 @@
-"""Browser / file manager mockups (3 designs) next to the real Timeline.
+"""Browser / file manager mockups (3 designs), docked on the right of the real Timeline.
 
 python3 docs/mockups/src/browser.py  ->  docs/mockups/src/browser_{a,b,c}.html
 Render: google-chrome --headless --screenshot=out.png --window-size=1600,900 file://…/browser_a.html
@@ -37,9 +37,9 @@ body{margin:0;width:1600px;height:900px;position:relative;overflow:hidden;backgr
  font-family:'Ubuntu','DejaVu Sans',sans-serif;color:#D4D7DB;font-size:13px}
 .abs{position:absolute}
 .mono{font-family:HackM,'DejaVu Sans Mono',monospace}
-#cover{left:0;top:62px;width:366px;height:818px;background:#26292d}
-#main{left:366px;top:62px;width:1234px;height:818px;background:url(%(bg)s) -277px -62px/1600px 900px no-repeat}
-#panel{left:4px;top:66px;width:358px;height:810px;background:#2b2f33;border:1px solid #444a50;border-left:3px solid #4CAF6A;border-radius:0 6px 6px 0;overflow:hidden}
+#cover{left:1234px;top:62px;width:366px;height:818px;background:#26292d}
+#main{left:0;top:62px;width:1234px;height:818px;background:url(%(bg)s) -273px -62px/1600px 900px no-repeat}
+#panel{left:1238px;top:66px;width:358px;height:810px;background:#2b2f33;border:1px solid #444a50;border-right:3px solid #4CAF6A;border-radius:6px 0 0 6px;overflow:hidden}
 .ph{height:30px;display:flex;align-items:center;gap:6px;padding:0 8px;background:linear-gradient(#2f3337,#272a2e);border-bottom:1px solid #1d2023}
 .chip{font-size:11px;font-weight:bold;letter-spacing:.5px;color:#1A1C1F;background:#5CC07A;border-radius:3px;padding:1px 6px}
 .search{flex:1;height:22px;background:#1f2225;border:1px solid #4a5056;border-radius:11px;display:flex;align-items:center;padding:0 8px;color:#7d848c;font-size:12px}
@@ -144,7 +144,7 @@ def design_a():
 </div>
 {legend()}
 """
-    note = '<div class="abs hint" style="left:380px;top:884px;font-size:11px;color:#9AA0A8">Mockup A · tree + file list · double-click or drag a file onto a track; Enter loads into the selected track</div>'
+    note = '<div class="abs hint" style="left:300px;top:884px;font-size:11px;color:#9AA0A8">Mockup A · tree + file list · double-click or drag a file onto a track; Enter loads into the selected track</div>'
     page("a", panel, note)
 
 # ---------------------------------------------------------------- B
@@ -208,7 +208,7 @@ def design_b():
 <span class="hint" style="margin-left:auto">Enter: load</span></div>
 {legend()}
 """
-    note = '<div class="abs hint" style="left:380px;top:884px;font-size:11px;color:#9AA0A8">Mockup B · Bitwig-style category tabs, tag chips, Category/Creator/Location columns, rated results</div>'
+    note = '<div class="abs hint" style="left:300px;top:884px;font-size:11px;color:#9AA0A8">Mockup B · Bitwig-style category tabs, tag chips, Category/Creator/Location columns, rated results</div>'
     page("b", panel, note)
 
 # ---------------------------------------------------------------- C
@@ -273,14 +273,14 @@ def design_c():
 """
     # the drag in progress: a ghost tile over the Hats track and a drop marker
     ghost = f"""
-<div class="abs" style="left:1003px;top:205px;width:2px;height:38px;background:#E8833A;box-shadow:0 0 6px #E8833A"></div>
-<div class="abs" style="left:1004px;top:207px;width:260px;height:34px;border:2px dashed #4F9FD9;border-radius:4px;background:rgba(79,159,217,.18)"></div>
-<div class="abs" style="left:1020px;top:222px;width:96px;height:44px;border-radius:6px;background:#33373c;border:1px solid #4F9FD9;opacity:.92;box-shadow:0 6px 16px rgba(0,0,0,.5);padding:4px;text-align:center">
+<div class="abs" style="left:641px;top:205px;width:2px;height:38px;background:#E8833A;box-shadow:0 0 6px #E8833A"></div>
+<div class="abs" style="left:642px;top:207px;width:260px;height:34px;border:2px dashed #4F9FD9;border-radius:4px;background:rgba(79,159,217,.18)"></div>
+<div class="abs" style="left:658px;top:222px;width:96px;height:44px;border-radius:6px;background:#33373c;border:1px solid #4F9FD9;opacity:.92;box-shadow:0 6px 16px rgba(0,0,0,.5);padding:4px;text-align:center">
  <div style="font-size:10px;color:#E6E8EB">Amen 136.flac</div>{wave(84,22,11,'#4F9FD9',40,'loop')}</div>
-<div class="abs" style="left:1122px;top:248px;background:#1f2225;border:1px solid #4a5056;border-radius:5px;padding:3px 8px;font-size:11.5px;color:#D4D7DB;box-shadow:0 4px 10px rgba(0,0,0,.5)">
+<div class="abs" style="left:760px;top:248px;background:#1f2225;border:1px solid #4a5056;border-radius:5px;padding:3px 8px;font-size:11.5px;color:#D4D7DB;box-shadow:0 4px 10px rgba(0,0,0,.5)">
  Drop on <b style="color:#E0B45C">03 Hats</b> at bar 41 · new audio clip<br><span class="hint">Shift: new track · Alt: replace instrument / sample</span></div>
-<svg class="abs" style="left:300px;top:150px" width="740" height="140"><path d="M30 40 C 260 10, 520 40, 718 78" stroke="#4F9FD9" stroke-width="1.5" stroke-dasharray="4 4" fill="none"/></svg>
-<div class="abs hint" style="left:380px;top:884px;font-size:11px;color:#9AA0A8">Mockup C · places rail + favourites, icon tiles with previews, drag a file onto a track</div>"""
+<svg class="abs" style="left:740px;top:150px" width="830" height="140"><path d="M810 50 C 560 10, 260 40, 14 80" stroke="#4F9FD9" stroke-width="1.5" stroke-dasharray="4 4" fill="none"/></svg>
+<div class="abs hint" style="left:300px;top:884px;font-size:11px;color:#9AA0A8">Mockup C · places rail + favourites, icon tiles with previews, drag a file onto a track</div>"""
     page("c", panel, ghost)
 
 design_a(); design_b(); design_c()
