@@ -214,6 +214,10 @@ impl App {
                                         ui.close();
                                     }
                                 }
+                                ui.separator();
+                                if let Some(pp) = self.plugin_fx_menu(ui) {
+                                    self.add_plugin_fx(slot, pp);
+                                }
                             });
                             if ui.button("Copy effects").clicked() {
                                 self.copy_effects(slot);
@@ -738,7 +742,7 @@ impl App {
 }
 
 /// devices per instrument chain (same limit as the FX view)
-const MAX_DEVICES: usize = 16;
+pub(super) const MAX_DEVICES: usize = 16;
 
 impl App {
     /// Add a default `kind` device at the end of instrument `slot`'s chain.
@@ -762,6 +766,9 @@ impl App {
 
     pub(super) fn copy_effects(&mut self, slot: u8) {
         let idx = (slot as usize).wrapping_sub(1);
+        // copy plugin effects with their current settings
+        self.plug.state_dirty = true;
+        self.capture_plugins();
         if let Some(fx) = self.with(|s| s.song.instruments.get(idx).map(|i| i.fx.clone())) {
             self.status = format!("Copied {} effect(s) from instrument {slot:02X}", fx.len());
             self.fx_clip = Some(fx);
@@ -783,7 +790,11 @@ impl App {
             }
             let room = MAX_DEVICES.saturating_sub(i.fx.len());
             let n = clip.len().min(room);
-            i.fx.extend(clip.into_iter().take(n));
+            // pasted plugin devices are new instances (own uid)
+            i.fx.extend(clip.into_iter().take(n).map(|mut d| {
+                d.renew_uid();
+                d
+            }));
             Some(n)
         });
         if let Some(n) = n {

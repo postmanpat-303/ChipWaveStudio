@@ -525,6 +525,66 @@ fn self_test(out: Option<PathBuf>) -> i32 {
             ));
             ok &= good;
         }
+        // plugin effects: a missing one is bypassed (the song still plays);
+        // CHIPWAVE_SELFTEST_PLUGIN_FX=<file.clap> runs the demo through that
+        // effect and needs sound
+        let fx_song = |patch: plugin::PluginPatch| {
+            let mut s = fileio::demo_song();
+            s.instruments[0].fx.push(fx::Device::plugin(patch));
+            s.order.truncate(1);
+            s
+        };
+        let missing = fx_song(plugin::PluginPatch {
+            format: "clap".into(),
+            id: "org.chipwave.self-test.missing-fx".into(),
+            name: "Missing FX".into(),
+            vendor: String::new(),
+            path: "/nonexistent/missing-fx.clap".into(),
+            state: String::new(),
+            params: vec![],
+            macros: vec![],
+        });
+        let warn = plugin::fxrack::missing_warnings(&missing);
+        let pcm = engine::render_song(&missing, 22050);
+        let rms = (pcm.iter().map(|x| x * x).sum::<f32>() / pcm.len().max(1) as f32).sqrt();
+        let fx_ok = warn.len() == 1 && rms > 0.003 && pcm.iter().all(|x| x.is_finite());
+        let found = plugin::scan::cache().effects();
+        report.push_str(&format!(
+            "  plugin effects: missing effect = bypassed + warning, rms {rms:.4} ({}); {} cached CLAP effect(s)\n",
+            if fx_ok { "ok" } else { "FAILED" },
+            found.len()
+        ));
+        ok &= fx_ok;
+        if let Some(p) = std::env::var_os("CHIPWAVE_SELFTEST_PLUGIN_FX") {
+            let p = PathBuf::from(p);
+            let r = plugin::scan::check_file(&p);
+            let rendered = r.plugins.iter().find(|x| x.desc.is_effect()).map(|f| {
+                let s = fx_song(plugin::PluginPatch {
+                    format: "clap".into(),
+                    id: f.desc.id.clone(),
+                    name: f.desc.name.clone(),
+                    vendor: f.desc.vendor.clone(),
+                    path: p.to_string_lossy().into_owned(),
+                    state: String::new(),
+                    params: vec![],
+                    macros: vec![],
+                });
+                let pcm = engine::render_song(&s, 44100);
+                let rms = (pcm.iter().map(|x| x * x).sum::<f32>() / pcm.len().max(1) as f32).sqrt();
+                (f.desc.name.clone(), rms, pcm.iter().all(|x| x.is_finite()))
+            });
+            let good = matches!(&rendered, Some((_, rms, fin)) if *rms > 1e-4 && *fin);
+            report.push_str(&format!(
+                "  plugin effect {}: {} ({})\n",
+                p.display(),
+                match &rendered {
+                    Some((n, rms, _)) => format!("{n}, demo block rms {rms:.4}"),
+                    None => format!("no effect ({})", r.message),
+                },
+                if good { "ok" } else { "FAILED" }
+            ));
+            ok &= good;
+        }
         ok
     };
     let ok = fill_ok

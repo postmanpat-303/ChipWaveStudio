@@ -385,6 +385,14 @@ impl Device {
             self.params[i] = params(self.kind)[i].to_norm(v);
         }
     }
+    /// a copy of a plugin device gets its own instance (built-in devices
+    /// keep uid 0)
+    pub fn renew_uid(&mut self) {
+        if self.plugin.is_some() {
+            self.uid = new_uid();
+        }
+    }
+
     pub fn param_index(kind: FxKind, key: &str) -> Option<usize> {
         params(kind).iter().position(|p| p.key == key)
     }

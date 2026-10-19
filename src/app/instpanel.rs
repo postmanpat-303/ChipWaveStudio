@@ -52,6 +52,7 @@ enum Act {
     OpenSample,
     OpenFx,
     AddFx(crate::fx::FxKind),
+    AddPluginFx(crate::plugin::PluginPatch),
     Lane(crate::automation::Target),
 }
 
@@ -617,6 +618,7 @@ impl App {
                 Act::OpenSample => self.view = View::Sample,
                 Act::OpenFx => self.view = View::Fx,
                 Act::AddFx(k) => self.add_effect(idx as u8 + 1, k),
+                Act::AddPluginFx(p) => self.add_plugin_fx(idx as u8 + 1, p),
                 Act::Lane(tg) => self.add_lane(tg),
             }
         }
@@ -1284,7 +1286,7 @@ impl App {
                 }
             }
             (Custom::FxChain, _) => {
-                let names: Vec<&str> = inst.fx.iter().map(|d| d.kind.name()).collect();
+                let names: Vec<String> = inst.fx.iter().map(|d| d.title()).collect();
                 ui.label(
                     egui::RichText::new(if names.is_empty() {
                         "no effects".to_string()
@@ -1301,6 +1303,10 @@ impl App {
                                 cx.acts.push(Act::AddFx(f));
                                 ui.close();
                             }
+                        }
+                        ui.separator();
+                        if let Some(pp) = self.plugin_fx_menu(ui) {
+                            cx.acts.push(Act::AddPluginFx(pp));
                         }
                     });
                     if ui

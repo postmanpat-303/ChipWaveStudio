@@ -33,7 +33,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 28] = [
+pub const VIEWS: [&str; 29] = [
     "pattern",
     "arranger",
     "timeline",
@@ -62,6 +62,7 @@ pub const VIEWS: [&str; 28] = [
     "cue",
     "plugin",
     "plugins",
+    "plugin-fx",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -214,6 +215,46 @@ impl App {
                                 s.engine.plugins.slots[k]
                                     .inst
                                     .open_editor("Plugin – ChipWave"),
+                            )
+                        });
+                        eprintln!("editor: {r:?}");
+                    }
+                }
+            }
+            // FX view of the first instrument with a plugin effect; with
+            // CHIPWAVE_SHOT_FX=<file.clap> that effect is added to the
+            // Supersaw Pad first; CHIPWAVE_SHOT_EDITOR=1 opens its editor
+            "plugin-fx" => {
+                if let Some(p) = std::env::var_os("CHIPWAVE_SHOT_FX") {
+                    let p = PathBuf::from(p);
+                    let r = crate::plugin::scan::check_file(&p);
+                    if let Some(f) = r.plugins.into_iter().find(|x| x.desc.is_effect()) {
+                        let mut f = f;
+                        f.path = p.to_string_lossy().into_owned();
+                        let patch = super::fxplugview::patch_of(f);
+                        self.with(|s| {
+                            if let Some(i) = s.song.instruments.get_mut(6) {
+                                i.fx.push(crate::fx::Device::plugin(patch));
+                            }
+                        });
+                    }
+                }
+                let found = self.with(|s| {
+                    s.song.instruments.iter().enumerate().find_map(|(i, x)| {
+                        x.fx.iter().find(|d| d.plugin.is_some()).map(|d| (i, d.uid))
+                    })
+                });
+                if let Some((i, uid)) = found {
+                    self.instr = i as u8 + 1;
+                    self.view = View::Fx;
+                    self.sync_fx_plugins();
+                    if std::env::var_os("CHIPWAVE_SHOT_EDITOR").is_some() {
+                        let r = self.with(|s| {
+                            let k = s.engine.fx_plugins.primary(i, uid)?;
+                            Some(
+                                s.engine.fx_plugins.slots[k]
+                                    .inst
+                                    .open_editor("Plugin effect – ChipWave"),
                             )
                         });
                         eprintln!("editor: {r:?}");

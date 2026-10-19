@@ -18,6 +18,7 @@ mod dialogs;
 mod edit;
 mod file;
 mod fillview;
+mod fxplugview;
 mod fxview;
 mod genview;
 mod instpanel;

@@ -21,7 +21,7 @@ pub(super) struct PluginUi {
     pub param_query: String,
     /// parameter list of the shown instrument: (instrument, list)
     params: Option<(usize, Vec<ParamInfo>)>,
-    tick: u32,
+    pub tick: u32,
     /// instances changed their state since the last capture
     pub state_dirty: bool,
     /// new folder typed in Settings > Plugins
@@ -36,11 +36,13 @@ impl App {
         if let Some(job) = &self.plug.scan {
             if let Ok(c) = job.rx.try_recv() {
                 let n = c.instruments().len();
+                let nfx = c.effects().len();
                 let bad = c.entries.iter().filter(|e| e.status != "ok").count();
                 scan::set_cache(c);
                 self.plug.scan = None;
                 self.plug.scan_msg = format!(
-                    "Scan done: {n} plugin instrument(s){}",
+                    "Scan done: {n} plugin instrument(s), {} effect(s){}",
+                    nfx,
                     if bad > 0 {
                         format!(", {bad} file(s) skipped (see the list)")
                     } else {
@@ -49,7 +51,10 @@ impl App {
                 );
                 self.status = self.plug.scan_msg.clone();
                 // a newly found plugin may fix a missing instrument
-                self.with(|s| s.engine.plugins.errors.clear());
+                self.with(|s| {
+                    s.engine.plugins.errors.clear();
+                    s.engine.fx_plugins.retry();
+                });
             } else {
                 ctx.request_repaint_after(std::time::Duration::from_millis(100));
             }
@@ -61,10 +66,20 @@ impl App {
                 .any(|i| matches!(i.kind, InstrumentKind::Plugin(_)))
                 || !s.engine.plugins.is_empty()
         });
-        if !has_plugins {
+        let has_fx = self.with(|s| {
+            crate::plugin::fxrack::song_has_fx(&s.song) || !s.engine.fx_plugins.is_empty()
+        });
+        if !has_plugins && !has_fx {
             return;
         }
         self.plug.tick = self.plug.tick.wrapping_add(1);
+        if has_fx {
+            self.fx_plugin_frame();
+        }
+        if !has_plugins {
+            ctx.request_repaint_after(std::time::Duration::from_millis(50));
+            return;
+        }
         if self.plug.tick % 15 == 1 {
             let extra = (self.instr as usize).checked_sub(1).map(|i| (i, self.ch));
             plugin::sync(&self.shared, extra);
@@ -132,6 +147,7 @@ impl App {
         for i in instrs {
             engine.plugins.capture(song, i);
         }
+        engine.fx_plugins.capture_all(song);
         self.hist.absorb(song);
     }
 

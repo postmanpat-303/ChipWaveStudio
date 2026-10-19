@@ -8,6 +8,7 @@ const BODY_W: f32 = 200.0;
 
 pub(super) enum FxOp {
     Add(FxKind, Option<usize>),
+    AddPlugin(crate::plugin::PluginPatch),
     Remove(usize),
     Dup(usize),
     Toggle(usize),
@@ -99,6 +100,10 @@ impl App {
                             }
                         });
                     }
+                    ui.separator();
+                    if let Some(pp) = self.plugin_fx_menu(ui) {
+                        ops.push(FxOp::AddPlugin(pp));
+                    }
                 });
             }
             ui.label(
@@ -166,8 +171,17 @@ impl App {
         self.apply_fx_ops(idx, ops);
     }
 
-    fn apply_fx_ops(&mut self, idx: usize, ops: Vec<FxOp>) {
+    pub(super) fn apply_fx_ops(&mut self, idx: usize, ops: Vec<FxOp>) {
         for op in ops {
+            if let FxOp::AddPlugin(p) = op {
+                self.add_plugin_fx(idx as u8 + 1, p);
+                continue;
+            }
+            if matches!(op, FxOp::Dup(_)) {
+                // the copy starts from the plugin's current settings
+                self.plug.state_dirty = true;
+                self.capture_plugins();
+            }
             if !matches!(op, FxOp::Param(_, _, _, false)) {
                 self.snapshot();
             }
@@ -187,10 +201,11 @@ impl App {
                     }
                     FxOp::Add(..) => "Chain is full (16 devices)".into(),
                     FxOp::Remove(i) if i < c.len() => {
-                        format!("Removed {}", c.remove(i).kind.name())
+                        format!("Removed {}", c.remove(i).title())
                     }
                     FxOp::Dup(i) if i < c.len() && c.len() < 16 => {
-                        let d = c[i].clone();
+                        let mut d = c[i].clone();
+                        d.renew_uid();
                         c.insert(i + 1, d);
                         "Duplicated device".into()
                     }
@@ -339,7 +354,14 @@ impl App {
             Stroke::new(1.3, ink),
         );
         egui::Popup::menu(&fr).show(|ui| {
-            ui.label(egui::RichText::new(format!("{} presets", d.kind.name())).strong());
+            ui.label(egui::RichText::new(format!("{} presets", d.title())).strong());
+            if d.kind == FxKind::Plugin {
+                ui.label(
+                    egui::RichText::new("plugin presets live in its editor")
+                        .small()
+                        .color(th().ink2),
+                );
+            }
             for (k, (pn, _)) in fx::presets(d.kind).iter().enumerate() {
                 if ui.button(*pn).clicked() {
                     ops.push(FxOp::Preset(i, k));
@@ -395,11 +417,9 @@ impl App {
             Pos2::new(strip.left(), icon(2).bottom() + 6.0),
             Pos2::new(strip.right(), rr.top() - 6.0),
         );
-        let galley = ui.painter().layout_no_wrap(
-            d.kind.name().to_uppercase(),
-            FontId::proportional(12.5),
-            ink,
-        );
+        let galley =
+            ui.painter()
+                .layout_no_wrap(d.title().to_uppercase(), FontId::proportional(12.5), ink);
         let gw = galley.size().x.min(name_r.height());
         let gh = galley.size().y;
         let pos = Pos2::new(
@@ -415,7 +435,7 @@ impl App {
             .on_hover_cursor(egui::CursorIcon::Grab)
             .on_hover_text(format!(
                 "{}: click to {}, drag to reorder",
-                d.kind.name(),
+                d.title(),
                 if d.collapsed { "expand" } else { "collapse" }
             ));
         if nr.clicked() {
@@ -452,11 +472,19 @@ impl App {
         ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(lay), |ui| {
             ui.set_clip_rect(inner);
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(d.kind.name()).strong().color(t.ink));
+                ui.add(
+                    egui::Label::new(egui::RichText::new(d.title()).strong().color(t.ink))
+                        .truncate(),
+                );
                 if !d.enabled {
                     ui.label(egui::RichText::new("bypassed").small().color(t.ink2));
                 }
             });
+            if d.kind == FxKind::Plugin {
+                let owner = (self.instr as usize).wrapping_sub(1);
+                self.plugin_fx_body(ui, owner, i, d);
+                return;
+            }
             ui.add_space(2.0);
             ui.spacing_mut().slider_width = inner.width() - 4.0;
             ui.spacing_mut().item_spacing.y = 1.0;

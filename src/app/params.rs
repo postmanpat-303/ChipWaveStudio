@@ -2041,7 +2041,10 @@ fn fx_chain(b: &mut B, inst: &Instrument, idx: usize) {
     b.custom("fx.chain", "FX chain", Custom::FxChain)
         .tip("add effects, open the FX view (reorder, presets)");
     for (j, d) in inst.fx.iter().enumerate() {
-        b.card(Tab::Fx, &format!("{} {}", j + 1, d.kind.name()));
+        let card = b.card(Tab::Fx, &format!("{} {}", j + 1, d.title()));
+        if d.kind == crate::fx::FxKind::Plugin {
+            card.note = "plugin effect: parameters and editor in the FX view".into();
+        }
         let gs: (Get, Set) = (
             Box::new(move |i| {
                 if i.fx.get(j).is_some_and(|d| d.enabled) {

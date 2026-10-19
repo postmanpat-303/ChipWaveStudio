@@ -1,6 +1,10 @@
 //! Automation lanes: lane edit operations, adding lanes and the automation bar.
 use super::*;
 
+/// a plugin effect device in the lane menu: (instrument, device, title,
+/// (param id, name))
+type PlugDev = (usize, usize, String, Vec<(u32, String)>);
+
 impl App {
     pub(super) fn apply_lane_ops(&mut self, ops: Vec<LaneOp>) {
         use crate::automation::Point;
@@ -62,6 +66,26 @@ impl App {
 
     pub(super) fn add_lane(&mut self, t: crate::automation::Target) {
         use crate::automation::{Lane, Target};
+        // plugin effect parameter: its name from the running instance
+        let plug_name = match t {
+            Target::Fx(i, d, p) => self
+                .with(|s| {
+                    s.song
+                        .instruments
+                        .get(i)
+                        .and_then(|x| x.fx.get(d))
+                        .filter(|dev| dev.plugin.is_some())
+                        .map(|dev| dev.uid)
+                })
+                .map(|uid| {
+                    self.fx_plugin_params(i, uid)
+                        .into_iter()
+                        .find(|x| x.id as usize == p)
+                        .map(|x| x.name)
+                        .unwrap_or_else(|| format!("param {p}"))
+                }),
+            _ => None,
+        };
         let label = self.with(|s| {
             let iname = |i: usize| {
                 s.song
@@ -87,11 +111,14 @@ impl App {
                         .map(|dev| {
                             format!(
                                 "{} {}",
-                                dev.kind.name(),
-                                crate::fx::params(dev.kind)
-                                    .get(p)
-                                    .map(|x| x.name)
-                                    .unwrap_or("")
+                                dev.title(),
+                                match &plug_name {
+                                    Some(n) => n.as_str(),
+                                    None => crate::fx::params(dev.kind)
+                                        .get(p)
+                                        .map(|x| x.name)
+                                        .unwrap_or(""),
+                                }
                             )
                         });
                     format!("{} - {}", iname(i), pn.unwrap_or_default())
@@ -169,13 +196,27 @@ impl App {
                 Target::ChanPan(c) => t.to_norm(s.song.mixer.channels[c].pan),
                 Target::Master => t.to_norm(s.song.mixer.master),
                 Target::Tempo => t.to_norm(s.song.bpm),
-                Target::Fx(i, d, p) => s
-                    .song
-                    .instruments
-                    .get(i)
-                    .and_then(|x| x.fx.get(d))
-                    .and_then(|dev| dev.params.get(p).copied())
-                    .unwrap_or(0.5),
+                Target::Fx(i, d, p) => {
+                    let dev = s.song.instruments.get(i).and_then(|x| x.fx.get(d));
+                    match dev {
+                        // plugin parameter: its current value over its range
+                        Some(dev) if dev.plugin.is_some() => {
+                            let r = &s.engine.fx_plugins;
+                            r.primary(i, dev.uid)
+                                .and_then(|k| {
+                                    let inst = &r.slots[k].inst;
+                                    let info =
+                                        inst.params().into_iter().find(|x| x.id as usize == p)?;
+                                    let v = inst.value(info.id)?;
+                                    let span = (info.max - info.min).max(1e-9);
+                                    Some(((v - info.min) / span) as f32)
+                                })
+                                .unwrap_or(0.5)
+                        }
+                        Some(dev) => dev.params.get(p).copied().unwrap_or(0.5),
+                        None => 0.5,
+                    }
+                }
                 Target::Ret(r, p) => s
                     .song
                     .mixer
@@ -225,6 +266,30 @@ impl App {
                 .map(|i| i.fx.iter().map(|d| d.kind).collect::<Vec<_>>())
                 .collect::<Vec<_>>()
         });
+        // plugin effect devices: (instrument, device) -> (title, parameters)
+        let plugdevs: Vec<PlugDev> = self
+            .with(|s| {
+                let mut v = vec![];
+                for (i, inst) in s.song.instruments.iter().enumerate() {
+                    for (d, dev) in inst.fx.iter().enumerate() {
+                        if dev.plugin.is_some() {
+                            v.push((i, d, dev.title(), dev.uid));
+                        }
+                    }
+                }
+                v
+            })
+            .into_iter()
+            .map(|(i, d, title, uid)| {
+                let ps = self
+                    .fx_plugin_params(i, uid)
+                    .into_iter()
+                    .filter(|x| !x.readonly)
+                    .map(|x| (x.id, x.label()))
+                    .collect();
+                (i, d, title, ps)
+            })
+            .collect();
         let (ninst, synths, nch, nl) = self.with(|s| {
             (
                 s.song.instruments.len(),
@@ -306,6 +371,28 @@ impl App {
                             });
                         }
                         for (d, k) in fxdevs.get(i).into_iter().flatten().enumerate() {
+                            if let Some((_, _, title, ps)) =
+                                plugdevs.iter().find(|x| x.0 == i && x.1 == d)
+                            {
+                                ui.menu_button(
+                                    format!("{:02X} {n} - FX {} {title}", i + 1, d + 1),
+                                    |ui| {
+                                        if ps.is_empty() {
+                                            ui.label("load the plugin first (play a note)");
+                                        }
+                                        ui.set_max_height(320.0);
+                                        egui::ScrollArea::vertical().show(ui, |ui| {
+                                            for (id, name) in ps {
+                                                if ui.button(name).clicked() {
+                                                    add = Some(Target::Fx(i, d, *id as usize));
+                                                    ui.close();
+                                                }
+                                            }
+                                        });
+                                    },
+                                );
+                                continue;
+                            }
                             ui.menu_button(
                                 format!("{:02X} {n} - FX {} {}", i + 1, d + 1, k.name()),
                                 |ui| {

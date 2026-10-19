@@ -255,11 +255,12 @@ impl Target {
         use crate::fx::FxKind;
         let info = |k: FxKind, p: usize| crate::fx::params(k).get(p).map(|i| i.format(n));
         match self {
-            Target::Fx(i, d, p) => units
-                .get(i)
-                .and_then(|x| x.fx.get(d))
-                .and_then(|&k| info(k, p))
-                .unwrap_or_default(),
+            Target::Fx(i, d, p) => match units.get(i).and_then(|x| x.fx.get(d)) {
+                // plugin parameters: normalised over the parameter's range
+                Some(FxKind::Plugin) => format!("{:.0} %", n * 100.0),
+                Some(&k) => info(k, p).unwrap_or_default(),
+                None => String::new(),
+            },
             Target::Gen(i, k) => match units.get(i).and_then(|u| u.gen.get(k)) {
                 Some(Some(d)) => d.show(n),
                 _ => format!("{:.0} %", n * 100.0),

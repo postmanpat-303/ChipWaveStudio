@@ -334,7 +334,8 @@ fn rack_needs_follow_the_song_and_instrument_renumbering() {
     let gone = rack.remap(&|i| if i == 0 { Some(4) } else { Some(i) });
     assert!(gone.is_empty());
     assert_eq!(rack.slots[0].owner, 4);
-    assert_eq!(rack.chain_latency(4), (FX_BLOCK + LAT) as u32);
+    assert!(rack.primary(4, 7).is_some());
+    assert_eq!(rack.slots[0].latency, (FX_BLOCK + LAT) as u32);
 }
 
 #[test]

@@ -3006,3 +3006,71 @@ fn mixer_return_strips_never_hide_behind_master() {
         }
     }
 }
+
+fn missing_fx_patch() -> crate::plugin::PluginPatch {
+    crate::plugin::PluginPatch {
+        format: "clap".into(),
+        id: "org.chipwave.ui-test.missing-fx".into(),
+        name: "Missing FX".into(),
+        vendor: "Nobody".into(),
+        path: "/nonexistent/missing-fx.clap".into(),
+        state: "c3RhdGU=".into(),
+        params: vec![],
+        macros: vec![],
+    }
+}
+
+#[test]
+fn plugin_effect_device_missing_notice_duplicate_and_paste_get_new_uids() {
+    let mut h = harness();
+    // every add-effect menu offers plugin effects
+    instr_menu(&mut h, 2);
+    click_exact(&mut h, "Add effect");
+    exact(&h, crate::fx::FxKind::Plugin.name());
+    h.key_press(egui::Key::Escape);
+    frames(&mut h, 2);
+    h.with_engine(|s| {
+        s.song.instruments[1].fx.clear();
+        s.song.instruments[1]
+            .fx
+            .push(crate::fx::Device::plugin(missing_fx_patch()));
+    });
+    h.state_mut().instr = 2;
+    h.state_mut().view = View::Fx;
+    frames(&mut h, 20);
+    // the device shows the plugin's name and the missing notice
+    exact(&h, "Missing FX");
+    let err = h.with_engine(|s| s.engine.fx_plugins.errors.clone());
+    assert_eq!(err.len(), 1, "load failed once: {err:?}");
+    assert!(
+        h.query_all_by(|n| n
+            .label()
+            .or(n.value())
+            .is_some_and(|l| l.contains("bypassed, settings kept")))
+            .next()
+            .is_some(),
+        "missing notice shown"
+    );
+    let uid0 = fx_of(&mut h, 2)[0].uid;
+    assert_ne!(uid0, 0);
+    // Duplicate (device menu): a new instance with the same saved state
+    h.state_mut()
+        .apply_fx_ops(1, vec![super::fxview::FxOp::Dup(0)]);
+    frames(&mut h, 2);
+    let fx = fx_of(&mut h, 2);
+    assert_eq!(fx.len(), 2);
+    assert_ne!(fx[1].uid, uid0, "duplicate gets its own uid");
+    assert_eq!(fx[1].plugin, fx[0].plugin, "same plugin and state");
+    // paste-append into the same instrument: uids stay unique
+    instr_menu(&mut h, 2);
+    click_exact(&mut h, "Copy effects");
+    instr_menu(&mut h, 2);
+    click_exact(&mut h, "Paste effects (append)");
+    let fx = fx_of(&mut h, 2);
+    assert_eq!(fx.len(), 4);
+    let mut uids: Vec<u32> = fx.iter().map(|d| d.uid).collect();
+    uids.sort();
+    uids.dedup();
+    assert_eq!(uids.len(), 4, "pasted devices are new instances");
+    assert_eq!(fx[3].plugin.as_ref().unwrap().state, "c3RhdGU=");
+}

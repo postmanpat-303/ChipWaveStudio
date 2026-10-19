@@ -512,19 +512,6 @@ impl FxRack {
             s.latency = FX_BLOCK as u32 + s.inst.latency();
         }
     }
-
-    /// total plugin latency of instrument `owner`'s chain (samples)
-    pub fn chain_latency(&self, owner: usize) -> u32 {
-        let mut seen: Vec<u32> = vec![];
-        let mut t = 0;
-        for s in &self.slots {
-            if s.owner == owner && !seen.contains(&s.uid) {
-                seen.push(s.uid);
-                t += s.latency;
-            }
-        }
-        t
-    }
 }
 
 pub struct FxPlan {

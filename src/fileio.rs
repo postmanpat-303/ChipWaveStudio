@@ -451,6 +451,8 @@ pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
     }
     // plugin instruments that are not installed here: placeholder + warning
     warnings.extend(crate::plugin::missing_warnings(&song));
+    // plugin effects that are not installed here: bypassed, state kept
+    warnings.extend(crate::plugin::fxrack::missing_warnings(&song));
     Ok((song, warnings))
 }
 
@@ -997,7 +999,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
             Target::Fx(i, d, p) => song.instruments[i]
                 .fx
                 .get(d)
-                .map(|dev| &crate::fx::params(dev.kind)[p]),
+                .and_then(|dev| crate::fx::params(dev.kind).get(p)),
             Target::Ret(r, p) => Some(
                 &crate::fx::params(if r == 0 {
                     crate::fx::FxKind::Delay
