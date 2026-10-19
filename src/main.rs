@@ -15,6 +15,7 @@ mod chipfx;
 mod chordgen;
 mod chords;
 mod credits;
+mod drumpat;
 mod engine;
 mod export;
 mod fileio;

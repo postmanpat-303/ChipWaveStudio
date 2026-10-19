@@ -225,6 +225,7 @@ impl Chan {
 
 mod audioclips;
 mod notes;
+pub mod patprev;
 #[cfg(test)]
 pub use notes::NOTE_VOICES;
 
@@ -391,6 +392,8 @@ pub struct Engine {
     nv: notes::NoteState,
     /// audio-clip voices (timeline mode, M4)
     av: audioclips::AudioState,
+    /// Browser drum-pattern preview (engine/patprev.rs); None = off
+    patprev: Option<Box<patprev::PatPreview>>,
 }
 
 /// Timeline-mode playback: the plan being played, the row position and the
@@ -485,6 +488,7 @@ impl Engine {
             tl: TlState::default(),
             nv: notes::NoteState::new(),
             av: audioclips::AudioState::new(),
+            patprev: None,
         }
     }
 
@@ -2077,6 +2081,9 @@ impl Engine {
             self.live.rx = Some(rx);
         }
         let live_on = self.live.v.iter().any(|v| v.active);
+        // drum-pattern preview: aligned with the transport once per callback
+        let pp_on = self.patprev.is_some();
+        let pp_rate = self.pp_begin(song);
         let nch = song.channels.clamp(1, MAX_CHANNELS);
         // note clips (timeline mode): the plan can't change during a callback
         let note_plan = self.tl.plan.clone().filter(|p| self.tl.on && p.has_notes());
@@ -2408,6 +2415,11 @@ impl Engine {
                 let (rl, rr) = ch.process(bus[b][0], bus[b][1], &ctx);
                 l += rl * lvl;
                 r += rr * lvl;
+            }
+            if pp_on {
+                let (pl, pr) = self.pp_sample(pp_rate);
+                l += pl / 0.6;
+                r += pr / 0.6;
             }
             if self.test_tone > 0 {
                 self.test_tone -= 1;
