@@ -365,6 +365,7 @@ impl App {
                 "instrument" => self.show_instrument_panel(),
                 "arranger" => self.set_lower(0),
                 "automation" => self.set_lower(2),
+                "piano" => self.set_lower(3),
                 "full" => {
                     self.set_lower(0);
                     self.toggle_full_height();

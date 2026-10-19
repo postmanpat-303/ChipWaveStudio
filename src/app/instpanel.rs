@@ -194,7 +194,9 @@ impl App {
         self.extra.full_height = false;
         self.extra.lower_inst = m == 1;
         self.extra.lower_chosen = true;
-        if m == 1 {
+        self.pr.open = m == 3;
+        self.pr.focus = m == 3;
+        if m == 1 || m == 3 {
             self.arr_focus = false;
         } else {
             self.show_auto = m == 2;
@@ -205,6 +207,8 @@ impl App {
     fn lower_mode(&self) -> u8 {
         if self.extra.lower_inst {
             1
+        } else if self.pr.open {
+            3
         } else if self.show_auto {
             2
         } else {
@@ -216,7 +220,7 @@ impl App {
     pub(super) fn pattern_and_lower(&mut self, ui: &mut egui::Ui, inner: Rect) {
         let t = th();
         let nl = self.with(|s| s.song.automation.len());
-        let auto_h = if self.extra.lower_inst {
+        let auto_h = if self.extra.lower_inst || self.pr.open {
             (inner.height() * 0.45).clamp(200.0, 340.0)
         } else if self.show_auto && nl > 0 {
             (inner.height() * 0.5).clamp(190.0, 120.0 + nl as f32 * 68.0 + 60.0)
@@ -311,6 +315,8 @@ impl App {
         ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
             if self.extra.lower_inst {
                 self.instrument_view(ui)
+            } else if self.pr.open {
+                self.piano_view(ui)
             } else {
                 self.arranger_view(ui)
             }
@@ -334,6 +340,11 @@ impl App {
                     "edit the selected instrument with knobs (Ctrl+I)",
                 ),
                 (2, "Automation", "the arranger with its automation lanes"),
+                (
+                    3,
+                    "Piano roll",
+                    "the notes of the selected clip (or the current block column) as bars: draw, move, resize",
+                ),
             ] {
                 let txt = egui::RichText::new(name).strong();
                 if ui

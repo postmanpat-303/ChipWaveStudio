@@ -6,14 +6,14 @@ use super::*;
 use crate::timeline::{Tick, PPQ, ROW};
 use egui_kittest::Harness;
 
-fn with_mods(h: &mut Harness<'static, App>, m: egui::Modifiers, e: egui::Event) {
+pub(super) fn with_mods(h: &mut Harness<'static, App>, m: egui::Modifiers, e: egui::Event) {
     h.input_mut().events.push(egui::Event::ModifiersChanged(m));
     h.input_mut().events.push(e);
     frame(h);
 }
 
 /// a real mouse drag with modifiers held throughout
-fn drag_m(h: &mut Harness<'static, App>, from: Pos2, to: Pos2, m: egui::Modifiers) {
+pub(super) fn drag_m(h: &mut Harness<'static, App>, from: Pos2, to: Pos2, m: egui::Modifiers) {
     with_mods(h, m, egui::Event::PointerMoved(from));
     let btn = |pos, pressed| egui::Event::PointerButton {
         pos,
@@ -33,7 +33,7 @@ fn drag_m(h: &mut Harness<'static, App>, from: Pos2, to: Pos2, m: egui::Modifier
     }
 }
 
-fn click_at(h: &mut Harness<'static, App>, p: Pos2) {
+pub(super) fn click_at(h: &mut Harness<'static, App>, p: Pos2) {
     with_mods(h, egui::Modifiers::NONE, egui::Event::PointerMoved(p));
     for pressed in [true, false] {
         with_mods(

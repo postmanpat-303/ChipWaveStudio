@@ -33,6 +33,9 @@ mod midiview;
 mod mixer;
 mod params;
 mod pattern;
+#[cfg(test)]
+mod piano_tests;
+mod pianoview;
 mod pluginview;
 mod sampleview;
 mod settingsview;
@@ -239,6 +242,8 @@ pub struct App {
     plug: pluginview::PluginUi,
     /// Timeline view state and its derived-timeline cache (app/timeline.rs)
     pub(crate) tlv: timeline::TimelineUi,
+    /// piano roll in the lower panel (app/pianoview.rs)
+    pub(crate) pr: pianoview::PianoUi,
     /// "made with a newer ChipWave Studio" message (open refused)
     too_new: Option<String>,
 }
@@ -515,6 +520,7 @@ impl App {
             instr_shown: 0,
             plug: Default::default(),
             tlv: Default::default(),
+            pr: Default::default(),
             too_new: None,
         };
         let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
@@ -878,6 +884,10 @@ impl eframe::App for App {
         self.instr_delete_dialog(ui.ctx());
         self.block_len_dialog(ui.ctx());
         self.chord_window(ui.ctx());
+        self.pr_release(!self.pr.open);
+        if !self.pr.open {
+            self.pr.focus = false;
+        }
         self.library_window(ui.ctx());
         if self.save_job.is_some() {
             ui.ctx()

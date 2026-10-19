@@ -248,6 +248,7 @@ impl App {
         });
         self.auto_lane = n;
         self.show_auto = true;
+        self.pr.open = false;
         // the lower panel shows the new lane (it opens on the instrument
         // editor by default, where lanes aren't drawn)
         if self.extra.lower_inst {

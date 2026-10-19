@@ -123,6 +123,10 @@ impl App {
             if self.modal_key(key, m, ctx) {
                 continue;
             }
+            // the piano roll has the keyboard (clicked into last)
+            if self.pr_active() && self.pr_key(key, m) {
+                continue;
+            }
             // Timeline view: its own keys; plain keys never type into the pattern
             if self.view == View::Timeline {
                 if self.timeline_key(key, m) {

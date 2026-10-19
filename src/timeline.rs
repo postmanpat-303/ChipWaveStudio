@@ -1113,6 +1113,7 @@ pub fn from_toml(text: &str) -> Result<Timeline, String> {
 
 mod edit;
 mod plan;
+pub mod roll;
 pub use edit::*;
 pub use plan::*;
 
