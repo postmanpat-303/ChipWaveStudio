@@ -233,11 +233,14 @@ impl App {
     }
 
     fn adv_contents(&mut self, ui: &mut egui::Ui) {
-        let t = th();
         ui.spacing_mut().item_spacing.y = 3.0;
+        // headings and hints in the theme's text colours (the accent is too
+        // pale on Amiga's grey panels)
+        let strong = ui.visuals().strong_text_color();
+        let hint = ui.visuals().text_color().gamma_multiply(0.8);
         let head = |ui: &mut egui::Ui, s: &str| {
             ui.add_space(4.0);
-            ui.label(egui::RichText::new(s).strong().size(12.5).color(t.accent));
+            ui.label(egui::RichText::new(s).strong().size(12.5).color(strong));
         };
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("A<>E  Advanced Edit").strong());
@@ -269,7 +272,7 @@ impl App {
             Ok(a) => self.with(|s| a.describe(s.song.patterns.len())),
             Err(e) => e,
         };
-        ui.add(egui::Label::new(egui::RichText::new(aff).small().color(t.ink2)).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(aff).small().color(hint)).wrap());
 
         head(ui, "Section to process");
         for s in Section::ALL {
@@ -305,7 +308,7 @@ impl App {
                 }
                 ui.end_row();
             });
-        ui.label(egui::RichText::new("RMB = solo mask").small().color(t.ink2));
+        ui.label(egui::RichText::new("RMB = solo mask").small().color(hint));
 
         let mut op = None;
         head(ui, "Cut / Copy / Paste");
@@ -348,7 +351,7 @@ impl App {
         ui.label(
             egui::RichText::new("Shrink: even rows, pack up")
                 .small()
-                .color(t.ink2),
+                .color(hint),
         );
 
         head(ui, "Notes");
@@ -441,7 +444,7 @@ impl App {
             ui.label(
                 egui::RichText::new("No instruments in this song")
                     .small()
-                    .color(t.ink2),
+                    .color(hint),
             );
         } else {
             let n = names.len() as u8;
@@ -478,7 +481,7 @@ impl App {
         ui.label(
             egui::RichText::new("Every button is one undo step (Ctrl+Z)")
                 .small()
-                .color(t.ink2),
+                .color(hint),
         );
         if let Some(op) = op {
             let ctx = ui.ctx().clone();
