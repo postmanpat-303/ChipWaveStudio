@@ -125,10 +125,25 @@ In timeline mode every track can show **automation lanes (M5)** under its header
 | Bars or time | **Bars** / **Time** switches the ruler between bar numbers and minutes:seconds. The readout shows `bar.beat · m:ss` at the playhead, or at the play marker while stopped |
 | Open a clip | **Double-click** a clip: it opens in the lower panel's **Piano roll** tab (a block clip shows that column of its block, which also becomes the pattern editor's current block and channel; a note clip shows its notes). **Alt+double-click**, **Enter** or right-click › **Open in the pattern editor** opens the block in the pattern editor instead, with the cursor in the clip's column (on the row you clicked; Enter: at the clip's start). **Settings › Double-click a clip** swaps the two (*Piano roll*, the default, or *Pattern editor*; Alt always does the other one). Audio clips don't open. Double-clicking an empty part of a track opens the block playing there (tracker mode) or writes a new one (timeline mode) in the pattern editor |
 | Select | Click a clip (outlined). **Esc** clears the selection |
-| Track header | Coloured strip, number, name and instrument. **M** / **S** mute and solo the channel. The mini-fader is the mixer volume (double-click for 0 dB), and the meter is the channel's. Click a header to put the pattern cursor on that channel |
+| Track header | Coloured strip, number, name and instrument. **M** / **S** mute and solo the channel. The mini-fader is the mixer volume (double-click for 0 dB), and the meter is the channel's. Click a header to put the pattern cursor on that channel. Drag it up or down to reorder; right-click to add tracks ([Tracks](#tracks-add-reorder-instruments)) |
 | Full height | **F11** hides the lower panel and the timeline gets the whole height. **Ctrl+I** brings back the instrument editor under it |
 
 Keys typed in the Timeline view never enter notes. Ctrl shortcuts and the F-keys work as everywhere else, and **Space** plays the song from the play marker.
+
+## Tracks: add, reorder, instruments
+
+Tracks are mixer channels, so these change the song's channels (up to 32). Every one is a single undo step.
+
+| Do | How |
+|---|---|
+| **Add a track** | **+ Add track** under the last track header, or right-click a header › **Add track above** / **Add track below**. A new track is empty, with default mixer settings, named "Track N" |
+| **Add a track with an instrument** | right-click a header › **Add track with instrument…**: the [Browser](BROWSER.md) opens on its Instruments tab, and the next instrument you double-click (or Enter) there makes the track, named after it. Or **drag an instrument from the Browser onto the empty area below the last track**: an insertion line and "New track: <name>" show where it goes |
+| **Give a track an instrument** | drag an instrument, preset, `.cwi` file or VST3 / CLAP plugin instrument from the Browser onto the **track's header** (or its row). The header lights up. Every note on the track switches to that instrument (block clips: the track's column of each block; note clips: their notes), and the track remembers it, so the header shows it even while the track is empty and clicking the header makes it the current instrument |
+| **Reorder** | **drag a header up or down** (by its number / name). An insertion line shows where it lands; let go to move it |
+
+When all 32 tracks are used, the add commands are greyed out with "all 32 tracks are used (the channel limit)" and a drop below the tracks says so instead of adding one.
+
+**Reordering moves the whole channel**, in timeline *and* tracker mode: its column in every block (so tracker-mode blocks are remapped, not just the view), its mixer strip (volume, pan, mute / solo, sends, ducking, and the duck key if it was this channel), its name, its timeline track (clips, height, automation lanes) and every automation lane or modulation route that targets the channel (`mixer.ch.N.volume`, `…pan`, `…send.X`). Playback is therefore the same music; only the order in which the channels are added together changes, which can differ in the last bits of a float (tests allow 1e‑4 and in practice it's far smaller). We chose to remap safely in both modes rather than allow reordering only in timeline mode, because tracks are channels in both and a tracker-mode user expects the columns to follow. Track colours follow the position (as before), so a moved track takes the colour of its new place.
 
 ## New songs
 
@@ -216,7 +231,7 @@ Tracker-mode songs are written exactly as before, byte for byte, with `min_reade
 `chipwave --screenshot out.png --view timeline --song demos/disco.cwt.toml` plays from order entry 8 (`CHIPWAVE_SHOT_POS=n` changes it). `--view timeline-new` shows a new song, `--view timeline-audio` audio clips (a looped break with a fade-in, a pad with fades and gain, a missing file), `--view timeline-automation` automation lanes (track lanes on Bass and Hats, a clip lane on a Bass clip). See `scripts/screenshots.sh`.
 
 ## Limits in this version
-- **Not yet in M2:** range selection with insert / delete time, snapping to other clips' edges and markers, clip fades and gain, a MOD/MMD exporter (ChipWave has none yet; the tracker-compatible copy is a `.cwt`), and the browser panel. These move to M3.
+- **Not yet in M2:** range selection with insert / delete time, snapping to other clips' edges and markers, clip fades and gain, a MOD/MMD exporter (ChipWave has none yet; the tracker-compatible copy is a `.cwt`), and the browser panel. These move to M3. (The Browser is now in: [BROWSER.md](BROWSER.md).)
 - **Chase:** a seek re-strikes held notes only on sustaining patches (plugin instruments get no re-strike), and slides (`01`, `02`, `0D`…) running at the seek point are not replayed.
 - **Glue** writes the result into the track's own column of the new block, at most 256 rows.
 - **Tempo:** the ruler's time and the readout use the song's BPM and the tempo map. `0Fxx` tempo commands inside blocks still play, but the ruler doesn't show their effect on time.

@@ -231,13 +231,15 @@ fn plugin_folder_search_finds_folders_and_skips_bundles() {
     let visited = AtomicUsize::new(0);
     let now = std::sync::Mutex::new(String::new());
     let stop = AtomicBool::new(false);
-    let found = find_plugin_folders(&[d.clone()], 8, 10_000, &visited, &now, &stop);
+    let found = find_plugin_folders(std::slice::from_ref(&d), 8, 10_000, &visited, &now, &stop);
     let mut got: Vec<(PathBuf, usize)> = found;
     got.sort();
     assert_eq!(got, vec![(a.clone(), 2), (b.clone(), 1)]);
     assert!(visited.load(std::sync::atomic::Ordering::Relaxed) >= 4);
     // a stop request ends the search at once
     stop.store(true, std::sync::atomic::Ordering::Relaxed);
-    assert!(find_plugin_folders(&[d.clone()], 8, 10_000, &visited, &now, &stop).is_empty());
+    assert!(
+        find_plugin_folders(std::slice::from_ref(&d), 8, 10_000, &visited, &now, &stop).is_empty()
+    );
     let _ = std::fs::remove_dir_all(&d);
 }

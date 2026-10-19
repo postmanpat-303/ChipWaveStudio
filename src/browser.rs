@@ -291,6 +291,7 @@ pub fn tags_for(name: &str, more: &str) -> Vec<&'static str> {
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn item(
     key: String,
     name: String,
@@ -1010,7 +1011,7 @@ pub fn grid_fx_device(name: &str) -> Option<crate::fx::Device> {
 pub fn preview_song(inst: &Instrument, base: &Song, ch: usize) -> Song {
     let mut s = instfile::audition_song(inst, base);
     if let Some(c) = base.mixer.channels.get(ch) {
-        let mut c = c.clone();
+        let mut c = *c;
         c.mute = false;
         c.solo = false;
         if let Some(d) = s.mixer.channels.get_mut(0) {

@@ -64,6 +64,10 @@ All pictures on this page are real captures of the current build (no mockups). T
     <td width="50%"><img src="docs/screenshots/dark-fx-chrome.png" alt="FX chain with the chrome devices"><br><b>FX chain</b>: per-instrument device strip with Filter, Chorus/Flanger, Delay, Reverb, Drive, Bitcrusher and Compressor, plus the chrome devices <b>Metal resonator</b>, <b>Digital distortion</b> and <b>Sub bass</b> (0.2.3.11, they follow the note; <code>40</code>–<code>42</code> set their mix); bypass, collapse, drag to reorder, presets.</td>
   </tr>
   <tr>
+    <td width="50%"><img src="docs/screenshots/dark-browser.png" alt="The Browser docked on the right of the Timeline: category tabs, search, tag chips, filter columns and rated results"><br><b>Browser</b> <sub>(Unreleased)</sub>: <code>Ctrl+B</code>. Instruments, CLAP / VST3 plugins, samples, songs, presets, Grid patches and wavetables in one searchable panel with tags, Category / Creator / Location filters, favourites and ratings. Double-click to load, drag onto a track header to give the track that sound, or below the last track for a new one. See <a href="docs/BROWSER.md">BROWSER.md</a>.</td>
+    <td width="50%"><img src="docs/screenshots/dark-plugin-setup.png" alt="The Find plugins step: scan automatically, choose folders, or skip"><br><b>Find plugins</b> <sub>(Unreleased)</sub>: on the first start ChipWave offers to search the standard VST3 / CLAP folders (optionally the whole drive) in the background, let you pick folders, or skip. Always in Settings › Plugins.</td>
+  </tr>
+  <tr>
     <td width="50%"><img src="docs/screenshots/dark-fill.png" alt="Fill to length"><br><b>Fill to length</b>: auto-arrange the song to a target length from a style, with an editable energy curve, variation, seed, preview and section locks.</td>
     <td width="50%"><img src="docs/screenshots/dark-settings.png" alt="Settings"><br><b>Settings</b>: summary cards for Audio, Look, Keys (remappable), Files &amp; Safety (autosave, backups, crash recovery, update check) and MIDI. <sub>(Captured on a machine without a sound card, hence “no audio output”.)</sub></td>
   </tr>
@@ -240,6 +244,7 @@ On Linux, build it from source (below).
 | `Ctrl+,` | settings |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | UI scale up / down / 100 % |
 | `Ctrl+I` | instrument editor in the lower panel (again: back to the arranger) |
+| `Ctrl+B` | show / hide the Browser (instruments, plugins, samples, songs…; [BROWSER.md](docs/BROWSER.md)) |
 | `Ctrl+F` | search the instrument's parameters |
 | `F11` | Full-height pattern: hide / show the lower panel |
 | `F12` | the full key list (Help > Keys) |
@@ -285,6 +290,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [FX.md](docs/FX.md) — the FX devices (Phaser and the rest)
 - [ARRANGER.md](docs/ARRANGER.md) — the arranger (the order list as a lane of blocks)
 - [TIMELINE.md](docs/TIMELINE.md) — the Timeline view (Ctrl+T) and timeline mode: arrange tracks and clips like a DAW
+- [BROWSER.md](docs/BROWSER.md) — the Browser (Ctrl+B): find and load instruments, plugins, samples, songs, presets, Grid patches and wavetables; drag them onto tracks; Find plugins
 - [DAW_TIMELINE_PLAN.md](docs/DAW_TIMELINE_PLAN.md) — the DAW timeline plan and milestones
 - [AUTO_ARRANGE.md](docs/AUTO_ARRANGE.md) — fill-to-length auto arrange and quick-start fun features
 - [EXPORT.md](docs/EXPORT.md) — WAV/MP3 export

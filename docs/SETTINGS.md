@@ -38,7 +38,7 @@ Theme, UI scale (auto from the OS or 75–300 %), pattern font and size, row hig
 Keymap preset (ChipWave / FT2 / ProTracker / OpenMPT / OctaMED), "press a key" rebinding, conflict list, piano layout (physical-key based), and an import/export `keymap.toml` ([PATTERN_EDITOR.md §9](PATTERN_EDITOR.md)).
 
 ### 2.5 Plugins
-Scan folders, scan timeout, parallel scanners, rescan / retry failed, and a link to the full plugin manager.
+Scan folders, scan timeout, parallel scanners, rescan / retry failed, and a link to the full plugin manager. **Find plugins…** (Unreleased) opens the plugin search from the first start again: standard folders, an optional whole-drive search, or folders you pick ([BROWSER.md › Find plugins](BROWSER.md#find-plugins)). Its answer is `plugin_setup_done` (once true, it isn't offered at startup again).
 
 ### 2.6 Files and Safety
 Default song folder, autosave interval, number of backups and backup location, journal, persistent undo, recovery folder and cleanup age, and the recent files list (clear, pin). All of these are explained in [SAFETY.md](SAFETY.md).
@@ -56,6 +56,8 @@ These are set from the View menu and the lower panel, and saved in `settings.tom
 - the collapsed instrument-editor cards (`cards_closed`, as "Type/Card")
 - whether File › New opens on the Timeline view, in timeline mode (`new_in_timeline`, default on; **Settings › New songs**, Unreleased; off = a tracker-mode song on the pattern editor). See [TIMELINE.md](TIMELINE.md#new-songs)
 - what double-clicking a clip on the Timeline opens (`dblclick_roll`, default on = the piano roll; **Settings › Double-click a clip**, Unreleased; off = the pattern editor; Alt+double-click does the other one). See [TIMELINE.md](TIMELINE.md#finding-your-way-around)
+
+- **The Browser** (Unreleased, [BROWSER.md](BROWSER.md)): whether it is shown (`browser_open`, default on; **Ctrl+B** or the toolbar's **Browser** button), its width (`browser_w`, default 340), your locations (`browser_dirs`), favourites (`browser_favs`, item keys), ratings (`browser_ratings`, key = 1–5) and **Auto-play on select** (`browser_autoplay`, default on). The folder scan is cached in `browser-index.json` next to `settings.toml`.
 
 Older settings files get the defaults.
 

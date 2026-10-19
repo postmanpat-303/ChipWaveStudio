@@ -41,14 +41,14 @@ pub fn remap_channels(song: &mut Song, map: &[usize], n: usize, new_name: &str) 
     let mut used = vec![false; len];
     for i in 0..old_n {
         if let Some(s) = song.mixer.channels.get(i) {
-            strips[map[i]] = s.clone();
+            strips[map[i]] = *s;
             used[map[i]] = true;
         }
     }
     // strips beyond the song's channels stay where they were if free
     for (i, s) in song.mixer.channels.iter().enumerate().skip(old_n) {
         if i < len && !used[i] && i >= n {
-            strips[i] = s.clone();
+            strips[i] = *s;
         }
     }
     song.mixer.channels = strips;

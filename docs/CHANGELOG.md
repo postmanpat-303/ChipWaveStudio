@@ -4,6 +4,20 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+- **The Browser:** a long panel on the right (**Ctrl+B** or the toolbar's **Browser** button; resizable, remembered) that lists everything ChipWave can load and is now the main way to load things. Guide: [BROWSER.md](BROWSER.md).
+  - **8 category tabs:** Instruments (blank synths, every generator preset, your `.cwi` library, this song's instruments), Plugins (CLAP and VST3 instruments and effects from the scan), Samples (WAV / FLAC / MP3 / Ogg), Songs (demos, `.cwt` / `.cwt.toml`; MOD/MED listed, import planned), Presets, Grid (starter patches and Grid FX), Wavetables (built-in and imported WAV tables) and MIDI (listed, import planned).
+  - **Search, tag chips** (Bass, Lead, Pad, Drums, Chip, FM…), **Category / Creator / Location columns** with counts, sort by name, type or rating, **colour-coded format badges** with a legend, **favourites** (heart) and **1–5 star ratings**, saved in the settings.
+  - **Locations:** library, this song, favourites and **folders you add**, scanned in the background (never stalls the UI) and cached in `browser-index.json`.
+  - **Load** with double-click or Enter (a new slot, the current instrument's sound for presets, its FX chain for effects, an audio clip for samples on the Timeline, songs with the usual save prompt), or **drag** onto a timeline track, an instrument slot, the FX view or the pattern editor, with a ghost and a drop hint. Files decode on a worker thread; every load is one undo step.
+  - **Preview** on C-3 through the current track's mixer channel (auto-play toggle, Space, Esc).
+- **Timeline tracks from the Browser and the headers:** guide: [TIMELINE.md › Tracks](TIMELINE.md#tracks-add-reorder-instruments).
+  - **Drop an instrument, preset, `.cwi` or VST3 / CLAP plugin on a track header:** the track plays it (every note on the track switches; undo). **Drop below the last track:** a new track named after it, playing it. The target header lights up, or an insertion line shows "New track: <name>".
+  - **Drag track headers up and down to reorder**, in timeline and tracker mode: the channel's block columns, mixer strip, name, clips and channel automation move with it, so playback is the same (tested).
+  - **+ Add track** under the last header, and right-click › **Add track above / below / with instrument…** (opens the Browser's Instruments tab). Up to 32 tracks, with a clear message when full.
+- **Find plugins (first-run plugin step):** scan the standard VST3 / CLAP folders automatically (optionally the whole drive), pick folders yourself, or skip. Runs in the background with progress, shows what it found and adds the folders to the plugin folders and the Browser's locations. Existing users see it once; it is always in **Settings › Plugins › Find plugins…** and the Browser's Plugins tab. Guide: [BROWSER.md › Find plugins](BROWSER.md#find-plugins), [PLUGINS.md](PLUGINS.md#finding-plugins).
+- Old songs open and render as before; the Browser only reads until you load something.
+- Limits: no MIDI or MOD/MED import yet, plugins aren't previewed, plugin preset files aren't listed, no custom tags, file favourites are keyed by path.
+
 - **Timeline: double-click opens a clip in the piano roll** (lower panel, editing that clip; a block clip shows its column of the block). **Alt+double-click**, **Enter** or right-click › **Open in the pattern editor** open the block in the tracker as before. **Settings › Double-click a clip** chooses which one a plain double-click does (default: Piano roll). Guide: [TIMELINE.md › Finding your way around](TIMELINE.md#finding-your-way-around).
 - **The Grid, modular patching:** **New… › Generator (grid)** and an **Add effect › Grid FX** device. Guide: [GRID.md](GRID.md).
   - **A node canvas in the lower panel** (the Grid tab): add modules (+ Module or right-click), drag them by the title, **drag cables from outputs to inputs**, click an input to unplug. Every edit is undoable.
