@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 57] = [
+pub const VIEWS: [&str; 61] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -94,6 +94,10 @@ pub const VIEWS: [&str; 57] = [
     "trackpie-icons",
     "cliparranger",
     "cliparranger-drag",
+    "focus-playing",
+    "focus-chord",
+    "focus-prompt",
+    "focus-window",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -114,6 +118,10 @@ fn save_png(path: &std::path::Path, img: &egui::ColorImage) -> Result<(), String
 
 impl App {
     fn shot_setup(&mut self, ctx: &egui::Context, view: &str) {
+        if view.starts_with("focus-") {
+            self.shot_focus(view);
+            return;
+        }
         // "Drop 2" (block 08) of the Lumen Drift demo, looping
         self.pattern = 8.min(self.with(|s| s.song.patterns.len().saturating_sub(1)));
         // CHIPWAVE_SHOT_BLOCK=<n>: another block (e.g. the disco demo's Chorus)
