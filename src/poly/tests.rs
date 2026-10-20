@@ -463,3 +463,165 @@ fn display_name_lives_in_one_constant() {
         }
     }
 }
+
+/// CPU use, one core: `cargo test --release -- --ignored poly_cpu --nocapture`
+#[test]
+#[ignore]
+fn poly_cpu_bench() {
+    let secs = 4.0;
+    let n = (SR * secs) as usize;
+    for (name, notes) in [
+        ("Init", 8),
+        ("Saw Lead", 8),
+        ("Supersaw Pad", 4),
+        ("Supersaw Pad", 8),
+        ("Supersaw Pad", 16),
+        ("Unison Lead", 8),
+        ("Unison Lead", 16),
+    ] {
+        let mut p = presets::by_name(&format!("{} {name}", poly_name!())).unwrap();
+        if name == "Unison Lead" && notes == 16 {
+            // the worst case: 16 + 16 unison
+            for o in OSC {
+                p.set(&[(o + VOICES, 16.0)]);
+            }
+        }
+        let mut vs: Vec<PolyState> = (0..notes).map(|_| PolyState::default()).collect();
+        let fs: Vec<f32> = (0..notes)
+            .map(|i| 110.0 * 2f32.powf((i * 5 % 24) as f32 / 12.0))
+            .collect();
+        let t = std::time::Instant::now();
+        let mut acc = 0.0f32;
+        for i in 0..n {
+            for (v, f) in vs.iter_mut().zip(&fs) {
+                let (l, r, _) = v.render(&p, Ov::NONE, *f, SR, i < n * 3 / 4, 0.8);
+                acc += l + r;
+            }
+        }
+        let e = t.elapsed().as_secs_f64();
+        let osc = p.osc_voices();
+        println!(
+            "{name:14} {notes:2} notes x {osc:2} osc/note: {:5.1} % of one core (48 kHz){}",
+            100.0 * e / secs as f64,
+            if acc.is_nan() { " NaN" } else { "" }
+        );
+    }
+}
+
+/// a short tour of the presets: `WF_DEMO=out.wav cargo test -- --ignored poly_demo`
+#[test]
+#[ignore]
+fn poly_demo_tour() {
+    let Ok(out) = std::env::var("WF_DEMO") else {
+        return;
+    };
+    let bpm = 120.0;
+    let step = (SR * 60.0 / bpm / 2.0) as usize; // eighths
+                                                 // (preset, [(start step, length in steps, semitones from A2)])
+    let a = |x: i32| 110.0 * 2f32.powf(x as f32 / 12.0);
+    type Ph = (&'static str, Vec<(usize, usize, i32)>);
+    let tour: Vec<Ph> = vec![
+        (
+            "Saw Lead",
+            vec![
+                (0, 2, 12),
+                (2, 2, 15),
+                (4, 2, 19),
+                (6, 4, 24),
+                (10, 2, 22),
+                (12, 4, 19),
+            ],
+        ),
+        (
+            "Sub Bass",
+            vec![
+                (0, 3, -12),
+                (3, 1, -12),
+                (4, 3, -9),
+                (7, 1, -9),
+                (8, 3, -14),
+                (11, 1, -14),
+                (12, 4, -12),
+            ],
+        ),
+        (
+            "Pluck",
+            (0..16)
+                .map(|i| (i, 1, [12, 19, 24, 27][i % 4] + if i >= 8 { -2 } else { 0 }))
+                .collect(),
+        ),
+        (
+            "Supersaw Pad",
+            vec![
+                (0, 8, 0),
+                (0, 8, 3),
+                (0, 8, 7),
+                (0, 8, 12),
+                (8, 8, -2),
+                (8, 8, 3),
+                (8, 8, 7),
+                (8, 8, 10),
+            ],
+        ),
+        (
+            "PWM Bass",
+            (0..16)
+                .map(|i| (i, 1, if i % 2 == 0 { -12 } else { 0 }))
+                .collect(),
+        ),
+        (
+            "Sync Lead",
+            vec![(0, 4, 12), (4, 2, 15), (6, 2, 17), (8, 8, 19)],
+        ),
+        (
+            "Soft Pad",
+            vec![(0, 16, 0), (0, 16, 7), (0, 16, 15), (0, 16, 19)],
+        ),
+        (
+            "Dirty Bass",
+            (0..16)
+                .map(|i| (i, 1, [-12, -12, 0, -12, -9, -12, -7, -12][i % 8]))
+                .collect(),
+        ),
+    ];
+    let len = 16 * step + SR as usize; // phrase + 1 s tail
+    let mut w = hound::WavWriter::create(
+        out,
+        hound::WavSpec {
+            channels: 2,
+            sample_rate: SR as u32,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for (name, notes) in tour {
+        let p = presets::by_name(&format!("{} {name}", poly_name!())).unwrap();
+        let mut vs: Vec<(PolyState, usize, usize, f32)> = notes
+            .iter()
+            .map(|&(s, l, x)| {
+                (
+                    PolyState::default(),
+                    s * step,
+                    (s + l) * step - step / 8,
+                    a(x),
+                )
+            })
+            .collect();
+        for i in 0..len {
+            let (mut l, mut r) = (0.0, 0.0);
+            for (v, s, e, f) in vs.iter_mut() {
+                if i >= *s {
+                    let (a, b, _) = v.render(&p, Ov::NONE, *f, SR, i < *e, 0.85);
+                    l += a;
+                    r += b;
+                }
+            }
+            for x in [l, r] {
+                w.write_sample(((x * 0.35).tanh() * 32000.0) as i16)
+                    .unwrap();
+            }
+        }
+    }
+    w.finalize().unwrap();
+}
