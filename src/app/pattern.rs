@@ -783,7 +783,13 @@ impl App {
                     .instruments
                     .get((slot as usize).wrapping_sub(1))
                     .map(|i| format!("{slot:02X} {}", i.name))
-                    .unwrap_or_default();
+                    .unwrap_or_else(|| {
+                        if slot > 0 {
+                            format!("{slot:02X} (missing instrument)")
+                        } else {
+                            String::new()
+                        }
+                    });
                 let tag = song
                     .instruments
                     .get((slot as usize).wrapping_sub(1))

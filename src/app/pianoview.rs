@@ -464,6 +464,32 @@ impl App {
     }
 
     /// play `key` briefly (what a drawn or moved note sounds like)
+    /// the instrument new notes in this clip get: its track's assigned
+    /// instrument, 0 (the channel's current one) when it has none
+    /// instrument when it has none (or it was deleted: says so)
+    pub(super) fn pr_track_instr(&mut self, t: Target) -> u8 {
+        let Target::Notes { clip: Some(id), .. } = t else {
+            return 0;
+        };
+        let (tr, given, n) = self
+            .with(|s| {
+                let tl = s.song.timeline.as_deref()?;
+                let c = tl.clips.iter().find(|c| c.id == id)?;
+                let tr = c.track as usize;
+                Some((tr, tl.track_instr(tr), s.song.instruments.len()))
+            })
+            .unwrap_or((0, 0, 0));
+        if given as usize > n {
+            self.status = format!(
+                "Track {:02}'s instrument {given:02X} is missing (deleted?): new notes play the \
+                 track's current sound. Drop an instrument from the Browser on the track to fix it",
+                tr + 1
+            );
+            return 0;
+        }
+        given
+    }
+
     /// the channel / track the roll's notes play on
     fn pr_channel(&self) -> usize {
         match self.pr.target {
@@ -810,12 +836,14 @@ impl App {
                 row
             }
             (Source::Notes(nd), _) => {
+                let instr = self.pr_track_instr(target);
                 for kk in self.pr_chord_keys(key, song_key) {
                     nd.notes.push(tl::Note {
                         start,
                         len,
                         key: kk,
                         vel: roll::vel_u16(self.pr.last_vel),
+                        instr,
                         ..Default::default()
                     });
                     self.pr.sel.push(nd.notes.len() - 1);

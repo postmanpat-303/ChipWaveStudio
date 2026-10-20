@@ -1660,7 +1660,7 @@ impl App {
                     k => names
                         .get(k as usize - 1)
                         .map(|n| format!("{k:02X} {n}"))
-                        .unwrap_or_default(),
+                        .unwrap_or_else(|| format!("{k:02X} (missing instrument)")),
                 })
                 .collect()
         };

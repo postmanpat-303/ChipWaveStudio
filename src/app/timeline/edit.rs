@@ -291,9 +291,22 @@ impl App {
                         let t = song.timeline.as_deref_mut().unwrap();
                         let i = t.clips.iter().position(|c| c.id == id).unwrap();
                         if let tl::ClipKind::Notes { data } = t.clips[i].kind {
+                            // captured notes play the track's instrument
+                            let instr = t.track_instr(tr);
+                            let instr = if instr as usize > song.instruments.len() {
+                                0
+                            } else {
+                                instr
+                            };
                             let d = t.notes[data as usize].make_mut();
                             d.name = format!("Capture {}", data + 1);
-                            d.notes = captured.clone();
+                            d.notes = captured
+                                .iter()
+                                .map(|n| tl::Note {
+                                    instr: if n.instr == 0 { instr } else { n.instr },
+                                    ..n.clone()
+                                })
+                                .collect();
                             let bar = 4 * PPQ;
                             d.len = (d.fit_len() + bar - 1) / bar * bar;
                             t.clips[i].len = d.len;

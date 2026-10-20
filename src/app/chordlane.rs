@@ -379,6 +379,15 @@ impl App {
         chords: &[ChordMark],
         what: String,
     ) {
+        // new notes play the track's instrument (the header's)
+        let instr = self.pr_track_instr(t);
+        let notes: Vec<tl::Note> = notes
+            .into_iter()
+            .map(|n| tl::Note {
+                instr: if n.instr == 0 { instr } else { n.instr },
+                ..n
+            })
+            .collect();
         if self.cl.gen.on_top {
             let n = notes.len();
             self.cl_write_ex(t, marks, notes, None, true);

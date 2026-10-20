@@ -120,7 +120,8 @@ impl App {
                 .and_then(|t| t.tracks.get(ch))
                 .map_or(0, |t| t.instr)
         });
-        if given > 0 {
+        // (a deleted instrument: the selected one)
+        if given > 0 && given as usize <= self.with(|s| s.song.instruments.len()) {
             given
         } else {
             self.instr.max(1)

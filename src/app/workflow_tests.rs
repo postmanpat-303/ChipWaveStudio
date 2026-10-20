@@ -990,3 +990,125 @@ fn key_labels_count_like_the_tracker() {
     assert_eq!(pianoview::key_label(120), "B9");
     assert_eq!(crate::model::note_name(50), "C#4");
 }
+
+// ------------------------------------------- step 6: new notes play the track's instrument
+
+fn render_fp(s: &Song) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hs = std::collections::hash_map::DefaultHasher::new();
+    for x in crate::engine::render_song(s, 11025) {
+        x.to_bits().hash(&mut hs);
+    }
+    hs.finish()
+}
+
+/// the audit's repro: a track given instrument 2 drew notes that played
+/// instrument 1. Notes drawn in the roll, written by the chord lane and
+/// step-input now carry the track's instrument, so they sound like it;
+/// notes already there keep theirs (their sound never changes)
+#[test]
+fn new_notes_play_the_tracks_instrument() {
+    let mut h = clip_setup();
+    let tr = 2;
+    let pick = 2u8;
+    h.state().with(|s| {
+        s.song.timeline.as_deref_mut().unwrap().tracks[tr].instr = pick;
+    });
+    // an old note with no instrument of its own stays that way
+    put_notes(&mut h, &[(3 * tl::PPQ, 40)]);
+    h.state_mut().instr = 1;
+    frame(&mut h);
+    // draw a note with a click in the roll
+    let gr = h.state().pr.grid_rect;
+    let key = h.state().pr.key_at_pub(gr.center().y) as u8;
+    let p = Pos2::new(
+        h.state().pr.x_of(0) + 5.0,
+        h.state().pr.y_of(key) + h.state().pr.key_h / 2.0,
+    );
+    click_at(&mut h, p);
+    frame(&mut h);
+    let d = note_data(&h);
+    let drawn = d.notes.iter().find(|n| n.start == 0 && n.key == key);
+    assert_eq!(drawn.map(|n| n.instr), Some(pick), "{:?}", d.notes);
+    assert_eq!(
+        d.notes.iter().find(|n| n.key == 40).map(|n| n.instr),
+        Some(0),
+        "old notes untouched"
+    );
+    // chord-lane notes
+    let t = h.state().pr.target.unwrap();
+    h.state_mut()
+        .cl_insert(t, vec![cmaj(chordlane::BAR)], true, Default::default(), 4);
+    frame(&mut h);
+    let d = note_data(&h);
+    let chord: Vec<u8> = d
+        .notes
+        .iter()
+        .filter(|n| n.start == chordlane::BAR)
+        .map(|n| n.instr)
+        .collect();
+    assert!(
+        !chord.is_empty() && chord.iter().all(|&i| i == pick),
+        "{chord:?}"
+    );
+    // and it is what you hear: the drawn note renders like an explicit
+    // instrument-2 note, not like instrument 1
+    let solo = |instr: u8| {
+        let mut s = h.state().with(|s| s.song.clone());
+        let id = h.state().tlv.sel.unwrap();
+        let t = s.timeline.as_deref_mut().unwrap();
+        t.clips.retain(|c| c.id == id);
+        let c = t.clips.iter().find(|c| c.id == id).unwrap();
+        let tl::ClipKind::Notes { data } = c.kind else {
+            panic!()
+        };
+        let d = t.notes[data as usize].make_mut();
+        d.notes.retain(|n| n.start == 0 && n.key == key);
+        d.notes[0].instr = instr;
+        s
+    };
+    let ours = render_fp(&solo(pick));
+    let mut as_drawn = solo(pick);
+    {
+        let t = as_drawn.timeline.as_deref_mut().unwrap();
+        let tl::ClipKind::Notes { data } = t.clips[0].kind else {
+            panic!()
+        };
+        t.notes[data as usize].make_mut().notes[0] = drawn.unwrap().clone();
+    }
+    assert_eq!(render_fp(&as_drawn), ours);
+    assert_ne!(render_fp(&solo(1)), ours, "instrument 1 sounds different");
+}
+
+/// a track whose instrument was deleted: new notes fall back to the
+/// channel's sound (instr 0), the status says why, the header says
+/// "missing", nothing panics
+#[test]
+fn a_missing_track_instrument_is_explained_not_a_panic() {
+    let mut h = clip_setup();
+    let tr = 2;
+    h.state().with(|s| {
+        s.song.timeline.as_deref_mut().unwrap().tracks[tr].instr = 200;
+    });
+    frames(&mut h, 2);
+    let gr = h.state().pr.grid_rect;
+    let key = h.state().pr.key_at_pub(gr.center().y) as u8;
+    let p = Pos2::new(
+        h.state().pr.x_of(0) + 5.0,
+        h.state().pr.y_of(key) + h.state().pr.key_h / 2.0,
+    );
+    click_at(&mut h, p);
+    frame(&mut h);
+    let d = note_data(&h);
+    assert_eq!(d.notes.first().map(|n| n.instr), Some(0));
+    assert!(
+        h.state().status.contains("is missing"),
+        "{}",
+        h.state().status
+    );
+    // auditions and typing use the selected instrument instead
+    h.state_mut().instr = 1;
+    assert_eq!(h.state().track_instr(tr), 1);
+    let hdr = h.state().channel_headers(4);
+    assert_eq!(hdr.instruments[tr], "C8 (missing instrument)");
+}
