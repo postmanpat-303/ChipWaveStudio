@@ -429,7 +429,7 @@ impl App {
             }
             // the Drum Kit editor: a library pattern dropped on a new track
             // (CHIPWAVE_SHOT_PAT=<name>, default "Full-on Drive"); the
-            // generator's result when CHIPWAVE_SHOT_DK=generate
+            // generator's result when CHIPWAVE_SHOT_DK=generate (=added: then Add to track)
             "timeline-drumkit" => {
                 self.enter_timeline();
                 let name = std::env::var("CHIPWAVE_SHOT_PAT").unwrap_or("Full-on Drive".into());
@@ -438,9 +438,30 @@ impl App {
                 }
                 self.dk.inst = (self.instr as usize).saturating_sub(1);
                 self.dk.sel = 3;
-                if std::env::var("CHIPWAVE_SHOT_DK").as_deref() == Ok("generate") {
-                    self.dk.tab = 1;
+                let dkv = std::env::var("CHIPWAVE_SHOT_DK").unwrap_or_default();
+                if dkv == "generate" || dkv == "added" {
+                    self.dk.tab = 2;
                     self.dk.gen.result = Some(crate::drumkit::generate(1, 7, 0.7, 1, 0));
+                }
+                // "added": Generate › Add to track with the marker in bar 5
+                if dkv == "added" {
+                    let bar = self.with(|s| {
+                        s.song
+                            .timeline
+                            .as_deref()
+                            .map_or(3840, |t| t.sig_at(0).bar_ticks())
+                    });
+                    self.tlv.cue = 4 * bar + 240;
+                    if let Some((notes, steps, swing, _)) = self.dk.gen.result.clone() {
+                        let d = crate::timeline::NoteClipData {
+                            name: "Groove 2".into(),
+                            len: steps as crate::timeline::Tick * crate::timeline::ROW,
+                            notes,
+                            chords: vec![],
+                            drum: Some(crate::drumkit::DrumMeta { swing }),
+                        };
+                        self.dk_add_to_track(self.instr, None, super::drumkitview::AddSrc::New(d));
+                    }
                 }
             }
             "timeline-new" => {

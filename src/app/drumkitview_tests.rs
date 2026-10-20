@@ -18,8 +18,11 @@ fn kit_harness() -> (Harness<'static, App>, u8, u32) {
         .add_instrument(crate::drumpat::drumkit_instrument("808 Kit").unwrap())
         .unwrap() as u8
         + 1;
-    crate::chanops::assign_track_instrument(&mut s, 0, slot);
-    let id = tl::new_note_clip(&mut s, 0, 0).unwrap();
+    // the kit on a new, empty last track
+    let tr = s.channels;
+    assert!(crate::chanops::insert_channel(&mut s, tr, "Drums"));
+    crate::chanops::assign_track_instrument(&mut s, tr, slot);
+    let id = tl::new_note_clip(&mut s, tr, 0).unwrap();
     let mut h = harness_with(s);
     h.state_mut().instr = slot;
     h.state_mut().tlv.sel = Some(id);
@@ -104,15 +107,14 @@ fn play_loops_the_song_over_the_pattern() {
 fn add_pad_stops_at_32() {
     let (mut h, slot, _) = kit_harness();
     for _ in 0..20 {
-        let add = h.state().dk.pads.last().map(|p| p.1).unwrap();
-        // + ADD PAD sits right after the last pad
-        let pr = add.translate(egui::vec2(add.width() + 6.0, 0.0));
-        let at = if h.state().dk.pads.len() % 8 == 0 {
-            let first = h.state().dk.pads[0].1;
-            egui::pos2(first.center().x, add.center().y + add.height() + 6.0)
-        } else {
-            pr.center()
-        };
+        let at = h
+            .state()
+            .dk
+            .ctl
+            .iter()
+            .find(|c| c.0 == "add_pad")
+            .map(|c| c.1.center());
+        let Some(at) = at else { break };
         click_at(&mut h, at);
         frames(&mut h, 2);
     }
@@ -128,4 +130,202 @@ impl KitAccess for Harness<'static, App> {
         let g = audio::lock(&s);
         f(dk::kit_of(&g.song.instruments[slot as usize - 1]).unwrap())
     }
+}
+
+fn clip_count(h: &Harness<'static, App>) -> usize {
+    let s = h.state().shared.clone();
+    let g = audio::lock(&s);
+    g.song.timeline.as_deref().unwrap().clips.len()
+}
+
+fn ctl(h: &Harness<'static, App>, name: &str) -> egui::Rect {
+    h.state()
+        .dk
+        .ctl
+        .iter()
+        .find(|c| c.0 == name)
+        .unwrap_or_else(|| panic!("{name} not drawn"))
+        .1
+}
+
+/// Generate › Add to track: one clip, on the kit's track, at the marker's
+/// bar; one undo removes it; a second Add doesn't stack on the same spot
+#[test]
+fn generate_add_to_track_places_one_clip_at_the_marker_bar() {
+    let (mut h, slot, first) = kit_harness();
+    let bar = {
+        let s = h.state().shared.clone();
+        let g = audio::lock(&s);
+        g.song.timeline.as_deref().unwrap().sig_at(0).bar_ticks()
+    };
+    // the marker a bit into bar 5, away from the first clip (bar 1)
+    h.state_mut().tlv.cue = 4 * bar + ROW * 3;
+    h.state_mut().dk.tab = 2;
+    frames(&mut h, 2);
+    let at = ctl(&h, "regen").center();
+    click_at(&mut h, at);
+    frames(&mut h, 2);
+    assert!(h.state().dk.gen.result.is_some());
+    let n0 = clip_count(&h);
+    let at = ctl(&h, "gen_add").center();
+    click_at(&mut h, at);
+    frames(&mut h, 3);
+    assert_eq!(clip_count(&h), n0 + 1, "exactly one clip");
+    let id = h.state().tlv.sel.unwrap();
+    assert_ne!(id, first);
+    let (track, start, len, ndata) = {
+        let s = h.state().shared.clone();
+        let g = audio::lock(&s);
+        let t = g.song.timeline.as_deref().unwrap();
+        let c = t.clips.iter().find(|c| c.id == id).unwrap();
+        let tl::ClipKind::Notes { data } = c.kind else {
+            panic!()
+        };
+        (c.track, c.start, c.len, t.notes[data as usize].notes.len())
+    };
+    assert_eq!(
+        track as usize,
+        h.state().dk_track(slot).unwrap(),
+        "the kit's track"
+    );
+    assert_eq!(start, 4 * bar, "at the marker, snapped to bar 5");
+    assert!(len > 0 && ndata > 0);
+    assert!(h.state().status.contains("Added"), "{}", h.state().status);
+    assert_eq!(
+        h.state().tlv.flash.map(|f| f.0),
+        Some(id),
+        "the new clip flashes"
+    );
+    assert_eq!(h.with_kit(slot, |k| k.pads.len()), 16);
+    // one undo removes it
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(clip_count(&h), n0, "one undo step");
+    // twice: the second goes after the first, not on top of it
+    h.state_mut().dk.tab = 2;
+    frames(&mut h, 2);
+    if h.state().dk.gen.result.is_none() {
+        let at = ctl(&h, "regen").center();
+        click_at(&mut h, at);
+        frames(&mut h, 2);
+    }
+    for _ in 0..2 {
+        let at = ctl(&h, "gen_add").center();
+        click_at(&mut h, at);
+        frames(&mut h, 3);
+    }
+    assert_eq!(clip_count(&h), n0 + 2);
+    let s = h.state().shared.clone();
+    let g = audio::lock(&s);
+    let t = g.song.timeline.as_deref().unwrap();
+    let mut on: Vec<(Tick, Tick)> = t
+        .clips
+        .iter()
+        .filter(|c| c.track == track)
+        .map(|c| (c.start, c.end()))
+        .collect();
+    on.sort();
+    for w in on.windows(2) {
+        assert!(w[0].1 <= w[1].0, "clips overlap: {on:?}");
+    }
+    assert!(on.iter().any(|c| c.0 == 4 * bar));
+}
+
+/// the pattern area's Add to track places a linked copy the same way
+#[test]
+fn pattern_add_to_track_places_a_linked_copy() {
+    let (mut h, _, first) = kit_harness();
+    let bar = {
+        let s = h.state().shared.clone();
+        let g = audio::lock(&s);
+        g.song.timeline.as_deref().unwrap().sig_at(0).bar_ticks()
+    };
+    // the marker a bit into the second bar after the first clip
+    let end = {
+        let s = h.state().shared.clone();
+        let g = audio::lock(&s);
+        let t = g.song.timeline.as_deref().unwrap();
+        t.clips.iter().find(|c| c.id == first).unwrap().end()
+    };
+    let want = (end + bar - 1) / bar * bar + bar;
+    h.state_mut().tlv.cue = want + ROW;
+    frames(&mut h, 2);
+    let n0 = clip_count(&h);
+    let at = ctl(&h, "add").center();
+    click_at(&mut h, at);
+    frames(&mut h, 3);
+    assert_eq!(clip_count(&h), n0 + 1);
+    let s = h.state().shared.clone();
+    let g = audio::lock(&s);
+    let t = g.song.timeline.as_deref().unwrap();
+    let id = h.state().tlv.sel.unwrap();
+    let a = t.clips.iter().find(|c| c.id == first).unwrap();
+    let b = t.clips.iter().find(|c| c.id == id).unwrap();
+    assert_eq!(b.start, want);
+    assert_eq!(a.kind, b.kind, "linked: same note data");
+}
+
+/// laptop windows (scale 1.0, the default panel height): the compact layout
+/// shows pads, the step grid, Add to track and the tabs without scrolling,
+/// and Generate's Add to track and Regenerate too
+#[test]
+fn laptop_windows_show_the_key_controls() {
+    for (w, hh) in [(1366.0, 768.0), (1280.0, 720.0)] {
+        let (mut h, _, _) = kit_harness();
+        h.state_mut().extra.lower_h = 0.0;
+        h.set_size(egui::vec2(w, hh));
+        h.state_mut().dk.tab = 0;
+        frames(&mut h, 4);
+        let st = h.state();
+        assert!(st.dk.compact, "{w}x{hh}: compact");
+        let view = st.dk.view.unwrap();
+        let inside = |r: egui::Rect, what: &str| {
+            assert!(
+                view.expand(0.5).contains_rect(r),
+                "{w}x{hh}: {what} {r:?} outside {view:?}"
+            );
+        };
+        assert_eq!(st.dk.pads.len(), 16, "{w}x{hh}: all 16 pads drawn");
+        for (_, r) in &st.dk.pads {
+            inside(*r, "pad");
+        }
+        assert!(
+            st.dk.cells.len() >= 8 * 16,
+            "{w}x{hh}: 8 lanes x 16 steps, got {} cells in {:?}",
+            st.dk.cells.len(),
+            st.dk.view
+        );
+        for (_, _, r) in &st.dk.cells {
+            inside(*r, "step cell");
+        }
+        inside(ctl(&h, "add"), "Add to track");
+        inside(ctl(&h, "tabs"), "tab bar");
+        // Generate
+        h.state_mut().dk.tab = 2;
+        frames(&mut h, 2);
+        let view = h.state().dk.view.unwrap();
+        for k in ["regen", "gen_add", "tabs"] {
+            let r = ctl(&h, k);
+            assert!(
+                view.expand(0.5).contains_rect(r),
+                "{w}x{hh}: {k} {r:?} outside {view:?}"
+            );
+        }
+    }
+}
+
+/// a tall panel keeps the full layout (cards, 8 pads a row, Sound below)
+#[test]
+fn a_tall_panel_uses_the_full_layout() {
+    let (mut h, _, _) = kit_harness();
+    h.set_size(egui::vec2(1800.0, 1500.0));
+    h.state_mut().extra.lower_h = 1150.0;
+    frames(&mut h, 4);
+    let st = h.state();
+    assert!(!st.dk.compact, "view {:?}", st.dk.view);
+    assert_eq!(st.dk.pads.len(), 16);
+    let (a, b) = (st.dk.pads[0].1, st.dk.pads[7].1);
+    assert!((a.top() - b.top()).abs() < 0.5, "8 pads a row");
+    assert!(st.dk.cells.len() >= 8 * 16);
+    assert!(st.dk.ctl.iter().any(|c| c.0 == "add"));
 }
