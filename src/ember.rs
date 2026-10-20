@@ -911,7 +911,7 @@ pub fn tab(ui: &mut egui::Ui, selected: bool, text: &str) -> egui::Response {
         egui::Sense::click(),
     );
     let label = text.to_string();
-    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, selected, &label));
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, &label));
     if ui.is_rect_visible(r) {
         let p = ui.painter();
         if selected {
@@ -939,4 +939,18 @@ pub fn tab(ui: &mut egui::Ui, selected: bool, text: &str) -> egui::Response {
         }
     }
     resp
+}
+
+/// a heading shown in capitals (the condensed label font) whose accessible
+/// name keeps the normal spelling, so screen readers say "Master", not
+/// "M A S T E R", and the UI tests find it by its usual name
+pub fn caps_label(ui: &mut egui::Ui, text: &str, size: f32) -> egui::Response {
+    let r = ui.label(
+        egui::RichText::new(text.to_uppercase())
+            .font(label_font(size))
+            .color(th().ink),
+    );
+    let name = text.to_string();
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &name));
+    r
 }

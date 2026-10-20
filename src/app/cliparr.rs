@@ -978,11 +978,7 @@ impl App {
     ) {
         let t = th();
         ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new("MASTER")
-                    .font(theme::label_font(14.0))
-                    .color(t.ink),
-            );
+            crate::ember::caps_label(ui, "Master", 14.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let txt = if lim.enabled {
                     "Limiter on"

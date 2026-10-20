@@ -219,12 +219,7 @@ impl App {
                 "fader 0 dB = double-click · pan C = double-click · M mute · S solo (F9 / F10) · \
                  drag the bar under the strips or Shift+wheel to scroll";
             if ember {
-                ui.label(
-                    egui::RichText::new("MIXER")
-                        .font(theme::label_font(14.0))
-                        .color(th().ink),
-                )
-                .on_hover_text(hint);
+                crate::ember::caps_label(ui, "Mixer", 14.0).on_hover_text(hint);
             } else {
                 ui.label(egui::RichText::new("Mixer").strong())
                     .on_hover_text(hint);
