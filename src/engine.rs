@@ -224,6 +224,7 @@ impl Chan {
 }
 
 mod audioclips;
+pub mod metro;
 pub mod launch;
 mod notes;
 pub mod patprev;
@@ -363,6 +364,8 @@ pub struct Engine {
     pub mods: crate::modulation::ModEngine,
     /// current song position in lines (for the UI playhead of lanes)
     pub song_pos: f32,
+    /// metronome and record count-in (off: no effect on the sound)
+    pub metro: metro::Metro,
     /// per-channel insert chain (follows the channel's current instrument)
     chains: Vec<crate::fx::ChainState>,
     /// return buses A (delay) and B (reverb)
@@ -487,6 +490,7 @@ impl Engine {
             },
             mods: Default::default(),
             song_pos: 0.0,
+            metro: Default::default(),
             chains: (0..MAX_CHANNELS).map(|_| Default::default()).collect(),
             rets: (0..2).map(|_| Default::default()).collect(),
             sends: [[0.0; 2]; MAX_CHANNELS],
@@ -1124,6 +1128,7 @@ impl Engine {
 
     pub fn stop(&mut self) {
         self.playing = false;
+        self.metro.cancel();
         self.cue = None;
         self.nv.release_all(&mut self.plugins);
         self.av.release_all();
@@ -2092,7 +2097,21 @@ impl Engine {
     /// Render interleaved stereo.
     pub fn render(&mut self, song: &Song, out: &mut [f32]) {
         crate::plugin::clap::AUDIO_THREAD.with(|a| a.set(true));
-        self.render_inner(song, out);
+        // a record count-in: clicks while the song waits at its start
+        let n = if self.metro.on_count() {
+            self.metro_count(out)
+        } else {
+            0
+        };
+        let rest = &mut out[2 * n..];
+        if !rest.is_empty() {
+            let click = self.metro.on && self.playing && self.tl.on;
+            let t0 = if click { self.tl_ticks() } else { None };
+            self.render_inner(song, rest);
+            if let (Some(t0), Some(t1)) = (t0, self.tl_ticks().filter(|_| click)) {
+                self.metro_mix(t0, t1, rest);
+            }
+        }
         // the playhead the UI draws: kept current on every callback, not
         // only when automation lanes are evaluated (songs without
         // automation had a frozen timeline playhead). Display only: the
