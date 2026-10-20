@@ -599,6 +599,47 @@ impl App {
         if self.ip.focus_search || !self.ip.query.is_empty() {
             self.ip.advanced = true;
         }
+        let drum_kit = crate::drumkit::kit_of(&inst).is_some();
+        if !self.ip.advanced && drum_kit {
+            // a Drum Kit's simple view is its editor (pads, steps, sound)
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                if ui
+                    .small_button("<")
+                    .on_hover_text("previous instrument")
+                    .clicked()
+                {
+                    cx.acts
+                        .push(Act::Select(if idx == 0 { n as u8 } else { idx as u8 }));
+                }
+                if ui
+                    .small_button(">")
+                    .on_hover_text("next instrument")
+                    .clicked()
+                {
+                    cx.acts.push(Act::Select(((idx + 1) % n) as u8 + 1));
+                }
+                ui.label(
+                    egui::RichText::new(format!("{:02X} {}", idx + 1, inst.name))
+                        .strong()
+                        .size(15.0),
+                );
+                tag_pill(ui, tag);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add_space(6.0);
+                    if ui
+                        .button("Advanced ›")
+                        .on_hover_text("every parameter, FX and modulation of this kit")
+                        .clicked()
+                    {
+                        self.ip.advanced = true;
+                    }
+                });
+            });
+            self.drumkit_view(ui, idx);
+            self.finish_edit(idx, inst, &orig, &orig_modm, cx);
+            return;
+        }
         if !self.ip.advanced {
             self.simple_card(ui, &layout, &mut inst, &mut cx, n);
             self.finish_edit(idx, inst, &orig, &orig_modm, cx);
@@ -732,6 +773,8 @@ impl App {
             self.grid_canvas(ui, &layout, &mut inst, &mut cx);
         } else if tab == Tab::Synth {
             self.poly_panel(ui, &layout, &mut inst, &mut cx);
+        } else if tab == Tab::Main && drum_kit {
+            self.drumkit_view(ui, idx);
         } else {
             egui::ScrollArea::horizontal()
                 .id_salt(("inst_cards", idx, tab))
@@ -1010,7 +1053,7 @@ fn custom_size(c: Custom, card_h: f32) -> (f32, f32) {
     match c {
         Custom::Vowels => (270.0, 84.0),
         Custom::Words => (270.0, 84.0),
-        Custom::KitPiece => (300.0, 64.0),
+        Custom::KitPiece => (300.0, 92.0),
         Custom::Dice => (300.0, 96.0),
         Custom::ChipCategories => (290.0, 64.0),
         Custom::PluginStatus => (290.0, 96.0),
@@ -1540,6 +1583,25 @@ impl App {
             }
             (Custom::Words, InstrumentKind::Voice(v)) => {
                 cx.changed |= super::voiceview::words_ui(ui, v);
+            }
+            (Custom::KitPiece, InstrumentKind::Gen(g)) => {
+                super::genview::kit_piece_ui(ui, &mut self.gen_ui);
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    if ui
+                        .button("Convert to Drum Kit")
+                        .on_hover_text(
+                            "the same sound as a Drum Kit: one pad per piece, the same notes \
+                             and automation lanes, plus the pad grid and step sequencer (Undo \
+                             takes it back)",
+                        )
+                        .clicked()
+                    {
+                        if let Some(n) = crate::drumkit::patch_from_kit(g, true) {
+                            cx.acts.push(Act::Kind(Box::new(InstrumentKind::Gen(n))));
+                        }
+                    }
+                });
             }
             (Custom::KitPiece, _) => super::genview::kit_piece_ui(ui, &mut self.gen_ui),
             (Custom::Dice, InstrumentKind::Gen(g)) => {

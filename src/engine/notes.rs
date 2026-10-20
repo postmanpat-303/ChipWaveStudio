@@ -302,7 +302,27 @@ pub(super) fn note_on(
         plugins.live_off(PLUG_TAG + slot as u16);
     }
     let key = (n.key as i32 + inst.transpose as i32).clamp(1, 127) as u8;
-    let vol = inst.volume * n.vel;
+    let mut vol = inst.volume * n.vel;
+    // Drum Kit: the pad's velocity depth, and its choke group cuts the
+    // group's other voices on this track
+    if let Some(k) = crate::drumkit::kit_of(inst) {
+        let f = note_freq(key) * 2f32.powf(n.tune / 12.0);
+        let (g, grp) = crate::drumkit::hit(k, f, n.vel);
+        vol = inst.volume * g;
+        if grp > 0 {
+            for v in st.v[base..base + NOTE_VOICES].iter_mut() {
+                if v.active
+                    && !v.plug
+                    && v.instr == idx
+                    && crate::drumkit::choke_of(k, v.freq) == grp
+                {
+                    v.down = false;
+                    v.synth.amp.release();
+                    v.synth.fenv.release();
+                }
+            }
+        }
+    }
     let plug = matches!(inst.kind, InstrumentKind::Plugin(_));
     if plug && !plugins.live_on(idx, ch, PLUG_TAG + slot as u16, midi_key(key), vol) {
         return;

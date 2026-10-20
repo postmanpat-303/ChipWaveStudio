@@ -645,6 +645,25 @@ impl Engine {
                     })
                     .unwrap_or(0);
                 let n = (note as i32 + inst.transpose as i32).clamp(1, 127) as u8;
+                // Drum Kit: velocity depth and choke groups (as on note clips)
+                let mut gain = vel;
+                if let Some(k) = crate::drumkit::kit_of(inst) {
+                    let (g, grp) = crate::drumkit::hit(k, note_freq(n), vel);
+                    gain = g;
+                    if grp > 0 {
+                        for (s, v) in lv.v.iter_mut().enumerate() {
+                            if s != slot
+                                && v.active
+                                && v.instr == i
+                                && crate::drumkit::choke_of(k, v.freq) == grp
+                            {
+                                v.down = false;
+                                v.synth.amp.release();
+                                v.synth.fenv.release();
+                            }
+                        }
+                    }
+                }
                 let v = &mut lv.v[slot];
                 *v = LiveVoice {
                     key,
@@ -653,7 +672,7 @@ impl Engine {
                     vol: if poly.is_some() {
                         inst.volume
                     } else {
-                        inst.volume * vel
+                        inst.volume * gain
                     },
                     synth: if poly.is_some() {
                         notes::poly_voice(vel, from, lv.age.wrapping_mul(0x85EB_CA6B))
@@ -4121,6 +4140,100 @@ mod tests {
         // ids out of range don't parse (and older songs never contain them)
         assert_eq!(Target::parse("instrument.1.gen.0"), None);
         assert_eq!(Target::parse("instrument.1.gen.65"), None);
+    }
+
+    /// "Convert to Drum Kit": the song sounds the same, tracker and
+    /// timeline form, with a lane on a piece macro and transposed notes
+    #[test]
+    fn a_converted_kit_plays_the_song_bit_identically() {
+        use crate::automation::{Lane, Point, Target};
+        let keys: Vec<u8> = (25..=85).step_by(5).collect();
+        for kit in ["808 Kit", "Psy Kit"] {
+            let mut song = gen_song(kit, &keys);
+            let mut l = Lane::new(Target::Gen(1, 8 * 5 + 3), "Tom: Decay".into());
+            for (pos, value) in [(0.0, 0.1), (32.0, 0.9)] {
+                l.points.push(Point {
+                    pos,
+                    value,
+                    shape: Default::default(),
+                    curve: 0.0,
+                });
+            }
+            song.automation = vec![l];
+            song.instruments[1].transpose = 3;
+            let mut conv = song.clone();
+            let InstrumentKind::Gen(g) = &conv.instruments[1].kind else {
+                panic!()
+            };
+            conv.instruments[1].kind =
+                InstrumentKind::Gen(crate::drumkit::patch_from_kit(g, true).unwrap());
+            let bits = |s: &Song| -> Vec<u32> {
+                render_secs(s, 3.0).iter().map(|x| x.to_bits()).collect()
+            };
+            let a = bits(&song);
+            assert!(
+                a.iter().any(|x| f32::from_bits(*x).abs() > 0.01),
+                "{kit} silent"
+            );
+            assert!(a == bits(&conv), "{kit}: tracker form differs");
+            let (mut ts, mut tc) = (song.clone(), conv.clone());
+            crate::timeline::enter_timeline_mode(&mut ts);
+            crate::timeline::enter_timeline_mode(&mut tc);
+            assert!(bits(&ts) == bits(&tc), "{kit}: timeline form differs");
+        }
+    }
+
+    /// a Drum Kit's choke group: on note clips a closed hat cuts the open
+    /// hat; without the group the open hat rings on
+    #[test]
+    fn drum_kit_hats_choke_on_note_clips() {
+        use crate::timeline::{Note, PPQ, ROW};
+        let mut song = gen_song("Psy Kit", &[59]);
+        for r in 0..64 {
+            song.patterns[0].cells[r][0] = Cell::default();
+        }
+        let mut g = crate::drumkit::preset("Psy Kit").unwrap();
+        if let crate::gen::GenEngine::Drums(k) = &mut g.engine {
+            // a long open hat, so the cut shows
+            let oh = k.pads.iter_mut().find(|p| p.name == "Open hat").unwrap();
+            oh.decay = 3.0;
+        }
+        g.base.amp.r = 0.005;
+        song.instruments[1].kind = InstrumentKind::Gen(g);
+        crate::timeline::enter_timeline_mode(&mut song);
+        // open hat at 0, closed hat a 16th later, as long notes on a note clip
+        let id = crate::timeline::new_note_clip(&mut song, 0, 0).expect("clip");
+        let t = song.timeline.as_deref_mut().unwrap();
+        let k = t.clips.iter().position(|c| c.id == id).unwrap();
+        if let crate::timeline::ClipKind::Notes { data } = t.clips[k].kind {
+            let d = t.notes[data as usize].make_mut();
+            d.notes = [(0, 59), (ROW, 55)]
+                .iter()
+                .map(|&(start, key)| Note {
+                    start,
+                    len: 4 * PPQ,
+                    key,
+                    vel: crate::timeline::vel_from_7(127),
+                    instr: 2,
+                    ..Default::default()
+                })
+                .collect();
+            d.len = 4 * PPQ;
+        }
+        t.clips[k].len = 4 * PPQ;
+        let mut free = song.clone();
+        if let InstrumentKind::Gen(g) = &mut free.instruments[1].kind {
+            if let crate::gen::GenEngine::Drums(k) = &mut g.engine {
+                k.pads.iter_mut().for_each(|p| p.choke = 0);
+            }
+        }
+        let tail = |s: &Song| -> f32 {
+            let o = left(&render_secs(s, 1.2));
+            o[(0.6 * 48000.0) as usize..].iter().map(|x| x * x).sum()
+        };
+        let (cut, rings) = (tail(&song), tail(&free));
+        assert!(rings > 1e-3, "the open hat should ring on: {rings}");
+        assert!(cut < rings * 0.05, "choked {cut} vs free {rings}");
     }
 
     #[test]

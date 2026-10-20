@@ -619,6 +619,10 @@ pub struct NoteClipData {
     /// Not written when empty, so songs without chords save as before.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub chords: Vec<crate::chordgen::ChordMark>,
+    /// a Drum Kit pattern (the step sequencer's groove). Not written when
+    /// None, so other note clips save as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drum: Option<crate::drumkit::DrumMeta>,
 }
 
 /// One piano-roll note. Velocity is 16-bit (MIDI 2.0); tracker volumes and

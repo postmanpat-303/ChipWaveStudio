@@ -368,6 +368,7 @@ fn engine_name(e: &crate::gen::GenEngine) -> &'static str {
         G::Wave(_) => "Wavetable",
         G::Grid(_) => "Grid",
         G::Poly(_) => crate::poly::POLY_DISPLAY_NAME,
+        G::Drums(_) => "Drum Kit",
     }
 }
 
@@ -405,6 +406,19 @@ pub fn builtin_items() -> Vec<Item> {
             Loc::Library,
             format!("{eng} generator · {tip}"),
             Src::Gen(name.into()),
+        ));
+    }
+    for (name, tip, _) in crate::drumkit::presets() {
+        v.push(item(
+            format!("drumkit:{name}"),
+            name.clone(),
+            Tab::Instruments,
+            Fmt::Cwi,
+            "Drum Kit",
+            cw,
+            Loc::Library,
+            format!("Drum Kit · 16 pads · {tip}"),
+            Src::Gen(format!("drumkit:{name}")),
         ));
     }
     for k in crate::fx::FxKind::ALL {
@@ -1072,8 +1086,12 @@ pub fn instrument_of(it: &Item, song: &Song) -> Result<Instrument, String> {
         Src::Init("voice") => Ok(plain("Voice", InstrumentKind::Voice(Default::default()))),
         Src::Init(_) => Ok(plain("Synth", InstrumentKind::Synth(Default::default()))),
         Src::Gen(n) => {
-            let mut g = crate::gen::preset(n).ok_or("unknown generator preset")?;
-            g.base.name = n.clone();
+            let (found, n) = match n.strip_prefix("drumkit:") {
+                Some(k) => (crate::drumkit::preset(k), k),
+                None => (crate::gen::preset(n), n.as_str()),
+            };
+            let mut g = found.ok_or("unknown generator preset")?;
+            g.base.name = n.to_string();
             Ok(plain(n, InstrumentKind::Gen(g)))
         }
         Src::Table(i) => Ok(wave_instrument(&it.name, Some(*i), None)),

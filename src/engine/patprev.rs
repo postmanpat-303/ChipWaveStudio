@@ -129,9 +129,20 @@ impl PatPreview {
     }
 
     fn fire(&mut self, k: usize) {
-        let (_, key, g) = self.ev[k];
-        // a closed hat chokes the open hat (as on one kit channel)
-        if matches!(key % 12, 6 | 8) {
+        let (_, key, mut g) = self.ev[k];
+        if let crate::gen::GenEngine::Drums(kit) = &self.patch.engine {
+            // a Drum Kit: its own choke groups and velocity depth
+            let grp;
+            (g, grp) = crate::drumkit::hit(kit, note_freq(key), g);
+            if grp > 0 {
+                for v in self.voices.iter_mut().filter(|v| v.active) {
+                    if crate::drumkit::choke_of(kit, v.freq) == grp {
+                        v.synth.amp.release();
+                    }
+                }
+            }
+        } else if matches!(key % 12, 6 | 8) {
+            // a closed hat chokes the open hat (as on one kit channel)
             for v in self
                 .voices
                 .iter_mut()

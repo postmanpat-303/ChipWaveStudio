@@ -107,6 +107,13 @@ fn drop_below_the_last_track_makes_a_drum_track_with_the_kit_and_clip() {
     assert_eq!(notes, pat.hits());
     assert_eq!(instr as usize, ni + 1);
     assert_eq!(kit, "Psy Kit");
+    assert!(
+        song(&mut h, |s| crate::drumkit::kit_of(
+            s.instruments.last().unwrap()
+        )
+        .is_some()),
+        "a new track gets a Drum Kit"
+    );
     // one undo step takes it all back
     super::ui_tests::key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
     frames(&mut h, 2);

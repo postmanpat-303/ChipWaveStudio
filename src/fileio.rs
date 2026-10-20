@@ -419,14 +419,18 @@ pub fn sanitize_modulation(
 /// them instead of playing a stale order list. Songs with plugin effect
 /// devices also write 2; songs with audio clips (M4) write 3; songs with
 /// track or clip automation lanes or curved segments (M5) write 4; songs
-/// with a new generator engine (the poly synth) write 5.
+/// with a new generator engine (WaveForge, Drum Kit) write 5.
 pub const READER_VERSION: u32 = 5;
 
-/// Version 5: a new generator engine (the poly synth, `GenEngine::Poly`), which an
-/// older reader can't parse. Every other song keeps writing its old version.
+/// Version 5: a new generator engine (WaveForge `GenEngine::Poly`, Drum Kit
+/// `GenEngine::Drums`), which an older reader can't parse. Every other song
+/// keeps writing its old version.
 pub fn needs_reader_5(song: &Song) -> bool {
     song.instruments.iter().any(|i| {
-        matches!(&i.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Poly(_)))
+        matches!(&i.kind, InstrumentKind::Gen(g) if matches!(
+            g.engine,
+            crate::gen::GenEngine::Poly(_) | crate::gen::GenEngine::Drums(_)
+        ))
     })
 }
 
@@ -982,10 +986,20 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
             });
             continue;
         }
-        // patch = "gen:<preset>": a Generator (drum synth / kit); an optional
-        // [instrument.gen] table overrides its fields (deep merge)
-        if let Some(gname) = src.strip_prefix("gen:") {
-            let mut gp = crate::gen::preset(gname)
+        // patch = "gen:<preset>": a Generator (drum synth / kit); "drumkit:<kit>"
+        // a Drum Kit ("drumkit:Psy Kit"); an optional [instrument.gen] table
+        // overrides its fields (deep merge)
+        let gen_src = src
+            .strip_prefix("gen:")
+            .map(|n| (n, false))
+            .or_else(|| src.strip_prefix("drumkit:").map(|n| (n, true)));
+        if let Some((gname, dk)) = gen_src {
+            let found = if dk {
+                crate::drumkit::preset(gname)
+            } else {
+                crate::gen::preset(gname)
+            };
+            let mut gp = found
                 .ok_or_else(|| format!("instrument {name}: unknown generator preset {gname:?}"))?;
             if let Some(t) = i.get("gen") {
                 let mut merged = toml::Value::try_from(&gp).map_err(|e| e.to_string())?;

@@ -34,6 +34,7 @@ mod devices;
 #[cfg(test)]
 mod devices_tests;
 mod dialogs;
+mod drumkitview;
 mod drumpat;
 #[cfg(test)]
 mod drumpat_tests;
@@ -230,6 +231,7 @@ pub struct App {
     instr_query: String,
     /// Generator editor state: kit piece, Dice history (0.2.3.12)
     gen_ui: genview::GenUi,
+    dk: drumkitview::DkUi,
     /// lower-panel instrument editor state (0.2.3.19)
     ip: instpanel::InstUi,
     /// instrument being renamed in the list (slot, text)
@@ -599,6 +601,7 @@ impl App {
             showcase: None,
             instr_query: String::new(),
             gen_ui: Default::default(),
+            dk: Default::default(),
             ip: Default::default(),
             renaming: None,
             rename_focus: false,

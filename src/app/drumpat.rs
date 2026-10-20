@@ -315,7 +315,7 @@ impl App {
     // ------------------------------------------------------------ preview
 
     /// the bar length (ticks) at the play marker (4/4 for tracker songs)
-    fn pat_bar(&self) -> tl::Tick {
+    pub(super) fn pat_bar(&self) -> tl::Tick {
         let cue = self.tlv.cue;
         self.with(|s| {
             s.song
@@ -459,16 +459,22 @@ impl App {
         let slot = match track_kit {
             Some(s) => Some(s),
             None => self.with(|s| {
-                // the same kit already in the song is shared
-                if let Some(k) = s
-                    .song
-                    .instruments
-                    .iter()
-                    .position(|x| x.name == p.kit && is_kit(x))
-                {
-                    return Some(k as u8 + 1);
-                }
-                let inst = dp::kit_instrument(p.kit)?;
+                // a new track gets its own Drum Kit (an existing track's
+                // kit is shared only when dropping onto that track)
+                let inst = if new {
+                    dp::drumkit_instrument(p.kit)?
+                } else {
+                    // an old Kit of that name already in the song is shared
+                    if let Some(k) = s
+                        .song
+                        .instruments
+                        .iter()
+                        .position(|x| x.name == p.kit && is_kit(x))
+                    {
+                        return Some(k as u8 + 1);
+                    }
+                    dp::drumkit_instrument(p.kit)?
+                };
                 s.song.add_instrument(inst).map(|k| k as u8 + 1)
             }),
         };
@@ -482,6 +488,10 @@ impl App {
             if new {
                 crate::chanops::assign_track_instrument(song, tr, slot);
             }
+            let drum_kit = song
+                .instruments
+                .get(slot as usize - 1)
+                .is_some_and(|i| crate::drumkit::kit_of(i).is_some());
             let t = song.timeline.as_deref()?;
             let sig = t.sig_at(at);
             let bar = sig.bar_ticks().max(1);
@@ -495,6 +505,9 @@ impl App {
                 d.name = p.name.to_string();
                 d.notes = p.notes(slot);
                 d.len = p.len();
+                if drum_kit {
+                    d.drum = Some(crate::drumkit::DrumMeta { swing: p.swing });
+                }
             }
             t.clips[k].len = p.len();
             let pos = t.bar_pos(start);
@@ -1347,6 +1360,7 @@ impl App {
     }
 }
 
+/// a Kit or a Drum Kit (the note picks the drum)
 fn is_kit(i: &Instrument) -> bool {
-    matches!(&i.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Kit(_)))
+    matches!(&i.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Kit(_) | crate::gen::GenEngine::Drums(_)))
 }

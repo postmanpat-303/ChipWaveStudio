@@ -277,6 +277,7 @@ pub(crate) fn type_tag(k: &InstrumentKind) -> &'static str {
             GenEngine::Wave(_) => "Wave",
             GenEngine::Grid(_) => "Grid",
             GenEngine::Poly(_) => crate::poly::POLY_DISPLAY_NAME,
+            GenEngine::Drums(_) => "Drum Kit",
         },
     }
 }
@@ -371,6 +372,11 @@ fn drum(i: &Instrument, sel: usize) -> DrumP {
     match &ge(i).engine {
         GenEngine::Drum(d) => *d,
         GenEngine::Kit(k) => k.pieces[sel.min(7)],
+        GenEngine::Drums(k) => k
+            .pads
+            .get(sel.min(k.pads.len().max(1) - 1))
+            .map(|p| p.drum)
+            .unwrap_or_default(),
         _ => DrumP::default(),
     }
 }
@@ -1646,6 +1652,7 @@ fn generator(b: &mut B, g: &GenPatch, sel: usize) {
         GenEngine::Wave(_) => wave(b),
         GenEngine::Grid(x) => grid(b, x),
         GenEngine::Poly(_) => polysynth(b),
+        GenEngine::Drums(_) => drums(b, g, sel),
     }
     if !g.engine.own_env() {
         // release + optional filter (drums, kit, chip FX)
@@ -1709,9 +1716,18 @@ fn generator(b: &mut B, g: &GenPatch, sel: usize) {
 
 fn drums(b: &mut B, g: &GenPatch, sel: usize) {
     let kit = matches!(g.engine, GenEngine::Kit(_));
+    let drum_kit = match &g.engine {
+        GenEngine::Drums(k) => Some(k),
+        _ => None,
+    };
     let d = match &g.engine {
         GenEngine::Drum(d) => *d,
         GenEngine::Kit(k) => k.pieces[sel.min(7)],
+        GenEngine::Drums(k) => k
+            .pads
+            .get(sel.min(k.pads.len().max(1) - 1))
+            .map(|p| p.drum)
+            .unwrap_or_default(),
         _ => DrumP::default(),
     };
     if kit {
@@ -1719,7 +1735,13 @@ fn drums(b: &mut B, g: &GenPatch, sel: usize) {
         b.custom("kit.piece", "Kit piece", Custom::KitPiece)
             .tip("which kit piece the knobs edit: C kick, D snare, D# clap, F#/A# hats, E-A toms, C# B perc");
     }
-    let title = if kit {
+    let title = if let Some(k) = drum_kit {
+        let n = k.pads.len().max(1);
+        format!(
+            "Pad · {}",
+            k.pads.get(sel.min(n - 1)).map_or("", |p| p.name.as_str())
+        )
+    } else if kit {
         format!("Drum · {}", crate::gen::KIT_NAMES[sel.min(7)])
     } else {
         "Drum".to_string()
@@ -1761,7 +1783,7 @@ fn drums(b: &mut B, g: &GenPatch, sel: usize) {
         d.kind.models().iter().map(|s| s.to_string()).collect(),
         gs,
     );
-    if !kit {
+    if !kit && drum_kit.is_none() {
         let gs: (Get, Set) = (
             Box::new(move |i| if drum(i, sel).follow_note { 1.0 } else { 0.0 }),
             Box::new(move |i, v| {
@@ -1792,8 +1814,18 @@ fn drums(b: &mut B, g: &GenPatch, sel: usize) {
                 }
             }),
         );
-        let gk = if kit { sel.min(7) * 8 + k } else { k };
-        b.mac(&format!("drum.m{k}"), def, gs, lock, Some(k), gk);
+        let gk = if kit {
+            sel.min(7) * 8 + k
+        } else if drum_kit.is_some() {
+            sel * 8 + k
+        } else {
+            k
+        };
+        let p = b.mac(&format!("drum.m{k}"), def, gs, lock, Some(k), gk);
+        if gk >= crate::gen::GEN_KNOBS {
+            // pads past GEN_KNOBS / 8 are not automatable yet
+            p.target = None;
+        }
     }
     let gs: (Get, Set) = (
         Box::new(move |i| drum(i, sel).level),
