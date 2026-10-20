@@ -423,3 +423,111 @@ fn real_plugin_from_env() {
     });
     eprintln!("allocations in 50 blocks (plugin's own included): {n}");
 }
+
+/// render `blocks` x 512 samples
+fn run(e: &mut crate::engine::Engine, song: &Song, blocks: usize) -> Vec<f32> {
+    let mut out = vec![];
+    let mut buf = vec![0.0f32; 512];
+    for _ in 0..blocks {
+        e.render(song, &mut buf);
+        out.extend_from_slice(&buf);
+    }
+    out
+}
+
+/// Del, 0.2.5.0: an effect added to a plugin instrument's chain (Devices
+/// row) must be heard at once. `play` false: live MIDI while stopped; true:
+/// while the song plays. Returns (without, with) the effect added part way.
+fn fx_added_mid_note(play: bool, ch: u8) -> (Vec<f32>, Vec<f32>) {
+    fx_added(play, ch, false)
+}
+
+/// `played`: the channel played a built-in instrument before (stopped since)
+fn fx_added(play: bool, ch: u8, played: bool) -> (Vec<f32>, Vec<f32>) {
+    let mut outs = vec![];
+    for add in [false, true] {
+        // '03 Monique': the plugin is not instrument 01
+        let mut song = plugin_song();
+        song.instruments.swap(0, 2);
+        for p in &mut song.patterns {
+            for row in &mut p.cells {
+                for c in row.iter_mut().filter(|c| c.instr == 1) {
+                    c.instr = 3;
+                }
+            }
+        }
+        let mut e = crate::engine::Engine::new(48000.0);
+        // the app's live-input slot for (instrument, channel), as audio.rs does
+        let plan = e.plugins.plan(&song, Some((2, ch as usize)));
+        for (i, c, p) in plan.add {
+            e.plugins
+                .insert(i, c, &p, instantiate(&p, 48000.0).unwrap());
+        }
+        if played {
+            let mut s2 = song.clone();
+            s2.patterns[0].cells[0][ch as usize] = Cell {
+                note: 49,
+                instr: 1,
+                ..Default::default()
+            };
+            e.start(&s2, 0, 0, true, 0);
+            let _ = run(&mut e, &s2, 10);
+            e.stop();
+            let _ = run(&mut e, &s2, 200);
+        }
+        if play {
+            e.start(&song, 0, 0, true, 0);
+        }
+        e.live_event(
+            &song,
+            crate::midi::LiveEv::On {
+                key: 60,
+                note: 49,
+                vel: 1.0,
+                instr: 3,
+                ch,
+            },
+        );
+        let _ = run(&mut e, &song, 20);
+        if add {
+            // as the Devices row's + does: push onto the instrument's chain
+            let d = crate::fx::Device::new(crate::fx::FxKind::Reverb);
+            song.instruments[2].fx.push(d);
+        }
+        e.live_event(&song, crate::midi::LiveEv::Off { key: 60 });
+        let o = run(&mut e, &song, 80);
+        assert!(rms(&o[..4096]) > 1e-3, "ch {ch}: the note sounds");
+        outs.push(o);
+    }
+    let w = outs.pop().unwrap();
+    (outs.pop().unwrap(), w)
+}
+
+#[test]
+fn an_effect_added_to_a_plugin_track_is_heard_at_once_live() {
+    for ch in [0u8, 2] {
+        let (a, b) = fx_added_mid_note(false, ch);
+        let d: f32 = a.iter().zip(&b).map(|(x, y)| (x - y).abs()).sum();
+        assert!(
+            d > 1.0,
+            "live MIDI on ch {ch}, stopped: the reverb changed nothing ({d})"
+        );
+    }
+}
+
+#[test]
+fn an_effect_added_to_a_plugin_track_is_heard_at_once_after_other_playback() {
+    let (a, b) = fx_added(false, 2, true);
+    let d: f32 = a.iter().zip(&b).map(|(x, y)| (x - y).abs()).sum();
+    assert!(
+        d > 1.0,
+        "channel last played instrument 01: the reverb changed nothing ({d})"
+    );
+}
+
+#[test]
+fn an_effect_added_to_a_plugin_track_is_heard_at_once_while_playing() {
+    let (a, b) = fx_added_mid_note(true, 0);
+    let d: f32 = a.iter().zip(&b).map(|(x, y)| (x - y).abs()).sum();
+    assert!(d > 1.0, "playing: the reverb changed nothing ({d})");
+}

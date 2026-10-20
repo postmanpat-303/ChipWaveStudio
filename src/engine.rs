@@ -572,6 +572,17 @@ impl Engine {
                     if let Some(inst) = song.instruments.get(i) {
                         if matches!(inst.kind, InstrumentKind::Plugin(_)) {
                             let n = (note as i32 + inst.transpose as i32).clamp(1, 127) as u8;
+                            // the plugin sounds through this channel's insert
+                            // chain, which refresh_fx gives to `c.instr`: make
+                            // that the plugin's own chain (its Devices row)
+                            // unless a song note holds the channel
+                            if let Some(c) = self.chans.get_mut(ch as usize) {
+                                if c.instr == usize::MAX && c.tail.instr == usize::MAX {
+                                    self.chains[ch as usize].sync(&inst.fx, i, self.sr);
+                                } else if !self.playing && !c.active && c.instr != i {
+                                    c.instr = i;
+                                }
+                            }
                             self.plugins.live_on(
                                 i,
                                 ch as usize,
@@ -1220,6 +1231,13 @@ impl Engine {
             }
             _ => None,
         }
+    }
+
+    /// (owner instrument, device count) of channel `ch`'s insert chain (tests)
+    #[cfg(test)]
+    pub fn chain_info(&self, ch: usize) -> (usize, usize) {
+        let c = &self.chains[ch];
+        (c.owner, c.states.len())
     }
 
     /// the phoneme a Voice note on `ch` is speaking (tests)
