@@ -19,7 +19,7 @@
 //! keeps them, so automation lanes (`instrument.N.gen.K`), MIDI learn and
 //! drag-to-modulate routes stay attached when other modules come and go.
 //!
-//! Written for ChipWave; the idea follows Bitwig Studio's Grid (no code or
+//! Written for ChipWave; the idea follows other DAWs' modular environments (no code or
 //! assets).
 use crate::gen::{MacroDef, Ov, GEN_KNOBS};
 use serde::{Deserialize, Serialize};

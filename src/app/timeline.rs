@@ -1,5 +1,5 @@
 //! Timeline view (docs/TIMELINE.md): the song as tracks (= mixer channels) x
-//! time, Bitwig-style. M1 is read-only: in tracker mode the timeline is
+//! time, as in other DAWs. M1 is read-only: in tracker mode the timeline is
 //! derived from the order list (`crate::timeline::from_order`) and cached
 //! until the song changes. One painter-based widget: clips, previews and
 //! grid go into a few meshes, only visible tracks and clips are touched

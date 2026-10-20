@@ -15,7 +15,7 @@
 //!   Emilie Gillet's Mutable Instruments Plaits drum models (MIT), also in
 //!   DaisySP `Source/Drums` (MIT, Electrosmith).
 //! * Macro layout (Tune, Punch, Click, Body, Shape ... per drum) and the Zap
-//!   kick idea: Bitwig's v0 drum devices (closed source; ideas only).
+//!   kick idea: macro drum devices in other DAWs (ideas only).
 //! * Dice with per-category ranges, Mutate and locks: sfxr (DrPetter, MIT)
 //!   and bfxr (Stephen Lavelle, Apache-2.0) "lock" toggles.
 //!

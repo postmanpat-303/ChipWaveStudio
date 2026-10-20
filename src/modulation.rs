@@ -1,4 +1,4 @@
-//! Drag-to-modulate (Unreleased, after 0.2.4.0): Bitwig-style modulators.
+//! Drag-to-modulate (Unreleased, after 0.2.4.0): modulators, as in other DAWs.
 //!
 //! An instrument owns **modulators** (LFO, envelope, random, velocity,
 //! keytrack, mod wheel, macro, or its own synth LFO). A **route** connects a
