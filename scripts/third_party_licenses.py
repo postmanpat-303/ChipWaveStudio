@@ -164,12 +164,12 @@ Generators (src/gen.rs, src/ladder.rs, 0.2.3.12):
   Emilie Gillet (MIT, https://github.com/pichenettes/eurorack), as ported to
   DaisySP by Electrosmith (MIT, https://github.com/electro-smith/DaisySP).
   Independent Rust implementations of those recipes; no samples used. The
-  macro-knob + dice workflow is inspired by Bitwig Studio's Grid and drum
-  devices (ideas only, no code or assets).
+  macro-knob + dice workflow is inspired by the modular environments and
+  drum devices of other DAWs (ideas only, no code or assets).
 - The Grid generator and Grid FX (src/grid.rs, a modular patching
   environment) are written from scratch for ChipWave. The idea of a
-  polyphonic, per-voice module canvas follows Bitwig Studio's The Grid
-  (Bitwig GmbH; ideas only, no code, modules, presets or assets). The node
+  polyphonic, per-voice module canvas is inspired by other DAWs' modular
+  environments (ideas only, no code, modules, presets or assets). The node
   canvas is ChipWave's own egui painter. The Karplus Pluck patch follows
   K. Karplus & A. Strong, "Digital Synthesis of Plucked-String and Drum
   Timbres", Computer Music Journal 7(2), 1983.
