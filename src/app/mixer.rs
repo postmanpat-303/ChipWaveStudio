@@ -11,21 +11,10 @@ impl App {
             -90.0
         };
         let frac = ((db + 60.0) / 66.0).clamp(0.0, 1.0);
-        if theme::polished() {
-            theme::meter(p, r, frac);
-        } else {
-            p.rect_filled(r, 3, th().crt_bot);
-        }
-        if frac > 0.0 && !theme::polished() {
-            let top = r.bottom() - frac * r.height();
-            let col = if db > 0.0 {
-                hex(0xD9605A)
-            } else if db > -6.0 {
-                hex(0xE8C35A)
-            } else {
-                hex(0x5CC07A)
-            };
-            p.rect_filled(Rect::from_min_max(Pos2::new(r.left(), top), r.max), 3, col);
+        // one meter painter for every theme (Slate: LED dots)
+        theme::meter_peak(p, r, frac, None);
+        if th().ember {
+            return;
         }
         // 0 dB line
         let y0 = r.bottom() - 60.0 / 66.0 * r.height();

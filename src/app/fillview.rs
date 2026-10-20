@@ -875,19 +875,8 @@ fn knob(ui: &mut egui::Ui, v: &mut f32) -> bool {
         *v = 0.5;
         changed = true;
     }
-    let p = ui.painter();
-    let c = r.center();
-    let rad = 14.0;
-    p.circle_filled(c, rad, th().crt_bot);
-    p.circle_stroke(c, rad, Stroke::new(1.0, th().ink2.gamma_multiply(0.6)));
-    let a0 = std::f32::consts::PI * 0.75;
-    let span = std::f32::consts::PI * 1.5;
-    let arc = |t: f32| c + egui::vec2((a0 + span * t).cos(), (a0 + span * t).sin()) * (rad - 3.0);
-    let pts: Vec<Pos2> = (0..=24).map(|i| arc(i as f32 / 24.0 * *v)).collect();
-    if pts.len() > 1 {
-        p.add(egui::Shape::line(pts, Stroke::new(3.0, th().accent)));
-    }
-    p.line_segment([c, arc(*v)], Stroke::new(2.0, th().ink));
+    // the shared knob painter (theme.rs)
+    theme::knob_face(ui.painter(), r.center(), 11.0, theme::KnobFace::new(*v));
     resp.on_hover_text("Variation: drag up/down (double-click = 50 %)");
     changed
 }

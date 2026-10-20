@@ -566,6 +566,12 @@ pub fn block(p: &egui::Painter, r: Rect, col: Color32) {
 /// (`frac` = lit height 0..1 of `r`, scale -60..+6 dB), plus the track
 pub fn meter(p: &egui::Painter, r: Rect, frac: f32) {
     let t = th();
+    if t.ember {
+        // Slate: the LED dot column (vertical when taller than wide)
+        let vertical = r.height() >= r.width();
+        crate::ember::dot_meter(p, r, frac, None, vertical, true);
+        return;
+    }
     p.rect_filled(r, 3, tone(t.crt_bot, -0.15));
     p.rect_stroke(
         r,
@@ -815,5 +821,173 @@ mod shade_tests {
                 t.name
             );
         }
+    }
+}
+
+// ------------------------------------------------------------ knob painter
+
+/// What a knob shows; shared by every rotary control (instrument and device
+/// knobs, generator macros, the mixer's send / pan knobs) so the themes stay
+/// in one place. Slate paints the knurled knob (`ember::knob_small`), the
+/// classic themes the shaded (Polished) or flat cap with a value arc.
+#[derive(Clone, Copy)]
+pub struct KnobFace {
+    /// position 0..1
+    pub frac: f32,
+    /// where the value arc starts (0.5 = bipolar, lit from 12 o'clock)
+    pub from: f32,
+    /// opacity of the value parts (disabled controls dim)
+    pub dim: f32,
+    /// a locked value draws its arc in ink instead of the accent
+    pub locked: bool,
+    /// discrete steps over the range (dots around the knob for 1..=16)
+    pub steps: f32,
+}
+
+impl KnobFace {
+    pub fn new(frac: f32) -> Self {
+        Self {
+            frac,
+            from: 0.0,
+            dim: 1.0,
+            locked: false,
+            steps: 0.0,
+        }
+    }
+}
+
+/// Paint a knob of radius `rad` (the value arc's radius) centred on `c`.
+pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
+    let t = th();
+    let v = k.frac.clamp(0.0, 1.0);
+    if t.ember {
+        let mut kp = p.clone();
+        kp.multiply_opacity(k.dim.max(0.55));
+        crate::ember::knob_small(&kp, c, rad + 2.5, v, &[]);
+        return;
+    }
+    let dim = k.dim;
+    let a0 = std::f32::consts::PI * 0.75;
+    let span = std::f32::consts::PI * 1.5;
+    let pt = |ang: f32, r: f32| c + egui::vec2(ang.cos(), ang.sin()) * r;
+    let arc = |from: f32, to: f32, col: Color32, w: f32| {
+        let n = 28;
+        let pts: Vec<Pos2> = (0..=n)
+            .map(|i| pt(a0 + span * (from + (to - from) * i as f32 / n as f32), rad))
+            .collect();
+        p.add(egui::Shape::line(pts, Stroke::new(w, col)));
+    };
+    if polished() {
+        // a soft shadow under the cap, the cap lit from above, a recessed track
+        p.circle_filled(
+            c + egui::vec2(0.0, 1.5),
+            rad - 2.5,
+            Color32::from_black_alpha(if t.light { 40 } else { 70 }),
+        );
+        let cap = t.pill.gamma_multiply(dim.max(0.7));
+        p.circle_filled(c, rad - 3.0, tone(cap, -0.06));
+        p.circle_filled(
+            c - egui::vec2(0.0, 1.0),
+            rad - 4.5,
+            tone(cap, if t.light { 0.25 } else { 0.07 }),
+        );
+        p.circle_stroke(c, rad - 3.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.35)));
+        arc(
+            0.0,
+            1.0,
+            Color32::from_black_alpha(if t.light { 45 } else { 90 }),
+            4.5,
+        );
+    } else {
+        p.circle_filled(c, rad - 3.0, t.pill.gamma_multiply(dim.max(0.7)));
+        p.circle_stroke(c, rad - 3.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.35)));
+    }
+    // stepped knobs (octave, voices...): a dot per step
+    if k.steps >= 1.0 && k.steps <= 16.0 {
+        let n = k.steps.round() as i32;
+        for s in 0..=n {
+            let f = s as f32 / n as f32;
+            p.circle_filled(
+                pt(a0 + span * f, rad + 3.5),
+                1.0,
+                t.ink2.gamma_multiply(0.6 * dim),
+            );
+        }
+    }
+    arc(0.0, 1.0, t.ink2.gamma_multiply(0.35), 3.0);
+    let col = if k.locked { t.ink2 } else { t.accent };
+    let (lo, hi) = if v < k.from { (v, k.from) } else { (k.from, v) };
+    if hi > lo {
+        arc(lo, hi, col.gamma_multiply(dim), 3.0);
+    }
+    p.line_segment(
+        [pt(a0 + span * v, 3.0), pt(a0 + span * v, rad - 4.0)],
+        Stroke::new(2.0, t.ink.gamma_multiply(dim)),
+    );
+}
+
+/// The large "hero" knob (instrument macros, the Master section). Slate
+/// paints the LED-arc knob with its readout inside (`ember::knob_big`, `rad`
+/// = outer radius); the classic themes the standard knob face, scaled.
+#[allow(clippy::too_many_arguments)]
+pub fn knob_hero(
+    p: &egui::Painter,
+    c: Pos2,
+    rad: f32,
+    frac: f32,
+    bipolar: bool,
+    readout: &str,
+    lit: bool,
+    dim: f32,
+) {
+    if th().ember {
+        let mut kp = p.clone();
+        kp.multiply_opacity(dim.max(0.5));
+        crate::ember::knob_big(&kp, c, rad, frac, bipolar, readout, lit);
+        return;
+    }
+    let mut k = KnobFace::new(frac);
+    k.from = if bipolar { 0.5 } else { 0.0 };
+    k.dim = dim;
+    knob_face(p, c, rad * 0.8, k);
+    p.text(
+        c + egui::vec2(0.0, rad * 0.8 + 8.0),
+        egui::Align2::CENTER_CENTER,
+        readout,
+        egui::FontId::monospace(10.0),
+        th().value.gamma_multiply(dim),
+    );
+}
+
+/// A level meter with an optional peak-hold mark (`peak` 0..1). Slate draws
+/// the LED dot column (vertical when taller than wide); the classic themes
+/// the gradient bar (`meter`) with a peak line.
+pub fn meter_peak(p: &egui::Painter, r: Rect, frac: f32, peak: Option<f32>) {
+    if th().ember {
+        let vertical = r.height() >= r.width();
+        crate::ember::dot_meter(p, r, frac, peak, vertical, true);
+        return;
+    }
+    if polished() {
+        meter(p, r, frac);
+    } else {
+        // Flat: one solid colour by level (green, amber over -6 dB, red over 0)
+        p.rect_filled(r, 3, th().crt_bot);
+        if frac > 0.0 {
+            let db = frac.clamp(0.0, 1.0) * 66.0 - 60.0;
+            let col = if db > 0.0 {
+                hex(0xD9605A)
+            } else if db > -6.0 {
+                hex(0xE8C35A)
+            } else {
+                hex(0x5CC07A)
+            };
+            let top = r.bottom() - frac.clamp(0.0, 1.0) * r.height();
+            p.rect_filled(Rect::from_min_max(Pos2::new(r.left(), top), r.max), 3, col);
+        }
+    }
+    if let Some(pk) = peak.filter(|k| *k > 0.0) {
+        let y = r.bottom() - pk.clamp(0.0, 1.0) * r.height();
+        p.hline(r.x_range(), y, Stroke::new(1.5, th().ink));
     }
 }

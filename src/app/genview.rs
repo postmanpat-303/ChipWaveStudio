@@ -96,35 +96,20 @@ pub(super) fn knob(
             let a0 = std::f32::consts::PI * 0.75;
             let span = std::f32::consts::PI * 1.5;
             let pt = |a: f32, r: f32| c + egui::vec2(a.cos(), a.sin()) * r;
-            p.circle_filled(c, rad, th().pill);
-            let arc = |from: f32, to: f32, col: egui::Color32, w: f32| {
-                let n = 24;
-                let pts: Vec<egui::Pos2> = (0..=n)
-                    .map(|i| {
-                        pt(
-                            a0 + span * (from + (to - from) * i as f32 / n as f32),
-                            rad - 2.0,
-                        )
-                    })
-                    .collect();
-                p.add(egui::Shape::line(pts, egui::Stroke::new(w, col)));
-            };
-            arc(0.0, 1.0, th().border, 2.0);
-            let col = if *locked { th().ink2 } else { th().accent };
-            arc(0.0, v.clamp(0.0, 1.0), col, 3.0);
-            // the dice window, as a thin inner arc
+            // the shared knob painter (theme.rs)
+            let mut k = crate::theme::KnobFace::new(*v);
+            k.locked = *locked;
+            crate::theme::knob_face(p, c, rad - 2.0, k);
+            // the dice window, as a thin arc (outside Slate's knurled cap)
+            let dr = if th().ember { rad + 4.0 } else { rad - 6.0 };
             let n = 12;
             let pts: Vec<egui::Pos2> = (0..=n)
                 .map(|i| {
                     let f = def.dice.0 + (def.dice.1 - def.dice.0) * i as f32 / n as f32;
-                    pt(a0 + span * f, rad - 6.0)
+                    pt(a0 + span * f, dr)
                 })
                 .collect();
             p.add(egui::Shape::line(pts, egui::Stroke::new(1.0, th().ink2)));
-            p.line_segment(
-                [pt(a0 + span * *v, 4.0), pt(a0 + span * *v, rad - 3.0)],
-                egui::Stroke::new(2.0, th().ink),
-            );
             ui.label(
                 egui::RichText::new(def.show(*v))
                     .monospace()

@@ -109,69 +109,26 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
             .collect();
         p.add(egui::Shape::line(pts, Stroke::new(w, col)));
     };
-    let arc = |from: f32, to: f32, col: Color32, w: f32| arc_r(from, to, col, w, RAD);
-    if t.ember {
-        let mut kp = p.clone();
-        kp.multiply_opacity(dim.max(0.55));
-        crate::ember::knob_small(&kp, kc, RAD + 2.5, *v, &[]);
-    } else if crate::theme::polished() {
-        // a soft shadow under the cap, the cap lit from above, a recessed track
-        p.circle_filled(
-            kc + egui::vec2(0.0, 1.5),
-            RAD - 2.5,
-            Color32::from_black_alpha(if t.light { 40 } else { 70 }),
-        );
-        let cap = t.pill.gamma_multiply(dim.max(0.7));
-        p.circle_filled(kc, RAD - 3.0, crate::theme::tone(cap, -0.06));
-        p.circle_filled(
-            kc - egui::vec2(0.0, 1.0),
-            RAD - 4.5,
-            crate::theme::tone(cap, if t.light { 0.25 } else { 0.07 }),
-        );
-        p.circle_stroke(kc, RAD - 3.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.35)));
-        arc(
-            0.0,
-            1.0,
-            Color32::from_black_alpha(if t.light { 45 } else { 90 }),
-            4.5,
-        );
-    } else {
-        p.circle_filled(kc, RAD - 3.0, t.pill.gamma_multiply(dim.max(0.7)));
-        p.circle_stroke(kc, RAD - 3.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.35)));
-    }
-    // stepped knobs (octave, voices...): a dot per step
-    if !t.ember && a.steps >= 1.0 && a.steps <= 16.0 {
-        let n = a.steps.round() as i32;
-        for k in 0..=n {
-            let f = k as f32 / n as f32;
-            p.circle_filled(
-                pt(a0 + span * f, RAD + 3.5),
-                1.0,
-                t.ink2.gamma_multiply(0.6 * dim),
-            );
-        }
-    }
-    if !t.ember {
-        arc(0.0, 1.0, t.ink2.gamma_multiply(0.35), 3.0);
-    }
     let locked = a.locked == Some(true);
-    let col = if locked { t.ink2 } else { t.accent };
     // bipolar ranges (default in the middle) draw from the centre
     let from = if (a.default - 0.5).abs() < 0.01 {
         0.5
     } else {
         0.0
     };
-    let (lo, hi) = if *v < from { (*v, from) } else { (from, *v) };
-    if !t.ember {
-        if hi > lo {
-            arc(lo, hi, col.gamma_multiply(dim), 3.0);
-        }
-        p.line_segment(
-            [pt(a0 + span * *v, 3.0), pt(a0 + span * *v, RAD - 4.0)],
-            Stroke::new(2.0, t.ink.gamma_multiply(dim)),
-        );
-    }
+    // the one knob painter (theme.rs): Slate's knurled knob or the classic cap
+    crate::theme::knob_face(
+        &p,
+        kc,
+        RAD,
+        crate::theme::KnobFace {
+            frac: *v,
+            from,
+            dim,
+            locked,
+            steps: a.steps,
+        },
+    );
     // modulation: a ring per route (value → value + depth) with a handle
     // that sets the depth, and the live modulated value as a dot
     let mut ring_drag = None;

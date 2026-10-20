@@ -984,7 +984,11 @@ impl App {
                     .color(t.ink),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let txt = if lim.enabled { "Limiter on" } else { "Limiter off" };
+                let txt = if lim.enabled {
+                    "Limiter on"
+                } else {
+                    "Limiter off"
+                };
                 if crate::ember::button(ui, txt, lim.enabled)
                     .on_hover_text(
                         "the true-peak limiter on the master (off: the classic soft clipper)",
@@ -1008,8 +1012,17 @@ impl App {
             }
         };
         let mut v = (*vol / 2.0).clamp(0.0, 1.0);
-        let r = super::mixstrip::big(ui, Pos2::new(xs[0], cy), id.with(0), &mut v, 0.5, "Volume", &db(*vol), true)
-            .on_hover_text("master volume (the mixer's Master fader)");
+        let r = super::mixstrip::big(
+            ui,
+            Pos2::new(xs[0], cy),
+            id.with(0),
+            &mut v,
+            0.5,
+            "Volume",
+            &db(*vol),
+            true,
+        )
+        .on_hover_text("master volume (the mixer's Master fader)");
         if r.dragged() || r.double_clicked() {
             *vol = v * 2.0;
         }
@@ -1099,7 +1112,11 @@ impl App {
             crate::ember::well(pp, gr, 4);
             for db in [-6.0f32, -18.0, -30.0] {
                 let y = gr.bottom() - ((db + 48.0) / 51.0) * gr.height();
-                pp.hline(gr.x_range().shrink(1.0), y, Stroke::new(1.0, crate::ember::GRID));
+                pp.hline(
+                    gr.x_range().shrink(1.0),
+                    y,
+                    Stroke::new(1.0, crate::ember::GRID),
+                );
             }
             let n = self.ca.hist.len();
             let bw = (gr.width() - 4.0) / HIST as f32;
@@ -1113,7 +1130,10 @@ impl App {
                 }
                 let x = inner.right() - (n - k) as f32 * bw;
                 let top = inner.bottom() - f * inner.height();
-                let b = Rect::from_min_max(Pos2::new(x + 0.5, top), Pos2::new(x + bw - 0.5, inner.bottom()));
+                let b = Rect::from_min_max(
+                    Pos2::new(x + 0.5, top),
+                    Pos2::new(x + bw - 0.5, inner.bottom()),
+                );
                 theme::round_mesh(
                     &mut bloom,
                     b.expand2(egui::vec2(2.0, 3.0)),
@@ -1171,7 +1191,7 @@ impl App {
                 |ui| self.ca_master_ember(ui, &mut vol, &mut lim, peaks, &loud),
             );
         } else {
-        ui.scope_builder(
+            ui.scope_builder(
             egui::UiBuilder::new()
                 .max_rect(inner)
                 .layout(egui::Layout::top_down(egui::Align::Min)),

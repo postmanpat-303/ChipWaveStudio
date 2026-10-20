@@ -734,16 +734,15 @@ fn big_knob(
         // pic-1 knob: LED arc, silver ring, glossy well with the readout
         crate::ember::knob_label(p, Pos2::new(cell.center().x, cell.top() + 6.0), name, 12.5);
         let bip = (def - 0.5).abs() < 0.01;
-        let mut kp = p.clone();
-        kp.multiply_opacity(if enabled { 1.0 } else { 0.55 });
-        crate::ember::knob_big(
-            &kp,
+        crate::theme::knob_hero(
+            p,
             c,
             r + 4.0,
             *v,
             bip,
             &compact(value),
             enabled && (*v - if bip { 0.5 } else { 0.0 }).abs() > 0.002,
+            if enabled { 1.0 } else { 0.55 },
         );
         if resp.hovered() && enabled {
             p.circle_stroke(c, r + 5.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.4)));

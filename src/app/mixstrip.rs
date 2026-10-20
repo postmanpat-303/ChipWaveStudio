@@ -91,7 +91,8 @@ pub(super) fn fader(ui: &mut egui::Ui, r: Rect, id: egui::Id, vol: &mut f32) -> 
         let p0 = if resp.drag_started() {
             gain_to_pos(*vol)
         } else {
-            ui.data(|m| m.get_temp::<f32>(nid)).unwrap_or(gain_to_pos(*vol))
+            ui.data(|m| m.get_temp::<f32>(nid))
+                .unwrap_or(gain_to_pos(*vol))
         };
         let p = (p0 - resp.drag_delta().y / slot.height() * fine).clamp(0.0, 1.0);
         ui.data_mut(|m| m.insert_temp(nid, p));
@@ -134,13 +135,15 @@ fn meter(ui: &egui::Ui, r: Rect, id: egui::Id, level: f32) {
     let f = ember::db_frac(db);
     let now = ui.input(|i| i.time);
     let hid = id.with("hold");
-    let (mut pk, mut at) = ui.data(|d| d.get_temp::<(f32, f64)>(hid)).unwrap_or((0.0, now));
+    let (mut pk, mut at) = ui
+        .data(|d| d.get_temp::<(f32, f64)>(hid))
+        .unwrap_or((0.0, now));
     if f >= pk || now - at > 1.5 {
         pk = f;
         at = now;
     }
     ui.data_mut(|d| d.insert_temp(hid, (pk, at)));
-    ember::dot_meter(ui.painter(), r, f, (pk > 0.0).then_some(pk), true, true);
+    crate::theme::meter_peak(ui.painter(), r, f, (pk > 0.0).then_some(pk));
 }
 
 /// a pic-2 knob with its name above it; `v` 0..1
@@ -181,9 +184,10 @@ pub(super) fn mini_knob(
         }
     }
     let p = ui.painter();
-    let mut kp = p.clone();
-    kp.multiply_opacity(if enabled { 1.0 } else { 0.45 });
-    ember::knob_small(&kp, c, rad + 3.0, *v, &[]);
+    let mut k = crate::theme::KnobFace::new(*v);
+    k.from = if (def - 0.5).abs() < 0.01 { 0.5 } else { 0.0 };
+    k.dim = if enabled { 1.0 } else { 0.45 };
+    crate::theme::knob_face(p, c, rad + 0.5, k);
     ember::knob_label(p, Pos2::new(c.x, c.y - rad - 9.0), name, 11.0);
     let nm = name.to_string();
     let val = value.to_string();
@@ -204,9 +208,18 @@ pub(super) fn mini_knob(
 /// readers and the UI tests find it)
 fn header(ui: &mut egui::Ui, r: Rect, title: &str, col: Color32) {
     let t = th();
-    let h = Rect::from_min_size(r.min + egui::vec2(5.0, 5.0), egui::vec2(r.width() - 10.0, 21.0));
+    let h = Rect::from_min_size(
+        r.min + egui::vec2(5.0, 5.0),
+        egui::vec2(r.width() - 10.0, 21.0),
+    );
     let mut m = egui::Mesh::default();
-    theme::round_mesh(&mut m, h, [3.0; 4], theme::tone(col, 0.06), theme::tone(col, -0.12));
+    theme::round_mesh(
+        &mut m,
+        h,
+        [3.0; 4],
+        theme::tone(col, 0.06),
+        theme::tone(col, -0.12),
+    );
     ui.painter().add(egui::Shape::mesh(m));
     ui.painter().hline(
         (h.left() + 2.0)..=(h.right() - 2.0),
@@ -243,7 +256,10 @@ fn meters(ui: &mut egui::Ui, r: Rect, id: egui::Id, levels: &[f32]) {
     let col_y = (fr.top() + 6.0)..=(fr.bottom() - 6.0);
     let x0 = fr.right() + 10.0;
     for (k, l) in levels.iter().enumerate() {
-        let mr = Rect::from_x_y_ranges((x0 + k as f32 * 11.0)..=(x0 + k as f32 * 11.0 + 6.0), col_y.clone());
+        let mr = Rect::from_x_y_ranges(
+            (x0 + k as f32 * 11.0)..=(x0 + k as f32 * 11.0 + 6.0),
+            col_y.clone(),
+        );
         meter(ui, mr, id.with(k), *l);
     }
     if levels.len() == 2 {
@@ -328,7 +344,14 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
         p.rect_stroke(
             sr,
             2,
-            Stroke::new(1.0, if resp.hovered() { ember::LINE2 } else { ember::LINE }),
+            Stroke::new(
+                1.0,
+                if resp.hovered() {
+                    ember::LINE2
+                } else {
+                    ember::LINE
+                },
+            ),
             egui::StrokeKind::Inside,
         );
         let more = c.inserts.len() > 3 && k == 2;
@@ -340,7 +363,12 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
                 } else {
                     name.clone()
                 };
-                let label = super::pattern::fit(p, &label, &egui::FontId::proportional(10.5), sr.width() - 18.0);
+                let label = super::pattern::fit(
+                    p,
+                    &label,
+                    &egui::FontId::proportional(10.5),
+                    sr.width() - 18.0,
+                );
                 p.text(
                     Pos2::new(sr.left() + 14.0, sr.center().y),
                     egui::Align2::LEFT_CENTER,
@@ -414,7 +442,12 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
     if pan.double_clicked() {
         *c.pan = 0.0;
     }
-    ember::knob_label(ui.painter(), Pos2::new(r.left() + 80.0, py - 20.0), "Duck", 11.0);
+    ember::knob_label(
+        ui.painter(),
+        Pos2::new(r.left() + 80.0, py - 20.0),
+        "Duck",
+        11.0,
+    );
     let mut pct = *c.duck * 100.0;
     let dr = Rect::from_center_size(Pos2::new(r.left() + 80.0, py + 1.0), egui::vec2(46.0, 18.0));
     let is_key = c.is_key;
@@ -457,7 +490,10 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
     let by = r.bottom() - 27.0;
     let mut row = ui.new_child(
         egui::UiBuilder::new()
-            .max_rect(Rect::from_min_size(Pos2::new(r.left() + 16.0, by), egui::vec2(r.width() - 32.0, 22.0)))
+            .max_rect(Rect::from_min_size(
+                Pos2::new(r.left() + 16.0, by),
+                egui::vec2(r.width() - 32.0, 22.0),
+            ))
             .layout(egui::Layout::left_to_right(egui::Align::Center)),
     );
     row.spacing_mut().item_spacing.x = 6.0;
@@ -485,7 +521,14 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
 
 /// a return strip (Ret A delay, Ret B reverb): its key parameters as
 /// knobs, its level fader and the On button
-pub(super) fn ret(ui: &mut egui::Ui, h: f32, b: usize, title: &str, lvl: &mut f32, dev: &mut crate::fx::Device) -> Rect {
+pub(super) fn ret(
+    ui: &mut egui::Ui,
+    h: f32,
+    b: usize,
+    title: &str,
+    lvl: &mut f32,
+    dev: &mut crate::fx::Device,
+) -> Rect {
     let r = frame(ui, h);
     let id = ui.make_persistent_id(("ember_ret", b));
     let col = fxview::strip_fill(dev.kind, true);
@@ -509,8 +552,17 @@ pub(super) fn ret(ui: &mut egui::Ui, h: f32, b: usize, title: &str, lvl: &mut f3
         let mut v = dev.params[k];
         let v0 = v;
         let short: String = info.name.chars().take(7).collect();
-        mini_knob(ui, c, id.with(k), &mut v, v0, &short, &info.format(dev.params[k]), dev.enabled)
-            .on_hover_text(format!("{} {}", info.name, info.format(dev.params[k])));
+        mini_knob(
+            ui,
+            c,
+            id.with(k),
+            &mut v,
+            v0,
+            &short,
+            &info.format(dev.params[k]),
+            dev.enabled,
+        )
+        .on_hover_text(format!("{} {}", info.name, info.format(dev.params[k])));
         if v != v0 {
             dev.params[k] = v;
         }
@@ -539,7 +591,13 @@ pub(super) fn ret(ui: &mut egui::Ui, h: f32, b: usize, title: &str, lvl: &mut f3
 }
 
 /// the Master strip: fader, L/R meters, readout and the limiter note
-pub(super) fn master(ui: &mut egui::Ui, h: f32, vol: &mut f32, lr: &[f32], note: &str) -> (Rect, egui::Response) {
+pub(super) fn master(
+    ui: &mut egui::Ui,
+    h: f32,
+    vol: &mut f32,
+    lr: &[f32],
+    note: &str,
+) -> (Rect, egui::Response) {
     let r = frame(ui, h);
     let id = ui.make_persistent_id("ember_master");
     header(ui, r, "Master", th().accent);
@@ -596,9 +654,8 @@ pub(super) fn big(
         }
     }
     let p = ui.painter();
-    let mut kp = p.clone();
-    kp.multiply_opacity(if enabled { 1.0 } else { 0.5 });
-    ember::knob_big(&kp, c, rad, *norm, false, readout, enabled);
+    let dim = if enabled { 1.0 } else { 0.5 };
+    crate::theme::knob_hero(p, c, rad, *norm, false, readout, enabled, dim);
     ember::knob_label(p, Pos2::new(c.x, c.y - rad - 9.0), name, 12.0);
     let nm = name.to_string();
     let x = *norm;
@@ -685,7 +742,11 @@ pub(super) fn master_panel(
                 t.acc_hot,
                 true,
             );
-            ui.label(egui::RichText::new("LUFS").font(label_font(11.5)).color(t.ink2));
+            ui.label(
+                egui::RichText::new("LUFS")
+                    .font(label_font(11.5))
+                    .color(t.ink2),
+            );
         });
     });
     ui.add_space(2.0);
@@ -710,32 +771,55 @@ pub(super) fn master_panel(
     // (a knob writes only when it is turned: no float round trips)
     let g0 = lim.gain_db / 24.0;
     let mut g = g0;
-    big(ui, Pos2::new(xs[0], cy), id.with(0), &mut g, 0.0, "Gain", &format!("{:.1}", lim.gain_db), en)
-        .on_hover_text("drives the mix into the limiter: louder, more limiting");
+    big(
+        ui,
+        Pos2::new(xs[0], cy),
+        id.with(0),
+        &mut g,
+        0.0,
+        "Gain",
+        &format!("{:.1}", lim.gain_db),
+        en,
+    )
+    .on_hover_text("drives the mix into the limiter: louder, more limiting");
     if g != g0 {
         lim.gain_db = (g * 24.0 * 10.0).round() / 10.0;
     }
     let c0 = (lim.ceiling_db + 12.0) / 12.0;
     let mut c = c0;
-    big(ui, Pos2::new(xs[1], cy), id.with(1), &mut c, 11.0 / 12.0, "Ceiling", &format!("{:.1}", lim.ceiling_db), en)
-        .on_hover_text("maximum true peak; −1 dBTP is safe for MP3 and streaming");
+    big(
+        ui,
+        Pos2::new(xs[1], cy),
+        id.with(1),
+        &mut c,
+        11.0 / 12.0,
+        "Ceiling",
+        &format!("{:.1}", lim.ceiling_db),
+        en,
+    )
+    .on_hover_text("maximum true peak; −1 dBTP is safe for MP3 and streaming");
     if c != c0 {
         lim.ceiling_db = ((c * 12.0 - 12.0).clamp(-12.0, 0.0) * 10.0).round() / 10.0;
     }
     let rl0 = (lim.release_ms.max(10.0) / 10.0).log10() / 2.0;
     let mut rl = rl0;
-    big(ui, Pos2::new(xs[2], cy), id.with(2), &mut rl, 0.45, "Release", &format!("{:.0}", lim.release_ms), en)
-        .on_hover_text("how fast the gain comes back after a peak");
+    big(
+        ui,
+        Pos2::new(xs[2], cy),
+        id.with(2),
+        &mut rl,
+        0.45,
+        "Release",
+        &format!("{:.0}", lim.release_ms),
+        en,
+    )
+    .on_hover_text("how fast the gain comes back after a peak");
     if rl != rl0 {
         lim.release_ms = (10.0 * 100f32.powf(rl)).round().clamp(10.0, 1000.0);
     }
     // exact values (type or drag)
     let vy = cy + 36.0;
-    let vals = [
-        (xs[0], 0usize),
-        (xs[1], 1),
-        (xs[2], 2),
-    ];
+    let vals = [(xs[0], 0usize), (xs[1], 1), (xs[2], 2)];
     ui.add_enabled_ui(en, |ui| {
         for (x, k) in vals {
             let vr = Rect::from_center_size(Pos2::new(x, vy), egui::vec2(78.0, 18.0));
@@ -775,31 +859,74 @@ pub(super) fn master_panel(
     ui.add_space(10.0);
     // levels and reduction as dot rows
     let db = |g: f32| if g > 1e-5 { 20.0 * g.log10() } else { -90.0 };
-    let num = |d: f32| if d > -70.0 { format!("{d:.1}") } else { "-inf".into() };
+    let num = |d: f32| {
+        if d > -70.0 {
+            format!("{d:.1}")
+        } else {
+            "-inf".into()
+        }
+    };
     let l = lr.first().copied().unwrap_or(0.0);
     let rr = lr.get(1).copied().unwrap_or(0.0);
     dot_row(ui, "Level L", ember::db_frac(db(l)), true, &num(db(l)));
     dot_row(ui, "Level R", ember::db_frac(db(rr)), true, &num(db(rr)));
     let gr = loud.gain_red;
-    dot_row(ui, "Reduction", (-gr / 12.0).clamp(0.0, 1.0), false, &format!("{gr:.1}"))
-        ;
+    dot_row(
+        ui,
+        "Reduction",
+        (-gr / 12.0).clamp(0.0, 1.0),
+        false,
+        &format!("{gr:.1}"),
+    );
     ui.add_space(8.0);
     egui::Grid::new("loud_grid").num_columns(2).show(ui, |ui| {
         for (name, v, unit, tip) in [
-            ("Momentary", loud.momentary, "LUFS", "loudness of the last 0.4 s (ITU-R BS.1770)"),
-            ("Short-term", loud.short_term, "LUFS", "loudness of the last 3 s"),
-            ("Integrated", loud.integrated, "LUFS", "gated loudness since Play was pressed"),
-            ("True peak", loud.true_peak, "dBTP", "highest true peak since Play was pressed"),
+            (
+                "Momentary",
+                loud.momentary,
+                "LUFS",
+                "loudness of the last 0.4 s (ITU-R BS.1770)",
+            ),
+            (
+                "Short-term",
+                loud.short_term,
+                "LUFS",
+                "loudness of the last 3 s",
+            ),
+            (
+                "Integrated",
+                loud.integrated,
+                "LUFS",
+                "gated loudness since Play was pressed",
+            ),
+            (
+                "True peak",
+                loud.true_peak,
+                "dBTP",
+                "highest true peak since Play was pressed",
+            ),
         ] {
-            ui.label(egui::RichText::new(name).font(label_font(12.0)).color(t.ink2))
-                .on_hover_text(tip);
-            ui.label(egui::RichText::new(fmt(v, unit)).font(num_font(12.0)).color(t.acc_hot));
+            ui.label(
+                egui::RichText::new(name)
+                    .font(label_font(12.0))
+                    .color(t.ink2),
+            )
+            .on_hover_text(tip);
+            ui.label(
+                egui::RichText::new(fmt(v, unit))
+                    .font(num_font(12.0))
+                    .color(t.acc_hot),
+            );
             ui.end_row();
         }
     });
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("TARGET").font(label_font(11.5)).color(t.ink2));
+        ui.label(
+            egui::RichText::new("TARGET")
+                .font(label_font(11.5))
+                .color(t.ink2),
+        );
         let cur = crate::master::TARGETS
             .iter()
             .find(|x| x.0 == lim.target_lufs)

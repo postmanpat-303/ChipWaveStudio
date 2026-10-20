@@ -1124,7 +1124,11 @@ impl App {
                     crate::ember::glow_dot(p, c, 7.0, t.accent);
                 }
                 p.circle_filled(c, 6.0, hex(0x141619));
-                p.circle_stroke(c, 6.0, Stroke::new(1.4, if hot { t.acc_hot } else { t.ink2 }));
+                p.circle_stroke(
+                    c,
+                    6.0,
+                    Stroke::new(1.4, if hot { t.acc_hot } else { t.ink2 }),
+                );
                 p.text(
                     c,
                     egui::Align2::CENTER_CENTER,

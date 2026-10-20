@@ -898,9 +898,18 @@ pub fn tab(ui: &mut egui::Ui, selected: bool, text: &str) -> egui::Response {
         } else {
             INK3
         };
-        p.galley_with_override_text_color(r.center() - g.size() * 0.5 - Vec2::new(0.0, 1.0), g, col);
+        p.galley_with_override_text_color(
+            r.center() - g.size() * 0.5 - Vec2::new(0.0, 1.0),
+            g,
+            col,
+        );
         if resp.has_focus() {
-            p.rect_stroke(r, 3, Stroke::new(1.5, t.focus_ring), egui::StrokeKind::Inside);
+            p.rect_stroke(
+                r,
+                3,
+                Stroke::new(1.5, t.focus_ring),
+                egui::StrokeKind::Inside,
+            );
         }
     }
     resp

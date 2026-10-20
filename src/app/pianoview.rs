@@ -1972,7 +1972,11 @@ pub(crate) fn sel_note_colours(t: &crate::theme::Theme, vel: f32) -> (Color32, C
     if t.ember {
         // acc-hot with a white rim (plus a bloom where they are drawn)
         let fill = crate::theme::mix(t.accent, t.acc_hot, 0.35 + 0.65 * vel.clamp(0.0, 1.0));
-        return (fill, Color32::from_rgb(0xFF, 0xF1, 0xD6), Color32::from_rgb(0x20, 0x14, 0x08));
+        return (
+            fill,
+            Color32::from_rgb(0xFF, 0xF1, 0xD6),
+            Color32::from_rgb(0x20, 0x14, 0x08),
+        );
     }
     let (lo, hi, edge) = if t.light {
         (
