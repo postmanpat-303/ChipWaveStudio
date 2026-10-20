@@ -169,8 +169,13 @@ impl StampShape {
     }
 }
 
+/// the gap above the Song / Master track: "+ Add track" sits in it, with a
+/// divider, so Master reads as its own thing at the bottom (display only)
+pub(crate) const MASTER_GAP: f32 = 34.0;
+
 /// Vertical layout of the track area: each track's clip row, then (when
-/// unfolded) its lane rows and the "+ lane" strip.
+/// unfolded) its lane rows and the "+ lane" strip. The Song / Master track
+/// (always the last one) comes after a gap of `MASTER_GAP`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Layout {
     /// content y of each track's top; one more entry: the total height
@@ -179,6 +184,8 @@ pub(crate) struct Layout {
     /// lane targets shown under each track (empty and folded: none)
     pub(crate) lanes: Vec<Vec<String>>,
     pub(crate) open: Vec<bool>,
+    /// the Song / Master track's index (the gap is above it)
+    pub(crate) master: Option<usize>,
 }
 
 /// the targets of track `tr`'s lanes: its own, then clip-only ones
@@ -205,7 +212,11 @@ impl Layout {
         let mut lanes = Vec::with_capacity(n);
         let mut open = Vec::with_capacity(n);
         let mut y = 0.0;
+        let master = (n > 0 && t.tracks[n - 1].kind == tl::TrackKind::Master).then_some(n - 1);
         for tr in 0..n {
+            if Some(tr) == master {
+                y += MASTER_GAP;
+            }
             top.push(y);
             let o = mode && tr < 64 && t.view.auto_open >> tr & 1 == 1;
             let l = if o { track_targets(t, tr) } else { vec![] };
@@ -222,7 +233,13 @@ impl Layout {
             clip_h,
             lanes,
             open,
+            master,
         }
+    }
+    /// content y is in the gap above the Master track
+    pub(crate) fn in_gap(&self, y: f32) -> bool {
+        self.master
+            .is_some_and(|m| y >= self.top[m] - MASTER_GAP && y < self.top[m])
     }
     pub(crate) fn total(&self) -> f32 {
         self.top.last().copied().unwrap_or(0.0)
@@ -241,7 +258,7 @@ impl Layout {
     /// what is at content y: (track, None = the clip row, Some(k) = lane
     /// row k, Some(lanes.len()) = the "+ lane" strip)
     pub(crate) fn part_at(&self, y: f32) -> Option<(usize, Option<usize>)> {
-        if y < 0.0 || y >= self.total() {
+        if y < 0.0 || y >= self.total() || self.in_gap(y) {
             return None;
         }
         let tr = self.track_at(y);

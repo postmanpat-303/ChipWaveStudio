@@ -2035,9 +2035,23 @@ impl App {
                 hd = None;
             }
         }
-        // ---- "+ Add track" below the last header
+        // ---- "+ Add track" below the last mixer track, in the gap above
+        // Song / Master (which sits at the bottom, after a divider)
         {
-            let y = heads.top() + lay.total() - sy + 4.0;
+            let gap_top = lay
+                .master
+                .map_or(lay.total(), |m| lay.top[m] - autolanes::MASTER_GAP);
+            if let Some(m) = lay.master {
+                let dy = heads.top() + lay.top[m] - sy - 4.0;
+                if dy > heads.top() && dy < heads.bottom() {
+                    ui.painter().hline(
+                        heads.left()..=lanes.right(),
+                        dy,
+                        Stroke::new(1.0, t.ink2.gamma_multiply(0.35)),
+                    );
+                }
+            }
+            let y = heads.top() + gap_top - sy + 4.0;
             if y + 20.0 < heads.bottom() {
                 let br =
                     Rect::from_min_size(Pos2::new(heads.left() + 6.0, y), egui::vec2(110.0, 20.0));
@@ -3159,6 +3173,10 @@ impl TimelineUi {
         });
         if y >= self.layout.total() {
             return Some((Err(self.layout.tracks()), tick));
+        }
+        // the gap above Song / Master: a new track there
+        if let (true, Some(m)) = (self.layout.in_gap(y), self.layout.master) {
+            return Some((Err(m), tick));
         }
         Some((Ok(self.layout.track_at(y)), tick))
     }
