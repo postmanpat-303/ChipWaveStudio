@@ -272,6 +272,9 @@ impl App {
                 }
                 Key::ArrowUp => self.move_row(-1),
                 Key::ArrowDown => self.move_row(1),
+                // block length keys change the Tracker's current block (every
+                // clip that plays it): only where that block is in view
+                Key::PageDown | Key::PageUp if cmd && m.shift && !tracker_view => {}
                 Key::PageDown if cmd && m.shift => {
                     let n = self.rows() * 2;
                     self.block_length(blocklen::LenOp::Set(n));
@@ -324,10 +327,14 @@ impl App {
                 Key::Plus | Key::Equals if cmd => self.set_zoom(self.zoom + 0.25),
                 Key::Minus if cmd => self.set_zoom(self.zoom - 0.25),
                 Key::Num0 if cmd => self.set_zoom(1.0),
-                Key::Escape => {
+                // Esc is the Tracker's Edit mode switch only where the
+                // Tracker shows; elsewhere it must not change how notes and
+                // MIDI are recorded behind the user's back
+                Key::Escape if tracker_view => {
                     self.edit = !self.edit;
                     self.status = format!("Edit mode {}", if self.edit { "on" } else { "off" });
                 }
+                Key::Escape => {}
                 Key::Z if cmd && m.shift => self.do_undo(true),
                 Key::Z if cmd => self.do_undo(false),
                 Key::Y if cmd => self.do_undo(true),

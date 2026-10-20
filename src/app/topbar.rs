@@ -408,7 +408,7 @@ impl App {
                 let mut e = self.edit;
                 if ui
                     .add(egui::Checkbox::new(&mut e, "Edit mode"))
-                    .on_hover_text("Esc")
+                    .on_hover_text("Esc in the Tracker and Order list")
                     .changed()
                 {
                     self.edit = e;

@@ -267,3 +267,37 @@ fn track_lanes_stay_on_their_track_no_unpin_that_springs_back() {
     frames(&mut h, 3);
     assert!(on_track(&h) && song(&h, |s| s.automation.is_empty()));
 }
+
+#[test]
+fn escape_toggles_edit_mode_only_in_the_tracker_views() {
+    let mut h = opened_demo(0);
+    for v in [View::Timeline, View::Mixer, View::Fx, View::Sample] {
+        h.state_mut().view = v;
+        frames(&mut h, 2);
+        let e0 = h.state().edit;
+        key(&mut h, Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(h.state().edit, e0, "Esc changed Edit mode in {v:?}");
+    }
+    h.state_mut().view = View::Pattern;
+    frames(&mut h, 2);
+    let e0 = h.state().edit;
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    assert_ne!(h.state().edit, e0, "Esc is Edit mode in the Tracker");
+}
+
+#[test]
+fn block_length_keys_only_act_where_the_tracker_shows() {
+    let mut h = opened_demo(0);
+    let p = h.state().pattern;
+    let rows = |h: &Harness<'static, App>| song(h, |s| s.patterns[p].rows);
+    let r0 = rows(&h);
+    let both = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+    key(&mut h, Key::PageDown, both);
+    key(&mut h, Key::PageUp, both);
+    assert_eq!(rows(&h), r0, "the Timeline resized a hidden block");
+    assert!(!h.state().dirty);
+    h.state_mut().view = View::Pattern;
+    frames(&mut h, 2);
+    key(&mut h, Key::PageDown, both);
+    assert_eq!(rows(&h), r0 * 2, "the Tracker doubles it");
+}
