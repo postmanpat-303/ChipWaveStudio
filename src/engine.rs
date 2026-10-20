@@ -405,6 +405,9 @@ pub struct Engine {
     cue: Option<launch::Cue>,
     /// Clip Arranger: tracks held silent (bit per track; 0 = none)
     held: u64,
+    /// Clip Arranger, timeline songs: the timeline rows [a, b) a launched
+    /// scene or slot loops (overrides the timeline loop; None = off)
+    tl_span: Option<(usize, usize)>,
 }
 
 /// Timeline-mode playback: the plan being played, the row position and the
@@ -514,6 +517,7 @@ impl Engine {
             patprev: None,
             cue: None,
             held: 0,
+            tl_span: None,
         }
     }
 
@@ -832,6 +836,7 @@ impl Engine {
         self.playing = true;
         self.cue = None;
         self.held = 0;
+        self.tl_span = None;
         // audio clips still fading from the last play end now
         self.av.release_all();
         self.av.starting = true;
@@ -1100,6 +1105,8 @@ impl Engine {
         }
         if self.tl.on {
             // timeline mode: `row` is the timeline row; state is chased
+            // (a seek leaves a launched span loop)
+            self.tl_span = None;
             self.ensure_plan(song);
             self.tick = 0;
             self.song_ended = false;
@@ -1628,6 +1635,8 @@ impl Engine {
             };
             let mut next = self.tl.row + 1;
             let mut jump = false;
+            // a launched Clip Arranger span loops instead of the timeline loop
+            let lp = self.tl_span.or(lp);
             if let Some((a, b)) = lp {
                 if next == b {
                     next = a;

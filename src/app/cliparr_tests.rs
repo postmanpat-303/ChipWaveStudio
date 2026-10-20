@@ -283,3 +283,151 @@ fn the_view_tab_bar_lights_the_view_you_are_in() {
     let lit = h.state().vtab_lit();
     assert_eq!(lit, Some(super::viewbar::VTab::Tracker));
 }
+
+/// Del's 0.2.5.0 report: a new song with note clips (a recorded take and a
+/// Drum Kit pattern) showed the blocks "00 Block…" as scenes with only
+/// empty dots, because the Clip Arranger read the song's Tracker blocks and
+/// new songs keep their notes in note clips. The scenes are now the clips'
+/// start times, each track's clip sits in its slot, and ▶ plays it.
+#[test]
+fn a_new_song_with_note_and_drum_kit_clips_shows_and_launches_them() {
+    let mut h = harness_with(fileio::demo_song());
+    h.state_mut().extra.show_tracker = false;
+    h.state_mut().extra.reduce_motion = true;
+    h.state_mut().extra.clip_arranger = true;
+    frames(&mut h, 2);
+    h.state_mut().new_song();
+    frames(&mut h, 3);
+    for _ in 0..2 {
+        h.get_by_label("+ Add track").click();
+        frames(&mut h, 3);
+    }
+    h.state_mut().view = View::Timeline;
+    // track 01: a take of 4 bars at bar 1 and another at bar 5; track 02:
+    // a Drum Kit pattern at bar 1
+    let bar = 4 * crate::timeline::PPQ;
+    let (a, b2) = h.state().with(|s| {
+        let mk = |s: &mut Shared, at| {
+            let id = crate::timeline::new_note_clip(&mut s.song, 0, at).unwrap();
+            let t = s.song.timeline.as_deref_mut().unwrap();
+            let c = t.clips.iter().find(|c| c.id == id).unwrap();
+            let crate::timeline::ClipKind::Notes { data } = c.kind else {
+                unreachable!()
+            };
+            t.notes[data as usize].make_mut().notes = (0..8)
+                .map(|k| crate::timeline::Note {
+                    start: k * crate::timeline::PPQ * 2,
+                    len: crate::timeline::PPQ,
+                    key: 49 + k as u8,
+                    ..Default::default()
+                })
+                .collect();
+            id
+        };
+        (mk(s, 0), mk(s, 4 * bar))
+    });
+    h.state_mut().tl_apply(super::timeline::TlOp::DrumPattern {
+        pat: 0,
+        track: 1,
+        at: 0,
+    });
+    frames(&mut h, 4);
+    assert!(h.state().ca_active());
+    let (blocks, drum) = h.state().with(|s| {
+        let t = s.song.timeline.as_deref().unwrap();
+        let d = t.clips.iter().find(|c| c.track == 1).map(|c| {
+            let n = match c.kind {
+                crate::timeline::ClipKind::Notes { data } => t.notes[data as usize].notes.len(),
+                _ => 0,
+            };
+            (c.id, c.start, n)
+        });
+        (s.song.patterns.len(), d)
+    });
+    let (drum, drum_at, drum_notes) = drum.expect("the Drum Kit pattern clip");
+    assert!(drum_notes > 0);
+    assert_eq!(drum_at, 0);
+    // the scenes: bar 1 and bar 5 (not the blocks "00 Block…")
+    let secs = h
+        .state()
+        .ca
+        .secs
+        .clone()
+        .expect("note clips: section scenes");
+    assert!(blocks > 0);
+    let names: Vec<&str> = secs.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["Bar 1", "Bar 5"]);
+    assert!(has(&h, "Scene Bar 1") && has(&h, "Scene Bar 5"));
+    assert_eq!(secs[0].clips, vec![Some(a), Some(drum)]);
+    assert_eq!(secs[1].clips, vec![Some(b2), None]);
+    // the slots have previews, not empty dots
+    for (k, tr) in [(0, 0), (0, 1), (1, 0)] {
+        assert!(
+            !h.state().ca.prev[k][tr].notes.is_empty(),
+            "slot {tr} {k} shows its notes"
+        );
+    }
+    assert!(
+        h.state().ca.prev[1][1].notes.is_empty(),
+        "no clip: an empty dot"
+    );
+    // ▶ on track 01's bar-5 slot: that clip loops, the other track is held
+    h.state_mut().extra.launch_q = 3; // next row
+    frames(&mut h, 2);
+    let (strip, _) = slot(&h, 0, 1);
+    click_at(&mut h, strip.center());
+    let (a5, b5) = super::cliparr::sec_rows(&secs[1]);
+    let (span, row, held) = h
+        .state()
+        .with(|s| (s.engine.span(), s.engine.tl_row(), s.engine.held()));
+    assert_eq!(span, Some((a5 as usize, b5 as usize)));
+    assert_eq!(row, Some(a5 as usize), "it starts at the clip");
+    assert_eq!(held & bit(0), 0);
+    assert_ne!(held & bit(1), 0, "the drum track is held");
+    let len = (b5 - a5) as u64;
+    play_rows(&mut h, len);
+    assert_eq!(
+        h.state().with(|s| s.engine.tl_row()),
+        Some(a5 as usize),
+        "the clip loops"
+    );
+    // it sounds: the take's notes play
+    let peak = h.state().with(|s| {
+        let Shared { song, engine, .. } = s;
+        let mut buf = vec![0.0f32; 256];
+        let mut pk = 0f32;
+        for _ in 0..400 {
+            engine.render(song, &mut buf);
+            pk = buf.iter().fold(pk, |m, x| m.max(x.abs()));
+        }
+        pk
+    });
+    assert!(peak > 0.001, "the launched clip plays ({peak})");
+    // the scene Bar 1 plays both tracks there, from the next row
+    h.get_by_label("Scene Bar 1").click();
+    frames(&mut h, 2);
+    play_rows(&mut h, 1);
+    let (a1, b1) = super::cliparr::sec_rows(&secs[0]);
+    let (span, held) = h.state().with(|s| (s.engine.span(), s.engine.held()));
+    assert_eq!(span, Some((a1 as usize, b1 as usize)));
+    assert_eq!(held, 0, "every track plays");
+    // Stop all, then Play plays the arrangement again (no span left over)
+    h.get_by_label("Stop all").click();
+    frames(&mut h, 2);
+    play_rows(&mut h, 2);
+    assert!(!h.state().with(|s| s.engine.playing));
+    h.state().with(|s| {
+        let song = &s.song;
+        s.engine.start(song, 0, 0, false, 0);
+    });
+    assert_eq!(h.state().with(|s| s.engine.span()), None);
+}
+
+/// Tracker-clip songs (the demos) keep the blocks as scenes.
+#[test]
+fn tracker_clip_songs_keep_their_block_scenes() {
+    let h = tl_demo();
+    assert!(h.state().ca.secs.is_none());
+    let s = h.state().with(|s| s.song.clone());
+    assert!(super::cliparr::sections(&s).is_none());
+}

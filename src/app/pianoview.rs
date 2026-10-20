@@ -221,6 +221,9 @@ pub(crate) struct PianoUi {
     /// Step input on (the header's toggle; off by default): MIDI and
     /// musical-typing keys go in one step after the other
     pub(crate) step_input: bool,
+    /// the playhead as last drawn: (tick in the clip's source, playing);
+    /// None when it is outside the clip (tests, screenshots)
+    pub(crate) head: Option<(f64, bool)>,
 }
 
 impl PianoUi {
@@ -270,6 +273,7 @@ impl Default for PianoUi {
             step: None,
             step_used: false,
             step_input: false,
+            head: None,
         }
     }
 }
@@ -1629,40 +1633,72 @@ impl App {
             FontId::proportional(10.0),
             t.ink2,
         );
-        // playhead (block loop or song in this block)
-        let clip = match target {
-            Target::Notes { clip: Some(id), .. } => self
-                .tlv
-                .cache
-                .as_ref()
-                .and_then(|c| c.tl.clips.iter().find(|x| x.id == id))
-                .cloned(),
-            _ => None,
-        };
-        let ph = self.with(|s| {
-            let e = &s.engine;
-            match target {
-                Target::Notes { .. } => {
-                    let c = clip.as_ref()?;
-                    let t = e.tl_ticks()?;
-                    let tk = t as Tick;
-                    (tk >= c.start && tk < c.end())
-                        .then(|| c.source_at(tk) as f64 + (t - tk as f64))
-                }
-                Target::Block { pattern, .. }
-                    if e.playing && e.pattern == pattern && s.song.timeline.is_none() =>
-                {
-                    Some(tl::rows_to_ticks(e.row) as f64 + e.row_phase() as f64 * ROW as f64)
-                }
-                _ => None,
-            }
+        // playhead: the Timeline's own (the transport while it plays, the
+        // play marker when stopped), mapped through the clip's start, trim
+        // and loop into this clip; a Tracker block loop in tracker mode
+        let tl_now = self.with(|s| {
+            s.song
+                .timeline
+                .is_some()
+                .then(|| match super::timeline::tl_head(&s.engine) {
+                    Some(h) => (h, true),
+                    None => (self.tlv.cue as f64, false),
+                })
         });
-        if let Some(ph) = ph {
+        let ph: Option<(f64, bool)> = match (tl_now, self.tlv.cache.as_ref()) {
+            (Some((h, live)), Some(c)) => {
+                let tk = h.floor() as Tick;
+                let inside = |x: &&tl::Clip| tk >= x.start && tk < x.end();
+                let clip = match target {
+                    Target::Notes { clip: Some(id), .. } => {
+                        c.tl.clips.iter().find(|x| x.id == id).filter(inside)
+                    }
+                    Target::Notes { data, clip: None } => c.tl.clips.iter().filter(inside).find(
+                        |x| matches!(x.kind, tl::ClipKind::Notes { data: d } if d as usize == data),
+                    ),
+                    Target::Block { pattern, col } => {
+                        c.tl.clips
+                            .iter()
+                            .filter(inside)
+                            .find(|x| x.block() == Some((pattern, col)))
+                    }
+                };
+                clip.map(|x| (x.source_at(tk) as f64 + (h - tk as f64), live))
+            }
+            _ => self.with(|s| {
+                let e = &s.engine;
+                match target {
+                    Target::Block { pattern, .. } if e.playing && e.pattern == pattern => Some((
+                        tl::rows_to_ticks(e.row) as f64 + e.row_phase() as f64 * ROW as f64,
+                        true,
+                    )),
+                    _ => None,
+                }
+            }),
+        };
+        self.pr.head = ph;
+        if let Some((ph, live)) = ph {
             let x = self.pr.x_of(0) + (ph * self.pr.ppt()) as f32;
             if grid_r.x_range().contains(x) {
-                p.vline(x, grid_r.y_range(), Stroke::new(1.5, t.play));
+                let col = if live {
+                    t.play
+                } else {
+                    t.play.gamma_multiply(0.55)
+                };
+                p.vline(x, grid_r.union(vel_r).y_range(), Stroke::new(1.5, col));
             }
-            ui.ctx().request_repaint();
+            if live {
+                // Follow (the Timeline's toggle): page so the playhead stays
+                // in view, a third in, like the Timeline
+                if self.follow && !ui.input(|i| i.pointer.any_down()) {
+                    let vis = grid_r.width() as f64 / self.pr.ppt();
+                    let s = self.pr.scroll_x;
+                    if ph < s || ph > s + vis * 0.92 {
+                        self.pr.scroll_x = (ph - vis / 3.0).max(0.0);
+                    }
+                }
+                ui.ctx().request_repaint();
+            }
         }
         if self.pr.focus {
             p.rect_stroke(

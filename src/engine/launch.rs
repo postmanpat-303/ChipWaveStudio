@@ -14,6 +14,9 @@ use crate::model::{Song, MAX_CHANNELS};
 pub struct Cue {
     /// block to loop from the boundary (None: keep what plays)
     pub scene: Option<usize>,
+    /// timeline songs: timeline rows [a, b) to loop from the boundary
+    /// (a scene or slot of note / audio clips; None: keep what plays)
+    pub span: Option<(u32, u32)>,
     /// tracks (bit per track) that play again from the boundary
     pub on: u64,
     /// tracks that stop (go silent) from the boundary
@@ -43,6 +46,10 @@ impl Engine {
             if let Some(b) = c.scene.filter(|&b| b < song.patterns.len()) {
                 self.start(song, 0, 0, true, b);
                 self.held = c.off & !c.on;
+            } else if let Some((a, b)) = c.span.filter(|s| s.1 > s.0 && song.timeline.is_some()) {
+                self.start(song, 0, a as usize, false, 0);
+                self.tl_span = Some((a as usize, b as usize));
+                self.held = c.off & !c.on;
             }
             return;
         }
@@ -52,6 +59,12 @@ impl Engine {
         } else {
             if c.scene.is_some() {
                 q.scene = c.scene;
+                q.span = None;
+                q.halt = false;
+            }
+            if c.span.is_some() {
+                q.span = c.span;
+                q.scene = None;
                 q.halt = false;
             }
             q.on = (q.on & !c.off) | c.on;
@@ -77,6 +90,15 @@ impl Engine {
         (self.playing && self.loop_pattern && !self.tl.on).then_some(self.pattern)
     }
 
+    /// timeline songs: the launched span (timeline rows [a, b)) that loops now
+    pub fn span(&self) -> Option<(usize, usize)> {
+        if self.playing && self.tl.on {
+            self.tl_span
+        } else {
+            None
+        }
+    }
+
     /// the pending launch
     pub fn cue(&self) -> Option<Cue> {
         self.cue
@@ -96,6 +118,7 @@ impl Engine {
         if c.halt {
             self.stop();
             self.held = 0;
+            self.tl_span = None;
             return false;
         }
         if let Some(b) = c.scene.filter(|&b| b < song.patterns.len()) {
@@ -106,11 +129,23 @@ impl Engine {
                 self.av.release_all();
             }
             self.loop_pattern = true;
+            self.tl_span = None;
             self.pattern = b;
             self.row = 0;
             if let Some(k) = song.order.iter().position(|&x| x == b) {
                 self.order_pos = k;
             }
+        }
+        if let Some((a, b)) = c.span.filter(|s| s.1 > s.0 && self.tl.plan.is_some()) {
+            // loop the span from its start: from a block loop the timeline
+            // takes over again (the plan is kept up to date by the UI)
+            self.tl.on = true;
+            self.loop_pattern = false;
+            self.tl_span = Some((a as usize, b as usize));
+            let a = a as usize;
+            self.tl.row = a;
+            self.tl_cursors(a);
+            self.notes_jump(song, a, false);
         }
         self.held = (self.held | c.off) & !c.on;
         // a held track's sounding notes end now (its gain ramps to 0 too)
