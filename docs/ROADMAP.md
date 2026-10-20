@@ -15,6 +15,9 @@ Each item has a size, **[easy]** (an evening or two), **[medium]** (a few days) 
 ## Good first picks
 
 - Instrument card: remove the duplicated name header. [easy] start: `src/app/instpanel.rs`
+- Simple instrument card: your own macro assignments per instrument, saved as an optional song field (absent = the built-in defaults). [medium] start: `src/app/instpanel/instcard.rs`
+- Simple instrument card: automation lanes, MIDI learn and modulation on the macro knobs themselves. [medium] start: `src/app/instpanel/instcard.rs`
+- Simple instrument card: an Amp / Filter switch on the Envelope section (the filter envelope's ADSR). [easy] start: `src/app/instpanel/instcard.rs`
 - Ask before replacing an instrument's sound (confirm dialog). [easy] start: `src/app/library.rs`
 - Advanced Edit: paste to the start of the chosen section, not only at the cursor. [easy] start: `src/app/advedit.rs`
 - Channel header Play: play the channel's current note instead of always C-4. [easy] start: `src/app/pattern.rs`

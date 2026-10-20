@@ -1,7 +1,7 @@
 //! UI tests of the lower-panel instrument editor, the lower-panel switch,
 //! the splitter and Full-height pattern (0.2.3.19).
 use super::params::{self, Ctl, Tab};
-use super::ui_tests::{double_click, drag, frame, harness_with, key};
+use super::ui_tests::{self, double_click, drag, frame, harness_with, key};
 use super::*;
 use egui::accesskit::Role;
 use egui_kittest::{kittest::Queryable, Harness};
@@ -64,6 +64,10 @@ fn ctrl_i_opens_the_instrument_editor_and_every_type_and_tab_draws_its_parameter
             !h.state().arr_docked(),
             "{ty}: the arranger is not docked meanwhile"
         );
+        // the simple card first, Advanced › for every tab
+        assert!(has_label(&h, "Advanced ›"), "{ty}: the simple card shows");
+        h.state_mut().ip.advanced = true;
+        frames(&mut h, 2);
         let idx = h.state().instr as usize - 1;
         let l = params::build(&inst, idx, 0);
         for tab in Tab::ALL {
@@ -128,6 +132,8 @@ fn analog_cutoff(h: &mut Harness<'static, App>) -> f32 {
 fn knob_drag_changes_the_sound_and_one_ctrl_z_undoes_it() {
     let mut h = with_inst(analog());
     h.state_mut().show_instrument_panel();
+    // these drive the full editor (Advanced ›)
+    h.state_mut().ip.advanced = true;
     frames(&mut h, 2);
     let before = analog_cutoff(&mut h);
     let r = labelled_rect(&h, Role::Slider, "Cutoff").expect("Cutoff knob");
@@ -151,6 +157,8 @@ fn knob_drag_changes_the_sound_and_one_ctrl_z_undoes_it() {
 fn ctrl_drag_is_fine_and_double_click_resets_to_default() {
     let mut h = with_inst(analog());
     h.state_mut().show_instrument_panel();
+    // these drive the full editor (Advanced ›)
+    h.state_mut().ip.advanced = true;
     frames(&mut h, 2);
     let before = analog_cutoff(&mut h);
     let r = labelled_rect(&h, Role::Slider, "Cutoff").expect("Cutoff knob");
@@ -289,6 +297,8 @@ fn splitter_y(h: &Harness<'static, App>) -> f32 {
 fn splitter_resizes_the_lower_panel_and_dragging_to_the_bottom_collapses_it() {
     let mut h = with_inst(analog());
     h.state_mut().show_instrument_panel();
+    // these drive the full editor (Advanced ›)
+    h.state_mut().ip.advanced = true;
     frames(&mut h, 2);
     let y = splitter_y(&h);
     let x = 900.0;
@@ -313,6 +323,8 @@ fn splitter_resizes_the_lower_panel_and_dragging_to_the_bottom_collapses_it() {
 fn switch_bar_keeps_arranger_and_automation_working() {
     let mut h = with_inst(analog());
     h.state_mut().show_instrument_panel();
+    // these drive the full editor (Advanced ›)
+    h.state_mut().ip.advanced = true;
     frames(&mut h, 2);
     for (name, inst, auto) in [
         ("Order list", false, false),
@@ -346,6 +358,8 @@ fn switch_bar_keeps_arranger_and_automation_working() {
 fn cards_collapse_per_instrument_type() {
     let mut h = with_inst(analog());
     h.state_mut().show_instrument_panel();
+    // these drive the full editor (Advanced ›)
+    h.state_mut().ip.advanced = true;
     frames(&mut h, 2);
     assert!(labelled_rect(&h, Role::Slider, "Osc 1").is_some());
     h.state_mut()
@@ -382,6 +396,8 @@ fn cards_collapse_per_instrument_type() {
 fn a_b_compare_swaps_the_sound_and_undoes() {
     let mut h = with_inst(analog());
     h.state_mut().show_instrument_panel();
+    // these drive the full editor (Advanced ›)
+    h.state_mut().ip.advanced = true;
     frames(&mut h, 2);
     let a = analog_cutoff(&mut h);
     h.state_mut().set_lower(1);
@@ -539,6 +555,8 @@ fn grid_canvas_adds_modules_unplugs_and_patches_cables_with_undo() {
     };
     let mut h = with_inst(inst);
     h.state_mut().show_instrument_panel();
+    // these drive the full editor (Advanced ›)
+    h.state_mut().ip.advanced = true;
     h.state_mut().extra.lower_h = 640.0;
     frames(&mut h, 3);
     assert_eq!(h.state().ip.tab, Tab::Grid, "a Grid opens on its patch");
@@ -585,4 +603,105 @@ fn grid_canvas_adds_modules_unplugs_and_patches_cables_with_undo() {
     let g2 = grid_of(&h);
     assert!(plugged(&g2), "a dragged cable patches it");
     assert_eq!(g2.cables.len(), g0.cables.len());
+}
+
+// ---- the simple card (cleanup C) ----
+
+fn exact_rect(h: &Harness<'static, App>, label: &str) -> Rect {
+    h.query_all_by(|n| n.label().as_deref() == Some(label))
+        .next()
+        .unwrap_or_else(|| panic!("no {label:?}"))
+        .rect()
+}
+
+#[test]
+fn the_simple_card_is_the_default_and_a_macro_turns_its_targets() {
+    let mut h = with_inst(analog());
+    h.state_mut().show_instrument_panel();
+    h.state_mut().extra.lower_h = 520.0;
+    frames(&mut h, 3);
+    assert!(!h.state().ip.advanced);
+    assert!(has_label(&h, "Advanced ›"));
+    for m in [
+        "Bright", "Width", "Attack", "Release", "Env", "Chorus", "Drive", "Space",
+    ] {
+        assert!(
+            labelled_rect(&h, Role::Slider, &format!("{m} macro")).is_some(),
+            "{m} macro"
+        );
+    }
+    // sections: the filter's knobs are there, the tabs are not
+    assert!(labelled_rect(&h, Role::Slider, "Cutoff").is_some());
+    assert!(!has_label(&h, "‹ Simple"));
+    let before = analog_cutoff(&mut h);
+    let r = labelled_rect(&h, Role::Slider, "Bright macro").unwrap();
+    drag(&mut h, r.center(), r.center() - egui::vec2(0.0, 40.0));
+    frames(&mut h, 2);
+    let after = analog_cutoff(&mut h);
+    assert!(after > before * 1.2, "{before} -> {after}");
+    key(&mut h, Key::Z, ctrl());
+    frames(&mut h, 2);
+    assert_eq!(analog_cutoff(&mut h), before, "one Ctrl+Z undoes the macro");
+    // Advanced › and back
+    let c = exact_rect(&h, "Advanced ›").center();
+    ui_tests::click_at(&mut h, c);
+    frames(&mut h, 2);
+    assert!(h.state().ip.advanced);
+    assert!(has_label(&h, "‹ Simple"));
+    let c = exact_rect(&h, "‹ Simple").center();
+    ui_tests::click_at(&mut h, c);
+    frames(&mut h, 2);
+    assert!(!h.state().ip.advanced);
+}
+
+#[test]
+fn a_space_macro_without_a_reverb_adds_one_and_ctrl_f_opens_the_full_editor() {
+    let mut h = with_inst(analog());
+    h.state_mut().show_instrument_panel();
+    h.state_mut().extra.lower_h = 520.0;
+    frames(&mut h, 3);
+    let i = h.state().instr as usize - 1;
+    assert!(h.state().with(|s| s.song.instruments[i].fx.is_empty()));
+    let r = labelled_rect(&h, Role::Slider, "Space macro").unwrap();
+    ui_tests::click_at(&mut h, r.center());
+    frames(&mut h, 2);
+    let kinds: Vec<crate::fx::FxKind> = h
+        .state()
+        .with(|s| s.song.instruments[i].fx.iter().map(|d| d.kind).collect());
+    assert_eq!(kinds, [crate::fx::FxKind::Reverb]);
+    key(&mut h, Key::F, ctrl());
+    frames(&mut h, 2);
+    assert!(h.state().ip.advanced, "searching shows every parameter");
+}
+
+#[test]
+fn a_grid_simple_card_has_its_macros_and_opens_the_patch() {
+    let inst = Instrument {
+        name: "Grid".into(),
+        volume: 0.8,
+        transpose: 0,
+        fx: vec![],
+        kind: InstrumentKind::Gen(crate::gen::preset("Grid Saw Bass").unwrap()),
+    };
+    let mut h = with_inst(inst);
+    h.state_mut().show_instrument_panel();
+    h.state_mut().extra.lower_h = 520.0;
+    frames(&mut h, 3);
+    assert!(labelled_rect(&h, Role::Slider, "Macro 1 macro").is_some());
+    let c = exact_rect(&h, "Edit the patch ›").center();
+    ui_tests::click_at(&mut h, c);
+    frames(&mut h, 2);
+    assert!(h.state().ip.advanced);
+    assert_eq!(h.state().ip.tab, Tab::Grid);
+}
+
+#[test]
+fn every_type_draws_its_simple_card() {
+    for (ty, inst) in params::tests::all_types() {
+        let mut h = with_inst(inst);
+        h.state_mut().show_instrument_panel();
+        frames(&mut h, 3);
+        assert!(!h.state().ip.advanced, "{ty}");
+        assert!(has_label(&h, "Advanced ›"), "{ty}");
+    }
 }
