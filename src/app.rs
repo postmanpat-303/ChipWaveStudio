@@ -98,6 +98,7 @@ mod timeline_m2_tests;
 #[cfg(test)]
 mod timeline_tests;
 mod topbar;
+mod trackauto;
 mod trackops;
 mod trackpie;
 #[cfg(test)]
@@ -110,6 +111,8 @@ mod undo;
 mod updates;
 mod viewbar;
 mod voiceview;
+#[cfg(test)]
+mod workflow_tests;
 
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect
 const SUBCOLS: usize = 9;
@@ -332,6 +335,8 @@ pub struct App {
     insp: inspector::InspectorUi,
     /// the track pie menu (right-click a track header; app/trackpie.rs)
     pub(crate) pie: Option<trackpie::Pie>,
+    /// the track pie's Add › Automation lane menu (track, place, picker data)
+    pub(crate) track_auto: Option<trackauto::TrackAuto>,
     /// a track name being typed inline (track, text) and whether the field
     /// has been focused yet
     pub(crate) track_rename: Option<(usize, String)>,
@@ -658,6 +663,7 @@ impl App {
             too_new: None,
             insp: Default::default(),
             pie: None,
+            track_auto: None,
             track_rename: None,
             tr_focus: false,
         };
@@ -1160,6 +1166,7 @@ impl eframe::App for App {
         self.br.slot_rects.clear();
         // the track pie takes the keys while it is open
         self.track_pie(&ctx);
+        self.track_auto_menu(&ctx);
         self.handle_keys(&ctx);
         self.tick_safety();
         self.tick_derived();

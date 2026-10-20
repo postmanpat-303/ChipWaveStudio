@@ -238,15 +238,19 @@ impl App {
                     }
                 }
             };
+            let ninst = s.song.instruments.len();
             let t_l = s.song.timeline.as_deref_mut()?;
             let c = t_l.clips.iter_mut().find(|c| c.id == take.clip)?;
             let rel = t - c.start + c.offset;
+            let instr = t_l.tracks.get(c.track as usize).map_or(0, |x| x.instr);
+            let instr = if instr as usize > ninst { 0 } else { instr };
             let d = t_l.notes.get_mut(take.data)?.make_mut();
             d.notes.push(tl::Note {
                 start: rel,
                 len: ROW,
                 key: note,
                 vel: vel16,
+                instr,
                 ..Default::default()
             });
             take.held.retain(|h| h.0 != key);
@@ -327,7 +331,10 @@ impl App {
             0xFFFF
         };
         let ok = self.with(|s| {
+            let ninst = s.song.instruments.len();
             let t_l = s.song.timeline.as_deref_mut()?;
+            let instr = t_l.track_instr(t_l.clips.iter().find(|c| c.id == id)?.track as usize);
+            let instr = if instr as usize > ninst { 0 } else { instr };
             let c = t_l.clips.iter_mut().find(|c| c.id == id)?;
             let d = t_l.notes.get_mut(data)?.make_mut();
             // the same key twice on one step is one note
@@ -337,6 +344,7 @@ impl App {
                     len: grid,
                     key: note,
                     vel: vel16,
+                    instr,
                     ..Default::default()
                 });
             }

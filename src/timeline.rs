@@ -908,6 +908,15 @@ impl Timeline {
         out
     }
 
+    /// the instrument new notes on track `tr` are written with: the
+    /// track's assigned one (0 = none, so they play the channel's current
+    /// instrument as before). The engine never reads `Track::instr`;
+    /// stamping new notes is what makes them play the instrument the
+    /// header shows, and old notes keep their sound.
+    pub fn track_instr(&self, tr: usize) -> u8 {
+        self.tracks.get(tr).map_or(0, |t| t.instr)
+    }
+
     /// bar.beat of `t` (1-based)
     pub fn bar_pos(&self, t: Tick) -> BarPos {
         let s = self.sigs();

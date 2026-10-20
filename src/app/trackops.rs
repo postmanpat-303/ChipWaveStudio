@@ -78,4 +78,34 @@ impl App {
             at + 1
         );
     }
+
+    /// the pie's Change instrument…: the Browser's Instruments, Favourites
+    /// first when there are any; the next pick replaces track `tr`'s
+    /// instrument (`br_assign_slot`, one undo step)
+    pub(super) fn track_change_instrument(&mut self, tr: usize) {
+        self.open_browser_tab(crate::browser::Tab::Instruments);
+        if !self.extra.browser_favs.is_empty() {
+            self.br.filter.loc = crate::browser::LocFilter::Favourites;
+        }
+        self.br.track_target = Some((tr, crate::browser::Tab::Instruments));
+        self.status = format!(
+            "Pick the new instrument for track {:02} in the Browser (double-click or Enter)",
+            tr + 1
+        );
+    }
+
+    /// the pie's Drum pattern…: the Browser's Drum Patterns tab; the next
+    /// pick goes on track `tr` at the play marker
+    pub(super) fn track_drum_pattern(&mut self, tr: usize) {
+        if self.with(|s| s.song.timeline.is_none()) {
+            self.status = "Drum patterns go on the Timeline (timeline mode)".into();
+            return;
+        }
+        self.open_browser_tab(crate::browser::Tab::Patterns);
+        self.br.track_target = Some((tr, crate::browser::Tab::Patterns));
+        self.status = format!(
+            "Pick a drum pattern for track {:02} in the Browser (double-click or Enter, or drag it)",
+            tr + 1
+        );
+    }
 }

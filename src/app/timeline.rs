@@ -132,7 +132,11 @@ struct Drag {
 /// an edit that waits for the switch to timeline mode
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum TlOp {
-    Split(Tick),
+    /// split preview: a line follows the pointer; a click splits the clip
+    /// under it (`SplitClip`), Esc cancels (S and "Split…")
+    SplitArm,
+    /// split exactly this clip at a tick (the split preview's click)
+    SplitClip(u32, Tick),
     Duplicate,
     Delete,
     Mute,
@@ -191,13 +195,17 @@ pub(crate) struct TimelineUi {
     pub(crate) ask_leave: bool,
     /// marker being renamed (index, text)
     rename: Option<(usize, String)>,
-    /// mouse position in timeline terms (S splits here)
+    /// mouse position in timeline terms
     hover_at: Option<(usize, Tick)>,
     /// right-click spot (track, tick) and marker for the context menus
     menu_at: Option<(usize, Tick)>,
     menu_marker: Option<usize>,
     /// snap grid as last drawn (keys use it)
     grid_now: Tick,
+    /// split preview on (S / "Split…"): click splits, Esc cancels
+    pub(crate) split_arm: bool,
+    /// what a click would split now: (clip id, tick)
+    pub(crate) split_at: Option<(u32, Tick)>,
     /// the ruler shows minutes:seconds instead of bars
     time_ruler: bool,
     ruler_drag: bool,
@@ -249,6 +257,8 @@ impl Default for TimelineUi {
             menu_at: None,
             menu_marker: None,
             grid_now: PPQ,
+            split_arm: false,
+            split_at: None,
             time_ruler: false,
             ruler_drag: false,
             overview_drag: false,
@@ -714,13 +724,13 @@ impl App {
             .on_hover_text(if mode && !self.tracker_on() {
                 "This song is arranged here: clips on tracks (track = mixer channel). \
                  Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
-                 S split, Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
+                 S split (line, click to cut, Esc cancels), Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
                  Ctrl+Shift+D make unique. Double-click a clip to edit it in the piano roll, \
                  empty space to make a new note clip."
             } else if mode {
                 "This song is arranged here: clips on tracks (track = mixer channel). \
                  Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
-                 S split, Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
+                 S split (line, click to cut, Esc cancels), Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
                  Ctrl+Shift+D make unique. Double-click a clip to edit it in the piano roll \
                  (Alt+double-click or Enter: the Tracker; Settings can swap them), \
                  empty space to write a new block. Song › Back to tracker mode… turns it back."
@@ -1650,7 +1660,7 @@ impl App {
                     k => names
                         .get(k as usize - 1)
                         .map(|n| format!("{k:02X} {n}"))
-                        .unwrap_or_default(),
+                        .unwrap_or_else(|| format!("{k:02X} (missing instrument)")),
                 })
                 .collect()
         };
@@ -2375,7 +2385,108 @@ impl App {
         self.tlv.hover_at = hover
             .filter(|p| lanes.contains(*p))
             .map(|p| (tr_of(p.y).max(0.0) as usize, tick_of(p.x).max(0.0) as Tick));
-        if let (Some(i), Some(p), None) = (hover_clip, hover, self.tlv.drag.as_ref()) {
+        // ---- split preview: a line at the snapped pointer over the clip it
+        // would split; click commits, right-click / Esc cancels
+        let armed = self.tlv.split_arm && mode;
+        if self.tlv.split_arm && !mode {
+            self.tlv.split_arm = false;
+            self.tlv.split_at = None;
+        }
+        if armed {
+            self.tlv.split_at = None;
+            let target = hover_clip.zip(hover).and_then(|(i, p)| {
+                let cl = &c.tl.clips[i];
+                let at = tl::snap(tick_of(p.x).max(0.0) as Tick, grid);
+                (cl.start < at && at < cl.end() && in_clip_row(p.y)).then_some((i, at))
+            });
+            let p = ui.painter_at(lanes);
+            let col = split_colour();
+            if let Some((i, at)) = target {
+                let cl = &c.tl.clips[i];
+                self.tlv.split_at = Some((cl.id, at));
+                let lr = lane_rect(cl.track as usize);
+                let cr = Rect::from_min_max(
+                    Pos2::new(x_of(cl.start as f64), lr.top() + 1.0),
+                    Pos2::new(x_of(cl.end() as f64), lr.bottom() - 1.0),
+                );
+                // the clip(s) it splits: outlined, the right part tinted
+                p.rect_stroke(cr, 3.0, Stroke::new(2.0, col), egui::StrokeKind::Inside);
+                let x = x_of(at as f64);
+                for k in edit::split_targets(&c.tl, &self.tlv.sels, cl.id, at) {
+                    if let Some(o) = c.tl.clips.iter().find(|o| o.id == k && o.id != cl.id) {
+                        let lo = lane_rect(o.track as usize);
+                        let orr = Rect::from_min_max(
+                            Pos2::new(x_of(o.start as f64), lo.top() + 1.0),
+                            Pos2::new(x_of(o.end() as f64), lo.bottom() - 1.0),
+                        );
+                        p.rect_stroke(orr, 3.0, Stroke::new(1.5, col), egui::StrokeKind::Inside);
+                        p.vline(x, orr.y_range(), Stroke::new(2.0, col));
+                    }
+                }
+                p.rect_filled(
+                    Rect::from_min_max(Pos2::new(x, cr.top()), cr.max),
+                    0.0,
+                    col.gamma_multiply(0.10),
+                );
+                // the cut: a dashed line through the lane, solid over the clip
+                p.extend(egui::Shape::dashed_line(
+                    &[Pos2::new(x, lanes.top()), Pos2::new(x, lanes.bottom())],
+                    Stroke::new(1.0, col.gamma_multiply(0.6)),
+                    4.0,
+                    4.0,
+                ));
+                p.vline(x, cr.y_range(), Stroke::new(2.0, col));
+                for (y, d) in [(cr.top(), 1.0), (cr.bottom(), -1.0)] {
+                    p.add(egui::Shape::convex_polygon(
+                        vec![
+                            Pos2::new(x - 5.0, y),
+                            Pos2::new(x + 5.0, y),
+                            Pos2::new(x, y + 6.0 * d),
+                        ],
+                        col,
+                        Stroke::NONE,
+                    ));
+                }
+                let bp = c.tl.bar_pos(at);
+                let txt = format!("Split {}.{}.{:03}", bp.bar, bp.beat, bp.tick);
+                let g = p.layout_no_wrap(txt, egui::FontId::proportional(11.5), Color32::BLACK);
+                let lab = Rect::from_min_size(
+                    Pos2::new(
+                        x + 6.0,
+                        (cr.top() - g.size().y - 6.0).max(lanes.top() + 2.0),
+                    ),
+                    g.size() + egui::vec2(10.0, 4.0),
+                );
+                p.rect_filled(lab, 3.0, col);
+                p.galley(lab.min + egui::vec2(5.0, 2.0), g, Color32::BLACK);
+                ui.ctx().set_cursor_icon(egui::CursorIcon::VerticalText);
+            } else if let Some(h) = hover.filter(|h| lanes.contains(*h)) {
+                p.vline(
+                    h.x,
+                    lanes.y_range(),
+                    Stroke::new(1.0, col.gamma_multiply(0.35)),
+                );
+            }
+            if cresp.clicked() {
+                match self.tlv.split_at {
+                    Some((id, at)) => {
+                        self.tlv.split_arm = false;
+                        self.tlv.split_at = None;
+                        ops.push(TlOp::SplitClip(id, at));
+                    }
+                    None => {
+                        self.status = "Split: point inside a clip and click (Esc cancels)".into();
+                    }
+                }
+            } else if cresp.secondary_clicked() {
+                self.tlv.split_arm = false;
+                self.tlv.split_at = None;
+                self.status = "Split cancelled".into();
+            }
+            ui.ctx().request_repaint();
+        }
+        if let (Some(i), Some(p), None, false) = (hover_clip, hover, self.tlv.drag.as_ref(), armed)
+        {
             if mode {
                 ui.ctx().set_cursor_icon(match part(i, p) {
                     0 => egui::CursorIcon::Grab,
@@ -2385,7 +2496,7 @@ impl App {
             }
         }
         let add_mod = mods.command || mods.shift;
-        if cresp.drag_started() {
+        if !armed && cresp.drag_started() {
             if let Some(p) = ui.input(|i| i.pointer.press_origin()) {
                 let hit = clip_at(c, &lay, p, lanes, sy, tick_of(p.x));
                 match (hit, mode) {
@@ -2506,7 +2617,7 @@ impl App {
         }
         let mut open: Option<(usize, usize, usize, usize)> = None; // block, col, row, entry
         let mut open_roll = false;
-        if cresp.clicked() || cresp.double_clicked() {
+        if !armed && (cresp.clicked() || cresp.double_clicked()) {
             if let Some(p) = cresp.interact_pointer_pos() {
                 let tk = tick_of(p.x);
                 let tr = tr_of(p.y) as usize;
@@ -2575,7 +2686,7 @@ impl App {
             }
         }
         // right-click: the clip menu (also offers to switch in tracker mode)
-        if cresp.secondary_clicked() {
+        if !armed && cresp.secondary_clicked() {
             if let Some(p) = cresp.interact_pointer_pos() {
                 let tk = tick_of(p.x).max(0.0) as Tick;
                 self.tlv.menu_at = Some((tr_of(p.y).max(0.0) as usize, tk));
@@ -2608,7 +2719,17 @@ impl App {
             .sel
             .and_then(|id| c.tl.clips.iter().find(|x| x.id == id))
             .filter(|cl| cl.audio().is_some());
-        cresp.context_menu(|ui| {
+        // (no menu while the split preview is on: right-click cancels it)
+        let menu_resp = if armed {
+            ui.interact(
+                Rect::NOTHING,
+                ui.scope_id().with("tl_no_menu"),
+                Sense::hover(),
+            )
+        } else {
+            cresp.clone()
+        };
+        menu_resp.context_menu(|ui| {
             let snap_at = menu_at.map_or(0, |m| tl::snap(m.1, ROW));
             if !mode {
                 ui.label("Clip editing needs timeline mode.");
@@ -2642,7 +2763,7 @@ impl App {
                 }
                 ui.separator();
                 let items: [(&str, &str, TlOp); 6] = [
-                    ("Split here", "S", TlOp::Split(snap_at)),
+                    ("Split…", "S", TlOp::SplitArm),
                     ("Duplicate", "Ctrl+D", TlOp::Duplicate),
                     ("Make unique", "Ctrl+Shift+D", TlOp::MakeUnique),
                     ("Glue", "Ctrl+J", TlOp::Glue),
@@ -2716,7 +2837,7 @@ impl App {
                 open = Some((b, col, row, usize::MAX));
             }
         }
-        if let Some(i) = hover_clip.filter(|_| self.tlv.drag.is_none()) {
+        if let Some(i) = hover_clip.filter(|_| self.tlv.drag.is_none() && !armed) {
             let cl = &c.tl.clips[i];
             if let Some(a) = cl.audio().and_then(|k| c.tl.audio.get(k)) {
                 let bp = c.tl.bar_pos(cl.start);
@@ -3002,12 +3123,12 @@ impl App {
         if self.tlv.rename.is_some() {
             return true;
         }
+        // the split preview: Esc cancels it (S again too); other keys pass
+        if self.tlv.split_arm && (key == Key::Escape || (key == Key::S && !m.command)) {
+            self.split_cancel();
+            return true;
+        }
         // clip edits (in tracker mode they ask to switch first)
-        let at_mouse = || {
-            self.tlv
-                .hover_at
-                .map(|(_, t)| tl::snap(t, self.tlv.grid_now.max(ROW)))
-        };
         let play_marker = self.tlv.cue;
         let op = match key {
             Key::D if m.command && m.shift => Some(TlOp::MakeUnique),
@@ -3016,7 +3137,7 @@ impl App {
             Key::L if m.command => Some(TlOp::LoopFromSelection),
             Key::A if m.command => Some(TlOp::SelectAll),
             _ if m.command || m.alt => return false,
-            Key::S if !m.shift => Some(TlOp::Split(at_mouse().unwrap_or(play_marker))),
+            Key::S if !m.shift => Some(TlOp::SplitArm),
             Key::M if m.shift => Some(TlOp::AddMarker(play_marker)),
             Key::M => Some(TlOp::Mute),
             Key::L => Some(TlOp::ToggleLoop),
@@ -3241,5 +3362,22 @@ impl TimelineUi {
         let anchor = self.scroll + rel * PPQ as f64 / z0 as f64;
         self.zoom = z1;
         self.scroll = (anchor - rel * PPQ as f64 / z1 as f64).max(0.0);
+    }
+}
+
+/// the split preview's colour: amber, unlike the playhead (accent), clip
+/// edges and the selection outline
+pub(crate) fn split_colour() -> Color32 {
+    Color32::from_rgb(0xFF, 0xB0, 0x2E)
+}
+
+impl App {
+    /// leave the split preview without splitting
+    pub(crate) fn split_cancel(&mut self) {
+        if self.tlv.split_arm {
+            self.tlv.split_arm = false;
+            self.tlv.split_at = None;
+            self.status = "Split cancelled".into();
+        }
     }
 }

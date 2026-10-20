@@ -202,6 +202,10 @@ pub(crate) struct PianoUi {
     /// notes going up in smoke
     pub(crate) smoke: Vec<Puff>,
     offs: Vec<(Instant, u8)>,
+    /// the keyboard key held with the mouse (sounding until release)
+    pub(crate) key_down: Option<u8>,
+    /// the last audition: (note, instrument, channel) (tests, status)
+    pub(crate) heard: Option<(u8, u8, u8)>,
     /// screen rect of the note grid as last drawn (tests)
     pub(crate) grid_rect: Rect,
     pub(crate) vel_rect: Rect,
@@ -243,6 +247,8 @@ impl Default for PianoUi {
             erased: 0,
             smoke: vec![],
             offs: vec![],
+            key_down: None,
+            heard: None,
             grid_rect: Rect::NOTHING,
             vel_rect: Rect::NOTHING,
             press: None,
@@ -269,6 +275,10 @@ impl PianoUi {
     }
     fn key_at(&self, y: f32) -> i32 {
         120 - ((y - self.grid_rect.top() + self.scroll_y) / self.key_h).floor() as i32
+    }
+    #[cfg(test)]
+    pub(crate) fn key_at_pub(&self, y: f32) -> i32 {
+        self.key_at(y)
     }
 }
 
@@ -454,8 +464,35 @@ impl App {
     }
 
     /// play `key` briefly (what a drawn or moved note sounds like)
-    fn pr_audition(&mut self, key: u8, instr: u8, vel: f32) {
-        let ch = match self.pr.target {
+    /// the instrument new notes in this clip get: its track's assigned
+    /// instrument, 0 (the channel's current one) when it has none
+    /// instrument when it has none (or it was deleted: says so)
+    pub(super) fn pr_track_instr(&mut self, t: Target) -> u8 {
+        let Target::Notes { clip: Some(id), .. } = t else {
+            return 0;
+        };
+        let (tr, given, n) = self
+            .with(|s| {
+                let tl = s.song.timeline.as_deref()?;
+                let c = tl.clips.iter().find(|c| c.id == id)?;
+                let tr = c.track as usize;
+                Some((tr, tl.track_instr(tr), s.song.instruments.len()))
+            })
+            .unwrap_or((0, 0, 0));
+        if given as usize > n {
+            self.status = format!(
+                "Track {:02}'s instrument {given:02X} is missing (deleted?): new notes play the \
+                 track's current sound. Drop an instrument from the Browser on the track to fix it",
+                tr + 1
+            );
+            return 0;
+        }
+        given
+    }
+
+    /// the channel / track the roll's notes play on
+    fn pr_channel(&self) -> usize {
+        match self.pr.target {
             Some(Target::Notes { clip: Some(id), .. }) => self
                 .tlv
                 .cache
@@ -464,8 +501,19 @@ impl App {
                 .map_or(self.ch, |c| c.track as usize),
             Some(Target::Block { col, .. }) => col,
             _ => self.ch,
-        } as u8;
-        let ins = if instr > 0 { instr } else { self.instr.max(1) };
+        }
+    }
+
+    fn pr_audition(&mut self, key: u8, instr: u8, vel: f32) {
+        let chu = self.pr_channel();
+        let ch = chu as u8;
+        // a note's own instrument, else the track's (as typing plays it)
+        let ins = if instr > 0 {
+            instr
+        } else {
+            self.track_instr(chu)
+        };
+        self.pr.heard = Some((key, ins, ch));
         let old: Vec<u8> = self.pr.offs.drain(..).map(|(_, k)| k).collect();
         self.with(|s| {
             let audio::Shared { song, engine, .. } = s;
@@ -493,17 +541,12 @@ impl App {
 
     /// play several keys at once for `ms` (chords from the chord lane)
     pub(super) fn pr_audition_keys(&mut self, keys: &[u8], ms: u64) {
-        let ch = match self.pr.target {
-            Some(Target::Notes { clip: Some(id), .. }) => self
-                .tlv
-                .cache
-                .as_ref()
-                .and_then(|c| c.tl.clips.iter().find(|x| x.id == id))
-                .map_or(self.ch, |c| c.track as usize),
-            Some(Target::Block { col, .. }) => col,
-            _ => self.ch,
-        } as u8;
-        let ins = self.instr.max(1);
+        let chu = self.pr_channel();
+        let ch = chu as u8;
+        let ins = self.track_instr(chu);
+        if let Some(&k) = keys.first() {
+            self.pr.heard = Some((k, ins, ch));
+        }
         let old: Vec<u8> = self.pr.offs.drain(..).map(|(_, k)| k).collect();
         self.with(|s| {
             let audio::Shared { song, engine, .. } = s;
@@ -529,6 +572,60 @@ impl App {
         let end = Instant::now() + Duration::from_millis(ms.clamp(80, 3000));
         for i in 0..keys.len().min(12) {
             self.pr.offs.push((end, AUDITION_KEY + i as u8));
+        }
+    }
+
+    /// the keyboard strip: press (and drag across) the keys to hear them
+    /// on the track's instrument, a tooltip names the key. Never writes a
+    /// note or an undo step.
+    fn pr_keyboard(&mut self, ui: &mut egui::Ui, keys_r: Rect, modal: bool) {
+        let r = ui.interact(
+            keys_r,
+            ui.scope_id().with("pr_keys"),
+            Sense::click_and_drag(),
+        );
+        let held = r.is_pointer_button_down_on() && !modal;
+        let at = r
+            .interact_pointer_pos()
+            .or(r.hover_pos())
+            .filter(|p| keys_r.contains(*p))
+            .map(|p| self.pr.key_at(p.y).clamp(1, 120) as u8);
+        match (held, at) {
+            (true, Some(k)) if self.pr.key_down != Some(k) => {
+                self.pr_audition(k, 0, 0.8);
+                // sounds while held (a long safety stop)
+                for o in &mut self.pr.offs {
+                    o.0 = Instant::now() + Duration::from_secs(8);
+                }
+                self.pr.key_down = Some(k);
+            }
+            (true, _) => {}
+            (false, _) => {
+                if self.pr.key_down.take().is_some() {
+                    let now = Instant::now();
+                    for o in &mut self.pr.offs {
+                        o.0 = now;
+                    }
+                    self.pr_release(false);
+                }
+            }
+        }
+        if !modal && r.hovered() {
+            if let Some(k) = at {
+                let ins = self.track_instr(self.pr_channel());
+                let name = self.with(|s| {
+                    s.song
+                        .instruments
+                        .get(ins as usize - 1)
+                        .map(|i| i.name.clone())
+                        .unwrap_or_default()
+                });
+                r.on_hover_text_at_pointer(format!(
+                    "{} · octave {}\nclick or drag: hear it on {ins:02X} {name}",
+                    key_label(k),
+                    (k - 1) / 12
+                ));
+            }
         }
     }
 
@@ -739,12 +836,14 @@ impl App {
                 row
             }
             (Source::Notes(nd), _) => {
+                let instr = self.pr_track_instr(target);
                 for kk in self.pr_chord_keys(key, song_key) {
                     nd.notes.push(tl::Note {
                         start,
                         len,
                         key: kk,
                         vel: roll::vel_u16(self.pr.last_vel),
+                        instr,
                         ..Default::default()
                     });
                     self.pr.sel.push(nd.notes.len() - 1);
@@ -989,6 +1088,7 @@ impl App {
         );
         self.pr.grid_rect = grid_r;
         self.pr.vel_rect = vel_r;
+        self.pr_keyboard(ui, keys_r, modal);
         // focus: a press inside takes the keys, a press elsewhere gives them back
         let (pressed, press_pos) =
             ui.input(|i| (i.pointer.any_pressed(), i.pointer.press_origin()));
@@ -2301,4 +2401,13 @@ fn pr_chip(ui: &mut egui::Ui, col: Color32, label: &str) -> egui::Response {
 
 fn grid_name(g: Tick) -> &'static str {
     GRIDS.iter().find(|x| x.0 == g).map_or("?", |x| x.1)
+}
+
+/// "C#4" for a roll key (1 = C0, as the tracker counts)
+pub(crate) fn key_label(k: u8) -> String {
+    const N: [&str; 12] = [
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+    ];
+    let i = k.max(1) as usize - 1;
+    format!("{}{}", N[i % 12], i / 12)
 }

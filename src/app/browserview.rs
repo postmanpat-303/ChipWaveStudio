@@ -101,6 +101,9 @@ pub(crate) struct BrowserUi {
     pub(crate) load: Option<LoadJob>,
     /// "Add track with instrument…": the next load makes a track here
     pub(crate) new_track_at: Option<usize>,
+    /// the track pie's Change instrument… / Drum pattern…: the next load
+    /// from this tab goes to this track
+    pub(crate) track_target: Option<(usize, Tab)>,
     /// the item being dragged out of the Browser
     pub(crate) drag: Option<Item>,
     pub(crate) scroll_sel: bool,
@@ -148,6 +151,7 @@ impl Default for BrowserUi {
             preview_until: None,
             load: None,
             new_track_at: None,
+            track_target: None,
             drag: None,
             scroll_sel: false,
             search_focus: false,
@@ -222,6 +226,7 @@ impl App {
             self.save_settings();
         }
         self.br.filter.tab = tab;
+        self.br.track_target = None;
         self.br.filter.category = None;
         self.br.filter.creator = None;
         self.br.focus = true;
@@ -667,6 +672,18 @@ impl App {
             if is_instrumentish(it) {
                 self.br_load_new_track(it, at);
                 return;
+            }
+        }
+        if let Some((tr, tab)) = self.br.track_target.take() {
+            if tab == self.br.filter.tab {
+                if let Src::Pattern(i) = it.src {
+                    self.pat_place(i, Some(tr), None);
+                    return;
+                }
+                if is_instrumentish(it) && tr < self.with(|s| s.song.channels) {
+                    self.br_instrument(it, Act::Track(tr));
+                    return;
+                }
             }
         }
         if let Src::Pattern(i) = it.src {

@@ -1,6 +1,7 @@
 //! Autosave + crash recovery (docs/SAFETY.md §1-3, simplified: no journal).
 //! Layout: <config>/recovery/<session-id>/{session.toml, heartbeat, autosave.cwt,
-//! autosave.1.cwt, autosave.2.cwt, panic.cwt, crash.txt}. A clean exit removes
+//! autosave.1.cwt, autosave.2.cwt, panic.cwt, crash.txt}, and a copy of every
+//! crash report in <config>/crashes/crash-<unix time>.txt. A clean exit removes
 //! the session folder; a folder left behind (stale heartbeat) is offered for
 //! recovery on the next start.
 use crate::model::Song;
@@ -143,8 +144,9 @@ impl Session {
 pub fn emergency(dir: &Path, song: Option<&Song>, msg: &str) {
     let _ = std::fs::create_dir_all(dir);
     let mut txt = format!(
-        "ChipWave {} crashed\n{}\n\n{}\n",
+        "ChipWave {}{} crashed\n{}\n\n{}\n",
         crate::VERSION,
+        option_env!("CW_BUILD").map_or(String::new(), |b| format!(" ({b})")),
         msg,
         std::backtrace::Backtrace::force_capture()
     );
@@ -155,7 +157,40 @@ pub fn emergency(dir: &Path, song: Option<&Song>, msg: &str) {
         }
     }
     let _ = std::fs::write(dir.join("heartbeat"), "0");
-    let _ = std::fs::write(dir.join("crash.txt"), txt);
+    let _ = std::fs::write(dir.join("crash.txt"), &txt);
+    // a copy the recovery clean-up never deletes (discarding the recovered
+    // song, or a session with nothing saved yet, removes the session folder)
+    if let Some(logs) = crash_log_dir(dir) {
+        keep_crash_log(&logs, &txt);
+    }
+}
+
+/// `<config>/crashes` for a session folder `<config>/recovery/<id>`
+fn crash_log_dir(session: &Path) -> Option<PathBuf> {
+    Some(session.parent()?.parent()?.join("crashes"))
+}
+
+/// write `crash-<unix time>.txt` into `logs`, keeping the newest 20
+fn keep_crash_log(logs: &Path, txt: &str) {
+    let _ = std::fs::create_dir_all(logs);
+    let _ = std::fs::write(logs.join(format!("crash-{}.txt", now())), txt);
+    let mut old: Vec<PathBuf> = std::fs::read_dir(logs)
+        .map(|r| {
+            r.flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.starts_with("crash-") && n.ends_with(".txt"))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    old.sort();
+    let n = old.len().saturating_sub(20);
+    for p in &old[..n] {
+        let _ = std::fs::remove_file(p);
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -333,6 +368,29 @@ mod tests {
         assert!(s.autosave(song) || second);
         s.wait_idle(std::time::Duration::from_secs(20));
         assert!(crate::fileio::load_cwt(&s.dir.join("autosave.cwt")).is_ok());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn crash_reports_outlive_the_recovery_folder() {
+        let root = tmp_root("crashlog");
+        let dir = root.join("recovery").join("123-1");
+        emergency(&dir, None, "panicked at src/app/chordlane.rs:1:1: boom");
+        // the recovery prompt's Discard, or "nothing saved yet": folder gone
+        let _ = std::fs::remove_dir_all(&dir);
+        let logs: Vec<_> = std::fs::read_dir(root.join("crashes"))
+            .unwrap()
+            .flatten()
+            .collect();
+        assert_eq!(logs.len(), 1);
+        let t = std::fs::read_to_string(logs[0].path()).unwrap();
+        assert!(t.contains("chordlane.rs:1:1: boom"), "{t}");
+        // only the newest 20 are kept
+        for i in 0..30 {
+            std::fs::write(root.join("crashes").join(format!("crash-{i:04}.txt")), "x").unwrap();
+        }
+        keep_crash_log(&root.join("crashes"), "y");
+        assert_eq!(std::fs::read_dir(root.join("crashes")).unwrap().count(), 20);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

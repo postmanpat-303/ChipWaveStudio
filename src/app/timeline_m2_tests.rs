@@ -229,7 +229,8 @@ fn edges_trim_and_loop_and_s_splits_under_the_mouse() {
         .unwrap()
         .clone();
     assert_eq!((c2.start, c2.end()), (c.start + 4 * PPQ, c.end()));
-    // S with the mouse inside the clip, a bar in: two clips
+    // S with the mouse inside the clip, a bar in: the split preview there;
+    // the click splits it into two clips
     let n = timeline(&h).clips.len();
     let at = h.state().tlv.x_of(c2.start + 4 * PPQ);
     with_mods(
@@ -239,6 +240,9 @@ fn edges_trim_and_loop_and_s_splits_under_the_mouse() {
     );
     frame(&mut h);
     key(&mut h, Key::S, egui::Modifiers::NONE);
+    assert_eq!(timeline(&h).clips.len(), n, "S alone only shows where");
+    assert_eq!(h.state().tlv.split_at, Some((cl.id, c2.start + 4 * PPQ)));
+    click_at(&mut h, Pos2::new(at + 1.0, r.center().y));
     let t = timeline(&h);
     assert_eq!(t.clips.len(), n + 1, "{}", h.state().status);
     assert_eq!(
