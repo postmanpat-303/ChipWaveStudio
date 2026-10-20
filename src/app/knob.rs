@@ -45,7 +45,12 @@ pub(super) struct KnobArgs<'a> {
 pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) -> KnobOut {
     let t = th();
     let (cell, _) = ui.allocate_exact_size(CELL, Sense::hover());
-    let kc = Pos2::new(cell.center().x, cell.top() + 4.0 + RAD);
+    // Ember (Slate): name above, a pic-2 knurled knob, value below
+    let kc = if t.ember {
+        Pos2::new(cell.center().x, cell.top() + 31.0)
+    } else {
+        Pos2::new(cell.center().x, cell.top() + 4.0 + RAD)
+    };
     let krect = Rect::from_center_size(kc, egui::vec2(RAD * 2.0 + 6.0, RAD * 2.0 + 6.0));
     let sense = if a.enabled {
         Sense::click_and_drag()
@@ -100,7 +105,11 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         p.add(egui::Shape::line(pts, Stroke::new(w, col)));
     };
     let arc = |from: f32, to: f32, col: Color32, w: f32| arc_r(from, to, col, w, RAD);
-    if crate::theme::polished() {
+    if t.ember {
+        let mut kp = p.clone();
+        kp.multiply_opacity(dim.max(0.55));
+        crate::ember::knob_small(&kp, kc, RAD + 2.5, *v, &[]);
+    } else if crate::theme::polished() {
         // a soft shadow under the cap, the cap lit from above, a recessed track
         p.circle_filled(
             kc + egui::vec2(0.0, 1.5),
@@ -126,7 +135,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         p.circle_stroke(kc, RAD - 3.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.35)));
     }
     // stepped knobs (octave, voices...): a dot per step
-    if a.steps >= 1.0 && a.steps <= 16.0 {
+    if !t.ember && a.steps >= 1.0 && a.steps <= 16.0 {
         let n = a.steps.round() as i32;
         for k in 0..=n {
             let f = k as f32 / n as f32;
@@ -137,7 +146,9 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
             );
         }
     }
-    arc(0.0, 1.0, t.ink2.gamma_multiply(0.35), 3.0);
+    if !t.ember {
+        arc(0.0, 1.0, t.ink2.gamma_multiply(0.35), 3.0);
+    }
     let locked = a.locked == Some(true);
     let col = if locked { t.ink2 } else { t.accent };
     // bipolar ranges (default in the middle) draw from the centre
@@ -147,18 +158,20 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         0.0
     };
     let (lo, hi) = if *v < from { (*v, from) } else { (from, *v) };
-    if hi > lo {
-        arc(lo, hi, col.gamma_multiply(dim), 3.0);
+    if !t.ember {
+        if hi > lo {
+            arc(lo, hi, col.gamma_multiply(dim), 3.0);
+        }
+        p.line_segment(
+            [pt(a0 + span * *v, 3.0), pt(a0 + span * *v, RAD - 4.0)],
+            Stroke::new(2.0, t.ink.gamma_multiply(dim)),
+        );
     }
-    p.line_segment(
-        [pt(a0 + span * *v, 3.0), pt(a0 + span * *v, RAD - 4.0)],
-        Stroke::new(2.0, t.ink.gamma_multiply(dim)),
-    );
     // modulation: a ring per route (value → value + depth) with a handle
     // that sets the depth, and the live modulated value as a dot
     let mut ring_drag = None;
     for (j, rg) in a.rings.iter().enumerate().take(3) {
-        let r = RAD + 4.5 + j as f32 * 3.0;
+        let r = RAD + if t.ember { 6.0 } else { 4.5 } + j as f32 * 3.0;
         let to = (*v + rg.amount).clamp(0.0, 1.0);
         arc_r(*v, to, rg.col, if rg.selected { 2.5 } else { 1.8 }, r);
         let hp = pt(a0 + span * to, r);
@@ -188,19 +201,39 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         p.circle_filled(lp, 3.6, led);
         p.circle_stroke(lp, 3.6, Stroke::new(1.0, Color32::from_black_alpha(160)));
     }
-    let small = egui::FontId::proportional(10.5);
-    let mono = egui::FontId::monospace(10.0);
+    let (small, mono) = if t.ember {
+        (crate::theme::label_font(11.0), crate::theme::num_font(10.0))
+    } else {
+        (
+            egui::FontId::proportional(10.5),
+            egui::FontId::monospace(10.0),
+        )
+    };
+    let name = if t.ember {
+        a.name.to_uppercase()
+    } else {
+        a.name.to_string()
+    };
     let name_col = if a.enabled {
         t.ink
     } else {
         t.ink2.gamma_multiply(0.7)
     };
-    let mut job =
-        egui::text::LayoutJob::simple_singleline(a.name.to_string(), small.clone(), name_col);
+    let name_col = if t.ember && a.enabled {
+        t.ink2
+    } else {
+        name_col
+    };
+    let mut job = egui::text::LayoutJob::simple_singleline(name, small.clone(), name_col);
     job.wrap = egui::text::TextWrapping::truncate_at_width(CELL.x - 2.0);
     job.halign = egui::Align::Center;
     let g = ui.fonts_mut(|f| f.layout_job(job));
-    p.galley(Pos2::new(cell.center().x, kc.y + RAD + 3.0), g, name_col);
+    let name_y = if t.ember {
+        cell.top() + 1.0
+    } else {
+        kc.y + RAD + 3.0
+    };
+    p.galley(Pos2::new(cell.center().x, name_y), g, name_col);
     let mut job = egui::text::LayoutJob::simple_singleline(
         a.value_text.clone(),
         mono,
@@ -209,7 +242,13 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     job.wrap = egui::text::TextWrapping::truncate_at_width(CELL.x);
     job.halign = egui::Align::Center;
     let g = ui.fonts_mut(|f| f.layout_job(job));
-    p.galley(Pos2::new(cell.center().x, kc.y + RAD + 16.0), g, t.value);
+    let val_y = if t.ember {
+        kc.y + RAD + 7.0
+    } else {
+        kc.y + RAD + 16.0
+    };
+    let val_col = if t.ember { t.ink } else { t.value };
+    p.galley(Pos2::new(cell.center().x, val_y), g, val_col);
     if let Some(b) = a.badge {
         p.text(
             Pos2::new(cell.left() + 2.0, cell.top() + 2.0),
@@ -302,10 +341,24 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
 /// draw a card picture into `r`
 pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
     let t = th();
-    p.rect_filled(r, 4.0, t.crt_bot);
+    if t.ember {
+        crate::ember::well(p, r, 4);
+    } else {
+        p.rect_filled(r, 4.0, t.crt_bot);
+    }
     let line = t.instr;
+    // Ember: crisp acc-hot curves over a bloom, an accent fill below
+    let curve = |pts: Vec<Pos2>, fill_to: Option<f32>| {
+        if t.ember {
+            if let Some(b) = fill_to {
+                crate::ember::fill_under(p, &pts, b, t.accent, 0.28);
+            }
+            crate::ember::glow_line(p, &pts, 1.8, t.acc_hot);
+        } else {
+            p.add(egui::Shape::line(pts, Stroke::new(1.5, line)));
+        }
+    };
     let grid = t.crt_grid;
-    let s = Stroke::new(1.5, line);
     let fill = line.gamma_multiply(0.18);
     let inner = r.shrink2(egui::vec2(6.0, 5.0));
     let x = |f: f32| inner.left() + f.clamp(0.0, 1.0) * inner.width();
@@ -333,14 +386,22 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
                 .zip(ys)
                 .map(|(&a, b)| Pos2::new(x(a), y(b)))
                 .collect();
-            p.add(egui::Shape::convex_polygon(
-                vec![pts[0], pts[1], Pos2::new(pts[1].x, y(0.0))],
-                fill,
-                Stroke::NONE,
-            ));
-            p.add(egui::Shape::line(pts.clone(), s));
+            if !t.ember {
+                p.add(egui::Shape::convex_polygon(
+                    vec![pts[0], pts[1], Pos2::new(pts[1].x, y(0.0))],
+                    fill,
+                    Stroke::NONE,
+                ));
+            }
+            curve(pts.clone(), Some(y(0.0)));
             for q in &pts[1..4] {
-                p.circle_filled(*q, 2.5, t.note);
+                if t.ember {
+                    crate::ember::glow_dot(p, *q, 3.0, t.accent);
+                    p.circle_filled(*q, 3.0, t.acc_hot);
+                    p.circle_filled(*q, 1.4, hex_white());
+                } else {
+                    p.circle_filled(*q, 2.5, t.note);
+                }
             }
         }
         Viz::Filter(cut, res, mode) => {
@@ -361,7 +422,7 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
                     Pos2::new(x(fx), y((db + 36.0) / 54.0))
                 })
                 .collect();
-            p.add(egui::Shape::line(pts, s));
+            curve(pts, Some(r.bottom() - 1.0));
             let cx = x((cut.max(20.0) / 20.0).log10() / 3.0);
             p.line_segment(
                 [Pos2::new(cx, inner.top()), Pos2::new(cx, inner.bottom())],
@@ -396,7 +457,7 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
                 ],
                 Stroke::new(1.0, grid),
             );
-            p.add(egui::Shape::line(pts, s));
+            curve(pts, None);
         }
         Viz::Peaks(pk) => {
             if pk.is_empty() {
@@ -410,7 +471,7 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
                         Pos2::new(x(fx), y(0.5 + hi * 0.5)),
                         Pos2::new(x(fx), y(0.5 + lo * 0.5)),
                     ],
-                    Stroke::new(1.5, line),
+                    Stroke::new(1.5, if t.ember { t.acc_hot } else { line }),
                 );
             }
         }
@@ -461,4 +522,8 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
             );
         }
     }
+}
+
+fn hex_white() -> Color32 {
+    Color32::from_rgb(0xFF, 0xF1, 0xD6)
 }

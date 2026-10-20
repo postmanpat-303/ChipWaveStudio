@@ -685,7 +685,7 @@ fn big_knob(
 ) -> (egui::Response, bool) {
     let t = th();
     let (cell, _) = ui.allocate_exact_size(egui::vec2(96.0, MACRO_H - 8.0), Sense::hover());
-    let r = 21.0;
+    let r = if t.ember { 25.0 } else { 21.0 };
     let c = Pos2::new(cell.center().x, cell.top() + 18.0 + r);
     let krect = Rect::from_center_size(c, egui::vec2(r * 2.0 + 8.0, r * 2.0 + 8.0));
     let resp = ui.interact(
@@ -727,6 +727,35 @@ fn big_knob(
     }
     let p = ui.painter();
     let dim = if enabled { 1.0 } else { 0.4 };
+    if t.ember {
+        // pic-1 knob: LED arc, silver ring, glossy well with the readout
+        crate::ember::knob_label(p, Pos2::new(cell.center().x, cell.top() + 6.0), name, 12.5);
+        let bip = (def - 0.5).abs() < 0.01;
+        let mut kp = p.clone();
+        kp.multiply_opacity(if enabled { 1.0 } else { 0.55 });
+        crate::ember::knob_big(
+            &kp,
+            c,
+            r + 8.0,
+            *v,
+            bip,
+            &compact(value),
+            enabled && (*v - if bip { 0.5 } else { 0.0 }).abs() > 0.002,
+        );
+        if resp.hovered() && enabled {
+            p.circle_stroke(c, r + 9.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.4)));
+        }
+        let cap =
+            super::super::pattern::fit(p, caption, &egui::FontId::proportional(10.0), cell.width());
+        p.text(
+            Pos2::new(cell.center().x, c.y + r + 17.0),
+            egui::Align2::CENTER_CENTER,
+            cap,
+            egui::FontId::proportional(10.0),
+            crate::ember::INK3,
+        );
+        return (resp, changed);
+    }
     p.text(
         Pos2::new(cell.center().x, cell.top() + 6.0),
         egui::Align2::CENTER_CENTER,
@@ -802,10 +831,47 @@ fn big_knob(
     (resp, changed)
 }
 
+/// the short readout inside a pic-1 knob: "3.20 kHz" -> "3.2k",
+/// "250 ms" -> "250", "+0.0 dB" -> "+0.0"
+pub(crate) fn compact(v: &str) -> String {
+    let mut it = v.split_whitespace();
+    let Some(num) = it.next() else {
+        return String::new();
+    };
+    let unit = it.next().unwrap_or("");
+    let k = if unit.starts_with('k') && !num.ends_with('k') {
+        "k"
+    } else {
+        ""
+    };
+    let mut n = num.to_string();
+    // too long: fewer decimals
+    while n.chars().count() + k.len() > 5 && n.contains('.') {
+        n.pop();
+        if n.ends_with('.') {
+            n.pop();
+            break;
+        }
+    }
+    if n.chars().count() > 5 {
+        n = n.chars().take(5).collect();
+    }
+    n + k
+}
+
 /// a section frame: rounded panel and an uppercase title; returns the rect
 fn frame(ui: &egui::Ui, r: Rect, title: &str) {
     let t = th();
     let p = ui.painter();
+    if t.ember {
+        crate::ember::card(p, r);
+        crate::ember::title(
+            p,
+            Pos2::new(r.left() + 16.0, r.top() + SEC_HEAD * 0.5),
+            title,
+        );
+        return;
+    }
     p.rect_filled(r, 6.0, t.cart_bot);
     p.rect_stroke(
         r,
@@ -937,18 +1003,23 @@ impl App {
             if ui.small_button(">").on_hover_text("next instrument").clicked() {
                 cx.acts.push(Act::Select(((idx + 1) % n) as u8 + 1));
             }
-            ui.label(
-                egui::RichText::new(format!("{:02X} {}", idx + 1, inst.name))
-                    .strong()
-                    .size(15.0),
-            );
+            let head = egui::RichText::new(format!("{:02X} {}", idx + 1, inst.name));
+            ui.label(if t.ember {
+                head.font(crate::theme::label_font(17.0)).color(t.ink)
+            } else {
+                head.strong().size(15.0)
+            });
             tag_pill(ui, tag);
             ui.add_space(6.0);
             self.preset_dropdown(ui, inst, cx);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
-                if ui
-                    .button("Advanced ›")
+                let adv = if t.ember {
+                    crate::ember::button(ui, "Advanced ›", false)
+                } else {
+                    ui.button("Advanced ›")
+                };
+                if adv
                     .on_hover_text("every control of this instrument: the full editor with its tabs")
                     .clicked()
                 {
@@ -957,9 +1028,12 @@ impl App {
                 if !matches!(inst.kind, InstrumentKind::Plugin(_)) {
                     let on_b = self.ip.ab.as_ref().is_some_and(|a| a.on_b);
                     for (b, name) in [(true, "B"), (false, "A")] {
-                        let r = ui
-                            .selectable_label(on_b == b, egui::RichText::new(name).strong())
-                            .on_hover_text(
+                        let r = if t.ember {
+                            crate::ember::button(ui, name, on_b == b)
+                        } else {
+                            ui.selectable_label(on_b == b, egui::RichText::new(name).strong())
+                        };
+                        let r = r.on_hover_text(
                                 "A/B compare: B starts as a copy of A; edit one, switch to hear the other (Ctrl+Z undoes a switch)",
                             );
                         if r.clicked() && on_b != b {

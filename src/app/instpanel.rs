@@ -145,6 +145,21 @@ pub(super) fn tag_text_colour(tag: &str) -> Color32 {
 
 /// a small rounded type pill
 pub(super) fn tag_pill(ui: &mut egui::Ui, tag: &str) -> egui::Response {
+    if th().ember {
+        // Ember: a small outlined tag in acc-hot capitals
+        let t = th();
+        let font = crate::theme::label_font(11.5);
+        let txt = tag.to_uppercase();
+        let g = ui.fonts_mut(|f| f.layout_no_wrap(txt, font, t.acc_hot));
+        let (r, resp) = ui.allocate_exact_size(egui::vec2(g.size().x + 12.0, 17.0), Sense::hover());
+        ui.painter()
+            .rect_filled(r, 3.0, Color32::from_black_alpha(60));
+        ui.painter()
+            .rect_stroke(r, 3.0, Stroke::new(1.0, t.line2), egui::StrokeKind::Inside);
+        ui.painter()
+            .galley(r.center() - g.size() / 2.0, g, t.acc_hot);
+        return resp;
+    }
     let font = egui::FontId::proportional(11.0);
     let g = ui.fonts_mut(|f| f.layout_no_wrap(tag.to_string(), font, Color32::BLACK));
     let size = egui::vec2(g.size().x + 12.0, 17.0);

@@ -100,6 +100,17 @@ fn x_hz(r: Rect, x: f32) -> f32 {
 /// graph background with a few frequency lines
 fn graph_bg(p: &egui::Painter, r: Rect, freq_grid: bool) {
     let t = th();
+    if t.ember {
+        crate::ember::well(p, r, 4);
+        let g = Stroke::new(1.0, crate::ember::GRID2);
+        if freq_grid {
+            for f in [100.0, 1000.0, 10000.0] {
+                p.vline(hz_x(r, f), r.y_range().shrink(1.0), g);
+            }
+        }
+        p.hline(r.x_range().shrink(1.0), r.center().y, g);
+        return;
+    }
     p.rect_filled(
         r,
         4,
@@ -128,6 +139,13 @@ fn freq_curve(p: &egui::Painter, r: Rect, col: Color32, fill: bool, f: impl Fn(f
             Pos2::new(x, f(x_hz(r, x)))
         })
         .collect();
+    if th().ember && col == th().accent {
+        if fill {
+            crate::ember::fill_under(p, &pts, r.bottom() - 1.0, col, 0.28);
+        }
+        crate::ember::glow_line(p, &pts, 1.8, th().acc_hot);
+        return;
+    }
     if fill {
         let y0 = r.center().y;
         for w in pts.windows(2) {
@@ -364,13 +382,17 @@ impl App {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
         let p = ui.painter_at(rect.expand(2.0));
         let accent = t.accent;
-        p.rect_filled(rect, 8, t.cart_top);
-        p.rect_stroke(
-            rect,
-            8,
-            Stroke::new(1.0, accent.gamma_multiply(0.55)),
-            egui::StrokeKind::Inside,
-        );
+        if t.ember {
+            crate::ember::card(&p, rect);
+        } else {
+            p.rect_filled(rect, 8, t.cart_top);
+            p.rect_stroke(
+                rect,
+                8,
+                Stroke::new(1.0, accent.gamma_multiply(0.55)),
+                egui::StrokeKind::Inside,
+            );
+        }
         let id = ui.make_persistent_id("dev_inst");
         if self.dev.inst_folded {
             let r = ui
@@ -384,16 +406,24 @@ impl App {
         }
         // header: number and name, type, fold
         let head = Rect::from_min_size(rect.min, egui::vec2(w, HEAD));
-        p.rect_filled(
-            head,
-            egui::CornerRadius {
-                nw: 8,
-                ne: 8,
-                sw: 0,
-                se: 0,
-            },
-            accent.gamma_multiply(0.22),
-        );
+        if t.ember {
+            p.hline(
+                (head.left() + 8.0)..=(head.right() - 8.0),
+                head.bottom(),
+                Stroke::new(1.0, crate::ember::LINE),
+            );
+        } else {
+            p.rect_filled(
+                head,
+                egui::CornerRadius {
+                    nw: 8,
+                    ne: 8,
+                    sw: 0,
+                    se: 0,
+                },
+                accent.gamma_multiply(0.22),
+            );
+        }
         let fold = Rect::from_center_size(
             Pos2::new(head.right() - 14.0, head.center().y),
             egui::vec2(18.0, 18.0),
@@ -410,7 +440,22 @@ impl App {
             ),
             egui::vec2(tag_g.size().x + 12.0, 16.0),
         );
-        if !tag.is_empty() {
+        if !tag.is_empty() && t.ember {
+            p.rect_filled(tag_r, 3, Color32::from_black_alpha(60));
+            p.rect_stroke(
+                tag_r,
+                3,
+                Stroke::new(1.0, t.line2),
+                egui::StrokeKind::Inside,
+            );
+            p.text(
+                tag_r.center(),
+                egui::Align2::CENTER_CENTER,
+                tag.to_uppercase(),
+                crate::theme::label_font(11.0),
+                t.acc_hot,
+            );
+        } else if !tag.is_empty() {
             p.rect_filled(tag_r, 8, super::instpanel::tag_colour(tag));
             p.galley(tag_r.center() - tag_g.size() * 0.5, tag_g, t.ink);
         }
@@ -418,17 +463,22 @@ impl App {
             head.min + egui::vec2(10.0, 0.0),
             Pos2::new(tag_r.left() - 6.0, head.bottom()),
         );
+        let nf = if t.ember {
+            crate::theme::label_font(14.0)
+        } else {
+            FontId::proportional(12.5)
+        };
         let label = super::pattern::fit(
             &p,
             &format!("{:02X} {name}", self.instr),
-            &FontId::proportional(12.5),
+            &nf,
             name_r.width(),
         );
         p.text(
             name_r.left_center(),
             egui::Align2::LEFT_CENTER,
             label,
-            FontId::proportional(12.5),
+            nf,
             t.ink,
         );
         let fr = ui
@@ -527,20 +577,32 @@ impl App {
         let p = ui.painter_at(rect.expand(2.0));
         let tint = strip_fill(d.kind, d.enabled);
         let dragging = self.dev.drag == Some(i);
-        p.rect_filled(rect, 8, t.cart_top);
-        p.rect_stroke(
-            rect,
-            8,
-            Stroke::new(
-                if dragging { 2.0 } else { 1.0 },
-                if dragging {
-                    t.accent
-                } else {
-                    tint.gamma_multiply(0.9)
-                },
-            ),
-            egui::StrokeKind::Inside,
-        );
+        if t.ember {
+            crate::ember::card(&p, rect);
+            if dragging {
+                p.rect_stroke(
+                    rect,
+                    6,
+                    Stroke::new(2.0, t.accent),
+                    egui::StrokeKind::Inside,
+                );
+            }
+        } else {
+            p.rect_filled(rect, 8, t.cart_top);
+            p.rect_stroke(
+                rect,
+                8,
+                Stroke::new(
+                    if dragging { 2.0 } else { 1.0 },
+                    if dragging {
+                        t.accent
+                    } else {
+                        tint.gamma_multiply(0.9)
+                    },
+                ),
+                egui::StrokeKind::Inside,
+            );
+        }
         let id = ui.make_persistent_id(("dev_card", owner, i));
         let title = d.title();
         let menu = |ui: &mut egui::Ui, ops: &mut Vec<FxOp>| {
@@ -574,7 +636,9 @@ impl App {
             }
         };
         if d.collapsed {
-            p.rect_filled(rect.shrink(1.0), 7, tint.gamma_multiply(0.55));
+            if !t.ember {
+                p.rect_filled(rect.shrink(1.0), 7, tint.gamma_multiply(0.55));
+            }
             let pw = Rect::from_center_size(
                 Pos2::new(rect.center().x, rect.top() + 14.0),
                 egui::vec2(20.0, 20.0),
@@ -598,16 +662,24 @@ impl App {
         }
         // header: power · name (drag) · … · remove
         let head = Rect::from_min_size(rect.min, egui::vec2(w, HEAD));
-        p.rect_filled(
-            head,
-            egui::CornerRadius {
-                nw: 8,
-                ne: 8,
-                sw: 0,
-                se: 0,
-            },
-            tint.gamma_multiply(0.8),
-        );
+        if t.ember {
+            p.hline(
+                (head.left() + 8.0)..=(head.right() - 8.0),
+                head.bottom(),
+                Stroke::new(1.0, crate::ember::LINE),
+            );
+        } else {
+            p.rect_filled(
+                head,
+                egui::CornerRadius {
+                    nw: 8,
+                    ne: 8,
+                    sw: 0,
+                    se: 0,
+                },
+                tint.gamma_multiply(0.8),
+            );
+        }
         let pw = Rect::from_center_size(
             Pos2::new(head.left() + 14.0, head.center().y),
             egui::vec2(20.0, 20.0),
@@ -636,7 +708,11 @@ impl App {
             } else {
                 format!("{title} (bypassed)")
             },
-            FontId::proportional(12.5),
+            if t.ember {
+                crate::theme::label_font(14.0)
+            } else {
+                FontId::proportional(12.5)
+            },
             ink,
         );
         let nr = ui
@@ -1146,7 +1222,7 @@ fn comp_graph(p: &egui::Painter, r: Rect, d: &Device) {
             to(i, o)
         })
         .collect();
-    p.add(egui::Shape::line(pts, Stroke::new(1.8, t.accent)));
+    acc_line(p, pts, 1.8);
     let tx = to(thr, thr).x;
     p.vline(
         tx,
@@ -1237,7 +1313,7 @@ fn reverb_graph(p: &egui::Painter, r: Rect, d: &Device) {
             Stroke::NONE,
         ));
     }
-    p.add(egui::Shape::line(pts, Stroke::new(1.6, t.accent)));
+    acc_line(p, pts, 1.6);
     p.text(
         r.right_top() + egui::vec2(-4.0, 2.0),
         egui::Align2::RIGHT_TOP,
@@ -1245,6 +1321,16 @@ fn reverb_graph(p: &egui::Painter, r: Rect, d: &Device) {
         FontId::proportional(10.0),
         t.ink2,
     );
+}
+
+/// an accent curve (Ember: acc-hot over a bloom)
+fn acc_line(p: &egui::Painter, pts: Vec<Pos2>, w: f32) {
+    let t = th();
+    if t.ember {
+        crate::ember::glow_line(p, &pts, w, t.acc_hot);
+    } else {
+        p.add(egui::Shape::line(pts, Stroke::new(w, t.accent)));
+    }
 }
 
 /// the insertion marker: an accent bar with end caps
@@ -1274,6 +1360,11 @@ fn power(ui: &egui::Ui, p: &egui::Painter, r: Rect, id: egui::Id, on: bool) -> b
     let col = if on { t.accent } else { t.ink2 };
     if resp.hovered() {
         p.circle_filled(c, 10.0, t.ink.gamma_multiply(0.12));
+    }
+    if t.ember {
+        // Ember: the card's LED (lit = on)
+        crate::ember::led(p, c, 4.0, on);
+        return resp.clicked();
     }
     let rad = 5.5;
     let pts: Vec<Pos2> = (0..=20)

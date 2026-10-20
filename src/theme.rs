@@ -43,11 +43,65 @@ pub struct Theme {
     pub focus_ring: Color32,
     /// outline of selected clips / items
     pub selection_outline: Color32,
+    /// the Ember skin (Slate): pic-1 knobs with LED arcs, pic-2 bevelled
+    /// panels, knurled knobs, LED dot meters (docs/STYLE_EMBER.md)
+    pub ember: bool,
+    /// LED arc start (red-orange), lit tips / readouts, unlit LED segments
+    pub acc_deep: Color32,
+    pub acc_hot: Color32,
+    pub led_off: Color32,
+    /// unlit meter dots and LEDs
+    pub dot_off: Color32,
+    /// outer panel edge (bevel shadow) and outlined-button outline
+    pub edge: Color32,
+    pub line2: Color32,
 }
 
-/// Default: modern dark grey with thin muted-green borders.
+/// Default (0.2.4.x): "Slate", the Ember skin on slate grey (pic 2 panels,
+/// pic 1 knobs and readouts, orange accent); see docs/STYLE_EMBER.md.
+pub const SLATE: Theme = Theme {
+    name: "Slate (default)",
+    light: false,
+    border: hex(0x121315),
+    bg_top: hex(0x202326),
+    bg_bot: hex(0x1B1D20),
+    cart_top: hex(0x2F3338),
+    cart_bot: hex(0x25282C),
+    pill: hex(0x3A3E44),
+    hdr_top: hex(0x2C3035),
+    hdr_bot: hex(0x25282C),
+    crt_top: hex(0x1A1C20),
+    crt_bot: hex(0x141619),
+    crt_grid: hex(0x262A2F),
+    ink: hex(0xE9EBED),
+    ink2: hex(0xAAB0B6),
+    value: hex(0xFFB45A),
+    slate: hex(0x454A51),
+    brick: hex(0xC4623F),
+    sage: hex(0x9BC46A),
+    ochre: hex(0xFF8A2A),
+    note: hex(0xE9EBED),
+    instr: hex(0xFFB45A),
+    vol: hex(0x7FC8D6),
+    fx: hex(0xE0C46C),
+    empty: hex(0x50555C),
+    play: hex(0xFF8A2A),
+    sel: hex(0x4A3C30),
+    accent: hex(0xFF8A2A),
+    focus_ring: hex(0xE9EBED),
+    selection_outline: hex(0xFFB45A),
+    ember: true,
+    acc_deep: hex(0xE2481F),
+    acc_hot: hex(0xFFB45A),
+    led_off: hex(0x3A2B28),
+    dot_off: hex(0x454A50),
+    edge: hex(0x121315),
+    line2: hex(0x6A7078),
+};
+
+/// The 0.2.3-0.2.4.1 default: modern dark grey with thin muted-green borders.
 pub const DARK: Theme = Theme {
-    name: "Dark Circuit (default)",
+    name: "Dark Circuit",
     light: false,
     border: hex(0x4CAF6A),
     bg_top: hex(0x24272B),
@@ -77,6 +131,13 @@ pub const DARK: Theme = Theme {
     accent: hex(0x5CC07A),
     focus_ring: hex(0xE6E9ED),
     selection_outline: hex(0xFFFFFF),
+    ember: false,
+    acc_deep: hex(0xE2481F),
+    acc_hot: hex(0xFFB45A),
+    led_off: hex(0x3A2B28),
+    dot_off: hex(0x454A50),
+    edge: hex(0x121315),
+    line2: hex(0x6A7078),
 };
 
 /// Optional "Amiga" theme: Workbench Gradient (A2) with the muted palette.
@@ -111,11 +172,18 @@ pub const AMIGA: Theme = Theme {
     accent: hex(0x1F5FD1),
     focus_ring: hex(0xFF9F1C),
     selection_outline: hex(0xFFE08A),
+    ember: false,
+    acc_deep: hex(0xE2481F),
+    acc_hot: hex(0xFFB45A),
+    led_off: hex(0x3A2B28),
+    dot_off: hex(0x454A50),
+    edge: hex(0x121315),
+    line2: hex(0x6A7078),
 };
 
-pub const THEMES: [Theme; 2] = [DARK, AMIGA];
+pub const THEMES: [Theme; 3] = [SLATE, DARK, AMIGA];
 
-static CURRENT: std::sync::RwLock<Theme> = std::sync::RwLock::new(DARK);
+static CURRENT: std::sync::RwLock<Theme> = std::sync::RwLock::new(SLATE);
 /// Interface style: Polished (default: soft depth, gradients, shadows) or
 /// Flat (the look before 0.2.4.x's polish pass). Settings › Look.
 static POLISHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
@@ -199,6 +267,10 @@ pub fn apply(ctx: &egui::Context, t: Theme) {
     if polished() {
         polish(&mut v, &t);
     }
+    if t.ember {
+        ember_visuals(&mut v, &t);
+    }
+    fonts(ctx, t.ember);
     ctx.set_visuals(v);
     ctx.global_style_mut(|s| {
         s.spacing.item_spacing = egui::vec2(6.0, 5.0);
@@ -233,6 +305,114 @@ fn polish(v: &mut egui::Visuals, t: &Theme) {
     // selected tabs / toggles: the accent shows through, text stays light
     v.selection.bg_fill = mix(t.slate, t.accent, if t.light { 0.45 } else { 0.4 });
     v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
+}
+
+/// The Ember skin (Slate) on top: pic-2 outlined grey buttons, recessed
+/// dark inputs, selected = orange text on a dark fill (never an orange
+/// block, never a glow), 4 px widget corners.
+fn ember_visuals(v: &mut egui::Visuals, t: &Theme) {
+    v.window_corner_radius = CornerRadius::same(7);
+    v.menu_corner_radius = CornerRadius::same(5);
+    v.window_fill = t.cart_top;
+    v.window_stroke = Stroke::new(1.0, t.edge);
+    v.extreme_bg_color = hex(0x17191C);
+    v.faint_bg_color = t.cart_top;
+    v.code_bg_color = hex(0x17191C);
+    v.hyperlink_color = t.acc_hot;
+    v.text_cursor.stroke = Stroke::new(2.0, t.accent);
+    for w in [
+        &mut v.widgets.inactive,
+        &mut v.widgets.hovered,
+        &mut v.widgets.active,
+        &mut v.widgets.open,
+        &mut v.widgets.noninteractive,
+    ] {
+        w.corner_radius = CornerRadius::same(4);
+    }
+    v.widgets.noninteractive.bg_fill = t.cart_top;
+    v.widgets.noninteractive.weak_bg_fill = t.cart_top;
+    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, hex(0x3B3F45));
+    v.widgets.inactive.bg_fill = hex(0x363A40);
+    v.widgets.inactive.weak_bg_fill = hex(0x363A40);
+    v.widgets.inactive.bg_stroke = Stroke::new(1.0, hex(0x5A6067));
+    v.widgets.hovered.bg_fill = hex(0x41464C);
+    v.widgets.hovered.weak_bg_fill = hex(0x41464C);
+    v.widgets.hovered.bg_stroke = Stroke::new(1.0, hex(0x8A8F96));
+    v.widgets.active.bg_fill = hex(0x2B2E33);
+    v.widgets.active.weak_bg_fill = hex(0x2B2E33);
+    v.widgets.active.bg_stroke = Stroke::new(1.0, hex(0x8A8F96));
+    v.widgets.open.bg_fill = hex(0x2B2E33);
+    v.widgets.open.weak_bg_fill = hex(0x2B2E33);
+    v.widgets.open.bg_stroke = Stroke::new(1.0, hex(0x8A8F96));
+    // selected toggles / tabs: orange text on a dark warm fill
+    v.selection.bg_fill = t.sel;
+    v.selection.stroke = Stroke::new(1.0, t.acc_hot);
+    v.widgets.hovered.expansion = 0.0;
+}
+
+/// The family of the condensed label font (Barlow Semi Condensed) and the
+/// numeric readout font (Geist Mono). Registered in every theme, so code
+/// may use them anywhere; Slate also makes Inter the body font.
+pub fn label_font(size: f32) -> egui::FontId {
+    egui::FontId::new(size, egui::FontFamily::Name("label".into()))
+}
+pub fn num_font(size: f32) -> egui::FontId {
+    egui::FontId::new(size, egui::FontFamily::Name("num".into()))
+}
+
+/// embedded fonts (SIL OFL 1.1, LICENSES/*-OFL.txt, credited in About)
+fn fonts(ctx: &egui::Context, ember: bool) {
+    let id = egui::Id::NULL.with("chipwave_fonts_ember");
+    if ctx.data(|d| d.get_temp::<bool>(id)) == Some(ember) {
+        return;
+    }
+    ctx.data_mut(|d| d.insert_temp(id, ember));
+    use egui::{FontData, FontFamily};
+    use std::sync::Arc;
+    let mut f = egui::FontDefinitions::default();
+    let add = |f: &mut egui::FontDefinitions, k: &str, b: &'static [u8]| {
+        f.font_data
+            .insert(k.into(), Arc::new(FontData::from_static(b)));
+    };
+    add(
+        &mut f,
+        "inter",
+        include_bytes!("../assets/fonts/Inter-Regular.ttf"),
+    );
+    add(
+        &mut f,
+        "barlow",
+        include_bytes!("../assets/fonts/BarlowSemiCondensed-SemiBold.ttf"),
+    );
+    add(
+        &mut f,
+        "geist",
+        include_bytes!("../assets/fonts/GeistMono-SemiBold.ttf"),
+    );
+    let prop = f
+        .families
+        .get(&FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default();
+    let mono = f
+        .families
+        .get(&FontFamily::Monospace)
+        .cloned()
+        .unwrap_or_default();
+    let with = |first: &str, rest: &[String]| {
+        let mut v = vec![first.to_string()];
+        v.extend(rest.iter().cloned());
+        v
+    };
+    f.families
+        .insert(FontFamily::Name("label".into()), with("barlow", &prop));
+    f.families
+        .insert(FontFamily::Name("num".into()), with("geist", &mono));
+    if ember {
+        f.families
+            .insert(FontFamily::Proportional, with("inter", &prop));
+    }
+    ctx.set_fonts(f);
 }
 
 /// linear mix of two colours (opaque result), `k` = 0 → a, 1 → b
@@ -318,6 +498,10 @@ pub fn round_mesh(mesh: &mut egui::Mesh, r: Rect, rad: [f32; 4], top: Color32, b
 /// top edge, shade over the bottom edge); `pressed` sinks it instead.
 pub fn raise(p: &egui::Painter, r: Rect, rad: f32, pressed: bool) {
     if !polished() || r.width() < 2.0 * rad + 2.0 {
+        return;
+    }
+    if th().ember && !pressed {
+        crate::ember::bevel(p, r, rad);
         return;
     }
     let x = (r.left() + rad)..=(r.right() - rad);
@@ -448,6 +632,10 @@ pub fn gradient(painter: &egui::Painter, r: Rect, top: Color32, bot: Color32) {
 /// overkill for an MVP, so we draw a flat rounded base + inner gradient band.
 pub fn cartridge(painter: &egui::Painter, r: Rect, spine: Color32) {
     let t = th();
+    if t.ember {
+        crate::ember::panel(painter, r, 7);
+        return;
+    }
     if polished() {
         painter.add(
             egui::Shadow {
@@ -552,6 +740,10 @@ fn mid(a: Color32, b: Color32) -> Color32 {
 
 pub fn crt(painter: &egui::Painter, r: Rect) {
     let t = th();
+    if t.ember {
+        crate::ember::well(painter, r, 5);
+        return;
+    }
     painter.rect_filled(r, CornerRadius::same(6), t.crt_bot);
     gradient(
         painter,

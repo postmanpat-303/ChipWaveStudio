@@ -1,4 +1,4 @@
-//! Hidden developer flag `--screenshot <out.png> [--view v] [--theme dark|amiga]
+//! Hidden developer flag `--screenshot <out.png> [--view v] [--theme slate|dark|amiga]
 //! [--size WxH]`: opens the real app window with the demo song, sets up one view,
 //! lets playback run for a moment, captures the window contents
 //! (egui ViewportCommand::Screenshot) to a PNG and exits. Used for the README
@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 64] = [
+pub const VIEWS: [&str; 65] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -90,6 +90,7 @@ pub const VIEWS: [&str; 64] = [
     "showcase-progress",
     "devices",
     "devices-drop",
+    "timeline-instrument",
     "trackpie",
     "trackpie-icons",
     "cliparranger",
@@ -288,7 +289,7 @@ impl App {
                     self.extra.full_height = true;
                 }
             }
-            "devices" | "devices-drop" => {
+            "devices" | "devices-drop" | "timeline-instrument" => {
                 // the Devices tab on the Supersaw Pad: EQ, its filter and
                 // chorus, a compressor and a reverb; Browser › Effects open
                 self.enter_timeline();
@@ -341,6 +342,11 @@ impl App {
                 self.extra.browser_open = std::env::var_os("CHIPWAVE_SHOT_NO_BROWSER").is_none();
                 self.br.filter.tab = crate::browser::Tab::Effects;
                 self.br_refresh();
+                if view == "timeline-instrument" {
+                    // the Instrument tab (simple card) on the same pad
+                    self.set_lower(1);
+                    self.extra.browser_open = false;
+                }
                 if view == "devices-drop" {
                     let it = self.br.items.iter().find(|i| i.key == "fx:Delay").cloned();
                     self.br.sel = it.as_ref().map(|i| i.key.clone());
@@ -887,13 +893,9 @@ impl App {
     fn shot_animate(&mut self, ctx: &egui::Context, view: &str, t: f32) {
         match view {
             "themes" => {
-                // Dark Circuit / Amiga every 2.5 s, over pattern, mixer and arranger
+                // Slate / Dark Circuit / Amiga every 2.5 s, over pattern, mixer and arranger
                 let step = (t / 2.5) as usize;
-                let want = if step.is_multiple_of(2) {
-                    theme::DARK
-                } else {
-                    theme::AMIGA
-                };
+                let want = theme::THEMES[step % theme::THEMES.len()];
                 if self.theme != want {
                     self.theme = want;
                     self.apply_theme(ctx);

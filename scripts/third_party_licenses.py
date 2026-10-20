@@ -424,3 +424,14 @@ if mpl:
               "https://github.com/pdeljanov/Symphonia. The licence text follows.\n\n")
     here = os.path.dirname(os.path.abspath(__file__))
     out.write(open(os.path.join(here, "licenses", "MPL-2.0.txt"), encoding="utf-8").read().strip() + "\n\n")
+
+# Fonts embedded in the app (Slate theme): SIL Open Font License 1.1
+repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+fonts = [("Inter (Regular) by The Inter Project Authors, https://github.com/rsms/inter", "Inter-OFL.txt"),
+         ("Barlow Semi Condensed (SemiBold) by The Barlow Project Authors, https://github.com/jpt/barlow", "Barlow-OFL.txt"),
+         ("Geist Mono (SemiBold) by The Geist Project Authors, https://github.com/vercel/geist-font", "GeistMono-OFL.txt")]
+for name, f in fonts:
+    out.write("=" * 60 + "\n")
+    out.write(f"Font: {name} - OFL-1.1\n")
+    out.write("=" * 60 + "\n")
+    out.write(open(os.path.join(repo, "LICENSES", f), encoding="utf-8").read().strip() + "\n\n")

@@ -283,7 +283,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             zoom: 1.0,
-            theme: crate::theme::DARK.name.into(),
+            theme: crate::theme::SLATE.name.into(),
             buffer: 0,
             maximized: true,
             window: None,
@@ -299,7 +299,9 @@ impl Settings {
             .iter()
             .copied()
             .find(|t| t.name == self.theme)
-            .unwrap_or(crate::theme::DARK)
+            // "Dark Circuit (default)" (the 0.2.4.1 default, renamed) and
+            // unknown names: the new default
+            .unwrap_or(crate::theme::SLATE)
     }
 }
 

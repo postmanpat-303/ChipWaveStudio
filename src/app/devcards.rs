@@ -60,6 +60,18 @@ pub(crate) fn more_params(d: &Device) -> Vec<usize> {
 /// the graph's background: a dark well with a faint grid
 pub(super) fn well(p: &egui::Painter, r: Rect) {
     let t = th();
+    if t.ember {
+        crate::ember::well(p, r, 4);
+        let g = Stroke::new(1.0, crate::ember::GRID);
+        for k in 1..4 {
+            p.vline(
+                r.left() + r.width() * k as f32 / 4.0,
+                r.y_range().shrink(1.0),
+                g,
+            );
+        }
+        return;
+    }
     p.rect_filled(
         r,
         4,
@@ -72,6 +84,11 @@ pub(super) fn well(p: &egui::Painter, r: Rect) {
 }
 
 fn line(p: &egui::Painter, pts: Vec<Pos2>, col: Color32) {
+    let t = th();
+    if t.ember && col == t.accent {
+        crate::ember::glow_line(p, &pts, 1.8, t.acc_hot);
+        return;
+    }
     p.add(egui::Shape::line(pts, Stroke::new(1.8, col)));
 }
 

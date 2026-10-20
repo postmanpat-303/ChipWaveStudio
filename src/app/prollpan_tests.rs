@@ -23,7 +23,7 @@ fn press_decision_click_hold_drag() {
 
 #[test]
 fn selected_notes_get_their_own_colour_in_both_themes_and_keep_velocity() {
-    for th in [crate::theme::DARK, crate::theme::AMIGA] {
+    for th in crate::theme::THEMES {
         let (loud, edge, ink) = sel_note_colours(&th, 1.0);
         let (quiet, _, _) = sel_note_colours(&th, 0.2);
         assert_ne!(loud, th.note, "{}", th.name);
