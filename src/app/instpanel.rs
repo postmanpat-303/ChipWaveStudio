@@ -260,6 +260,8 @@ impl App {
 
     /// 0 arranger, 1 instrument, 2 automation, 3 piano roll, 4 devices
     pub(super) fn set_lower(&mut self, m: u8) {
+        // the Order list is a Tracker view: hidden, the piano roll stands in
+        let m = if m == 0 && !self.tracker_on() { 3 } else { m };
         self.dock_arranger = true;
         self.extra.full_height = false;
         self.extra.lower_inst = m == 1;

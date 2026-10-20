@@ -221,7 +221,9 @@ impl App {
                 .resizable(false)
                 .fixed_size(egui::vec2(PROMPT_W, 0.0))
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-                .frame(egui::Frame::window(&ctx.global_style()).inner_margin(egui::Margin::same(20)))
+                .frame(
+                    egui::Frame::window(&ctx.global_style()).inner_margin(egui::Margin::same(20)),
+                )
                 .show(ctx, |ui| {
                     ui.set_width(PROMPT_W);
                     ui.label(egui::RichText::new(title).heading().strong().color(t.ink));

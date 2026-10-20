@@ -129,7 +129,7 @@ impl App {
     /// instruments, only Song / Master; tracker mode with four empty
     /// channels and no instruments. Tempo and metre are the defaults.
     pub(super) fn new_song(&mut self) {
-        let tl = self.extra.new_in_timeline;
+        let tl = self.extra.new_in_timeline || !self.tracker_on();
         self.with(|s| {
             s.engine.stop();
             s.song = if tl { Song::clean() } else { Song::empty() };
@@ -218,7 +218,7 @@ impl App {
         if self.shot.is_some() {
             return false;
         }
-        let on = self.extra.open_in_timeline;
+        let on = self.extra.open_in_timeline || !self.tracker_on();
         self.with(|s| {
             let done = convert_on_open(&mut s.song, on);
             if done {
