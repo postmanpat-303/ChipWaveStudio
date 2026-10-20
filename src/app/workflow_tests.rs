@@ -246,7 +246,7 @@ fn out_of_range_chord_roots_do_not_overflow() {
 
 // ------------------------------------------------------------ step 1: track pie submenus
 
-use super::trackpie::{hit, seg_angle, sub_items, sub_layout, sub_rect, Seg, SEGS};
+use super::trackpie::{hit, seg_angle, sub_items, sub_layout, sub_rect, PieAct, Seg, SEGS};
 
 fn pie_harness(at: Pos2) -> Harness<'static, App> {
     let mut h = harness_with({
@@ -586,4 +586,101 @@ fn split_cuts_the_clip_under_the_pointer_not_other_tracks_selection() {
     if let Some(o) = other {
         assert!(after.clips.contains(&o), "the other track's clip is whole");
     }
+}
+
+// ------------------------------------------------------- step 3: Add › Automation lane
+
+fn track_auto(h: &Harness<'static, App>, tr: usize) -> Vec<(String, bool)> {
+    h.state().with(|s| {
+        s.song.timeline.as_deref().unwrap().tracks[tr]
+            .auto
+            .iter()
+            .map(|l| (l.target.clone(), l.enabled))
+            .collect()
+    })
+}
+
+/// the pie's Add › Automation lane opens the track's lane menu; picking a
+/// parameter makes a lane on that track (one undo step), the menu shows /
+/// hides the lanes and switches them on and off, and it all saves
+#[test]
+fn add_automation_lane_from_the_track_pie() {
+    let tr = 1;
+    let mut h = pie_harness(Pos2::new(600.0, 400.0));
+    // the entry is in Add › and acts in timeline mode
+    let add = SEGS.iter().position(|s| *s == Seg::Add).unwrap();
+    let items = sub_items(SEGS[add], &h.state().pie_info(tr));
+    assert!(items.iter().any(|i| i.act == Some(PieAct::Automation)));
+    let before = track_auto(&h, tr);
+    let ctx = h.ctx.clone();
+    h.state_mut().pie_apply(tr, PieAct::Automation, &ctx);
+    frames(&mut h, 3);
+    assert!(h.state().track_auto.as_ref().is_some_and(|m| m.track == tr));
+    assert!(h
+        .query_by_label_contains(&format!("AUTOMATION · {:02}", tr + 1))
+        .is_some());
+    // pick track 2's instrument's resonance (the demo has its cutoff lane) in the picker submenu
+    h.get_by_label("New lane: pick a parameter ›").click();
+    frames(&mut h, 2);
+    h.get_all_by(|n| n.label().is_some_and(|l| l == "02 Gallop Bass - Resonance"))
+        .next()
+        .expect("a cutoff parameter")
+        .click();
+    frames(&mut h, 3);
+    let after = track_auto(&h, tr);
+    assert_eq!(after.len(), before.len() + 1, "one new lane on track {tr}");
+    assert_eq!(
+        after.last().unwrap().0,
+        crate::automation::Target::Resonance(1).id()
+    );
+    assert!(h.state().track_auto.is_none(), "picking closes the menu");
+    assert!(h.state().track_lanes_shown(tr), "a new lane shows itself");
+    // one undo step
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(track_auto(&h, tr), before);
+    h.state_mut().undo(true);
+    frames(&mut h, 2);
+    assert_eq!(track_auto(&h, tr), after);
+    // reopen: hide / show and switch the lane off
+    let ctx = h.ctx.clone();
+    h.state_mut().pie_apply(tr, PieAct::Automation, &ctx);
+    frames(&mut h, 3);
+    h.get_by_label("Hide this track's lanes").click();
+    frames(&mut h, 2);
+    assert!(!h.state().track_lanes_shown(tr));
+    h.get_by_label("Show this track's lanes").click();
+    frames(&mut h, 2);
+    assert!(h.state().track_lanes_shown(tr));
+    let label = h.state().track_lanes(tr).last().unwrap().1.clone();
+    h.get_by_label(&label).click();
+    frames(&mut h, 2);
+    assert!(!track_auto(&h, tr).last().unwrap().1, "the lane is off");
+    assert!(h.state().track_auto.is_some(), "toggles keep the menu open");
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    frames(&mut h, 2);
+    assert!(h.state().track_auto.is_none(), "Esc closes it");
+    // saves and loads
+    let p = std::env::temp_dir().join(format!("cw-wf-auto-{}.cwt", std::process::id()));
+    let song = h.state().with(|s| s.song.clone());
+    fileio::save_cwt(&song, &p).unwrap();
+    let back = fileio::load_cwt(&p).unwrap();
+    let _ = std::fs::remove_file(&p);
+    let lanes: Vec<(String, bool)> = back.timeline.as_deref().unwrap().tracks[tr]
+        .auto
+        .iter()
+        .map(|l| (l.target.clone(), l.enabled))
+        .collect();
+    assert_eq!(lanes, track_auto(&h, tr));
+}
+
+/// tracker mode: the entry says why and opens nothing
+#[test]
+fn automation_lane_menu_needs_timeline_mode() {
+    let mut h = harness_with(fileio::demo_song());
+    frames(&mut h, 2);
+    h.state_mut().track_auto_open(0, Pos2::new(100.0, 100.0));
+    frame(&mut h);
+    assert!(h.state().track_auto.is_none());
+    assert!(h.state().status.contains("timeline mode"));
 }

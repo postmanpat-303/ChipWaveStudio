@@ -127,6 +127,9 @@ pub(crate) enum PieAct {
     Move(MoveTo),
     Speed(u8),
     Delete,
+    /// the track's automation: its lanes (show / hide, on / off) and the
+    /// parameter picker for a new one (`App::track_auto_menu`)
+    Automation,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -277,6 +280,15 @@ pub(crate) fn sub_items(seg: Seg, i: &TrackInfo) -> Vec<Item> {
                         full
                     } else {
                         "a copy below: notes, clips, mixer strip, lanes"
+                    },
+                ),
+                text(
+                    "Automation lane ›",
+                    i.timeline.then_some(PieAct::Automation),
+                    if i.timeline {
+                        "automate a parameter on this track, or show / hide its lanes"
+                    } else {
+                        need_tl
                     },
                 ),
             ]
@@ -1403,6 +1415,12 @@ impl App {
                 self.status = format!("Track {:02} icon: {}", tr + 1, i.label());
             }
             PieAct::AddInstrument => self.track_add_with(tr + 1),
+            PieAct::Automation => {
+                let at = self.pie.as_ref().map_or(Pos2::new(200.0, 200.0), |p| {
+                    p.centre + egui::vec2(R_OUT + 12.0, -R_OUT)
+                });
+                self.track_auto_open(tr, at);
+            }
             PieAct::AddEmpty(above) => {
                 let at = if above { tr } else { tr + 1 };
                 if self.track_add(at) {

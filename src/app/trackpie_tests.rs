@@ -219,8 +219,14 @@ fn submenu_entries_map_to_real_actions() {
     assert!(acts.contains(&Some(PieAct::AddAudio)));
     assert!(acts.contains(&Some(PieAct::Duplicate)));
     assert!(acts.contains(&None), "FX track: coming soon");
+    assert!(
+        acts.contains(&Some(PieAct::Automation)),
+        "Automation lane ›"
+    );
     info.full = true;
-    assert!(sub_items(Seg::Add, &info).iter().all(|i| i.act.is_none()));
+    assert!(sub_items(Seg::Add, &info)
+        .iter()
+        .all(|i| i.act.is_none() || i.act == Some(PieAct::Automation)));
     info.timeline = false;
     assert!(sub_items(Seg::Icon, &info).iter().all(|i| i.act.is_none()));
     assert!(sub_items(Seg::Colour, &info)
