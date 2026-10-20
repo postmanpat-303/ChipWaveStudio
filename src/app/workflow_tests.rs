@@ -1112,3 +1112,104 @@ fn a_missing_track_instrument_is_explained_not_a_panic() {
     let hdr = h.state().channel_headers(4);
     assert_eq!(hdr.instruments[tr], "C8 (missing instrument)");
 }
+
+// ------------------------------------- step 3b: Change instrument… / Drum pattern…
+
+fn br_item(f: impl Fn(&crate::browser::Item) -> bool) -> crate::browser::Item {
+    crate::browser::builtin_items()
+        .into_iter()
+        .find(|i| f(i))
+        .expect("a built-in item")
+}
+
+/// Add › Change instrument… opens the Browser's Instruments (Favourites
+/// first when there are some) and the next pick replaces this track's
+/// instrument, one undo step; nothing else is aimed at the track after it
+#[test]
+fn change_instrument_from_the_track_pie() {
+    let mut h = pie_harness(Pos2::new(600.0, 400.0));
+    let tr = 1;
+    let add = SEGS.iter().position(|s| *s == Seg::Add).unwrap();
+    let items = sub_items(SEGS[add], &h.state().pie_info(tr));
+    assert!(items
+        .iter()
+        .any(|i| i.act == Some(PieAct::ChangeInstrument)));
+    assert!(items.iter().any(|i| i.act == Some(PieAct::DrumPattern)));
+    h.state_mut().extra.browser_favs = vec!["something".into()];
+    let ctx = h.ctx.clone();
+    h.state_mut().pie_apply(tr, PieAct::ChangeInstrument, &ctx);
+    frames(&mut h, 2);
+    {
+        let a = h.state();
+        assert!(a.extra.browser_open);
+        assert_eq!(a.br.filter.tab, crate::browser::Tab::Instruments);
+        assert_eq!(a.br.filter.loc, crate::browser::LocFilter::Favourites);
+        assert_eq!(a.br.track_target.map(|t| t.0), Some(tr));
+    }
+    h.state_mut().undo_reset();
+    let (n_inst, before) = h.state().with(|s| {
+        (
+            s.song.instruments.len(),
+            s.song.timeline.as_deref().unwrap().tracks[tr].instr,
+        )
+    });
+    let it = br_item(|i| matches!(i.src, crate::browser::Src::Gen(_)));
+    h.state_mut().br_load(&it, &ctx);
+    frames(&mut h, 2);
+    let after = h
+        .state()
+        .with(|s| s.song.timeline.as_deref().unwrap().tracks[tr].instr);
+    assert_eq!(
+        after as usize,
+        n_inst + 1,
+        "the new instrument on track {tr}"
+    );
+    assert!(h.state().br.track_target.is_none());
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(
+        h.state().with(|s| (
+            s.song.instruments.len(),
+            s.song.timeline.as_deref().unwrap().tracks[tr].instr
+        )),
+        (n_inst, before),
+        "one undo step"
+    );
+    // opening the Browser some other way forgets the target
+    let ctx = h.ctx.clone();
+    h.state_mut().pie_apply(tr, PieAct::ChangeInstrument, &ctx);
+    h.state_mut()
+        .open_browser_tab(crate::browser::Tab::Instruments);
+    assert!(h.state().br.track_target.is_none());
+}
+
+/// Add › Drum pattern… opens the Drum Patterns tab; the pick lands on
+/// that track (not a new one)
+#[test]
+fn drum_pattern_from_the_track_pie_goes_on_that_track() {
+    let mut h = pie_harness(Pos2::new(600.0, 400.0));
+    let tr = 0;
+    let ctx = h.ctx.clone();
+    h.state_mut().pie_apply(tr, PieAct::DrumPattern, &ctx);
+    frames(&mut h, 2);
+    assert_eq!(h.state().br.filter.tab, crate::browser::Tab::Patterns);
+    let n = h.state().with(|s| s.song.channels);
+    let clips = |h: &Harness<'static, App>| {
+        h.state().with(|s| {
+            s.song
+                .timeline
+                .as_deref()
+                .unwrap()
+                .clips
+                .iter()
+                .filter(|c| c.track as usize == tr)
+                .count()
+        })
+    };
+    let before = clips(&h);
+    let it = br_item(|i| matches!(i.src, crate::browser::Src::Pattern(_)));
+    h.state_mut().br_load(&it, &ctx);
+    frames(&mut h, 3);
+    assert_eq!(h.state().with(|s| s.song.channels), n, "no new track");
+    assert!(clips(&h) > before, "a pattern clip on track {tr}");
+}

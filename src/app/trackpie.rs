@@ -130,6 +130,11 @@ pub(crate) enum PieAct {
     /// the track's automation: its lanes (show / hide, on / off) and the
     /// parameter picker for a new one (`App::track_auto_menu`)
     Automation,
+    /// the Browser's Instruments (Favourites first when there are any):
+    /// the next pick replaces this track's instrument
+    ChangeInstrument,
+    /// the Browser's Drum Patterns tab: the next pick goes on this track
+    DrumPattern,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -241,6 +246,20 @@ pub(crate) fn sub_items(seg: Seg, i: &TrackInfo) -> Vec<Item> {
                         full
                     } else {
                         "pick an instrument in the Browser for a new track below"
+                    },
+                ),
+                text(
+                    "Change instrument…",
+                    Some(PieAct::ChangeInstrument),
+                    "the Browser (your Favourites first): the instrument you pick replaces this track's",
+                ),
+                text(
+                    "Drum pattern…",
+                    i.timeline.then_some(PieAct::DrumPattern),
+                    if i.timeline {
+                        "the Browser's Drum Patterns: the one you pick goes on this track at the play marker"
+                    } else {
+                        need_tl
                     },
                 ),
                 text(
@@ -1415,6 +1434,8 @@ impl App {
                 self.status = format!("Track {:02} icon: {}", tr + 1, i.label());
             }
             PieAct::AddInstrument => self.track_add_with(tr + 1),
+            PieAct::ChangeInstrument => self.track_change_instrument(tr),
+            PieAct::DrumPattern => self.track_drum_pattern(tr),
             PieAct::Automation => {
                 let at = self.pie.as_ref().map_or(Pos2::new(200.0, 200.0), |p| {
                     p.centre + egui::vec2(R_OUT + 12.0, -R_OUT)
