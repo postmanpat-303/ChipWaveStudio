@@ -229,3 +229,55 @@ fn presets_cover_every_library_kit_and_finish() {
     }
     assert!(preset("psy kit").is_some());
 }
+
+#[test]
+fn a_drum_kit_song_and_cwi_round_trip_and_need_reader_5() {
+    use crate::model::{Instrument, InstrumentKind};
+    let dir = std::env::temp_dir().join(format!("cw_drumkit_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = |p: &std::path::Path| {
+        let mut z = zip::ZipArchive::new(std::fs::File::open(p).unwrap()).unwrap();
+        let mut f = z.by_name("manifest.toml").unwrap();
+        let mut s = String::new();
+        std::io::Read::read_to_string(&mut f, &mut s).unwrap();
+        s
+    };
+    let mut song = crate::fileio::demo_song();
+    let plain = dir.join("plain.cwt");
+    crate::fileio::save_cwt(&song, &plain).unwrap();
+    assert!(
+        manifest(&plain).contains("min_reader_version = 1"),
+        "no kit: as before"
+    );
+    let mut g = preset("909 Kit").unwrap();
+    if let GenEngine::Drums(k) = &mut g.engine {
+        k.pads[2].pan = -0.4;
+        k.pads[3].mute = true;
+        k.add_pad(Some(0));
+    }
+    let inst = Instrument {
+        name: "909 Kit".into(),
+        volume: 0.8,
+        transpose: 0,
+        fx: vec![],
+        kind: InstrumentKind::Gen(g),
+    };
+    song.instruments.push(inst.clone());
+    let p = dir.join("kit.cwt");
+    crate::fileio::save_cwt(&song, &p).unwrap();
+    assert!(manifest(&p).contains("min_reader_version = 5"));
+    let back = crate::fileio::load_cwt(&p).unwrap();
+    assert_eq!(back.instruments.last(), Some(&inst));
+    // .cwi
+    let ip = dir.join("kit.cwi");
+    crate::instfile::save_cwi(&inst, &ip).unwrap();
+    assert_eq!(crate::instfile::load_cwi(&ip).unwrap(), inst);
+    // the text form: patch = "drumkit:<kit>"
+    let t = "[song]\ntitle = \"t\"\n[[instrument]]\nname = \"Kit\"\npatch = \"drumkit:Psy Kit\"\n";
+    let s = crate::fileio::song_from_text(t).unwrap();
+    let InstrumentKind::Gen(g) = &s.instruments[0].kind else {
+        panic!()
+    };
+    assert!(matches!(&g.engine, GenEngine::Drums(k) if k.pads.len() == DEFAULT_PADS));
+    std::fs::remove_dir_all(&dir).ok();
+}
