@@ -35,12 +35,12 @@ The toolbar shows which mode the song is in:
 | Make unique | **Ctrl+Shift+D**: the clip gets its own copy of its block ("Groove copy"), so editing it no longer changes the others |
 | Resize / loop | Drag a clip's **right edge**. Past the end of its block the block repeats (notches show each repeat) |
 | Trim | Drag the **left edge**: hides (or, on a looping clip, reveals) the start, while the content stays where it is |
-| Split | **S** splits the clips under the mouse (or the selected clips at the play marker) at the snapped position |
+| Split | **S** (or the clip menu's **Split…**) shows the split preview: an amber line follows the mouse, snapped to the grid (Shift: off the grid), with its bar.beat.tick, and the clip it would cut is outlined. **Click** cuts there (one undo step); **Esc** or right-click cancels. When the clip under the mouse is selected, every selected clip the line crosses is cut. |
 | Glue | **Ctrl+J**: the selected clips of one track become one clip of a new block "Glue NN" that plays exactly what they played (gaps become empty rows, up to 256 rows) |
 | Mute | **M** mutes or unmutes the selected clips (drawn dim, marked *muted*) |
 | Delete | **Del** or **Backspace** (the blocks stay in the song) |
 | New clip | **Double-click** empty space on a track: a new empty 64-row block on that bar, opened in the Tracker on that channel |
-| Clip menu | **Right-click** a clip: open, split here, duplicate, make unique, glue, mute, delete, loop around the selection, add marker |
+| Clip menu | **Right-click** a clip: open, split…, duplicate, make unique, glue, mute, delete, loop around the selection, add marker |
 | Track speed | **Right-click** a track header: the ticks per row for this track's effects (slides, `0D` volume slides, filter slides), or *Follow the song*. A track with its own speed shows "speed N" in its header |
 
 Each gesture is one undo step (a drag records when you let go). The status line shows the position while dragging.

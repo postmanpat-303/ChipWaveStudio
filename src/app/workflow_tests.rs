@@ -422,3 +422,168 @@ fn submenu_switching_and_closing_stay_predictable() {
     frames(&mut h, 10);
     assert!(h.state().pie.is_none(), "a click outside closes it");
 }
+
+// ------------------------------------------------------------ step 2: split preview
+
+fn tl_now(h: &Harness<'static, App>) -> tl::Timeline {
+    h.state()
+        .with(|s| s.song.timeline.as_deref().cloned())
+        .expect("timeline mode")
+}
+
+/// a clip on screen at least 2 bars long; the timeline at 40 px a beat,
+/// snapping to beats
+fn split_setup() -> (Harness<'static, App>, tl::Clip) {
+    let mut h = tl_setup();
+    h.state_mut().tlv.snap = super::timeline::Snap::Beat;
+    h.state_mut().tlv.sel = None;
+    h.state_mut().tlv.sels.clear();
+    frames(&mut h, 2);
+    let lanes = h.state().tlv.lanes;
+    let cl = tl_now(&h)
+        .clips
+        .iter()
+        .find(|c| {
+            c.len >= 8 * tl::PPQ
+                && h.state().tlv.clip_rect(c.id).is_some_and(|r| {
+                    lanes.contains(r.left_center() + egui::vec2(4.0, 0.0))
+                        && h.state().tlv.x_of(c.start + 8 * tl::PPQ) < lanes.right() - 20.0
+                })
+        })
+        .cloned()
+        .expect("a 2-bar clip on screen");
+    (h, cl)
+}
+
+#[test]
+fn s_shows_a_snapped_split_line_and_only_the_click_splits() {
+    let (mut h, cl) = split_setup();
+    let before = tl_now(&h);
+    let r = h.state().tlv.clip_rect(cl.id).unwrap();
+    // a beat and a bit into the clip: the line snaps to the beat
+    let want = cl.start + 5 * tl::PPQ;
+    let x = h.state().tlv.x_of(want) + 4.0;
+    let p = Pos2::new(x, r.center().y);
+    mv(&mut h, p);
+    key(&mut h, Key::S, egui::Modifiers::NONE);
+    assert!(h.state().tlv.split_arm, "S arms the split preview");
+    mv(&mut h, p + egui::vec2(1.0, 0.0));
+    assert_eq!(
+        h.state().tlv.split_at,
+        Some((cl.id, want)),
+        "snapped to the beat"
+    );
+    assert_eq!(
+        tl_now(&h).clips.len(),
+        before.clips.len(),
+        "nothing split yet"
+    );
+    // the preview follows the pointer
+    let x2 = h.state().tlv.x_of(cl.start + 3 * tl::PPQ) + 2.0;
+    mv(&mut h, Pos2::new(x2, r.center().y));
+    assert_eq!(
+        h.state().tlv.split_at,
+        Some((cl.id, cl.start + 3 * tl::PPQ))
+    );
+    // Esc cancels: the song is unchanged
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    assert!(!h.state().tlv.split_arm);
+    assert_eq!(tl_now(&h).clips, before.clips);
+    // again, and the click commits exactly where the line was
+    mv(&mut h, p);
+    key(&mut h, Key::S, egui::Modifiers::NONE);
+    mv(&mut h, p + egui::vec2(1.0, 0.0));
+    let shown = h.state().tlv.split_at;
+    click_at(&mut h, p + egui::vec2(1.0, 0.0));
+    let after = tl_now(&h);
+    assert!(!h.state().tlv.split_arm, "the click ends it");
+    assert_eq!(after.clips.len(), before.clips.len() + 1);
+    let left = after.clips.iter().find(|c| c.id == cl.id).unwrap();
+    let right = after
+        .clips
+        .iter()
+        .find(|c| !before.clips.iter().any(|b| b.id == c.id))
+        .unwrap();
+    assert_eq!(shown, Some((cl.id, want)));
+    assert_eq!((left.start, left.end()), (cl.start, want));
+    assert_eq!((right.start, right.end()), (want, cl.end()));
+    assert_eq!(
+        (right.kind.clone(), right.track, right.offset),
+        (cl.kind.clone(), cl.track, cl.offset + (want - cl.start)),
+        "same data, track and timing"
+    );
+    // other clips are untouched
+    for b in before.clips.iter().filter(|b| b.id != cl.id) {
+        assert!(after.clips.contains(b));
+    }
+    // one undo step back, redo again
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(tl_now(&h).clips, before.clips, "undo");
+    h.state_mut().undo(true);
+    frames(&mut h, 2);
+    assert_eq!(tl_now(&h).clips.len(), before.clips.len() + 1, "redo");
+}
+
+#[test]
+fn split_from_the_menu_waits_for_the_click_and_right_click_cancels() {
+    let (mut h, cl) = split_setup();
+    let before = tl_now(&h);
+    let r = h.state().tlv.clip_rect(cl.id).unwrap();
+    let p = Pos2::new(
+        h.state().tlv.x_of(cl.start + 4 * tl::PPQ) + 3.0,
+        r.center().y,
+    );
+    click_at(&mut h, p);
+    assert_eq!(h.state().tlv.sel, Some(cl.id));
+    right_click(&mut h, p);
+    frame(&mut h);
+    h.query_by_label_contains("Split…")
+        .expect("the clip menu offers Split…")
+        .click();
+    frames(&mut h, 3);
+    assert!(h.state().tlv.split_arm, "the menu arms the preview");
+    assert_eq!(
+        tl_now(&h).clips,
+        before.clips,
+        "no split at the menu's spot"
+    );
+    // a click outside every clip does not split, the preview stays
+    let lanes = h.state().tlv.lanes;
+    click_at(&mut h, Pos2::new(lanes.right() - 5.0, lanes.bottom() - 5.0));
+    assert!(h.state().tlv.split_arm);
+    assert_eq!(tl_now(&h).clips, before.clips);
+    // right-click cancels (and opens no menu)
+    mv(&mut h, p);
+    right_click(&mut h, p);
+    assert!(!h.state().tlv.split_arm);
+    assert_eq!(tl_now(&h).clips, before.clips);
+}
+
+/// a selected clip on another track is not cut by a split of this one
+#[test]
+fn split_cuts_the_clip_under_the_pointer_not_other_tracks_selection() {
+    let (mut h, cl) = split_setup();
+    let before = tl_now(&h);
+    let at = cl.start + 4 * tl::PPQ;
+    let other = before
+        .clips
+        .iter()
+        .find(|c| c.track != cl.track && c.start < at && at < c.end())
+        .cloned();
+    if let Some(o) = &other {
+        h.state_mut().tlv.sel = Some(o.id);
+        h.state_mut().tlv.sels = vec![o.id];
+    }
+    let r = h.state().tlv.clip_rect(cl.id).unwrap();
+    let p = Pos2::new(h.state().tlv.x_of(at) + 3.0, r.center().y);
+    mv(&mut h, p);
+    key(&mut h, Key::S, egui::Modifiers::NONE);
+    mv(&mut h, p + egui::vec2(1.0, 0.0));
+    click_at(&mut h, p + egui::vec2(1.0, 0.0));
+    let after = tl_now(&h);
+    assert_eq!(after.clips.len(), before.clips.len() + 1, "one clip cut");
+    if let Some(o) = other {
+        assert!(after.clips.contains(&o), "the other track's clip is whole");
+    }
+}

@@ -144,6 +144,14 @@ impl App {
             self.pat_place_now(pat as usize, track, at);
             return;
         }
+        if op == TlOp::SplitArm {
+            self.tlv.split_arm = true;
+            self.tlv.split_at = None;
+            self.status = "Split: point where to cut (the amber line, snapped to the grid; \
+                           Shift: off the grid) and click · Esc cancels"
+                .into();
+            return;
+        }
         let sels = self.tlv.sels.clone();
         let needs_sel = matches!(
             op,
@@ -159,7 +167,6 @@ impl App {
                 "Select a clip first (click it; Ctrl-click or drag a box for more)".into();
             return;
         }
-        let hover = self.tlv.hover_at;
         let mut new_sel: Option<Vec<u32>> = None;
         let mut open: Option<(usize, usize)> = None;
         let mut rename: Option<usize> = None;
@@ -176,34 +183,27 @@ impl App {
         let msg: String = self.with(|s| {
             let song = &mut s.song;
             let msg = match op {
-                TlOp::Split(at) => {
+                TlOp::SplitClip(id, at) => {
                     let t = song.timeline.as_deref_mut().unwrap();
-                    let inside = |c: &tl::Clip| c.start < at && at < c.end();
-                    let mut ids: Vec<u32> = t
-                        .clips
-                        .iter()
-                        .filter(|c| sels.contains(&c.id) && inside(c))
-                        .map(|c| c.id)
-                        .collect();
-                    if ids.is_empty() {
-                        // nothing selected there: the clip under the mouse
-                        if let Some((tr, _)) = hover {
-                            ids = t
-                                .clips
-                                .iter()
-                                .filter(|c| c.track as usize == tr && inside(c))
-                                .map(|c| c.id)
-                                .collect();
-                        }
-                    }
-                    let n = ids.iter().filter(|id| tl::split(t, **id, at).is_some()).count();
                     let p = t.bar_pos(at);
+                    // the clip under the pointer; when it is selected, every
+                    // selected clip the line crosses (the preview outlines them)
+                    let ids = split_targets(t, &sels, id, at);
+                    let new: Vec<u32> = ids.iter().filter_map(|&k| tl::split(t, k, at)).collect();
+                    let n = new.len();
                     if n == 0 {
-                        "Nothing to split here: put the mouse (or the play marker) inside a clip".into()
+                        "Nothing to split there: the point must be inside the clip".into()
                     } else {
-                        format!("Split {n} clip{} at bar {}.{}", plural(n), p.bar, p.beat)
+                        format!(
+                            "Split {n} clip{} at {}.{}.{:03} (Ctrl+Z undoes)",
+                            plural(n),
+                            p.bar,
+                            p.beat,
+                            p.tick
+                        )
                     }
                 }
+                TlOp::SplitArm => String::new(),
                 TlOp::Duplicate => {
                     let t = song.timeline.as_deref_mut().unwrap();
                     let ids = tl::duplicate(t, &sels);
@@ -658,5 +658,19 @@ fn describe(t: &tl::Timeline, e: DragEdit) -> String {
                 if len == 0 { " (off)" } else { "" }
             )
         }
+    }
+}
+
+/// the clips a split of `id` at `at` cuts: just `id`, or every selected
+/// clip the line crosses when `id` is one of the selection
+pub(crate) fn split_targets(t: &tl::Timeline, sels: &[u32], id: u32, at: Tick) -> Vec<u32> {
+    if sels.contains(&id) {
+        t.clips
+            .iter()
+            .filter(|c| sels.contains(&c.id) && c.start < at && at < c.end())
+            .map(|c| c.id)
+            .collect()
+    } else {
+        vec![id]
     }
 }
