@@ -1546,3 +1546,107 @@ fn every_chord_pie_entry_on_a_new_clips_chord() {
         }
     }
 }
+
+// ------------------------------------------- Settings scale slider (20 Oct)
+
+/// dragging the Settings scale slider shows the pending scale and the
+/// workspace size but rescales nothing until release; Reset to 100 % and
+/// Ctrl+= / Ctrl+- / Ctrl+0 still work
+#[test]
+fn scale_slider_applies_on_release_only() {
+    use egui::accesskit::Role;
+    let mut h = harness_with(fileio::demo_song());
+    h.state_mut().view = View::Settings;
+    h.state_mut().set_open = Some(1);
+    frames(&mut h, 4);
+    let ppp0 = h.ctx.pixels_per_point();
+    assert!((h.state().zoom - 1.0).abs() < 0.001);
+    assert!(h.state().max_zoom >= 1.5, "max {}", h.state().max_zoom);
+    let reset = h.get_by_label("Reset to 100 %").rect();
+    let slider = h
+        .query_all_by(|n| n.role() == Role::Slider)
+        .map(|n| n.rect())
+        .filter(|r| (r.center().y - reset.center().y).abs() < 12.0 && r.right() <= reset.left())
+        .last()
+        .expect("the scale slider");
+    let y = slider.center().y as f32;
+    let from = Pos2::new(slider.left() as f32 + 4.0, y);
+    // part way up (at the top end the Reset button scrolls out of the
+    // harness window)
+    let to = Pos2::new((slider.left() + (slider.width()) * 0.7) as f32, y);
+    let ev = |h: &mut Harness<'static, App>, e: egui::Event| {
+        h.input_mut().events.push(e);
+        frame(h);
+    };
+    ev(&mut h, egui::Event::PointerMoved(from));
+    ev(
+        &mut h,
+        egui::Event::PointerButton {
+            pos: from,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        },
+    );
+    for k in 1..=8 {
+        let p = from + (to - from) * (k as f32 / 8.0);
+        ev(&mut h, egui::Event::PointerMoved(p));
+        assert_eq!(h.ctx.pixels_per_point(), ppp0, "no rescale mid-drag");
+        assert!((h.state().zoom - 1.0).abs() < 0.001);
+    }
+    let pending = h.state().zoom_drag.expect("a pending scale");
+    assert!(pending > 1.0, "dragged up to {pending}");
+    assert!(
+        h.query_all_by_label_contains("at this scale")
+            .next()
+            .is_some(),
+        "the pending scale and workspace size show"
+    );
+    let shown = format!("{:.0} %", pending * 100.0);
+    assert!(
+        h.query_all_by_label_contains(&shown).next().is_some(),
+        "{shown}"
+    );
+    ev(
+        &mut h,
+        egui::Event::PointerButton {
+            pos: to,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        },
+    );
+    frames(&mut h, 3);
+    assert!(h.state().zoom_drag.is_none());
+    assert!(
+        (h.state().zoom - pending).abs() < 0.001,
+        "the release applies it"
+    );
+    assert!(h.ctx.pixels_per_point() > ppp0 + 0.1, "rescaled on release");
+    // Reset to 100 %
+    frames(&mut h, 2);
+    let c = h.get_by_label("Reset to 100 %").rect().center();
+    click_at(&mut h, Pos2::new(c.x as f32, c.y as f32));
+    frames(&mut h, 3);
+    assert!((h.state().zoom - 1.0).abs() < 0.001);
+    assert!((h.ctx.pixels_per_point() - ppp0).abs() < 0.001);
+    // the keyboard
+    key(&mut h, egui::Key::Equals, egui::Modifiers::COMMAND);
+    frames(&mut h, 2);
+    assert!(
+        (h.state().zoom - 1.25).abs() < 0.001,
+        "Ctrl+= {}",
+        h.state().zoom
+    );
+    key(&mut h, egui::Key::Minus, egui::Modifiers::COMMAND);
+    key(&mut h, egui::Key::Minus, egui::Modifiers::COMMAND);
+    frames(&mut h, 2);
+    assert!(
+        (h.state().zoom - 0.75).abs() < 0.001,
+        "Ctrl+- {}",
+        h.state().zoom
+    );
+    key(&mut h, egui::Key::Num0, egui::Modifiers::COMMAND);
+    frames(&mut h, 2);
+    assert!((h.state().zoom - 1.0).abs() < 0.001, "Ctrl+0");
+}
