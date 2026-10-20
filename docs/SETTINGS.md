@@ -13,7 +13,7 @@ Six cards in a grid (3×2, reflowing to 2 or 1 columns on narrow screens, [UI_SC
 |---|---|---|
 | **Audio** | Device, sample rate / buffer, latency, running status | §2.1 |
 | **MIDI** | Input(s), clock in/out, number of learned mappings, ports status | §2.2 |
-| **Look** | Theme (Workbench Gradient / Wave Neon), scale, font, motion | §2.3 |
+| **Look** | Theme (Dark Circuit, the default / Amiga (Workbench Gradient)), scale, font, motion | §2.3 |
 | **Keys** | Keymap preset, piano layout and base octave, overrides, conflicts | §2.4 |
 | **Plugins** | Found / verified / failed, scan folders | §2.5 → [PLUGIN_MANAGER.md](PLUGIN_MANAGER.md) |
 | **Files and Safety** | Autosave interval, backups, last save, recovery status | §2.6 → [SAFETY.md](SAFETY.md) |

@@ -48,6 +48,19 @@ Each gesture is one undo step (a drag records when you let go). The status line 
 ### Snap
 The **snap** menu in the toolbar: **Auto** (bar, beat or row, whichever is at least about 10 pixels wide at this zoom), **Bar**, **Beat** or **Row**. Hold **Shift** while dragging for rows. The ruler snaps to the same grid (**Alt** = exact row).
 
+### Shift and Alt while dragging
+What the modifiers do differs a little between the things you can drag (this is how 0.2.4.1 behaves; it is listed here so nothing is a surprise):
+
+| Dragging | Plain drag | Shift | Alt |
+|---|---|---|---|
+| Clips (move, edges) | the snap grid | rows | Alt-drag copies |
+| Ruler (play marker) | the snap grid | Shift-drag sets the loop region | the exact row |
+| Fade handles (audio clips) | free | rows | – |
+| Automation points | rows | free | Alt-drag a segment bends it |
+| Piano-roll notes | the roll's snap menu | Shift+click / Shift-drag add to the selection | – |
+
+Starting a drag with **Ctrl** or **Shift** held adds to the selection (clicks and box selection).
+
 ### Loop region and markers
 - **Shift-drag the ruler** to set the loop region, or press **Ctrl+L** to loop around the selected clips. **L** or the **Loop** toggle switches it on and off. While it is on, playback wraps from its end to its start, and the region is shaded.
 - **+ Marker** (or **Shift+M**) adds a marker at the play marker and asks for its name. Right-click the marker strip to add one under the mouse. Click a marker to jump there. Drag it to move it, double-click it to rename it, and right-click it to rename or delete it.
@@ -137,7 +150,7 @@ In timeline mode every track can show **automation lanes (M5)** under its header
 
 | Do | How |
 |---|---|
-| Open the view | **Ctrl+T**, the **Timeline** tab, or View › Timeline. **Ctrl+Tab** cycles Order list → Timeline → Mixer |
+| Open the view | **Ctrl+T**, the **Timeline** tab, or View › Timeline. **Ctrl+Tab** cycles Timeline → Mixer → FX → Sample (with Settings › Show Tracker on: Tracker → Order list → Timeline → Mixer → FX → Sample) |
 | Zoom | **Ctrl+wheel** zooms around the mouse. **+** / **−** (keys or toolbar). **Fit** or **F** shows the whole song |
 | Scroll | Wheel scrolls tracks. **Shift+wheel** scrolls time (the wheel scrolls time too when every track fits). Drag the **mini-map** strip under the clips, or the scroll bar on the right. **Home** / **End** jump to the start / end, and **←** / **→** scroll a bar |
 | Track height | **Alt+wheel** |
