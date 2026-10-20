@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 71] = [
+pub const VIEWS: [&str; 72] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -78,6 +78,7 @@ pub const VIEWS: [&str; 71] = [
     "grid",
     "grid-fx",
     "browser",
+    "browser-instruments",
     "browser-samples",
     "browser-drop",
     "browser-patterns",
@@ -166,6 +167,18 @@ impl App {
                     }
                 }
                 self.br.sel = keys.first().cloned();
+            }
+            "browser-instruments" => {
+                // Browser › ChipWave Instruments; FM-4 just dropped on track 3:
+                // selected, its editor open under the Timeline
+                self.enter_timeline();
+                self.default_layout();
+                self.br.filter.tab = crate::browser::Tab::Instruments;
+                self.br.filter.category = Some(crate::browser::TOOLS_CAT.into());
+                self.br_refresh();
+                self.track_new_instrument(2, super::trackpie::Builtin::Fm4);
+                self.br.sel = Some("tool:FM-4".into());
+                self.dirty = false;
             }
             "browser-samples" => {
                 self.view = View::Timeline;
