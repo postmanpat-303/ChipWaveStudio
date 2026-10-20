@@ -48,6 +48,19 @@ Each gesture is one undo step (a drag records when you let go). The status line 
 ### Snap
 The **snap** menu in the toolbar: **Auto** (bar, beat or row, whichever is at least about 10 pixels wide at this zoom), **Bar**, **Beat** or **Row**. Hold **Shift** while dragging for rows. The ruler snaps to the same grid (**Alt** = exact row).
 
+### Shift and Alt while dragging
+What the modifiers do differs a little between the things you can drag (this is how 0.2.4.1 behaves; it is listed here so nothing is a surprise):
+
+| Dragging | Plain drag | Shift | Alt |
+|---|---|---|---|
+| Clips (move, edges) | the snap grid | rows | Alt-drag copies |
+| Ruler (play marker) | the snap grid | Shift-drag sets the loop region | the exact row |
+| Fade handles (audio clips) | free | rows | – |
+| Automation points | rows | free | Alt-drag a segment bends it |
+| Piano-roll notes | the roll's snap menu | Shift+click / Shift-drag add to the selection | – |
+
+Starting a drag with **Ctrl** or **Shift** held adds to the selection (clicks and box selection).
+
 ### Loop region and markers
 - **Shift-drag the ruler** to set the loop region, or press **Ctrl+L** to loop around the selected clips. **L** or the **Loop** toggle switches it on and off. While it is on, playback wraps from its end to its start, and the region is shaded.
 - **+ Marker** (or **Shift+M**) adds a marker at the play marker and asks for its name. Right-click the marker strip to add one under the mouse. Click a marker to jump there. Drag it to move it, double-click it to rename it, and right-click it to rename or delete it.
@@ -68,7 +81,7 @@ The lower panel has a **Piano roll** tab (next to Order list / Instrument / Auto
 **Toolbar and editing (Unreleased, all targets):** one row, left to right:
 - the clip / block **chip** (track colour) and **ALL** (select every note, Ctrl+A);
 - the tools: **Pointer** (key **1**, the default: click empty space draws a note, drag a note moves it, its right edge resizes it), **Select** (**2**: drag a box on empty space; never draws) and **Pencil** (**3**: click draws, dragging paints a run of notes, each the remembered length, at the mouse's pitch);
-- note clips: the **snap** menu (Bar, Beat, 1/8, 1/16, 1/32, 1/16T, **Smart** = follows the zoom, off), **Quantize** (Q);
+- note clips: the **snap** menu (Bar, Beat, 1/8, 1/16, 1/32, 1/16T, **Auto** = follows the zoom, like the Timeline's Auto, off), **Quantize** (Q);
 - **Fit** (F: zoom to the notes); **Scale** turns the song key on or off (its notes are highlighted; the same key as the Chords window) with the **key** and **scale** menus;
 - **Len**: the length the next click draws (also a menu).
 - note clips: **Chords** shows the **chord lane** above the notes, **Generate** opens *Generate chord progression*, and **Stamp** picks the chord the click draws (see [CHORDS.md › Chord lane](CHORDS.md#chord-lane-in-the-piano-roll-unreleased)).
@@ -94,7 +107,7 @@ The lower panel has a **Piano roll** tab (next to Order list / Instrument / Auto
 
 **Note clips (M3b)** are polyphonic, with free timing:
 - To make one: right-click empty space › **New note clip here**, or **Shift+double-click** empty space. Double-click or **Enter** on a note clip opens it in the roll; double-click opens Tracker clips there too (see [Finding your way around](#finding-your-way-around)).
-- The **snap** menu sets the grid (Bar, Beat, 1/8 … 1/32, 1/16T, Smart, off), and **Q** / **Quantize** snaps the selection (or every note).
+- The **snap** menu sets the grid (Bar, Beat, 1/8 … 1/32, 1/16T, Auto, off), and **Q** / **Quantize** snaps the selection (or every note).
 - **Chord** draws the song key's chord on the clicked scale degree (set the key in the Chords window). Notes in the song key are highlighted.
 - Dragging the edge of a note resizes the whole selection.
 - Note clips loop, trim, split, duplicate (linked) and **make unique** like Tracker clips. They play **on top of** Tracker clips on the same track; they don't replace them.
@@ -124,9 +137,9 @@ Audio files play on the timeline as **audio clips (M4)**, on any track, mixed in
 In timeline mode every track can show **automation lanes (M5)** under its header.
 
 - **Open and close:** click the **A** button on a track header (sage when open). The lanes fold away with it; which tracks are open is saved with the song but isn't part of undo. In tracker mode the button offers to switch to timeline mode.
-- **Add a lane:** **+ lane** under the open track lists everything that can be automated: the track's mixer channel (volume, pan, sends), instrument parameters, generator knobs, FX devices (built-in and **plugin FX** parameters), return buses, the master and **modulation depths** (route amounts). Tempo stays a song lane. **pin song lane** moves an existing song lane (from the lower panel's Automation tab) onto the track; right-click its lane header › **Move to the song lanes (unpin)** moves it back.
+- **Add a lane:** **+ lane** under the open track lists everything that can be automated: the track's mixer channel (volume, pan, sends), instrument parameters, generator knobs, FX devices (built-in and **plugin FX** parameters), return buses, the master and **modulation depths** (route amounts). Tempo stays a song lane. In timeline mode every lane lives on a track or the Song / Master row: song lanes are moved there when the song switches to timeline mode (design A), and **pin song lane** pins any that are left over. (There is no "unpin": a song lane would be pinned again at once, so 0.2.4.1's **Move to the song lanes (unpin)** item was removed.)
 - **Drawing:** click to add a point; drag a point to move it (snaps to rows, **Shift** for free movement); drag in empty space to add a point and keep dragging it; **Ctrl-drag** draws freehand (pencil); **Alt-drag** a segment **bends** it into a curve; double-click a point to delete it. Right-click a point for its shape (linear, step, smooth), **Straighten (no curve)**, or **Delete point**.
-- **Lane header:** the dot turns the lane on or off, **×** removes it (Ctrl+Z brings it back), right-click to clear, **Move to the song lanes (unpin)** or remove.
+- **Lane header:** the dot turns the lane on or off, **×** removes it (Ctrl+Z brings it back), right-click to clear or remove.
 - **Clip automation:** right-click a lane inside a clip › **Add clip automation to this clip** gives that clip its own copy of the lane, drawn as a box over the clip. Its points belong to the clip's source, so they **move, loop, trim and split with the clip** like its notes, and linked copies of a clip each keep their own lane. Clear or remove it from the same menu.
 - **Innermost lane wins:** Absolute clip lanes replace the track lane inside the clip; **Relative +** / **Relative ×** combine with it (design A). Song lanes migrate onto tracks (and a **Song / Master** row) when entering timeline mode. Muted clips and switched-off lanes don't count. Where two Absolute clip lanes overlap, the one that starts later wins. **Glue** merges clip automation onto the glued clip.
 - **Playback and export:** lanes play live (edits are heard at once, without restarting notes or audio) and in WAV/MP3 export, sample for sample the same.
@@ -137,7 +150,7 @@ In timeline mode every track can show **automation lanes (M5)** under its header
 
 | Do | How |
 |---|---|
-| Open the view | **Ctrl+T**, the **Timeline** tab, or View › Timeline. **Ctrl+Tab** cycles Order list → Timeline → Mixer |
+| Open the view | **Ctrl+T**, the **Timeline** tab, or View › Timeline. **Ctrl+Tab** cycles Timeline → Mixer → FX → Sample (with Settings › Show Tracker on: Tracker → Order list → Timeline → Mixer → FX → Sample) |
 | Zoom | **Ctrl+wheel** zooms around the mouse. **+** / **−** (keys or toolbar). **Fit** or **F** shows the whole song |
 | Scroll | Wheel scrolls tracks. **Shift+wheel** scrolls time (the wheel scrolls time too when every track fits). Drag the **mini-map** strip under the clips, or the scroll bar on the right. **Home** / **End** jump to the start / end, and **←** / **→** scroll a bar |
 | Track height | **Alt+wheel** |

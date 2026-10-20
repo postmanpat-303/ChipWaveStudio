@@ -145,7 +145,7 @@ pub(crate) struct Puff {
 /// how long a puff of smoke lasts
 const SMOKE_S: f32 = 0.5;
 
-/// note-clip snap grids (ticks, label); 0 = Smart (follows the zoom)
+/// note-clip snap grids (ticks, label); 0 = Auto (follows the zoom)
 const GRIDS: [(Tick, &str); 8] = [
     (4 * PPQ, "Bar"),
     (PPQ, "Beat"),
@@ -153,11 +153,11 @@ const GRIDS: [(Tick, &str); 8] = [
     (ROW, "1/16"),
     (ROW / 2, "1/32"),
     (PPQ / 6, "1/16T"),
-    (0, "Smart"),
+    (0, "Auto"),
     (1, "off"),
 ];
 
-/// Smart snap: the finest of 1/32 … bar that is at least 12 px wide
+/// Auto snap: the finest of 1/32 … bar that is at least 12 px wide
 fn smart_grid(zoom: f32) -> Tick {
     let ppt = zoom as f64 / ROW as f64;
     [ROW / 2, ROW, PPQ / 2, PPQ, 4 * PPQ]
@@ -221,6 +221,20 @@ pub(crate) struct PianoUi {
     /// Step input on (the header's toggle; off by default): MIDI and
     /// musical-typing keys go in one step after the other
     pub(crate) step_input: bool,
+}
+
+impl PianoUi {
+    /// the song changed under the roll (undo / redo, another song): note
+    /// ids are indices or rows, so a kept selection would point at other
+    /// notes. The selection and any gesture in progress are dropped.
+    pub(crate) fn forget_selection(&mut self) {
+        self.sel.clear();
+        self.drag = None;
+        self.erase = None;
+        self.erase_started = false;
+        self.press = None;
+        self.pan = None;
+    }
 }
 
 impl Default for PianoUi {
@@ -1164,7 +1178,7 @@ impl App {
                 ui.add_space(6.0);
                 if let Target::Notes { .. } = target {
                     let shown = if self.pr.grid == 0 {
-                        format!("Smart · {}", len_name(smart_grid(self.pr.zoom)))
+                        format!("Auto · {}", len_name(smart_grid(self.pr.zoom)))
                     } else {
                         grid_name(self.pr.grid).to_string()
                     };

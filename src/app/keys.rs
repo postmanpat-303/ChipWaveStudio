@@ -1,6 +1,10 @@
 //! Global keyboard handling for the editor views, UI zoom, audio restart, settings save.
 use super::*;
 
+/// status line for Ctrl+C / Ctrl+X / Ctrl+V outside the Tracker views
+pub(super) const CLIPBOARD_ELSEWHERE: &str =
+    "Cut, copy and paste work in the Tracker and Order list (on the Timeline: Ctrl+D duplicates, Alt-drag copies)";
+
 impl App {
     pub(super) fn handle_keys(&mut self, ctx: &egui::Context) {
         let mut events = std::mem::take(&mut self.pending);
@@ -21,7 +25,16 @@ impl App {
         let channels = self.with(|s| s.song.channels).max(1);
         let arr_focus = self.arr_focused();
         self.mods = ctx.input(|i| i.modifiers);
+        // cut / copy / paste edit Tracker cells and Order list entries, so
+        // they only act while one of those views shows: elsewhere they
+        // would change a block the user can't see (or, with no tracks,
+        // index nothing)
+        let tracker_view = matches!(self.view, View::Pattern | View::Arranger);
         for a in input::clipboard_actions(&events) {
+            if !tracker_view {
+                self.status = CLIPBOARD_ELSEWHERE.into();
+                continue;
+            }
             match input::route_clip(a, arr_focus, self.mods.shift) {
                 input::Routed::Pattern(input::ClipAction::Copy) => self.copy(false, ctx),
                 input::Routed::Pattern(input::ClipAction::Cut) => self.copy(true, ctx),
@@ -274,6 +287,9 @@ impl App {
                 }
                 Key::ArrowUp => self.move_row(-1),
                 Key::ArrowDown => self.move_row(1),
+                // block length keys change the Tracker's current block (every
+                // clip that plays it): only where that block is in view
+                Key::PageDown | Key::PageUp if cmd && m.shift && !tracker_view => {}
                 Key::PageDown if cmd && m.shift => {
                     let n = self.rows() * 2;
                     self.block_length(blocklen::LenOp::Set(n));
@@ -326,10 +342,14 @@ impl App {
                 Key::Plus | Key::Equals if cmd => self.set_zoom(self.zoom + 0.25),
                 Key::Minus if cmd => self.set_zoom(self.zoom - 0.25),
                 Key::Num0 if cmd => self.set_zoom(1.0),
-                Key::Escape => {
+                // Esc is the Tracker's Edit mode switch only where the
+                // Tracker shows; elsewhere it must not change how notes and
+                // MIDI are recorded behind the user's back
+                Key::Escape if tracker_view => {
                     self.edit = !self.edit;
                     self.status = format!("Edit mode {}", if self.edit { "on" } else { "off" });
                 }
+                Key::Escape => {}
                 Key::Z if cmd && m.shift => self.do_undo(true),
                 Key::Z if cmd => self.do_undo(false),
                 Key::Y if cmd => self.do_undo(true),

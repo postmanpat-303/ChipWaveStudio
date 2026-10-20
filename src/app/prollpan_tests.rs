@@ -265,6 +265,9 @@ fn clip_roll(keys: &[(Tick, u8)]) -> (Harness<'static, App>, usize) {
         .collect();
     let mut h = harness_with(s);
     h.state_mut().default_layout();
+    // the roll has been clicked into (the default layout leaves the keys
+    // with the Timeline)
+    h.state_mut().pr.focus = true;
     h.state_mut().tlv.sel = Some(id);
     h.state_mut().undo_reset();
     frames(&mut h, 3);

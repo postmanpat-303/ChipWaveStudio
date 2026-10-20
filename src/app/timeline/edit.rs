@@ -77,8 +77,10 @@ impl App {
         if let Some(d) = self.tlv.drag.as_mut() {
             d.moved |= moved;
         }
+        // the unsaved mark comes from the undo commit when the mouse is let
+        // go, and only if the drag changed something (a drag that snaps
+        // back to where it started is not an edit)
         self.status = what;
-        self.dirty = true;
     }
 
     /// mouse released: an Alt-copy that never moved is taken back; markers
@@ -135,6 +137,23 @@ impl App {
     /// Run a timeline edit. In tracker mode it asks to switch first (the
     /// edit runs after the switch).
     pub(crate) fn tl_apply(&mut self, op: TlOp) {
+        // an edit of the selection with nothing selected says so, in either
+        // mode (in tracker mode it used to ask to switch modes first)
+        let sels = self.tlv.sels.clone();
+        let needs_sel = matches!(
+            op,
+            TlOp::Duplicate
+                | TlOp::Delete
+                | TlOp::Mute
+                | TlOp::MakeUnique
+                | TlOp::Glue
+                | TlOp::LoopFromSelection
+        );
+        if needs_sel && sels.is_empty() {
+            self.status =
+                "Select a clip first (click it; Ctrl-click or drag a box for more)".into();
+            return;
+        }
         let mode = self.with(|s| s.song.timeline.is_some());
         if !mode {
             self.tlv.ask_switch = Some(Some(op));
@@ -150,21 +169,6 @@ impl App {
             self.status = "Split: point where to cut (the amber line, snapped to the grid; \
                            Shift: off the grid) and click · Esc cancels"
                 .into();
-            return;
-        }
-        let sels = self.tlv.sels.clone();
-        let needs_sel = matches!(
-            op,
-            TlOp::Duplicate
-                | TlOp::Delete
-                | TlOp::Mute
-                | TlOp::MakeUnique
-                | TlOp::Glue
-                | TlOp::LoopFromSelection
-        );
-        if needs_sel && sels.is_empty() {
-            self.status =
-                "Select a clip first (click it; Ctrl-click or drag a box for more)".into();
             return;
         }
         let mut new_sel: Option<Vec<u32>> = None;
@@ -397,7 +401,9 @@ impl App {
             });
             self.tlv.rename = name.map(|n| (i, n));
         }
-        self.dirty = true;
+        // no `dirty` here: selecting (Ctrl+A) and refused edits ("Nothing to
+        // split here") change nothing; real edits are marked unsaved by the
+        // undo commit at the end of the frame
         if open_roll {
             self.set_lower(3);
         }

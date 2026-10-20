@@ -54,6 +54,20 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 - **Glow only on lit things:** curves, meters, LED arcs, readouts, the playhead and selected piano-roll notes (orange with a white rim; unselected notes are light grey).
 - **Fonts:** Inter, Barlow Semi Condensed and Geist Mono (SIL OFL 1.1), embedded and credited in Help › About. Paint only: songs and audio are unchanged. See `docs/STYLE_EMBER.md`.
 
+### Consistency fixes
+- **Opening a song forgets the old selection.** The Timeline and piano-roll selection, and any drag or rename in progress, no longer carry over to the next song (where the same ids meant other clips).
+- **Cut, copy and paste act where you can see them.** Ctrl+X / C / V only work in the Tracker and the Order list. On the Timeline they used to cut or paste the hidden Tracker block (every clip that plays it); now the status bar points to Ctrl+D and Alt-drag. A song with no tracks no longer crashes on copy or paste.
+- **The Timeline keeps the keyboard after opening a song.** The default layout no longer hands the keys to the piano roll; click into the roll or open a clip in it.
+- **The unsaved mark (●) means a real change.** Selecting, refused edits and drags that snap back no longer mark the song unsaved, and undoing back to the opened or saved song clears the mark.
+- **Track automation lanes stay on their track.** The "Move to the song lanes (unpin)" item is gone: the lane moved straight back on the next frame.
+- **Esc and Ctrl+Shift+PgUp / PgDn** only act in the Tracker and Order list. Elsewhere they switched Edit mode or resized a block you could not see.
+- **Undo / redo clear the piano-roll selection**, which otherwise landed on other notes.
+- **Delete, M, Ctrl+D, Ctrl+J with nothing selected** say "Select a clip first" in tracker mode too, instead of asking to switch modes.
+- **Inspector sliders** (clip gain, volume, pan, sends, duck) reset on double-click, like the mixer and the knobs.
+- **Recovery:** Discard asks before deleting the copy, and Recover lists load warnings like File › Open.
+- **One snap name:** the piano roll's zoom-following snap is **Auto**, like the Timeline's (it was "Smart").
+- Docs: what Shift and Alt do while dragging (TIMELINE.md), Ctrl+Tab's order, and the theme names in SETTINGS.md.
+
 ### Clip Arranger
 - **Scenes and slots left of the Timeline**, one row per track, lined up with the track rows (inspired by other DAWs). A **scene** is a block: its button plays the block on every track, looping, from the next bar. A **slot** is a track's column of that block with a mini preview of its notes: ▶ plays just that track, **■** on a row stops the track, **■** in the header stops everything, all on the next bar. **Launch:** 1 bar / ½ bar / beat / off. Queued things pulse until their bar; a second click on a queued scene takes it back.
 - **Drag a slot onto the timeline** for a Tracker clip (block + column) on the bar under the mouse. Double-click a slot to open it in the Tracker.

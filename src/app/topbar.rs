@@ -426,7 +426,7 @@ impl App {
                 let mut e = self.edit;
                 if ui
                     .add(egui::Checkbox::new(&mut e, "Edit mode"))
-                    .on_hover_text("Esc")
+                    .on_hover_text("Esc in the Tracker and Order list")
                     .changed()
                 {
                     self.edit = e;
@@ -1166,6 +1166,9 @@ impl App {
         }
         let mut act: Option<(usize, bool)> = None; // (index, recover?)
         let mut later = false;
+        // Discard deletes the copy for good: it asks once on that row first
+        let confirm_id = egui::Id::unique("orph_discard_confirm");
+        let mut confirm: Option<usize> = ctx.data(|d| d.get_temp(confirm_id));
         egui::Window::new("Recover unsaved work?")
             .collapsible(false)
             .resizable(false)
@@ -1219,12 +1222,25 @@ impl App {
                             {
                                 act = Some((i, true));
                             }
-                                    if ui
+                                    if confirm == Some(i) {
+                                        ui.horizontal(|ui| {
+                                            if ui
+                                                .button("Delete it")
+                                                .on_hover_text("delete this recovery copy for good")
+                                                .clicked()
+                                            {
+                                                act = Some((i, false));
+                                            }
+                                            if ui.button("Keep").clicked() {
+                                                confirm = None;
+                                            }
+                                        });
+                                    } else if ui
                                         .button("Discard")
-                                        .on_hover_text("delete this recovery copy")
+                                        .on_hover_text("delete this recovery copy (asks first)")
                                         .clicked()
                                     {
-                                        act = Some((i, false));
+                                        confirm = Some(i);
                                     }
                                     ui.end_row();
                                 }
@@ -1239,11 +1255,22 @@ impl App {
                     later = true;
                 }
             });
+        if act.is_some() {
+            confirm = None;
+        }
+        ctx.data_mut(|d| match confirm {
+            Some(i) => {
+                d.insert_temp(confirm_id, i);
+            }
+            None => d.remove::<usize>(confirm_id),
+        });
         if let Some((i, rec)) = act {
             let o = self.orphans.remove(i);
             if rec {
-                match fileio::load_cwt(&o.file) {
-                    Ok(mut song) => {
+                match fileio::load_cwt_warn(&o.file) {
+                    Ok((mut song, warnings)) => {
+                        // like File > Open: what could not be loaded is listed
+                        self.load_warnings = warnings;
                         song.title = format!(
                             "{} (recovered)",
                             if song.title.is_empty() {
@@ -1259,6 +1286,8 @@ impl App {
                         self.path = None;
                         let conv = self.convert_on_open();
                         self.reset_cursor();
+                        // not on disk anywhere: undo never makes it "saved"
+                        self.hist.forget_saved();
                         self.dirty = true;
                         self.status = "Recovered - choose File > Save As to keep it".into();
                         if conv {

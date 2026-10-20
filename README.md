@@ -228,7 +228,7 @@ On Linux, build it from source (below).
 | `Space` / `Shift+Space` | play / stop block (loop) / whole song (from the Order list play marker) |
 | Click / drag the Order list ruler | move the play marker to that bar (jumps there while playing); drag = scrub, `Alt`+click = exact row |
 | `Enter` / `Ctrl+Enter` | restart block / play from the cursor row |
-| `Esc` | edit mode on / off |
+| `Esc` | edit mode on / off (in the Tracker and Order list; Edit › Edit mode works everywhere) |
 | `Delete`, `Backspace`, `Insert` | clear, pull up, push down |
 | `Shift`+arrows, mouse drag, `Ctrl+A` | select (again = whole block) |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | copy / cut / paste |

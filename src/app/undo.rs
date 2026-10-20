@@ -365,17 +365,40 @@ pub struct History {
     bytes: usize,
     /// signature + time of the last commit (None = next change starts a new step)
     last: Option<(Sig, Instant)>,
+    /// the song as it is on disk (opened, new or last saved; None = never
+    /// saved, e.g. recovered): undo / redo back to it is not "unsaved"
+    saved: Option<State>,
 }
 
 impl History {
     pub fn new(song: &Song) -> Self {
+        let cur = State::capture(song);
         History {
-            cur: State::capture(song),
+            saved: Some(cur.clone()),
+            cur,
             undo: VecDeque::new(),
             redo: vec![],
             bytes: 0,
             last: None,
         }
+    }
+
+    /// The song was saved as it is now: pending changes become a step,
+    /// and this state is the clean one.
+    pub fn mark_saved(&mut self, song: &Song, now: Instant) {
+        self.commit(song, now, false);
+        self.last = None;
+        self.saved = Some(self.cur.clone());
+    }
+
+    /// No state is on disk any more (a failed save, a recovered song).
+    pub fn forget_saved(&mut self) {
+        self.saved = None;
+    }
+
+    /// The song equals the one on disk (shares items, so this is cheap).
+    pub fn is_saved(&self, song: &Song) -> bool {
+        self.saved.as_ref().is_some_and(|s| s.matches(song))
     }
 
     /// forget everything (new / opened song)
@@ -821,5 +844,27 @@ mod tests {
         }
         assert!(h.bytes() <= MAX_BYTES + 40_000_000, "{}", h.bytes());
         assert!(h.len() < 20);
+    }
+
+    #[test]
+    fn undo_back_to_the_saved_state_is_clean() {
+        let mut s = song();
+        let mut h = History::new(&s);
+        assert!(h.is_saved(&s), "a new / opened song is the saved one");
+        s.bpm += 7.0;
+        h.commit(&s, t0(), false);
+        assert!(!h.is_saved(&s));
+        assert!(h.step(&mut s, false, later(t0(), 10)));
+        assert!(h.is_saved(&s), "undone back to the opened song");
+        assert!(h.step(&mut s, true, later(t0(), 20)));
+        assert!(!h.is_saved(&s));
+        // saving makes this the clean state; undo leaves it
+        h.mark_saved(&s, later(t0(), 30));
+        assert!(h.is_saved(&s));
+        h.step(&mut s, false, later(t0(), 40));
+        assert!(!h.is_saved(&s), "undone past the save");
+        h.forget_saved();
+        h.step(&mut s, true, later(t0(), 50));
+        assert!(!h.is_saved(&s), "nothing on disk");
     }
 }

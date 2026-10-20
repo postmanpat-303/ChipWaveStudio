@@ -56,6 +56,16 @@ fn section(ui: &mut egui::Ui, id: &str, title: &str, add: impl FnOnce(&mut egui:
 }
 
 /// "label ........ control" rows
+/// Double-click puts a slider back to its default, like the mixer's faders
+/// and the knobs (the response reports a change so callers see it)
+fn reset_on_dbl<T>(mut r: egui::Response, v: &mut T, default: T) -> egui::Response {
+    if r.double_clicked() {
+        *v = default;
+        r.mark_changed();
+    }
+    r
+}
+
 fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(egui::vec2(62.0, 18.0), Sense::hover());
@@ -277,13 +287,15 @@ impl App {
                 });
                 if kind == "audio" {
                     row(ui, "Gain", |ui| {
-                        if ui
-                            .add(
-                                egui::Slider::new(&mut gain_db, -48.0..=12.0)
-                                    .suffix(" dB")
-                                    .fixed_decimals(1),
+                        let r = ui.add(
+                            egui::Slider::new(&mut gain_db, -48.0..=12.0)
+                                .suffix(" dB")
+                                .fixed_decimals(1),
+                        );
+                        if reset_on_dbl(r, &mut gain_db, 0.0)
+                            .on_hover_text(
+                                "clip gain (also: right-click the clip)\ndouble-click: 0 dB",
                             )
-                            .on_hover_text("clip gain (also: right-click the clip)")
                             .changed()
                         {
                             changed = true;
@@ -568,18 +580,20 @@ impl App {
                 });
             });
             row(ui, "Volume", |ui| {
-                ui.add(
+                let r = ui.add(
                     egui::Slider::new(&mut m.volume, 0.0..=2.0)
                         .custom_formatter(|v, _| crate::model::db_text(v as f32))
                         .show_value(true),
-                )
-                .on_hover_text("track (mixer channel) volume");
+                );
+                reset_on_dbl(r, &mut m.volume, 1.0)
+                    .on_hover_text("track (mixer channel) volume\ndouble-click: 0 dB");
             });
             row(ui, "Pan", |ui| {
                 ui.spacing_mut().slider_width = 70.0;
-                ui.add(
+                let r = ui.add(
                     egui::Slider::new(&mut m.pan, -1.0..=1.0).custom_formatter(|v, _| pan_text(v)),
                 );
+                reset_on_dbl(r, &mut m.pan, 0.0).on_hover_text("double-click: centre");
                 if ui.small_button("C").on_hover_text("centre").clicked() {
                     m.pan = 0.0;
                 }
@@ -677,22 +691,26 @@ impl App {
                     .cloned()
                     .unwrap_or_else(|| ["Delay", "Reverb"][k].to_string());
                 row(ui, &label, |ui| {
-                    ui.add(
+                    let r = ui.add(
                         egui::Slider::new(&mut m.send[k], 0.0..=1.0)
                             .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
-                    )
-                    .on_hover_text(format!(
-                        "post-fader send to return {} ({label}; Mixer view has the returns)",
+                    );
+                    reset_on_dbl(r, &mut m.send[k], 0.0).on_hover_text(format!(
+                        "post-fader send to return {} ({label}; Mixer view has the returns)\n\
+                         double-click: off",
                         ["A", "B"][k]
                     ));
                 });
             }
             row(ui, "Duck", |ui| {
-                ui.add(
+                let r = ui.add(
                     egui::Slider::new(&mut m.duck, 0.0..=1.0)
                         .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
-                )
-                .on_hover_text("sidechain ducking depth (keyed by the Mixer's duck key channel)");
+                );
+                reset_on_dbl(r, &mut m.duck, 0.0).on_hover_text(
+                    "sidechain ducking depth (keyed by the Mixer's duck key channel)\n\
+                     double-click: off",
+                );
             });
         });
         if m != m0 {

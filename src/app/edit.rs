@@ -7,6 +7,9 @@ impl App {
         let ((r0, c0), (r1, c1)) = self.sel?;
         let rows = self.rows();
         let chans = self.with(|s| s.song.channels);
+        if rows == 0 || chans == 0 {
+            return None;
+        }
         Some((
             r0.min(r1).min(rows - 1),
             r0.max(r1).min(rows - 1),
@@ -34,6 +37,11 @@ impl App {
     }
 
     pub(super) fn copy(&mut self, cut: bool, ctx: &egui::Context) {
+        // a song with no tracks (File > New) has no cells to copy
+        if self.with(|s| s.song.channels) == 0 || self.rows() == 0 {
+            self.status = "Nothing to copy: the song has no tracks yet".into();
+            return;
+        }
         let rect = self
             .sel_rect()
             .unwrap_or((self.row, self.row, self.ch, self.ch));
@@ -75,6 +83,10 @@ impl App {
         }
         if !self.edit {
             self.status = "Edit mode is off (Esc) - paste ignored".into();
+            return;
+        }
+        if self.with(|s| s.song.channels) == 0 || self.rows() == 0 {
+            self.status = "Nothing to paste into: the song has no tracks yet".into();
             return;
         }
         self.snapshot();

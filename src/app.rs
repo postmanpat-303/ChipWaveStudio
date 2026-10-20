@@ -93,6 +93,8 @@ pub mod shot;
 pub mod showcase;
 #[cfg(test)]
 mod showcase_tests;
+#[cfg(test)]
+mod stabilise_tests;
 mod timeline;
 #[cfg(test)]
 mod timeline_m2_tests;
@@ -764,7 +766,13 @@ impl App {
             done
         };
         if done {
-            self.dirty = true;
+            // back at the song on disk (opened or last saved): not unsaved
+            let saved = {
+                let shared = self.shared.clone();
+                let s = audio::lock(&shared);
+                self.hist.is_saved(&s.song)
+            };
+            self.dirty = !saved || self.plug.state_dirty;
             self.status = if redo { "Redo".into() } else { "Undo".into() };
         } else {
             self.status = if redo {
@@ -787,6 +795,9 @@ impl App {
         self.arr_sel = self.arr_sel.min(self.order_len().saturating_sub(1));
         self.arr_multi.clear();
         self.sel = None;
+        // piano-roll note ids are indices / rows: after undo they would
+        // point at other notes (timeline clip ids are pruned on refresh)
+        self.pr.forget_selection();
     }
 
     fn rows(&self) -> usize {

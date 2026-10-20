@@ -257,7 +257,9 @@ impl App {
         self.show_auto = false;
         self.arr_focus = false;
         self.pr.open = true;
-        self.pr.focus = true;
+        // the Timeline on top keeps the keyboard: the roll takes it when it
+        // is clicked into or a clip is opened in it (docs/TIMELINE.md)
+        self.pr.focus = false;
     }
 
     /// the default layout is showing (tests)
