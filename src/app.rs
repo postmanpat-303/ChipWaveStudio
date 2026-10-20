@@ -299,6 +299,8 @@ pub struct App {
     win_rect: Option<[f32; 4]>,
     max_zoom: f32,
     zoom_checked: bool,
+    /// the title bar colours last given to Windows (DWM); None: not yet
+    titlebar: Option<crate::titlebar::Colours>,
     /// the Settings scale slider's value while it is dragged: applied on
     /// release, so the UI doesn't rescale under the pointer
     zoom_drag: Option<f32>,
@@ -649,6 +651,7 @@ impl App {
             win_rect: crate::settings::load().window,
             max_zoom: 3.0,
             zoom_checked: false,
+            titlebar: None,
             zoom_drag: None,
             themed: false,
             theme: crate::settings::load().theme(),
@@ -1190,6 +1193,12 @@ impl eframe::App for App {
         self.tick_derived();
         self.plugin_frame(&ctx);
 
+        // the native title bar in the theme's colours (Windows; again after
+        // a theme change)
+        let bar = crate::titlebar::for_theme(&th());
+        if self.titlebar != Some(bar) && crate::titlebar::apply(bar) {
+            self.titlebar = Some(bar);
+        }
         let full = ui.max_rect();
         theme::gradient(ui.painter(), full, th().bg_top, th().bg_bot);
 
