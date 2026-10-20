@@ -15,7 +15,7 @@ fn voice_hash(g: &crate::gen::GenPatch, h: &mut impl Hasher) {
     for pass in 0..3 {
         for key in 13u8..=97 {
             let freq = crate::model::note_freq(key);
-            let mut v = crate::synth::SynthVoice::seeded(key as u32 * 2_654_435_761 | 1);
+            let mut v = crate::synth::SynthVoice::seeded((key as u32).wrapping_mul(2_654_435_761) | 1);
             if pass == 2 {
                 v.gmo = [0.2, -1.0, 0.7, -1.0, 0.4, -1.0, -1.0, 0.9];
             }
