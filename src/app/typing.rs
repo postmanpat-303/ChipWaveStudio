@@ -106,7 +106,13 @@ impl App {
 
     /// the instrument the selected track plays
     fn typing_instr(&self) -> u8 {
-        let ch = self.ch;
+        self.track_instr(self.ch)
+    }
+
+    /// the instrument a track plays new notes on: the track's assigned
+    /// instrument (Timeline), else the selected one. Typing, the roll's
+    /// key and note auditions and chord previews all use it.
+    pub(super) fn track_instr(&self, ch: usize) -> u8 {
         let given = self.with(|s| {
             s.song
                 .timeline

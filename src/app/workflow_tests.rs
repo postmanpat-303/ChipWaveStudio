@@ -895,3 +895,98 @@ fn generate_dialog_shows_target_and_scope() {
         .query_by_label_contains("notes added on top of the clip's notes")
         .is_some());
 }
+
+// ------------------------------------------------- step 5: piano-key audition
+
+fn press_at(h: &mut Harness<'static, App>, p: Pos2, pressed: bool) {
+    with_mods(
+        h,
+        egui::Modifiers::NONE,
+        egui::Event::PointerButton {
+            pos: p,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        },
+    );
+}
+
+/// pressing a key on the roll's keyboard plays it on the track's
+/// instrument (not the globally selected one), dragging plays the next
+/// key, release stops it; no note and no undo step. Hover names the key.
+#[test]
+fn piano_keys_audition_on_the_tracks_instrument() {
+    let mut h = clip_setup();
+    let tr = 2;
+    h.state().with(|s| {
+        s.song.timeline.as_deref_mut().unwrap().tracks[tr].instr = 3;
+    });
+    h.state_mut().instr = 1;
+    h.state_mut().undo_reset();
+    frame(&mut h);
+    let before = note_data(&h);
+    let gr = h.state().pr.grid_rect;
+    let kh = h.state().pr.key_h;
+    let key_pos = |h: &Harness<'static, App>, k: u8| {
+        Pos2::new(gr.left() - 12.0, h.state().pr.y_of(k) + kh / 2.0)
+    };
+    // the middle of the visible keys
+    let mid = h.state().pr.key_at_pub(gr.center().y) as u8;
+    let p = key_pos(&h, mid);
+    mv(&mut h, p);
+    frames(&mut h, 2);
+    press_at(&mut h, p, true);
+    frame(&mut h);
+    assert_eq!(
+        h.state().pr.heard,
+        Some((mid, 3, tr as u8)),
+        "the track's instrument"
+    );
+    assert_eq!(h.state().pr.key_down, Some(mid));
+    // drag to the key above
+    let q = key_pos(&h, mid + 1);
+    mv(&mut h, q);
+    frame(&mut h);
+    assert_eq!(h.state().pr.heard, Some((mid + 1, 3, tr as u8)));
+    assert_eq!(h.state().pr.key_down, Some(mid + 1));
+    press_at(&mut h, q, false);
+    frames(&mut h, 2);
+    assert_eq!(h.state().pr.key_down, None, "release stops it");
+    assert_eq!(note_data(&h), before, "no note written");
+    h.state_mut().undo(false);
+    frame(&mut h);
+    assert_eq!(note_data(&h), before, "no undo step either");
+    // the hover tooltip names the key and octave
+    mv(&mut h, p + egui::vec2(1.0, 0.0));
+    for _ in 0..30 {
+        h.step();
+        if h.query_all_by_label_contains(&format!("{} · octave", pianoview::key_label(mid)))
+            .next()
+            .is_some()
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
+    assert!(h
+        .query_all_by_label_contains(&format!(
+            "{} · octave {}",
+            pianoview::key_label(mid),
+            (mid - 1) / 12
+        ))
+        .next()
+        .is_some());
+    // chord previews use the track's instrument too
+    let m = cmaj(0);
+    h.state_mut().cl_play(&m);
+    assert_eq!(h.state().pr.heard.map(|x| x.1), Some(3));
+}
+
+#[test]
+fn key_labels_count_like_the_tracker() {
+    assert_eq!(pianoview::key_label(1), "C0");
+    assert_eq!(pianoview::key_label(49), "C4");
+    assert_eq!(pianoview::key_label(50), "C#4");
+    assert_eq!(pianoview::key_label(120), "B9");
+    assert_eq!(crate::model::note_name(50), "C#4");
+}
