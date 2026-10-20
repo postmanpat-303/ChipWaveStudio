@@ -272,6 +272,16 @@ impl Default for TimelineUi {
 }
 
 impl TimelineUi {
+    /// another song was opened (or recovered): clip ids belong to the old
+    /// song, so the selection, a gesture in progress and the play marker go
+    pub(super) fn forget_song(&mut self) {
+        self.sel = None;
+        self.sels.clear();
+        self.drag = None;
+        self.rename = None;
+        self.cue = 0;
+    }
+
     /// File > New: a fresh layout (zoomed to show a few dozen bars)
     pub(super) fn start_new_song(&mut self) {
         self.new_song = true;

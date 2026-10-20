@@ -73,6 +73,8 @@ mod newsong_tests;
 mod noterec;
 #[cfg(test)]
 mod opentl_tests;
+#[cfg(test)]
+mod stabilise_tests;
 mod params;
 mod pattern;
 #[cfg(test)]

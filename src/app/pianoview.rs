@@ -216,6 +216,21 @@ pub(crate) struct PianoUi {
     pub(crate) step_used: bool,
 }
 
+
+impl PianoUi {
+    /// the song changed under the roll (undo / redo, another song): note
+    /// ids are indices or rows, so a kept selection would point at other
+    /// notes. The selection and any gesture in progress are dropped.
+    pub(crate) fn forget_selection(&mut self) {
+        self.sel.clear();
+        self.drag = None;
+        self.erase = None;
+        self.erase_started = false;
+        self.press = None;
+        self.pan = None;
+    }
+}
+
 impl Default for PianoUi {
     fn default() -> Self {
         Self {

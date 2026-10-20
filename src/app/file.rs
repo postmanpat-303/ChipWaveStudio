@@ -371,6 +371,11 @@ impl App {
         self.arr_sel = 0;
         self.arr_multi.clear();
         self.cue = (0, 0);
+        // the timeline and piano-roll selections hold the old song's clip
+        // and note ids (every song numbers its clips from 1)
+        self.tlv.forget_song();
+        self.pr.forget_selection();
+        self.pr.target = None;
         self.dirty = false;
     }
 
