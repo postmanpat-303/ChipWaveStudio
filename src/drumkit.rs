@@ -361,6 +361,201 @@ pub fn preset(name: &str) -> Option<GenPatch> {
         .map(|(_, _, p)| p)
 }
 
+// ------------------------------------------------------------------ patterns
+
+use crate::timeline::{Note, Tick, ROW};
+
+/// a Drum Kit pattern's groove, kept with its note data
+/// (`timeline::NoteClipData::drum`)
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DrumMeta {
+    /// 0..0.5: the odd 16ths are late by this part of a 16th (shown as
+    /// 50..75 % swing, as drum machines do)
+    pub swing: f32,
+}
+
+/// swing as drum machines show it: 50 % = straight, 66 % = triplet feel, 75 % max
+pub fn swing_percent(swing: f32) -> f32 {
+    50.0 + swing.clamp(0.0, 0.5) * 50.0
+}
+
+/// tick of step `k` (16ths) with `swing` (`drumpat::Pat::step_tick` maths)
+pub fn step_tick(k: usize, swing: f32) -> Tick {
+    let base = k as Tick * ROW;
+    if k % 2 == 1 {
+        base + (swing.clamp(0.0, 0.5) * ROW as f32).round() as Tick
+    } else {
+        base
+    }
+}
+
+/// the step a note at `start` sits on (swung or a little early still count)
+pub fn step_of(start: Tick) -> usize {
+    (start + ROW / 4).div_euclid(ROW).max(0) as usize
+}
+
+/// the note on `key` at step `k`, if any (index into `notes`)
+pub fn hit_at(notes: &[Note], key: u8, k: usize) -> Option<usize> {
+    notes
+        .iter()
+        .position(|n| n.key == key && step_of(n.start) == k)
+}
+
+/// switch step `k` of `key` on (a 16th at `vel`, instrument `instr`) or off;
+/// returns true when it is now on
+pub fn toggle(
+    notes: &mut Vec<Note>,
+    key: u8,
+    k: usize,
+    on: bool,
+    swing: f32,
+    vel: u16,
+    instr: u8,
+) -> bool {
+    let had = hit_at(notes, key, k).is_some();
+    if on && !had {
+        notes.push(Note {
+            start: step_tick(k, swing),
+            len: ROW,
+            key,
+            vel,
+            instr,
+            ..Default::default()
+        });
+        notes.sort_by_key(|n| (n.start, n.key));
+    } else if !on && had {
+        notes.retain(|n| !(n.key == key && step_of(n.start) == k));
+    }
+    on
+}
+
+/// re-place the notes that sit on odd steps for a new swing
+pub fn set_swing(notes: &mut [Note], swing: f32) {
+    for n in notes.iter_mut() {
+        let k = step_of(n.start);
+        let on_grid = (n.start - step_tick(k, 0.0)).abs() <= ROW / 2;
+        if k % 2 == 1 && on_grid {
+            n.start = step_tick(k, swing);
+        }
+    }
+    notes.sort_by_key(|n| (n.start, n.key));
+}
+
+/// move every note of `key` by `by` steps, wrapping inside `steps`
+pub fn shift(notes: &mut [Note], key: u8, by: i32, steps: usize, swing: f32) {
+    let steps = steps.max(1) as i32;
+    for n in notes.iter_mut().filter(|n| n.key == key) {
+        let k = (step_of(n.start) as i32 + by).rem_euclid(steps) as usize;
+        n.start = step_tick(k, swing);
+    }
+    notes.sort_by_key(|n| (n.start, n.key));
+}
+
+/// a new pattern from the Drum Patterns library: style `style`
+/// (`drumpat::STYLES`), reproducible from `seed`. `energy` 0..1 thins out
+/// (low) or adds 16th hats, ghost snares and kick pickups (high); `fill`
+/// replaces the last `fill` beats with a tom / snare fill. Keys are the
+/// library lanes, so every Drum Kit plays it. (notes, steps, swing, the
+/// library pattern it started from)
+pub fn generate(
+    style: usize,
+    seed: u32,
+    energy: f32,
+    fill: u8,
+    instr: u8,
+) -> (Vec<Note>, usize, f32, &'static str) {
+    use crate::drumpat::{in_style, PATTERNS};
+    let mut r = crate::gen::Rng::new(seed);
+    let pool: Vec<usize> = in_style(style)
+        .filter(|(_, p)| crate::drumpat::STYLES[p.style] != "Fills")
+        .map(|(i, _)| i)
+        .collect();
+    let pool = if pool.is_empty() {
+        (0..PATTERNS.len()).collect()
+    } else {
+        pool
+    };
+    let p = &PATTERNS[pool[r.next() as usize % pool.len()]];
+    let steps = p.steps().min(64);
+    let mut notes = p.notes(instr);
+    let e = energy.clamp(0.0, 1.0);
+    let lane = |c: char| crate::drumpat::lane_note(c).unwrap_or(0);
+    let (kick, snare, hat, ohat) = (lane('K'), lane('S'), lane('H'), lane('O'));
+    let vel = |v: u8| crate::timeline::vel_from_7(v);
+    if e < 0.5 {
+        // thinner: drop off-beat hats and ghosts, more as energy falls
+        let drop = (0.5 - e) * 2.0;
+        notes.retain(|n| {
+            let k = step_of(n.start);
+            let weak = !k.is_multiple_of(4) && n.key != kick;
+            !(weak && r.f() < drop * 0.7)
+        });
+    } else {
+        let add = (e - 0.5) * 2.0;
+        for k in 0..steps {
+            let x = r.f();
+            if hit_at(&notes, hat, k).is_none()
+                && hit_at(&notes, ohat, k).is_none()
+                && x < add * 0.6
+            {
+                notes.push(Note {
+                    start: step_tick(k, p.swing),
+                    len: ROW,
+                    key: hat,
+                    vel: vel(if k % 2 == 0 { 90 } else { 60 }),
+                    instr,
+                    ..Default::default()
+                });
+            }
+            let y = r.f();
+            if k % 4 == 3 && hit_at(&notes, snare, k).is_none() && y < add * 0.3 {
+                notes.push(Note {
+                    start: step_tick(k, p.swing),
+                    len: ROW,
+                    key: snare,
+                    vel: vel(45),
+                    instr,
+                    ..Default::default()
+                });
+            }
+            let z = r.f();
+            if k % 8 == 7 && hit_at(&notes, kick, k).is_none() && z < add * 0.25 {
+                notes.push(Note {
+                    start: step_tick(k, p.swing),
+                    len: ROW,
+                    key: kick,
+                    vel: vel(80),
+                    instr,
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    if fill > 0 {
+        let from = steps.saturating_sub(fill as usize * 4);
+        notes.retain(|n| step_of(n.start) < from || n.key == kick);
+        let toms = [lane('T'), lane('M'), lane('L')];
+        for k in from..steps {
+            let t = toms[((k - from) * 3 / (steps - from).max(1)).min(2)];
+            let key = if r.f() < 0.3 { snare } else { t };
+            if k % 2 == 0 || r.f() < 0.6 {
+                notes.push(Note {
+                    start: step_tick(k, p.swing),
+                    len: ROW,
+                    key,
+                    vel: vel(70 + (r.next() % 50) as u8),
+                    instr,
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    notes.sort_by_key(|n| (n.start, n.key));
+    notes.dedup_by(|a, b| a.key == b.key && step_of(a.start) == step_of(b.start));
+    (notes, steps, p.swing, p.name)
+}
+
 /// index of the kind's "Decay" macro (what the pad's Decay scales)
 pub fn decay_macro(k: DrumKind) -> Option<usize> {
     k.macros().iter().position(|m| m.name == "Decay")

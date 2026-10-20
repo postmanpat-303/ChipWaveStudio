@@ -315,7 +315,7 @@ impl App {
     // ------------------------------------------------------------ preview
 
     /// the bar length (ticks) at the play marker (4/4 for tracker songs)
-    fn pat_bar(&self) -> tl::Tick {
+    pub(super) fn pat_bar(&self) -> tl::Tick {
         let cue = self.tlv.cue;
         self.with(|s| {
             s.song
@@ -488,6 +488,10 @@ impl App {
             if new {
                 crate::chanops::assign_track_instrument(song, tr, slot);
             }
+            let drum_kit = song
+                .instruments
+                .get(slot as usize - 1)
+                .is_some_and(|i| crate::drumkit::kit_of(i).is_some());
             let t = song.timeline.as_deref()?;
             let sig = t.sig_at(at);
             let bar = sig.bar_ticks().max(1);
@@ -501,6 +505,9 @@ impl App {
                 d.name = p.name.to_string();
                 d.notes = p.notes(slot);
                 d.len = p.len();
+                if drum_kit {
+                    d.drum = Some(crate::drumkit::DrumMeta { swing: p.swing });
+                }
             }
             t.clips[k].len = p.len();
             let pos = t.bar_pos(start);

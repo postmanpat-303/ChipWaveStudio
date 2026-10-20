@@ -281,3 +281,94 @@ fn a_drum_kit_song_and_cwi_round_trip_and_need_reader_5() {
     assert!(matches!(&g.engine, GenEngine::Drums(k) if k.pads.len() == DEFAULT_PADS));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+// ------------------------------------------------------------ step model
+
+#[test]
+fn steps_round_trip_with_swing() {
+    for sw in [0.0f32, 0.1, 0.25, 0.5] {
+        for k in 0..64 {
+            assert_eq!(step_of(step_tick(k, sw)), k, "step {k} swing {sw}");
+        }
+    }
+    assert_eq!(swing_percent(0.0), 50.0);
+    assert_eq!(swing_percent(0.5), 75.0);
+    assert_eq!(step_tick(1, 0.5), ROW + ROW / 2);
+    assert_eq!(step_tick(2, 0.5), 2 * ROW);
+}
+
+#[test]
+fn toggle_shift_and_swing_edit_the_right_notes() {
+    let mut n = vec![];
+    assert!(toggle(&mut n, 49, 0, true, 0.0, 30000, 0));
+    assert!(toggle(&mut n, 55, 1, true, 0.0, 30000, 0));
+    assert!(toggle(&mut n, 55, 1, true, 0.0, 30000, 0));
+    assert_eq!(n.len(), 2, "a second on is a no-op");
+    assert_eq!(hit_at(&n, 55, 1), Some(1));
+    set_swing(&mut n, 0.25);
+    assert_eq!(n[1].start, ROW + ROW / 4, "odd step moves");
+    assert_eq!(n[0].start, 0, "even step stays");
+    set_swing(&mut n, 0.0);
+    assert_eq!(n[1].start, ROW);
+    shift(&mut n, 55, -2, 16, 0.0);
+    assert_eq!(
+        step_of(n.iter().find(|x| x.key == 55).unwrap().start),
+        15,
+        "wraps"
+    );
+    shift(&mut n, 55, 1, 16, 0.0);
+    assert_eq!(step_of(n.iter().find(|x| x.key == 55).unwrap().start), 0);
+    assert!(!toggle(&mut n, 49, 0, false, 0.0, 0, 0));
+    assert_eq!(n.len(), 1);
+    assert_eq!(n[0].key, 55);
+}
+
+#[test]
+fn generate_is_reproducible_and_plays_on_library_pads() {
+    let kit = from_library_kit(
+        match &crate::drumpat::kit_patch("808 Kit").unwrap().engine {
+            GenEngine::Kit(k) => k,
+            _ => unreachable!(),
+        },
+    );
+    for style in 0..crate::drumpat::STYLES.len() {
+        for seed in [1u32, 2, 77] {
+            for (e, fill) in [(0.0f32, 0u8), (0.5, 1), (1.0, 2)] {
+                let a = generate(style, seed, e, fill, 3);
+                let b = generate(style, seed, e, fill, 3);
+                assert_eq!(a, b, "style {style} seed {seed} reproducible");
+                let (notes, steps, swing, _) = a;
+                assert!((1..=64).contains(&steps));
+                assert!((0.0..=0.5).contains(&swing));
+                assert!(
+                    !notes.is_empty(),
+                    "style {style} seed {seed} energy {e}: empty"
+                );
+                for n in &notes {
+                    assert!(step_of(n.start) < steps);
+                    assert_eq!(n.instr, 3);
+                    assert!(
+                        kit.pads.iter().any(|p| p.key == n.key),
+                        "key {} has no pad (style {style})",
+                        n.key
+                    );
+                }
+            }
+        }
+    }
+    // energy changes the density
+    let lo: usize = (1..20).map(|s| generate(0, s, 0.0, 0, 0).0.len()).sum();
+    let hi: usize = (1..20).map(|s| generate(0, s, 1.0, 0, 0).0.len()).sum();
+    assert!(hi > lo, "energy: {lo} vs {hi}");
+}
+
+#[test]
+fn drum_meta_saves_only_when_set() {
+    let mut d = crate::timeline::NoteClipData::default();
+    let a = toml::to_string(&d).unwrap();
+    assert!(!a.contains("drum"), "{a}");
+    d.drum = Some(DrumMeta { swing: 0.25 });
+    let b = toml::to_string(&d).unwrap();
+    let back: crate::timeline::NoteClipData = toml::from_str(&b).unwrap();
+    assert_eq!(back.drum, Some(DrumMeta { swing: 0.25 }));
+}
