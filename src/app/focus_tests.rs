@@ -393,7 +393,8 @@ fn midi_keys_held_together_step_in_as_a_chord() {
         a.tlv.sel = Some(id);
         a.tlv.sels = vec![id];
         a.set_lower(3);
-        a.edit = true;
+        // the piano roll header's Step input toggle (off by default)
+        a.pr.step_input = true;
     }
     frames(&mut h, 2);
     let now = std::time::Instant::now;

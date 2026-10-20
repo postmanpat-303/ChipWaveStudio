@@ -1035,9 +1035,9 @@ impl App {
                 // musical typing: lit with its octave and velocity while on
                 let on = self.typing.on;
                 let txt = if on {
-                    format!("⌨ Typing {}", self.typing_label())
+                    format!("Typing {}", self.typing_label())
                 } else {
-                    "⌨ Typing".to_string()
+                    "Typing".to_string()
                 };
                 if ui
                     .selectable_label(

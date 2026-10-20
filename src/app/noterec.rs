@@ -274,7 +274,7 @@ impl App {
         let p = self.with(|s| s.song.timeline.as_deref().map(|x| x.bar_pos(t)));
         if let Some(p) = p {
             self.status = format!(
-                "● Rec {} at {}.{} track {:02}",
+                "Rec {} at {}.{} track {:02}",
                 note_name(note),
                 p.bar,
                 p.beat,
@@ -469,7 +469,7 @@ impl App {
             }
         });
         self.status = format!(
-            "● Recording track {:02}{} (R or ● again: stop recording)",
+            "Recording track {:02}{} (R or Record again: stop recording)",
             track + 1,
             if count { " after a bar's count-in" } else { "" }
         );

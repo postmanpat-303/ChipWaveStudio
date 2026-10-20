@@ -2155,6 +2155,8 @@ fn pr_btn(ui: &mut egui::Ui, label: &str, on: bool, enabled: bool, tip: &str) ->
         };
         ui.painter().galley(r.center() - g.size() / 2.0, g, col);
     }
+    let name = label.to_string();
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, &name));
     resp.on_hover_text(tip)
 }
 
