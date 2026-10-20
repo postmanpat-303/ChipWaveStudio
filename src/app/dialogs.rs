@@ -208,45 +208,63 @@ impl App {
     pub(super) fn modal_dialogs(&mut self, ctx: &egui::Context) {
         // ---------------------------------------------------- unsaved prompt
         if let Some(p) = &self.prompt {
-            let what = match p {
-                Pending::Quit => "quitting",
-                Pending::New => "starting a new song",
-                Pending::Open | Pending::OpenPath(_) | Pending::Demo(_) => "opening another song",
-            };
-            let title = self.with(|s| s.song.title.clone());
+            let (title, lead) = prompt_text(
+                p,
+                &self.with(|s| s.song.title.clone()),
+                self.path.as_deref(),
+            );
+            let t = th();
             let mut choice = None;
-            egui::Window::new("Unsaved changes")
+            egui::Window::new("Save changes")
+                .title_bar(false)
                 .collapsible(false)
                 .resizable(false)
+                .fixed_size(egui::vec2(PROMPT_W, 0.0))
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .frame(egui::Frame::window(&ctx.global_style()).inner_margin(egui::Margin::same(20)))
                 .show(ctx, |ui| {
-                    ui.label(
-                        egui::RichText::new(format!("Save changes to \"{title}\" before {what}?"))
-                            .strong(),
+                    ui.set_width(PROMPT_W);
+                    ui.label(egui::RichText::new(title).heading().strong().color(t.ink));
+                    ui.add_space(6.0);
+                    ui.label(egui::RichText::new(lead).color(t.ink2));
+                    ui.add_space(18.0);
+                    // three buttons of one width, right-aligned in the
+                    // reading order Save · Don't save · Cancel
+                    let bw = egui::vec2(PROMPT_BTN_W, 30.0);
+                    let gap = 10.0;
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(PROMPT_W, bw.y),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.spacing_mut().item_spacing.x = gap;
+                            ui.add_space((PROMPT_W - 3.0 * bw.x - 2.0 * gap).max(0.0));
+                            if ui
+                                .add(
+                                    egui::Button::new(egui::RichText::new("Save").strong())
+                                        .min_size(bw)
+                                        .fill(t.accent.gamma_multiply(0.6)),
+                                )
+                                .on_hover_text("save, then go on (Enter)")
+                                .clicked()
+                            {
+                                choice = Some(Choice::Save);
+                            }
+                            if ui
+                                .add(egui::Button::new("Don't save").min_size(bw))
+                                .on_hover_text("go on and lose the changes (N)")
+                                .clicked()
+                            {
+                                choice = Some(Choice::DontSave);
+                            }
+                            if ui
+                                .add(egui::Button::new("Cancel").min_size(bw))
+                                .on_hover_text("stay with this song (Esc)")
+                                .clicked()
+                            {
+                                choice = Some(Choice::Cancel);
+                            }
+                        },
                     );
-                    ui.label(
-                        egui::RichText::new("Your changes will be lost if you don't save them.")
-                            .color(th().ink2),
-                    );
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        if ui
-                            .add(
-                                egui::Button::new(egui::RichText::new("  Save  ").strong())
-                                    .fill(th().accent.gamma_multiply(0.6)),
-                            )
-                            .on_hover_text("Enter")
-                            .clicked()
-                        {
-                            choice = Some(Choice::Save);
-                        }
-                        if ui.button("Don't save").on_hover_text("N").clicked() {
-                            choice = Some(Choice::DontSave);
-                        }
-                        if ui.button("Cancel").on_hover_text("Esc").clicked() {
-                            choice = Some(Choice::Cancel);
-                        }
-                    });
                 });
             if let Some(c) = choice {
                 self.answer(c, ctx);
@@ -622,4 +640,36 @@ impl App {
             self.start_export();
         }
     }
+}
+
+/// the save prompt's width and its buttons' width
+const PROMPT_W: f32 = 400.0;
+const PROMPT_BTN_W: f32 = 108.0;
+
+/// The save prompt's title and its one line of explanation:
+/// `Save changes to "Song"?` - the song's title, else its file name, else
+/// Untitled.
+pub(crate) fn prompt_text(
+    p: &Pending,
+    title: &str,
+    path: Option<&std::path::Path>,
+) -> (String, String) {
+    let name = if !title.trim().is_empty() {
+        title.trim().to_string()
+    } else {
+        path.and_then(|p| p.file_stem())
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Untitled".into())
+    };
+    let lead = match p {
+        Pending::Quit => "If you quit without saving, your changes are lost.",
+        Pending::New => "If you start a new song without saving, your changes are lost.",
+        Pending::Open | Pending::OpenPath(_) | Pending::Demo(_) => {
+            "If you open another song without saving, your changes are lost."
+        }
+    };
+    (
+        format!("Save changes to \u{201C}{name}\u{201D}?"),
+        lead.into(),
+    )
 }

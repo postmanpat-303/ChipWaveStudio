@@ -285,7 +285,10 @@ impl App {
         self.pr.step = Some((data, at));
         self.pr.step_used = true;
         self.dirty = true;
-        self.status = format!("MIDI step {} (release all keys: next step)", note_name(note));
+        self.status = format!(
+            "MIDI step {} (release all keys: next step)",
+            note_name(note)
+        );
         true
     }
 
