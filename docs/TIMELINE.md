@@ -63,7 +63,7 @@ Timeline-mode songs save a `timeline.toml` and need this version to open (older 
 
 ## Piano roll and note clips
 
-The lower panel has a **Piano roll** tab (next to Order list / Instrument / Automation). It edits the clip selected on the Timeline, or the current block column in the Tracker. Clicking into it gives it the keyboard; clicking elsewhere gives it back.
+The lower panel has a **Piano roll** tab (next to Order list / Instrument / Automation). It edits the clip selected on the Timeline, or the current block column in the Tracker. Clicking into it gives it the keyboard; clicking elsewhere gives it back. **Press a key on the roll's keyboard** (the strip on the left) to hear it on the track's instrument; drag up and down to play the keys you pass, release to stop. It never writes a note or an undo step. Hovering a key names it (*C#4 · octave 4*). Notes you draw, write from the chord lane, step-input, record or capture carry the track's instrument, so they play what the header shows; notes already in a song keep theirs. A track whose instrument was deleted says so in its header (*0C (missing instrument)*) and in the status line, and new notes then play the track's current sound.
 
 **Toolbar and editing (Unreleased, all targets):** one row, left to right:
 - the clip / block **chip** (track colour) and **ALL** (select every note, Ctrl+A);
@@ -176,7 +176,7 @@ When all 32 tracks are used, the add commands are greyed out with "all 32 tracks
 | **Rename** | the name in the header becomes a text field: type, then **Enter** or click away keeps it, **Esc** cancels (one undo step) |
 | **Colour ›** | a swatch panel pops out: the 12 track colours or **Auto** (the palette colour of the track's place). Timeline mode |
 | **Icon ›** | the **TRACK ICON** panel: **Auto** (picked from the instrument type, the default) or one of 16 icons (keys, synth wave, sine, square, drums, hi-hat, guitar, bass clef, mic, violin, brass, voice, sparkle, waveform, noise, pad). Shown in the track header, the channel header and the [Inspector](INSPECTOR.md). Saved with the song; timeline mode |
-| **Add ›** | **Instrument track…** (the Browser picks the instrument, as "Add track with instrument"), **Audio track** (timeline mode), **Empty track above / below**, **Duplicate** (a copy below: its block column, clips with their own notes, mixer strip, colour, icon and lanes). **FX track** is greyed out: bus tracks are not in ChipWave yet |
+| **Add ›** | **Instrument track…** (the Browser picks the instrument, as "Add track with instrument"), **Audio track** (timeline mode), **Empty track above / below**, **Duplicate** (a copy below: its block column, clips with their own notes, mixer strip, colour, icon and lanes), **Automation lane ›** (timeline mode: a small menu with **Show / Hide this track's lanes**, a tick box per lane to switch it on or off, and **New lane: pick a parameter ›**, the same searchable picker as the lane strip's **+ lane**; a new lane is one undo step and shows itself). **FX track** is greyed out: bus tracks are not in ChipWave yet |
 | **Devices** | the lower panel's Devices tab for this track |
 | **Routing** | the Inspector for this track; its **Sends** section has the delay / reverb sends and the duck depth |
 | **Organize ›** | **Move up / down / to top / to bottom** (the whole channel moves, as when you drag a header) and the track's **effect speed** (follow the song, 3, 6, 12) |
