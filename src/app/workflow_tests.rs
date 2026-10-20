@@ -1213,3 +1213,336 @@ fn drum_pattern_from_the_track_pie_goes_on_that_track() {
     assert_eq!(h.state().with(|s| s.song.channels), n, "no new track");
     assert!(clips(&h) > before, "a pattern clip on track {tr}");
 }
+
+// ------------------------------------------- Del's crash path (20 Oct, evening)
+
+fn dbl_at(h: &mut Harness<'static, App>, p: Pos2) {
+    with_mods(h, egui::Modifiers::NONE, egui::Event::PointerMoved(p));
+    let mut t = h.ctx.input(|i| i.time);
+    for _ in 0..2 {
+        for pressed in [true, false] {
+            t += 0.05;
+            h.input_mut().time = Some(t);
+            with_mods(
+                h,
+                egui::Modifiers::NONE,
+                egui::Event::PointerButton {
+                    pos: p,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: Default::default(),
+                },
+            );
+        }
+    }
+    h.input_mut().time = None;
+    frames(h, 2);
+}
+
+/// a new song, + Add track, double-click the track: a new empty note clip
+/// open in the piano roll
+fn new_clip_setup() -> Harness<'static, App> {
+    let mut h = harness_with(fileio::demo_song());
+    h.state_mut().new_song();
+    // the default install: the Tracker hidden, so a double-click on empty
+    // space makes a note clip
+    h.state_mut().extra.show_tracker = false;
+    h.state_mut().view = View::Timeline;
+    frames(&mut h, 3);
+    h.get_by_label("+ Add track").click();
+    frames(&mut h, 3);
+    let (_, row) = h.state().tlv.track_rects(0).expect("the new track");
+    let lanes = h.state().tlv.lanes;
+    dbl_at(&mut h, Pos2::new(lanes.left() + 40.0, row.center().y));
+    frames(&mut h, 3);
+    assert!(h.state().pr.open, "the roll opens on the new clip");
+    eprintln!("target: {:?}", h.state().pr_target());
+    h
+}
+
+/// Del's steps: new track, double-click a clip, right-click the roll's
+/// chord lane, Generate, click a style
+#[test]
+fn del_new_clip_chord_pie_generate_style_click() {
+    use crate::chordgen::{PIE_STYLES, STYLES};
+    let n = PIE_STYLES.len();
+    // every way into the dialog from the pie: a style wedge (n of them),
+    // More… (n + 1)
+    for wedge in (0..n).chain([n + 1]) {
+        let mut h = new_clip_setup();
+        let lane = h.state().cl.rect;
+        assert!(lane.height() > 0.0, "the chord lane shows");
+        let p = Pos2::new(lane.left() + 60.0, lane.center().y);
+        right_click(&mut h, p);
+        frames(&mut h, 12);
+        let w = h
+            .state()
+            .cl
+            .pie
+            .as_ref()
+            .map(|p| p.0.wedge_centre(wedge, 75.0))
+            .expect("the chord pie opens");
+        click_at(&mut h, w);
+        frames(&mut h, 3);
+        assert!(h.state().cl.gen.open, "wedge {wedge} opens Generate");
+        for st in STYLES.iter() {
+            h.get_by_label(st.name).click();
+            frames(&mut h, 2);
+        }
+        for st in STYLES.iter().rev() {
+            h.get_by_label(st.name).click();
+            frame(&mut h);
+        }
+    }
+}
+
+fn render_some(h: &mut Harness<'static, App>) {
+    h.state().with(|s| {
+        let crate::audio::Shared { song, engine, .. } = s;
+        let mut buf = vec![0.0f32; 128];
+        for _ in 0..400 {
+            engine.render(song, &mut buf);
+        }
+    });
+}
+
+/// the pie's presets: point at a style, run over its progressions (each
+/// plays), click one, and the new clip plays it
+#[test]
+fn del_new_clip_chord_pie_presets_hover_pick_and_play() {
+    use crate::chordgen::{PIE_STYLES, STYLES};
+    for (wi, &st) in PIE_STYLES.iter().enumerate() {
+        for k in 0..STYLES[st].progs.len() {
+            let mut h = new_clip_setup();
+            let lane = h.state().cl.rect;
+            right_click(&mut h, Pos2::new(lane.left() + 60.0, lane.center().y));
+            frames(&mut h, 12);
+            let w = h.state().cl.pie.as_ref().unwrap().0.wedge_centre(wi, 75.0);
+            h.event(egui::Event::PointerMoved(w));
+            frames(&mut h, 4);
+            for kk in 0..STYLES[st].progs.len() {
+                let c = h.state().cl.pie.as_ref().unwrap().0.child_centre(wi, kk);
+                h.event(egui::Event::PointerMoved(c));
+                frames(&mut h, 3);
+                render_some(&mut h);
+            }
+            let c = h.state().cl.pie.as_ref().unwrap().0.child_centre(wi, k);
+            click_at(&mut h, c);
+            frames(&mut h, 4);
+            render_some(&mut h);
+            assert!(
+                !h.state()
+                    .cl_marks(h.state().pr_target().unwrap())
+                    .is_empty(),
+                "style {st} prog {k} wrote chords"
+            );
+            h.state_mut().play(1);
+            frames(&mut h, 2);
+            render_some(&mut h);
+            frames(&mut h, 2);
+        }
+    }
+}
+
+/// fuzz the Generate dialog on a brand-new clip: random song keys and dialog
+/// settings, random clicks on every control, Apply / Cancel / reopen,
+/// undo / redo, playback. Any panic names its seed and step.
+#[test]
+fn generate_dialog_fuzz_on_a_new_clip() {
+    use crate::chordgen::{Voicing, STYLES};
+    use crate::chords::{Key, Scale};
+    let seeds: u64 = std::env::var("CW_FUZZ_SEEDS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(12);
+    let steps = 50;
+    let mut fixed: Vec<&str> = vec![
+        "Any",
+        "Major",
+        "Minor",
+        "4",
+        "8",
+        "16",
+        "32",
+        "Slower",
+        "Style",
+        "Faster",
+        " - ",
+        " + ",
+        "Another one",
+        "Preview",
+        "Apply",
+        "Cancel",
+    ];
+    fixed.extend([
+        "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B",
+    ]);
+    let mut wrote = 0;
+    for seed in 0..seeds {
+        let mut r = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+        let mut rnd = move |n: usize| {
+            r ^= r << 13;
+            r ^= r >> 7;
+            r ^= r << 17;
+            (r % n.max(1) as u64) as usize
+        };
+        let mut h = new_clip_setup();
+        let key = match rnd(3) {
+            0 => None,
+            _ => Some(Key::new(rnd(12) as u8, Scale::ALL[rnd(Scale::ALL.len())])),
+        };
+        h.state().with(|s| s.song.info.key = key);
+        let mut log = vec![format!("key {key:?}")];
+        let mut had = false;
+        let t = h.state().pr_target().unwrap();
+        h.state_mut().cl_open_gen_at(0);
+        frames(&mut h, 2);
+        for step in 0..steps {
+            let what = rnd(10);
+            let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let a = h.state_mut();
+                match what {
+                    0 => {
+                        let g = &mut a.cl.gen;
+                        g.write = rnd(2) == 0;
+                        g.on_top = rnd(3) == 0;
+                        g.voicing = Voicing::ALL[rnd(Voicing::ALL.len())];
+                        g.octave = 1 + rnd(7) as u8;
+                        g.opts.colour = rnd(101) as f32 / 100.0;
+                        g.opts.variation = rnd(101) as f32 / 100.0;
+                        g.opts.walking_bass = rnd(2) == 0;
+                        format!(
+                            "set write {} top {} {:?} oct {} col {} var {} walk {}",
+                            g.write,
+                            g.on_top,
+                            g.voicing,
+                            g.octave,
+                            g.opts.colour,
+                            g.opts.variation,
+                            g.opts.walking_bass
+                        )
+                    }
+                    1 if !a.cl.gen.open => {
+                        a.cl_open_gen_at((rnd(6) as i64 * 4 * tl::PPQ as i64) as _);
+                        "reopen".into()
+                    }
+                    2 => {
+                        a.undo(false);
+                        "undo".into()
+                    }
+                    3 => {
+                        a.undo(true);
+                        "redo".into()
+                    }
+                    4 => {
+                        a.play(1);
+                        "play".into()
+                    }
+                    5 | 6 | 7 => format!("style {}", STYLES[rnd(STYLES.len())].name),
+                    8 if rnd(2) == 0 => "btn Apply".into(),
+                    8 => "btn Generate".into(),
+                    _ => format!("btn {}", fixed[rnd(fixed.len())]),
+                }
+            }));
+            let Ok(act) = res else {
+                panic!("seed {seed} step {step}: {log:?}");
+            };
+            log.push(act.clone());
+            let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let label = act
+                    .strip_prefix("style ")
+                    .or_else(|| act.strip_prefix("btn "));
+                if let Some(l) = label {
+                    if let Some(n) = h.query_all_by_label(l).next() {
+                        n.click();
+                    }
+                }
+                frames(&mut h, 2);
+                if act == "reopen" || act == "btn Generate" {
+                    // a new window's first frame is a sizing pass
+                    frames(&mut h, 2);
+                }
+                if let Some(name) = act.strip_prefix("style ") {
+                    let g = &h.state().cl.gen;
+                    // (an undo that removes the new clip hides the dialog)
+                    let shown = h.query_all_by_label(name).next().is_some();
+                    if g.open && shown {
+                        assert_eq!(STYLES[g.opts.style].name, name, "the click lands");
+                    }
+                }
+                render_some(&mut h);
+                // a pending "Replace notes?" ask: answer it either way
+                if h.state().cl.confirm.is_some() {
+                    let l = if rnd(2) == 0 {
+                        "Replace (delete"
+                    } else {
+                        "Cancel"
+                    };
+                    if let Some(n) = h.query_all_by_label_contains(l).last() {
+                        n.click();
+                    }
+                    frames(&mut h, 2);
+                }
+            }));
+            if res.is_err() {
+                panic!("seed {seed} step {step}: {log:?}");
+            }
+            had |= !h.state().cl_marks(t).is_empty();
+        }
+        if had {
+            wrote += 1;
+        }
+    }
+    // the clicks land: most runs end with chords in the clip
+    assert!(
+        wrote * 3 >= seeds,
+        "only {wrote} of {seeds} runs wrote chords"
+    );
+}
+
+/// a chord on the new clip: every entry of its pie (Generate included,
+/// then every style), each child, with undo between; nothing panics
+#[test]
+fn every_chord_pie_entry_on_a_new_clips_chord() {
+    use crate::chordgen::STYLES;
+    let mut h = new_clip_setup();
+    let t = h.state().pr_target().unwrap();
+    h.state_mut().cl_add_tonic(t, 0, 4 * tl::PPQ as tl::Tick);
+    frames(&mut h, 2);
+    assert_eq!(h.state().cl_marks(t).len(), 1);
+    let lane = h.state().cl.rect;
+    right_click(&mut h, Pos2::new(lane.left() + 20.0, lane.center().y));
+    frames(&mut h, 6);
+    let kids: Vec<usize> = {
+        let (pie, on) = h.state().cl.pie.as_ref().expect("the chord's pie");
+        assert!(matches!(on, chordlane::PieOn::Mark(0)));
+        pie.items.iter().map(|i| i.children.len()).collect()
+    };
+    h.state_mut().cl.pie = None;
+    for write in [false, true] {
+        h.state_mut().cl.gen.write = write;
+        for (item, &n) in kids.iter().enumerate() {
+            for child in std::iter::once(None).chain((0..n).map(Some)) {
+                h.state_mut().cl_mark_action(t, 0, item, child);
+                frames(&mut h, 3);
+                if h.state().cl.gen.open {
+                    for st in STYLES.iter() {
+                        h.get_by_label(st.name).click();
+                        frames(&mut h, 2);
+                    }
+                    h.get_by_label("Apply").click();
+                    frames(&mut h, 2);
+                }
+                h.state_mut().cl.edit = None;
+                render_some(&mut h);
+                frames(&mut h, 1);
+                h.state_mut().undo(false);
+                frames(&mut h, 2);
+                if h.state().cl_marks(t).is_empty() {
+                    h.state_mut().cl_add_tonic(t, 0, 4 * tl::PPQ as tl::Tick);
+                    frames(&mut h, 2);
+                }
+            }
+        }
+    }
+}

@@ -1149,7 +1149,13 @@ impl App {
     }
 
     /// chord pie / list actions on marker `mi`
-    fn cl_mark_action(&mut self, t: Target, mi: usize, item: usize, child: Option<usize>) {
+    pub(super) fn cl_mark_action(
+        &mut self,
+        t: Target,
+        mi: usize,
+        item: usize,
+        child: Option<usize>,
+    ) {
         let mut marks = self.cl_marks(t);
         let Some(m) = marks.get(mi).cloned() else {
             return;
