@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.4.1-00d0ff" alt="Version 0.2.4.1">
+  <img src="https://img.shields.io/badge/version-0.2.5.0-00d0ff" alt="Version 0.2.5.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -20,7 +20,7 @@
 
 ```
  ┌──────────────────────────────────────────────────────────────────────────┐
- │  C H I P W A V E   S T U D I O            v0.2.4.1     BPM 140  SPD 06  │
+ │  C H I P W A V E   S T U D I O            v0.2.5.0     BPM 140  SPD 06  │
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
  │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ OctaMED-inspired  │
  │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ tracker + synth   │
@@ -43,7 +43,7 @@
   <a href="https://github.com/postmanpat-303/BigWaveRadio"><b>BigWave Radio</b></a> (sister project)
 </p>
 
-**ChipWave Studio** is a music tracker inspired by **OctaMED** and the Commodore **Amiga**: the fast, keyboard-driven pattern workflow of a classic tracker, plus a built-in synth, a synthetic Voice instrument, macro-knob Generators (drums, chip FX, analog, FM, noise), a visual Order list, a mixer with sidechain ducking and a true-peak limiter, automation and WAV/MP3 export, in up to 32 channels. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
+**ChipWave Studio** is a music tracker inspired by **OctaMED** and the Commodore **Amiga**: the fast, keyboard-driven pattern workflow of a classic tracker, plus a built-in synth, a synthetic Voice instrument, macro-knob Generators (drums, chip FX, analog, FM, noise), the WaveForge polyphonic synth, a Drum Kit with a step sequencer, a visual Order list, a mixer with sidechain ducking and a true-peak limiter, automation and WAV/MP3 export, in up to 32 channels. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
 
 > **ChipWave Studio was called ChipWave Tracker until 0.2.3.19.** It was renamed in 0.2.4.0 to tell it apart from an unrelated iOS app called "ChipWave". Same app, same settings, same `.cwt` songs; the old GitHub links redirect here. Website: **[postmanpat-303.github.io/ChipWaveStudio](https://postmanpat-303.github.io/ChipWaveStudio/)**. Details: [docs/RENAME.md](docs/RENAME.md).
 
@@ -120,6 +120,14 @@ All pictures on this page are real captures of the current build (no mockups). T
     <td width="66%" valign="top"><b>Voice Transform</b> <sub>(0.2.3.11)</sub>: blend the voice into <b>metallic resonance</b> (modal resonators tuned to the note: metal, bell, bar, harmonic, odd), <b>digital distortion</b> (clip/fold, bits, sample-rate, ring mod) and a <b>heavy sub</b> (sine or octave divider, mono below the crossover), with formant drop for a monster voice. Presets Metal Demon, Digital Ghost, Sub Beast, Cyber Choir, Ritual Growl; <code>3F</code>–<code>42</code> per row; the stages are FX devices for any instrument too. See <a href="docs/VOICE.md">VOICE.md</a>.</td>
   </tr>
   <tr>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-generators-waveforge.png" alt="WaveForge polyphonic synth editor"></td>
+    <td width="66%" valign="top"><b>WaveForge</b> <sub>(0.2.5.0)</sub>: a polyphonic synth inspired by classic subtractive synths. Two band-limited (polyBLEP) oscillators that morph pulse → saw → octave-up saw, with sub, hard sync and up to 16 unison voices each; six blend modes and noise; LP / BP / HP filters at 12 or 24 dB/oct plus band-reject; drive, feedback and a shaper; filter and amp envelopes; Poly / Mono / Legato with 1–8 notes and glide; eight mod routes. Its own editor shows every section side by side on a wide panel and switches to tabs on a narrow one. 11 presets with Init and Revert. See <a href="docs/GENERATORS.md#waveforge-polyphonic-synth-0250">GENERATORS.md</a>.</td>
+  </tr>
+  <tr>
+    <td width="34%" valign="top"><img src="docs/screenshots/drumkit-editor.png" alt="Drum Kit editor with pads, step sequencer and velocity lane"></td>
+    <td width="66%" valign="top"><b>Drum Kit</b> <sub>(0.2.5.0)</sub>: one instrument with up to 32 pads (key, tune, pan, decay, attack, velocity depth, choke groups, mute / solo), 13 kits of 16 pads, a <b>step sequencer</b> with velocity lane, swing and 16 / 32 / 64 steps, a <b>groove generator</b> (style, energy, fill), <b>Add to track</b> and a compact layout for laptop screens. Old Kits convert bit-identically. See <a href="docs/GENERATORS.md#drum-kit-0250">GENERATORS.md</a>.</td>
+  </tr>
+  <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/dark-generators-kit.png" alt="Drum kit generator with macro knobs"></td>
     <td width="66%" valign="top"><b>Generators: Drum Synth</b> <sub>(0.2.3.12)</sub>: kick (v0, 808, 909, psy Zap), snare, hat, clap, tom and perc from eight macro knobs, or a whole <b>kit</b> on one instrument. <b>Dice</b> rolls a new sound within sensible ranges, <b>Mutate</b> nudges it, <b>lock</b> keeps a knob, 16 rolls of history, stored seed, <b>Bake to sample</b>. Plus a <b>Moog ladder filter</b> (clean or vintage, 12/24 dB LP/BP/HP) in every synth. <code>43xy</code> sets a macro per row. See <a href="docs/GENERATORS.md">GENERATORS.md</a>.</td>
   </tr>
@@ -151,7 +159,7 @@ All pictures on this page are real captures of the current build (no mockups). T
 | 📚 **Instrument library** | `.cwi` instrument files, a library folder with categories, factory sounds, audition, rename / reorder / swap instruments |
 | 🎛️ **Effects column** | `01`/`02` slide, `08` note decay, `09` speed, `0C` volume, `0D` volume slide, `0F` tempo; Voice `30`–`37` (`33`/`34` stutter any instrument); filter and acid `38`–`3D` (cutoff, resonance, cutoff slides, 303 glide, accent); `3E` speak word; `3F`–`42` Voice Transform and chrome devices; `43xy` generator macros. Full table: [TRACKER.md](docs/TRACKER.md#5-effect-commands) |
 | 🔌 **Plugin instruments** | CLAP instruments such as Surge XT: crash-guarded scanner, browser, native editor (Windows), parameter list, 8 macros for `43xy` and automation, state saved in the song, offline render. VST3 is listed but not hosted yet. [PLUGINS.md](docs/PLUGINS.md) |
-| 🎲 **Generators** | macro-knob instruments: Drum Synth and kits, Chip FX (sfxr), Analog (Moog-style), FM-4, Noise, WaveForge (polyphonic, two oscillators with unison); Dice, Mutate, locks, 16-roll history, Bake to sample; 46 presets |
+| 🎲 **Generators** | macro-knob instruments: Drum Synth and kits, Drum Kit (32 pads, step sequencer, groove generator), Chip FX (sfxr), Analog (Moog-style), FM-4, Noise, Wave, Grid, WaveForge (polyphonic, two oscillators with unison); Dice, Mutate, locks, 16-roll history, Bake to sample; presets for each |
 | 🗣️ **Voice** | synthetic vowels, babble, stutter, spoken words, Throat (vocal tract) mode and the Transform (metal, digital, sub) |
 | 🧱 **Master limiter** | lookahead true-peak limiter on the master and in every export (ceiling −1 dBTP by default, gain, release, bypass), with a loudness meter: momentary, short-term and integrated LUFS plus true peak, and a loudness-target hint |
 | 🔊 **Samples** | import WAV (button or drag and drop), sample view with loop points and preview, chop / slice into instruments or notes |
@@ -309,7 +317,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [INSTRUMENT_LIBRARY.md](docs/INSTRUMENT_LIBRARY.md) — instrument library, `.cwi` files, rename / reorder / swap (0.2.3.9)
 - [CHORDS.md](docs/CHORDS.md) — chord helper and scale lock (0.2.3.9)
 - [VOICE.md](docs/VOICE.md) — the Voice (glitch) instrument: vowels, babble, stutter, words, Throat mode, Transform and chrome FX devices, effects 30–42 (0.2.3.6-11)
-- [GENERATORS.md](docs/GENERATORS.md) — generators: Drum Synth, kits, Chip FX (sfxr), Analog, FM-4, Noise, WaveForge, Dice, Bake, Moog ladder filter, effect 43xy (0.2.3.12-14)
+- [GENERATORS.md](docs/GENERATORS.md) — generators: Drum Synth, kits, Drum Kit, Chip FX (sfxr), Analog, FM-4, Noise, Wave, Grid, WaveForge, Dice, Bake, Moog ladder filter, effect 43xy (0.2.3.12–0.2.5.0)
 - [MIDI.md](docs/MIDI.md) — MIDI keyboard input: play, record, velocity, sustain, MIDI learn (0.2.3)
 - [MIDI_VST.md](docs/MIDI_VST.md) — MIDI and plugins (plan)
 - [PLUGIN_MANAGER.md](docs/PLUGIN_MANAGER.md) — the plugin manager (scan, verify, activate)

@@ -1,5 +1,5 @@
 //! The poly synth (Unreleased; shown as [`POLY_DISPLAY_NAME`]): a configurable
-//! polyphonic subtractive synth, inspired by other synths. A generator engine (`GenEngine::Poly`), so the
+//! polyphonic subtractive synth, inspired by classic subtractive synths. A generator engine (`GenEngine::Poly`), so the
 //! voice pools, insert FX, mixer, automation lanes (`instrument.N.gen.K`),
 //! 43xy (knobs 1-8), MIDI learn, drag-to-modulate, presets and `.cwi` files
 //! all work as for the other generators.

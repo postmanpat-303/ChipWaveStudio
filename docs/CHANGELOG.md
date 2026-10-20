@@ -2,7 +2,24 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
-## Unreleased
+## 0.2.5.0: WaveForge, Drum Kit and a steadier workflow
+
+Released 2026-10-20. Highlights (details in the sections below):
+- **WaveForge**, a new polyphonic synth: two band-limited oscillators with up to 16 unison voices each, 12 / 24 dB filters, drive and shaper, two envelopes, Poly / Mono / Legato with glide, eight mod routes and 11 presets.
+- **Drum Kit**, a new drum instrument: up to 32 pads with choke groups, a step sequencer, a groove generator and **Add to track**, with a compact layout for laptop screens.
+- **New notes play the track's instrument.** Notes you draw, record or write now carry the instrument the track header shows (they used to play instrument 01). Existing notes and songs sound exactly as before. For an older take that plays the wrong sound, **Use the track's instrument** (clip menu, or the piano roll header) gives its notes the track's instrument in one step.
+- **Workflow fixes:** no more crash in Generate chord progression, track pie panels (Colour, Icon, Add, Organize) that stay open on the way to them, a split preview line, the track pie's Add menu (Change instrument…, Drum pattern…, Automation lane), chord notes that replace instead of piling up, a playable piano-roll keyboard that uses the track's instrument, kept crash reports and a Settings scale slider that no longer jumps while you drag it.
+- **Consistency fixes:** opening a song forgets the old selection, cut / copy / paste act only where you can see them, the Timeline keeps the keyboard after opening a song, the unsaved mark only means real changes, and more (see *Consistency fixes*).
+- Songs that use WaveForge or a Drum Kit are saved as reader version 5, which older versions refuse cleanly instead of playing them wrong. Every other song is saved and plays exactly as before.
+
+### Drum Kit
+- **Drum Kit**, a new instrument (**New… › Drum Kit**, and in the Browser): one instrument with up to **32 pads**, each a Drum Synth voice with its own trigger key, tune, pan, level, decay, attack, velocity depth, **choke group** and mute / solo. Choke groups and velocity depth work on note clips, live MIDI and pattern previews. 13 kits of 16 pads, one per Drum Patterns kit; **Dice kit** rolls new sounds.
+- **Its own editor:** Kit, Pattern and Groove cards, a pad grid (click to hear and select, **+ Add pad**), a **step sequencer** with drag-paint, mute / solo per lane, a velocity lane, 16 / 32 / 64 steps, pages, **Play loop**, *Insert at marker*, linked copies and *Make unique*, and **swing** kept with the pattern.
+- **Generate:** a new groove from the pattern library, in this kit (style, energy, fill, seed), with **Preview**, **Keep as pattern**, **Replace pattern** and **Regenerate**.
+- **Add to track:** places the pattern at the play marker's bar on the kit's track (after its last clip when that bar is taken, or on a new track), as one undo step; a line says where it went and the new clip flashes.
+- **Laptop layout:** on short or narrow panels (1366×768, 1280×720) the editor switches to a compact layout with a toolbar, the sequencer and Pads / Sound / Generate side tabs.
+- **Convert to Drum Kit** turns an old Kit into a Drum Kit that renders bit-identically (tested on every key). A Drum Pattern dropped on a new track now makes a Drum Kit.
+
 
 ### Workflow and stability
 - **The Settings scale slider no longer jumps under the pointer.** Dragging it used to rescale the whole UI on every frame (and save the settings each time), so the slider moved and resized while you dragged it. It now shows the pending scale and the workspace size it gives (*125 % · 1536×864 at this scale*) and applies on release, in the same 25 % steps that Ctrl+= / Ctrl+- use. **Reset to 100 %** sits next to it, and Ctrl+0 still works.
@@ -13,11 +30,12 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 - **Add › Change instrument…** and **Drum pattern…** in the track pie open the Browser (Instruments with your Favourites first, or Drum Patterns) and the next pick goes to that track.
 - **Add › Automation lane** in the track pie: show or hide the track's lanes, switch each on or off, or make a new lane from the parameter picker (one undo step).
 - **Chord notes replace instead of piling up.** Writing chord notes (Generate's Apply, a pie progression, a chord's Write notes) replaces the notes that start inside each chord's span, so running it twice never doubles notes. **Add on top** keeps the old notes; a confirm box shows the target clip and bars before deleting more than 8 notes or notes outside the chords' range.
+- **Use the track's instrument** (the clip menu, and the piano roll header while the clip needs it): notes stored without an instrument, as takes recorded before this version were, play whatever the channel last played. This gives them the track's assigned instrument; notes that already have one are left alone, and it is one undo step. Linked copies on the same track change with the clip; when a copy sits on another track, this track's copies get their own notes first, so no other track changes. It is disabled, with a tooltip saying why, when the track has no instrument assigned. Nothing changes until you use it, so songs still open and play exactly as before.
 - **Play the piano roll's keyboard.** Press or drag over the keys to hear them on the track's instrument (no notes written, no undo step); hovering a key names it and its octave. Note and chord previews in the roll also use the track's instrument now instead of the instrument last selected.
 - **New notes play the track's instrument.** Notes drawn, written, step-input, recorded or captured in a note clip used to play the channel's last instrument (often instrument 01) instead of the one the track header shows. They now carry the track's instrument. Existing notes and songs sound exactly as before. A deleted track instrument shows as *(missing instrument)* with a message instead of silence.
 
 ### WaveForge synth
-- **WaveForge**, a new polyphonic generator (**New… > Generator (WaveForge)**), inspired by other synths. Two band-limited oscillators (Shape pulse → saw → octave-up saw, PW, sub, hard sync, up to 16 unison voices each), six blend modes plus noise, LP / BP / HP filters at 12 or 24 dB/oct and a band-reject, drive and a shaper, filter and amp envelopes, Poly / Mono / Legato with 1–8 notes and glide, and eight mod routes (envelopes, velocity, key). Its own editor shows every section on a wide panel and switches to tabs on a narrow one; the header shows the voices playing and the load. Eleven presets (WaveForge Init and ten starters), with **Init** and **Revert**. See [GENERATORS.md](GENERATORS.md#waveforge-polyphonic-synth-unreleased).
+- **WaveForge**, a new polyphonic generator (**New… > Generator (WaveForge)**), inspired by classic subtractive synths. Two band-limited oscillators (Shape pulse → saw → octave-up saw, PW, sub, hard sync, up to 16 unison voices each), six blend modes plus noise, LP / BP / HP filters at 12 or 24 dB/oct and a band-reject, drive and a shaper, filter and amp envelopes, Poly / Mono / Legato with 1–8 notes and glide, and eight mod routes (envelopes, velocity, key). Its own editor shows every section on a wide panel and switches to tabs on a narrow one; the header shows the voices playing and the load. Eleven presets (WaveForge Init and ten starters), with **Init** and **Revert**. See [GENERATORS.md](GENERATORS.md#waveforge-polyphonic-synth-0250).
 - Songs that use WaveForge need reader version 5. Other songs are saved and play exactly as before.
 
 ### Record and musical typing

@@ -1138,6 +1138,7 @@ impl App {
             .then(|| notes.iter().find(|n| n.id == self.pr.sel[0]).copied())
             .flatten();
         let mut tool_edit: Option<RNote> = None;
+        let mut use_instr_clip: Option<u32> = None;
         ui.scope_builder(egui::UiBuilder::new().max_rect(tool.shrink2(egui::vec2(6.0, 1.0))), |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
@@ -1214,6 +1215,32 @@ impl App {
                     let on = self.typing.on;
                     if pr_btn(ui, "Typing", on, true, "musical typing: play notes on the computer keyboard (Ctrl+K)").clicked() {
                         self.typing_toggle();
+                    }
+                    // "Use track instrument": only while the clip has notes
+                    // without an instrument (the button is the hint)
+                    if let Target::Notes { clip: Some(id), .. } = target {
+                        let (unset, slot) = self.with(|s| {
+                            let t = s.song.timeline.as_deref();
+                            let unset = t.map_or(0, |t| crate::timeline::unset_instr_notes(t, id));
+                            let tr = t.and_then(|t| t.clips.iter().find(|c| c.id == id)).map(|c| c.track as usize);
+                            (unset, tr.map_or(0, |tr| crate::timeline::assigned_instr(&s.song, tr)))
+                        });
+                        if unset > 0 {
+                            let tip = if slot == 0 {
+                                format!(
+                                    "{unset} note{} here have no instrument, so they play whatever the channel last played. The track has no instrument assigned: give it one in the Inspector first",
+                                    if unset == 1 { "" } else { "s" }
+                                )
+                            } else {
+                                format!(
+                                    "{unset} note{} here have no instrument, so they play whatever the channel last played. Click to give them the track's instrument {slot:02} (notes that have one are left alone; one undo step)",
+                                    if unset == 1 { "" } else { "s" }
+                                )
+                            };
+                            if pr_btn(ui, "Use track instrument", false, slot > 0, &tip).clicked() && slot > 0 {
+                                use_instr_clip = Some(id);
+                            }
+                        }
                     }
                 }
                 if let Target::Notes { .. } = target {
@@ -1333,6 +1360,16 @@ impl App {
                 }
             });
         });
+        if let Some(id) = use_instr_clip {
+            // the roll's clip, whatever the Timeline has selected
+            let (sel, sels) = (
+                self.tlv.sel,
+                std::mem::replace(&mut self.tlv.sels, vec![id]),
+            );
+            self.tl_apply(super::timeline::TlOp::UseTrackInstr);
+            self.tlv.sel = sel;
+            self.tlv.sels = sels;
+        }
         if let (Some(e), Some(n)) = (tool_edit, sel_note) {
             self.pr_set_note(target, n, e);
         }
