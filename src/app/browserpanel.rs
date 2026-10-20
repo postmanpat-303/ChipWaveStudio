@@ -1035,6 +1035,25 @@ impl App {
                         egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
                         Color32::WHITE,
                     );
+                } else if let Src::Tool(k) = it.src {
+                    // ChipWave Instruments: the instrument's glyph tile
+                    let b = super::trackpie::Builtin::ALL
+                        .get(k as usize)
+                        .copied()
+                        .unwrap_or(super::trackpie::Builtin::Synth);
+                    let g = super::glyphs::glyph_for(b.glyph_tag());
+                    let side = (r.height() - 8.0).clamp(16.0, 24.0);
+                    super::glyphs::tile(
+                        p,
+                        Rect::from_center_size(
+                            Pos2::new(r.left() + 30.0, r.center().y),
+                            egui::vec2(side, side),
+                        ),
+                        g,
+                        c,
+                        Color32::WHITE,
+                        crate::theme::polished(),
+                    );
                 } else {
                     badge(
                         p,
@@ -1155,6 +1174,10 @@ impl App {
                     resp.on_hover_text(match &it.src {
                         Src::File(p) => p.display().to_string(),
                         Src::Plugin(f) => f.path.clone(),
+                        Src::Tool(_) => format!(
+                            "{} · drag onto a track (or below the tracks for a new one), or double-click for a new track",
+                            it.detail
+                        ),
                         _ => format!("{} · {}", it.fmt.what(), it.category),
                     })
                 };
@@ -1181,11 +1204,14 @@ impl App {
                             ui.close();
                         }
                     } else if inst {
-                        if ui.button("Add as a new instrument").clicked() {
+                        // (ChipWave Instruments always go onto a track)
+                        let tool = matches!(it.src, Src::Tool(_));
+                        if !tool && ui.button("Add as a new instrument").clicked() {
                             ops.push(Op::Act(it.clone(), Act::New));
                             ui.close();
                         }
                         if cur_slot > 0
+                            && !tool
                             && ui
                                 .button(format!("Replace instrument {cur_slot:02X}'s sound"))
                                 .clicked()
