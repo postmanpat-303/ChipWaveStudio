@@ -133,3 +133,26 @@ fn clipboard_keys_on_a_song_with_no_tracks_do_not_crash() {
         }
     }
 }
+
+#[test]
+fn after_opening_a_song_the_timeline_has_the_keyboard() {
+    let mut h = harness_with(fileio::demo_song());
+    h.state_mut().load_demo(0);
+    frames(&mut h, 4);
+    assert_eq!(h.state().view, View::Timeline);
+    assert!(h.state().is_default_layout(), "Timeline + piano roll");
+    assert!(!h.state().pr_active(), "the roll waits for a click");
+    key(&mut h, Key::A, egui::Modifiers::COMMAND);
+    assert_eq!(h.state().tlv.sels.len(), clips(&h), "Ctrl+A selects every clip");
+    assert!(h.state().pr.sel.is_empty(), "and no roll notes");
+    // Ctrl+6 and File > New keep it on the Timeline too
+    key(&mut h, Key::Num6, egui::Modifiers::COMMAND);
+    assert!(!h.state().pr_active());
+    // opening a clip in the roll gives the roll the keys
+    let id = song(&h, |s| s.timeline.as_ref().unwrap().clips[0].id);
+    h.state_mut().tlv.sel = Some(id);
+    h.state_mut().tlv.sels = vec![id];
+    h.state_mut().timeline_open_roll();
+    frames(&mut h, 2);
+    assert!(h.state().pr_active(), "an opened clip takes the keys");
+}
