@@ -2179,7 +2179,14 @@ fn polysynth(b: &mut B) {
         |x| x.blend as usize,
         |x, v| x.blend = BlendOp::ALL[v],
     )
-    .tip("how oscillator 2 combines with oscillator 1: MIX, NEG (inverted), WIPE, AM (ring), SIGN, MAX");
+    .tip(&format!(
+        "how oscillator 2 combines with oscillator 1. {}",
+        BlendOp::ALL
+            .iter()
+            .map(|x| format!("{}: {}", x.name(), x.tip()))
+            .collect::<Vec<_>>()
+            .join("; ")
+    ));
     for i in [BLEND, NOISE, COLOUR] {
         k(b, i);
     }
@@ -2263,7 +2270,7 @@ fn polysynth(b: &mut B) {
         k(b, i);
     }
     b.card(Tab::Modulation, "Mod routes");
-    let dsts: Vec<String> = route_targets().map(|d| POLY[d].name.to_string()).collect();
+    let dsts: Vec<String> = route_targets().map(knob_label).collect();
     for s in 0..MOD_SLOTS {
         ps_choice(
             b,
@@ -2818,6 +2825,24 @@ pub(crate) mod tests {
                     unreachable!()
                 };
                 r.extend(g.knobs().into_iter().map(|(k, _)| format!("gd.{k}")));
+            }
+            crate::poly::POLY_DISPLAY_NAME => {
+                r.extend(s(&[
+                    "gen.dice",
+                    "ps.panel",
+                    "ps.reset0",
+                    "ps.reset1",
+                    "ps.blend",
+                    "ps.filter",
+                    "ps.shaper",
+                    "ps.mode",
+                    "ps.polyphony",
+                ]));
+                for k in 0..crate::poly::MOD_SLOTS {
+                    r.push(format!("ps.src{k}"));
+                    r.push(format!("ps.dst{k}"));
+                }
+                r.extend((0..crate::poly::PN).map(|k| format!("ps.{k}")));
             }
             "Sample" => r.push("sample.info".into()),
             "CLAP" | "VST3" => r.extend(s(&["plugin.status", "plugin.macros", "plugin.params"])),

@@ -53,7 +53,7 @@ fn knob_table_is_consistent() {
         assert!((d.unmap(mid) - 0.37).abs() < 1e-4, "{} map/unmap", d.name);
         assert!(!d.name.is_empty() && !d.tip.is_empty(), "knob {i}");
     }
-    assert_eq!(POLY[OSC[1] + VOICES].name, "O2 Voices");
+    assert_eq!(knob_label(OSC[1] + VOICES), "Osc 2: Voices");
     assert_eq!(POLY[MOD_AMT].name, "Mod 1");
     // the new units read as semitones and footage
     assert_eq!(

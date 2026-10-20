@@ -575,7 +575,7 @@ pub(crate) fn macros(l: &Layout, sp: &Spec) -> Vec<MacroRt> {
 
 /// the engine macro keys are &'static in the spec already; find it there
 fn leak_key(k: &str) -> &'static str {
-    for sp in [&DRUM, &CHIPFX, &FM, &GRID] {
+    for sp in [&DRUM, &CHIPFX, &FM, &GRID, &POLY] {
         if let Macros::Params(ks) = &sp.macros {
             if let Some(s) = ks.iter().find(|x| **x == k) {
                 return s;

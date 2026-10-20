@@ -824,7 +824,9 @@ pub fn gen_knobs(g: &GenPatch) -> Vec<(usize, String)> {
         GenEngine::Fm(_) => named(&crate::gen2::FM),
         GenEngine::Noise(_) => named(&crate::gen2::NOISE),
         GenEngine::Wave(_) => named(&crate::gen_wave::WAVE),
-        GenEngine::Poly(_) => named(&crate::poly::POLY),
+        GenEngine::Poly(_) => (0..crate::poly::PN)
+            .map(|k| (k, crate::poly::knob_label(k)))
+            .collect(),
         GenEngine::Grid(x) => x.knobs(),
     }
 }

@@ -115,27 +115,27 @@ pub const PN: usize = 58;
 macro_rules! osc_knobs {
     ($n:literal) => {
         [
-            m(concat!("O", $n, " Shape"), -1.0, 1.0, false, "v", (0.2, 0.8),
+            m("Shape", -1.0, 1.0, false, "v", (0.2, 0.8),
                 "pulse (left), saw (centre), octave-up saw (right)"),
-            m(concat!("O", $n, " PW"), 0.05, 0.95, false, "", (0.2, 0.8),
+            m("PW", 0.05, 0.95, false, "", (0.2, 0.8),
                 "pulse width; also moves the octave-up saw's second ramp"),
-            m(concat!("O", $n, " Pitch"), -7.0, 7.0, false, "st.", (0.5, 0.5),
+            m("Pitch", -7.0, 7.0, false, "st.", (0.5, 0.5),
                 "pitch, -7 to +7 semitones"),
-            m(concat!("O", $n, " Octave"), -2.0, 3.0, false, "ft", (0.2, 0.8),
+            m("Octave", -2.0, 3.0, false, "ft", (0.2, 0.8),
                 "octave in organ footage: 32' 16' 8' 4' 2' 1'"),
-            m(concat!("O", $n, " Sub"), 0.0, 1.0, false, "", (0.0, 0.5),
+            m("Sub", 0.0, 1.0, false, "", (0.0, 0.5),
                 "sub oscillator level: a pulse one octave down"),
-            m(concat!("O", $n, " Sub PW"), 0.05, 0.95, false, "", (0.3, 0.7),
+            m("Sub PW", 0.05, 0.95, false, "", (0.3, 0.7),
                 "sub oscillator pulse width"),
-            m(concat!("O", $n, " Sync"), 0.0, 60.0, false, "st.", (0.0, 0.3),
+            m("Sync", 0.0, 60.0, false, "st.", (0.0, 0.3),
                 "hard sync: the oscillator runs this far above its pitch and restarts every cycle (0 = off)"),
-            m(concat!("O", $n, " Voices"), 1.0, 16.0, false, "#", (0.0, 0.4),
+            m("Voices", 1.0, 16.0, false, "#", (0.0, 0.4),
                 "unison voices per note"),
-            m(concat!("O", $n, " Detune"), 0.0, 100.0, false, "ct", (0.0, 0.4),
+            m("Detune", 0.0, 100.0, false, "ct", (0.0, 0.4),
                 "unison detune (the outer voices, in cents)"),
-            m(concat!("O", $n, " Width"), 0.0, 1.0, false, "", (0.3, 1.0),
+            m("Width", 0.0, 1.0, false, "", (0.3, 1.0),
                 "stereo spread of the unison voices"),
-            m(concat!("O", $n, " Pan"), -1.0, 1.0, false, "v", (0.4, 0.6),
+            m("Pan", -1.0, 1.0, false, "v", (0.4, 0.6),
                 "oscillator pan"),
         ]
     };
@@ -483,7 +483,6 @@ impl BlendOp {
     pub fn name(self) -> &'static str {
         ["MIX", "NEG", "WIPE", "AM", "SIGN", "MAX"][self as usize]
     }
-    #[allow(dead_code)] // WIP: wired up in the next commits
     pub fn tip(self) -> &'static str {
         [
             "a linear mix of oscillators 1 and 2",
@@ -596,6 +595,18 @@ pub struct Route {
     pub src: ModSrc,
     /// destination knob index (< MOD_AMT)
     pub dst: u8,
+}
+
+/// a knob's full name ("Osc 1: Shape"): automation lanes and route targets
+pub fn knob_label(k: usize) -> String {
+    let n = POLY.get(k).map_or("?", |d| d.name);
+    if (OSC[0]..OSC[0] + OSC_N).contains(&k) {
+        format!("Osc 1: {n}")
+    } else if (OSC[1]..OSC[1] + OSC_N).contains(&k) {
+        format!("Osc 2: {n}")
+    } else {
+        n.to_string()
+    }
 }
 
 /// knobs a route may target (everything but the route amounts)
@@ -769,7 +780,6 @@ impl PolyP {
     }
     /// voices sounding per note (unison of both oscillators; oscillator 2
     /// counts only when the blend lets it through)
-    #[allow(dead_code)] // WIP: wired up in the next commits
     pub fn osc_voices(&self) -> usize {
         let n = |o: usize| self.get(OSC[o] + VOICES).round().clamp(1.0, 16.0) as usize;
         n(0) + if self.p[BLEND] > 0.0 { n(1) } else { 0 }

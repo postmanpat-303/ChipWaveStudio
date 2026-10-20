@@ -20,7 +20,7 @@ pub(in crate::app) struct PolyUi {
 }
 
 /// below this width the editor switches to layout B
-pub(in crate::app) const WIDE_MIN: f32 = 1300.0;
+pub(in crate::app) const WIDE_MIN: f32 = 1400.0;
 
 /// sections: (title, card whose picture it shows, LED choices, other
 /// choices, knobs, knobs per row)
@@ -111,6 +111,38 @@ fn sections() -> Vec<Sec> {
     ]
 }
 
+/// the routes "section"
+const ROUTES: usize = 8;
+/// a knob's column (the cell plus room for its label)
+const KW: f32 = 68.0;
+const TITLE_H: f32 = 22.0;
+const VIZ_H: f32 = 52.0;
+
+/// a section's size
+fn sec_size(secs: &[Sec], s: usize) -> egui::Vec2 {
+    if s == ROUTES {
+        return egui::vec2(
+            4.0 * CTL_W + 16.0,
+            TITLE_H + 2.0 * (2.0 * 24.0 + CELL.y) + 10.0,
+        );
+    }
+    let sc = &secs[s];
+    let w = sc.cols as f32 * KW + 16.0;
+    let leds: f32 = sc
+        .leds
+        .iter()
+        .map(|k| if *k == "ps.filter" { 40.0 } else { 20.0 })
+        .sum();
+    let rows = sc.knobs.len().div_ceil(sc.cols) as f32;
+    let h = TITLE_H
+        + if sc.viz.is_some() { VIZ_H } else { 0.0 }
+        + leds
+        + sc.ctls.len() as f32 * 24.0
+        + rows * CELL.y
+        + 8.0;
+    egui::vec2(w, h)
+}
+
 /// layout B's section tabs: (name, sections shown)
 const TABS: [(&str, &[usize]); 6] = [
     ("Osc", &[0, 1]),
@@ -147,21 +179,15 @@ impl App {
         let wide = ui.available_width() >= WIDE_MIN;
         self.ip.poly.wide = wide;
         let secs = sections();
-        egui::ScrollArea::vertical()
+        egui::ScrollArea::both()
             .id_salt(("poly_body", cx.idx))
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 if wide {
                     // layout A: oscillators, mix, filter on top; drive,
-                    // envelopes, voice and the routes below
+                    // envelopes, voice below; the routes last
                     for row in [&[0usize, 1, 2, 3][..], &[4, 5, 6, 7][..], &[8][..]] {
-                        ui.horizontal_top(|ui| {
-                            ui.spacing_mut().item_spacing.x = 8.0;
-                            for &s in row {
-                                self.poly_section(ui, layout, &secs, s, inst, cx);
-                            }
-                        });
-                        ui.add_space(6.0);
+                        self.poly_row(ui, layout, &secs, row, inst, cx);
                     }
                 } else {
                     // layout B: one group at a time
@@ -174,14 +200,42 @@ impl App {
                     });
                     ui.add_space(4.0);
                     let sec = self.ip.poly.sec.min(TABS.len() - 1);
-                    ui.horizontal_top(|ui| {
-                        ui.spacing_mut().item_spacing.x = 8.0;
-                        for &s in TABS[sec].1 {
-                            self.poly_section(ui, layout, &secs, s, inst, cx);
-                        }
-                    });
+                    self.poly_row(ui, layout, &secs, TABS[sec].1, inst, cx);
                 }
             });
+    }
+
+    /// sections side by side, each in its own fixed rectangle
+    fn poly_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        layout: &Layout,
+        secs: &[Sec],
+        row: &[usize],
+        inst: &mut Instrument,
+        cx: &mut Cx,
+    ) {
+        const GAP: f32 = 8.0;
+        let sizes: Vec<egui::Vec2> = row.iter().map(|&s| sec_size(secs, s)).collect();
+        if row.len() > 1 {
+            let w: f32 = sizes.iter().map(|s| s.x).sum::<f32>() + GAP * (row.len() as f32 - 1.0);
+            if w > ui.available_width() {
+                // too narrow for side by side: stack them
+                for &s in row {
+                    self.poly_row(ui, layout, secs, &[s], inst, cx);
+                }
+                return;
+            }
+        }
+        let w: f32 = sizes.iter().map(|s| s.x).sum::<f32>() + GAP * (row.len() as f32 - 1.0);
+        let h = sizes.iter().map(|s| s.y).fold(0.0, f32::max);
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(w + 4.0, h + GAP), Sense::hover());
+        let mut x = rect.left() + 2.0;
+        for (&s, sz) in row.iter().zip(&sizes) {
+            let r = Rect::from_min_size(Pos2::new(x, rect.top()), egui::vec2(sz.x, h));
+            x += sz.x + GAP;
+            self.poly_section(ui, layout, secs, s, r, inst, cx);
+        }
     }
 
     /// title, presets, Init / Revert, Voices and Load
@@ -285,49 +339,74 @@ impl App {
         }
     }
 
-    /// one section: a panel with its picture, LED choices, choices, knobs
+    /// one section in `rect`: a panel with its picture, LED choices,
+    /// choices and knobs
+    #[allow(clippy::too_many_arguments)]
     fn poly_section(
         &mut self,
         ui: &mut egui::Ui,
         layout: &Layout,
         secs: &[Sec],
         s: usize,
+        rect: Rect,
         inst: &mut Instrument,
         cx: &mut Cx,
     ) {
         let t = th();
-        let (title, w) = if s == 8 {
-            ("Mod routes", 4.0 * CTL_W + 24.0)
+        let title = if s == ROUTES {
+            "Mod routes"
         } else {
-            let sc = &secs[s];
-            (sc.title, sc.cols as f32 * CELL.x + 16.0)
+            secs[s].title
         };
-        egui::Frame::new()
-            .fill(t.cart_bot)
-            .stroke(Stroke::new(1.0, t.ink2.gamma_multiply(0.35)))
-            .corner_radius(6.0)
-            .inner_margin(egui::Margin::same(6))
-            .show(ui, |ui| {
-                ui.set_width(w - 12.0);
-                ui.set_max_width(w - 12.0);
-                ui.label(
-                    egui::RichText::new(title.to_uppercase())
-                        .size(11.5)
-                        .strong()
-                        .color(t.ink),
+        {
+            let p = ui.painter();
+            if t.ember {
+                crate::ember::panel(p, rect, 6);
+            } else {
+                p.rect_filled(rect, 6.0, t.cart_bot);
+                p.rect_stroke(
+                    rect,
+                    6.0,
+                    Stroke::new(1.0, t.ink2.gamma_multiply(0.35)),
+                    egui::StrokeKind::Inside,
                 );
-                if s == 8 {
+            }
+            p.text(
+                Pos2::new(rect.left() + 10.0, rect.top() + 11.0),
+                egui::Align2::LEFT_CENTER,
+                title.to_uppercase(),
+                egui::FontId::proportional(11.5),
+                t.ink,
+            );
+        }
+        let inner = Rect::from_min_max(
+            Pos2::new(rect.left() + 8.0, rect.top() + TITLE_H),
+            rect.max - egui::vec2(8.0, 4.0),
+        );
+        ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(inner)
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+            |ui| {
+                ui.set_clip_rect(inner.intersect(ui.clip_rect()));
+                if s == ROUTES {
                     self.poly_routes(ui, layout, inst, cx);
                     return;
                 }
                 let sc = &secs[s];
                 if let Some(card) = sc.viz {
-                    if let Some(c) = layout.cards.iter().find(|c| c.name == card) {
-                        if let Some(v) = &c.viz {
-                            let (r, _) =
-                                ui.allocate_exact_size(egui::vec2(w - 12.0, 46.0), Sense::hover());
-                            knob::draw_viz(&ui.painter_at(r), r, &v(inst));
-                        }
+                    if let Some(v) = layout
+                        .cards
+                        .iter()
+                        .find(|c| c.name == card)
+                        .and_then(|c| c.viz.as_ref())
+                    {
+                        let (r, _) = ui.allocate_exact_size(
+                            egui::vec2(inner.width(), VIZ_H - 6.0),
+                            Sense::hover(),
+                        );
+                        knob::draw_viz(&ui.painter_at(r), r, &v(inst));
+                        ui.add_space(6.0);
                     }
                 }
                 for key in sc.leds {
@@ -337,10 +416,10 @@ impl App {
                 }
                 for key in sc.ctls {
                     if let Some(p) = find(layout, key) {
-                        ui.horizontal(|ui| self.ctl_ui(ui, p, inst, cx));
+                        self.ctl_ui(ui, p, inst, cx);
                     }
                 }
-                ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+                ui.spacing_mut().item_spacing = egui::vec2(KW - CELL.x, 0.0);
                 for row in sc.knobs.chunks(sc.cols) {
                     ui.horizontal(|ui| {
                         for k in row {
@@ -350,7 +429,8 @@ impl App {
                         }
                     });
                 }
-            });
+            },
+        );
     }
 
     /// the eight routes (two rows of four): source, destination, amount

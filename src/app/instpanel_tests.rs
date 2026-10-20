@@ -709,6 +709,7 @@ fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
         ),
     };
     let mut h = with_inst(inst);
+    h.set_size(egui::vec2(1920.0, 1080.0));
     h.state_mut().show_instrument_panel();
     h.state_mut().ip.advanced = true;
     h.state_mut().extra.lower_h = 640.0;
@@ -716,10 +717,10 @@ fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
     assert_eq!(h.state().ip.tab, Tab::Synth, "opens on its own editor");
     assert_eq!(Tab::Synth.name(), POLY_DISPLAY_NAME);
     // the wide window: layout A, every section at once
-    assert!(h.state().ip.poly.wide, "1700 px: layout A");
+    assert!(h.state().ip.poly.wide, "1920 px: layout A");
     for k in [
-        "O1 Shape",
-        "O2 Detune",
+        "Shape",
+        "Detune",
         "Cutoff",
         "F.Attack",
         "A.Release",
@@ -735,7 +736,7 @@ fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
         .next()
         .expect("BP 24 LED")
         .rect();
-    assert!(r.right() <= 1700.0, "layout A fits the window: {r:?}");
+    assert!(r.right() <= 1920.0, "layout A fits the window: {r:?}");
     ui_tests::click_at(&mut h, r.center());
     frames(&mut h, 2);
     assert_eq!(poly_of(&h).filter, PolyFilter::Bp4);
@@ -757,7 +758,7 @@ fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
     h.set_size(egui::vec2(900.0, 1000.0));
     frames(&mut h, 3);
     assert!(!h.state().ip.poly.wide, "900 px: layout B");
-    assert!(labelled_rect(&h, Role::Slider, "O1 Shape").is_some());
+    assert!(labelled_rect(&h, Role::Slider, "Shape").is_some());
     assert!(
         labelled_rect(&h, Role::Slider, "Cutoff").is_none(),
         "filter on its own tab"

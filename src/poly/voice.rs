@@ -116,7 +116,6 @@ impl PolyState {
     }
 
     /// the pitch sounding now (Hz), for legato glides
-    #[allow(dead_code)] // WIP: wired up in the next commits
     pub fn sounding(&self) -> f32 {
         self.freq * exp2(self.glide / 12.0)
     }

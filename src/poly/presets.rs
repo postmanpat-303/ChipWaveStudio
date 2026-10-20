@@ -260,7 +260,7 @@ pub fn presets() -> Vec<(&'static str, &'static str, PolyP)> {
 }
 
 /// a factory preset by name
-#[allow(dead_code)] // WIP: wired up in the next commits
+#[cfg(test)]
 pub fn by_name(name: &str) -> Option<PolyP> {
     presets()
         .into_iter()
