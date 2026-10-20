@@ -215,7 +215,8 @@ impl App {
         let learn =
             std::cell::RefCell::new(Vec::<(egui::Response, crate::automation::Target)>::new());
         ui.horizontal(|ui| {
-            let hint = "fader 0 dB = double-click · pan C = double-click · M mute · S solo (F9 / F10) · \
+            let hint =
+                "fader 0 dB = double-click · pan C = double-click · M mute · S solo (F9 / F10) · \
                  drag the bar under the strips or Shift+wheel to scroll";
             if ember {
                 ui.label(

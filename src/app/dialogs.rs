@@ -226,7 +226,15 @@ impl App {
                 )
                 .show(ctx, |ui| {
                     ui.set_width(PROMPT_W);
-                    ui.label(egui::RichText::new(title).heading().strong().color(t.ink));
+                    if t.ember {
+                        ui.label(
+                            egui::RichText::new(title)
+                                .font(theme::label_font(19.0))
+                                .color(t.ink),
+                        );
+                    } else {
+                        ui.label(egui::RichText::new(title).heading().strong().color(t.ink));
+                    }
                     ui.add_space(6.0);
                     ui.label(egui::RichText::new(lead).color(t.ink2));
                     ui.add_space(18.0);
@@ -240,26 +248,33 @@ impl App {
                         |ui| {
                             ui.spacing_mut().item_spacing.x = gap;
                             ui.add_space((PROMPT_W - 3.0 * bw.x - 2.0 * gap).max(0.0));
-                            if ui
-                                .add(
-                                    egui::Button::new(egui::RichText::new("Save").strong())
-                                        .min_size(bw)
-                                        .fill(t.accent.gamma_multiply(0.6)),
-                                )
+                            // Slate: the outlined buttons, Save lit as the default
+                            let btn = |ui: &mut egui::Ui, text: &str, primary: bool| {
+                                if t.ember {
+                                    crate::ember::button_ex(ui, text, false, primary, bw)
+                                } else if primary {
+                                    ui.add(
+                                        egui::Button::new(egui::RichText::new(text).strong())
+                                            .min_size(bw)
+                                            .fill(t.accent.gamma_multiply(0.6)),
+                                    )
+                                } else {
+                                    ui.add(egui::Button::new(text).min_size(bw))
+                                }
+                            };
+                            if btn(ui, "Save", true)
                                 .on_hover_text("save, then go on (Enter)")
                                 .clicked()
                             {
                                 choice = Some(Choice::Save);
                             }
-                            if ui
-                                .add(egui::Button::new("Don't save").min_size(bw))
+                            if btn(ui, "Don't save", false)
                                 .on_hover_text("go on and lose the changes (N)")
                                 .clicked()
                             {
                                 choice = Some(Choice::DontSave);
                             }
-                            if ui
-                                .add(egui::Button::new("Cancel").min_size(bw))
+                            if btn(ui, "Cancel", false)
                                 .on_hover_text("stay with this song (Esc)")
                                 .clicked()
                             {

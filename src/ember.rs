@@ -721,6 +721,18 @@ pub fn button(ui: &mut egui::Ui, text: &str, selected: bool) -> egui::Response {
 }
 
 pub fn button_sized(ui: &mut egui::Ui, text: &str, selected: bool, min_w: f32) -> egui::Response {
+    button_ex(ui, text, selected, false, Vec2::new(min_w, 0.0))
+}
+
+/// the outlined button with a minimum size; `primary` (the default action of
+/// a dialog) is lit: an orange outline with a faint bloom and orange text
+pub fn button_ex(
+    ui: &mut egui::Ui,
+    text: &str,
+    selected: bool,
+    primary: bool,
+    min: Vec2,
+) -> egui::Response {
     let t = th();
     let font = label_font(12.5);
     let txt = text.to_uppercase();
@@ -728,8 +740,8 @@ pub fn button_sized(ui: &mut egui::Ui, text: &str, selected: bool, min_w: f32) -
         .painter()
         .layout_no_wrap(txt.clone(), font.clone(), t.ink);
     let dot = if selected { 10.0 } else { 0.0 };
-    let w = (g.size().x + dot + 16.0).max(min_w);
-    let h = ui.spacing().interact_size.y.max(20.0);
+    let w = (g.size().x + dot + 16.0).max(min.x);
+    let h = ui.spacing().interact_size.y.max(20.0).max(min.y);
     let (r, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
     let label = text.to_string();
     resp.widget_info(|| {
@@ -755,7 +767,21 @@ pub fn button_sized(ui: &mut egui::Ui, text: &str, selected: bool, min_w: f32) -
                 Stroke::new(1.0, Color32::from_white_alpha(16)),
             );
         }
-        let outline = if selected || resp.hovered() {
+        let outline = if primary {
+            if bloom() {
+                p.rect_stroke(
+                    r.expand(1.5),
+                    5,
+                    Stroke::new(3.0, alpha(t.accent, 0.18)),
+                    egui::StrokeKind::Inside,
+                );
+            }
+            if resp.hovered() {
+                t.acc_hot
+            } else {
+                t.accent
+            }
+        } else if selected || resp.hovered() {
             hex(0x8A8F96)
         } else {
             LINE2
@@ -763,7 +789,7 @@ pub fn button_sized(ui: &mut egui::Ui, text: &str, selected: bool, min_w: f32) -
         p.rect_stroke(r, 4, Stroke::new(1.0, outline), egui::StrokeKind::Inside);
         let col = if !ui.is_enabled() {
             INK3
-        } else if selected {
+        } else if selected || primary {
             t.acc_hot
         } else {
             t.ink
