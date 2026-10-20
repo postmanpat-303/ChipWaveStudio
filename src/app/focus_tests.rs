@@ -527,16 +527,15 @@ fn with_the_tracker_hidden_every_demo_opens_in_timeline_mode_and_plays_identical
     let mut h = focus(Song::clean());
     // even with "open tracker songs in timeline mode" off
     h.state_mut().extra.open_in_timeline = false;
-    for i in [0] {
-        let want = render_hash(&fileio::demo_song_n(i));
-        h.state_mut().load_demo(i);
-        frames(&mut h, 2);
-        assert_eq!(h.state().view, View::Timeline);
-        assert!(!h.state().dirty, "opening is not an edit");
-        let s = h.state().with(|s| s.song.clone());
-        assert!(s.timeline.is_some(), "demo {i}: timeline mode");
-        assert_eq!(render_hash(&s), want, "demo {i} plays the same");
-    }
+    let i = 0;
+    let want = render_hash(&fileio::demo_song_n(i));
+    h.state_mut().load_demo(i);
+    frames(&mut h, 2);
+    assert_eq!(h.state().view, View::Timeline);
+    assert!(!h.state().dirty, "opening is not an edit");
+    let s = h.state().with(|s| s.song.clone());
+    assert!(s.timeline.is_some(), "demo {i}: timeline mode");
+    assert_eq!(render_hash(&s), want, "demo {i} plays the same");
 }
 
 #[test]
