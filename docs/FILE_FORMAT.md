@@ -36,7 +36,7 @@ Why this layout:
 - **Inspectable:** text for everything structural; samples as plain WAV that any editor can open.
 - **Patch reuse:** `patches/*.cwpatch` is byte-for-byte the preset format, so drag a patch out of a song and it's a preset, drop one in and it's an instrument.
 - **Robust:** one damaged sample doesn't take out the song; the loader can skip it and warn.
-- **Proven:** the same approach as OpenDocument (`mimetype` first), EPUB and Bitwig-style project bundles.
+- **Proven:** the same approach as OpenDocument (`mimetype` first), EPUB and the project bundles of other DAWs.
 - **Compression:** Deflate for TOML (high ratio), WAV samples **stored** or Deflate (lightweight; FLAC-in-zip is an option for later). Zstd is avoided in v1 because many unzip tools can't read it.
 
 ### Block text encoding

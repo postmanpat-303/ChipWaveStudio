@@ -10,7 +10,7 @@ Still planned: Sallen-Key, diode, comb and formant filter models, wavetables, th
 
 ChipWave lets you build your own sounds *inside* the tracker and play them as ordinary instruments. Each sound is a **Patch**: an analogue-style subtractive synth voice followed by a per-instrument effects chain. A patch can stay **live** (rendered in real time) or be **sampled** to a normal 8/16-bit sample, the way Amiga musicians bounced synth sounds into samples for ProTracker/OctaMED.
 
-The filter section is inspired by Bitwig Studio's filters and its modulation workflow (sources at the bottom). We copy ideas, not code or assets.
+The filter section is inspired by the filters and modulation workflow of other DAWs (sources at the bottom). We copy ideas, not code or assets.
 
 ![Sound designer device strip mockup](mockups/sound_designer.svg)
 
@@ -74,9 +74,9 @@ Two filter slots, serial or parallel, each with **Cutoff** (20 Hz–20 kHz, set 
 | **Amiga LED** | LP fixed (~3.3 kHz 2-pole) + A500 output RC (~4.4 kHz) | Matches the Amiga hardware filter; on/off like OctaMED's filter command |
 | **Formant/Vowel** | A-E-I-O-U morph | Parallel band-pass bank (phase 2) |
 
-**Character switch** on SVF, Ladder and Sallen-Key: *Clean* (linear), *Warm* (symmetric tanh), *Dirty* (asymmetric, adds even harmonics). This mirrors the idea of Bitwig's "Character" options without copying their curves.
+**Character switch** on SVF, Ladder and Sallen-Key: *Clean* (linear), *Warm* (symmetric tanh), *Dirty* (asymmetric, adds even harmonics). This mirrors the idea of the "character" options other DAWs' filters have, without copying their curves.
 
-**Bitwig reference (what inspired this, verified):** Bitwig Studio 5.1 introduced the **Filter+** device, which loads any of ten Grid filters grouped as *Structural* (Low-pass LD ladder with variable slope and nonlinear option; Sallen-Key with 16 LP/HP/BP configurations; SVF high/low/band-pass and notch; Comb), *Inspired* (Low-pass MG Moog-style, XP Oberheim-style with 15 configurations, Vowels) and *Character* (Fizz, Rasp, Ripple) [1][2]. Third-party analysis by Polarity Music describes Low-pass LD as 1–4 poles with symmetric/asymmetric/linear character and drive [3], Sallen-Key modes as LP1/2/3/4/6/8, BP2/4/6/8, HP1/2/3/4/6/8 [4], and SVF as a resonant state-variable core [5]. Those are descriptions of Bitwig internals by a third party, not official docs, so we treat them as inspiration only.
+**Reference (what inspired this, verified):** a filter device in another DAW loads any of ten filters grouped as *Structural* (Low-pass LD ladder with variable slope and nonlinear option; Sallen-Key with 16 LP/HP/BP configurations; SVF high/low/band-pass and notch; Comb), *Inspired* (Low-pass MG Moog-style, XP Oberheim-style with 15 configurations, Vowels) and *Character* (Fizz, Rasp, Ripple) [1][2]. Third-party analysis by Polarity Music describes Low-pass LD as 1–4 poles with symmetric/asymmetric/linear character and drive [3], Sallen-Key modes as LP1/2/3/4/6/8, BP2/4/6/8, HP1/2/3/4/6/8 [4], and SVF as a resonant state-variable core [5]. Those are descriptions of that DAW's internals by a third party, not official docs, so we treat them as inspiration only.
 
 ## 4. Envelopes, LFOs and the mod matrix
 
@@ -88,8 +88,8 @@ Two filter slots, serial or parallel, each with **Cutoff** (20 Hz–20 kHz, set 
 - **4 Macros:** big knobs that can drive many targets, used by presets and by tracker commands.
 - **Mod matrix:** up to 16 slots, `source → target × amount (bipolar)`, optional *via* (scale by another source). Every knob is a target, including FX parameters.
 
-### Drag-to-modulate (functional idea from Bitwig, ChipWave's own UI)
-Bitwig's Unified Modulation System works like this: click a modulator's routing button, every possible target is highlighted, then click-and-drag a parameter to set modulation depth and direction; Alt temporarily edits the base value, Esc exits routing mode, and modulators can be per-voice [6][7][8]. ChipWave keeps the idea (direct assignment, with depth set by dragging) and gives it its own UI:
+### Drag-to-modulate (functional idea from other DAWs, ChipWave's own UI)
+The modulation system of the DAW we studied works like this: click a modulator's routing button, every possible target is highlighted, then click-and-drag a parameter to set modulation depth and direction; Alt temporarily edits the base value, Esc exits routing mode, and modulators can be per-voice [6][7][8]. ChipWave keeps the idea (direct assignment, with depth set by dragging) and gives it its own UI:
 
 1. Each envelope/LFO/macro appears as a **mod chip** (a coloured pill).
 2. **Drag a chip onto any knob or fader**: a cable follows the cursor, and valid targets show a dashed outline. Dropping creates the matrix slot.
@@ -99,7 +99,7 @@ Bitwig's Unified Modulation System works like this: click a modulator's routing 
 
 ## 5. UI: the cartridge strip
 
-The look follows ChipWave's own design language, **"Wave Cartridge"**, defined in [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md) (palette, knob and fader spec, component sizes). Del's Bitwig Sampler screenshot ([`reference/`](reference/del-visual-reference-bitwig-sampler.png)) was functional inspiration only; we keep the functions but none of the look.
+The look follows ChipWave's own design language, **"Wave Cartridge"**, defined in [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md) (palette, knob and fader spec, component sizes). Del's sampler screenshot ([`reference/`](reference/del-visual-reference-sampler.png)) was functional inspiration only; we keep the functions but none of the look.
 
 ![Sound designer mockup](mockups/sound_designer.svg)
 ![FX chain mockup](mockups/fx_chain.svg)
@@ -116,7 +116,7 @@ At compact widths the strip scrolls sideways, and in portrait it wraps onto two 
 
 **Palette and controls:** see DESIGN_LANGUAGE.md §3–4. In short: ink-navy background `#070B1C`, cartridge `#121B3D`, CRT `#050817`; accents cyan `#22E3FF`, magenta `#FF3FB4`, lime `#B6FF3C`, yellow `#FFD23F`; guru red `#FF2A3D` for warnings. Knobs have hex caps with a 15-segment LED ring, and modulation lights segments in the source's colour. Faders are segmented LED "chips".
 
-The draggable response curve is our own design. We didn't find official Bitwig documentation describing one in Filter+, so we don't claim it.
+The draggable response curve is our own design. We didn't find official documentation describing one in the reference filter device, so we don't claim it.
 
 ## 6. Effects chain (per patch)
 
@@ -272,14 +272,14 @@ Why not MVP: the MVP must prove the tracker core (timing, sample playback, MMD l
 
 ## Sources
 
-1. Bitwig Studio 5.1 release notes, "New device: Filter+": https://downloads.bitwig.com/5.1.1/Release-Notes-5.1.1.html
-2. Bitwig user guide, Filter devices: https://www.bitwig.com/userguide/latest/filter15
+1. Release notes of the reference DAW, its filter device (ideas only).
+2. The reference DAW's user guide, filter devices.
 3. Polarity Music, Low-pass LD (third-party analysis): https://polarity.me/topics/low-pass-ld/
 4. Polarity Music, Sallen-Key: https://polarity.me/topics/sallen-key/
 5. Polarity Music, SVF: https://polarity.me/topics/svf/
-6. Bitwig user guide, The Unified Modulation System: https://www.bitwig.com/userguide/latest/the_unified_modulation_system
-7. Bitwig, An Introduction to Modulators: https://www.bitwig.com/learnings/an-introduction-to-modulators-45/
-8. Bitwig Studio Getting Started Guide, §6 Modulation: https://dash.bitwig.com/documentation/Bitwig%20Studio%20Getting%20Started%20Guide%20English.pdf
+6. The reference DAW's user guide, its modulation system.
+7. The reference DAW's introduction to modulators.
+8. The reference DAW's getting started guide, modulation chapter.
 9. V. Zavalishin, *The Art of VA Filter Design* (Native Instruments, free PDF).
 10. A. Huovilainen, "Non-linear digital implementation of the Moog ladder filter", DAFx 2004.
 11. V. Välimäki, A. Huovilainen, "Antialiasing oscillators in subtractive synthesis", IEEE Signal Processing Magazine, 2007 (PolyBLEP family).

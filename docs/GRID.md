@@ -2,7 +2,7 @@
 
 ![Grid canvas](screenshots/dark-generators-grid.png)
 
-A modular patching environment in the spirit of Bitwig Studio's Grid: put
+A modular patching environment inspired by other DAWs: put
 modules on a canvas, drag cables between their ports, and play the result as
 an instrument (**Grid generator**) or run audio through it (**Grid FX**).
 

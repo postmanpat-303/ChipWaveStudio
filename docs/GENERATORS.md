@@ -246,7 +246,7 @@ at 20 Hz). Older versions can't open songs that use Wave.
 
 ## Grid (modular, Unreleased)
 
-**New… > Generator (grid)**: a Bitwig-style modular patch (oscillators,
+**New… > Generator (grid)**: a modular patch, inspired by other DAWs (oscillators,
 wavetables, noise, filters, envelopes, LFOs, math, logic, delay …) on a node
 canvas in the lower panel, polyphonic per voice, every module knob automatable
 and modulatable. There is also a **Grid FX** device. Full guide:
@@ -446,7 +446,7 @@ on generator instruments (Unreleased):
 - **Sonic Pi** sc808 by Sam Aaron and contributors (MIT), after Yoshinosuke
   Horiuchi's SC-808.
 - **Plaits** by Emilie Gillet (MIT), via DaisySP by Electrosmith (MIT).
-- **Bitwig Studio**, for the macro and dice idea and The Grid's modular
+- Other DAWs' modular environments, for the macro and dice idea and modular
   patching (no code or assets).
 - **sfxr** by Tomas Pettersson (DrPetter, MIT) and **sfxr-rs** by Teemu
   Erkkola (MIT): the Chip FX generator.

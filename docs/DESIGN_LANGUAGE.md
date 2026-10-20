@@ -2,7 +2,7 @@
 
 **Status:** design, chosen direction. Applies to every ChipWave screen.
 
-ChipWave keeps the *functions* Del liked in Bitwig (horizontal device strips, a live draggable filter curve, a waveform display with markers, knobs that show modulation, drag-to-modulate) but has its **own look**. The Bitwig Sampler screenshot in [`reference/`](reference/del-visual-reference-bitwig-sampler.png) was **functional inspiration only**. None of its visual style is reused.
+ChipWave keeps the *functions* Del liked in other DAWs (horizontal device strips, a live draggable filter curve, a waveform display with markers, knobs that show modulation, drag-to-modulate) but has its **own look**. The sampler screenshot in [`reference/`](reference/del-visual-reference-sampler.png) was **functional inspiration only**. None of its visual style is reused.
 
 ## 1. Two directions explored
 
@@ -15,8 +15,8 @@ ChipWave keeps the *functions* Del liked in Bitwig (horizontal device strips, a 
 
 **Decision: B "Wave/Neon"**, with Workbench Modern kept as the basis of the optional **Amiga mode** skin ([UI_SCALING.md §9](UI_SCALING.md)). Both use the same shapes and layout described below, so a skin only changes the palette and the bevels.
 
-## 2. Distinguishing choices (what makes it ChipWave, not Bitwig)
-| Element | ChipWave | Avoided Bitwig hallmark |
+## 2. Distinguishing choices (what makes it ChipWave, not another DAW)
+| Element | ChipWave | Avoided hallmark of the reference |
 |---|---|---|
 | **Modules** | **Cartridges**: panels with a cut (45°) top-left corner, like a game cartridge, and a **coloured vertical spine on the left edge** carrying the module name in rotated monospace caps (OSCILLATOR, FILTER, MOD, OUT) | Flat, evenly rounded charcoal panels with small top headers |
 | **Signal flow** | Visible **wave-shaped patch arrows** between cartridges, in cyan, showing audio flowing left to right | A plain row of panels |

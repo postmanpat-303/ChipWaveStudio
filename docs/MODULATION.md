@@ -1,6 +1,6 @@
 # Drag-to-modulate (Unreleased)
 
-Bitwig-style modulation: an instrument owns **modulators** (LFOs, envelopes and other
+Drag-to-modulate, inspired by other DAWs: an instrument owns **modulators** (LFOs, envelopes and other
 sources), and you **drag one onto any knob** to make it move that parameter. Each connection
 is a **routing** with a bipolar **depth**, drawn as a coloured ring on the knob. This is item
 §5.4 of [DAW_TIMELINE_PLAN.md](DAW_TIMELINE_PLAN.md).
