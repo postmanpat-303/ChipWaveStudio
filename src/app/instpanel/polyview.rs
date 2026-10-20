@@ -17,6 +17,9 @@ pub(in crate::app) struct PolyUi {
     pub loaded: Option<(usize, crate::gen::GenPatch)>,
     /// the last layout drawn was the wide one (tests, screenshots)
     pub wide: bool,
+    /// each section's content height as last drawn (the estimate can be
+    /// short with another theme's fonts)
+    pub hs: [f32; 9],
 }
 
 /// below this width the editor switches to layout B
@@ -216,7 +219,13 @@ impl App {
         cx: &mut Cx,
     ) {
         const GAP: f32 = 8.0;
-        let sizes: Vec<egui::Vec2> = row.iter().map(|&s| sec_size(secs, s)).collect();
+        let sizes: Vec<egui::Vec2> = row
+            .iter()
+            .map(|&s| {
+                let z = sec_size(secs, s);
+                egui::vec2(z.x, z.y.max(self.ip.poly.hs[s]))
+            })
+            .collect();
         if row.len() > 1 {
             let w: f32 = sizes.iter().map(|s| s.x).sum::<f32>() + GAP * (row.len() as f32 - 1.0);
             if w > ui.available_width() {
@@ -230,11 +239,17 @@ impl App {
         let w: f32 = sizes.iter().map(|s| s.x).sum::<f32>() + GAP * (row.len() as f32 - 1.0);
         let h = sizes.iter().map(|s| s.y).fold(0.0, f32::max);
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w + 4.0, h + GAP), Sense::hover());
+        // a child, so the sections never move this ui's cursor
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         let mut x = rect.left() + 2.0;
         for (&s, sz) in row.iter().zip(&sizes) {
             let r = Rect::from_min_size(Pos2::new(x, rect.top()), egui::vec2(sz.x, h));
             x += sz.x + GAP;
-            self.poly_section(ui, layout, secs, s, r, inst, cx);
+            let need = self.poly_section(&mut child, layout, secs, s, r, inst, cx);
+            if (need - self.ip.poly.hs[s]).abs() > 0.5 {
+                self.ip.poly.hs[s] = need;
+                ui.ctx().request_repaint();
+            }
         }
     }
 
@@ -351,7 +366,7 @@ impl App {
         rect: Rect,
         inst: &mut Instrument,
         cx: &mut Cx,
-    ) {
+    ) -> f32 {
         let t = th();
         let title = if s == ROUTES {
             "Mod routes"
@@ -383,7 +398,7 @@ impl App {
             Pos2::new(rect.left() + 8.0, rect.top() + TITLE_H),
             rect.max - egui::vec2(8.0, 4.0),
         );
-        ui.scope_builder(
+        let used = ui.scope_builder(
             egui::UiBuilder::new()
                 .max_rect(inner)
                 .layout(egui::Layout::top_down(egui::Align::Min)),
@@ -431,6 +446,7 @@ impl App {
                 }
             },
         );
+        used.response.rect.bottom() - rect.top() + 8.0
     }
 
     /// the eight routes (two rows of four): source, destination, amount

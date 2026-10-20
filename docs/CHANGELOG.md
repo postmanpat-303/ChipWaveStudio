@@ -4,6 +4,10 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### WaveForge synth
+- **WaveForge**, a new polyphonic generator (**New… > Generator (WaveForge)**), inspired by other synths. Two band-limited oscillators (Shape pulse → saw → octave-up saw, PW, sub, hard sync, up to 16 unison voices each), six blend modes plus noise, LP / BP / HP filters at 12 or 24 dB/oct and a band-reject, drive and a shaper, filter and amp envelopes, Poly / Mono / Legato with 1–8 notes and glide, and eight mod routes (envelopes, velocity, key). Its own editor shows every section on a wide panel and switches to tabs on a narrow one; the header shows the voices playing and the load. Eleven presets (WaveForge Init and ten starters), with **Init** and **Revert**. See [GENERATORS.md](GENERATORS.md#waveforge-polyphonic-synth-unreleased).
+- Songs that use WaveForge need reader version 5. Other songs are saved and play exactly as before.
+
 ### Record and musical typing
 - **Record on the Timeline.** The toolbar's transport has a **Record** button (●), and **R** does the same outside the Tracker. It records live: the armed track (or the selected one) records, the song plays from the play marker, and every MIDI key goes in at the time you played it, with its length and velocity. Chords and overlapping notes stay as played. The notes go into the note clip under the playhead on that track, or a new **Take** clip that starts on the bar and grows with the take. With the timeline loop on, a new take starts at the loop's start, so every pass overdubs into the same clip. A take is **one undo step**. Pressing Record again stops recording and playback goes on; Stop ends the take too. The playhead runs as usual.
 - **Metronome and count-in.** The toolbar's **Click** toggle (Settings › Recording › Metronome, off by default) clicks on every beat while the timeline plays. With it on, Record from stopped counts in one bar first (Settings › Recording › Count-in, on by default). Keys played in the count-in sound but aren't recorded. **Quantise on record** (off by default) snaps recorded note starts to the piano roll's grid. Exports never hear the metronome.
