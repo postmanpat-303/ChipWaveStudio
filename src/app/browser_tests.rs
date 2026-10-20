@@ -299,6 +299,9 @@ fn drop_below_the_last_track_makes_a_named_track() {
 #[test]
 fn drop_on_an_instrument_slot_replaces_its_sound() {
     let mut h = tl_harness();
+    // the Instruments list (the Clip Arranger takes its place on the Timeline)
+    h.state_mut().extra.clip_arranger = false;
+    frames(&mut h, 2);
     let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "808 Boom");
     let (slot, r) = h.state().br.slot_rects[2];
     drag(&mut h, p, r.center());
