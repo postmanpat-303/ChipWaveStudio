@@ -88,7 +88,7 @@ fn play_loops_the_song_over_the_pattern() {
         .next()
         .map(|n| n.rect())
         .expect("Play loop button");
-    let c = egui::pos2(r.center().x as f32, r.center().y as f32);
+    let c = egui::pos2(r.center().x, r.center().y);
     click_at(&mut h, c);
     frames(&mut h, 2);
     let s = h.state().shared.clone();
