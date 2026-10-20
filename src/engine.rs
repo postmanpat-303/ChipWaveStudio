@@ -2093,6 +2093,13 @@ impl Engine {
     pub fn render(&mut self, song: &Song, out: &mut [f32]) {
         crate::plugin::clap::AUDIO_THREAD.with(|a| a.set(true));
         self.render_inner(song, out);
+        // the playhead the UI draws: kept current on every callback, not
+        // only when automation lanes are evaluated (songs without
+        // automation had a frozen timeline playhead). Display only: the
+        // audio never reads it.
+        if self.playing {
+            self.song_pos = self.calc_song_pos(song);
+        }
         crate::plugin::clap::AUDIO_THREAD.with(|a| a.set(false));
     }
 
