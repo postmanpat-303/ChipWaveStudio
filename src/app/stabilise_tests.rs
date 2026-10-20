@@ -200,14 +200,17 @@ fn selecting_and_refused_edits_do_not_mark_the_song_unsaved() {
     assert!(!h.state().tlv.sels.is_empty());
     assert!(!h.state().dirty, "Ctrl+A is not an edit");
     key(&mut h, Key::Escape, egui::Modifiers::NONE);
-    // Split with nothing under the mouse or the play marker
+    // Split with nothing under the mouse or the play marker (test-combined:
+    // with workflow's split preview, S arms the amber line and Esc cancels it)
     h.state_mut().tlv.cue = 10_000 * tl::PPQ;
     key(&mut h, Key::S, egui::Modifiers::NONE);
     assert!(
-        h.state().status.contains("Nothing to split"),
+        h.state().status.contains("Nothing to split") || h.state().tlv.split_arm,
         "{}",
         h.state().status
     );
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    assert!(!h.state().tlv.split_arm, "Esc cancels the split");
     // Ctrl+L / Ctrl+J with nothing selected
     key(&mut h, Key::L, egui::Modifiers::COMMAND);
     key(&mut h, Key::J, egui::Modifiers::COMMAND);
