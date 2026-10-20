@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 70] = [
+pub const VIEWS: [&str; 71] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -100,6 +100,7 @@ pub const VIEWS: [&str; 70] = [
     "split-preview",
     "cliparranger",
     "cliparranger-drag",
+    "cliparranger-notes",
     "focus-playing",
     "focus-chord",
     "focus-prompt",
@@ -408,6 +409,59 @@ impl App {
                 if view == "cliparranger" {
                     self.ca_scene(3);
                 }
+                self.dirty = false;
+            }
+            "cliparranger-notes" => {
+                // a new song: a take on track 01 at bars 1 and 5, a Drum Kit
+                // pattern on track 02 (launched a few frames later)
+                self.new_song();
+                for k in 0..2 {
+                    self.track_insert(k, if k == 0 { "Lead" } else { "Drums" });
+                }
+                self.view = View::Timeline;
+                self.default_layout();
+                self.extra.clip_arranger = true;
+                self.extra.reduce_motion = true;
+                self.track_new_instrument(0, super::trackpie::Builtin::WaveForge);
+                self.with(|s| {
+                    use crate::timeline::{self as tl, PPQ};
+                    let bar = 4 * PPQ;
+                    for (at, base) in [(0, 57u8), (4 * bar, 60)] {
+                        let Some(id) = tl::new_note_clip(&mut s.song, 0, at) else {
+                            continue;
+                        };
+                        let t = s.song.timeline.as_deref_mut().unwrap();
+                        let c = t.clips.iter_mut().find(|c| c.id == id).unwrap();
+                        c.len = 4 * bar;
+                        let tl::ClipKind::Notes { data } = c.kind else {
+                            continue;
+                        };
+                        let d = t.notes[data as usize].make_mut();
+                        d.name = if base == 57 {
+                            "Verse".into()
+                        } else {
+                            "Hook".into()
+                        };
+                        d.len = 4 * bar;
+                        for k in 0..16i64 {
+                            let step = [0u8, 3, 7, 10, 12, 10, 7, 3][k as usize % 8];
+                            d.notes.push(tl::Note {
+                                start: k * PPQ,
+                                len: PPQ - PPQ / 4,
+                                key: base + step,
+                                instr: 1,
+                                ..Default::default()
+                            });
+                        }
+                    }
+                });
+                if let Some(i) = crate::drumpat::PATTERNS
+                    .iter()
+                    .position(|p| p.name == "Full-on Drive")
+                {
+                    self.pat_place_now(i, 1, 0);
+                }
+                self.ch = 0;
                 self.dirty = false;
             }
             "trackpie" | "trackpie-icons" | "trackpie-colour" | "trackpie-add" | "trackauto"
@@ -792,6 +846,7 @@ impl App {
                 | "timeline-switch"
                 | "cliparranger"
                 | "cliparranger-drag"
+                | "cliparranger-notes"
         ) && std::env::var_os("CHIPWAVE_SHOT_NOPLAY").is_none()
         {
             self.play(3);
@@ -1022,6 +1077,14 @@ impl App {
             if let Ok(m) = std::env::var("CHIPWAVE_SHOT_PR") {
                 self.shot_pr(ctx, &m);
             }
+        }
+        if view == "cliparranger-notes" && f == SETUP_AT + 20 {
+            // the Hook slot on track 01 plays (the drums held); the Bar 1
+            // scene is queued for the next bar
+            self.ca_slot(0, 1);
+        }
+        if view == "cliparranger-notes" && f == CAPTURE_AT - 6 {
+            self.ca_scene(0);
         }
         if view == "cliparranger" && f == CAPTURE_AT - 6 {
             // queued for the next bar: Pad 1 plays block 04, Kick stops
@@ -1644,7 +1707,12 @@ impl App {
             let info = self.pie_info(tr);
             let at = super::trackpie::sub_items(super::trackpie::SEGS[3], &info)
                 .iter()
-                .position(|i| i.act == Some(super::trackpie::PieAct::Automation));
+                .position(|i| {
+                    i.act
+                        == Some(super::trackpie::PieAct::NewInstrument(
+                            super::trackpie::Builtin::WaveForge,
+                        ))
+                });
             if let Some(p) = &mut self.pie {
                 p.sub_key = at;
             }
