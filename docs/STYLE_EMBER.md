@@ -9,12 +9,16 @@
 - The instrument card (`instpanel/instcard.rs`: pic-1 macro knobs, bevelled sections with screws, glowing graphs), the Devices cards (`devices.rs`, `devcards.rs`), the knob widget (`knob.rs`: pic-2 knob, glowing card graphs), the Clip Arranger's Master panel, the piano roll (light grey notes, selected notes orange with a white rim and a bloom), the Timeline playhead and the lower-panel tabs.
 - Paint and interaction only: songs, audio and the mixer data are unchanged; old songs render bit-identically. The mixer fader uses a console taper on screen (0 dB at 72 % of the travel); the stored gain is the same 0..2 value as before.
 - **Fonts** (SIL OFL 1.1, embedded with `include_bytes!`): Inter Regular, Barlow Semi Condensed SemiBold and Geist Mono SemiBold in `assets/fonts/`, licences in `LICENSES/`, credited in Help › About › Credits, the README and `THIRD_PARTY_LICENSES.txt`. The two families `label` and `num` are registered in every theme; Inter becomes the body font in Slate only.
-- Flat mode (*Settings › Look › Flat*) turns the bevels' shadows and the bloom off.
+- **One knob and meter painter for every theme** (`src/theme.rs`): `knob_face` (every rotary control: instrument and Devices knobs, generator and fill macros, the mixer's send / pan knobs), `knob_hero` (the instrument macros and the Master knobs) and `meter` / `meter_peak` (every level meter). Each draws the Slate look when the theme is Slate and the existing Polished / Flat look in Dark Circuit and Amiga, so the widgets themselves (interaction, accessibility labels, undo) are shared, not duplicated. The Slate mixer strips (`mixstrip.rs`) reuse the same painters and the existing mixer data and learn targets.
+- Flat mode (*Settings › Look › Flat*) turns the bevels' shadows and the bloom off. *Reduce motion* is unchanged: Slate adds no animation (the meters' 1.5 s peak hold is a reading, not motion). The app has no high-contrast setting yet; Slate keeps the keyboard focus ring and the accessible names / roles / values of every control (the UI tests find them by label).
+- The save prompt (*Save changes to "Song"?*) uses the outlined buttons; **Save**, the default, is lit orange.
 
 ## Not (yet) done
 - Mono channels have one meter column (the engine keeps one peak per channel); Master shows L and R.
 - No **R** (record arm) button on strips: ChipWave has no per-track record arm yet.
-- The Timeline header, transport and view bar keep their current widgets (they are being reworked on `focus-timeline`); they take the Slate palette and fonts.
+- The Timeline header, the transport and the view bar keep their current widgets (reworked on `focus-timeline`); they take the Slate palette and fonts.
+- The LED-selector and square-toggle widgets from the style guide are not used yet: the existing radio rows, checkboxes and dropdowns take the Slate visuals instead.
+- The classic sidebar instrument editor is wider than its panel in Slate (Inter is a little wider), so long rows run under its scroll bar, as some already did in Dark.
 
 The design guide (from the mockup stage) follows.
 
