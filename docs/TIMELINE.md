@@ -192,7 +192,7 @@ When all 32 tracks are used, the add commands are greyed out with "all 32 tracks
 ChipWave starts with the clean song of File › New (no demo; the demos are in File › Demo songs), with the **Timeline on top and the piano roll docked below** (about 40 % of the height; drag the splitter to resize). File › New and opening a timeline-mode song show the same layout; tracker-mode songs open in the view you are in.
 
 - The piano roll follows the selection: **click a clip** and its notes are in the roll; double-click still opens it focused. With nothing selected it shows the selected track's first clip, or an empty roll with a hint.
-- **Back to it in one step:** **Ctrl+6**, **View › Reset to default layout** (also the panel height), or **TIMELINE + PIANO** at the left of the view tab bar. The Inspector (I) and the Browser stay as they are.
+- **Back to it in one step:** **Ctrl+6**, **View › Reset to default layout** (also the panel height), The Inspector (I) and the Browser stay as they are.
 
 ## New songs
 
@@ -307,6 +307,6 @@ Tracker-mode songs are written exactly as before, byte for byte, with `min_reade
 
 ## Layout
 
-The toolbar holds transport, tempo and the status lights. Tracker controls (Play block, Octave, Edit / Step) appear only in the Tracker view; their keys work everywhere. The view tab bar runs TIMELINE · PIANO · DEVICES · INST · AUTO · MIX · FX · SAMPLE, then ORDER · TRACKER at the far right. In timeline mode the header carries no mode label: **Song › Back to tracker mode…** turns the song back into blocks and an order list. The lower panel's tabs are Piano roll · Devices · Instrument · Automation · Order list.
+The toolbar holds the one transport (⏮ · Play · Stop and the playhead position), tempo and the status lights. The view tab bar runs TIMELINE · MIX · FX · SAMPLE. **Settings › Show Tracker (experimental)** (off by default since 20 Oct 2026) adds ORDER · TRACKER at the far right, the lower panel's Order list, Ctrl+1 / Ctrl+2 and the Tracker controls (Play block, Octave, Edit / Step), which appear only in the Tracker view. In timeline mode the header carries no mode label: **Song › Back to tracker mode…** turns the song back into blocks and an order list. The lower panel's tabs are Piano roll · Devices · Instrument · Automation · Order list.
 
 On the left of the Timeline sits the **Clip Arranger** (scenes = blocks, slots = a track's column of a block, launched on the next bar) with a small **Master** panel under it; Ctrl+8 shows the Instruments list there instead. See [CLIP_ARRANGER.md](CLIP_ARRANGER.md).

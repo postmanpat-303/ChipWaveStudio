@@ -51,19 +51,15 @@ when you let go.
 
 ## View tab bar
 
-A slim bar above the status line:
+A slim bar above the status line (Unreleased: views only; the transport
+is in the toolbar):
 
-- **Transport:** to start (play marker to bar 1), **Play song** (from the
-  play marker), **Stop**, and the position: `bar 12.3 · 0:41.2` in
-  timeline mode, `pos 03 · row 12` in tracker mode, plus the tempo.
-- **TIMELINE + PIANO:** the default layout (Timeline on top, piano roll
-  below; Ctrl+6, View › Reset to default layout). Lit while it is showing.
-- **Tabs:** **TIMELINE** · **TRACKER** (Tracker) · **ORDER** ·
-  **PIANO** (piano roll in the lower panel) · **INST** (instrument editor in
-  the lower panel) · **AUTO** (automation lanes in the lower panel) ·
-  **MIX** · **FX** · **SAMPLE**. The lit tab is what is showing; when a
-  lower-panel tab is lit, the view it sits under (TIMELINE or TRACKER) is
-  tinted.
+- **Tabs:** **TIMELINE** · **MIX** · **FX** · **SAMPLE**, and with
+  **Settings › Show Tracker (experimental)** on, **ORDER** · **TRACKER** after
+  a divider. The lit tab is the view you are in. The lower panel (piano
+  roll, devices, instrument, automation) has its own tabs above it, so the
+  bar no longer repeats them, and the default layout is **Ctrl+6** /
+  **View › Reset to default layout** (no TIMELINE + PIANO button).
 - **Right:** **Inspector** and **Browser** toggles.
 
 The tabs call the same switches as the toolbar's VIEW group, the View menu

@@ -235,8 +235,8 @@ On Linux, build it from source (below).
 | `Ctrl+Z` / `Ctrl+Y` | undo / redo |
 | `Alt +` / `Alt -` (Shift = octave) | transpose selection or channel (also the Block bar **-12 -1 +1 +12** buttons and **Edit › Transpose**, which has *Transpose by…* for -24…+24) |
 | `F9` / `F10` | mute / solo channel |
-| `Ctrl+1`…`5`, `Ctrl+Tab` | Pattern / Order list / Mixer / FX / Sample view |
-| `Ctrl+6` | the default layout: Timeline on top, piano roll below (also View › Reset to default layout and **TIMELINE + PIANO** in the view tab bar) |
+| `Ctrl+T`, `Ctrl+3`…`5`, `Ctrl+Tab` | Timeline / Mixer / FX / Sample view (`Ctrl+1` / `Ctrl+2`: Tracker / Order list, with Settings › Show Tracker on) |
+| `Ctrl+6` | the default layout: Timeline on top, piano roll below (also View › Reset to default layout) |
 | `Ctrl+8` | Clip Arranger on / off: scenes and slots left of the Timeline (also View › Clip Arranger; off shows the Instruments list there) |
 | `Ctrl+T` | Timeline view (tracks and clips; in timeline mode drag, loop, split, copy clips, [TIMELINE.md](docs/TIMELINE.md)) |
 | `Ctrl+Shift+F` | Fill to length |

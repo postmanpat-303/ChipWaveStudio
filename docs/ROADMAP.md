@@ -38,6 +38,7 @@ Each item has a size, **[easy]** (an evening or two), **[medium]** (a few days) 
 
 ## Tracker
 
+- **The Tracker comes back.** Since 20 Oct 2026 it is hidden by default (Settings › Show Tracker (experimental)) so ChipWave can focus on the Timeline and the piano roll. Its code, keys and the file format are all still there, and tracker songs open in timeline mode and play bit-identically. Bring it back as a first-class view once the timeline workflow is settled: Tracker clips edited in place, a block loop with a timeline playhead, and Tracker-only menu items back in the menus. [big] start: `src/app/focus.rs`
 - Advanced Edit: interpolate. [medium] start: `src/advedit.rs`
 - Advanced Edit: humanise. [medium] start: `src/advedit.rs`
 - Advanced Edit: paste to the start of the chosen section. [easy] start: `src/app/advedit.rs`

@@ -17,8 +17,9 @@ compact instrument list.
   Analog, FM-4, Noise or CLAP. The list search also matches the tags ("fm", "clap", "kit").
 - **Summary** under the list: number, name, type, volume, transpose, the number of FX devices and
   the number of blocks that use the instrument.
-- **Edit in lower panel** (`Ctrl+I`) opens the editor. F3 was not free (F1–F8 set the octave),
-  so the shortcut is `Ctrl+I`.
+- `Ctrl+I`, the lower panel's **Instrument** tab or the Inspector's **Edit** opens the editor
+  (the old **Edit in lower panel** box under the list is gone, Unreleased). F3 was not free
+  (F1–F8 set the octave), so the shortcut is `Ctrl+I`.
 - **Classic editor:** **View › Classic sidebar instrument editor** brings back the pre-0.2.3.19
   slider editor under the list. It is saved in settings.
 

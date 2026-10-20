@@ -4,6 +4,25 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Focus on the Timeline
+- **The playhead moves again.** Pressing Play on the Timeline now moves the playhead in every song. The Timeline drew it from the engine's song position, but the engine only updated that position while it was evaluating automation lanes. Songs without automation, such as every new song, had a playhead stuck at the play marker. It is now updated on every audio callback (display only, so the sound is unchanged). Space in the Mixer, FX or Sample view plays the Timeline too, instead of looping a block that has no timeline playhead.
+- **Chords in the piano roll.** Clicking several pitches at one time adds a note each time. Double-click on empty track space now makes a **note clip**, so new songs hold chords from the start. On a **Tracker clip**, which holds one note at a time per column, a chord (a second note at the same time, or the chord helper) first turns the clip into a note clip. Its linked copies switch with it, and the notes keep their instruments, volumes and effects. It is one undo step. A column with lone volume or effect commands stays a Tracker clip and says why. In timeline mode the roll never edits the Tracker's cursor block any more.
+- **MIDI step input on the Timeline.** With edit mode on and the song stopped (or Rec step), MIDI keys go into the piano roll's note clip at the step position. Keys held together make a chord on one step, and releasing them moves the step on by the grid. Live recording already took chords.
+- **The Tracker is hidden by default.** A new setting, **Settings › Show Tracker (experimental)**, is off by default. While it's off:
+  - The TRACKER and ORDER tabs, the Tracker and Order list views, Ctrl+1 / Ctrl+2 and the lower panel's Order list are hidden.
+  - These menu items are hidden: View › Advanced Edit, Automation lanes, Dock lower panel under the Tracker, Alternate column shading, Row numbers; Song › Back to tracker mode…, Add block, Block ›; the clip menu's Open in Tracker.
+  - These Settings rows are hidden: the Tracker's *Open on the Timeline view*, *Open tracker songs in timeline mode* and *Double-click a clip*.
+  - Tracker songs and demos always open in timeline mode and play bit-identically. Tracker clips open in the piano roll. Nothing is removed from the code or the file format. ROADMAP: the Tracker returns later.
+- **One transport.** The toolbar has ⏮ · Play · Stop and the playhead position. The view bar's second set of transport buttons is gone, and so are its position and BPM readout.
+- **Fewer duplicate buttons.** Removed:
+  - **TIMELINE + PIANO**: the default layout. Ctrl+6 and View › Reset to default layout still give it.
+  - The view bar's **PIANO · DEVICES · INST · AUTO**: they duplicated the lower panel's own tabs. Ctrl+7, Ctrl+I and the lower-panel tabs still work.
+  - **View › Timeline + Piano roll**, which was the same as Reset to default layout.
+  - The Instruments list's **Edit in lower panel** box (Ctrl+I, the lower panel's Instrument tab and the Inspector's Edit still open it).
+  - Hint lines that moved into tooltips: the Inspector's "Drop an instrument…" (now on Browse…), the Mixer's "fader 0 dB = double-click…" (now on the Mixer title) and the strip bar's "drag / Shift+wheel to scroll".
+  - Every keyboard shortcut still works.
+- **Save prompt.** It now reads "Save changes to “Song”?" with one line of explanation and three buttons of the same width: **Save** (primary), **Don't save**, **Cancel**. Enter saves, N doesn't save and Esc cancels. Quitting, File › New, opening a song and the demos all use it.
+
 ### Clip Arranger
 - **Scenes and slots left of the Timeline**, one row per track, lined up with the track rows (inspired by other DAWs). A **scene** is a block: its button plays the block on every track, looping, from the next bar. A **slot** is a track's column of that block with a mini preview of its notes: ▶ plays just that track, **■** on a row stops the track, **■** in the header stops everything, all on the next bar. **Launch:** 1 bar / ½ bar / beat / off. Queued things pulse until their bar; a second click on a queued scene takes it back.
 - **Drag a slot onto the timeline** for a Tracker clip (block + column) on the bar under the mouse. Double-click a slot to open it in the Tracker.
