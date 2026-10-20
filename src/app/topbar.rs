@@ -492,6 +492,19 @@ impl App {
                 }
                 if ui
                     .add(
+                        egui::Button::selectable(self.extra.clip_arranger, "Clip Arranger")
+                            .shortcut_text("Ctrl+8"),
+                    )
+                    .on_hover_text(
+                        "scenes and slots left of the Timeline (off: the Instruments list there)",
+                    )
+                    .clicked()
+                {
+                    self.toggle_clip_arranger();
+                    ui.close();
+                }
+                if ui
+                    .add(
                         egui::Button::selectable(self.devices_visible(), "Devices in lower panel")
                             .shortcut_text("Ctrl+7"),
                     )

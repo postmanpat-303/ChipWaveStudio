@@ -332,6 +332,27 @@ impl App {
                     }
                 }
                 TlOp::DrumPattern { .. } => String::new(),
+                TlOp::PlaceBlock {
+                    block,
+                    col,
+                    track,
+                    at,
+                } => {
+                    let (b, c, tr) = (block as usize, col as usize, track as usize);
+                    match tl::place_block(song, tr, at, b, c) {
+                        Some(id) => {
+                            new_sel = Some(vec![id]);
+                            let name = song.patterns.get(b).map_or(String::new(), |p| p.name.clone());
+                            let bar = song.timeline.as_deref().map_or(1, |t| t.bar_pos(at).bar);
+                            format!(
+                                "Tracker clip: block {b:02} {name}, column {} on track {:02} at bar {bar}",
+                                c + 1,
+                                tr + 1
+                            )
+                        }
+                        None => "No track there for that clip".into(),
+                    }
+                }
                 TlOp::PlaceAudio => {
                     let (msg, ids) = App::place_ready_audio(song, ready);
                     if !ids.is_empty() {

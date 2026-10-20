@@ -69,7 +69,9 @@ Each item has a size, **[easy]** (an evening or two), **[medium]** (a few days) 
 - FX (bus) tracks and track groups, so the track pie's Add › FX track and Organize › Group can work. [big] start: `src/timeline.rs`
 - Use the track arm button (it is in the model but does nothing yet). [medium] start: `src/timeline.rs`
 - New songs: don't keep the unused empty block 00. [easy] start: `src/model.rs`
-- Clip launcher with scenes (M6, optional). [big] start: `src/timeline.rs`
+- Clip Arranger phase 2: independent per-track slots (track 1 plays block 3 while track 2 plays block 5). Needs a per-track row cursor in the engine, still real-time safe. [big] start: `src/engine/launch.rs`
+- Clip Arranger: note and audio clips in slots, and record a session into the timeline. [big] start: `src/app/cliparr.rs`
+- Clip Arranger: a real spectrum in the Master panel (it shows a level graph today). [medium] start: `src/app/cliparr.rs`
 - DAWproject import and export (M7, optional). [big] start: `src/fileio.rs`
 - Order list variation lanes (optional, see [ORDER_LIST.md](ORDER_LIST.md)). [big] start: `src/app/arranger.rs`
 

@@ -4,6 +4,14 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### Clip Arranger
+- **Scenes and slots left of the Timeline**, one row per track, lined up with the track rows (inspired by other DAWs). A **scene** is a block: its button plays the block on every track, looping, from the next bar. A **slot** is a track's column of that block with a mini preview of its notes: ▶ plays just that track, **■** on a row stops the track, **■** in the header stops everything, all on the next bar. **Launch:** 1 bar / ½ bar / beat / off. Queued things pulse until their bar; a second click on a queued scene takes it back.
+- **Drag a slot onto the timeline** for a Tracker clip (block + column) on the bar under the mouse. Double-click a slot to open it in the Tracker.
+- **Master panel** under it: volume, limiter drive and ceiling, limiter on / off, L / R and gain-reduction meters, loudness and a level graph.
+- The Instruments list moves to **Browser › Instruments** and the **Inspector**, which gets an instrument picker for the selected track. **Ctrl+8** or **View › Clip Arranger** brings the list back; the Tracker view keeps it.
+- Real-time safe: launches are queued to the engine and switched on the boundary row without locks or allocation. Nothing new is saved in songs; old songs play bit-identically. Per-track slots that play different blocks at once are phase 2 (ROADMAP). See `docs/CLIP_ARRANGER.md`.
+- **View tab bar:** the view you're in (TIMELINE or TRACKER) is the lit tab; the lower panel's tab under it is tinted (the Tracker used to light INST instead).
+
 ### One set of names
 - **Tracker** is the row editor everywhere (was "Pattern" / "pattern editor"): the view menu, tooltips, Settings (*double-click a clip: Piano roll / Tracker*, the *Tracker* row), the Inspector (**Open in Tracker**), the clip menu and the key list. Its unit stays the **block**; Advanced Edit's scopes are *Whole block / Track in block / Column in block / Selection in block*.
 - **Order list** is the tracker song's block sequence (was "Arranger"): the view tab is **ORDER**, the lower-panel tab **Order list**.

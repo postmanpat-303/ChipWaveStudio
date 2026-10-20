@@ -131,7 +131,13 @@ impl App {
         })
     }
 
-    /// the main view a tab belongs to (lit as well while a lower tab shows)
+    /// the tab drawn lit: the view you are in (tests)
+    #[allow(dead_code)]
+    pub(crate) fn vtab_lit(&self) -> Option<VTab> {
+        self.vtab_main().or(self.vtab_current())
+    }
+
+    /// the main view's tab: lit, with the lower panel's tab tinted under it
     fn vtab_main(&self) -> Option<VTab> {
         match self.view {
             View::Timeline => Some(VTab::Timeline),
@@ -269,8 +275,12 @@ impl App {
                     ui.separator();
                     ui.add_space(6.0);
                 }
-                let on = cur == Some(tab);
-                let host_on = !on && main == Some(tab);
+                // the view you are in is lit (TIMELINE / TRACKER); the lower
+                // panel's tab under it is tinted
+                let (on, host_on) = match main {
+                    Some(m) => (m == tab, m != tab && cur == Some(tab)),
+                    None => (cur == Some(tab), false),
+                };
                 let txt = egui::RichText::new(name).size(11.0).strong().color(if on {
                     if t.light {
                         t.hdr_bot

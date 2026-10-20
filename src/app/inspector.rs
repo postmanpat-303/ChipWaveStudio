@@ -714,9 +714,39 @@ impl App {
                 .get((slot as usize).wrapping_sub(1))
                 .map(|i| (i.name.clone(), super::params::type_tag(&i.kind)))
         });
+        let all: Vec<String> = self.with(|s| {
+            s.song
+                .instruments
+                .iter()
+                .enumerate()
+                .map(|(i, x)| format!("{:02X} {}", i + 1, x.name))
+                .collect()
+        });
         let mut edit = false;
         let mut browse = false;
+        let mut pick: Option<u8> = None;
         section(ui, "instrument", "Instrument", |ui| {
+            // the picker the left Instruments list used to be (Clip Arranger layout)
+            if !all.is_empty() {
+                let cur = (slot as usize)
+                    .checked_sub(1)
+                    .and_then(|i| all.get(i))
+                    .cloned()
+                    .unwrap_or_else(|| "none".into());
+                egui::ComboBox::from_id_salt(("insp_instr_pick", tr))
+                    .selected_text(cur)
+                    .width(ui.available_width() - 8.0)
+                    .show_ui(ui, |ui| {
+                        for (i, n) in all.iter().enumerate() {
+                            let k = (i + 1) as u8;
+                            if ui.selectable_label(k == slot, n).clicked() && k != slot {
+                                pick = Some(k);
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("the instrument this track plays: every note on it switches");
+            }
             match &info {
                 Some((n, tag)) => {
                     ui.horizontal(|ui| {
@@ -768,6 +798,19 @@ impl App {
                 .color(t.ink2),
             );
         });
+        if let Some(k) = pick {
+            self.snapshot();
+            let n = self.with(|s| crate::chanops::assign_track_instrument(&mut s.song, tr, k));
+            self.instr = k;
+            self.dirty = true;
+            crate::plugin::sync(&self.shared, Some(((k - 1) as usize, tr)));
+            self.status = format!(
+                "Track {:02} now plays {} ({n} note{} changed)",
+                tr + 1,
+                all[(k - 1) as usize],
+                if n == 1 { "" } else { "s" }
+            );
+        }
         if edit && slot > 0 {
             self.instr = slot;
             self.show_instrument_panel();

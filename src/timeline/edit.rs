@@ -506,6 +506,38 @@ pub fn new_clip(song: &mut Song, track: usize, start: Tick) -> Option<(usize, u3
     Some((n, id))
 }
 
+/// A Tracker clip of `block`'s column `col` on `track` at `start`, as long
+/// as the block (a slot dragged from the Clip Arranger). Returns its id.
+pub fn place_block(
+    song: &mut Song,
+    track: usize,
+    start: Tick,
+    block: usize,
+    col: usize,
+) -> Option<u32> {
+    let nch = song.channels.min(MAX_CHANNELS);
+    let rows = song.patterns.get(block)?.rows.max(1);
+    if track >= nch || col >= nch {
+        return None;
+    }
+    let tl = song.timeline.as_deref_mut()?;
+    let id = tl.new_id();
+    tl.clips.push(Clip {
+        id,
+        track: track as u16,
+        start: start.max(0),
+        len: rows_to_ticks(rows),
+        kind: ClipKind::Block {
+            pattern: block,
+            col: col as u8,
+        },
+        seed: seed_for(id),
+        ..Default::default()
+    });
+    tl.sort();
+    Some(id)
+}
+
 /// Add a marker at `tick` (named "Marker N"); returns its index.
 pub fn add_marker(tl: &mut Timeline, tick: Tick) -> usize {
     let name = format!("Marker {}", tl.markers.len() + 1);

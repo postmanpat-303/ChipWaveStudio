@@ -170,6 +170,13 @@ pub struct Extra {
     /// ... as a floating window instead of docked right of the pattern
     #[serde(default)]
     pub adv_edit_float: bool,
+    /// the Clip Arranger replaces the left Instruments list on the Timeline
+    /// (Ctrl+8, View menu; docs/CLIP_ARRANGER.md)
+    #[serde(default = "yes")]
+    pub clip_arranger: bool,
+    /// Clip Arranger launch quantise: 0 one bar, 1 half a bar, 2 a beat, 3 off
+    #[serde(default)]
+    pub launch_q: u8,
 }
 
 fn pattern_vol() -> f32 {
@@ -233,6 +240,8 @@ impl Default for Extra {
             view_bar: true,
             adv_edit_open: false,
             adv_edit_float: false,
+            clip_arranger: true,
+            launch_q: 0,
         }
     }
 }

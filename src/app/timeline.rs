@@ -64,7 +64,7 @@ struct Preview {
 pub(crate) struct Cache {
     /// fingerprints: block contents (previews) and the timeline / order list
     pkey: u64,
-    key: u64,
+    pub(crate) key: u64,
     /// the song is in timeline mode (`tl` is the song's own timeline)
     pub(crate) mode: bool,
     pub(crate) tl: tl::Timeline,
@@ -154,6 +154,13 @@ pub(crate) enum TlOp {
     /// `track` (u8::MAX = a new drum track below the last) at `at`
     DrumPattern {
         pat: u16,
+        track: u8,
+        at: Tick,
+    },
+    /// a Clip Arranger slot (block, column) as a Tracker clip on `track` at `at`
+    PlaceBlock {
+        block: u16,
+        col: u8,
         track: u8,
         at: Tick,
     },

@@ -26,6 +26,9 @@ mod browserpanel;
 mod browserview;
 mod chordlane;
 mod chordview;
+mod cliparr;
+#[cfg(test)]
+mod cliparr_tests;
 mod devices;
 #[cfg(test)]
 mod devices_tests;
@@ -174,6 +177,8 @@ pub struct App {
     fx_drag: Option<usize>,
     /// the lower panel's Devices tab (app/devices.rs)
     dev: devices::DevUi,
+    /// the left Clip Arranger (app/cliparr.rs)
+    ca: cliparr::CaUi,
     recent: Vec<String>,
     session: Option<crate::recovery::Session>,
     last_autosave: std::time::Instant,
@@ -551,6 +556,7 @@ impl App {
             arr_drag: None,
             fx_drag: None,
             dev: Default::default(),
+            ca: Default::default(),
             recent: crate::settings::load().recent,
             session,
             last_autosave: std::time::Instant::now(),
@@ -858,7 +864,7 @@ impl App {
                     ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Ctrl+Shift+F", "fill to length (auto arrange)"), ("1-7 / 0 in the Order list", "tag block role / clear"), ("Alt +/- (Shift = octave)", "transpose selection or channel (also the Block bar -12 -1 +1 +12 buttons, Edit > Transpose)"), ("F9 / F10", "mute / solo channel"),
                     ("Numpad - / +", "base octave down / up"), ("Ctrl+Shift+PgDn / PgUp", "double / halve the block length (Length field in the Block bar; Song > Block: set length, stretch, squash)"), ("Row numbers", "decimal 00-63 by default; View > Row numbers or Settings > Look switches to hex 00-3F. Effect values stay hex"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
                     ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Ctrl+Shift+A", "Advanced Edit panel (tracker): section, content mask, flip / shrink / expand, mix-paste, safe transpose, mirror, volume fade, replace instrument"), ("Delete (with selection)", "clear selection"),
-                    ("Ctrl+Tab, Ctrl+1..5", "views: Tracker / Order list / mixer / FX / sample"), ("Ctrl+6", "Timeline + piano roll: the default layout (View > Reset to default layout)"), ("I (Alt+I in the Tracker)", "Inspector: the selected track or clip (View > Inspector)"), ("View tab bar (bottom)", "TIMELINE / PIANO / DEVICES / INST / AUTO / MIX / FX / SAMPLE, then ORDER / TRACKER; View > View tab bar hides it"), ("F12", "this key list"), ("F11", "full-height view (hide / show the lower panel)"), ("Ctrl+I", "instrument editor in the lower panel"), ("Ctrl+F", "search instrument parameters"), ("knob: Ctrl-drag / double-click", "fine adjust / default"), ("Ctrl+Q", "quit"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "Order list: duplicate clip / as new block (when visible)"),
+                    ("Ctrl+Tab, Ctrl+1..5", "views: Tracker / Order list / mixer / FX / sample"), ("Ctrl+6", "Timeline + piano roll: the default layout (View > Reset to default layout)"), ("Ctrl+8", "Clip Arranger on / off: scenes and slots left of the Timeline (View > Clip Arranger)"), ("I (Alt+I in the Tracker)", "Inspector: the selected track or clip (View > Inspector)"), ("View tab bar (bottom)", "TIMELINE / PIANO / DEVICES / INST / AUTO / MIX / FX / SAMPLE, then ORDER / TRACKER; View > View tab bar hides it"), ("F12", "this key list"), ("F11", "full-height view (hide / show the lower panel)"), ("Ctrl+I", "instrument editor in the lower panel"), ("Ctrl+F", "search instrument parameters"), ("knob: Ctrl-drag / double-click", "fine adjust / default"), ("Ctrl+Q", "quit"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "Order list: duplicate clip / as new block (when visible)"),
                     ("Order list (click it to focus)", "click / Shift+click / Ctrl+click select; Ctrl+X/C/V cut/copy/paste after selection; Ctrl+Shift+V paste as new blocks; Del; Ctrl+A; right-click menu"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
                     ("Order list: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
                     ("Order list ruler (bar numbers)", "click = move the play marker to that bar (jumps there while playing), drag = scrub, Alt = exact row; Play song starts from the marker"),
@@ -1180,6 +1186,19 @@ impl eframe::App for App {
         } else {
             self.insp.rect = None;
         }
+        let ca_on = self.ca_active();
+        let ca_fade = if self.extra.reduce_motion {
+            if ca_on {
+                1.0
+            } else {
+                0.0
+            }
+        } else {
+            ctx.animate_bool_with_time(egui::Id::NULL.with("ca_fade"), ca_on, 0.18)
+        };
+        if !ca_on {
+            self.ca.drag = None;
+        }
         egui::Panel::left("side")
             .exact_size(330.0)
             .resizable(false)
@@ -1190,10 +1209,18 @@ impl eframe::App for App {
                 bottom: 6,
             }))
             .show(ui, |ui| {
-                theme::cartridge(ui.painter(), ui.max_rect(), th().slate);
-                egui::ScrollArea::vertical()
-                    .id_salt("side_scroll")
-                    .show(ui, |ui| self.side_panel(ui));
+                // the Clip Arranger fades in over the Instruments list; it
+                // is drawn after the Timeline (rows line up with its tracks)
+                self.ca.rect = ui.max_rect();
+                if ca_fade < 1.0 {
+                    if ca_fade > 0.0 {
+                        ui.multiply_opacity(1.0 - ca_fade);
+                    }
+                    theme::cartridge(ui.painter(), ui.max_rect(), th().slate);
+                    egui::ScrollArea::vertical()
+                        .id_salt("side_scroll")
+                        .show(ui, |ui| self.side_panel(ui));
+                }
             });
         if self.extra.browser_open {
             self.browser_side(ui);
@@ -1258,6 +1285,21 @@ impl eframe::App for App {
                     }
                 }
             });
+        if ca_fade > 0.0 {
+            let r = self.ca.rect;
+            ui.scope_builder(
+                egui::UiBuilder::new().max_rect(r).id_salt("clip_arranger"),
+                |ui| {
+                    if ca_fade < 1.0 {
+                        ui.multiply_opacity(ca_fade);
+                    }
+                    if !ca_on {
+                        ui.disable();
+                    }
+                    self.clip_arranger(ui);
+                },
+            );
+        }
         if self.show_help {
             self.help(&ctx);
         }

@@ -224,6 +224,7 @@ impl Chan {
 }
 
 mod audioclips;
+pub mod launch;
 mod notes;
 pub mod patprev;
 #[cfg(test)]
@@ -394,6 +395,10 @@ pub struct Engine {
     av: audioclips::AudioState,
     /// Browser drum-pattern preview (engine/patprev.rs); None = off
     patprev: Option<Box<patprev::PatPreview>>,
+    /// Clip Arranger: the launch waiting for its boundary (engine/launch.rs)
+    cue: Option<launch::Cue>,
+    /// Clip Arranger: tracks held silent (bit per track; 0 = none)
+    held: u64,
 }
 
 /// Timeline-mode playback: the plan being played, the row position and the
@@ -489,6 +494,8 @@ impl Engine {
             nv: notes::NoteState::new(),
             av: audioclips::AudioState::new(),
             patprev: None,
+            cue: None,
+            held: 0,
         }
     }
 
@@ -728,6 +735,8 @@ impl Engine {
         pattern: usize,
     ) {
         self.playing = true;
+        self.cue = None;
+        self.held = 0;
         // audio clips still fading from the last play end now
         self.av.release_all();
         self.av.starting = true;
@@ -1047,6 +1056,8 @@ impl Engine {
 
     fn start_panic(&mut self) {
         self.playing = false;
+        self.cue = None;
+        self.held = 0;
         self.test_tone = 0;
         self.live.sustain = false;
         self.live.bend = 1.0;
@@ -1102,6 +1113,7 @@ impl Engine {
 
     pub fn stop(&mut self) {
         self.playing = false;
+        self.cue = None;
         self.nv.release_all(&mut self.plugins);
         self.av.release_all();
         self.plugins.all_off();
@@ -1529,6 +1541,9 @@ impl Engine {
                 self.tl_cursors(next);
                 self.notes_jump(song, next, false);
             }
+            if self.cue.is_some() && !self.cue_step(song) {
+                return;
+            }
             self.process_row(song);
             return;
         }
@@ -1549,6 +1564,9 @@ impl Engine {
                 }
                 self.pattern = song.order.get(self.order_pos).copied().unwrap_or(0);
             }
+        }
+        if self.cue.is_some() && !self.cue_step(song) {
+            return;
         }
         self.process_row(song);
     }
@@ -1631,7 +1649,11 @@ impl Engine {
             let m = song.mixer.channels.get(i).copied().unwrap_or_default();
             let vol = self.auto.chan_vol[i].unwrap_or(m.volume);
             let pan = self.auto.chan_pan[i].unwrap_or(m.pan);
-            let g = if song.mixer.audible(i) { vol } else { 0.0 };
+            let g = if song.mixer.audible(i) && self.held & (1u64 << i) == 0 {
+                vol
+            } else {
+                0.0
+            };
             // constant power pan, normalised so centre = 1.0 per side
             let a = (pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
             *t = (

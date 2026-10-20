@@ -309,3 +309,4 @@ Tracker-mode songs are written exactly as before, byte for byte, with `min_reade
 
 The toolbar holds transport, tempo and the status lights. Tracker controls (Play block, Octave, Edit / Step) appear only in the Tracker view; their keys work everywhere. The view tab bar runs TIMELINE · PIANO · DEVICES · INST · AUTO · MIX · FX · SAMPLE, then ORDER · TRACKER at the far right. In timeline mode the header carries no mode label: **Song › Back to tracker mode…** turns the song back into blocks and an order list. The lower panel's tabs are Piano roll · Devices · Instrument · Automation · Order list.
 
+On the left of the Timeline sits the **Clip Arranger** (scenes = blocks, slots = a track's column of a block, launched on the next bar) with a small **Master** panel under it; Ctrl+8 shows the Instruments list there instead. See [CLIP_ARRANGER.md](CLIP_ARRANGER.md).

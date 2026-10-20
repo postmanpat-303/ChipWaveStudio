@@ -237,6 +237,7 @@ On Linux, build it from source (below).
 | `F9` / `F10` | mute / solo channel |
 | `Ctrl+1`…`5`, `Ctrl+Tab` | Pattern / Order list / Mixer / FX / Sample view |
 | `Ctrl+6` | the default layout: Timeline on top, piano roll below (also View › Reset to default layout and **TIMELINE + PIANO** in the view tab bar) |
+| `Ctrl+8` | Clip Arranger on / off: scenes and slots left of the Timeline (also View › Clip Arranger; off shows the Instruments list there) |
 | `Ctrl+T` | Timeline view (tracks and clips; in timeline mode drag, loop, split, copy clips, [TIMELINE.md](docs/TIMELINE.md)) |
 | `Ctrl+Shift+F` | Fill to length |
 | `Ctrl+Shift+PgDn` / `Ctrl+Shift+PgUp` | double / halve the block length (or the Length field in the Block bar) |
@@ -293,6 +294,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [FX.md](docs/FX.md) — the FX devices (Phaser and the rest)
 - [ORDER_LIST.md](docs/ORDER_LIST.md) — the Order list (the order list as a lane of blocks)
 - [TIMELINE.md](docs/TIMELINE.md) — the Timeline view (Ctrl+T) and timeline mode: arrange tracks and clips like a DAW
+- [CLIP_ARRANGER.md](docs/CLIP_ARRANGER.md) — the Clip Arranger: scenes and slots left of the Timeline, launched on the next bar, and the Master panel
 - [INSPECTOR.md](docs/INSPECTOR.md) — the Inspector (I) and the view tab bar along the bottom
 - [BROWSER.md](docs/BROWSER.md) — the Browser (Ctrl+B): find and load instruments, plugins, samples, songs, presets, Grid patches and wavetables; drag them onto tracks; Find plugins
 - [DAW_TIMELINE_PLAN.md](docs/DAW_TIMELINE_PLAN.md) — the DAW timeline plan and milestones

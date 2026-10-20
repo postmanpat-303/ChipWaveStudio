@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 55] = [
+pub const VIEWS: [&str; 57] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -92,6 +92,8 @@ pub const VIEWS: [&str; 55] = [
     "devices-drop",
     "trackpie",
     "trackpie-icons",
+    "cliparranger",
+    "cliparranger-drag",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -360,6 +362,19 @@ impl App {
                 }
             }
             "arranger" | "cue" => self.view = View::Arranger,
+            "cliparranger" | "cliparranger-drag" => {
+                // the default layout on the timeline-mode demo with the Clip
+                // Arranger; scene 03 plays (more is queued just before the shot)
+                self.enter_timeline();
+                self.default_layout();
+                self.extra.clip_arranger = true;
+                self.extra.reduce_motion = true;
+                self.ch = 5;
+                if view == "cliparranger" {
+                    self.ca_scene(3);
+                }
+                self.dirty = false;
+            }
             "trackpie" | "trackpie-icons" => {
                 // the default layout on the timeline-mode demo; the pie
                 // opens a few frames later (shot_pie)
@@ -702,6 +717,8 @@ impl App {
                 | "slice"
                 | "timeline-new"
                 | "timeline-switch"
+                | "cliparranger"
+                | "cliparranger-drag"
         ) && std::env::var_os("CHIPWAVE_SHOT_NOPLAY").is_none()
         {
             self.play(3);
@@ -928,6 +945,19 @@ impl App {
         if f == SETUP_AT + 14 {
             if let Ok(m) = std::env::var("CHIPWAVE_SHOT_PR") {
                 self.shot_pr(ctx, &m);
+            }
+        }
+        if view == "cliparranger" && f == CAPTURE_AT - 6 {
+            // queued for the next bar: Pad 1 plays block 04, Kick stops
+            self.ca_slot(5, 4);
+            self.ca_stop(0);
+        }
+        if view == "cliparranger-drag" && f == SETUP_AT + 12 {
+            let at = 40 * 4 * crate::timeline::PPQ;
+            if let Some((_, row)) = self.tlv.track_rects(4) {
+                let x = self.tlv.x_of(at) + 30.0;
+                self.ca.drag = Some((2, 4));
+                self.ca.shot_drag = Some(Pos2::new(x, row.center().y));
             }
         }
         if view.starts_with("trackpie") && f == SETUP_AT + 12 {
