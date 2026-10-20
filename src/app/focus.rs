@@ -38,6 +38,8 @@ impl App {
     pub(super) fn shot_focus(&mut self, view: &str) {
         use crate::timeline as tl;
         self.extra.show_tracker = false;
+        self.extra.browser_open = false;
+        self.psetup = None;
         self.with(|s| {
             super::file::convert_on_open(&mut s.song, true);
             let Shared { song, engine, .. } = s;
@@ -61,14 +63,15 @@ impl App {
                 self.prompt = Some(crate::prompt::Pending::Quit);
             }
             "focus-chord" => {
-                // the first Tracker clip on a melodic track, as a note clip
+                // a Tracker clip on a pad track, as a note clip
                 // with a triad on each of its first notes
                 let id = self.with(|s| {
                     let t = s.song.timeline.as_deref()?;
                     let (id, b, col) = t
                         .clips
                         .iter()
-                        .filter(|c| c.track >= 2)
+                        .filter(|c| c.track == 5 && c.start > 0)
+                        .chain(t.clips.iter().filter(|c| c.track >= 2))
                         .find_map(|c| c.block().map(|(b, col)| (c.id, b, col)))?;
                     let data = tl::block_col_to_notes(&mut s.song, b, col)?;
                     let t = s.song.timeline.as_deref_mut()?;
