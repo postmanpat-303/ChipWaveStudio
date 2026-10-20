@@ -127,7 +127,12 @@ fn view_tab_bar_switches_views_and_the_old_ways_still_work() {
     h.get_by_label("TRACKER").click();
     frames(&mut h, 2);
     assert!(h.state().view == View::Pattern);
-    h.get_by_label("INST").click();
+    // the lower panel's tabs live above it (the bar no longer repeats them)
+    assert!(h
+        .query_all_by(|n| n.label().as_deref() == Some("INST"))
+        .next()
+        .is_none());
+    h.state_mut().vtab_select(super::viewbar::VTab::Inst);
     frames(&mut h, 2);
     assert!(h.state().extra.lower_inst && h.state().lower_visible());
     assert_eq!(h.state().vtab_current(), Some(super::viewbar::VTab::Inst));

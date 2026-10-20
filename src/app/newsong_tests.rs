@@ -214,13 +214,18 @@ fn ctrl_6_view_bar_and_view_menu_bring_the_default_layout_back() {
     key(&mut h, Key::Num6, egui::Modifiers::COMMAND);
     frames(&mut h, 2);
     assert!(h.state().is_default_layout(), "Ctrl+6");
-    // the instrument editor, then the view bar button
+    // the instrument editor, then View › Reset to default layout (the view
+    // bar's TIMELINE + PIANO button is gone)
     h.state_mut().show_instrument_panel();
     frames(&mut h, 2);
     assert!(!h.state().is_default_layout());
-    h.get_by_label("TIMELINE + PIANO").click();
+    assert!(h
+        .query_all_by(|n| n.label().as_deref() == Some("TIMELINE + PIANO"))
+        .next()
+        .is_none());
+    key(&mut h, Key::Num6, egui::Modifiers::COMMAND);
     frames(&mut h, 2);
-    assert!(h.state().is_default_layout(), "view bar button");
+    assert!(h.state().is_default_layout(), "Ctrl+6 again");
     // a resized lower panel goes back to the default height
     h.state_mut().extra.lower_h = 600.0;
     h.state_mut().view = View::Fx;
