@@ -29,6 +29,7 @@ mod chordview;
 mod cliparr;
 #[cfg(test)]
 mod cliparr_tests;
+mod devcards;
 mod devices;
 #[cfg(test)]
 mod devices_tests;

@@ -14,6 +14,7 @@
 //! devices that changed (`fx::ChainState::sync`), and the audio callback
 //! never sees any of it (it only pops the ring buffer, see audio.rs).
 //! Original ChipWave code.
+use super::devcards::{self, open_key, CARD_MIN_W, CARD_W, GAP, MORE_W, ROW_H};
 use super::fxview::{strip_fill, FxOp};
 use super::knob::{self, KnobArgs, CELL};
 use super::*;
@@ -37,13 +38,16 @@ pub(crate) struct DevUi {
     pub(crate) inst_folded: bool,
     /// the track the view last followed (usize::MAX = none yet)
     pub(crate) follow_ch: usize,
-    /// the EQ band the curve's knobs show, per device index
-    pub(crate) eq_band: Vec<(usize, usize)>,
     /// a Browser instrument dropped on the instrument card: keep the
     /// slot's FX chain when its sound is replaced
     pub(crate) keep_fx: Option<(u8, Vec<Device>)>,
     /// screenshot: hold a Browser drag over device card N
     pub(crate) shot_at: Option<usize>,
+    /// cards with their "…" open, as (instrument, device uid); remembered
+    /// while ChipWave runs
+    pub(crate) open: std::collections::HashSet<(usize, u64)>,
+    /// this frame's card width (every card the same; narrower when many)
+    pub(crate) card_w: f32,
 }
 
 impl Default for DevUi {
@@ -55,9 +59,10 @@ impl Default for DevUi {
             drag: None,
             inst_folded: false,
             follow_ch: usize::MAX,
-            eq_band: vec![],
             keep_fx: None,
             shot_at: None,
+            open: Default::default(),
+            card_w: CARD_W,
         }
     }
 }
@@ -79,20 +84,6 @@ pub(crate) fn marker_x(inst: Rect, cards: &[Rect], i: usize) -> f32 {
         r.right() + 5.0
     } else {
         inst.right() + 9.0
-    }
-}
-
-/// width of an expanded device card
-fn card_w(d: &Device) -> f32 {
-    match d.kind {
-        FxKind::Eq => 300.0,
-        FxKind::Plugin => 250.0,
-        FxKind::Compressor | FxKind::Reverb | FxKind::Delay | FxKind::Filter => 262.0,
-        k => {
-            // knob grid, 4 per row
-            let n = fx::params(k).len();
-            (n.min(4) as f32 * CELL.x + 24.0).max(200.0)
-        }
     }
 }
 
@@ -228,38 +219,26 @@ impl App {
         }
         let idx = (self.instr as usize).wrapping_sub(1);
         let chain = self.with(|s| s.song.instruments.get(idx).map(|i| i.fx.clone()));
-        // ---- header
+        // ---- header (the how-to lives in the tooltip)
         ui.horizontal(|ui| {
             ui.add_space(6.0);
-            ui.label(egui::RichText::new("Devices").strong());
-            ui.label(
-                egui::RichText::new(format!("· {}", self.devices_target_label()))
-                    .color(t.ink2),
-            );
-            if let Some(c) = &chain {
-                ui.label(
+            ui.label(egui::RichText::new("Devices").strong())
+                .on_hover_text(
+                    "drag effects in from Browser › Effects · drag a card's title to reorder · \
+                 right-click a card for more · … shows a device's other parameters",
+                );
+            let n_fx = chain.as_ref().map_or(0, |c| c.len());
+            ui.add(
+                egui::Label::new(
                     egui::RichText::new(format!(
-                        "· {} effect{}",
-                        c.len(),
-                        if c.len() == 1 { "" } else { "s" }
+                        "· {} · {n_fx} effect{}",
+                        self.devices_target_label(),
+                        if n_fx == 1 { "" } else { "s" }
                     ))
-                    .small()
                     .color(t.ink2),
-                );
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_space(6.0);
-                ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(
-                            "drag effects in from Browser › Effects · drag a title to reorder · right-click a card for more",
-                        )
-                        .small()
-                        .color(t.ink2),
-                    )
-                    .truncate(),
-                );
-            });
+                )
+                .truncate(),
+            );
         });
         let Some(chain) = chain else {
             self.dev.row = ui.max_rect();
@@ -286,18 +265,50 @@ impl App {
         let pointer = ui.ctx().pointer_latest_pos();
         let released = ui.input(|i| i.pointer.any_released());
         let row_top = ui.cursor().top();
-        let row_w = ui.available_width();
+        // one width for every card: the most that fits, between the two limits
+        {
+            let open = chain
+                .iter()
+                .enumerate()
+                .filter(|(i, d)| {
+                    !d.collapsed && self.dev.open.contains(&(idx, open_key(&chain, *i)))
+                })
+                .count();
+            let slim = chain.iter().filter(|d| d.collapsed).count() + self.dev.inst_folded as usize;
+            let full = chain.len() + 1 - slim;
+            let fixed = 16.0
+                + plus_w(chain.is_empty())
+                + GAP * (chain.len() + 1) as f32
+                + SLIM * slim as f32
+                + MORE_W * open as f32;
+            self.dev.card_w = if full == 0 {
+                CARD_W
+            } else {
+                ((ui.available_width() - fixed) / full as f32)
+                    .clamp(CARD_MIN_W, CARD_W)
+                    .floor()
+            };
+        }
         egui::ScrollArea::horizontal()
             .id_salt("devices_row")
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
+                    ui.spacing_mut().item_spacing.x = 0.0;
                     ui.add_space(4.0);
-                    inst_rect = self.devices_inst_card(ui, h, row_w);
+                    inst_rect = self.devices_inst_card(ui, h);
                     chevron(ui, h);
                     for (i, d) in chain.iter().enumerate() {
-                        let r = self.devices_card(ui, idx, i, d, h, chain.len(), &mut ops);
+                        let r = self.devices_card(
+                            ui,
+                            idx,
+                            i,
+                            d,
+                            open_key(&chain, i),
+                            h,
+                            chain.len(),
+                            &mut ops,
+                        );
                         cards.push(r);
                         chevron(ui, h);
                     }
@@ -333,21 +344,22 @@ impl App {
         self.apply_fx_ops(idx, ops);
     }
 
-    /// the instrument card: the lower-panel instrument editor in a frame
-    fn devices_inst_card(&mut self, ui: &mut egui::Ui, h: f32, row_w: f32) -> Rect {
+    /// the instrument card, as compact as the effects: its picture, four key
+    /// knobs and Advanced › for the full editor (the Instrument tab)
+    fn devices_inst_card(&mut self, ui: &mut egui::Ui, h: f32) -> Rect {
         let t = th();
-        let (name, kind) = self.with(|s| {
+        let idx = (self.instr as usize).wrapping_sub(1);
+        let (name, tag) = self.with(|s| {
             s.song
                 .instruments
-                .get((self.instr as usize).wrapping_sub(1))
+                .get(idx)
                 .map(|i| (i.name.clone(), super::params::type_tag(&i.kind)))
                 .unwrap_or_default()
         });
-        // about 40 % of the row, so a few effect cards fit next to it
         let w = if self.dev.inst_folded {
             SLIM
         } else {
-            (row_w * 0.42).clamp(380.0, 760.0)
+            self.dev.card_w
         };
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
         let p = ui.painter_at(rect.expand(2.0));
@@ -370,7 +382,7 @@ impl App {
             }
             return rect;
         }
-        // header: name, type, fold
+        // header: number and name, type, fold
         let head = Rect::from_min_size(rect.min, egui::vec2(w, HEAD));
         p.rect_filled(
             head,
@@ -382,21 +394,46 @@ impl App {
             },
             accent.gamma_multiply(0.22),
         );
-        p.text(
-            head.left_center() + egui::vec2(10.0, 0.0),
-            egui::Align2::LEFT_CENTER,
-            format!("INSTRUMENT · {:02X} {name}", self.instr),
-            FontId::proportional(12.0),
-            t.ink,
-        );
-        let _ = kind;
         let fold = Rect::from_center_size(
             Pos2::new(head.right() - 14.0, head.center().y),
             egui::vec2(18.0, 18.0),
         );
+        let tag_g = p.layout_no_wrap(
+            tag.to_string(),
+            FontId::proportional(10.5),
+            super::instpanel::tag_text_colour(tag),
+        );
+        let tag_r = Rect::from_min_size(
+            Pos2::new(
+                fold.left() - 8.0 - tag_g.size().x - 12.0,
+                head.center().y - 8.0,
+            ),
+            egui::vec2(tag_g.size().x + 12.0, 16.0),
+        );
+        if !tag.is_empty() {
+            p.rect_filled(tag_r, 8, super::instpanel::tag_colour(tag));
+            p.galley(tag_r.center() - tag_g.size() * 0.5, tag_g, t.ink);
+        }
+        let name_r = Rect::from_min_max(
+            head.min + egui::vec2(10.0, 0.0),
+            Pos2::new(tag_r.left() - 6.0, head.bottom()),
+        );
+        let label = super::pattern::fit(
+            &p,
+            &format!("{:02X} {name}", self.instr),
+            &FontId::proportional(12.5),
+            name_r.width(),
+        );
+        p.text(
+            name_r.left_center(),
+            egui::Align2::LEFT_CENTER,
+            label,
+            FontId::proportional(12.5),
+            t.ink,
+        );
         let fr = ui
             .interact(fold, id.with("fold"), Sense::click())
-            .on_hover_text("fold the instrument card (more room for effects)");
+            .on_hover_text("fold the instrument card");
         chevron_icon(
             &p,
             fold.center(),
@@ -406,19 +443,64 @@ impl App {
         if fr.clicked() {
             self.dev.inst_folded = true;
         }
-        let body = Rect::from_min_max(
-            Pos2::new(rect.left() + 4.0, head.bottom() + 2.0),
-            rect.max - egui::vec2(4.0, 4.0),
+        ui.interact(name_r, id.with("name"), Sense::hover())
+            .on_hover_text(format!(
+                "{name}: the track's instrument · drop one from the Browser here to replace its sound \\
+                 (its effects stay) · Advanced › opens every control"
+            ));
+        let main = Rect::from_min_max(
+            Pos2::new(rect.left() + 8.0, head.bottom() + 6.0),
+            rect.max - egui::vec2(8.0, 6.0),
         );
-        let lay = egui::Layout::top_down(egui::Align::LEFT);
-        ui.scope_builder(egui::UiBuilder::new().max_rect(body).layout(lay), |ui| {
-            ui.set_clip_rect(body.intersect(ui.clip_rect()));
-            self.instrument_view(ui);
+        let foot_h = 22.0;
+        let gh = (main.height() - CELL.y - foot_h - 8.0).clamp(0.0, 240.0);
+        let g = Rect::from_min_size(main.min, egui::vec2(main.width(), gh));
+        if gh >= 24.0 {
+            match self.inst_card_viz(idx) {
+                Some(v) => {
+                    devcards::well(&p, g);
+                    knob::draw_viz(&p, g.shrink(2.0), &v);
+                }
+                None => {
+                    devcards::well(&p, g);
+                    p.text(
+                        g.center(),
+                        egui::Align2::CENTER_CENTER,
+                        tag,
+                        FontId::proportional(14.0),
+                        t.ink2,
+                    );
+                }
+            }
+        }
+        let kr = Rect::from_min_size(
+            Pos2::new(main.left(), g.bottom() + 6.0),
+            egui::vec2(main.width(), CELL.y),
+        );
+        inside(ui, egui::UiBuilder::new().max_rect(kr), |ui| {
+            ui.set_clip_rect(kr.intersect(ui.clip_rect()));
+            if self.inst_key_knobs(ui, idx, devcards::knobs_fit(kr.width()).min(4)) == 0 {
+                ui.label(egui::RichText::new("its controls are in Advanced ›").color(t.ink2));
+            }
         });
+        let b = Rect::from_min_max(
+            Pos2::new(main.right() - 92.0, main.bottom() - foot_h),
+            main.max,
+        );
+        if ui
+            .put(b, egui::Button::new("Advanced ›").small())
+            .on_hover_text("every control of this instrument (the Instrument tab's full editor)")
+            .clicked()
+        {
+            self.ip.advanced = true;
+            self.set_lower(1);
+        }
         rect
     }
 
-    /// one effect card
+    /// one effect card: the same width for every kind, a header (power,
+    /// name to drag, "…", remove), one graph, its 2-4 key knobs; "…" adds a
+    /// column with the other parameters, presets and reset
     #[allow(clippy::too_many_arguments)]
     fn devices_card(
         &mut self,
@@ -426,12 +508,21 @@ impl App {
         owner: usize,
         i: usize,
         d: &Device,
+        key: u64,
         h: f32,
         n: usize,
         ops: &mut Vec<FxOp>,
     ) -> Rect {
         let t = th();
-        let w = if d.collapsed { SLIM } else { card_w(d) };
+        let cw = self.dev.card_w;
+        let open = !d.collapsed && self.dev.open.contains(&(owner, key));
+        let w = if d.collapsed {
+            SLIM
+        } else if open {
+            cw + MORE_W
+        } else {
+            cw
+        };
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
         let p = ui.painter_at(rect.expand(2.0));
         let tint = strip_fill(d.kind, d.enabled);
@@ -505,7 +596,7 @@ impl App {
             r.context_menu(|ui| menu(ui, ops));
             return rect;
         }
-        // header: power · name (drag) · collapse · remove
+        // header: power · name (drag) · … · remove
         let head = Rect::from_min_size(rect.min, egui::vec2(w, HEAD));
         p.rect_filled(
             head,
@@ -528,10 +619,13 @@ impl App {
             Pos2::new(head.right() - 13.0, head.center().y),
             egui::vec2(18.0, 18.0),
         );
-        let col_r = x_r.translate(egui::vec2(-20.0, 0.0));
+        let more_r = Rect::from_center_size(
+            Pos2::new(x_r.left() - 14.0, head.center().y),
+            egui::vec2(22.0, 18.0),
+        );
         let name_r = Rect::from_min_max(
             Pos2::new(pw.right() + 4.0, head.top()),
-            Pos2::new(col_r.left() - 2.0, head.bottom()),
+            Pos2::new(more_r.left() - 2.0, head.bottom()),
         );
         let ink = if d.enabled { t.ink } else { t.ink2 };
         p.with_clip_rect(name_r).text(
@@ -549,7 +643,8 @@ impl App {
             .interact(name_r, id.with("name"), Sense::click_and_drag())
             .on_hover_cursor(egui::CursorIcon::Grab)
             .on_hover_text(format!(
-                "{title}: drag to move · double-click to collapse · right-click for more"
+                "{title}: drag to move · double-click to collapse · right-click for more\n\
+                 knobs: drag · Ctrl-drag fine · double-click default · right-click to automate or modulate"
             ));
         if nr.drag_started() {
             self.dev.drag = Some(i);
@@ -558,17 +653,32 @@ impl App {
             ops.push(FxOp::Collapse(i));
         }
         nr.context_menu(|ui| menu(ui, ops));
-        let cr = ui
-            .interact(col_r, id.with("col"), Sense::click())
-            .on_hover_text("collapse");
-        chevron_icon(
-            &p,
-            col_r.center(),
-            false,
-            if cr.hovered() { t.accent } else { ink },
+        let mr = ui
+            .interact(more_r, id.with("more"), Sense::click())
+            .on_hover_text(if open {
+                "hide the other parameters"
+            } else {
+                "show the other parameters, presets and reset"
+            });
+        if open || mr.hovered() {
+            p.rect_filled(
+                more_r,
+                4,
+                t.ink.gamma_multiply(if open { 0.16 } else { 0.10 }),
+            );
+        }
+        p.text(
+            more_r.center(),
+            egui::Align2::CENTER_CENTER,
+            "…",
+            FontId::proportional(14.0),
+            if open || mr.hovered() { t.accent } else { ink },
         );
-        if cr.clicked() {
-            ops.push(FxOp::Collapse(i));
+        if mr.clicked() {
+            let k = (owner, key);
+            if !self.dev.open.remove(&k) {
+                self.dev.open.insert(k);
+            }
         }
         let xr = ui
             .interact(x_r, id.with("x"), Sense::click())
@@ -584,82 +694,252 @@ impl App {
         if xr.clicked() {
             ops.push(FxOp::Remove(i));
         }
-        // body
-        let body = Rect::from_min_max(
+        // the main column: graph, key knobs, a line about what's under "…"
+        let main = Rect::from_min_max(
             Pos2::new(rect.left() + 8.0, head.bottom() + 6.0),
-            rect.max - egui::vec2(8.0, 6.0),
+            Pos2::new(rect.left() + cw - 8.0, rect.bottom() - 6.0),
         );
+        let foot_h = 16.0;
+        let gh = (main.height() - CELL.y - foot_h - 8.0).clamp(0.0, 240.0);
+        let g = Rect::from_min_size(main.min, egui::vec2(main.width(), gh));
+        let mut keys = devcards::key_params(d);
+        keys.truncate(devcards::knobs_fit(main.width()));
         let lay = egui::Layout::top_down(egui::Align::LEFT);
-        ui.scope_builder(egui::UiBuilder::new().max_rect(body).layout(lay), |ui| {
-            ui.set_clip_rect(body.intersect(ui.clip_rect()));
-            if !d.enabled {
-                ui.multiply_opacity(0.55);
-            }
-            match d.kind {
-                FxKind::Plugin => self.devices_plugin_body(ui, owner, i, d),
-                FxKind::Grid => {
-                    let nm = d.grid.as_ref().map_or(0, |g| g.modules.len());
-                    if ui
-                        .button(format!("Edit patch… ({nm} modules)"))
-                        .on_hover_text("open the Grid FX patch editor")
-                        .clicked()
-                    {
-                        self.ip.grid_fx = Some((owner, i));
-                    }
-                    self.devices_knobs(ui, owner, i, d, &[0, 1, 2, 3, 8], ops);
+        inside(
+            ui,
+            egui::UiBuilder::new().max_rect(main).layout(lay),
+            |ui| {
+                ui.set_clip_rect(main.intersect(ui.clip_rect()));
+                if !d.enabled {
+                    ui.multiply_opacity(0.55);
                 }
-                FxKind::Eq => self.devices_eq(ui, owner, i, d, ops),
-                FxKind::Compressor => {
-                    let r = graph(ui, 92.0);
-                    comp_graph(ui.painter(), r, d);
-                    self.devices_knobs(ui, owner, i, d, &[0, 1, 2, 3, 4], ops);
+                if gh >= 24.0 {
+                    self.devices_graph(ui, owner, i, d, g, ops);
                 }
-                FxKind::Filter => {
-                    let r = graph(ui, 80.0);
-                    let p = ui.painter();
-                    graph_bg(p, r, true);
-                    let (mode, fc, res) = (d.real(0) as usize, d.real(1), d.real(2));
-                    freq_curve(p, r, t.accent, true, |f| {
-                        db_y(r, svf_db(mode, fc, res, f), 24.0)
-                    });
-                    self.devices_choice(ui, i, d, 0, ops);
-                    self.devices_knobs(ui, owner, i, d, &[1, 2, 3, 4, 5], ops);
+                if d.kind == FxKind::Plugin {
+                    return;
                 }
-                FxKind::Delay => {
-                    let r = graph(ui, 70.0);
-                    let bpm = self.with(|s| s.song.bpm);
-                    delay_graph(ui.painter(), r, d, bpm);
+                let kr = Rect::from_min_size(
+                    Pos2::new(main.left(), g.bottom() + 6.0),
+                    egui::vec2(main.width(), CELL.y),
+                );
+                inside(ui, egui::UiBuilder::new().max_rect(kr), |ui| {
+                    let pad = ((kr.width() - keys.len() as f32 * CELL.x) / 2.0).max(0.0);
                     ui.horizontal(|ui| {
-                        self.devices_choice(ui, i, d, 0, ops);
+                        ui.add_space(pad);
+                        self.devices_knobs(ui, owner, i, d, &keys, ops);
                     });
-                    self.devices_choice(ui, i, d, 3, ops);
-                    let keys: &[usize] = if d.real(0) as usize == 0 {
-                        &[1, 2, 4, 5, 6]
-                    } else {
-                        &[2, 4, 5, 6]
-                    };
-                    self.devices_knobs(ui, owner, i, d, keys, ops);
+                });
+            },
+        );
+        let rest = devcards::more_params(d).len();
+        if !open && (rest > 0 || d.kind == FxKind::Plugin) {
+            p.text(
+                Pos2::new(main.left(), main.bottom()),
+                egui::Align2::LEFT_BOTTOM,
+                if d.kind == FxKind::Plugin {
+                    "parameters under …".to_string()
+                } else {
+                    format!("+{rest} more under …")
+                },
+                FontId::proportional(10.5),
+                t.ink2.gamma_multiply(0.8),
+            );
+        }
+        if open {
+            let more = Rect::from_min_max(
+                Pos2::new(rect.left() + cw + 4.0, head.bottom() + 6.0),
+                rect.max - egui::vec2(8.0, 6.0),
+            );
+            p.vline(
+                more.left() - 6.0,
+                egui::Rangef::new(more.top(), more.bottom()),
+                Stroke::new(1.0, t.border.gamma_multiply(0.7)),
+            );
+            inside(
+                ui,
+                egui::UiBuilder::new().max_rect(more).layout(lay),
+                |ui| {
+                    ui.set_clip_rect(more.intersect(ui.clip_rect()));
+                    if !d.enabled {
+                        ui.multiply_opacity(0.55);
+                    }
+                    self.devices_more(ui, owner, i, d, ops);
+                },
+            );
+        }
+        rect
+    }
+
+    /// the card's one graph
+    fn devices_graph(
+        &mut self,
+        ui: &mut egui::Ui,
+        owner: usize,
+        i: usize,
+        d: &Device,
+        g: Rect,
+        ops: &mut Vec<FxOp>,
+    ) {
+        let t = th();
+        let p = ui.painter().clone();
+        match d.kind {
+            FxKind::Eq => self.devices_eq(ui, owner, i, d, g, ops),
+            FxKind::Filter => {
+                graph_bg(&p, g, true);
+                let (mode, fc, res) = (d.real(0) as usize, d.real(1), d.real(2));
+                freq_curve(&p, g, t.accent, true, |f| {
+                    db_y(g, svf_db(mode, fc, res, f), 24.0)
+                });
+            }
+            FxKind::Compressor => {
+                comp_graph(
+                    &p,
+                    Rect::from_min_max(g.min, Pos2::new(g.right() - 14.0, g.bottom())),
+                    d,
+                );
+                let gr = self.with(|s| s.engine.comp_gr_db(owner, i));
+                devcards::gr_meter(&p, g, gr);
+                if gr > 0.05 {
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(40));
                 }
-                FxKind::Reverb => {
-                    let r = graph(ui, 70.0);
-                    reverb_graph(ui.painter(), r, d);
-                    self.devices_knobs(ui, owner, i, d, &[0, 1, 2, 3, 4, 5, 6], ops);
+                ui.interact(g, ui.make_persistent_id(("gr", owner, i)), Sense::hover())
+                    .on_hover_text(format!(
+                        "gain reduction {gr:.1} dB (the meter on the right)"
+                    ));
+            }
+            FxKind::Delay => {
+                let bpm = self.with(|s| s.song.bpm);
+                delay_graph(&p, g, d, bpm);
+            }
+            FxKind::Reverb => reverb_graph(&p, g, d),
+            FxKind::Chorus => devcards::chorus_graph(&p, g, d),
+            FxKind::Drive => devcards::drive_graph(&p, g, d),
+            FxKind::Bitcrusher => devcards::steps_graph(&p, g, d.real(0)),
+            FxKind::Digital => devcards::steps_graph(&p, g, d.real(3)),
+            FxKind::Phaser => devcards::phaser_graph(&p, g, d),
+            FxKind::FreqShift => devcards::shift_graph(&p, g, d),
+            FxKind::Resonator => devcards::ring_graph(&p, g, d),
+            FxKind::Sub => devcards::sub_graph(&p, g),
+            FxKind::Grid => {
+                let nm = d.grid.as_ref().map_or(0, |gp| gp.modules.len());
+                devcards::grid_graph(&p, g, nm);
+                let b = Rect::from_center_size(g.center(), egui::vec2(120.0, 22.0));
+                if ui
+                    .put(b, egui::Button::new(format!("Edit patch… ({nm})")))
+                    .on_hover_text("open the Grid FX patch editor")
+                    .clicked()
+                {
+                    self.ip.grid_fx = Some((owner, i));
                 }
-                k => {
-                    let info = fx::params(k);
-                    let mut knobs = vec![];
-                    for (pi, x) in info.iter().enumerate() {
-                        if x.choices.is_empty() {
-                            knobs.push(pi);
-                        } else {
-                            self.devices_choice(ui, i, d, pi, ops);
+            }
+            FxKind::Plugin => self.devices_plugin_face(ui, owner, d, g),
+        }
+    }
+
+    /// the "…" column: every other parameter as a row, then presets / reset
+    fn devices_more(
+        &mut self,
+        ui: &mut egui::Ui,
+        owner: usize,
+        i: usize,
+        d: &Device,
+        ops: &mut Vec<FxOp>,
+    ) {
+        let t = th();
+        if d.kind == FxKind::Plugin {
+            egui::ScrollArea::vertical()
+                .id_salt(("dev_more", owner, i))
+                .auto_shrink([false, false])
+                .show(ui, |ui| self.plugin_fx_body(ui, owner, i, d));
+            return;
+        }
+        let info = fx::params(d.kind);
+        let rows = devcards::more_params(d);
+        let list_h = (ui.available_height() - 28.0).max(ROW_H);
+        egui::ScrollArea::vertical()
+            .id_salt(("dev_more", owner, i))
+            .max_height(list_h)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
+                for k in rows {
+                    let pi = &info[k];
+                    let v0 = d.params.get(k).copied().unwrap_or(0.0);
+                    if !pi.choices.is_empty() {
+                        let cur = d.real(k) as usize;
+                        ui.horizontal(|ui| {
+                            ui.set_height(ROW_H);
+                            ui.add_sized(
+                                egui::vec2(76.0, ROW_H),
+                                egui::Label::new(
+                                    egui::RichText::new(pi.name).size(11.5).color(t.ink),
+                                )
+                                .truncate(),
+                            );
+                            egui::ComboBox::from_id_salt(("dev_ch", owner, i, k))
+                                .selected_text(pi.choices.get(cur).copied().unwrap_or(""))
+                                .width((ui.available_width() - 4.0).max(60.0))
+                                .show_ui(ui, |ui| {
+                                    for (ci, cn) in pi.choices.iter().enumerate() {
+                                        if ui.selectable_label(ci == cur, *cn).clicked()
+                                            && ci != cur
+                                        {
+                                            ops.push(FxOp::Param(
+                                                i,
+                                                k,
+                                                pi.to_norm(ci as f32),
+                                                true,
+                                            ));
+                                        }
+                                    }
+                                });
+                        });
+                        continue;
+                    }
+                    let (resp, out) = devcards::param_row(
+                        ui,
+                        ui.make_persistent_id(("dev_row", owner, i, k)),
+                        pi.name,
+                        v0,
+                        &pi.format(v0),
+                        pi.to_norm(pi.def),
+                    );
+                    let tid = crate::automation::Target::Fx(owner, i, k);
+                    let mut lane = false;
+                    self.mod_slider(ui, &resp, &tid.id(), v0, Some(&mut lane));
+                    if lane {
+                        self.add_lane(tid);
+                    }
+                    if let Some((v, first)) = out {
+                        ops.push(FxOp::Param(i, k, v, first));
+                    }
+                }
+            });
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let pre = fx::presets(d.kind);
+            if !pre.is_empty() {
+                ui.menu_button("Presets", |ui| {
+                    for (k, (pn, _)) in pre.iter().enumerate() {
+                        if ui.button(*pn).clicked() {
+                            ops.push(FxOp::Preset(i, k));
+                            ui.close();
                         }
                     }
-                    self.devices_knobs(ui, owner, i, d, &knobs, ops);
+                });
+            }
+            if ui
+                .button("Reset")
+                .on_hover_text("every parameter back to its default (one undo step)")
+                .clicked()
+            {
+                for (k, pi) in info.iter().enumerate() {
+                    ops.push(FxOp::Param(i, k, pi.to_norm(pi.def), k == 0));
                 }
             }
         });
-        rect
     }
 
     /// knobs for parameters `keys` of device `i`, wrapped
@@ -714,53 +994,19 @@ impl App {
         });
     }
 
-    /// a choice parameter as small chips
-    fn devices_choice(
-        &mut self,
-        ui: &mut egui::Ui,
-        i: usize,
-        d: &Device,
-        k: usize,
-        ops: &mut Vec<FxOp>,
-    ) {
-        let Some(info) = fx::params(d.kind).get(k) else {
-            return;
-        };
-        let cur = d.real(k) as usize;
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = 3.0;
-            ui.label(egui::RichText::new(info.name).small().color(th().ink2));
-            for (ci, cn) in info.choices.iter().enumerate() {
-                if ui
-                    .selectable_label(cur == ci, egui::RichText::new(*cn).small())
-                    .clicked()
-                    && cur != ci
-                {
-                    ops.push(FxOp::Param(i, k, info.to_norm(ci as f32), true));
-                }
-            }
-        });
-    }
-
-    /// EQ: the curve with a draggable dot per band, then the selected band's knobs
+    /// EQ: the response curve with a draggable dot per band (frequency and
+    /// gain; double-click a dot for 0 dB). The gains are the card's knobs.
     fn devices_eq(
         &mut self,
         ui: &mut egui::Ui,
         owner: usize,
         i: usize,
         d: &Device,
+        r: Rect,
         ops: &mut Vec<FxOp>,
     ) {
         let t = th();
         let sr = self.with(|s| s.engine.sr).max(8000.0);
-        let r = graph(ui, 110.0);
-        let band = self
-            .dev
-            .eq_band
-            .iter()
-            .find(|(k, _)| *k == i)
-            .map(|x| x.1)
-            .unwrap_or(1);
         {
             let p = ui.painter();
             graph_bg(p, r, true);
@@ -780,7 +1026,6 @@ impl App {
             (8, 9, "High"),
         ];
         const COLS: [u32; 4] = [0xE0A060, 0x7FD08A, 0x6CB6E8, 0xC88AE0];
-        let mut pick = None;
         for (b, (fi, gi, name)) in BANDS.iter().enumerate() {
             let c = Pos2::new(hz_x(r, d.real(*fi)), db_y(r, d.real(*gi), 18.0));
             let resp = ui
@@ -795,14 +1040,11 @@ impl App {
                     fx::EQ[*gi].format(d.params[*gi])
                 ));
             let col = hex(COLS[b]);
-            let on = b == band;
+            let hot = resp.hovered() || resp.dragged();
             let p = ui.painter();
-            p.circle_filled(c, if on || resp.hovered() { 6.0 } else { 4.5 }, col);
-            if on {
+            p.circle_filled(c, if hot { 6.0 } else { 4.5 }, col);
+            if hot {
                 p.circle_stroke(c, 8.0, Stroke::new(1.2, col));
-            }
-            if resp.clicked() || resp.drag_started() {
-                pick = Some(b);
             }
             if resp.double_clicked() {
                 ops.push(FxOp::Param(i, *gi, fx::EQ[*gi].to_norm(0.0), true));
@@ -816,61 +1058,54 @@ impl App {
                 }
             }
         }
-        if let Some(b) = pick {
-            self.dev.eq_band.retain(|(k, _)| *k != i);
-            self.dev.eq_band.push((i, b));
-        }
-        let band = pick.unwrap_or(band);
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 3.0;
-            for (b, (_, _, name)) in BANDS.iter().enumerate() {
-                let txt = egui::RichText::new(*name).small().color(hex(COLS[b]));
-                if ui.selectable_label(b == band, txt).clicked() {
-                    self.dev.eq_band.retain(|(k, _)| *k != i);
-                    self.dev.eq_band.push((i, b));
-                }
-            }
-        });
-        let keys: &[usize] = match band {
-            0 => &[0, 1],
-            1 => &[2, 3, 4],
-            2 => &[5, 6, 7],
-            _ => &[8, 9],
-        };
-        self.devices_knobs(ui, owner, i, d, keys, ops);
     }
 
-    /// a plugin effect: its editor thumbnail, then the plugin device body
-    /// (status, Editor… / Reload, parameters)
-    fn devices_plugin_body(&mut self, ui: &mut egui::Ui, owner: usize, i: usize, d: &Device) {
-        if let Some(pp) = d.plugin.as_deref() {
-            let found = self.br.items.iter().find_map(|it| match &it.src {
-                crate::browser::Src::Plugin(f) if f.desc.id == pp.id && f.format == pp.format => {
-                    Some(f.clone())
-                }
-                _ => None,
-            });
-            let tex = found.and_then(|f| self.br_thumb(ui.ctx(), &f));
-            if let Some(tex) = tex {
-                let s = tex.size_vec2();
-                let w = ui.available_width();
-                let scale = (w / s.x).min(96.0 / s.y).min(1.0);
-                let (r, resp) = ui.allocate_exact_size(s * scale, Sense::click());
-                ui.painter().image(
-                    tex.id(),
-                    r,
-                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                    Color32::WHITE,
-                );
-                if resp
-                    .on_hover_text("double-click: open the plugin's editor")
-                    .double_clicked()
-                {
-                    self.devices_plugin_editor(owner, d.uid, &pp.name);
-                }
+    /// a plugin effect's face: its editor thumbnail (or a card with its
+    /// name) and an Open button for its own editor
+    fn devices_plugin_face(&mut self, ui: &mut egui::Ui, owner: usize, d: &Device, g: Rect) {
+        let t = th();
+        let Some(pp) = d.plugin.as_deref() else {
+            return;
+        };
+        let found = self.br.items.iter().find_map(|it| match &it.src {
+            crate::browser::Src::Plugin(f) if f.desc.id == pp.id && f.format == pp.format => {
+                Some(f.clone())
             }
+            _ => None,
+        });
+        let tex = found.and_then(|f| self.br_thumb(ui.ctx(), &f));
+        let main = Rect::from_min_max(g.min, Pos2::new(g.right(), ui.max_rect().bottom() - 46.0));
+        let p = ui.painter();
+        if let Some(tex) = tex {
+            let s = tex.size_vec2();
+            let scale = (main.width() / s.x).min(main.height() / s.y).min(1.0);
+            let r = Rect::from_center_size(main.center(), s * scale);
+            p.image(
+                tex.id(),
+                r,
+                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                Color32::WHITE,
+            );
+        } else {
+            devcards::well(p, main);
+            p.text(
+                main.center(),
+                egui::Align2::CENTER_CENTER,
+                &pp.name,
+                FontId::proportional(15.0),
+                t.ink2,
+            );
         }
-        self.plugin_fx_body(ui, owner, i, d);
+        let b = Rect::from_center_size(
+            Pos2::new(main.center().x, main.bottom() + 18.0),
+            egui::vec2(110.0, 24.0),
+        );
+        let r = ui
+            .put(b, egui::Button::new("Open"))
+            .on_hover_text(format!("open {}'s own editor", pp.name));
+        if r.clicked() {
+            self.devices_plugin_editor(owner, d.uid, &pp.name);
+        }
     }
 
     /// open a plugin effect's own editor window
@@ -886,14 +1121,6 @@ impl App {
             _ => {}
         }
     }
-}
-
-/// a graph area at the top of a card body
-fn graph(ui: &mut egui::Ui, h: f32) -> Rect {
-    let w = ui.available_width();
-    let (r, _) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
-    ui.add_space(2.0);
-    r
 }
 
 /// compressor: input -> output level (dB) with the threshold knee
@@ -1080,7 +1307,7 @@ fn chevron_icon(p: &egui::Painter, c: Pos2, right: bool, col: Color32) {
 
 /// the signal arrow between cards
 fn chevron(ui: &mut egui::Ui, h: f32) {
-    let (r, _) = ui.allocate_exact_size(egui::vec2(8.0, h), Sense::hover());
+    let (r, _) = ui.allocate_exact_size(egui::vec2(GAP, h), Sense::hover());
     chevron_icon(
         ui.painter(),
         r.center(),
@@ -1097,9 +1324,18 @@ fn vertical_name(p: &egui::Painter, r: Rect, s: &str, col: Color32) {
 }
 
 /// the `+` card at the end of the chain; true when clicked
+/// the + drop slot's width
+fn plus_w(empty: bool) -> f32 {
+    if empty {
+        200.0
+    } else {
+        56.0
+    }
+}
+
 fn plus_card(ui: &mut egui::Ui, h: f32, empty: bool) -> bool {
     let t = th();
-    let w = if empty { 200.0 } else { 70.0 };
+    let w = plus_w(empty);
     let (r, resp) = ui.allocate_exact_size(egui::vec2(w, h), Sense::click());
     let resp = resp.on_hover_text("add an effect: opens Browser › Effects (or drag one here)");
     let p = ui.painter();
@@ -1142,6 +1378,13 @@ fn plus_card(ui: &mut egui::Ui, h: f32, empty: bool) -> bool {
         );
     }
     resp.clicked()
+}
+
+/// draw `f` in a child ui at the builder's rect without moving the parent's
+/// cursor (the card already allocated its whole rect)
+fn inside<R>(ui: &mut egui::Ui, b: egui::UiBuilder, f: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let mut c = ui.new_child(b);
+    f(&mut c)
 }
 
 #[cfg(test)]

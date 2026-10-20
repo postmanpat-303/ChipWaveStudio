@@ -1483,6 +1483,24 @@ impl FxState {
         }
     }
 
+    /// a compressor's current gain reduction in dB (0 when idle or not a
+    /// compressor); read by the Devices meter, never changes the state
+    pub fn comp_gr_db(&self) -> Option<f32> {
+        let Dsp::Comp { env } = &self.dsp else {
+            return None;
+        };
+        if !self.on {
+            return Some(0.0);
+        }
+        let lvl = 20.0 * env.max(1e-6).log10();
+        let over = lvl - self.cur[0];
+        Some(if over > 0.0 {
+            over * (1.0 - 1.0 / self.cur[1].max(1.0))
+        } else {
+            0.0
+        })
+    }
+
     pub fn process(&mut self, l: f32, r: f32, ctx: &Ctx) -> (f32, f32) {
         let step = 1.0 / (0.005 * self.sr);
         let g_t = if self.on { 1.0 } else { 0.0 };
@@ -2304,5 +2322,29 @@ mod tests {
             let _ = i;
             assert!((l - want).abs() < 0.05, "{l} vs {want}");
         }
+    }
+
+    #[test]
+    fn compressor_reports_gain_reduction_for_its_meter() {
+        let mut d = Device::new(FxKind::Compressor);
+        d.set_real("threshold", -30.0);
+        d.set_real("ratio", 8.0);
+        let mut st = FxState::new(&d, 48000.0);
+        let ctx = Ctx {
+            bpm: 120.0,
+            note: 0.0,
+        };
+        assert_eq!(st.comp_gr_db(), Some(0.0));
+        for n in 0..9600 {
+            let x = 0.8 * (n as f32 * 0.05).sin();
+            st.process(x, x, &ctx);
+        }
+        let gr = st.comp_gr_db().unwrap();
+        assert!(gr > 6.0, "{gr}");
+        // other devices have no meter
+        assert_eq!(
+            FxState::new(&Device::new(FxKind::Delay), 48000.0).comp_gr_db(),
+            None
+        );
     }
 }

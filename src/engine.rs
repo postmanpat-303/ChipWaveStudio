@@ -444,6 +444,17 @@ impl Default for TlState {
 }
 
 impl Engine {
+    /// the gain reduction (dB) of instrument `owner`'s device `dev` if it is
+    /// a compressor: the largest over the channels playing that chain
+    /// (the Devices meter; a read, the audio is untouched)
+    pub fn comp_gr_db(&self, owner: usize, dev: usize) -> f32 {
+        self.chains
+            .iter()
+            .filter(|c| c.owner == owner)
+            .filter_map(|c| c.states.get(dev).and_then(|s| s.comp_gr_db()))
+            .fold(0.0, f32::max)
+    }
+
     pub fn new(sr: f32) -> Self {
         // the built-in wavetables (once per process, off the audio thread)
         crate::wavetable::init();

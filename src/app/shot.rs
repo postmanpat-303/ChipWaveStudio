@@ -310,11 +310,24 @@ impl App {
                     let n = s.song.instruments.get(6).map_or(0, |i| i.fx.len());
                     s.song.insert_device(6, n, comp);
                     s.song.insert_device(6, n + 1, rev);
+                    s.song.insert_device(6, n + 2, Device::new(FxKind::Delay));
                 });
+                // CHIPWAVE_SHOT_MORE=N: device N with its "…" open
+                if let Some(n) = std::env::var("CHIPWAVE_SHOT_MORE")
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                {
+                    let chain = self.with(|s| s.song.instruments[6].fx.clone());
+                    if n < chain.len() {
+                        self.dev
+                            .open
+                            .insert((6, super::devcards::open_key(&chain, n)));
+                    }
+                }
                 self.set_lower(4);
                 self.extra.lower_h = 430.0;
                 self.dev.inst_folded = std::env::var_os("CHIPWAVE_SHOT_FOLD").is_some();
-                self.extra.browser_open = true;
+                self.extra.browser_open = std::env::var_os("CHIPWAVE_SHOT_NO_BROWSER").is_none();
                 self.br.filter.tab = crate::browser::Tab::Effects;
                 self.br_refresh();
                 if view == "devices-drop" {
@@ -775,6 +788,12 @@ impl App {
                 self.ch = c.saturating_sub(1);
             }
             self.inspector_shot(m == "clip");
+        }
+        // CHIPWAVE_SHOT_ADVANCED=1 (or a tab): the full editor, not the simple card
+        if std::env::var_os("CHIPWAVE_SHOT_ADVANCED").is_some()
+            || std::env::var_os("CHIPWAVE_SHOT_TAB").is_some()
+        {
+            self.ip.advanced = true;
         }
         if let Ok(tb) = std::env::var("CHIPWAVE_SHOT_TAB") {
             // keep the tab (a Grid would open on its patch)
