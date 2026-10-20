@@ -1423,7 +1423,7 @@ fn generate_dialog_fuzz_on_a_new_clip() {
                         )
                     }
                     1 if !a.cl.gen.open => {
-                        a.cl_open_gen_at((rnd(6) as i64 * 4 * tl::PPQ as i64) as _);
+                        a.cl_open_gen_at(rnd(6) as i64 * 4 * tl::PPQ);
                         "reopen".into()
                     }
                     2 => {
@@ -1438,7 +1438,7 @@ fn generate_dialog_fuzz_on_a_new_clip() {
                         a.play(1);
                         "play".into()
                     }
-                    5 | 6 | 7 => format!("style {}", STYLES[rnd(STYLES.len())].name),
+                    5..=7 => format!("style {}", STYLES[rnd(STYLES.len())].name),
                     8 if rnd(2) == 0 => "btn Apply".into(),
                     8 => "btn Generate".into(),
                     _ => format!("btn {}", fixed[rnd(fixed.len())]),
