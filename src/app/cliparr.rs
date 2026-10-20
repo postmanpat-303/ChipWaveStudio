@@ -966,6 +966,187 @@ impl App {
         ctx.request_repaint();
     }
 
+    /// the Master panel in the Slate theme (mockup a): pic-1 knobs, LEVEL /
+    /// REDUCTION dot rows, the level history as glowing bars in a well
+    fn ca_master_ember(
+        &mut self,
+        ui: &mut egui::Ui,
+        vol: &mut f32,
+        lim: &mut crate::master::LimiterSettings,
+        peaks: [f32; 2],
+        loud: &crate::master::Readout,
+    ) {
+        let t = th();
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("MASTER")
+                    .font(theme::label_font(14.0))
+                    .color(t.ink),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let txt = if lim.enabled { "Limiter on" } else { "Limiter off" };
+                if crate::ember::button(ui, txt, lim.enabled)
+                    .on_hover_text(
+                        "the true-peak limiter on the master (off: the classic soft clipper)",
+                    )
+                    .clicked()
+                {
+                    lim.enabled = !lim.enabled;
+                }
+            });
+        });
+        let row = ui.available_rect_before_wrap();
+        let cy = row.top() + 44.0;
+        let w = row.width();
+        let xs = [row.left() + w / 6.0, row.center().x, row.right() - w / 6.0];
+        let id = ui.make_persistent_id("ca_master_ember");
+        let db = |v: f32| {
+            if v <= 0.0001 {
+                "-inf".to_string()
+            } else {
+                format!("{:+.1}", 20.0 * v.log10())
+            }
+        };
+        let mut v = (*vol / 2.0).clamp(0.0, 1.0);
+        let r = super::mixstrip::big(ui, Pos2::new(xs[0], cy), id.with(0), &mut v, 0.5, "Volume", &db(*vol), true)
+            .on_hover_text("master volume (the mixer's Master fader)");
+        if r.dragged() || r.double_clicked() {
+            *vol = v * 2.0;
+        }
+        let en = lim.enabled;
+        let mut g = (lim.gain_db / 24.0).clamp(0.0, 1.0);
+        let r = super::mixstrip::big(
+            ui,
+            Pos2::new(xs[1], cy),
+            id.with(1),
+            &mut g,
+            crate::master::LimiterSettings::default().gain_db / 24.0,
+            "Drive",
+            &format!("{:.1}", lim.gain_db),
+            en,
+        )
+        .on_hover_text("limiter input gain: drives the mix into the limiter (louder, denser)");
+        if r.dragged() || r.double_clicked() {
+            lim.gain_db = g * 24.0;
+        }
+        let mut c = ((lim.ceiling_db + 12.0) / 12.0).clamp(0.0, 1.0);
+        let r = super::mixstrip::big(
+            ui,
+            Pos2::new(xs[2], cy),
+            id.with(2),
+            &mut c,
+            (crate::master::LimiterSettings::default().ceiling_db + 12.0) / 12.0,
+            "Ceiling",
+            &format!("{:.1}", lim.ceiling_db),
+            en,
+        )
+        .on_hover_text("limiter output ceiling (true peak)");
+        if r.dragged() || r.double_clicked() {
+            lim.ceiling_db = c * 12.0 - 12.0;
+        }
+        let below = cy + 36.0 - ui.cursor().top();
+        if below > 0.0 {
+            ui.add_space(below);
+        }
+        let frac = |v: f32| {
+            if v <= 0.0 {
+                0.0
+            } else {
+                ((20.0 * v.log10() + 48.0) / 51.0).clamp(0.0, 1.0)
+            }
+        };
+        let num = |v: f32| {
+            if v > 1e-5 {
+                format!("{:.1}", 20.0 * v.log10())
+            } else {
+                "-inf".into()
+            }
+        };
+        super::mixstrip::dot_row(ui, "Level L", frac(peaks[0]), true, &num(peaks[0]));
+        super::mixstrip::dot_row(ui, "Level R", frac(peaks[1]), true, &num(peaks[1]));
+        super::mixstrip::dot_row(
+            ui,
+            "Reduction",
+            (-loud.gain_red / 12.0).clamp(0.0, 1.0),
+            false,
+            &format!("{:.1}", loud.gain_red),
+        );
+        ui.add_space(4.0);
+        let fmt = |v: f32, unit: &str| {
+            if v.is_finite() && v > -70.0 {
+                format!("{v:.1} {unit}")
+            } else {
+                format!("–– {unit}")
+            }
+        };
+        ui.label(
+            egui::RichText::new(format!(
+                "short-term {} · peak {}",
+                fmt(loud.short_term, "LUFS"),
+                fmt(loud.true_peak, "dBTP")
+            ))
+            .size(11.0)
+            .color(t.ink2),
+        );
+        // the level over the last few seconds: glowing bars in a well
+        let room = ui.available_height() - 4.0;
+        if room > 36.0 {
+            let (gr, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), room.min(150.0)),
+                Sense::hover(),
+            );
+            let pp = ui.painter();
+            crate::ember::well(pp, gr, 4);
+            for db in [-6.0f32, -18.0, -30.0] {
+                let y = gr.bottom() - ((db + 48.0) / 51.0) * gr.height();
+                pp.hline(gr.x_range().shrink(1.0), y, Stroke::new(1.0, crate::ember::GRID));
+            }
+            let n = self.ca.hist.len();
+            let bw = (gr.width() - 4.0) / HIST as f32;
+            let inner = gr.shrink(2.0);
+            let mut bloom = egui::Mesh::default();
+            let mut bars = egui::Mesh::default();
+            for (k, v) in self.ca.hist.iter().enumerate() {
+                let f = frac(*v);
+                if f <= 0.0 {
+                    continue;
+                }
+                let x = inner.right() - (n - k) as f32 * bw;
+                let top = inner.bottom() - f * inner.height();
+                let b = Rect::from_min_max(Pos2::new(x + 0.5, top), Pos2::new(x + bw - 0.5, inner.bottom()));
+                theme::round_mesh(
+                    &mut bloom,
+                    b.expand2(egui::vec2(2.0, 3.0)),
+                    [0.0; 4],
+                    t.accent.gamma_multiply(0.10),
+                    Color32::TRANSPARENT,
+                );
+                theme::round_mesh(
+                    &mut bars,
+                    b,
+                    [0.0; 4],
+                    t.accent.gamma_multiply(0.85),
+                    t.acc_deep.gamma_multiply(0.15),
+                );
+                bars.add_colored_rect(
+                    Rect::from_min_max(b.min, Pos2::new(b.right(), b.top() + 1.5)),
+                    t.acc_hot,
+                );
+            }
+            if crate::ember::bloom() {
+                pp.add(egui::Shape::mesh(bloom));
+            }
+            pp.add(egui::Shape::mesh(bars));
+            pp.text(
+                gr.left_top() + egui::vec2(6.0, 4.0),
+                egui::Align2::LEFT_TOP,
+                "LEVEL",
+                theme::label_font(10.5),
+                t.ink2,
+            );
+        }
+    }
+
     /// Master: volume, limiter drive / ceiling, meters, loudness
     fn ca_master(&mut self, ui: &mut egui::Ui, r: Rect) {
         let t = th();
@@ -982,6 +1163,14 @@ impl App {
         });
         let (vol0, lim0) = (vol, lim);
         let inner = r.shrink2(egui::vec2(14.0, 8.0));
+        if t.ember {
+            ui.scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(inner)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+                |ui| self.ca_master_ember(ui, &mut vol, &mut lim, peaks, &loud),
+            );
+        } else {
         ui.scope_builder(
             egui::UiBuilder::new()
                 .max_rect(inner)
@@ -1184,6 +1373,7 @@ impl App {
                 }
             },
         );
+        }
         let playing = self.with(|s| s.engine.playing);
         if playing {
             self.ca.hist.push_back(peaks[0].max(peaks[1]));

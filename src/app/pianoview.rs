@@ -1388,6 +1388,17 @@ impl App {
             let hot = hovered == Some(n.id);
             let (fill, edge, ink) = if sel {
                 sel_note_colours(&t, n.vel)
+            } else if t.ember {
+                // Slate: light grey notes, selected ones orange with a glow
+                (
+                    crate::theme::mix(
+                        crate::theme::hex(0x7E8187),
+                        crate::ember::NOTE,
+                        0.4 + 0.6 * n.vel,
+                    ),
+                    Color32::from_black_alpha(120),
+                    crate::theme::hex(0x1B1D20),
+                )
             } else {
                 (
                     base.gamma_multiply(0.45 + 0.55 * n.vel),
@@ -1395,6 +1406,9 @@ impl App {
                     Color32::WHITE,
                 )
             };
+            if sel && t.ember {
+                crate::ember::glow_rect(&notes_p, r, 2, t.accent);
+            }
             // hover: a slight lighten
             let fill = if hot {
                 crate::theme::mix(fill, Color32::WHITE, 0.18)
@@ -1955,6 +1969,11 @@ impl App {
 /// still reads), a lighter outline and dark text. Theme-aware: Amiga's
 /// light chrome gets a deeper orange.
 pub(crate) fn sel_note_colours(t: &crate::theme::Theme, vel: f32) -> (Color32, Color32, Color32) {
+    if t.ember {
+        // acc-hot with a white rim (plus a bloom where they are drawn)
+        let fill = crate::theme::mix(t.accent, t.acc_hot, 0.35 + 0.65 * vel.clamp(0.0, 1.0));
+        return (fill, Color32::from_rgb(0xFF, 0xF1, 0xD6), Color32::from_rgb(0x20, 0x14, 0x08));
+    }
     let (lo, hi, edge) = if t.light {
         (
             Color32::from_rgb(0xA8, 0x4C, 0x0C),

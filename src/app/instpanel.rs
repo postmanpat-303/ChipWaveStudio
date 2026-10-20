@@ -463,9 +463,7 @@ impl App {
                 if m == 0 && !tracker {
                     continue;
                 }
-                let txt = egui::RichText::new(name).strong();
-                if ui
-                    .selectable_label(cur == m, txt)
+                if crate::ember::tab(ui, cur == m, name)
                     .on_hover_text(tip)
                     .clicked()
                     && cur != m

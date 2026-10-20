@@ -63,6 +63,7 @@ mod layout_tests;
 mod library;
 mod midiview;
 mod mixer;
+mod mixstrip;
 mod modview;
 #[cfg(test)]
 mod modview_tests;

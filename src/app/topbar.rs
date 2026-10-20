@@ -160,10 +160,19 @@ fn segmented(ui: &mut egui::Ui, items: &[(&str, &str)], cur: usize) -> Option<us
 /// a toolbar group (calmer header: no visible caption; it's the
 /// group's hover text)
 fn group(ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
+    let ember = th().ember;
     egui::Frame::new()
-        .fill(Color32::from_black_alpha(if th().light { 40 } else { 70 }))
-        .stroke(Stroke::new(1.0, Color32::from_white_alpha(18)))
-        .corner_radius(7)
+        .fill(if ember {
+            hex(0x17191C)
+        } else {
+            Color32::from_black_alpha(if th().light { 40 } else { 70 })
+        })
+        .stroke(if ember {
+            Stroke::new(1.0, th().edge)
+        } else {
+            Stroke::new(1.0, Color32::from_white_alpha(18))
+        })
+        .corner_radius(if ember { 5 } else { 7 })
         .inner_margin(egui::Margin::symmetric(8, 3))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -268,12 +277,21 @@ impl App {
         let cmd = egui::Modifiers::COMMAND;
         egui::MenuBar::new().ui(ui, |ui| {
             ui.add_space(6.0);
-            ui.label(
-                egui::RichText::new("ChipWave")
-                    .strong()
-                    .size(16.0)
-                    .color(hdr_text()),
-            );
+            if th().ember {
+                // Slate: CHIP in ink, WAVE in the accent (Barlow capitals)
+                let mut job = egui::text::LayoutJob::default();
+                let f = theme::label_font(17.0);
+                job.append("CHIP", 0.0, egui::TextFormat::simple(f.clone(), th().ink));
+                job.append("WAVE", 0.0, egui::TextFormat::simple(f, th().accent));
+                ui.label(job).on_hover_text("ChipWave Studio");
+            } else {
+                ui.label(
+                    egui::RichText::new("ChipWave")
+                        .strong()
+                        .size(16.0)
+                        .color(hdr_text()),
+                );
+            }
             ui.add_space(6.0);
             ui.menu_button("File", |ui| {
                 if item(ui, "New", "Ctrl+N") {

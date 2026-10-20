@@ -165,14 +165,22 @@ fn strip(h: &Harness<'static, App>, ch: usize) -> (Rect, Rect) {
         .filter(|r| r.height() > 100.0)
         .collect();
     let fader = faders[ch];
-    let pan = *sliders
+    // classic themes: the pan slider under the fader; Slate: the Pan knob
+    // above it (same strip)
+    let pan = sliders
         .iter()
+        .copied()
         .find(|r| {
             r.height() < 40.0
                 && r.top() > fader.bottom()
                 && (r.center().x - fader.center().x).abs() < 40.0
         })
-        .expect("pan slider under the fader");
+        .or_else(|| {
+            rects(h, Role::Slider, Some("Pan"))
+                .into_iter()
+                .find(|r| (r.center().x - fader.center().x).abs() < 40.0)
+        })
+        .expect("the pan control of the fader's strip");
     (fader, pan)
 }
 

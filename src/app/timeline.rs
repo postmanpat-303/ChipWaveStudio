@@ -1175,7 +1175,7 @@ impl App {
                 };
                 // solid title bar in the track colour over a softer body
                 // (the musical data keeps the saturation; 0.2.4 polish)
-                let body_c = theme::mix(t.crt_bot, col, 0.34 * k);
+                let body_c = theme::mix(t.crt_bot, col, if t.ember { 0.46 } else { 0.34 } * k);
                 let head_c = theme::mix(
                     t.crt_bot,
                     if hot { theme::tone(col, 0.10) } else { col },
@@ -1549,11 +1549,21 @@ impl App {
             } else {
                 t.accent
             };
-            lp.vline(
-                phx,
-                lanes.y_range(),
-                Stroke::new(if live.head.is_some() { 1.5 } else { 1.0 }, colr),
-            );
+            if t.ember && live.head.is_some() {
+                // Slate: a 2 px acc-hot playhead with a soft bloom
+                crate::ember::glow_line(
+                    &lp,
+                    &[Pos2::new(phx, lanes.top()), Pos2::new(phx, lanes.bottom())],
+                    2.0,
+                    t.acc_hot,
+                );
+            } else {
+                lp.vline(
+                    phx,
+                    lanes.y_range(),
+                    Stroke::new(if live.head.is_some() { 1.5 } else { 1.0 }, colr),
+                );
+            }
             rp.add(egui::Shape::convex_polygon(
                 vec![
                     Pos2::new(phx - 5.0, ruler.top() + 4.0),

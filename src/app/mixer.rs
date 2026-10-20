@@ -196,15 +196,49 @@ impl App {
             )
         });
         let before = mix.clone();
+        let ember = th().ember;
+        // Ember strips: each track instrument's effects (the insert slots)
+        // and the track colours
+        let (inserts, colours): (Vec<Vec<(String, bool)>>, Vec<Color32>) = if ember {
+            (0..nch.min(MAX_CHANNELS))
+                .map(|ch| {
+                    let slot = self.track_slot(ch) as usize;
+                    self.with(|s| {
+                        let fx = s
+                            .song
+                            .instruments
+                            .get(slot.wrapping_sub(1))
+                            .map(|i| i.fx.iter().map(|d| (d.title(), d.enabled)).collect())
+                            .unwrap_or_default();
+                        let col = match s.song.timeline.as_deref() {
+                            Some(t) => timeline::track_colour_in(t, ch),
+                            None => timeline::track_colour(ch),
+                        };
+                        (fx, col)
+                    })
+                })
+                .unzip()
+        } else {
+            (vec![], vec![])
+        };
+        let mut open_ins: Option<usize> = None;
         // (response, target) of controls that get a MIDI learn menu
         let learn =
             std::cell::RefCell::new(Vec::<(egui::Response, crate::automation::Target)>::new());
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Mixer").strong())
-                .on_hover_text(
-                "fader 0 dB = double-click · pan C = double-click · M mute · S solo (F9 / F10) · \
-                 drag the bar under the strips or Shift+wheel to scroll",
-            );
+            let hint = "fader 0 dB = double-click · pan C = double-click · M mute · S solo (F9 / F10) · \
+                 drag the bar under the strips or Shift+wheel to scroll";
+            if ember {
+                ui.label(
+                    egui::RichText::new("MIXER")
+                        .font(theme::label_font(14.0))
+                        .color(th().ink),
+                )
+                .on_hover_text(hint);
+            } else {
+                ui.label(egui::RichText::new("Mixer").strong())
+                    .on_hover_text(hint);
+            }
             ui.separator();
             ui.label("Sidechain key")
                 .on_hover_text("notes on this channel duck every channel whose Duck is above 0 %");
@@ -241,6 +275,7 @@ impl App {
         });
         ui.add_space(6.0);
         let fader_h = (ui.available_height() - 150.0).clamp(80.0, 320.0);
+        let strip_h = mixstrip::strip_h(ui.available_height() - 34.0);
         // master section pinned on the right, channels + returns scroll.
         // Its real width is measured each frame (egui memory), so the scroll
         // area gets every pixel left of it minus a clear gap; before 0.2.4.x a
@@ -335,6 +370,40 @@ impl App {
                         let mut send = c.send;
                         let mut duck = c.duck;
                         let is_key = mix.duck_key == ch;
+                        if ember {
+                            let out = mixstrip::channel(
+                                ui,
+                                strip_h,
+                                mixstrip::Chan {
+                                    ch,
+                                    title: format!(
+                                        "{} {}",
+                                        ch + 1,
+                                        names.get(ch).cloned().unwrap_or_default()
+                                    ),
+                                    colour: colours[ch],
+                                    vol: &mut vol,
+                                    pan: &mut pan,
+                                    mute: &mut mute,
+                                    solo: &mut solo,
+                                    send: &mut send,
+                                    duck: &mut duck,
+                                    is_key,
+                                    level: cpk[ch],
+                                    inserts: &inserts[ch],
+                                },
+                            );
+                            edge(out.rect);
+                            let mut l = learn.borrow_mut();
+                            l.push((out.fader, crate::automation::Target::ChanVolume(ch)));
+                            l.push((out.pan, crate::automation::Target::ChanPan(ch)));
+                            for (b, r) in out.sends.into_iter().enumerate() {
+                                l.push((r, crate::automation::Target::Send(ch, b)));
+                            }
+                            if out.open_inserts {
+                                open_ins = Some(ch);
+                            }
+                        } else {
                         edge(strip(
                             ui,
                             format!("{} {}", ch + 1, names.get(ch).cloned().unwrap_or_default()),
@@ -427,6 +496,7 @@ impl App {
                                 });
                             },
                         ));
+                        }
                         let c = &mut mix.channels[ch];
                         c.duck = duck;
                         c.send = send;
@@ -440,6 +510,13 @@ impl App {
                     for b in 0..mix.returns.len() {
                         let mut lvl = mix.returns[b].level;
                         let mut dev = mix.returns[b].device.clone();
+                        if ember {
+                            let title = format!("Ret {}", mix.returns[b].name);
+                            edge(mixstrip::ret(ui, strip_h, b, &title, &mut lvl, &mut dev));
+                            mix.returns[b].level = lvl;
+                            mix.returns[b].device = dev;
+                            continue;
+                        }
                         edge(strip(
                             ui,
                             format!("Ret {}", mix.returns[b].name),
@@ -557,6 +634,18 @@ impl App {
         ui.add_space(MIXER_GAP / 2.0 - ui.spacing().item_spacing.x);
         let master_start = ui.cursor().left();
                     let mut master = mix.master;
+                    if ember {
+                        let note = if mix.limiter.enabled {
+                            format!("limit {:.1} dBTP", mix.limiter.ceiling_db)
+                        } else {
+                            "soft clip".into()
+                        };
+                        let (_, f) = mixstrip::master(ui, strip_h, &mut master, &plr, &note);
+                        learn.borrow_mut().push((f, crate::automation::Target::Master));
+                        mix.master = master;
+                        ui.add_space(8.0);
+                        mixstrip::master_panel(ui, strip_h, &mut mix.limiter, &loud, &plr);
+                    } else {
                     strip(
                         ui,
                         "Master".into(),
@@ -576,6 +665,7 @@ impl App {
                     mix.master = master;
                     ui.add_space(8.0);
                     Self::master_panel(ui, &mut mix.limiter, &loud);
+                    }
                     // measured width of the master section, for the next frame
                     let used = ui.min_rect().right() - master_start;
                     if (used - master_w).abs() > 0.5 {
@@ -589,6 +679,21 @@ impl App {
         }
         for (r, t) in learn.into_inner() {
             self.learn_menu(&r, t);
+        }
+        // an insert slot: edit that track's effects in Devices (Timeline)
+        // or the FX view (tracker songs)
+        if let Some(ch) = open_ins {
+            let slot = self.track_slot(ch);
+            self.ch = ch;
+            if slot > 0 {
+                self.instr = slot;
+            }
+            if self.with(|s| s.song.timeline.is_some()) {
+                self.view = View::Timeline;
+                self.set_lower(4);
+            } else {
+                self.view = View::Fx;
+            }
         }
     }
 }

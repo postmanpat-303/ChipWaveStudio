@@ -10,8 +10,7 @@
 use crate::theme::{hex, label_font, mix, num_font, polished, th};
 use eframe::egui::{self, Align2, Color32, CornerRadius, Painter, Pos2, Rect, Stroke, Vec2};
 
-/// window behind the panels / panel bottom / panel top / raised / highlight
-pub const BG1: Color32 = hex(0x25282C);
+/// panel top / raised / highlight
 pub const BG2: Color32 = hex(0x2F3338);
 pub const BG3: Color32 = hex(0x3A3E44);
 pub const BG4: Color32 = hex(0x454A51);
@@ -793,22 +792,6 @@ pub fn button_sized(ui: &mut egui::Ui, text: &str, selected: bool, min_w: f32) -
     resp
 }
 
-/// pic-2 LED selector: labelled LEDs, the chosen one lit with an acc-hot
-/// label. Returns true when the choice changed.
-pub fn led_selector(ui: &mut egui::Ui, sel: &mut usize, items: &[&str]) -> bool {
-    let mut changed = false;
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-        for (i, it) in items.iter().enumerate() {
-            if led_item(ui, it, *sel == i).clicked() && *sel != i {
-                *sel = i;
-                changed = true;
-            }
-        }
-    });
-    changed
-}
-
 /// one LED + label (a toggle or one option of an LED selector)
 pub fn led_item(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     let t = th();
@@ -834,43 +817,6 @@ pub fn led_item(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
         );
     }
     resp
-}
-
-/// pic-1 square toggle (HQ, Drive, Sync, Follow): raised grey when off, an
-/// orange radial with a highlight when on
-pub fn square_toggle(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
-    let (r, mut resp) = ui.allocate_exact_size(Vec2::splat(14.0), egui::Sense::click());
-    if resp.clicked() {
-        *on = !*on;
-        resp.mark_changed();
-    }
-    paint_square(ui.painter(), r, *on, resp.hovered());
-    resp
-}
-pub fn paint_square(p: &Painter, r: Rect, on: bool, hovered: bool) {
-    let t = th();
-    if on {
-        glow_rect(p, r, 3, t.accent);
-        let mut m = egui::Mesh::default();
-        crate::theme::round_mesh(&mut m, r, [3.0; 4], t.acc_hot, t.acc_deep);
-        p.add(egui::Shape::mesh(m));
-        p.circle_filled(
-            r.center() - Vec2::new(2.0, 2.0),
-            2.0,
-            Color32::from_white_alpha(120),
-        );
-    } else {
-        let mut m = egui::Mesh::default();
-        crate::theme::round_mesh(
-            &mut m,
-            r,
-            [3.0; 4],
-            if hovered { hex(0x5E646B) } else { BG4 },
-            hex(0x2B2E33),
-        );
-        p.add(egui::Shape::mesh(m));
-    }
-    p.rect_stroke(r, 3, Stroke::new(1.0, t.edge), egui::StrokeKind::Inside);
 }
 
 /// pic-1 tab underline: acc-deep › acc-hot › acc-deep with a glow, plus a
@@ -923,4 +869,39 @@ pub fn knob_label(p: &Painter, pos: Pos2, text: &str, size: f32) -> Rect {
         label_font(size),
         th().ink2,
     )
+}
+
+/// a pic-1 tab: ink3 text, the active one in ink with the glowing
+/// underline. Classic themes: a selectable label.
+pub fn tab(ui: &mut egui::Ui, selected: bool, text: &str) -> egui::Response {
+    let t = th();
+    if !t.ember {
+        return ui.selectable_label(selected, egui::RichText::new(text).strong());
+    }
+    let font = egui::FontId::proportional(13.0);
+    let g = ui.painter().layout_no_wrap(text.to_string(), font, t.ink);
+    let (r, resp) = ui.allocate_exact_size(
+        Vec2::new(g.size().x + 20.0, ui.available_height().clamp(20.0, 26.0)),
+        egui::Sense::click(),
+    );
+    let label = text.to_string();
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, selected, &label));
+    if ui.is_rect_visible(r) {
+        let p = ui.painter();
+        if selected {
+            tab_underline(p, r, 3.0);
+        }
+        let col = if selected {
+            t.ink
+        } else if resp.hovered() {
+            t.ink2
+        } else {
+            INK3
+        };
+        p.galley_with_override_text_color(r.center() - g.size() * 0.5 - Vec2::new(0.0, 1.0), g, col);
+        if resp.has_focus() {
+            p.rect_stroke(r, 3, Stroke::new(1.5, t.focus_ring), egui::StrokeKind::Inside);
+        }
+    }
+    resp
 }
