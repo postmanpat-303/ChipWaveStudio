@@ -7,6 +7,7 @@ use super::params::{self, Ctl, Custom, Layout, Param, Tab};
 use super::*;
 
 pub(super) mod gridcanvas;
+pub(super) mod instcard;
 
 /// lower-panel switch bar height
 const BAR_H: f32 = 26.0;
@@ -45,6 +46,10 @@ pub(super) struct InstUi {
     pub grid_fx_ui: gridcanvas::GridUi,
     /// a knob / module drag is going on in that window (one undo step)
     pub grid_fx_held: bool,
+    /// the full editor (Advanced ›) instead of the simple card
+    pub advanced: bool,
+    /// the preset the shown sound matches: (instrument, sound, name)
+    preset_seen: Option<(usize, InstrumentKind, Option<String>)>,
 }
 
 pub(super) struct Ab {
@@ -89,6 +94,8 @@ struct Cx {
     /// route target names (Routings card)
     labels: Vec<String>,
     mod_out: super::modview::ModOut,
+    /// the simple card: no Dice lock buttons on its knobs
+    no_locks: bool,
 }
 
 fn matches(words: &[String], p: &Param) -> bool {
@@ -526,6 +533,7 @@ impl App {
             live: [0.0; crate::modulation::MAX_MODS],
             labels: vec![],
             mod_out: Default::default(),
+            no_locks: false,
         };
         (cx.modm, cx.live, cx.labels) = self.with(|s| {
             let m = &s.song.modulation;
@@ -551,6 +559,15 @@ impl App {
             } else {
                 self.ip.flash = None;
             }
+        }
+        // ---- the simple card, unless Advanced › (or a search) asks for all ----
+        if self.ip.focus_search || !self.ip.query.is_empty() {
+            self.ip.advanced = true;
+        }
+        if !self.ip.advanced {
+            self.simple_card(ui, &layout, &mut inst, &mut cx, n);
+            self.finish_edit(idx, inst, &orig, &orig_modm, cx);
+            return;
         }
         // ---- header ----
         ui.horizontal(|ui| {
@@ -599,6 +616,15 @@ impl App {
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
+                if ui
+                    .button("‹ Simple")
+                    .on_hover_text("back to the simple card: macros and the controls that matter")
+                    .clicked()
+                {
+                    self.ip.advanced = false;
+                    self.ip.query.clear();
+                    self.ip.search_open = false;
+                }
                 self.param_search(ui, &layout, &inst, now);
             });
         });
@@ -1179,7 +1205,11 @@ impl App {
         let real = (p.get)(inst);
         let mut n = params::to_norm(real, lo, hi, log);
         let steps = if step >= 1.0 { (hi - lo) / step } else { 0.0 };
-        let locked = p.lock.as_ref().map(|(f, _)| f(inst));
+        let locked = p
+            .lock
+            .as_ref()
+            .filter(|_| !cx.no_locks)
+            .map(|(f, _)| f(inst));
         let tip = if p.tip.is_empty() {
             p.name.clone()
         } else {
@@ -1783,6 +1813,7 @@ impl App {
             live: [0.0; crate::modulation::MAX_MODS],
             labels: vec![],
             mod_out: Default::default(),
+            no_locks: true,
         };
         (cx.modm, cx.live, cx.labels) = self.with(|s| {
             let m = &s.song.modulation;

@@ -36,6 +36,8 @@ fn synth_with_lfo() -> (Harness<'static, App>, usize) {
     let mut h = harness_with(song);
     h.state_mut().instr = idx as u8 + 1;
     h.state_mut().show_instrument_panel();
+    // the knobs of the full editor (Advanced ›)
+    h.state_mut().ip.advanced = true;
     frames(&mut h, 3);
     (h, idx)
 }

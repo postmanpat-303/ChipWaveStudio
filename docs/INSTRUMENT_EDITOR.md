@@ -48,7 +48,49 @@ compact instrument list.
 - **View › Dock lower panel under pattern** (formerly "Dock arranger under pattern") turns the
   docked panel off altogether.
 
-## 3. Header
+## 2a. The simple card (Unreleased)
+
+The **Instrument** tab opens on a simple card. **Advanced ›** shows the full editor described
+below, and **‹ Simple** in its header comes back. Searching (`Ctrl+F`) and the Devices card's
+**Advanced ›** open the full editor too.
+
+- **Header:** `<` / `>` (previous / next instrument), the name, the type chip, **Preset: …**,
+  **A** / **B** compare and **Advanced ›**. **Preset: …** names the preset the sound matches
+  ("custom" once you change it). It lists that type's presets (the synth factory sounds, the Voice
+  presets or the generator presets of the same engine), then **Save to library…** and **Library…**.
+- **Macros:** a row of 8 big knobs, each with a caption saying what it drives. Macros store
+  nothing: a macro shows its first target's value, and turning it moves all of its targets by the
+  same amount (some scaled), so songs and old files are unchanged. Double-click resets the main
+  target to its default; one Ctrl+Z undoes a turn.
+
+  | Type | Macros |
+  |---|---|
+  | Synth, Moog | Bright (Cutoff + Res), Width (Detune + Stereo), Attack, Release, Motion (LFO > Cutoff), Chorus (Chorus mix), Drive (Filter drive), Space (Reverb mix) |
+  | Voice | Bright, Formant, Breath, Attack, Release, Babble, Chorus, Space |
+  | Analog | Bright, Width (Detune + Width), Attack, Release, Env (filter env amount), Chorus, Drive, Space |
+  | Wave | Bright, Width (Detune + Spread), Attack, Release, Morph (table position A + B), Sub, Chorus, Space |
+  | Drum, Kit, Chip FX, FM-4, Grid | the engine's own 8 macro knobs |
+  | CLAP / VST3 | the plugin's 8 assignable macros |
+  | Noise, Sample | none (every control fits in the sections) |
+
+  **Chorus** and **Space** drive the first Chorus / Reverb in the instrument's effects. Without
+  one they're greyed out; click to add that effect.
+- **Sound / Filter / Envelope:** one graph each (waveform, filter response, envelope; FM-4 shows
+  its algorithm, Sample its waveform) and the 2–6 knobs that change the sound right now. Choices
+  (Wave, Mode, Legato…) sit in the section header. Hidden until they matter:
+  - **Pulse width** only on the Pulse wave; **Detune** and **Stereo** only with more than one
+    unison voice;
+  - **F.Decay** only while **Env amt** isn't 0;
+  - **Glide** only with **Legato** on;
+  - an Analog oscillator or Wave Osc B at level 0 shows just its level;
+  - a filter that is switched off (Drum, Kit, Chip FX, Wave) collapses to its header and "Filter
+    off".
+
+  Knobs work as everywhere (drag, Ctrl-drag fine, double-click default, right-click for
+  automation, MIDI learn and modulation). Dice locks are only in the full editor.
+- **Grid** instruments show their 8 macros and **Edit the patch ›** (the Grid tab).
+
+## 3. Header (the full editor)
 
 - `<` / `>`: the previous or next instrument.
 - The name and the type tag.

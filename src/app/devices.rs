@@ -489,9 +489,10 @@ impl App {
         );
         if ui
             .put(b, egui::Button::new("Advanced ›").small())
-            .on_hover_text("every control of this instrument (the Instrument tab)")
+            .on_hover_text("every control of this instrument (the Instrument tab's full editor)")
             .clicked()
         {
+            self.ip.advanced = true;
             self.set_lower(1);
         }
         rect

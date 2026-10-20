@@ -12,6 +12,12 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 - **Track icons** are new: saved per track (Auto by default, picked from the instrument type), shown in the track header, the channel header and the Inspector (Icon › Pick…). Old songs open with Auto and play bit-identically; songs without icons save as before.
 - Not yet: **Save CPU** (freeze / deactivate) and **FX track** are greyed out with "coming soon" and are on the roadmap. There are no track groups yet, so Organize has no Group.
 
+### Instrument tab: the simple card
+- **The Instrument tab opens on a simple card**, after the mockup Del picked. The header has prev / next, the name, the type chip, a **Preset: …** dropdown (names the preset the sound matches, lists that type's presets, Save to library / Library), **A / B** compare and **Advanced ›** for today's full editor (**‹ Simple** comes back; Ctrl+F also opens it).
+- **MACROS:** 8 big knobs with a caption saying what each drives. Synth / Moog: Bright (Cutoff + Res), Width (Detune + Stereo), Attack, Release, Motion (LFO > Cutoff), Chorus, Drive, Space (Reverb mix); curated sets for Voice, Analog and Wave; Drum, Kit, Chip FX, FM-4 and Grid use their own 8 macro knobs, plugins their 8 assignable macros. A macro moves all its targets together and stores nothing, so **no song format change** and old songs play bit-identically. Chorus / Space without that effect are greyed; click to add it.
+- **Sound / Filter / Envelope** sections, one graph each and only the knobs that change the sound now: Pulse width only on Pulse, Detune and Stereo only with unison, F.Decay only with an Env amount, Glide only with Legato, an oscillator at level 0 shows just its level, a filter that's off collapses to one line.
+- Current theme colours (Dark and Amiga). Custom macro assignments and automating macros are on the roadmap.
+
 ### Devices: compact cards
 - **Every card in the Devices row is the same size** and shows **one graph and 2–4 key knobs**: EQ curve (drag the band dots), filter response, chorus waves, compressor curve with a live **gain-reduction meter**, reverb decay, delay taps, and a graph for every other device. The width adapts (256 px down to 196 px), so the instrument, six effects and the + drop slot fit at 1920 px.
 - **…** on a card opens a column with the rest of its parameters, Presets and Reset (one undo step). It's remembered per device while ChipWave runs.

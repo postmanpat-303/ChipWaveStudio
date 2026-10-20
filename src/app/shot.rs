@@ -772,6 +772,12 @@ impl App {
             }
             self.inspector_shot(m == "clip");
         }
+        // CHIPWAVE_SHOT_ADVANCED=1 (or a tab): the full editor, not the simple card
+        if std::env::var_os("CHIPWAVE_SHOT_ADVANCED").is_some()
+            || std::env::var_os("CHIPWAVE_SHOT_TAB").is_some()
+        {
+            self.ip.advanced = true;
+        }
         if let Ok(tb) = std::env::var("CHIPWAVE_SHOT_TAB") {
             // keep the tab (a Grid would open on its patch)
             self.gen_ui.inst = (self.instr as usize).saturating_sub(1);
