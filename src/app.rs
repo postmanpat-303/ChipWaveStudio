@@ -840,6 +840,12 @@ impl App {
         self.extra.show_tracker
     }
 
+    /// the status bar's Row / Instr / Oct / Step readout: only while the
+    /// Tracker (pattern editor) is the view
+    pub(crate) fn status_cursor_visible(&self) -> bool {
+        self.view == View::Pattern
+    }
+
     fn play(&mut self, mode: u8) {
         // Tracker hidden: every Play (Space, Enter, the buttons) plays the
         // Timeline from its play marker - no block loops, which have no
@@ -1218,24 +1224,49 @@ impl eframe::App for App {
                     .inner_margin(egui::Margin::symmetric(0, 5)),
             )
             .show(ui, |ui| self.toolbar(ui));
-        egui::Panel::bottom("status").exact_size(26.0).frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(12, 4))).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                if let Some(log) = &self.key_log {
-                    let v: Vec<&str> = log.iter().map(|s| s.as_str()).collect();
-                    ui.label(
-                        egui::RichText::new(format!("keys: {}", v.join("  ")))
-                            .monospace()
-                            .color(th().fx),
-                    );
-                } else {
-                    ui.label(egui::RichText::new(&self.status).color(Color32::WHITE));
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let (peak, len) = self.with(|s| (s.engine.peak, s.song.length_seconds()));
-                    ui.label(egui::RichText::new(format!("Row {}/{} · Instr {:02X} · Oct {} · Step {} · length {}:{:04.1} · peak {:.0} %", self.row_text(self.row, self.rows()), self.rows(), self.instr, self.octave, self.step, (len / 60.0) as u32, len % 60.0, peak * 100.0)).color(Color32::WHITE).monospace());
+        egui::Panel::bottom("status")
+            .exact_size(26.0)
+            .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(12, 4)))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if let Some(log) = &self.key_log {
+                        let v: Vec<&str> = log.iter().map(|s| s.as_str()).collect();
+                        ui.label(
+                            egui::RichText::new(format!("keys: {}", v.join("  ")))
+                                .monospace()
+                                .color(th().fx),
+                        );
+                    } else {
+                        ui.label(egui::RichText::new(&self.status).color(Color32::WHITE));
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let (peak, len) = self.with(|s| (s.engine.peak, s.song.length_seconds()));
+                        // the tracker's cursor readout only with the Tracker in view
+                        let cursor = if self.status_cursor_visible() {
+                            format!(
+                                "Row {}/{} · Instr {:02X} · Oct {} · Step {} · ",
+                                self.row_text(self.row, self.rows()),
+                                self.rows(),
+                                self.instr,
+                                self.octave,
+                                self.step
+                            )
+                        } else {
+                            String::new()
+                        };
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{cursor}length {}:{:04.1} · peak {:.0} %",
+                                (len / 60.0) as u32,
+                                len % 60.0,
+                                peak * 100.0
+                            ))
+                            .color(Color32::WHITE)
+                            .monospace(),
+                        );
+                    });
                 });
             });
-        });
         if self.extra.view_bar {
             let t = th();
             egui::Panel::bottom("viewbar")

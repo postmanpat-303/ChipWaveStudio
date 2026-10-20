@@ -3173,3 +3173,28 @@ fn rt_lock_wait_chrome_throat() {
         pct(&mut r, 0.99),
     );
 }
+
+/// Del (0.2.5.0): the status bar's tracker readout (Row · Instr · Oct ·
+/// Step) only shows with the Tracker; length and peak stay everywhere
+#[test]
+fn status_bar_tracker_readout_only_with_the_tracker() {
+    let mut h = harness();
+    h.state_mut().view = View::Timeline;
+    frames(&mut h, 2);
+    assert!(!h.state().status_cursor_visible());
+    assert!(!has_text(&h, "Row "), "no tracker readout on the main page");
+    assert!(has_text(&h, "length "), "length and peak stay");
+    h.state_mut().view = View::Pattern;
+    frames(&mut h, 2);
+    assert!(h.state().status_cursor_visible());
+    assert!(has_text(&h, "Row "), "the Tracker shows its cursor");
+    let both = h
+        .query_all_by(|n| {
+            n.label().or(n.value()).is_some_and(|l| {
+                l.starts_with("Row ") && l.contains(" · length ") && l.contains(" · peak ")
+            })
+        })
+        .next()
+        .is_some();
+    assert!(both, "length and peak still there");
+}
