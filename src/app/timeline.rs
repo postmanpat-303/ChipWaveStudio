@@ -225,6 +225,12 @@ pub(crate) struct TimelineUi {
     pub(crate) follow_touch: bool,
     /// last automatable target the user moved (instrument/FX/mixer knob)
     pub(crate) last_touch: Option<crate::automation::Target>,
+    /// a clip just added (Drum Kit "Add to track"): (id, start time; NaN =
+    /// starts on the next frame); its outline pulses briefly
+    pub(crate) flash: Option<(u32, f64)>,
+    /// scroll so this (track, tick) is in view on the next frame (a clip
+    /// just added from the Drum Kit editor)
+    pub(crate) reveal: Option<(usize, Tick)>,
 }
 
 impl Default for TimelineUi {
@@ -267,6 +273,8 @@ impl Default for TimelineUi {
             head_drag: None,
             follow_touch: false,
             last_touch: None,
+            flash: None,
+            reveal: None,
         }
     }
 }
@@ -942,6 +950,22 @@ impl App {
                 }
             }
         }
+        if let Some((tr, at)) = self.tlv.reveal {
+            // waits until the track has a row (a track made this frame)
+            if let Some(&top) = self.tlv.layout.top.get(tr) {
+                self.tlv.reveal = None;
+                let h = self.tlv.layout.clip_h.max(1.0);
+                let sy = self.tlv.scroll_y;
+                if top < sy || top + h > sy + lanes.height() {
+                    self.tlv.scroll_y = top - (lanes.height() - h) / 2.0;
+                }
+                let at = at as f64;
+                let s = self.tlv.scroll;
+                if at < s || at > s + vis_ticks * 0.85 {
+                    self.tlv.scroll = at - vis_ticks / 4.0;
+                }
+            }
+        }
         let max_scroll = (content_end + vis_ticks * 0.25 - vis_ticks).max(0.0);
         self.tlv.scroll = self.tlv.scroll.clamp(0.0, max_scroll);
         self.tlv.scroll_y = self.tlv.scroll_y.clamp(0.0, max_sy);
@@ -1165,6 +1189,20 @@ impl App {
                     Pos2::new((x1 - 0.5).max(x0 + 1.5), lr.bottom() - 2.0),
                 );
                 let sel = self.tlv.sels.contains(&clip.id);
+                if let Some((fid, t0)) = self.tlv.flash.filter(|f| f.0 == clip.id) {
+                    let now = ui.input(|i| i.time);
+                    let t0 = if t0.is_nan() { now } else { t0 };
+                    let e = (now - t0) as f32;
+                    if e < 1.6 {
+                        self.tlv.flash = Some((fid, t0));
+                        let a = 1.0 - e / 1.6;
+                        outlines
+                            .push((r.expand(2.0), Stroke::new(3.0, t.accent.gamma_multiply(a))));
+                        ui.ctx().request_repaint();
+                    } else {
+                        self.tlv.flash = None;
+                    }
+                }
                 let hot = hover_clip == Some(i);
                 let k = if clip.muted {
                     0.22
