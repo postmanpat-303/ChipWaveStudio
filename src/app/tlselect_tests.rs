@@ -99,8 +99,10 @@ fn a_clip_click_selects_its_track_and_the_lower_panel_follows() {
     frames(&mut h, 2);
     assert_eq!(h.state().ch, 0);
     let (id, r) = clips_on(&h, 4)[0];
+    h.state_mut().dirty = false;
     click_at(&mut h, r.center());
     frames(&mut h, 2);
+    assert!(!h.state().dirty, "selecting is not an edit");
     assert_eq!(h.state().tlv.sels, vec![id]);
     assert_eq!(h.state().ch, 4, "the headers follow the clip");
     assert_eq!(h.state().tl_cur_track(), 4);

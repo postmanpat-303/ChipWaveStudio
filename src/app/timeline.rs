@@ -3206,7 +3206,9 @@ impl App {
             }
             // a clip or the empty lane: its track, clips as the click left them
             HeadOp::Pick(i) => {
+                // (a selection, not an edit: the song stays saved)
                 self.tl_select_track(i, true);
+                return;
             }
             _ => {}
         }
