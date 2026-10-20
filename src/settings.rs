@@ -181,6 +181,15 @@ pub struct Extra {
     /// mode. The code and the file format stay.
     #[serde(default)]
     pub show_tracker: bool,
+    /// metronome click while the timeline plays (and the record count-in)
+    #[serde(default)]
+    pub metronome: bool,
+    /// Record from stopped counts in one bar first (with the metronome on)
+    #[serde(default = "yes")]
+    pub count_in: bool,
+    /// recorded note starts snap to the piano roll's grid
+    #[serde(default)]
+    pub rec_quantise: bool,
     /// Clip Arranger launch quantise: 0 one bar, 1 half a bar, 2 a beat, 3 off
     #[serde(default)]
     pub launch_q: u8,
@@ -249,6 +258,9 @@ impl Default for Extra {
             adv_edit_float: false,
             clip_arranger: true,
             show_tracker: false,
+            metronome: false,
+            count_in: true,
+            rec_quantise: false,
             launch_q: 0,
         }
     }

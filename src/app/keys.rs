@@ -11,6 +11,8 @@ impl App {
             }
             return;
         }
+        // musical typing (Ctrl+K): its keys play notes, not shortcuts
+        events = self.typing_keys(events);
         events = events
             .iter()
             .filter_map(|e| self.keymap.translate(e))
@@ -122,6 +124,19 @@ impl App {
             };
             let cmd = m.command;
             if self.modal_key(key, m, ctx) {
+                continue;
+            }
+            // R: Record (live, into the Timeline). The Tracker types notes
+            // with R.
+            if key == Key::R
+                && !cmd
+                && !m.alt
+                && !m.shift
+                && !repeat
+                && self.view != View::Pattern
+                && self.prompt.is_none()
+            {
+                self.rec_toggle();
                 continue;
             }
             // the piano roll has the keyboard (clicked into last)

@@ -841,6 +841,43 @@ impl App {
                 {
                     self.with(|s| s.engine.stop());
                 }
+                // Record: live into the Timeline, at the time you play
+                if tl_mode {
+                    let rec = self.recording();
+                    let tip = if rec {
+                        "Recording - click (or R) to stop recording; playback goes on".to_string()
+                    } else {
+                        format!(
+                            "Record (R): the armed (or selected) track records what you play on the MIDI keyboard or with musical typing (Ctrl+K), in time{}",
+                            if self.extra.metronome && self.extra.count_in {
+                                ", after a bar's count-in"
+                            } else {
+                                ""
+                            }
+                        )
+                    };
+                    if super::viewbar::transport_button(
+                        ui,
+                        super::viewbar::Tr::Record,
+                        rec,
+                        if rec { t.brick } else { t.brick.gamma_multiply(0.7) },
+                        &tip,
+                    ) {
+                        self.rec_toggle();
+                    }
+                    let m = self.extra.metronome;
+                    if ui
+                        .selectable_label(m, egui::RichText::new("Click").small())
+                        .on_hover_text(format!(
+                            "metronome: {}\n(with it on, Record counts in a bar first; Settings › Recording)",
+                            if m { "on" } else { "off" }
+                        ))
+                        .clicked()
+                    {
+                        self.extra.metronome = !m;
+                        self.save_settings();
+                    }
+                }
                 let (pos, _) = self.view_bar_position(playing);
                 ui.label(
                     egui::RichText::new(pos)
@@ -995,13 +1032,37 @@ impl App {
                             a.advice().map(|s| format!("\n{s}")).unwrap_or_default()
                         ));
                 }
+                // musical typing: lit with its octave and velocity while on
+                let on = self.typing.on;
+                let txt = if on {
+                    format!("⌨ Typing {}", self.typing_label())
+                } else {
+                    "⌨ Typing".to_string()
+                };
+                if ui
+                    .selectable_label(
+                        on,
+                        egui::RichText::new(txt)
+                            .small()
+                            .color(if on { t.accent } else { hdr_dim() }),
+                    )
+                    .on_hover_text(
+                        "musical typing (Ctrl+K): play notes on the computer keyboard\nA S D F G H J K L ; white keys, W E T Y U O P black keys\nZ / X octave down / up, C / V velocity down / up\n(while on, those keys play notes instead of their shortcuts)",
+                    )
+                    .clicked()
+                {
+                    self.typing_toggle();
+                }
+                let tracker_rec = self.tracker_on();
                 // MIDI quick toggles (laid out right to left: shown as light, Chord, Rec)
                 let m = &mut self.extra.midi;
                 let rec_txt = if m.live_record { "Rec live" } else { "Rec step" };
                 let armed = self.edit;
                 let rec_col = if armed { t.brick } else { hdr_dim() };
                 let mut toggled = false;
-                if ui
+                // the Tracker's MIDI record mode (the Timeline has Record)
+                if tracker_rec
+                    && ui
                     .selectable_label(
                         false,
                         egui::RichText::new(rec_txt).small().color(rec_col),

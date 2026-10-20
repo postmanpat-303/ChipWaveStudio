@@ -446,6 +446,19 @@ impl App {
                     }
                 });
                 ui.end_row();
+                ui.label("Recording");
+                ui.horizontal(|ui| {
+                    for (v, name, tip) in [
+                        (&mut self.extra.metronome, "Metronome", "a click on every beat while the timeline plays (the toolbar's Click)"),
+                        (&mut self.extra.count_in, "Count-in", "Record from stopped counts in one bar first (with the metronome on)"),
+                        (&mut self.extra.rec_quantise, "Quantise on record", "recorded notes start on the piano roll's grid (off: exactly as played)"),
+                    ] {
+                        if ui.checkbox(v, name).on_hover_text(tip).changed() {
+                            changed = true;
+                        }
+                    }
+                });
+                ui.end_row();
                 ui.label("Tracker");
                 if ui
                     .checkbox(&mut self.extra.show_tracker, "Show Tracker (experimental)")

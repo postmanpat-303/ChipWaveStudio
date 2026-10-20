@@ -214,6 +214,9 @@ pub(crate) struct PianoUi {
     pub(crate) step: Option<(usize, Tick)>,
     /// keys went in at the step since the last full release (a chord)
     pub(crate) step_used: bool,
+    /// Step input on (the header's toggle; off by default): MIDI and
+    /// musical-typing keys go in one step after the other
+    pub(crate) step_input: bool,
 }
 
 impl Default for PianoUi {
@@ -246,6 +249,7 @@ impl Default for PianoUi {
             pan: None,
             step: None,
             step_used: false,
+            step_input: false,
         }
     }
 }
@@ -1085,6 +1089,18 @@ impl App {
                 }
                 if pr_btn(ui, "Fit", false, true, "zoom to the notes (F)").clicked() {
                     self.pr.fit = true;
+                }
+                if let Target::Notes { .. } = target {
+                    let on = self.pr.step_input;
+                    if pr_btn(ui, "Step input", on, true, "MIDI / typed notes go in one step after the other at the step position (chords: hold the keys together). Off: they only play - press Record (R) to record in time").clicked() {
+                        self.pr.step_input = !on;
+                        self.pr.step = None;
+                        self.status = format!("Step input {}", if on { "off" } else { "on" });
+                    }
+                    let on = self.typing.on;
+                    if pr_btn(ui, "Typing", on, true, "musical typing: play notes on the computer keyboard (Ctrl+K)").clicked() {
+                        self.typing_toggle();
+                    }
                 }
                 if let Target::Notes { .. } = target {
                     let on = !self.cl.hidden;

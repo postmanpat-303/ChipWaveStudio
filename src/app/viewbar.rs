@@ -64,6 +64,8 @@ pub(crate) const VTABS: [(VTab, &str, &str); 10] = [
 #[derive(Clone, Copy)]
 pub(super) enum Tr {
     Start,
+    /// Record: a filled circle
+    Record,
 }
 
 pub(super) fn transport_button(
@@ -99,6 +101,9 @@ pub(super) fn transport_button(
                 col,
                 Stroke::NONE,
             ));
+        }
+        Tr::Record => {
+            p.circle_filled(c, 5.5, col);
         }
     }
     resp.clicked()

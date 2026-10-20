@@ -71,6 +71,9 @@ mod narrow_tests;
 #[cfg(test)]
 mod newsong_tests;
 mod noterec;
+mod typing;
+#[cfg(test)]
+mod record_tests;
 #[cfg(test)]
 mod opentl_tests;
 mod params;
@@ -320,6 +323,8 @@ pub struct App {
     pub(crate) cl: chordlane::LaneUi,
     /// MIDI recording into note clips and Capture (app/noterec.rs)
     pub(crate) noterec: noterec::NoteRec,
+    /// musical typing (app/typing.rs; Ctrl+K)
+    pub(crate) typing: typing::Typing,
     /// "made with a newer ChipWave Studio" message (open refused)
     too_new: Option<String>,
     /// the left Inspector (I; app/inspector.rs)
@@ -648,6 +653,7 @@ impl App {
             pr: Default::default(),
             cl: Default::default(),
             noterec: Default::default(),
+            typing: Default::default(),
             too_new: None,
             insp: Default::default(),
             pie: None,
