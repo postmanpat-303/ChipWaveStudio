@@ -29,6 +29,12 @@ pub(crate) struct DkUi {
     /// drawn step cells (pad, step, rect) and pads (pad, rect), for tests
     pub cells: Vec<(usize, usize, egui::Rect)>,
     pub pads: Vec<(usize, egui::Rect)>,
+    /// the editor's visible area as last drawn (tests)
+    pub view: Option<egui::Rect>,
+    /// key controls as last drawn: ("tabs" | "add" | "gen_add" | "regen", rect) (tests)
+    pub ctl: Vec<(&'static str, egui::Rect)>,
+    /// the last frame used the compact (laptop) layout
+    pub compact: bool,
     /// audition key counter (live keys 200..=215)
     akey: u8,
     pub gen: GenSet,
@@ -68,7 +74,7 @@ struct PatRow {
 
 /// the clip being edited
 #[derive(Clone)]
-struct Cur {
+pub(crate) struct Cur {
     id: u32,
     data: usize,
     track: usize,
@@ -222,21 +228,42 @@ impl App {
         let (pats, cur, play_at, playing) = self.dk_patterns(slot);
         self.dk.clip = cur.as_ref().map(|c| c.id);
         let mut edit: Option<tl::NoteClipData> = None;
+        self.dk.view = Some(ui.clip_rect().intersect(ui.max_rect()));
         self.dk.cells.clear();
         self.dk.pads.clear();
-        egui::ScrollArea::vertical()
+        self.dk.ctl.clear();
+        // the full layout needs about 840 px; shorter (laptops: the panel
+        // under the timeline is 250-350 px) or narrow panels get the compact
+        // one, which fits without scrolling
+        let avail = ui.available_rect_before_wrap();
+        let compact = avail.height() < 840.0 || avail.width() < 1000.0;
+        self.dk.compact = compact;
+        if compact {
+            self.dk_compact(
+                ui,
+                &name,
+                &mut kit,
+                &pats,
+                cur.as_ref(),
+                tlon,
+                (play_at, playing),
+                &mut edit,
+            );
+        } else {
+            let out = egui::ScrollArea::vertical()
             .id_salt("dk_scroll")
             .auto_shrink([false, false])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
             .show(ui, |ui| {
                 ui.add_space(4.0);
                 self.dk_header(ui, &name, &mut kit, &pats, cur.as_ref(), tlon);
                 ui.add_space(6.0);
                 let ch = cur.as_ref().map_or(self.ch, |c| c.track);
-                self.dk_pads(ui, &mut kit, ch);
+                self.dk_pads(ui, &mut kit, ch, None);
                 ui.add_space(6.0);
                 if let Some(c) = &cur {
                     let mut d = c.d.clone();
-                    self.dk_sequencer(ui, &mut kit, c, &mut d, play_at, playing, slot);
+                    self.dk_sequencer(ui, &mut kit, c, &mut d, play_at, playing, slot, None);
                     if d != c.d {
                         edit = Some(d);
                     }
@@ -262,6 +289,25 @@ impl App {
                 self.dk_lower(ui, &mut kit, cur.as_ref(), slot);
                 ui.add_space(6.0);
             });
+            // more below: a fade and a hint over the bottom edge
+            let vis = out.inner_rect;
+            if out.state.clamped_offset().y + vis.height() < out.content_size.y - 4.0 {
+                let fr =
+                    egui::Rect::from_min_max(egui::pos2(vis.left(), vis.bottom() - 30.0), vis.max);
+                let p = ui.painter_at(vis);
+                let mut m = egui::Mesh::default();
+                let bg = th().crt_bot;
+                crate::theme::round_mesh(&mut m, fr, [0.0; 4], bg.gamma_multiply(0.0), bg);
+                p.add(egui::Shape::mesh(m));
+                p.text(
+                    egui::pos2(fr.center().x, fr.bottom() - 6.0),
+                    egui::Align2::CENTER_BOTTOM,
+                    "More below: scroll down",
+                    egui::FontId::proportional(11.5),
+                    th().ochre,
+                );
+            }
+        }
         if kit != orig {
             kit.fix();
             self.with(|s| {
@@ -279,6 +325,130 @@ impl App {
         if ui.input(|i| i.pointer.any_released()) {
             self.dk.paint = None;
         }
+    }
+
+    /// the compact (laptop) layout: a one-line toolbar, the step sequencer
+    /// on the left (it gets the height), and Pads / Sound / Generate tabs in
+    /// a side panel; it fits the panel without scrolling
+    #[allow(clippy::too_many_arguments)]
+    fn dk_compact(
+        &mut self,
+        ui: &mut egui::Ui,
+        name: &str,
+        kit: &mut DrumKitP,
+        pats: &[PatRow],
+        cur: Option<&Cur>,
+        tlon: bool,
+        (play_at, playing): (Option<f64>, bool),
+        edit: &mut Option<tl::NoteClipData>,
+    ) {
+        let slot = self.dk.inst as u8 + 1;
+        let full = ui.available_rect_before_wrap();
+        let tb = egui::Rect::from_min_max(full.min, egui::pos2(full.right(), full.top() + 26.0));
+        area(ui, tb, |ui| {
+            ui.horizontal_centered(|ui| {
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(name).strong().color(th().ink));
+                self.dk_btn_kits(ui, kit);
+                self.dk_btn_dice(ui, kit);
+                ui.separator();
+                self.dk_pat_combo(ui, pats, cur);
+                self.dk_btn_new(ui, cur, slot);
+                self.dk_btn_dup(ui, cur);
+                if let Some(c) = cur {
+                    ui.separator();
+                    ui.label(egui::RichText::new("STEPS").small().color(th().ink2));
+                    self.dk_steps_leds(ui, c, [16, 32, 64]);
+                    ui.separator();
+                    let swing = c.d.drum.as_ref().map_or(0.0, |m| m.swing);
+                    let mut pc = dk::swing_percent(swing).round();
+                    ui.label("Swing");
+                    if ui
+                        .add(egui::DragValue::new(&mut pc).range(50.0..=75.0).suffix(" %"))
+                        .on_hover_text("50 % = straight, 66 % = triplet feel, 75 % max; the off-beat 16ths move")
+                        .changed()
+                    {
+                        self.dk_set_swing(c, (pc - 50.0) / 50.0);
+                    }
+                }
+            });
+        });
+        let rest = egui::Rect::from_min_max(egui::pos2(full.left(), tb.bottom() + 2.0), full.max);
+        let side_w = (rest.width() * 0.34).clamp(300.0, 390.0);
+        let seq_r = egui::Rect::from_min_max(
+            rest.min,
+            egui::pos2(rest.right() - side_w - 6.0, rest.bottom()),
+        );
+        let side_r =
+            egui::Rect::from_min_max(egui::pos2(seq_r.right() + 6.0, rest.top()), rest.max);
+        let ch = cur.map_or(self.ch, |c| c.track);
+        match cur {
+            Some(c) => {
+                let mut d = c.d.clone();
+                area(ui, seq_r, |ui| {
+                    self.dk_sequencer(
+                        ui,
+                        kit,
+                        c,
+                        &mut d,
+                        play_at,
+                        playing,
+                        slot,
+                        Some(seq_r.height()),
+                    )
+                });
+                if d != c.d {
+                    *edit = Some(d);
+                }
+            }
+            None => {
+                crate::ember::card(ui.painter(), seq_r);
+                ui.painter().text(
+                    seq_r.center(),
+                    egui::Align2::CENTER_CENTER,
+                    if tlon {
+                        "No pattern yet: + New makes one, or Generate › Add to track"
+                    } else {
+                        "The step sequencer edits note clips: switch the song to timeline mode first"
+                    },
+                    egui::FontId::proportional(12.5),
+                    th().ink2,
+                );
+            }
+        }
+        // side panel
+        crate::ember::card(ui.painter(), side_r);
+        let tabs_r = egui::Rect::from_min_max(
+            side_r.min + egui::vec2(8.0, 3.0),
+            egui::pos2(side_r.right() - 8.0, side_r.top() + 29.0),
+        );
+        area(ui, tabs_r, |ui| {
+            ui.horizontal_centered(|ui| {
+                for (i, t) in [(0u8, "Pads"), (1, "Sound"), (2, "Generate")] {
+                    if crate::ember::tab(ui, self.dk.tab == i, t).clicked() {
+                        self.dk.tab = i;
+                    }
+                }
+            });
+        });
+        self.dk.ctl.push(("tabs", tabs_r));
+        let body_r = egui::Rect::from_min_max(
+            egui::pos2(side_r.left() + 8.0, tabs_r.bottom() + 4.0),
+            side_r.max - egui::vec2(6.0, 6.0),
+        );
+        let tab = self.dk.tab;
+        area(ui, body_r, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt(("dk_side", tab))
+                .auto_shrink([false, false])
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+                .show(ui, |ui| match tab {
+                    0 => self.dk_pads(ui, kit, ch, Some(body_r.height())),
+                    1 => self.dk_sound(ui, kit, true),
+                    _ => self.dk_generate(ui, kit, cur, slot, true),
+                });
+        });
+        ui.allocate_rect(full, egui::Sense::hover());
     }
 
     /// the kit's patterns (note data on clips that play it) and the clip to edit
@@ -464,37 +634,8 @@ impl App {
         );
         area(ui, br, |ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if crate::ember::button(ui, "Dice kit", false)
-                    .on_hover_text("re-roll every pad's unlocked knobs (Undo takes it back)")
-                    .clicked()
-                {
-                    let seed = (ui.input(|i| i.time) * 1000.0) as u32 | 1;
-                    for (i, p) in kit.pads.iter_mut().enumerate() {
-                        crate::gen::roll(&mut p.drum, seed.wrapping_add(i as u32 * 0x9E37_79B9));
-                    }
-                }
-                ui.menu_button("Kits…", |ui| {
-                    ui.label(
-                        egui::RichText::new(
-                            "load a kit's sounds into the pads with the same keys (patterns stay)",
-                        )
-                        .small()
-                        .color(th().ink2),
-                    );
-                    for (n, tip, p) in dk::presets() {
-                        if ui.button(&n).on_hover_text(tip).clicked() {
-                            if let GenEngine::Drums(k) = p.engine {
-                                for pad in kit.pads.iter_mut() {
-                                    if let Some(src) = k.pads.iter().find(|x| x.key == pad.key) {
-                                        pad.drum = src.drum;
-                                        pad.tune = src.tune;
-                                    }
-                                }
-                            }
-                            ui.close();
-                        }
-                    }
-                });
+                self.dk_btn_dice(ui, kit);
+                self.dk_btn_kits(ui, kit);
             });
         });
         // ---- Pattern
@@ -534,77 +675,19 @@ impl App {
         );
         area(ui, br, |ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if crate::ember::button(ui, "Dup", false)
-                    .on_hover_text("a copy of this pattern of its own, right after it")
-                    .clicked()
-                {
-                    if let Some(c) = cur {
-                        self.dk_new_pattern(c.track, Some(c));
-                    }
-                }
-                if crate::ember::button(ui, "+ New", false)
-                    .on_hover_text(
-                        "an empty 1-bar pattern on this kit's track, after its last clip",
-                    )
-                    .clicked()
-                {
-                    let tr = cur
-                        .map(|c| c.track)
-                        .or_else(|| self.dk_track(slot))
-                        .unwrap_or(self.ch);
-                    self.dk_new_pattern(tr, None);
-                }
-                let sel = cur.map(|c| c.data);
-                let at = pats
-                    .iter()
-                    .position(|p| Some(p.data) == sel)
-                    .map_or(0, |i| i + 1);
-                egui::ComboBox::from_id_salt("dk_pats")
-                    .width(130.0)
-                    .selected_text(format!("{at} / {} patterns", pats.len()))
-                    .show_ui(ui, |ui| {
-                        for p in pats {
-                            let label = if p.uses > 1 {
-                                format!("{}  ×{}", p.name, p.uses)
-                            } else {
-                                p.name.clone()
-                            };
-                            if ui.selectable_label(Some(p.data) == sel, label).clicked() {
-                                self.dk.clip = Some(p.clip);
-                                self.tlv.sel = Some(p.clip);
-                                self.tlv.sels = vec![p.clip];
-                            }
-                        }
-                    });
+                self.dk_btn_dup(ui, cur);
+                self.dk_btn_new(ui, cur, slot);
+                self.dk_pat_combo(ui, pats, cur);
             });
         });
         if let Some(c) = cur {
-            let steps = ((c.d.len + ROW - 1) / ROW).max(1) as usize;
             let br = egui::Rect::from_min_max(
                 egui::pos2(r2.right() - 220.0, r2.top() + 42.0),
                 egui::pos2(r2.right() - 14.0, r2.top() + 66.0),
             );
             area(ui, br, |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    for n in [64usize, 32, 16] {
-                        if crate::ember::led_item(ui, &n.to_string(), steps == n)
-                            .on_hover_text(format!(
-                                "{n} steps ({} bar{})",
-                                n / 16,
-                                if n > 16 { "s" } else { "" }
-                            ))
-                            .clicked()
-                            && steps != n
-                        {
-                            let mut d = c.d.clone();
-                            d.len = n as Tick * ROW;
-                            if n < steps {
-                                d.notes.retain(|x| dk::step_of(x.start) < n);
-                            }
-                            self.dk_write(c.data, d);
-                            self.dk.page = 0;
-                        }
-                    }
+                    self.dk_steps_leds(ui, c, [64, 32, 16]);
                     ui.label(egui::RichText::new("STEPS").small().color(th().ink2));
                 });
             });
@@ -646,15 +729,131 @@ impl App {
                 crate::theme::KnobFace::new(sw * 2.0),
             );
             // whole percents, as shown
-            let sw = ((dk::swing_percent(sw).round() - 50.0) / 50.0).clamp(0.0, 0.5);
-            if (sw - swing).abs() > 1e-6 {
-                let mut d = c.d.clone();
-                dk::set_swing(&mut d.notes, sw);
-                d.drum = Some(DrumMeta { swing: sw });
-                self.dk_write(c.data, d);
-            }
+            self.dk_set_swing(c, sw);
         }
         let _ = t;
+    }
+
+    /// swing `sw` (0..0.5) on pattern `c`, in whole percents as shown
+    fn dk_set_swing(&mut self, c: &Cur, sw: f32) {
+        let swing = c.d.drum.as_ref().map_or(0.0, |m| m.swing);
+        let sw = ((dk::swing_percent(sw).round() - 50.0) / 50.0).clamp(0.0, 0.5);
+        if (sw - swing).abs() > 1e-6 {
+            let mut d = c.d.clone();
+            dk::set_swing(&mut d.notes, sw);
+            d.drum = Some(DrumMeta { swing: sw });
+            self.dk_write(c.data, d);
+        }
+    }
+
+    fn dk_btn_dice(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP) {
+        if crate::ember::button(ui, "Dice kit", false)
+            .on_hover_text("re-roll every pad's unlocked knobs (Undo takes it back)")
+            .clicked()
+        {
+            let seed = (ui.input(|i| i.time) * 1000.0) as u32 | 1;
+            for (i, p) in kit.pads.iter_mut().enumerate() {
+                crate::gen::roll(&mut p.drum, seed.wrapping_add(i as u32 * 0x9E37_79B9));
+            }
+        }
+    }
+
+    fn dk_btn_kits(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP) {
+        ui.menu_button("Kits…", |ui| {
+            ui.label(
+                egui::RichText::new(
+                    "load a kit's sounds into the pads with the same keys (patterns stay)",
+                )
+                .small()
+                .color(th().ink2),
+            );
+            for (n, tip, p) in dk::presets() {
+                if ui.button(&n).on_hover_text(tip).clicked() {
+                    if let GenEngine::Drums(k) = p.engine {
+                        for pad in kit.pads.iter_mut() {
+                            if let Some(src) = k.pads.iter().find(|x| x.key == pad.key) {
+                                pad.drum = src.drum;
+                                pad.tune = src.tune;
+                            }
+                        }
+                    }
+                    ui.close();
+                }
+            }
+        });
+    }
+
+    fn dk_btn_dup(&mut self, ui: &mut egui::Ui, cur: Option<&Cur>) {
+        if crate::ember::button(ui, "Dup", false)
+            .on_hover_text("a copy of this pattern of its own, right after it")
+            .clicked()
+        {
+            if let Some(c) = cur {
+                self.dk_new_pattern(c.track, Some(c));
+            }
+        }
+    }
+
+    fn dk_btn_new(&mut self, ui: &mut egui::Ui, cur: Option<&Cur>, slot: u8) {
+        if crate::ember::button(ui, "+ New", false)
+            .on_hover_text("an empty 1-bar pattern on this kit's track, after its last clip")
+            .clicked()
+        {
+            let tr = cur
+                .map(|c| c.track)
+                .or_else(|| self.dk_track(slot))
+                .unwrap_or(self.ch);
+            self.dk_new_pattern(tr, None);
+        }
+    }
+
+    fn dk_pat_combo(&mut self, ui: &mut egui::Ui, pats: &[PatRow], cur: Option<&Cur>) {
+        let sel = cur.map(|c| c.data);
+        let at = pats
+            .iter()
+            .position(|p| Some(p.data) == sel)
+            .map_or(0, |i| i + 1);
+        egui::ComboBox::from_id_salt("dk_pats")
+            .width(130.0)
+            .selected_text(format!("{at} / {} patterns", pats.len()))
+            .show_ui(ui, |ui| {
+                for p in pats {
+                    let label = if p.uses > 1 {
+                        format!("{}  ×{}", p.name, p.uses)
+                    } else {
+                        p.name.clone()
+                    };
+                    if ui.selectable_label(Some(p.data) == sel, label).clicked() {
+                        self.dk.clip = Some(p.clip);
+                        self.tlv.sel = Some(p.clip);
+                        self.tlv.sels = vec![p.clip];
+                    }
+                }
+            });
+    }
+
+    /// the pattern-length LEDs, in `order`
+    fn dk_steps_leds(&mut self, ui: &mut egui::Ui, c: &Cur, order: [usize; 3]) {
+        let steps = ((c.d.len + ROW - 1) / ROW).max(1) as usize;
+        for n in order {
+            if crate::ember::led_item(ui, &n.to_string(), steps == n)
+                .on_hover_text(format!(
+                    "{n} steps ({} bar{})",
+                    n / 16,
+                    if n > 16 { "s" } else { "" }
+                ))
+                .clicked()
+                && steps != n
+            {
+                let mut d = c.d.clone();
+                d.len = n as Tick * ROW;
+                if n < steps {
+                    d.notes.retain(|x| dk::step_of(x.start) < n);
+                }
+                self.dk_write(c.data, d);
+                self.dk.page = 0;
+            }
+        }
     }
 
     /// a new pattern clip on `track`: a unique copy of `from`, or an empty
@@ -733,35 +932,49 @@ fn hit(kit: &DrumKitP, notes: &[Note], p: usize, k: usize) -> Option<usize> {
 
 // -------------------------------------------------------------------- pads
 impl App {
-    fn dk_pads(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP, ch: usize) {
+    /// the pad grid: 8 big pads a row, or (compact) small pads, 4 a row
+    /// fit = Some(height): the compact grid (4 a row), pads sized to fit
+    fn dk_pads(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP, ch: usize, fit: Option<f32>) {
+        let compact = fit.is_some();
         let w = ui.available_width();
-        let cols = 8usize;
+        let cols = if compact { 4usize } else { 8 };
         let n = kit.pads.len() + usize::from(kit.pads.len() < dk::MAX_PADS);
         let rows = n.div_ceil(cols).max(1);
-        let ph = 50.0;
-        let gap = 6.0;
-        let h = 26.0 + rows as f32 * (ph + gap) + 6.0;
+        let gap = if compact { 4.0 } else { 6.0 };
+        let (top, side) = if compact { (2.0, 2.0) } else { (26.0, 16.0) };
+        let ph = match fit {
+            Some(h) => ((h - top - 6.0) / rows as f32 - gap).clamp(24.0, 34.0),
+            None => 50.0,
+        };
+        let h = top + rows as f32 * (ph + gap) + 6.0;
         let (r, _) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::hover());
-        card(
-            ui,
-            r,
-            &format!("Pads · {} of {}", kit.pads.len(), dk::MAX_PADS),
-        );
-        ui.painter().text(
-            egui::pos2(r.right() - 16.0, r.top() + 7.0),
-            egui::Align2::RIGHT_TOP,
-            "click = hear and select · right-click = more",
-            egui::FontId::proportional(10.0),
-            th().ink2,
-        );
-        let pw = (r.width() - 32.0 - gap * (cols - 1) as f32) / cols as f32;
+        if !compact {
+            card(
+                ui,
+                r,
+                &format!("Pads · {} of {}", kit.pads.len(), dk::MAX_PADS),
+            );
+            ui.painter().text(
+                egui::pos2(r.right() - 16.0, r.top() + 7.0),
+                egui::Align2::RIGHT_TOP,
+                "click = hear and select · right-click = more",
+                egui::FontId::proportional(10.0),
+                th().ink2,
+            );
+        }
+        let (f_name, f_tag, inset) = if compact {
+            (11.5, 9.0, 4.0)
+        } else {
+            (13.0, 10.0, 8.0)
+        };
+        let pw = (r.width() - 2.0 * side - gap * (cols - 1) as f32) / cols as f32;
         let mut act: Option<(u8, usize)> = None;
         for i in 0..n {
             let (cx, cy) = (i % cols, i / cols);
             let pr = egui::Rect::from_min_size(
                 egui::pos2(
-                    r.left() + 16.0 + cx as f32 * (pw + gap),
-                    r.top() + 26.0 + cy as f32 * (ph + gap),
+                    r.left() + side + cx as f32 * (pw + gap),
+                    r.top() + top + cy as f32 * (ph + gap),
                 ),
                 egui::vec2(pw, ph),
             );
@@ -774,7 +987,7 @@ impl App {
                     pr.center(),
                     egui::Align2::CENTER_CENTER,
                     "+ ADD PAD",
-                    egui::FontId::proportional(12.0),
+                    egui::FontId::proportional(f_name - 1.0),
                     th().ink2,
                 );
                 if resp
@@ -785,6 +998,7 @@ impl App {
                 {
                     act = Some((0, i));
                 }
+                self.dk.ctl.push(("add_pad", pr));
                 continue;
             }
             self.dk.pads.push((i, pr));
@@ -803,8 +1017,8 @@ impl App {
             }
             p.rect_filled(
                 egui::Rect::from_min_size(
-                    pr.min + egui::vec2(6.0, 8.0),
-                    egui::vec2(3.0, ph - 16.0),
+                    pr.min + egui::vec2(5.0, inset),
+                    egui::vec2(3.0, ph - 2.0 * inset),
                 ),
                 1.5,
                 if kit.audible(i) {
@@ -814,10 +1028,10 @@ impl App {
                 },
             );
             p.text(
-                pr.left_top() + egui::vec2(15.0, 8.0),
+                pr.left_top() + egui::vec2(13.0, inset - 1.0),
                 egui::Align2::LEFT_TOP,
                 &pad.name,
-                egui::FontId::proportional(13.0),
+                egui::FontId::proportional(f_name),
                 if kit.audible(i) { th().ink } else { th().ink2 },
             );
             let mut tag = dk::key_name(pad.key);
@@ -831,10 +1045,10 @@ impl App {
                 tag += " · S";
             }
             p.text(
-                pr.left_bottom() + egui::vec2(15.0, -8.0),
+                pr.left_bottom() + egui::vec2(13.0, 1.0 - inset),
                 egui::Align2::LEFT_BOTTOM,
                 tag,
-                egui::FontId::monospace(10.0),
+                egui::FontId::monospace(f_tag),
                 th().ink2,
             );
             let resp = resp.on_hover_text(format!(
@@ -901,7 +1115,10 @@ impl App {
         play_at: Option<f64>,
         playing: bool,
         slot: u8,
+        fit: Option<f32>,
     ) {
+        // fit = Some(height): the compact layout, filling that height
+        let compact = fit.is_some();
         let steps = ((d.len + ROW - 1) / ROW).max(1) as usize;
         let pages = steps.div_ceil(16);
         self.dk.page = self.dk.page.min(pages - 1);
@@ -922,17 +1139,48 @@ impl App {
             }
         }
         lane_ix.sort_unstable();
+        let (top, vel_h, side) = if compact {
+            (50.0, 20.0, 8.0)
+        } else {
+            (62.0, 46.0, 16.0)
+        };
+        let mut hidden = 0;
+        let lh = match fit {
+            Some(h) => {
+                // as many lanes as fit at 12 px or more (the selected pad stays)
+                let room = (h - top - 6.0 - vel_h - 6.0).max(12.0);
+                let max = ((room / 12.0).floor() as usize).max(1);
+                if lane_ix.len() > max {
+                    hidden = lane_ix.len() - max;
+                    let sel = self.dk.sel;
+                    let mut keep: Vec<usize> = lane_ix
+                        .iter()
+                        .copied()
+                        .filter(|&p| p != sel)
+                        .take(max - 1)
+                        .collect();
+                    if lane_ix.contains(&sel) {
+                        keep.push(sel);
+                    }
+                    keep.sort_unstable();
+                    lane_ix = keep;
+                }
+                (room / lane_ix.len().max(1) as f32).clamp(12.0, 22.0)
+            }
+            None => 22.0,
+        };
         let lanes = lane_ix.len();
-        let lh = 22.0;
-        let top = 62.0;
-        let vel_h = 46.0;
-        let h = top + lanes as f32 * lh + 10.0 + vel_h + 14.0;
+        let h = fit.unwrap_or(top + lanes as f32 * lh + 10.0 + vel_h + 14.0);
         let (r, _) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::hover());
-        card(
-            ui,
-            r,
-            &format!("Step sequencer · {} · {steps} steps", d.name),
-        );
+        if compact {
+            crate::ember::card(ui.painter(), r);
+        } else {
+            card(
+                ui,
+                r,
+                &format!("Step sequencer · {} · {steps} steps", d.name),
+            );
+        }
         // transport + tools row
         let looping = playing
             && self.with(|s| {
@@ -940,11 +1188,48 @@ impl App {
                     t.loop_on && t.loop_range == Some((c.start, c.start + c.len.max(ROW)))
                 })
             });
+        let row_y = if compact { 2.0 } else { 24.0 };
         let row = egui::Rect::from_min_max(
-            egui::pos2(r.left() + 14.0, r.top() + 24.0),
-            egui::pos2(r.right() - 14.0, r.top() + 50.0),
+            egui::pos2(r.left() + side - 2.0, r.top() + row_y),
+            egui::pos2(r.right() - side + 2.0, r.top() + row_y + 26.0),
         );
         let mut tool: Option<u8> = None;
+        // where Add to track puts a linked copy: on the card (compact: under
+        // the buttons)
+        let add_line = self.dk_add_plan(slot, Some(c.track), &d.name, c.len).line;
+        let line_at = if compact {
+            egui::pos2(r.right() - side, r.top() + 29.0)
+        } else {
+            egui::pos2(r.right() - 16.0, r.top() + 7.0)
+        };
+        let line_r = ui.painter().text(
+            line_at,
+            egui::Align2::RIGHT_TOP,
+            &add_line,
+            egui::FontId::proportional(if compact { 11.0 } else { 10.5 }),
+            if compact { th().ink } else { th().ink2 },
+        );
+        if compact {
+            // the pattern's name (and hidden lanes) in what's left of the line
+            let free = egui::Rect::from_min_max(
+                egui::pos2(r.left() + side, r.top() + 27.0),
+                egui::pos2(line_r.left() - 10.0, r.top() + 43.0),
+            );
+            ui.painter_at(free).text(
+                egui::pos2(r.left() + side, r.top() + 29.0),
+                egui::Align2::LEFT_TOP,
+                if hidden > 0 {
+                    format!(
+                        "{} · {steps} steps · {hidden} more lanes: drag the panel taller",
+                        d.name
+                    )
+                } else {
+                    format!("{} · {steps} steps", d.name)
+                },
+                egui::FontId::proportional(11.0),
+                if hidden > 0 { th().ochre } else { th().ink2 },
+            );
+        }
         area(ui, row, |ui| {
             ui.horizontal_centered(|ui| {
                 if crate::ember::button(ui, if looping { "Stop" } else { "Play loop" }, looping)
@@ -972,19 +1257,19 @@ impl App {
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if crate::ember::button(ui, "Shift >", false)
+                    if crate::ember::button(ui, if compact { ">" } else { "Shift >" }, false)
                         .on_hover_text("shift the selected lane one step later (wraps)")
                         .clicked()
                     {
                         tool = Some(5);
                     }
-                    if crate::ember::button(ui, "< Shift", false)
+                    if crate::ember::button(ui, if compact { "<" } else { "< Shift" }, false)
                         .on_hover_text("shift the selected lane one step earlier (wraps)")
                         .clicked()
                     {
                         tool = Some(4);
                     }
-                    if crate::ember::button(ui, "Clear lane", false).clicked() {
+                    if crate::ember::button(ui, if compact { "Clear" } else { "Clear lane" }, false).clicked() {
                         tool = Some(3);
                     }
                     let uses = self.with(|s| {
@@ -996,7 +1281,7 @@ impl App {
                         })
                     });
                     if ui
-                        .add_enabled_ui(uses > 1, |ui| crate::ember::button(ui, "Make unique", false))
+                        .add_enabled_ui(uses > 1, |ui| crate::ember::button(ui, if compact { "Unique" } else { "Make unique" }, false))
                         .inner
                         .on_hover_text("give this clip its own copy of the pattern (the other placed copies stay linked)")
                         .on_disabled_hover_text("only this clip plays this pattern")
@@ -1004,20 +1289,20 @@ impl App {
                     {
                         tool = Some(6);
                     }
-                    if crate::ember::button(ui, "Insert at marker", false)
-                        .on_hover_text("place a linked copy of this pattern at the timeline marker on this track (edits change every copy; Make unique splits one off)")
-                        .clicked()
-                    {
+                    let add = crate::ember::button_ex(ui, "Add to track", false, true, egui::vec2(0.0, 0.0))
+                        .on_hover_text(format!("{} (a linked copy: edits change every copy; Make unique splits one off)", add_line));
+                    self.dk.ctl.push(("add", add.rect));
+                    if add.clicked() {
                         tool = Some(2);
                     }
                 });
             });
         });
         // grid
-        let names_w = 150.0;
+        let names_w = if compact { 96.0 } else { 150.0 };
         let ms_w = 44.0;
-        let gx = r.left() + 16.0 + names_w + ms_w;
-        let gw = r.right() - 16.0 - gx;
+        let gx = r.left() + side + names_w + ms_w;
+        let gw = r.right() - side - gx;
         let sw = gw / 16.0;
         let gy = r.top() + top;
         let first = self.dk.page * 16;
@@ -1038,7 +1323,7 @@ impl App {
             let pad = &mut kit.pads[p];
             let y = gy + row as f32 * lh;
             let lane = egui::Rect::from_min_size(
-                egui::pos2(r.left() + 16.0, y),
+                egui::pos2(r.left() + side, y),
                 egui::vec2(names_w, lh - 2.0),
             );
             let col = pad_col(pad);
@@ -1058,7 +1343,7 @@ impl App {
             painter.rect_filled(
                 egui::Rect::from_min_size(
                     lane.min + egui::vec2(2.0, 4.0),
-                    egui::vec2(3.0, lh - 10.0),
+                    egui::vec2(3.0, (lh - 10.0).max(4.0)),
                 ),
                 1.0,
                 col,
@@ -1073,7 +1358,7 @@ impl App {
             // M / S
             for (j, (lbl, on)) in [("M", pad.mute), ("S", pad.solo)].into_iter().enumerate() {
                 let br = egui::Rect::from_min_size(
-                    egui::pos2(r.left() + 16.0 + names_w + j as f32 * 21.0, y + 1.0),
+                    egui::pos2(r.left() + side + names_w + j as f32 * 21.0, y + 1.0),
                     egui::vec2(19.0, lh - 4.0),
                 );
                 let rr = ui
@@ -1175,7 +1460,10 @@ impl App {
             let k = first + s;
             if k.is_multiple_of(4) {
                 painter.text(
-                    egui::pos2(gx + s as f32 * sw + 3.0, gy - 12.0),
+                    egui::pos2(
+                        gx + s as f32 * sw + 3.0,
+                        gy - if compact { 7.0 } else { 12.0 },
+                    ),
                     egui::Align2::LEFT_CENTER,
                     format!("{}.{}", k / 16 + 1, (k % 16) / 4 + 1),
                     egui::FontId::monospace(9.5),
@@ -1184,11 +1472,11 @@ impl App {
             }
         }
         // velocity lane for the selected pad
-        let vy = gy + lanes as f32 * lh + 10.0;
+        let vy = gy + lanes as f32 * lh + if compact { 6.0 } else { 10.0 };
         let vr = egui::Rect::from_min_size(egui::pos2(gx, vy), egui::vec2(gw, vel_h));
         crate::ember::well(ui.painter(), vr, 4);
         ui.painter().text(
-            egui::pos2(r.left() + 28.0, vy + vel_h / 2.0),
+            egui::pos2(r.left() + side + 12.0, vy + vel_h / 2.0),
             egui::Align2::LEFT_CENTER,
             format!(
                 "Velocity · {}",
@@ -1261,7 +1549,9 @@ impl App {
         match tool {
             Some(0) => self.dk_play(c),
             Some(1) => self.with(|s| s.engine.stop()),
-            Some(2) => self.dk_insert(c),
+            Some(2) => {
+                self.dk_add_to_track(slot, Some(c.track), AddSrc::Linked(c.clone()));
+            }
             Some(3) => d.notes.retain(|n| !on_pad(kit, n, sp)),
             Some(4) | Some(5) => {
                 if let Some(key) = kit.pads.get(sp).map(|x| x.key) {
@@ -1303,31 +1593,192 @@ impl App {
         self.play(0);
     }
 
-    /// a linked copy of clip `c` at the timeline marker, on its track
-    fn dk_insert(&mut self, c: &Cur) {
-        let at = self.tlv.cue;
+    /// where Add to track puts a pattern of `len` ticks named `name` for
+    /// kit `slot`: on `track` (None = the kit's track; no track = a new one),
+    /// at the play marker snapped to its bar, or right after the track's last
+    /// clip when that spot is taken
+    pub(crate) fn dk_add_plan(
+        &self,
+        slot: u8,
+        track: Option<usize>,
+        name: &str,
+        len: Tick,
+    ) -> AddPlan {
+        let track = track.or_else(|| self.dk_track(slot));
+        let cue = self.tlv.cue.max(0);
+        self.with(|s| {
+            let Some(t) = s.song.timeline.as_deref() else {
+                return AddPlan {
+                    track,
+                    at: 0,
+                    line: "Switch the song to timeline mode to add patterns to a track".into(),
+                };
+            };
+            let snap_down = |x: Tick| {
+                let sig = t.sig_at(x);
+                let bar = sig.bar_ticks().max(1);
+                let from = sig.tick.min(x);
+                from + (x - from) / bar * bar
+            };
+            let snap_up = |x: Tick| {
+                let d = snap_down(x);
+                if d == x {
+                    x
+                } else {
+                    d + t.sig_at(d).bar_ticks().max(1)
+                }
+            };
+            let mut at = snap_down(cue);
+            let len = len.max(ROW);
+            let mut after = false;
+            if let Some(tr) = track {
+                let on: Vec<&tl::Clip> = t.clips.iter().filter(|c| c.track as usize == tr).collect();
+                if on.iter().any(|c| c.start < at + len && c.end() > at) {
+                    let last = on.iter().map(|c| c.end()).max().unwrap_or(0);
+                    at = snap_up(last);
+                    after = true;
+                }
+            }
+            let bar_len = t.sig_at(at).bar_ticks().max(1);
+            let size = if len % bar_len == 0 {
+                let n = len / bar_len;
+                format!("{n} bar{}", if n == 1 { "" } else { "s" })
+            } else {
+                format!("{} steps", len / ROW)
+            };
+            let bar = t.bar_pos(at).bar;
+            let line = match track {
+                None => format!(
+                    "Adds '{name}' ({size}) to a new track at bar {bar} (this kit isn't on a track yet)"
+                ),
+                Some(tr) if after => format!(
+                    "Adds '{name}' ({size}) to Track {} at bar {bar}, after its last clip (the marker's bar is taken)",
+                    tr + 1
+                ),
+                Some(tr) => format!("Adds '{name}' ({size}) to Track {} at bar {bar}", tr + 1),
+            };
+            AddPlan { track, at, line }
+        })
+    }
+
+    /// Add to track: place `src` (a linked copy of a clip, or new note data)
+    /// as the plan says, making the kit's track when it has none. One undo
+    /// step; selects and flashes the new clip. Returns its id.
+    pub(crate) fn dk_add_to_track(
+        &mut self,
+        slot: u8,
+        track: Option<usize>,
+        src: AddSrc,
+    ) -> Option<u32> {
+        let (name, len) = match &src {
+            AddSrc::Linked(c) => (c.d.name.clone(), c.len),
+            AddSrc::New(d) => (d.name.clone(), d.len),
+        };
+        let plan = self.dk_add_plan(slot, track, &name, len);
+        if self.with(|s| s.song.timeline.is_none()) {
+            self.status = plan.line;
+            return None;
+        }
         self.snapshot();
+        self.undo_hold += 1;
+        let tr = match plan.track {
+            Some(t) => t,
+            None => {
+                let n = self.with(|s| s.song.channels);
+                let kit_name = self.with(|s| {
+                    s.song
+                        .instruments
+                        .get(slot as usize - 1)
+                        .map_or("Drums".to_string(), |i| i.name.clone())
+                });
+                if !self.track_insert(n, &kit_name) {
+                    self.undo_hold -= 1;
+                    return None;
+                }
+                self.with(|s| crate::chanops::assign_track_instrument(&mut s.song, n, slot));
+                n
+            }
+        };
+        let at = plan.at;
         let id = self.with(|s| {
-            let t = s.song.timeline.as_deref_mut()?;
-            let src = t.clips.iter().find(|x| x.id == c.id)?.clone();
-            let id = t.new_id();
-            t.clips.push(tl::Clip {
-                id,
-                start: at,
-                ..src
-            });
+            let own = s
+                .song
+                .timeline
+                .as_deref()
+                .and_then(|t| t.tracks.get(tr))
+                .is_some_and(|x| x.instr == slot);
+            let id = match src {
+                AddSrc::Linked(c) => {
+                    let t = s.song.timeline.as_deref_mut()?;
+                    let from = t.clips.iter().find(|x| x.id == c.id)?.clone();
+                    let id = t.new_id();
+                    t.clips.push(tl::Clip {
+                        id,
+                        start: at,
+                        track: tr as _,
+                        ..from
+                    });
+                    id
+                }
+                AddSrc::New(mut d) => {
+                    let i = if own { 0 } else { slot };
+                    for n in d.notes.iter_mut() {
+                        n.instr = i;
+                    }
+                    let id = tl::new_note_clip(&mut s.song, tr, at)?;
+                    let t = s.song.timeline.as_deref_mut()?;
+                    let k = t.clips.iter().position(|c| c.id == id)?;
+                    t.clips[k].len = d.len;
+                    if let tl::ClipKind::Notes { data } = t.clips[k].kind {
+                        *t.notes[data as usize].make_mut() = d;
+                    }
+                    id
+                }
+            };
             let audio::Shared { song, engine, .. } = s;
             engine.ensure_plan(song);
             Some(id)
         });
-        if let Some(id) = id {
-            self.dk.clip = Some(id);
-            self.tlv.sel = Some(id);
-            self.tlv.sels = vec![id];
-            self.dirty = true;
-            self.status = "Placed a linked copy at the marker (Make unique splits it off)".into();
+        self.undo_hold -= 1;
+        let Some(id) = id else {
+            self.status = "Couldn't add the pattern to the track".into();
+            return None;
+        };
+        self.dirty = true;
+        self.dk.clip = Some(id);
+        self.tlv.sel = Some(id);
+        self.tlv.sels = vec![id];
+        // the timeline starts the flash on its next frame
+        self.tlv.flash = Some((id, f64::NAN));
+        self.tlv.reveal = Some((tr, at));
+        self.ch = tr;
+        let mut line = plan.line.replacen("Adds", "Added", 1);
+        if plan.track.is_none() {
+            line = line.replace(
+                "(this kit isn't on a track yet)",
+                "(made the track for this kit)",
+            );
         }
+        self.status = format!("{line}. Undo takes it back");
+        Some(id)
     }
+}
+
+/// Add to track's target (see `dk_add_plan`)
+pub(crate) struct AddPlan {
+    /// None = a new track
+    pub track: Option<usize>,
+    pub at: Tick,
+    /// "Adds 'Groove 3' (2 bars) to Track 2 at bar 5"
+    pub line: String,
+}
+
+/// what Add to track places
+pub(crate) enum AddSrc {
+    /// a linked copy of this clip
+    Linked(Cur),
+    /// new note data (a generated groove)
+    New(tl::NoteClipData),
 }
 
 // ------------------------------------------------------------ lower tabs
@@ -1335,40 +1786,38 @@ impl App {
     fn dk_lower(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP, cur: Option<&Cur>, slot: u8) {
         ui.horizontal(|ui| {
             ui.add_space(8.0);
-            for (i, t) in ["Sound", "Generate"].into_iter().enumerate() {
-                if crate::ember::tab(ui, self.dk.tab == i as u8, t).clicked() {
-                    self.dk.tab = i as u8;
+            for (i, t) in [(1u8, "Sound"), (2, "Generate")] {
+                let on = self.dk.tab == i || (i == 1 && self.dk.tab == 0);
+                if crate::ember::tab(ui, on, t).clicked() {
+                    self.dk.tab = i;
                 }
             }
         });
         ui.add_space(4.0);
-        if self.dk.tab == 1 {
-            self.dk_generate(ui, kit, cur, slot);
+        if self.dk.tab == 2 {
+            self.dk_generate(ui, kit, cur, slot, false);
         } else {
-            self.dk_sound(ui, kit);
+            self.dk_sound(ui, kit, false);
         }
     }
 
-    fn dk_sound(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP) {
+    /// the selected pad's sound; compact = wrapped rows in the side panel
+    fn dk_sound(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP, compact: bool) {
         let sel = self.dk.sel;
         let n_pads = kit.pads.len();
         let Some(pad) = kit.pads.get_mut(sel) else {
             return;
         };
-        let w = ui.available_width();
-        let (r, _) = ui.allocate_exact_size(egui::vec2(w, 196.0), egui::Sense::hover());
-        card(
-            ui,
-            r,
-            &format!("Sound · pad {} of {n_pads} · {}", sel + 1, pad.name),
-        );
-        let inner = egui::Rect::from_min_max(
-            r.min + egui::vec2(16.0, 26.0),
-            r.max - egui::vec2(16.0, 10.0),
-        );
         let mut audition = false;
-        area(ui, inner, |ui| {
-            ui.horizontal(|ui| {
+        let row = |ui: &mut egui::Ui, f: &mut dyn FnMut(&mut egui::Ui)| {
+            if compact {
+                ui.horizontal_wrapped(|ui| f(ui));
+            } else {
+                ui.horizontal(|ui| f(ui));
+            }
+        };
+        let mut body = |ui: &mut egui::Ui| {
+            row(ui, &mut |ui: &mut egui::Ui| {
                 ui.label("Name");
                 ui.add(egui::TextEdit::singleline(&mut pad.name).desired_width(110.0));
                 ui.label("Drum");
@@ -1424,7 +1873,7 @@ impl App {
                     .on_hover_text("notes away from the pad's key re-pitch it");
             });
             ui.add_space(4.0);
-            ui.horizontal(|ui| {
+            row(ui, &mut |ui: &mut egui::Ui| {
                 let defs = pad.drum.kind.macros();
                 for (i, def) in defs.iter().enumerate() {
                     let mut lock = pad.drum.locks & (1 << i) != 0;
@@ -1451,29 +1900,74 @@ impl App {
                 mix_knob(ui, &mut pad.decay, &MIX_DECAY, &format!("dc{sel}"));
                 mix_knob(ui, &mut pad.vel, &MIX_VEL, &format!("vl{sel}"));
             });
-        });
+        };
+        if compact {
+            ui.label(
+                egui::RichText::new(format!("Pad {} of {n_pads}", sel + 1))
+                    .small()
+                    .color(th().ink2),
+            );
+            body(ui);
+        } else {
+            let w = ui.available_width();
+            let (r, _) = ui.allocate_exact_size(egui::vec2(w, 196.0), egui::Sense::hover());
+            card(ui, r, &format!("Sound · pad {} of {n_pads}", sel + 1));
+            let inner = egui::Rect::from_min_max(
+                r.min + egui::vec2(16.0, 26.0),
+                r.max - egui::vec2(16.0, 10.0),
+            );
+            area(ui, inner, body);
+        }
         if audition {
             let k = kit.clone();
             self.dk_audition(&k, sel, self.ch, 1.0);
         }
     }
 
-    fn dk_generate(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP, cur: Option<&Cur>, slot: u8) {
+    fn dk_generate(
+        &mut self,
+        ui: &mut egui::Ui,
+        kit: &mut DrumKitP,
+        cur: Option<&Cur>,
+        slot: u8,
+        compact: bool,
+    ) {
         use crate::drumpat::STYLES;
-        let w = ui.available_width();
-        let (r, _) = ui.allocate_exact_size(egui::vec2(w, 210.0), egui::Sense::hover());
-        card(
-            ui,
-            r,
-            "Generate · a new groove from the pattern library, in this kit",
-        );
-        let inner = egui::Rect::from_min_max(
-            r.min + egui::vec2(16.0, 26.0),
-            r.max - egui::vec2(16.0, 10.0),
-        );
+        // what Add to track will do, under the buttons
+        let gen_name = format!("Groove {}", self.dk_patterns(slot).0.len() + 1);
+        let add_line = match &self.dk.gen.result {
+            Some((_, steps, _, _)) => {
+                self.dk_add_plan(slot, cur.map(|c| c.track), &gen_name, *steps as Tick * ROW)
+                    .line
+            }
+            None => {
+                "Regenerate makes a groove; Add to track then puts it on this kit's track".into()
+            }
+        };
         let mut act: Option<u8> = None;
-        area(ui, inner, |ui| {
-            ui.horizontal(|ui| {
+        if compact {
+            act = self.dk_gen_compact(ui, kit, &add_line, cur.is_some());
+        } else {
+            let w = ui.available_width();
+            let (r, _) = ui.allocate_exact_size(egui::vec2(w, 232.0), egui::Sense::hover());
+            card(
+                ui,
+                r,
+                "Generate · a new groove from the pattern library, in this kit",
+            );
+            ui.painter().text(
+                egui::pos2(r.right() - 16.0, r.bottom() - 12.0),
+                egui::Align2::RIGHT_BOTTOM,
+                &add_line,
+                egui::FontId::proportional(12.0),
+                th().ink,
+            );
+            let inner = egui::Rect::from_min_max(
+                r.min + egui::vec2(16.0, 26.0),
+                r.max - egui::vec2(16.0, 10.0),
+            );
+            area(ui, inner, |ui| {
+                ui.horizontal(|ui| {
                 let g = &mut self.dk.gen;
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
@@ -1550,6 +2044,18 @@ impl App {
                 }
                 ui.vertical(|ui| {
                     let has = g.result.is_some();
+                    if ui
+                        .add_enabled_ui(has, |ui| {
+                            crate::ember::button_ex(ui, "Add to track", false, true, egui::vec2(180.0, 34.0))
+                        })
+                        .inner
+                        .on_hover_text("keep it as a new pattern and place it on this kit's track, in one step (Undo takes it back)")
+                        .on_disabled_hover_text("Regenerate first")
+                        .clicked()
+                    {
+                        act = Some(3);
+                    }
+                    ui.add_space(4.0);
                     let prev = if g.previewing { "Stop preview" } else { "Preview" };
                     if ui
                         .add_enabled_ui(has, |ui| crate::ember::button(ui, prev, g.previewing))
@@ -1560,9 +2066,9 @@ impl App {
                         act = Some(0);
                     }
                     if ui
-                        .add_enabled_ui(has && cur.is_some(), |ui| crate::ember::button(ui, "Keep as pattern", false))
+                        .add_enabled_ui(has && cur.is_some(), |ui| crate::ember::button(ui, "Replace pattern", false))
                         .inner
-                        .on_hover_text("replace the current pattern's notes with it (every linked copy; Undo takes it back)")
+                        .on_hover_text("put it in the pattern being edited instead (every linked copy changes; Undo takes it back)")
                         .clicked()
                     {
                         act = Some(1);
@@ -1573,17 +2079,10 @@ impl App {
                     {
                         act = Some(2);
                     }
-                    if ui
-                        .add_enabled_ui(has, |ui| crate::ember::button(ui, "New pattern", false))
-                        .inner
-                        .on_hover_text("keep it as a new pattern clip on this kit's track")
-                        .clicked()
-                    {
-                        act = Some(3);
-                    }
                 });
             });
-        });
+            });
+        }
         let ins = |me: &Self, c: Option<&Cur>| -> u8 {
             match c {
                 Some(c) if me.dk_track(slot) == Some(c.track) => 0,
@@ -1624,49 +2123,135 @@ impl App {
                 }
             }
             Some(3) => {
-                if let Some((notes, steps, swing, src)) = self.dk.gen.result.clone() {
-                    let tr = cur
-                        .map(|c| c.track)
-                        .or_else(|| self.dk_track(slot))
-                        .unwrap_or(self.ch);
-                    self.snapshot();
-                    let tmp = Cur {
-                        id: 0,
-                        data: 0,
-                        track: tr,
-                        start: cur.map_or(0, |c| c.start),
+                if let Some((notes, steps, swing, _)) = self.dk.gen.result.clone() {
+                    let d = tl::NoteClipData {
+                        name: gen_name,
                         len: steps as Tick * ROW,
-                        d: tl::NoteClipData {
-                            name: src.to_string(),
-                            len: steps as Tick * ROW,
-                            notes: notes.clone(),
-                            chords: vec![],
-                            drum: Some(DrumMeta { swing }),
-                        },
+                        notes,
+                        chords: vec![],
+                        drum: Some(DrumMeta { swing }),
                     };
-                    self.dk_new_pattern(tr, Some(&tmp));
-                    // the copy is named "<src> copy": use the source name
-                    if let Some(id) = self.dk.clip {
-                        let i = ins(self, Some(&tmp));
-                        self.with(|s| {
-                            if let Some(t) = s.song.timeline.as_deref_mut() {
-                                if let Some(tl::ClipKind::Notes { data }) =
-                                    t.clips.iter().find(|c| c.id == id).map(|c| c.kind.clone())
-                                {
-                                    let d = t.notes[data as usize].make_mut();
-                                    d.name = src.to_string();
-                                    for n in d.notes.iter_mut() {
-                                        n.instr = i;
-                                    }
-                                }
-                            }
-                        });
-                    }
+                    let tr = cur.map(|c| c.track);
                     self.dk_gen_stop();
+                    self.dk_add_to_track(slot, tr, AddSrc::New(d));
                 }
             }
             _ => {}
         }
+    }
+
+    /// the Generate controls in the side panel: settings, a small result
+    /// view, Add to track (primary) with its target line, then the rest
+    fn dk_gen_compact(
+        &mut self,
+        ui: &mut egui::Ui,
+        kit: &DrumKitP,
+        add_line: &str,
+        has_cur: bool,
+    ) -> Option<u8> {
+        use crate::drumpat::STYLES;
+        let mut act = None;
+        let g = &mut self.dk.gen;
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("dk_style")
+                .width(118.0)
+                .selected_text(STYLES[g.style.min(STYLES.len() - 1)])
+                .show_ui(ui, |ui| {
+                    for (i, s) in STYLES.iter().enumerate() {
+                        if *s != "Fills" {
+                            ui.selectable_value(&mut g.style, i, *s);
+                        }
+                    }
+                });
+            ui.label("Fill");
+            for (f, l) in [(0u8, "0"), (1, "1"), (2, "2")] {
+                if crate::ember::led_item(ui, l, g.fill == f)
+                    .on_hover_text(format!("a fill over the last {f} beat(s)"))
+                    .clicked()
+                {
+                    g.fill = f;
+                }
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Energy");
+            let mut e = (g.energy * 100.0).round();
+            if ui
+                .add(egui::DragValue::new(&mut e).range(0.0..=100.0).suffix(" %"))
+                .on_hover_text(ENERGY.tip)
+                .changed()
+            {
+                g.energy = e / 100.0;
+            }
+            ui.label("Seed");
+            ui.add(egui::DragValue::new(&mut g.seed).range(1..=99_999));
+        });
+        // the result, small
+        let (gr, _) =
+            ui.allocate_exact_size(egui::vec2(ui.available_width(), 40.0), egui::Sense::hover());
+        crate::ember::well(ui.painter(), gr, 4);
+        if let Some((notes, steps, _, _)) = &g.result {
+            let used: Vec<usize> = (0..kit.pads.len())
+                .filter(|&p| notes.iter().any(|n| on_pad(kit, n, p)))
+                .collect();
+            let lh = ((gr.height() - 4.0) / used.len().max(1) as f32).min(8.0);
+            let sw = gr.width() / (*steps).max(1) as f32;
+            for (row, &p) in used.iter().enumerate() {
+                let col = pad_col(&kit.pads[p]);
+                for n in notes.iter().filter(|n| on_pad(kit, n, p)) {
+                    let k = dk::step_of(n.start);
+                    let cr = egui::Rect::from_min_size(
+                        egui::pos2(
+                            gr.left() + k as f32 * sw + 0.5,
+                            gr.top() + 2.0 + row as f32 * lh,
+                        ),
+                        egui::vec2((sw - 1.0).max(1.0), (lh - 1.0).max(1.0)),
+                    );
+                    ui.painter().rect_filled(cr, 1.0, col);
+                }
+            }
+        }
+        let has = g.result.is_some();
+        let previewing = g.previewing;
+        ui.add_space(2.0);
+        ui.horizontal(|ui| {
+            let add = ui
+                .add_enabled_ui(has, |ui| {
+                    crate::ember::button_ex(ui, "Add to track", false, true, egui::vec2(120.0, 28.0))
+                })
+                .inner
+                .on_hover_text("keep it as a new pattern and place it on this kit's track, in one step (Undo takes it back)")
+                .on_disabled_hover_text("Regenerate first");
+            self.dk.ctl.push(("gen_add", add.rect));
+            if add.clicked() {
+                act = Some(3);
+            }
+            let p = ui
+                .add_enabled_ui(has, |ui| {
+                    crate::ember::button(ui, if previewing { "Stop" } else { "Preview" }, previewing)
+                })
+                .inner
+                .on_hover_text("hear it in this kit, looping at the song tempo (nothing changes yet)");
+            if p.clicked() {
+                act = Some(0);
+            }
+            let rg = crate::ember::button(ui, "Regenerate", false)
+                .on_hover_text("a new groove with the next seed");
+            self.dk.ctl.push(("regen", rg.rect));
+            if rg.clicked() {
+                act = Some(2);
+            }
+        });
+        ui.add(egui::Label::new(egui::RichText::new(add_line).size(11.5).color(th().ink)).wrap());
+        if ui
+            .add_enabled_ui(has && has_cur, |ui| crate::ember::button(ui, "Replace pattern", false))
+            .inner
+            .on_hover_text("put it in the pattern being edited instead (every linked copy changes; Undo takes it back)")
+            .clicked()
+        {
+            act = Some(1);
+        }
+        act
     }
 
     fn dk_gen_preview(&mut self, kit: &DrumKitP) {
@@ -1697,7 +2282,7 @@ impl App {
         self.with(|s| drop(s.engine.set_pattern_preview(Some(Box::new(pp)))));
         self.dk.gen.previewing = true;
         self.status =
-            "Preview: the generated groove in this kit (Keep as pattern or New pattern keeps it)"
+            "Preview: the generated groove in this kit (Add to track puts it on the timeline)"
                 .into();
     }
 
