@@ -106,7 +106,7 @@ pub(crate) fn mark_colour(key: Key, m: &ChordMark) -> Color32 {
         (160, 84, 160),
     ];
     const DEG: [usize; 12] = [0, 1, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6];
-    let (r, g, b) = PAL[DEG[((m.root + 12 - key.root) % 12) as usize]];
+    let (r, g, b) = PAL[DEG[((m.root % 12 + 12 - key.root % 12) % 12) as usize]];
     Color32::from_rgb(r, g, b)
 }
 
@@ -612,7 +612,7 @@ impl App {
                 if *steps != 0 {
                     // up / down a scale step: the diatonic chord one degree over
                     let st = key.scale.steps();
-                    let off = (m.root + 12 - key.root) % 12;
+                    let off = (m.root % 12 + 12 - key.root % 12) % 12;
                     let deg = st.iter().position(|&s| s == off).unwrap_or(0) as i32;
                     let nd = (deg + steps).rem_euclid(st.len() as i32) as usize;
                     let kind = if m.q.iv().len() > 3 {
@@ -1027,6 +1027,13 @@ impl App {
         let mut cancel = false;
         let mut preview = false;
         let res = cg::generate(&self.cl.gen.opts);
+        // the style `res` was made in: a style button clicked below changes
+        // `opts.style` this frame, and `res.prog` indexes the old style's list
+        let res_style = self.cl.gen.opts.style.min(cg::STYLES.len() - 1);
+        let res_len = cg::STYLES[res_style]
+            .progs
+            .get(res.prog)
+            .map_or(0, |p| cg::parse_prog(p).len());
         let track = match t {
             Target::Notes { clip: Some(id), .. } => self
                 .tlv
@@ -1205,10 +1212,7 @@ impl App {
                     .iter()
                     .filter_map(|m| {
                         let n = m.numeral(key);
-                        (seen.len() < 16
-                            && !(seen.len()
-                                >= cg::parse_prog(cg::STYLES[g.opts.style].progs[res.prog]).len()))
-                        .then(|| {
+                        (seen.len() < 16 && seen.len() < res_len).then(|| {
                             seen.push(n.clone());
                             n
                         })

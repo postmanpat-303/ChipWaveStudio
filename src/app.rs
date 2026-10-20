@@ -110,6 +110,8 @@ mod undo;
 mod updates;
 mod viewbar;
 mod voiceview;
+#[cfg(test)]
+mod workflow_tests;
 
 /// cursor sub-columns: 0 note, 1-2 instr, 3-4 vol, 5-8 effect
 const SUBCOLS: usize = 9;

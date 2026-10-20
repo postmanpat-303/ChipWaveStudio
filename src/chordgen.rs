@@ -170,11 +170,15 @@ impl ChordMark {
     }
     /// roman numeral in `key` ("bVII", "ii7", "i°")
     pub fn numeral(&self, key: Key) -> String {
-        numeral((self.root + 12 - key.root) % 12, self.q)
+        numeral((self.root % 12 + 12 - key.root % 12) % 12, self.q)
     }
     /// the chord's pitch classes (root first)
     pub fn pcs(&self) -> Vec<u8> {
-        self.q.iv().iter().map(|i| (self.root + i) % 12).collect()
+        self.q
+            .iv()
+            .iter()
+            .map(|i| (self.root % 12 + i) % 12)
+            .collect()
     }
 }
 
@@ -775,8 +779,8 @@ pub fn suggestions(key: Key, m: &ChordMark) -> Vec<(&'static str, ChordMark)> {
         bass: None,
         ..m.clone()
     };
-    let r = m.root;
-    let t = key.root;
+    let r = m.root % 12;
+    let t = key.root % 12;
     let mut v = vec![];
     if m.q.minor() {
         v.push(("relative major", mk(r + 3, Quality::Maj)));
