@@ -459,16 +459,22 @@ impl App {
         let slot = match track_kit {
             Some(s) => Some(s),
             None => self.with(|s| {
-                // the same kit already in the song is shared
-                if let Some(k) = s
-                    .song
-                    .instruments
-                    .iter()
-                    .position(|x| x.name == p.kit && is_kit(x))
-                {
-                    return Some(k as u8 + 1);
-                }
-                let inst = dp::kit_instrument(p.kit)?;
+                // a new track gets its own Drum Kit (an existing track's
+                // kit is shared only when dropping onto that track)
+                let inst = if new {
+                    dp::drumkit_instrument(p.kit)?
+                } else {
+                    // an old Kit of that name already in the song is shared
+                    if let Some(k) = s
+                        .song
+                        .instruments
+                        .iter()
+                        .position(|x| x.name == p.kit && is_kit(x))
+                    {
+                        return Some(k as u8 + 1);
+                    }
+                    dp::drumkit_instrument(p.kit)?
+                };
                 s.song.add_instrument(inst).map(|k| k as u8 + 1)
             }),
         };
@@ -1347,6 +1353,7 @@ impl App {
     }
 }
 
+/// a Kit or a Drum Kit (the note picks the drum)
 fn is_kit(i: &Instrument) -> bool {
-    matches!(&i.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Kit(_)))
+    matches!(&i.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Kit(_) | crate::gen::GenEngine::Drums(_)))
 }

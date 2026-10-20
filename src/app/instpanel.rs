@@ -1002,7 +1002,7 @@ fn custom_size(c: Custom, card_h: f32) -> (f32, f32) {
     match c {
         Custom::Vowels => (270.0, 84.0),
         Custom::Words => (270.0, 84.0),
-        Custom::KitPiece => (300.0, 64.0),
+        Custom::KitPiece => (300.0, 92.0),
         Custom::Dice => (300.0, 96.0),
         Custom::ChipCategories => (290.0, 64.0),
         Custom::PluginStatus => (290.0, 96.0),
@@ -1531,6 +1531,25 @@ impl App {
             }
             (Custom::Words, InstrumentKind::Voice(v)) => {
                 cx.changed |= super::voiceview::words_ui(ui, v);
+            }
+            (Custom::KitPiece, InstrumentKind::Gen(g)) => {
+                super::genview::kit_piece_ui(ui, &mut self.gen_ui);
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    if ui
+                        .button("Convert to Drum Kit")
+                        .on_hover_text(
+                            "the same sound as a Drum Kit: one pad per piece, the same notes \
+                             and automation lanes, plus the pad grid and step sequencer (Undo \
+                             takes it back)",
+                        )
+                        .clicked()
+                    {
+                        if let Some(n) = crate::drumkit::patch_from_kit(g, true) {
+                            cx.acts.push(Act::Kind(Box::new(InstrumentKind::Gen(n))));
+                        }
+                    }
+                });
             }
             (Custom::KitPiece, _) => super::genview::kit_piece_ui(ui, &mut self.gen_ui),
             (Custom::Dice, InstrumentKind::Gen(g)) => {

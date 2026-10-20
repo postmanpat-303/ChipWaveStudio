@@ -759,6 +759,19 @@ impl App {
 
     /// "New instrument > Generator" menu
     pub(super) fn new_generator_menu(&mut self, ui: &mut egui::Ui) {
+        ui.menu_button("Drum Kit", |ui| {
+            ui.label(
+                egui::RichText::new("16 pads on their own keys, a step sequencer and Generate")
+                    .small()
+                    .color(th().ink2),
+            );
+            for (name, tip, p) in crate::drumkit::presets() {
+                if ui.button(&name).on_hover_text(tip).clicked() {
+                    self.add_instrument(&name, InstrumentKind::Gen(p));
+                    ui.close();
+                }
+            }
+        });
         ui.menu_button("Generator (drums)", |ui| {
             ui.label(
                 egui::RichText::new("drum synth: sounds from scratch, 8 knobs + Dice")

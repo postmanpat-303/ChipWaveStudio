@@ -341,8 +341,23 @@ pub fn kit_patch(name: &str) -> Option<GenPatch> {
 }
 
 /// the kit as a song instrument (named after the kit)
+#[cfg(test)]
 pub fn kit_instrument(name: &str) -> Option<Instrument> {
     let mut g = kit_patch(name)?;
+    g.base.name = name.to_string();
+    Some(Instrument {
+        name: name.to_string(),
+        volume: 0.85,
+        transpose: 0,
+        fx: vec![],
+        kind: InstrumentKind::Gen(g),
+    })
+}
+
+/// the kit as a Drum Kit instrument (16 pads, `drumkit::from_library_kit`):
+/// what a pattern dropped on a new track gets
+pub fn drumkit_instrument(name: &str) -> Option<Instrument> {
+    let mut g = crate::drumkit::preset(name)?;
     g.base.name = name.to_string();
     Some(Instrument {
         name: name.to_string(),

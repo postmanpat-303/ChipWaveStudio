@@ -222,6 +222,33 @@ impl DrumKitP {
     }
 }
 
+/// the Drum Kit of an instrument (None = any other instrument)
+pub fn kit_of(inst: &crate::model::Instrument) -> Option<&DrumKitP> {
+    match &inst.kind {
+        crate::model::InstrumentKind::Gen(GenPatch {
+            engine: GenEngine::Drums(k),
+            ..
+        }) => Some(k),
+        _ => None,
+    }
+}
+
+/// A Drum Kit note starts at `freq` with velocity `vel`: (its gain, from
+/// the pad's velocity depth; the pad's choke group, 0 = none). The caller
+/// releases its voices of the same kit whose `choke_of` is that group.
+/// Allocation-free.
+pub fn hit(k: &DrumKitP, freq: f32, vel: f32) -> (f32, u8) {
+    match k.pad_for_freq(freq) {
+        Some((p, _)) => (k.vel_gain(p, vel), k.pads[p].choke),
+        None => (vel, 0),
+    }
+}
+
+/// the choke group of the pad a voice at `freq` plays (0 = none)
+pub fn choke_of(k: &DrumKitP, freq: f32) -> u8 {
+    k.pad_for_freq(freq).map_or(0, |(p, _)| k.pads[p].choke)
+}
+
 /// Convert a Kit: one pad per piece, the Kit's note map, no choke. Renders
 /// bit-identically to the Kit and keeps its automation lanes (pad p macro m =
 /// knob p*8+m, as piece p).
