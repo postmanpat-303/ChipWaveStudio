@@ -1401,7 +1401,8 @@ fn instrument_glide_legato_and_accent_are_editable_and_undoable() {
     assert!(patch(&mut h).legato, "legato on");
     // accent threshold: drag the hex value up from 00
     let r = exact(&h, "at vol ≥ 00");
-    drag(&mut h, r.center(), r.center() + egui::vec2(60.0, 0.0));
+    let s = egui::pos2(r.left() + 10.0, r.center().y);
+    drag(&mut h, s, s + egui::vec2(60.0, 0.0));
     assert!(patch(&mut h).accent_vel > 0.0);
     ctrl_z(&mut h);
     assert_eq!(patch(&mut h).accent_vel, 0.0);
