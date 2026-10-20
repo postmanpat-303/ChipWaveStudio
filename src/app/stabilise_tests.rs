@@ -34,7 +34,10 @@ fn opened_demo(i: usize) -> Harness<'static, App> {
     h.state_mut().view = View::Timeline;
     h.state_mut().pr.focus = false;
     frames(&mut h, 4);
-    assert!(song(&h, |s| s.timeline.is_some()), "demo opens in timeline mode");
+    assert!(
+        song(&h, |s| s.timeline.is_some()),
+        "demo opens in timeline mode"
+    );
     assert!(!h.state().dirty, "opening is not an edit");
     h
 }
@@ -54,7 +57,11 @@ fn opening_another_song_forgets_the_old_selection() {
     // so Delete right after opening removes nothing
     let n = clips(&h);
     key(&mut h, Key::Delete, egui::Modifiers::NONE);
-    assert_eq!(clips(&h), n, "Delete removed clips of the newly opened song");
+    assert_eq!(
+        clips(&h),
+        n,
+        "Delete removed clips of the newly opened song"
+    );
     assert!(!h.state().dirty);
 }
 
@@ -90,13 +97,25 @@ fn cut_copy_paste_outside_the_tracker_leave_the_blocks_alone() {
     for v in [View::Timeline, View::Mixer, View::Fx] {
         h.state_mut().view = v;
         frames(&mut h, 2);
-        for e in [egui::Event::Cut, egui::Event::Copy, egui::Event::Paste("C-4 01 .. 0000".into())] {
+        for e in [
+            egui::Event::Cut,
+            egui::Event::Copy,
+            egui::Event::Paste("C-4 01 .. 0000".into()),
+        ] {
             let d = format!("{e:?}");
             h.input_mut().events.push(e);
             frames(&mut h, 2);
-            eprintln!("{v:?} {d}: {} '{}'", song(&h, |s| s.channels), h.state().status);
+            eprintln!(
+                "{v:?} {d}: {} '{}'",
+                song(&h, |s| s.channels),
+                h.state().status
+            );
         }
-        assert_eq!(song(&h, cells), before, "{v:?}: a hidden Tracker block was edited");
+        assert_eq!(
+            song(&h, cells),
+            before,
+            "{v:?}: a hidden Tracker block was edited"
+        );
         assert_eq!(h.state().status, super::keys::CLIPBOARD_ELSEWHERE);
     }
     assert!(!h.state().dirty);
@@ -119,16 +138,28 @@ fn clipboard_keys_on_a_song_with_no_tracks_do_not_crash() {
     h.state_mut().edit = true;
     let ctx = h.ctx.clone();
     h.state_mut().copy(false, &ctx);
-    assert!(h.state().status.starts_with("Nothing to copy"), "{}", h.state().status);
+    assert!(
+        h.state().status.starts_with("Nothing to copy"),
+        "{}",
+        h.state().status
+    );
     h.state_mut().paste(Some("C-4 01 .. 0000".into()));
-    assert!(h.state().status.starts_with("Nothing to paste"), "{}", h.state().status);
+    assert!(
+        h.state().status.starts_with("Nothing to paste"),
+        "{}",
+        h.state().status
+    );
     // and through the keys in every view (opening the Tracker view on an
     // empty song gives it a track first)
     for v in [View::Timeline, View::Pattern, View::Arranger] {
         h.state_mut().view = v;
         h.state_mut().edit = true;
         frames(&mut h, 2);
-        for e in [egui::Event::Copy, egui::Event::Cut, egui::Event::Paste("C-4 01 .. 0000".into())] {
+        for e in [
+            egui::Event::Copy,
+            egui::Event::Cut,
+            egui::Event::Paste("C-4 01 .. 0000".into()),
+        ] {
             h.input_mut().events.push(e);
             frames(&mut h, 2);
         }
@@ -144,7 +175,11 @@ fn after_opening_a_song_the_timeline_has_the_keyboard() {
     assert!(h.state().is_default_layout(), "Timeline + piano roll");
     assert!(!h.state().pr_active(), "the roll waits for a click");
     key(&mut h, Key::A, egui::Modifiers::COMMAND);
-    assert_eq!(h.state().tlv.sels.len(), clips(&h), "Ctrl+A selects every clip");
+    assert_eq!(
+        h.state().tlv.sels.len(),
+        clips(&h),
+        "Ctrl+A selects every clip"
+    );
     assert!(h.state().pr.sel.is_empty(), "and no roll notes");
     // Ctrl+6 and File > New keep it on the Timeline too
     key(&mut h, Key::Num6, egui::Modifiers::COMMAND);
@@ -168,7 +203,11 @@ fn selecting_and_refused_edits_do_not_mark_the_song_unsaved() {
     // Split with nothing under the mouse or the play marker
     h.state_mut().tlv.cue = 10_000 * tl::PPQ;
     key(&mut h, Key::S, egui::Modifiers::NONE);
-    assert!(h.state().status.contains("Nothing to split"), "{}", h.state().status);
+    assert!(
+        h.state().status.contains("Nothing to split"),
+        "{}",
+        h.state().status
+    );
     // Ctrl+L / Ctrl+J with nothing selected
     key(&mut h, Key::L, egui::Modifiers::COMMAND);
     key(&mut h, Key::J, egui::Modifiers::COMMAND);
@@ -204,13 +243,23 @@ fn a_drag_that_snaps_back_is_not_an_edit_and_a_real_move_is() {
     };
     let from = h.state().tlv.clip_rect(id).unwrap().center();
     // 12 px at 40 px a beat snaps back to the same bar
-    super::timeline_m2_tests::drag_m(&mut h, from, from + egui::vec2(12.0, 0.0), egui::Modifiers::NONE);
+    super::timeline_m2_tests::drag_m(
+        &mut h,
+        from,
+        from + egui::vec2(12.0, 0.0),
+        egui::Modifiers::NONE,
+    );
     frames(&mut h, 3);
     assert!(!h.state().dirty, "a drag that moved nothing");
     assert!(!h.state().hist.can_undo());
     // a bar further is an edit
     let from = h.state().tlv.clip_rect(id).unwrap().center();
-    super::timeline_m2_tests::drag_m(&mut h, from, from + egui::vec2(160.0, 0.0), egui::Modifiers::NONE);
+    super::timeline_m2_tests::drag_m(
+        &mut h,
+        from,
+        from + egui::vec2(160.0, 0.0),
+        egui::Modifiers::NONE,
+    );
     frames(&mut h, 3);
     assert!(h.state().dirty, "moved a bar: unsaved");
     assert!(h.state().hist.can_undo());
@@ -247,7 +296,8 @@ fn track_lanes_stay_on_their_track_no_unpin_that_springs_back() {
     use super::timeline::autolanes::AutoOp;
     use crate::automation::Target;
     let mut h = opened_demo(0);
-    h.state_mut().auto_op(AutoOp::AddLane(1, Target::ChanVolume(1)));
+    h.state_mut()
+        .auto_op(AutoOp::AddLane(1, Target::ChanVolume(1)));
     frames(&mut h, 3);
     let tgt = Target::ChanVolume(1).id();
     let on_track = |h: &Harness<'static, App>| {
@@ -356,11 +406,23 @@ fn undo_does_not_move_the_piano_roll_selection_onto_other_notes() {
     frames(&mut h, 2);
     h.state_mut().pr.sel = vec![1];
     key(&mut h, Key::Z, egui::Modifiers::COMMAND);
-    assert_eq!(song(&h, |s| s.timeline.as_ref().unwrap().notes[0].notes.len()), 4);
-    assert!(h.state().pr.sel.is_empty(), "the selection would now be key 51");
+    assert_eq!(
+        song(&h, |s| s.timeline.as_ref().unwrap().notes[0].notes.len()),
+        4
+    );
+    assert!(
+        h.state().pr.sel.is_empty(),
+        "the selection would now be key 51"
+    );
     // so an arrow key after undo moves nothing
     let keys = |h: &Harness<'static, App>| {
-        song(h, |s| s.timeline.as_ref().unwrap().notes[0].notes.iter().map(|n| n.key).collect::<Vec<_>>())
+        song(h, |s| {
+            s.timeline.as_ref().unwrap().notes[0]
+                .notes
+                .iter()
+                .map(|n| n.key)
+                .collect::<Vec<_>>()
+        })
     };
     let k0 = keys(&h);
     key(&mut h, Key::ArrowUp, egui::Modifiers::NONE);
@@ -383,8 +445,15 @@ fn tracker_mode_delete_or_mute_with_nothing_selected_does_not_ask_to_switch() {
         (Key::J, egui::Modifiers::COMMAND),
     ] {
         key(&mut h, k, m);
-        assert!(h.state().tlv.ask_switch.is_none(), "{k:?} asked to switch modes");
-        assert!(h.state().status.starts_with("Select a clip first"), "{}", h.state().status);
+        assert!(
+            h.state().tlv.ask_switch.is_none(),
+            "{k:?} asked to switch modes"
+        );
+        assert!(
+            h.state().status.starts_with("Select a clip first"),
+            "{}",
+            h.state().status
+        );
     }
     assert!(song(&h, |s| s.timeline.is_none()) && !h.state().dirty);
 }

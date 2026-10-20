@@ -867,5 +867,4 @@ mod tests {
         h.step(&mut s, true, later(t0(), 50));
         assert!(!h.is_saved(&s), "nothing on disk");
     }
-
 }

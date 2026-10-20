@@ -216,7 +216,6 @@ pub(crate) struct PianoUi {
     pub(crate) step_used: bool,
 }
 
-
 impl PianoUi {
     /// the song changed under the roll (undo / redo, another song): note
     /// ids are indices or rows, so a kept selection would point at other

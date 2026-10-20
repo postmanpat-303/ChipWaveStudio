@@ -73,8 +73,6 @@ mod newsong_tests;
 mod noterec;
 #[cfg(test)]
 mod opentl_tests;
-#[cfg(test)]
-mod stabilise_tests;
 mod params;
 mod pattern;
 #[cfg(test)]
@@ -91,6 +89,8 @@ pub mod shot;
 pub mod showcase;
 #[cfg(test)]
 mod showcase_tests;
+#[cfg(test)]
+mod stabilise_tests;
 mod timeline;
 #[cfg(test)]
 mod timeline_m2_tests;

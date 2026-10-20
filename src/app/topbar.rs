@@ -1135,9 +1135,7 @@ impl App {
                                         ui.horizontal(|ui| {
                                             if ui
                                                 .button("Delete it")
-                                                .on_hover_text(
-                                                    "delete this recovery copy for good",
-                                                )
+                                                .on_hover_text("delete this recovery copy for good")
                                                 .clicked()
                                             {
                                                 act = Some((i, false));
