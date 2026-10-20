@@ -18,6 +18,8 @@ pub(crate) struct DkUi {
     pub sel: usize,
     /// sequencer page (16 steps each)
     pub page: usize,
+    /// a lane for every pad (else the used ones)
+    pub all_lanes: bool,
     /// lower tab: 0 Sound, 1 Generate
     pub tab: u8,
     /// the clip the sequencer edits
@@ -469,7 +471,7 @@ impl App {
                         crate::gen::roll(&mut p.drum, seed.wrapping_add(i as u32 * 0x9E37_79B9));
                     }
                 }
-                ui.menu_button("Kits ▾", |ui| {
+                ui.menu_button("Kits…", |ui| {
                     ui.label(
                         egui::RichText::new(
                             "load a kit's sounds into the pads with the same keys (patterns stay)",
@@ -903,7 +905,22 @@ impl App {
         self.dk.page = self.dk.page.min(pages - 1);
         let swing = d.drum.as_ref().map_or(0.0, |m| m.swing);
         let w = ui.available_width();
-        let lanes = kit.pads.len();
+        // the pads this pattern uses and the selected one (at least 8), or all
+        let mut lane_ix: Vec<usize> = (0..kit.pads.len())
+            .filter(|&p| {
+                self.dk.all_lanes || p == self.dk.sel || d.notes.iter().any(|n| on_pad(kit, n, p))
+            })
+            .collect();
+        for p in 0..kit.pads.len() {
+            if lane_ix.len() >= 8 {
+                break;
+            }
+            if !lane_ix.contains(&p) {
+                lane_ix.push(p);
+            }
+        }
+        lane_ix.sort_unstable();
+        let lanes = lane_ix.len();
         let lh = 22.0;
         let top = 62.0;
         let vel_h = 46.0;
@@ -928,11 +945,19 @@ impl App {
         let mut tool: Option<u8> = None;
         area(ui, row, |ui| {
             ui.horizontal_centered(|ui| {
-                if crate::ember::button(ui, if looping { "■ Stop" } else { "▶ Play loop" }, looping)
+                if crate::ember::button(ui, if looping { "Stop" } else { "Play loop" }, looping)
                     .on_hover_text("loop the song over this pattern's clip and play it (the timeline's loop moves here)")
                     .clicked()
                 {
                     tool = Some(if looping { 1 } else { 0 });
+                }
+                ui.add_space(8.0);
+                let all = self.dk.all_lanes;
+                if crate::ember::led_item(ui, "All pads", all)
+                    .on_hover_text("show a lane for every pad (off: the pads this pattern uses)")
+                    .clicked()
+                {
+                    self.dk.all_lanes = !all;
                 }
                 ui.add_space(8.0);
                 if pages > 1 {
@@ -945,13 +970,13 @@ impl App {
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if crate::ember::button(ui, "▶", false)
+                    if crate::ember::button(ui, "Shift >", false)
                         .on_hover_text("shift the selected lane one step later (wraps)")
                         .clicked()
                     {
                         tool = Some(5);
                     }
-                    if crate::ember::button(ui, "◀", false)
+                    if crate::ember::button(ui, "< Shift", false)
                         .on_hover_text("shift the selected lane one step earlier (wraps)")
                         .clicked()
                     {
@@ -1007,8 +1032,9 @@ impl App {
         let mut toggles: Vec<(usize, usize, bool)> = vec![];
         let ptr = ui.input(|i| i.pointer.interact_pos());
         let down = ui.input(|i| i.pointer.primary_down());
-        for (p, pad) in kit.pads.iter_mut().enumerate() {
-            let y = gy + p as f32 * lh;
+        for (row, &p) in lane_ix.iter().enumerate() {
+            let pad = &mut kit.pads[p];
+            let y = gy + row as f32 * lh;
             let lane = egui::Rect::from_min_size(
                 egui::pos2(r.left() + 16.0, y),
                 egui::vec2(names_w, lh - 2.0),
@@ -1085,8 +1111,8 @@ impl App {
                 }
             }
         }
-        for p in 0..lanes {
-            let y = gy + p as f32 * lh;
+        for (row, &p) in lane_ix.iter().enumerate() {
+            let y = gy + row as f32 * lh;
             let col = pad_col(&kit.pads[p]);
             for s in 0..16 {
                 let k = first + s;
@@ -1514,7 +1540,7 @@ impl App {
                         ui.painter().text(
                             gr.left_bottom() + egui::vec2(6.0, -6.0),
                             egui::Align2::LEFT_BOTTOM,
-                            format!("from “{src}” · {steps} steps · {} hits", notes.len()),
+                            format!("from \"{src}\" · {steps} steps · {} hits", notes.len()),
                             egui::FontId::proportional(10.5),
                             th().ink2,
                         );
@@ -1522,7 +1548,7 @@ impl App {
                 }
                 ui.vertical(|ui| {
                     let has = g.result.is_some();
-                    let prev = if g.previewing { "■ Stop preview" } else { "▶ Preview" };
+                    let prev = if g.previewing { "Stop preview" } else { "Preview" };
                     if ui
                         .add_enabled_ui(has, |ui| crate::ember::button(ui, prev, g.previewing))
                         .inner
@@ -1532,7 +1558,7 @@ impl App {
                         act = Some(0);
                     }
                     if ui
-                        .add_enabled_ui(has && cur.is_some(), |ui| crate::ember::button(ui, "Keep ▸ pattern", false))
+                        .add_enabled_ui(has && cur.is_some(), |ui| crate::ember::button(ui, "Keep as pattern", false))
                         .inner
                         .on_hover_text("replace the current pattern's notes with it (every linked copy; Undo takes it back)")
                         .clicked()
@@ -1669,7 +1695,7 @@ impl App {
         self.with(|s| drop(s.engine.set_pattern_preview(Some(Box::new(pp)))));
         self.dk.gen.previewing = true;
         self.status =
-            "Preview: the generated groove in this kit (Keep ▸ pattern or New pattern keeps it)"
+            "Preview: the generated groove in this kit (Keep as pattern or New pattern keeps it)"
                 .into();
     }
 
@@ -1679,3 +1705,7 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "drumkitview_tests.rs"]
+mod tests;

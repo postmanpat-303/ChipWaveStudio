@@ -421,6 +421,22 @@ impl App {
                 self.view = View::Timeline;
                 self.tlv.ask_switch = Some(None);
             }
+            // the Drum Kit editor: a library pattern dropped on a new track
+            // (CHIPWAVE_SHOT_PAT=<name>, default "Full-on Drive"); the
+            // generator's result when CHIPWAVE_SHOT_DK=generate
+            "timeline-drumkit" => {
+                self.enter_timeline();
+                let name = std::env::var("CHIPWAVE_SHOT_PAT").unwrap_or("Full-on Drive".into());
+                if let Some(i) = crate::drumpat::PATTERNS.iter().position(|p| p.name == name) {
+                    self.pat_place_now(i, u8::MAX, 0);
+                }
+                self.dk.inst = (self.instr as usize).saturating_sub(1);
+                self.dk.sel = 3;
+                if std::env::var("CHIPWAVE_SHOT_DK").as_deref() == Ok("generate") {
+                    self.dk.tab = 1;
+                    self.dk.gen.result = Some(crate::drumkit::generate(1, 7, 0.7, 1, 0));
+                }
+            }
             "timeline-new" => {
                 self.new_song();
                 self.dirty = false;
