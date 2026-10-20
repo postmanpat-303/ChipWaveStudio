@@ -365,3 +365,25 @@ fn undo_does_not_move_the_piano_roll_selection_onto_other_notes() {
     key(&mut h, Key::ArrowUp, egui::Modifiers::NONE);
     assert_eq!(keys(&h), k0);
 }
+
+#[test]
+fn tracker_mode_delete_or_mute_with_nothing_selected_does_not_ask_to_switch() {
+    let mut h = harness_with(fileio::demo_song());
+    h.state_mut().extra.open_in_timeline = false;
+    h.state_mut().load_demo(0);
+    h.state_mut().view = View::Timeline;
+    h.state_mut().pr.focus = false;
+    frames(&mut h, 4);
+    assert!(song(&h, |s| s.timeline.is_none()), "tracker mode");
+    for (k, m) in [
+        (Key::Delete, egui::Modifiers::NONE),
+        (Key::M, egui::Modifiers::NONE),
+        (Key::D, egui::Modifiers::COMMAND),
+        (Key::J, egui::Modifiers::COMMAND),
+    ] {
+        key(&mut h, k, m);
+        assert!(h.state().tlv.ask_switch.is_none(), "{k:?} asked to switch modes");
+        assert!(h.state().status.starts_with("Select a clip first"), "{}", h.state().status);
+    }
+    assert!(song(&h, |s| s.timeline.is_none()) && !h.state().dirty);
+}

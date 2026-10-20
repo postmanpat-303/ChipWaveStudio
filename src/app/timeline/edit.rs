@@ -137,15 +137,8 @@ impl App {
     /// Run a timeline edit. In tracker mode it asks to switch first (the
     /// edit runs after the switch).
     pub(crate) fn tl_apply(&mut self, op: TlOp) {
-        let mode = self.with(|s| s.song.timeline.is_some());
-        if !mode {
-            self.tlv.ask_switch = Some(Some(op));
-            return;
-        }
-        if let TlOp::DrumPattern { pat, track, at } = op {
-            self.pat_place_now(pat as usize, track, at);
-            return;
-        }
+        // an edit of the selection with nothing selected says so, in either
+        // mode (in tracker mode it used to ask to switch modes first)
         let sels = self.tlv.sels.clone();
         let needs_sel = matches!(
             op,
@@ -159,6 +152,15 @@ impl App {
         if needs_sel && sels.is_empty() {
             self.status =
                 "Select a clip first (click it; Ctrl-click or drag a box for more)".into();
+            return;
+        }
+        let mode = self.with(|s| s.song.timeline.is_some());
+        if !mode {
+            self.tlv.ask_switch = Some(Some(op));
+            return;
+        }
+        if let TlOp::DrumPattern { pat, track, at } = op {
+            self.pat_place_now(pat as usize, track, at);
             return;
         }
         let hover = self.tlv.hover_at;

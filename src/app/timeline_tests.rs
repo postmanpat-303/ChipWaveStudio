@@ -191,7 +191,14 @@ fn plain_keys_do_not_type_notes_and_zoom_keys_work() {
         key(&mut h, k, egui::Modifiers::NONE);
     }
     assert_eq!(h.state().with(|s| s.song.patterns.clone()), before);
-    // Delete is a clip edit: in tracker mode it asks to switch; Esc says no
+    // Delete with nothing selected only says so (stabilise)
+    key(&mut h, Key::Delete, egui::Modifiers::NONE);
+    assert!(h.state().tlv.ask_switch.is_none());
+    // on a selected clip it is a clip edit: in tracker mode it asks to
+    // switch; Esc says no
+    let id = h.state().tlv.cache.as_ref().unwrap().tl.clips[0].id;
+    h.state_mut().tlv.sel = Some(id);
+    h.state_mut().tlv.sels = vec![id];
     key(&mut h, Key::Delete, egui::Modifiers::NONE);
     assert!(h.state().tlv.ask_switch.is_some());
     key(&mut h, Key::Escape, egui::Modifiers::NONE);
