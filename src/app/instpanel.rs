@@ -593,6 +593,47 @@ impl App {
         if self.ip.focus_search || !self.ip.query.is_empty() {
             self.ip.advanced = true;
         }
+        let drum_kit = crate::drumkit::kit_of(&inst).is_some();
+        if !self.ip.advanced && drum_kit {
+            // a Drum Kit's simple view is its editor (pads, steps, sound)
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                if ui
+                    .small_button("<")
+                    .on_hover_text("previous instrument")
+                    .clicked()
+                {
+                    cx.acts
+                        .push(Act::Select(if idx == 0 { n as u8 } else { idx as u8 }));
+                }
+                if ui
+                    .small_button(">")
+                    .on_hover_text("next instrument")
+                    .clicked()
+                {
+                    cx.acts.push(Act::Select(((idx + 1) % n) as u8 + 1));
+                }
+                ui.label(
+                    egui::RichText::new(format!("{:02X} {}", idx + 1, inst.name))
+                        .strong()
+                        .size(15.0),
+                );
+                tag_pill(ui, tag);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add_space(6.0);
+                    if ui
+                        .button("Advanced ›")
+                        .on_hover_text("every parameter, FX and modulation of this kit")
+                        .clicked()
+                    {
+                        self.ip.advanced = true;
+                    }
+                });
+            });
+            self.drumkit_view(ui, idx);
+            self.finish_edit(idx, inst, &orig, &orig_modm, cx);
+            return;
+        }
         if !self.ip.advanced {
             self.simple_card(ui, &layout, &mut inst, &mut cx, n);
             self.finish_edit(idx, inst, &orig, &orig_modm, cx);
@@ -724,6 +765,8 @@ impl App {
         let cards: Vec<&params::Card> = layout.cards.iter().filter(|c| c.tab == tab).collect();
         if tab == Tab::Grid {
             self.grid_canvas(ui, &layout, &mut inst, &mut cx);
+        } else if tab == Tab::Main && drum_kit {
+            self.drumkit_view(ui, idx);
         } else {
             egui::ScrollArea::horizontal()
                 .id_salt(("inst_cards", idx, tab))
