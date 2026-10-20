@@ -601,7 +601,6 @@ impl App {
                     render(self, 6);
                 }
                 self.set_lower(3);
-                self.pr.fit = true;
             }
             "record-typing" => {
                 // musical typing on, the piano roll open on a note clip,

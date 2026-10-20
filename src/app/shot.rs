@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 61] = [
+pub const VIEWS: [&str; 64] = [
     "pattern",
     "advedit",
     "advedit-headers",

@@ -84,7 +84,7 @@ impl Engine {
         let m = &mut self.metro;
         for f in 0..n {
             let el = m.count_all - m.count_left;
-            if el % m.count_beat == 0 {
+            if el.is_multiple_of(m.count_beat) {
                 m.click(sr, el == 0);
             }
             m.count_left -= 1;

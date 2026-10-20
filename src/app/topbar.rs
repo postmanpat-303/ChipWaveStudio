@@ -865,6 +865,10 @@ impl App {
                     ) {
                         self.rec_toggle();
                     }
+                    if rec {
+                        ui.label(egui::RichText::new("REC").small().strong().color(t.brick))
+                            .on_hover_text("recording: R or the Record button stops it");
+                    }
                     let m = self.extra.metronome;
                     if ui
                         .selectable_label(m, egui::RichText::new("Click").small())
