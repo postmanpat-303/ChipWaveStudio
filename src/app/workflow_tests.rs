@@ -1650,3 +1650,113 @@ fn scale_slider_applies_on_release_only() {
     frames(&mut h, 2);
     assert!((h.state().zoom - 1.0).abs() < 0.001, "Ctrl+0");
 }
+
+/// Add › lists the built-in instruments by name (WaveForge and Drum Kit
+/// first) and Browse…; a pick makes the instrument and gives it to the
+/// track, one undo step; they are disabled when the 255 slots are used
+#[test]
+fn add_a_built_in_instrument_from_the_track_pie() {
+    use super::trackpie::{Builtin, ADD_INSTR_ITEMS};
+    // every built-in has something to start from
+    for b in Builtin::ALL {
+        let (name, kind) = b.make().unwrap_or_else(|| panic!("{b:?}"));
+        assert!(!name.is_empty());
+        if b == Builtin::WaveForge {
+            assert!(
+                matches!(&kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Poly(_)))
+            );
+        }
+        if b == Builtin::DrumKit {
+            assert!(
+                matches!(&kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Drums(_)))
+            );
+        }
+    }
+    let mut info = super::trackpie::TrackInfo {
+        tracks: 4,
+        timeline: true,
+        ..Default::default()
+    };
+    let items = sub_items(Seg::Add, &info);
+    let label = |i: &super::trackpie::Item| match &i.kind {
+        super::trackpie::ItemKind::Text(s) => s.clone(),
+        _ => String::new(),
+    };
+    assert_eq!(label(&items[0]), crate::poly::POLY_DISPLAY_NAME);
+    assert_eq!(label(&items[1]), "Drum Kit");
+    assert_eq!(label(&items[ADD_INSTR_ITEMS - 1]), "Browse…");
+    assert_eq!(
+        items[ADD_INSTR_ITEMS - 1].act,
+        Some(PieAct::ChangeInstrument)
+    );
+    assert_eq!(
+        items[0].act,
+        Some(PieAct::NewInstrument(Builtin::WaveForge))
+    );
+    info.instr_full = true;
+    let items = sub_items(Seg::Add, &info);
+    assert!(items[..ADD_INSTR_ITEMS - 1]
+        .iter()
+        .all(|i| i.act.is_none() && i.tip.contains("255")));
+    // with the pointer: Add › Drum Kit on track 01 of the demo
+    let mut h = pie_harness(Pos2::new(600.0, 400.0));
+    h.state_mut().extra.reduce_motion = true;
+    h.state_mut().undo_reset();
+    let add = SEGS.iter().position(|s| *s == Seg::Add).unwrap();
+    let centre = h.state().pie.as_ref().unwrap().centre;
+    let (_, _, rects) = onto(&mut h, add);
+    frames(&mut h, 40);
+    assert_eq!(open_sub(&h), Some(add));
+    let target = rects[1].center();
+    let from = centre + egui::vec2(seg_angle(add).cos(), seg_angle(add).sin()) * 110.0;
+    for k in 1..=10 {
+        mv(&mut h, from + (target - from) * (k as f32 / 10.0));
+    }
+    let before = h.state().with(|s| {
+        (
+            s.song.instruments.len(),
+            s.song.timeline.as_deref().unwrap().tracks[0].instr,
+        )
+    });
+    click_at(&mut h, target);
+    frames(&mut h, 10);
+    assert!(h.state().pie.is_none(), "a pick closes the pie");
+    let (n, slot, kind, notes_ok) = h.state().with(|s| {
+        let t = s.song.timeline.as_deref().unwrap();
+        let slot = t.tracks[0].instr;
+        let kind = s.song.instruments[slot as usize - 1].kind.clone();
+        // the track's notes play it now
+        let ok = t
+            .clips
+            .iter()
+            .filter(|c| c.track == 0)
+            .all(|c| match c.kind {
+                tl::ClipKind::Notes { data } => {
+                    t.notes[data as usize].notes.iter().all(|n| n.instr == slot)
+                }
+                _ => true,
+            });
+        (s.song.instruments.len(), slot, kind, ok)
+    });
+    assert_eq!(n, before.0 + 1, "one new instrument");
+    assert_eq!(slot as usize, n, "assigned to the track");
+    assert!(
+        matches!(kind, InstrumentKind::Gen(ref g) if matches!(g.engine, crate::gen::GenEngine::Drums(_)))
+    );
+    assert!(notes_ok);
+    assert!(
+        h.state().status.contains("Track 01 now plays"),
+        "{}",
+        h.state().status
+    );
+    // one undo step back
+    key(&mut h, Key::Z, egui::Modifiers::COMMAND);
+    frames(&mut h, 3);
+    let after = h.state().with(|s| {
+        (
+            s.song.instruments.len(),
+            s.song.timeline.as_deref().unwrap().tracks[0].instr,
+        )
+    });
+    assert_eq!(after, before);
+}

@@ -618,6 +618,12 @@ struct Live {
     any_solo: bool,
 }
 
+/// Timeline mode: the playhead tick while the timeline plays (the one
+/// source the Timeline, the piano roll and the Clip Arranger draw from)
+pub(crate) fn tl_head(e: &crate::engine::Engine) -> Option<f64> {
+    e.tl_row().map(|_| e.song_pos as f64 * ROW as f64)
+}
+
 /// adaptive bar-label step: 1, 2, 4, 8 ... bars so labels stay >= `min_px` apart
 fn bar_step(bar_px: f32, min_px: f32) -> i64 {
     let mut s = 1;
@@ -680,7 +686,7 @@ impl App {
         let head = if !e.playing {
             None
         } else if c.mode {
-            e.tl_row().map(|_| e.song_pos as f64 * ROW as f64)
+            tl_head(e)
         } else if e.loop_pattern {
             c.order
                 .iter()
