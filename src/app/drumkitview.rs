@@ -191,8 +191,10 @@ fn mix_knob(ui: &mut egui::Ui, v: &mut f32, def: &'static MacroDef, id: &str) ->
 
 /// an area at `r` for widgets
 fn area<R>(ui: &mut egui::Ui, r: egui::Rect, f: impl FnOnce(&mut egui::Ui) -> R) -> R {
-    ui.scope_builder(egui::UiBuilder::new().max_rect(r), f)
-        .inner
+    // a child that leaves the parent's cursor alone: the card around it is
+    // already allocated
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
+    f(&mut child)
 }
 
 impl App {

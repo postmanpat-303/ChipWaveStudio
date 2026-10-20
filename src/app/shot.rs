@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 65] = [
+pub const VIEWS: [&str; 66] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -91,6 +91,7 @@ pub const VIEWS: [&str; 65] = [
     "devices",
     "devices-drop",
     "timeline-instrument",
+    "timeline-drumkit",
     "trackpie",
     "trackpie-icons",
     "cliparranger",
