@@ -381,36 +381,26 @@ pub(crate) fn sub_layout(seg: Seg, items: &[Item]) -> (Vec2, Vec<Rect>) {
     (egui::vec2(w, h), rects)
 }
 
-/// where a segment's submenu sits: just outside the rim in the segment's
-/// direction, on the side it points to, kept on screen
-pub(crate) fn sub_rect(centre: Pos2, seg: usize, size: Vec2, screen: Rect) -> Rect {
-    let a = seg_angle(seg);
-    let d = egui::vec2(a.cos(), a.sin());
-    let anchor = centre + d * (R_OUT + 12.0);
-    let x = if d.x >= -0.2 {
-        anchor.x
-    } else {
-        anchor.x - size.x
-    };
-    let y = anchor.y - size.y / 2.0;
-    let mut r = Rect::from_min_size(Pos2::new(x, y), size);
-    // keep it on screen; if it would cover the pie, put it on the other side
+/// how far the nearest point of `r` is from `c`
+fn rect_dist(r: Rect, c: Pos2) -> f32 {
+    let q = Pos2::new(
+        c.x.clamp(r.left(), r.right()),
+        c.y.clamp(r.top(), r.bottom()),
+    );
+    (q - c).length()
+}
+
+/// the panel keeps this far from the pie's centre (clear of the ring and
+/// its rim arc)
+const SUB_CLEAR: f32 = R_OUT + 10.0;
+
+/// keep `r` on `screen` (4 px in)
+fn on_screen(mut r: Rect, screen: Rect) -> Rect {
     if r.right() > screen.right() - 4.0 {
         r = r.translate(egui::vec2(screen.right() - 4.0 - r.right(), 0.0));
     }
     if r.left() < screen.left() + 4.0 {
         r = r.translate(egui::vec2(screen.left() + 4.0 - r.left(), 0.0));
-    }
-    let ring = Rect::from_center_size(centre, Vec2::splat(2.0 * R_OUT));
-    if r.intersects(ring.shrink(20.0)) {
-        let other = if d.x >= -0.2 {
-            centre.x - R_OUT - 12.0 - size.x
-        } else {
-            centre.x + R_OUT + 12.0
-        };
-        if other >= screen.left() + 4.0 && other + size.x <= screen.right() - 4.0 {
-            r = Rect::from_min_size(Pos2::new(other, r.top()), size);
-        }
     }
     if r.bottom() > screen.bottom() - 4.0 {
         r = r.translate(egui::vec2(0.0, screen.bottom() - 4.0 - r.bottom()));
@@ -420,6 +410,75 @@ pub(crate) fn sub_rect(centre: Pos2, seg: usize, size: Vec2, screen: Rect) -> Re
     }
     r
 }
+
+/// where a segment's submenu sits: just outside the rim in the segment's
+/// direction, on the side it points to, kept on screen. It is pushed out
+/// along the segment's direction until it clears the ring (so the way to
+/// it from the segment crosses no other segment); only when the screen
+/// edge leaves no room there does it go to the pie's other side.
+pub(crate) fn sub_rect(centre: Pos2, seg: usize, size: Vec2, screen: Rect) -> Rect {
+    let a = seg_angle(seg);
+    let d = egui::vec2(a.cos(), a.sin());
+    let right = d.x >= -0.2;
+    let place = |dir: Vec2, right: bool| -> Rect {
+        let anchor = centre + dir * (R_OUT + 12.0);
+        let x = if right { anchor.x } else { anchor.x - size.x };
+        let mut r = Rect::from_min_size(Pos2::new(x, anchor.y - size.y / 2.0), size);
+        // out along the segment until it clears the ring
+        let mut n = 0;
+        while rect_dist(r, centre) < SUB_CLEAR && n < 200 {
+            r = r.translate(dir * 2.0);
+            n += 1;
+        }
+        let mut r = on_screen(r, screen);
+        // the screen edge pushed it back over the ring: sideways out instead
+        let side = egui::vec2(if right { 1.0 } else { -1.0 }, 0.0);
+        let mut n = 0;
+        while rect_dist(r, centre) < SUB_CLEAR && n < 200 {
+            r = r.translate(side * 2.0);
+            n += 1;
+        }
+        r
+    };
+    let r = place(d, right);
+    if screen.shrink(3.9).contains_rect(r) && rect_dist(r, centre) >= SUB_CLEAR - 0.5 {
+        return r;
+    }
+    // no room on this side: the mirror side, else the first try on screen
+    let m = place(egui::vec2(-d.x, d.y), !right);
+    if screen.shrink(3.9).contains_rect(m) && rect_dist(m, centre) >= SUB_CLEAR - 0.5 {
+        return m;
+    }
+    on_screen(r, screen)
+}
+
+/// The way from the open submenu's segment to its panel: the pointer is
+/// "on its way" while it is inside the hull of `from` (where it last was
+/// on the segment or the panel) and the panel's corners (a few px bigger).
+pub(crate) fn in_aim(from: Pos2, panel: Rect, p: Pos2) -> bool {
+    let r = panel.expand(8.0);
+    if r.contains(p) {
+        return true;
+    }
+    let cs = [
+        r.left_top(),
+        r.right_top(),
+        r.right_bottom(),
+        r.left_bottom(),
+    ];
+    let cross = |a: Pos2, b: Pos2, c: Pos2| (b - a).x * (c - a).y - (b - a).y * (c - a).x;
+    let tri = |a: Pos2, b: Pos2, c: Pos2| {
+        let (d1, d2, d3) = (cross(a, b, p), cross(b, c, p), cross(c, a, p));
+        let neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+        let pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+        !(neg && pos)
+    };
+    (0..4).any(|i| (i + 1..4).any(|j| tri(from, cs[i], cs[j])))
+}
+
+/// pointer resting this long on another segment (inside the way to the
+/// panel) switches to it after all
+pub(crate) const AIM_SETTLE_S: f64 = 0.35;
 
 // ------------------------------------------------------------ motion maths
 
@@ -560,6 +619,12 @@ pub(crate) struct Pie {
     pub(crate) frozen: Option<f64>,
     /// pointer position last frame (hover follows the mouse only when it moves)
     last_ptr: Option<Pos2>,
+    /// where the pointer last was on the open submenu's segment or panel
+    /// (the tip of the way to the panel, `in_aim`)
+    aim_from: Option<Pos2>,
+    /// input time the pointer last moved (resting on another segment on
+    /// the way to the panel switches to it after `AIM_SETTLE_S`)
+    moved_at: f64,
 }
 
 /// colours of the pie in the current theme
@@ -642,6 +707,8 @@ impl App {
             press: press.then_some(at),
             frozen: None,
             last_ptr: None,
+            aim_from: None,
+            moved_at: ctx.input(|i| i.time),
         });
         ctx.request_repaint();
     }
@@ -879,6 +946,29 @@ impl App {
             let ptr_moved = moved || (ptr.is_some() && p.last_ptr != ptr && p.last_ptr.is_some());
             p.last_ptr = ptr;
             if ptr_moved {
+                p.moved_at = now;
+            }
+            let open_si = p.sub.map(|s| s.0);
+            // on the open submenu's own segment or its panel: the way to the
+            // panel starts here
+            if in_sub || (over_seg.is_some() && over_seg == open_si) {
+                p.aim_from = ptr;
+            }
+            // another segment, but the pointer is on its way to the open
+            // panel: keep the panel (until it rests there a moment)
+            let aiming = |p: &Pie| match (over_seg, open_si, &sub_geo, p.aim_from, ptr) {
+                (Some(k), Some(si), Some((_, _, r, _)), Some(from), Some(q)) if k != si => {
+                    in_aim(from, *r, q)
+                }
+                _ => false,
+            };
+            let rested = now - p.moved_at >= AIM_SETTLE_S;
+            let hold = aiming(p) && !rested;
+            if hold && !ptr_moved {
+                // check again once it may have rested
+                ctx.request_repaint_after(std::time::Duration::from_secs_f64(AIM_SETTLE_S));
+            }
+            if (ptr_moved || (rested && aiming(p))) && !hold {
                 if let Some(k) = over_seg {
                     p.key = Some(k);
                     // pointing at a submenu segment pops its submenu out
@@ -886,15 +976,17 @@ impl App {
                         if p.sub.map(|s| s.0) != Some(k) {
                             p.sub = Some((k, now));
                             p.sub_key = None;
+                            p.aim_from = ptr;
                         }
                     } else if p.sub.is_some() {
                         p.sub = None;
                         p.sub_key = None;
+                        p.aim_from = None;
                     }
                 }
-                if in_sub {
-                    p.sub_key = over_item;
-                }
+            }
+            if ptr_moved && in_sub {
+                p.sub_key = over_item;
             }
             let press = p.press;
             // right button held from the opening press: release chooses

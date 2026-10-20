@@ -243,3 +243,182 @@ fn out_of_range_chord_roots_do_not_overflow() {
     h.state_mut().cl_write(t, vec![m], vec![], true);
     frames(&mut h, 3);
 }
+
+// ------------------------------------------------------------ step 1: track pie submenus
+
+use super::trackpie::{hit, seg_angle, sub_items, sub_layout, sub_rect, Seg, SEGS};
+
+fn pie_harness(at: Pos2) -> Harness<'static, App> {
+    let mut h = harness_with({
+        let mut s = fileio::demo_song();
+        crate::timeline::enter_timeline_mode(&mut s);
+        s
+    });
+    h.state_mut().view = View::Timeline;
+    frames(&mut h, 3);
+    let ctx = h.ctx.clone();
+    h.state_mut().open_track_pie(0, at, false, &ctx);
+    frames(&mut h, 20);
+    h
+}
+
+fn mv(h: &mut Harness<'static, App>, p: Pos2) {
+    with_mods(h, egui::Modifiers::NONE, egui::Event::PointerMoved(p));
+}
+
+fn open_sub(h: &Harness<'static, App>) -> Option<usize> {
+    h.state().pie.as_ref().and_then(|p| p.sub.map(|s| s.0))
+}
+
+/// point at segment `seg`, return (start point, its panel)
+fn onto(h: &mut Harness<'static, App>, seg: usize) -> (Pos2, Rect, Vec<Rect>) {
+    let centre = h.state().pie.as_ref().unwrap().centre;
+    let a = seg_angle(seg);
+    let start = centre + egui::vec2(a.cos(), a.sin()) * 110.0;
+    mv(h, start - egui::vec2(3.0, 3.0));
+    mv(h, start);
+    let info = h.state().pie_info(0);
+    let items = sub_items(SEGS[seg], &info);
+    let (size, rects) = sub_layout(SEGS[seg], &items);
+    let sr = sub_rect(centre, seg, size, h.ctx.content_rect());
+    let rects = rects
+        .iter()
+        .map(|q| q.translate(sr.min.to_vec2()))
+        .collect();
+    (start, sr, rects)
+}
+
+/// moving the pointer straight from a submenu segment to any part of its
+/// panel keeps the panel open (it closed over Rename on the way to Colour)
+#[test]
+fn submenus_stay_open_on_the_way_to_them() {
+    let subs: Vec<usize> = (0..SEGS.len()).filter(|&i| SEGS[i].has_sub()).collect();
+    for at in [
+        Pos2::new(600.0, 400.0),
+        Pos2::new(1500.0, 400.0),
+        Pos2::new(250.0, 300.0),
+        Pos2::new(1550.0, 850.0),
+        Pos2::new(850.0, 170.0),
+    ] {
+        for &seg in &subs {
+            for which in 0..3 {
+                let mut h = pie_harness(at);
+                let centre = h.state().pie.as_ref().unwrap().centre;
+                let (start, sr, rects) = onto(&mut h, seg);
+                assert_eq!(open_sub(&h), Some(seg), "{:?} opens", SEGS[seg]);
+                assert!(
+                    (sr.center() - centre).length() > 0.0
+                        && !sr.intersects(Rect::from_center_size(centre, egui::Vec2::splat(2.0)))
+                );
+                let target = match which {
+                    0 => sr.center(),
+                    1 => rects[0].center(),
+                    _ => rects.last().unwrap().center(),
+                };
+                for k in 1..=24 {
+                    let p = start + (target - start) * (k as f32 / 24.0);
+                    mv(&mut h, p);
+                    assert_eq!(
+                        open_sub(&h),
+                        Some(seg),
+                        "{:?} pie at {at:?}, step {k}/24 to item {which}: closed over {:?}",
+                        SEGS[seg],
+                        hit(centre, p)
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// the Colour panel sits on the Colour side when there is room (it used to
+/// flip to the far side of the pie)
+#[test]
+fn the_colour_panel_sits_beside_its_segment() {
+    let screen = Rect::from_min_size(Pos2::ZERO, egui::vec2(1700.0, 1000.0));
+    let c = Pos2::new(600.0, 400.0);
+    let (size, _) = sub_layout(
+        Seg::Colour,
+        &sub_items(
+            Seg::Colour,
+            &super::trackpie::TrackInfo {
+                timeline: true,
+                tracks: 4,
+                ..Default::default()
+            },
+        ),
+    );
+    let i = SEGS.iter().position(|s| *s == Seg::Colour).unwrap();
+    let r = sub_rect(c, i, size, screen);
+    assert!(r.center().x > c.x, "right of the pie: {r:?}");
+    assert!(screen.contains_rect(r));
+    // clear of the ring
+    let q = Pos2::new(
+        c.x.clamp(r.left(), r.right()),
+        c.y.clamp(r.top(), r.bottom()),
+    );
+    assert!((q - c).length() >= super::trackpie::R_OUT + 9.0, "{r:?}");
+}
+
+/// leaving the way to the panel for another segment switches at once;
+/// resting on one on the way switches after a moment; a pick, Esc and a
+/// click outside still close it
+#[test]
+fn submenu_switching_and_closing_stay_predictable() {
+    let ci = SEGS.iter().position(|s| *s == Seg::Colour).unwrap();
+    let ri = SEGS.iter().position(|s| *s == Seg::Routing).unwrap();
+    let mut h = pie_harness(Pos2::new(600.0, 400.0));
+    let centre = h.state().pie.as_ref().unwrap().centre;
+    onto(&mut h, ci);
+    assert_eq!(open_sub(&h), Some(ci));
+    // straight to Routing (the other side): not on the way, so it closes
+    let a = seg_angle(ri);
+    mv(&mut h, centre + egui::vec2(a.cos(), a.sin()) * 100.0);
+    assert_eq!(open_sub(&h), None, "Routing has no submenu");
+    assert_eq!(h.state().pie.as_ref().unwrap().key, Some(ri));
+    // back to Colour, then onto Icon (next to the panel's way) and rest
+    let (_, sr, _) = onto(&mut h, ci);
+    let ii = SEGS.iter().position(|s| *s == Seg::Icon).unwrap();
+    let a = seg_angle(ii);
+    let on_icon = centre + egui::vec2(a.cos(), a.sin()) * 140.0;
+    mv(&mut h, on_icon);
+    if super::trackpie::in_aim(
+        centre + egui::vec2(seg_angle(ci).cos(), seg_angle(ci).sin()) * 110.0,
+        sr,
+        on_icon,
+    ) {
+        assert_eq!(open_sub(&h), Some(ci), "on the way: kept");
+    }
+    frames(&mut h, 40);
+    assert_eq!(open_sub(&h), Some(ii), "resting on Icon opens its submenu");
+    // a pick closes the pie and sets the colour (one undo step)
+    let (_, _, rects) = onto(&mut h, ci);
+    let swatch = rects[2].center();
+    for k in 1..=10 {
+        let from = centre + egui::vec2(seg_angle(ci).cos(), seg_angle(ci).sin()) * 110.0;
+        mv(&mut h, from + (swatch - from) * (k as f32 / 10.0));
+    }
+    click_at(&mut h, swatch);
+    frames(&mut h, 10);
+    assert!(h.state().pie.is_none(), "a pick closes it");
+    let col = h
+        .state()
+        .with(|s| s.song.timeline.as_ref().unwrap().tracks[0].colour);
+    assert!(col.is_some(), "the colour is set at once");
+    // Esc closes
+    let ctx = h.ctx.clone();
+    h.state_mut()
+        .open_track_pie(0, Pos2::new(600.0, 400.0), false, &ctx);
+    frames(&mut h, 5);
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    frames(&mut h, 10);
+    assert!(h.state().pie.is_none(), "Esc closes it");
+    // a click outside the pie and its panel closes
+    h.state_mut()
+        .open_track_pie(0, Pos2::new(600.0, 400.0), false, &ctx);
+    frames(&mut h, 5);
+    onto(&mut h, ci);
+    click_at(&mut h, Pos2::new(1500.0, 900.0));
+    frames(&mut h, 10);
+    assert!(h.state().pie.is_none(), "a click outside closes it");
+}
