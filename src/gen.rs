@@ -531,6 +531,8 @@ pub enum GenEngine {
     Wave(crate::gen_wave::WaveP),
     /// modular Grid (Unreleased)
     Grid(crate::grid::GridP),
+    /// Drum Kit: up to 32 pads, each a drum voice on its own key (Unreleased)
+    Drums(crate::drumkit::DrumKitP),
 }
 
 impl GenEngine {
@@ -615,6 +617,7 @@ impl GenPatch {
             GenEngine::Noise(n) => n.fix(),
             GenEngine::Wave(w) => w.fix(),
             GenEngine::Grid(x) => x.fix(),
+            GenEngine::Drums(k) => k.fix(),
         }
         self.mutate = if self.mutate.is_finite() {
             self.mutate.clamp(0.0, 0.5)
@@ -628,6 +631,10 @@ impl GenPatch {
         match &mut self.engine {
             GenEngine::Drum(d) => Some(d),
             GenEngine::Kit(k) => Some(&mut k.pieces[sel.min(7)]),
+            GenEngine::Drums(k) => {
+                let n = k.pads.len();
+                k.pads.get_mut(sel.min(n.max(1) - 1)).map(|p| &mut p.drum)
+            }
             _ => None,
         }
     }
@@ -669,6 +676,11 @@ impl GenPatch {
             GenEngine::Kit(k) => {
                 for (i, d) in k.pieces.iter_mut().enumerate() {
                     roll(d, seed.wrapping_add(i as u32 * 0x9E37_79B9));
+                }
+            }
+            GenEngine::Drums(k) => {
+                for (i, p) in k.pads.iter_mut().enumerate() {
+                    roll(&mut p.drum, seed.wrapping_add(i as u32 * 0x9E37_79B9));
                 }
             }
         }
@@ -805,6 +817,21 @@ pub fn gen_knobs(g: &GenPatch) -> Vec<(usize, String)> {
         GenEngine::Noise(_) => named(&crate::gen2::NOISE),
         GenEngine::Wave(_) => named(&crate::gen_wave::WAVE),
         GenEngine::Grid(x) => x.knobs(),
+        // pad p macro m = knob p*8+m (pads past GEN_KNOBS/8 are not automatable yet)
+        GenEngine::Drums(k) => k
+            .pads
+            .iter()
+            .enumerate()
+            .take(GEN_KNOBS / 8)
+            .flat_map(|(p, pad)| {
+                pad.drum
+                    .kind
+                    .macros()
+                    .iter()
+                    .enumerate()
+                    .map(move |(m, def)| (p * 8 + m, format!("{}: {}", pad.name, def.name)))
+            })
+            .collect(),
     }
 }
 
@@ -819,6 +846,8 @@ pub fn gen_knob_def(g: &GenPatch, k: usize) -> Option<&'static MacroDef> {
         GenEngine::Noise(_) => crate::gen2::NOISE.get(k),
         GenEngine::Wave(_) => crate::gen_wave::WAVE.get(k),
         GenEngine::Grid(x) => x.knob_def(k),
+        GenEngine::Drums(kp) if k < GEN_KNOBS => kp.pads.get(k / 8)?.drum.kind.macros().get(k % 8),
+        GenEngine::Drums(_) => None,
     }
 }
 
@@ -833,6 +862,10 @@ pub fn gen_knob_norm(g: &GenPatch, k: usize) -> Option<f32> {
         GenEngine::Noise(n) => n.p.get(k).copied(),
         GenEngine::Wave(w) => w.p.get(k).copied(),
         GenEngine::Grid(x) => x.p.get(k).copied(),
+        GenEngine::Drums(kp) if k < GEN_KNOBS => {
+            kp.pads.get(k / 8)?.drum.macros.get(k % 8).copied()
+        }
+        GenEngine::Drums(_) => None,
     }
 }
 
@@ -859,6 +892,10 @@ pub fn set_gen_knob_norm(g: &mut GenPatch, k: usize, v: f32) -> bool {
         GenEngine::Noise(n) => n.p.get_mut(k),
         GenEngine::Wave(w) => w.p.get_mut(k),
         GenEngine::Grid(x) => x.p.get_mut(k),
+        GenEngine::Drums(kp) => match kp.pads.get_mut(k / 8) {
+            Some(p) if k < GEN_KNOBS => p.drum.macros.get_mut(k % 8),
+            _ => None,
+        },
     };
     match slot {
         Some(x) => {
@@ -926,6 +963,8 @@ pub struct GenState {
     note_f: f32,
     piece: usize,
     off: f32,
+    /// Drum Kit: the pad's Decay macro index (8 = none)
+    dec_ix: u8,
     pub done: bool,
     sfx: crate::chipfx::SfxState,
     an: crate::gen2::AnalogState,
@@ -958,6 +997,7 @@ impl Default for GenState {
             note_f: -1.0,
             piece: 0,
             off: 0.0,
+            dec_ix: 8,
             sfx: crate::chipfx::SfxState::default(),
             an: Default::default(),
             fm: Default::default(),
@@ -1004,8 +1044,12 @@ impl GenState {
             }
             return (y, y, false);
         }
+        if let GenEngine::Drums(k) = &g.engine {
+            return self.render_pads(k, ov, freq, sr);
+        }
         let (d, ratio) = match &g.engine {
-            GenEngine::ChipFx(_)
+            GenEngine::Drums(_)
+            | GenEngine::ChipFx(_)
             | GenEngine::Analog(_)
             | GenEngine::Fm(_)
             | GenEngine::Noise(_)
@@ -1038,13 +1082,61 @@ impl GenState {
         } else {
             0
         };
-        self.render_drum(d, ratio, base, ov, sr)
+        self.render_drum(d, ratio, base, ov, sr, 1.0)
+    }
+
+    /// Drum Kit: the note picks the pad (`DrumKitP::pad_for_freq`), whose
+    /// tune, decay, attack and pan shape the shared drum voice. A pad at its
+    /// defaults (tune 0, decay 1, attack 0, centre) renders exactly as the
+    /// same drum on a Kit. Allocation-free.
+    fn render_pads(
+        &mut self,
+        k: &crate::drumkit::DrumKitP,
+        ov: Ov,
+        freq: f32,
+        sr: f32,
+    ) -> (f32, f32, bool) {
+        if freq != self.note_f {
+            self.note_f = freq;
+            match k.pad_for_freq(freq) {
+                Some((p, o)) if k.audible(p) => {
+                    self.piece = p;
+                    self.off = o;
+                }
+                _ => {
+                    self.done = true;
+                    return (0.0, 0.0, false);
+                }
+            }
+        }
+        let Some(pad) = k.pads.get(self.piece) else {
+            self.done = true;
+            return (0.0, 0.0, false);
+        };
+        if pad.decay != 1.0 {
+            self.dec_ix = crate::drumkit::decay_macro(pad.drum.kind).map_or(8, |i| i as u8);
+        }
+        let t = self.t;
+        let ratio = 2f32.powf((self.off + pad.tune) / 12.0);
+        let (mut l, mut r, mut st) =
+            self.render_drum(&pad.drum, ratio, self.piece * 8, ov, sr, pad.decay);
+        if pad.attack > 0.0 && t < pad.attack {
+            let a = t / pad.attack;
+            (l, r) = (l * a, r * a);
+        }
+        if pad.pan != 0.0 {
+            l *= (1.0 - pad.pan).min(1.0);
+            r *= (1.0 + pad.pan).min(1.0);
+            st = true;
+        }
+        (l, r, st)
     }
 
     /// One drum voice: `d` at pitch `ratio`, its macros automated by the
     /// lanes `knob_base..knob_base+8` (lanes past `GEN_KNOBS` are not
     /// automatable) and the 43xy macros. Shared by the Drum, the Kit and the
-    /// Drum Kit, so they sound the same. Allocation-free.
+    /// Drum Kit, so they sound the same; `decay` scales the Decay macro (1 =
+    /// untouched, the only value the Drum and the Kit use). Allocation-free.
     fn render_drum(
         &mut self,
         d: &DrumP,
@@ -1052,6 +1144,7 @@ impl GenState {
         knob_base: usize,
         ov: Ov,
         sr: f32,
+        decay: f32,
     ) -> (f32, f32, bool) {
         let mut mac = d.macros;
         for (k, m) in mac.iter_mut().enumerate() {
@@ -1071,7 +1164,12 @@ impl GenState {
                 self.val[i] = def.map(mac[i]);
             }
         }
-        let v = self.val;
+        let mut v = self.val;
+        if decay != 1.0 {
+            if let Some(x) = v.get_mut(self.dec_ix as usize) {
+                *x *= decay;
+            }
+        }
         let t = self.t;
         self.t += 1.0 / sr;
         let (l, r, st, end) = match d.kind {

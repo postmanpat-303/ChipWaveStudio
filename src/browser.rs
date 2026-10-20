@@ -367,6 +367,7 @@ fn engine_name(e: &crate::gen::GenEngine) -> &'static str {
         G::Noise(_) => "Noise",
         G::Wave(_) => "Wavetable",
         G::Grid(_) => "Grid",
+        G::Drums(_) => "Drum Kit",
     }
 }
 

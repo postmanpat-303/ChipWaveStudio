@@ -17,6 +17,7 @@ mod chordgen;
 mod chords;
 mod credits;
 mod drives;
+mod drumkit;
 mod drumpat;
 mod ember;
 mod engine;
@@ -42,6 +43,8 @@ mod prompt;
 mod recovery;
 #[cfg(test)]
 mod render_hashes;
+#[cfg(test)]
+mod render_hashes_gen;
 mod sample;
 mod settings;
 mod showcase;

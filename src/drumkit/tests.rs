@@ -1,0 +1,231 @@
+use super::*;
+use crate::gen::{GenEngine, GenPatch, NO_KNOBS};
+
+const SR: f32 = 48000.0;
+
+/// one note on a fresh voice, sample by sample (bits), with optional knob
+/// automation and 43xy macros
+fn note(
+    g: &GenPatch,
+    key: u8,
+    ko: &[f32; crate::gen::GEN_KNOBS],
+    gmo: [f32; 8],
+) -> Vec<(u32, u32)> {
+    let freq = crate::model::note_freq(key);
+    let mut v = crate::synth::SynthVoice::seeded(key as u32 * 77 + 5);
+    v.gmo = gmo;
+    (0..(SR * 0.5) as usize)
+        .map(|n| {
+            if n == (SR * 0.25) as usize {
+                v.amp.release();
+            }
+            let (l, r) = v.render_gen_ko(&g.base, g, ko, freq, SR, 120.0);
+            (l.to_bits(), r.to_bits())
+        })
+        .collect()
+}
+
+fn all_kits() -> Vec<(&'static str, GenPatch)> {
+    crate::drumpat::KIT_NAMES
+        .iter()
+        .map(|(n, _)| (*n, crate::drumpat::kit_patch(n).unwrap()))
+        .collect()
+}
+
+#[test]
+fn a_converted_kit_renders_bit_identically_on_every_key() {
+    let mut ko = NO_KNOBS;
+    for (k, v) in ko.iter_mut().enumerate() {
+        if k % 5 == 2 {
+            *v = (k % 9) as f32 / 9.0;
+        }
+    }
+    let gmo = [-1.0, 0.8, -1.0, 0.1, -1.0, -1.0, 0.5, -1.0];
+    for (name, kit) in all_kits() {
+        let dk = patch_from_kit(&kit, true).unwrap();
+        assert!(matches!(dk.engine, GenEngine::Drums(_)));
+        for key in 1u8..=96 {
+            for (ko, gmo) in [(&NO_KNOBS, [-1.0; 8]), (&ko, [-1.0; 8]), (&NO_KNOBS, gmo)] {
+                assert!(
+                    note(&kit, key, ko, gmo) == note(&dk, key, ko, gmo),
+                    "{name}: key {key} differs"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_16_pad_kit_plays_every_library_note_as_the_kit_did() {
+    for (name, kit) in all_kits() {
+        let dk = patch_from_kit(&kit, false).unwrap();
+        let GenEngine::Drums(k) = &dk.engine else {
+            panic!()
+        };
+        assert_eq!(k.pads.len(), DEFAULT_PADS, "{name}");
+        for (_, key, lane) in crate::drumpat::LANES {
+            assert!(
+                note(&kit, key, &NO_KNOBS, [-1.0; 8]) == note(&dk, key, &NO_KNOBS, [-1.0; 8]),
+                "{name}: {lane} ({key}) differs"
+            );
+        }
+        // every pad has its own key, and the hats choke each other
+        let mut keys: Vec<u8> = k.pads.iter().map(|p| p.key).collect();
+        keys.sort();
+        keys.dedup();
+        assert_eq!(keys.len(), k.pads.len(), "{name}: duplicate keys");
+        let hats: Vec<&str> = k
+            .pads
+            .iter()
+            .filter(|p| p.choke == 1)
+            .map(|p| p.name.as_str())
+            .collect();
+        assert_eq!(hats, ["Closed hat", "Pedal hat", "Open hat"], "{name}");
+        assert!(k.pads.iter().all(|p| p.choke == 0 || p.choke == 1));
+    }
+}
+
+#[test]
+fn notes_find_their_pad() {
+    let k = DrumKitP::default();
+    let pad = |key: i32| {
+        k.pad_for_key(key)
+            .map(|(i, o)| (k.pads[i].name.as_str(), o))
+    };
+    assert_eq!(pad(49), Some(("Kick", 0.0)));
+    assert_eq!(pad(61), Some(("Crash", 0.0)));
+    // another octave: the same note name, nearest pad
+    assert_eq!(pad(37), Some(("Kick", 0.0)));
+    assert_eq!(pad(73), Some(("Crash", 0.0)));
+    assert_eq!(pad(75), Some(("Rim", 0.0)));
+    // the old Kit map on a converted kit
+    let c = from_kit(&KitP::default());
+    let cp = |key: i32| {
+        c.pad_for_key(key)
+            .map(|(i, o)| (c.pads[i].name.as_str(), o))
+    };
+    assert_eq!(cp(53), Some(("Tom", -7.0)));
+    assert_eq!(cp(54), Some(("Tom", -4.0)));
+    assert_eq!(cp(58), Some(("Tom", 4.0)));
+    assert_eq!(cp(57), Some(("Closed hat", 0.0)));
+    assert_eq!(cp(61), Some(("Kick", 0.0)));
+    assert_eq!(key_name(49), "C-4");
+    assert_eq!(key_name(55), "F#4");
+    assert_eq!(freq_key(crate::model::note_freq(70)), 70);
+}
+
+#[test]
+fn mute_solo_tune_pan_decay_and_attack_shape_the_pad() {
+    let base = GenPatch {
+        engine: GenEngine::Drums(DrumKitP::default()),
+        ..Default::default()
+    };
+    let with = |f: &dyn Fn(&mut Pad)| {
+        let mut g = base.clone();
+        if let GenEngine::Drums(k) = &mut g.engine {
+            f(&mut k.pads[1]); // Snare
+        }
+        g
+    };
+    let render = |g: &GenPatch| -> Vec<(f32, f32)> {
+        let freq = crate::model::note_freq(51);
+        let mut v = crate::synth::SynthVoice::seeded(9);
+        (0..(SR * 0.4) as usize)
+            .map(|_| v.render_gen(&g.base, g, freq, SR, 120.0))
+            .collect()
+    };
+    let energy = |o: &[(f32, f32)]| o.iter().map(|(l, r)| l * l + r * r).sum::<f32>();
+    let plain = render(&base);
+    assert!(energy(&plain) > 1.0);
+    assert_eq!(energy(&render(&with(&|p| p.mute = true))), 0.0, "muted");
+    // another pad's solo silences this one; its own solo doesn't
+    let mut solo = base.clone();
+    if let GenEngine::Drums(k) = &mut solo.engine {
+        k.pads[0].solo = true;
+    }
+    assert_eq!(energy(&render(&solo)), 0.0, "soloed elsewhere");
+    assert_eq!(render(&with(&|p| p.solo = true)), plain, "own solo");
+    // pan right: the left side quieter
+    let r = render(&with(&|p| p.pan = 0.8));
+    let (le, re): (f32, f32) = r
+        .iter()
+        .fold((0.0, 0.0), |a, (l, r)| (a.0 + l * l, a.1 + r * r));
+    assert!(le < re * 0.1, "{le} {re}");
+    // decay: longer tail
+    let tail = |o: &[(f32, f32)]| energy(&o[(SR * 0.2) as usize..]);
+    assert!(tail(&render(&with(&|p| p.decay = 3.0))) > 2.0 * tail(&plain));
+    // attack: a softer start
+    let head = |o: &[(f32, f32)]| energy(&o[..(SR * 0.005) as usize]);
+    assert!(head(&render(&with(&|p| p.attack = 0.02))) < 0.5 * head(&plain));
+    // tune: a different sound
+    assert_ne!(render(&with(&|p| p.tune = 5.0)), plain);
+}
+
+#[test]
+fn every_kind_has_a_decay_macro() {
+    for k in DrumKind::ALL {
+        assert!(decay_macro(k).is_some(), "{k:?}");
+    }
+}
+
+#[test]
+fn pads_add_up_to_32_and_fix_clamps() {
+    let mut k = DrumKitP::default();
+    while k.add_pad(Some(0)).is_some() {}
+    assert_eq!(k.pads.len(), MAX_PADS);
+    let mut keys: Vec<u8> = k.pads.iter().map(|p| p.key).collect();
+    keys.sort();
+    keys.dedup();
+    assert_eq!(keys.len(), MAX_PADS, "each added pad gets a free key");
+    k.pads.push(Pad::default());
+    k.pads[0].pan = f32::NAN;
+    k.pads[0].decay = 99.0;
+    k.pads[0].choke = 40;
+    k.fix();
+    assert_eq!(k.pads.len(), MAX_PADS);
+    assert_eq!(
+        (k.pads[0].pan, k.pads[0].decay, k.pads[0].choke),
+        (0.0, 4.0, 8)
+    );
+    let mut e = DrumKitP {
+        pads: vec![],
+        ..Default::default()
+    };
+    e.fix();
+    assert_eq!(e.pads.len(), 1);
+}
+
+#[test]
+fn velocity_depth() {
+    let mut k = DrumKitP::default();
+    assert_eq!(k.vel_gain(0, 0.5), 0.5, "default = linear");
+    k.pads[0].vel = 0.0;
+    assert_eq!(k.vel_gain(0, 0.2), 1.0);
+    k.pads[0].vel = 0.5;
+    assert!((k.vel_gain(0, 0.0) - 0.5).abs() < 1e-6);
+}
+
+#[test]
+fn presets_cover_every_library_kit_and_finish() {
+    let p = presets();
+    assert_eq!(p.len(), crate::drumpat::KIT_NAMES.len());
+    for (name, _, g) in &p {
+        let GenEngine::Drums(k) = &g.engine else {
+            panic!("{name}")
+        };
+        for pad in &k.pads {
+            let freq = crate::model::note_freq(pad.key);
+            let mut v = crate::synth::SynthVoice::seeded(3);
+            let mut n = 0;
+            let mut pk = 0.0f32;
+            while !v.gen.done && n < (SR * 8.0) as usize {
+                let (l, r) = v.render_gen(&g.base, g, freq, SR, 120.0);
+                pk = pk.max(l.abs()).max(r.abs());
+                n += 1;
+            }
+            assert!(v.gen.done, "{name} {} never ends", pad.name);
+            assert!((0.05..=1.5).contains(&pk), "{name} {}: peak {pk}", pad.name);
+        }
+    }
+    assert!(preset("psy kit").is_some());
+}
