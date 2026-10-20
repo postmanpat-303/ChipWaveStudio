@@ -40,6 +40,8 @@ mod plugin;
 mod presets;
 mod prompt;
 mod recovery;
+#[cfg(test)]
+mod render_hashes;
 mod sample;
 mod settings;
 mod showcase;

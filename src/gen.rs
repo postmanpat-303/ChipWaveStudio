@@ -1038,11 +1038,27 @@ impl GenState {
         } else {
             0
         };
+        self.render_drum(d, ratio, base, ov, sr)
+    }
+
+    /// One drum voice: `d` at pitch `ratio`, its macros automated by the
+    /// lanes `knob_base..knob_base+8` (lanes past `GEN_KNOBS` are not
+    /// automatable) and the 43xy macros. Shared by the Drum, the Kit and the
+    /// Drum Kit, so they sound the same. Allocation-free.
+    fn render_drum(
+        &mut self,
+        d: &DrumP,
+        ratio: f32,
+        knob_base: usize,
+        ov: Ov,
+        sr: f32,
+    ) -> (f32, f32, bool) {
         let mut mac = d.macros;
         for (k, m) in mac.iter_mut().enumerate() {
-            let a = ov.knob[base + k];
-            if a >= 0.0 {
-                *m = a;
+            if let Some(&a) = ov.knob.get(knob_base + k) {
+                if a >= 0.0 {
+                    *m = a;
+                }
             }
             if ov.mac[k] >= 0.0 {
                 *m = ov.mac[k];
