@@ -118,7 +118,7 @@ impl App {
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Close").on_hover_text("Esc").clicked() {
-                    self.view = View::Pattern;
+                    self.view = self.home_view();
                 }
             });
         });
@@ -498,6 +498,7 @@ impl App {
                     changed = true;
                 }
                 ui.end_row();
+                }
                 ui.label("Double-click a clip");
                 ui.horizontal(|ui| {
                     let a = ui
@@ -509,7 +510,6 @@ impl App {
                     changed |= a.changed() || b.changed();
                 });
                 ui.end_row();
-                }
                 ui.label("Chord menus");
                 ui.horizontal(|ui| {
                     let a = ui

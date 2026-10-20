@@ -345,16 +345,17 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
     let song = match &open {
         Some(p) if p.to_string_lossy().ends_with(".toml") => fileio::load_text_song(p)?,
         Some(p) => fileio::load_cwt(p)?,
-        None => startup_song(
-            shot.is_some(),
-            crate::settings::load().extra.new_in_timeline,
-        ),
+        None => {
+            let ex = crate::settings::load().extra;
+            startup_song(shot.is_some(), ex.new_in_timeline || !ex.show_tracker)
+        }
     };
     // a tracker-mode song given on the command line opens in timeline mode
     // (Settings › Open tracker songs in timeline mode); screenshots keep it
     let mut song = song;
-    let converted = shot.is_none()
-        && file::convert_on_open(&mut song, crate::settings::load().extra.open_in_timeline);
+    let ex = crate::settings::load().extra;
+    let converted =
+        shot.is_none() && file::convert_on_open(&mut song, ex.open_in_timeline || !ex.show_tracker);
     let shared: SharedRef = Arc::new(Mutex::new(Shared {
         song,
         engine: Engine::new(48000.0),
@@ -809,7 +810,11 @@ impl App {
         // Tracker hidden: every Play (Space, Enter, the buttons) plays the
         // Timeline from its play marker - no block loops, which have no
         // timeline playhead
-        let mode = if mode != 0 && !self.tracker_on() && self.with(|s| s.song.timeline.is_some()) {
+        let mode = if mode != 0
+            && !self.tracker_on()
+            && self.view != View::Pattern
+            && self.with(|s| s.song.timeline.is_some())
+        {
             if mode != 1 {
                 self.with(|s| s.engine.stop());
             }
@@ -1149,7 +1154,6 @@ impl eframe::App for App {
         // the track pie takes the keys while it is open
         self.track_pie(&ctx);
         self.handle_keys(&ctx);
-        self.tracker_guard();
         self.tick_safety();
         self.tick_derived();
         self.plugin_frame(&ctx);
@@ -1249,8 +1253,6 @@ impl eframe::App for App {
         } else {
             self.br.rect = Rect::NOTHING;
         }
-        // a menu may have asked for a hidden view this frame
-        self.tracker_guard();
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.inner_margin(egui::Margin {
                 left: 4,

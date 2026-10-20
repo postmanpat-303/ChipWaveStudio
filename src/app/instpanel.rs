@@ -191,8 +191,8 @@ impl App {
             self.status = "Lower panel shown".into();
         }
         // F11 works for the Timeline view too (full-height timeline)
-        if self.view != View::Timeline {
-            self.view = View::Pattern;
+        if !matches!(self.view, View::Timeline | View::Pattern) {
+            self.view = self.home_view();
         }
         self.save_settings();
     }
@@ -211,8 +211,8 @@ impl App {
 
     pub(super) fn show_instrument_panel(&mut self) {
         // the Timeline view has the same lower panel
-        if self.view != View::Timeline {
-            self.view = View::Pattern;
+        if !matches!(self.view, View::Timeline | View::Pattern) {
+            self.view = self.home_view();
         }
         self.dock_arranger = true;
         self.extra.full_height = false;
@@ -261,7 +261,11 @@ impl App {
     /// 0 arranger, 1 instrument, 2 automation, 3 piano roll, 4 devices
     pub(super) fn set_lower(&mut self, m: u8) {
         // the Order list is a Tracker view: hidden, the piano roll stands in
-        let m = if m == 0 && !self.tracker_on() { 3 } else { m };
+        let m = if m == 0 && !self.tracker_on() && self.view != View::Pattern {
+            3
+        } else {
+            m
+        };
         self.dock_arranger = true;
         self.extra.full_height = false;
         self.extra.lower_inst = m == 1;
@@ -437,9 +441,10 @@ impl App {
                     "the selected track's instrument and effects, left to right (Ctrl+7)",
                 ),
             ];
-            let tracker = self.tracker_on();
+            let tracker = self.tracker_on() || self.view == View::Pattern;
             for (m, name, tip) in [3, 4, 1, 2, 0].map(|k| tabs[k]) {
-                // the Order list is a Tracker view (Settings › Show Tracker)
+                // the Order list belongs to the Tracker (Settings › Show
+                // Tracker, or the Tracker view itself)
                 if m == 0 && !tracker {
                     continue;
                 }

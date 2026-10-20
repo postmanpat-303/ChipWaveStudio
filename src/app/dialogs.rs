@@ -36,7 +36,7 @@ impl App {
 
     pub(super) fn toggle_settings(&mut self) {
         self.view = if self.view == View::Settings {
-            View::Pattern
+            self.home_view()
         } else {
             View::Settings
         };
@@ -197,7 +197,7 @@ impl App {
                         Some(self.set_card)
                     };
                 }
-                Key::Escape => self.view = View::Pattern,
+                Key::Escape => self.view = self.home_view(),
                 _ => return false,
             }
             return true;

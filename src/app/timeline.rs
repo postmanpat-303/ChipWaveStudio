@@ -2592,8 +2592,7 @@ impl App {
                         ui.close();
                     }
                 } else {
-                    if self.tracker_on()
-                        && ui
+                    if ui
                         .add(egui::Button::new("Open in Tracker").shortcut_text(if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" }))
                         .clicked()
                     {
@@ -2601,7 +2600,7 @@ impl App {
                         ui.close();
                     }
                     if ui
-                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if self.extra.dblclick_roll || !self.tracker_on() { "double-click" } else { "Alt+double-click" }))
+                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
                         .clicked()
                     {
                         open_roll = true;
@@ -2709,9 +2708,7 @@ impl App {
                     .loop_len
                     .map(|l| format!(" · loops {}x", (cl.len + l - 1) / l))
                     .unwrap_or_default();
-                let dbl = if !self.tracker_on() {
-                    "double-click: piano roll"
-                } else if self.extra.dblclick_roll {
+                let dbl = if self.extra.dblclick_roll {
                     "double-click: piano roll (Alt: Tracker)"
                 } else {
                     "double-click: Tracker (Alt: piano roll)"
@@ -2930,11 +2927,6 @@ impl App {
 
     /// double-click: the block in the pattern editor, cursor on the column and row
     pub(super) fn timeline_open(&mut self, block: usize, col: usize, row: usize, entry: usize) {
-        if !self.tracker_on() {
-            // the Tracker is hidden: block clips open in the piano roll
-            self.timeline_open_roll();
-            return;
-        }
         let (nb, nch) = self.with(|s| (s.song.patterns.len(), s.song.channels));
         if block >= nb {
             return;

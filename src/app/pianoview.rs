@@ -395,12 +395,10 @@ impl App {
                     .map(|(_, t)| t);
             }
         }
-        // timeline mode: only the Timeline's clips - never the Tracker's
-        // cursor block (it isn't on the Timeline, and with the Tracker
-        // hidden its notes would go nowhere you can see)
-        if self.with(|s| s.song.timeline.is_some())
-            && (self.view == View::Timeline || !self.tracker_on())
-        {
+        // the Timeline in timeline mode: only its clips - never the
+        // Tracker's cursor block (it isn't on the Timeline; its notes would
+        // go nowhere you can see). The Tracker view keeps its block.
+        if self.view == View::Timeline && self.with(|s| s.song.timeline.is_some()) {
             return None;
         }
         Some(Target::Block {

@@ -220,7 +220,6 @@ impl App {
                         _ => View::Timeline,
                     }
                 }
-                Key::Num1 | Key::Num2 if cmd && !self.tracker_on() => self.tracker_hidden_note(),
                 Key::Tab if cmd => {
                     self.view = match self.view {
                         View::Pattern => View::Arranger,

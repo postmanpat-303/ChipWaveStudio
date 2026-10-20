@@ -429,11 +429,12 @@ fn count(h: &Harness<'static, App>, text: &str) -> usize {
 }
 
 #[test]
-fn the_tracker_is_hidden_by_default_and_comes_back_in_settings() {
+fn the_tracker_tabs_are_hidden_by_default_and_the_tracker_stays_reachable() {
     assert!(!crate::settings::Extra::default().show_tracker);
     let old: crate::settings::Extra = toml::from_str("").unwrap();
     assert!(!old.show_tracker, "old settings files: hidden too");
-    let mut h = focus(fileio::demo_song());
+    let mut h = focus(Song::clean());
+    h.state_mut().load_demo(0);
     frames(&mut h, 3);
     assert_eq!(h.state().view, View::Timeline);
     assert!(
@@ -467,20 +468,17 @@ fn the_tracker_is_hidden_by_default_and_comes_back_in_settings() {
         assert!(has(&h, here), "{here} is shown");
     }
     assert_eq!(count(&h, "Stop"), 1, "one transport");
-    // the old ways in land on the Timeline
+    // View › Tracker stays: a specialised view, as are Ctrl+1 / Ctrl+2
+    let views: Vec<View> = h.state().views_shown().iter().map(|v| v.0).collect();
+    assert!(views.contains(&View::Pattern) && views.contains(&View::Timeline));
     key(&mut h, Key::Num1, egui::Modifiers::COMMAND);
     frames(&mut h, 2);
-    assert_eq!(h.state().view, View::Timeline);
-    assert!(
-        h.state().status.contains("Show Tracker"),
-        "{}",
-        h.state().status
-    );
+    assert_eq!(h.state().view, View::Pattern, "Ctrl+1: the Tracker");
+    assert!(has(&h, "Play block"), "the Tracker's own controls");
     key(&mut h, Key::Num2, egui::Modifiers::COMMAND);
-    h.state_mut().view = View::Pattern;
     frames(&mut h, 2);
-    assert_eq!(h.state().view, View::Timeline);
-    // the other shortcuts still work
+    assert_eq!(h.state().view, View::Arranger, "Ctrl+2: the Order list");
+    // the other shortcuts
     key(&mut h, Key::Num3, egui::Modifiers::COMMAND);
     frames(&mut h, 2);
     assert_eq!(h.state().view, View::Mixer);
@@ -502,13 +500,17 @@ fn the_tracker_is_hidden_by_default_and_comes_back_in_settings() {
     key(&mut h, Key::Num6, egui::Modifiers::COMMAND);
     frames(&mut h, 2);
     assert!(h.state().pr.open, "Ctrl+6");
-    // Settings › Show Tracker brings it all back
+    // Settings closes back to the Timeline (not the Tracker)
+    key(&mut h, Key::Comma, egui::Modifiers::COMMAND);
+    frames(&mut h, 2);
+    assert_eq!(h.state().view, View::Settings);
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    frames(&mut h, 2);
+    assert_eq!(h.state().view, View::Timeline);
+    // Settings › Show Tracker brings the tabs back
     h.state_mut().extra.show_tracker = true;
     frames(&mut h, 2);
     assert!(has(&h, "TRACKER") && has(&h, "ORDER") && has(&h, "Order list"));
-    key(&mut h, Key::Num1, egui::Modifiers::COMMAND);
-    frames(&mut h, 2);
-    assert_eq!(h.state().view, View::Pattern);
 }
 
 #[test]
@@ -551,9 +553,15 @@ fn nothing_in_the_roll_follows_the_tracker_cursor_block() {
     assert_eq!(h.state().pr_target(), None);
     // stale tracker state does not matter
     h.state_mut().pattern = 0;
-    h.state_mut().view = View::Mixer;
     frames(&mut h, 1);
     assert_eq!(h.state().pr_target(), None);
+    // the Tracker view (View › Tracker) still edits its block
+    h.state_mut().view = View::Pattern;
+    frames(&mut h, 1);
+    assert!(matches!(
+        h.state().pr_target(),
+        Some(super::pianoview::Target::Block { .. })
+    ));
 }
 
 // ---- the save prompt
