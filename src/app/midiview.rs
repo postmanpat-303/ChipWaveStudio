@@ -9,7 +9,7 @@ use std::sync::atomic::Ordering::Relaxed;
 pub(super) struct MidiUi {
     pub hub: midi::Hub,
     /// keys held down right now
-    held: Vec<u8>,
+    pub(super) held: Vec<u8>,
     /// keys of the chord being recorded (chord spread)
     chord: Vec<u8>,
     /// the chord was step-recorded: move the cursor when it is released
@@ -214,6 +214,9 @@ impl App {
         if self.rec_note_on(key, note, vel, at) {
             return;
         }
+        if self.step_note_on(note, vel) {
+            return;
+        }
         if !self.edit || self.view != View::Pattern {
             return; // play only
         }
@@ -282,6 +285,7 @@ impl App {
         self.midi.held.retain(|k| *k != key);
         self.rec_remember_off(key);
         self.rec_note_off(key);
+        self.step_note_off();
         if self.midi.held.is_empty() && !self.midi.chord.is_empty() {
             self.midi.chord.clear();
             if self.midi.chord_step {

@@ -210,6 +210,10 @@ pub(crate) struct PianoUi {
     press: Option<(Pos2, Instant)>,
     /// panning (hand grab): the pointer's last position
     pub(crate) pan: Option<Pos2>,
+    /// MIDI step input: (note data, tick in it) where the next key goes
+    pub(crate) step: Option<(usize, Tick)>,
+    /// keys went in at the step since the last full release (a chord)
+    pub(crate) step_used: bool,
 }
 
 impl Default for PianoUi {
@@ -240,6 +244,8 @@ impl Default for PianoUi {
             vel_rect: Rect::NOTHING,
             press: None,
             pan: None,
+            step: None,
+            step_used: false,
         }
     }
 }
@@ -551,7 +557,6 @@ impl App {
         self.pr.open && self.pr.focus && self.lower_visible() && !self.extra.lower_inst
     }
 
-    #[cfg(test)]
     pub(super) fn pr_grid_now(&self) -> Tick {
         self.pr_grid()
     }

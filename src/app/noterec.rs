@@ -213,6 +213,94 @@ impl App {
         true
     }
 
+    /// MIDI step input on the Timeline (edit mode on; stopped, or Rec step):
+    /// the key goes into the piano roll's note clip at the step position.
+    /// Keys held together land on the same step - a chord - and releasing
+    /// the last one moves the step on by the roll's grid. The step starts at
+    /// the play marker (or the clip start).
+    pub(super) fn step_note_on(&mut self, note: u8, vel: f32) -> bool {
+        let ms = self.extra.midi.clone();
+        if self.view != View::Timeline || !self.edit {
+            return false;
+        }
+        if ms.live_record && self.with(|s| s.engine.playing) {
+            return false;
+        }
+        let Some(super::pianoview::Target::Notes {
+            data,
+            clip: Some(id),
+        }) = self.pr_target()
+        else {
+            return false;
+        };
+        let grid = self.pr_grid_now().max(1);
+        let cue = self.tlv.cue;
+        let at = match self.pr.step {
+            Some((d, t)) if d == data => t,
+            _ => self
+                .with(|s| {
+                    let t = s.song.timeline.as_deref()?;
+                    let c = t.clips.iter().find(|c| c.id == id)?;
+                    let rel = cue - c.start + c.offset;
+                    Some(if cue >= c.start && cue < c.end() {
+                        rel.div_euclid(grid) * grid
+                    } else {
+                        c.offset
+                    })
+                })
+                .unwrap_or(0),
+        };
+        if !self.pr.step_used {
+            self.snapshot();
+        }
+        let vel16 = if ms.velocity {
+            tl::roll::vel_u16(vel)
+        } else {
+            0xFFFF
+        };
+        let ok = self.with(|s| {
+            let t_l = s.song.timeline.as_deref_mut()?;
+            let c = t_l.clips.iter_mut().find(|c| c.id == id)?;
+            let d = t_l.notes.get_mut(data)?.make_mut();
+            // the same key twice on one step is one note
+            if !d.notes.iter().any(|n| n.start == at && n.key == note) {
+                d.notes.push(tl::Note {
+                    start: at,
+                    len: grid,
+                    key: note,
+                    vel: vel16,
+                    ..Default::default()
+                });
+            }
+            let need = bar_up(at + grid);
+            d.len = d.len.max(need);
+            c.len = c.len.max(need - c.offset);
+            let audio::Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
+            Some(())
+        });
+        if ok.is_none() {
+            return false;
+        }
+        self.pr.step = Some((data, at));
+        self.pr.step_used = true;
+        self.dirty = true;
+        self.status = format!("MIDI step {} (release all keys: next step)", note_name(note));
+        true
+    }
+
+    /// a key released: when none is held, step input moves on
+    pub(super) fn step_note_off(&mut self) {
+        if !self.pr.step_used || !self.midi.held.is_empty() {
+            return;
+        }
+        self.pr.step_used = false;
+        let grid = self.pr_grid_now().max(1);
+        if let Some((d, t)) = self.pr.step {
+            self.pr.step = Some((d, t + grid));
+        }
+    }
+
     /// key released: the recorded note gets its length
     pub(super) fn rec_note_off(&mut self, key: u8) {
         let Some(take) = self.noterec.take.as_mut() else {
