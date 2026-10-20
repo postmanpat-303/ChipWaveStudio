@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 65] = [
+pub const VIEWS: [&str; 69] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -93,6 +93,10 @@ pub const VIEWS: [&str; 65] = [
     "timeline-instrument",
     "trackpie",
     "trackpie-icons",
+    "trackpie-colour",
+    "trackpie-add",
+    "trackauto",
+    "split-preview",
     "cliparranger",
     "cliparranger-drag",
     "focus-playing",
@@ -405,7 +409,8 @@ impl App {
                 }
                 self.dirty = false;
             }
-            "trackpie" | "trackpie-icons" => {
+            "trackpie" | "trackpie-icons" | "trackpie-colour" | "trackpie-add" | "trackauto"
+            | "split-preview" => {
                 // the default layout on the timeline-mode demo; the pie
                 // opens a few frames later (shot_pie)
                 self.enter_timeline();
@@ -992,8 +997,11 @@ impl App {
                 self.ca.shot_drag = Some(Pos2::new(x, row.center().y));
             }
         }
-        if view.starts_with("trackpie") && f == SETUP_AT + 12 {
+        if (view.starts_with("trackpie") || view == "trackauto") && f == SETUP_AT + 12 {
             self.shot_pie(ctx, &view);
+        }
+        if view == "split-preview" && f == SETUP_AT + 12 {
+            self.shot_split();
         }
         // no audio device: advance the engine from the UI at real-time speed
         let now = std::time::Instant::now();
@@ -1588,6 +1596,90 @@ impl App {
                 p.sub = Some((2, now));
                 p.sub_key = Some(6);
             }
+            if view == "trackpie-add" {
+                p.key = Some(3);
+                p.sub = Some((3, now));
+            }
+        }
+        if view == "trackpie-add" {
+            let info = self.pie_info(tr);
+            let at = super::trackpie::sub_items(super::trackpie::SEGS[3], &info)
+                .iter()
+                .position(|i| i.act == Some(super::trackpie::PieAct::Automation));
+            if let Some(p) = &mut self.pie {
+                p.sub_key = at;
+            }
+        }
+        if view == "trackauto" {
+            self.pie_apply(tr, super::trackpie::PieAct::Automation, ctx);
+            self.pie = None;
+        }
+        if view == "trackpie-colour" {
+            // the pointer goes from Colour straight to its panel, over the
+            // ring's next segment: the panel stays open
+            if let Some(p) = &mut self.pie {
+                p.key = None;
+                p.frozen = None;
+            }
+            let Some(c) = self.pie.as_ref().map(|p| p.centre) else {
+                return;
+            };
+            let a = super::trackpie::seg_angle(1);
+            let from = c + egui::vec2(a.cos(), a.sin()) * 110.0;
+            let info = self.pie_info(tr);
+            let items = super::trackpie::sub_items(super::trackpie::SEGS[1], &info);
+            let (size, _) = super::trackpie::sub_layout(super::trackpie::SEGS[1], &items);
+            let panel = super::trackpie::sub_rect(c, 1, size, ctx.content_rect());
+            let to = panel.center();
+            let mut sc = vec![];
+            for i in 0..=12u32 {
+                let t = i as f32 / 12.0 * 0.62;
+                sc.push((
+                    SETUP_AT + 30 + i * 2,
+                    egui::Event::PointerMoved(from + (to - from) * t),
+                ));
+            }
+            if let Some(sh) = &mut self.shot {
+                sh.script = sc;
+            }
+        }
+    }
+
+    /// `--view split-preview`: S on the timeline with the pointer over a
+    /// clip on track 2 (the amber split line, its label, the clip outlined)
+    fn shot_split(&mut self) {
+        let Some(c) = self.tlv.cache.as_ref() else {
+            return;
+        };
+        let Some(cl) =
+            c.tl.clips
+                .iter()
+                .filter(|x| x.track == 1 && x.len >= 4 * crate::timeline::PPQ)
+                .min_by_key(|x| x.start)
+                .cloned()
+        else {
+            return;
+        };
+        // zoomed in so the line and its label read at a glance
+        self.tlv.zoom = 40.0;
+        self.tlv.scroll = 0.0;
+        let Some((_, row)) = self.tlv.track_rects(1) else {
+            return;
+        };
+        let ppq = crate::timeline::PPQ;
+        let x = self.tlv.x_of(cl.start + (22 * ppq).min(cl.len * 5 / 8)) + 3.0;
+        self.tlv.split_arm = true;
+        self.status = "Split: click to cut · Esc cancels".into();
+        let p = Pos2::new(x, row.center().y);
+        if let Some(sh) = &mut self.shot {
+            sh.script = (0..6)
+                .map(|i| {
+                    (
+                        SETUP_AT + 40 + i * 3,
+                        egui::Event::PointerMoved(p + egui::vec2(i as f32, 0.0)),
+                    )
+                })
+                .collect();
         }
     }
 }
