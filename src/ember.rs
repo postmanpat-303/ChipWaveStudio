@@ -748,74 +748,102 @@ pub fn button_ex(
         egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), selected, &label)
     });
     if ui.is_rect_visible(r) {
-        let p = ui.painter();
-        let pressed = resp.is_pointer_button_down_on();
-        let (top, bot) = if pressed {
-            (BG2, BG3)
-        } else if resp.hovered() {
-            (BG4, BG3)
-        } else {
-            (BG3, BG2)
-        };
-        let mut m = egui::Mesh::default();
-        crate::theme::round_mesh(&mut m, r, [4.0; 4], top, bot);
-        p.add(egui::Shape::mesh(m));
-        if !pressed {
-            p.hline(
-                (r.left() + 3.0)..=(r.right() - 3.0),
-                r.top() + 1.5,
-                Stroke::new(1.0, Color32::from_white_alpha(16)),
-            );
-        }
-        let outline = if primary {
-            if bloom() {
-                p.rect_stroke(
-                    r.expand(1.5),
-                    5,
-                    Stroke::new(3.0, alpha(t.accent, 0.18)),
-                    egui::StrokeKind::Inside,
-                );
-            }
-            if resp.hovered() {
-                t.acc_hot
-            } else {
-                t.accent
-            }
-        } else if selected || resp.hovered() {
-            hex(0x8A8F96)
-        } else {
-            LINE2
-        };
-        p.rect_stroke(r, 4, Stroke::new(1.0, outline), egui::StrokeKind::Inside);
-        let col = if !ui.is_enabled() {
-            INK3
-        } else if selected || primary {
-            t.acc_hot
-        } else {
-            t.ink
-        };
-        let tw = g.size().x + dot;
-        let x0 = r.center().x - tw * 0.5;
-        if selected {
-            led(p, Pos2::new(x0 + 3.0, r.center().y), 3.0, true);
-        }
-        p.text(
-            Pos2::new(x0 + dot, r.center().y),
-            Align2::LEFT_CENTER,
-            txt,
-            font,
-            col,
+        paint_button(
+            ui.painter(),
+            r,
+            &resp,
+            text,
+            selected,
+            primary,
+            ui.is_enabled(),
         );
-        if resp.has_focus() {
-            p.rect_stroke(
-                r.expand(2.0),
-                5,
-                Stroke::new(1.5, t.focus_ring),
-                egui::StrokeKind::Outside,
-            );
-        }
     }
     resp
+}
+
+/// paint the outlined button into `r` (shared by `button_ex` and the
+/// existing toolbar / piano-roll buttons in Slate): bevelled face, 1 px
+/// outline, capital label; `selected` adds the LED dot and orange text,
+/// `primary` the lit orange outline
+pub fn paint_button(
+    p: &Painter,
+    r: Rect,
+    resp: &egui::Response,
+    text: &str,
+    selected: bool,
+    primary: bool,
+    enabled: bool,
+) {
+    let t = th();
+    let font = label_font(if r.height() < 20.0 { 11.5 } else { 12.5 });
+    let txt = text.to_uppercase();
+    let g = p.layout_no_wrap(txt.clone(), font.clone(), t.ink);
+    let dot = if selected { 10.0 } else { 0.0 };
+    let pressed = resp.is_pointer_button_down_on();
+    let (top, bot) = if pressed {
+        (BG2, BG3)
+    } else if resp.hovered() {
+        (BG4, BG3)
+    } else {
+        (BG3, BG2)
+    };
+    let mut m = egui::Mesh::default();
+    crate::theme::round_mesh(&mut m, r, [4.0; 4], top, bot);
+    p.add(egui::Shape::mesh(m));
+    if !pressed {
+        p.hline(
+            (r.left() + 3.0)..=(r.right() - 3.0),
+            r.top() + 1.5,
+            Stroke::new(1.0, Color32::from_white_alpha(16)),
+        );
+    }
+    let outline = if primary {
+        if bloom() {
+            p.rect_stroke(
+                r.expand(1.5),
+                5,
+                Stroke::new(3.0, alpha(t.accent, 0.18)),
+                egui::StrokeKind::Inside,
+            );
+        }
+        if resp.hovered() {
+            t.acc_hot
+        } else {
+            t.accent
+        }
+    } else if selected || resp.hovered() {
+        hex(0x8A8F96)
+    } else {
+        LINE2
+    };
+    p.rect_stroke(r, 4, Stroke::new(1.0, outline), egui::StrokeKind::Inside);
+    let col = if !enabled {
+        INK3
+    } else if selected || primary {
+        t.acc_hot
+    } else {
+        t.ink
+    };
+    let tw = g.size().x + dot;
+    let x0 = r.center().x - tw * 0.5;
+    if selected {
+        led(p, Pos2::new(x0 + 3.0, r.center().y), 3.0, true);
+    }
+    p.text(
+        Pos2::new(x0 + dot, r.center().y),
+        Align2::LEFT_CENTER,
+        txt,
+        font,
+        col,
+    );
+    if resp.has_focus() {
+        p.rect_stroke(
+            r.expand(2.0),
+            5,
+            Stroke::new(1.5, t.focus_ring),
+            egui::StrokeKind::Outside,
+        );
+    }
 }
 
 /// one LED + label (a toggle or one option of an LED selector)
@@ -953,4 +981,14 @@ pub fn caps_label(ui: &mut egui::Ui, text: &str, size: f32) -> egui::Response {
     let name = text.to_string();
     r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &name));
     r
+}
+
+/// an on/off toolbar toggle: Slate draws the outlined button with its LED
+/// dot when on; the classic themes keep the selectable label (`classic`)
+pub fn toggle(ui: &mut egui::Ui, on: bool, classic: egui::RichText, text: &str) -> egui::Response {
+    if th().ember {
+        button(ui, text, on)
+    } else {
+        ui.selectable_label(on, classic)
+    }
 }

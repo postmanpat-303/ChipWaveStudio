@@ -2163,7 +2163,10 @@ fn pr_btn(ui: &mut egui::Ui, label: &str, on: bool, enabled: bool, tip: &str) ->
             Sense::hover()
         },
     );
-    if ui.is_rect_visible(r) {
+    if ui.is_rect_visible(r) && t.ember {
+        // Slate: the outlined button (LED dot when on)
+        crate::ember::paint_button(ui.painter(), r, &resp, label, on, false, enabled);
+    } else if ui.is_rect_visible(r) {
         btn_back(ui.painter(), r, &resp, on);
         let col = if !enabled {
             t.ink2.gamma_multiply(0.5)

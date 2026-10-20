@@ -103,6 +103,10 @@ pub(super) fn transport_button(
             ));
         }
         Tr::Record => {
+            // Slate: the record dot glows while recording (a lit thing)
+            if on && th().ember {
+                crate::ember::glow_dot(p, c, 5.5, col);
+            }
             p.circle_filled(c, 5.5, col);
         }
     }

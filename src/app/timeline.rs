@@ -2053,7 +2053,16 @@ impl App {
                 .map_or(lay.total(), |m| lay.top[m] - autolanes::MASTER_GAP);
             if let Some(m) = lay.master {
                 let dy = heads.top() + lay.top[m] - sy - 4.0;
-                if dy > heads.top() && dy < heads.bottom() {
+                if dy > heads.top() && dy < heads.bottom() && t.ember {
+                    // Slate: an engraved groove (dark line over a highlight)
+                    let xr = heads.left()..=lanes.right();
+                    ui.painter().hline(xr.clone(), dy, Stroke::new(1.0, t.edge));
+                    ui.painter().hline(
+                        xr,
+                        dy + 1.0,
+                        Stroke::new(1.0, Color32::from_white_alpha(14)),
+                    );
+                } else if dy > heads.top() && dy < heads.bottom() {
                     ui.painter().hline(
                         heads.left()..=lanes.right(),
                         dy,

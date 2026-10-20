@@ -884,12 +884,19 @@ impl App {
                         self.rec_toggle();
                     }
                     if rec {
-                        ui.label(egui::RichText::new("REC").small().strong().color(t.brick))
+                        let rec_txt = if t.ember {
+                            // Slate: a lit (glowing) red tally
+                            egui::RichText::new("REC")
+                                .font(theme::label_font(13.0))
+                                .color(crate::ember::RED)
+                        } else {
+                            egui::RichText::new("REC").small().strong().color(t.brick)
+                        };
+                        ui.label(rec_txt)
                             .on_hover_text("recording: R or the Record button stops it");
                     }
                     let m = self.extra.metronome;
-                    if ui
-                        .selectable_label(m, egui::RichText::new("Click").small())
+                    if crate::ember::toggle(ui, m, egui::RichText::new("Click").small(), "Click")
                         .on_hover_text(format!(
                             "metronome: {}\n(with it on, Record counts in a bar first; Settings › Recording)",
                             if m { "on" } else { "off" }
@@ -1061,13 +1068,14 @@ impl App {
                 } else {
                     "Typing".to_string()
                 };
-                if ui
-                    .selectable_label(
-                        on,
-                        egui::RichText::new(txt)
-                            .small()
-                            .color(if on { t.accent } else { hdr_dim() }),
-                    )
+                if crate::ember::toggle(
+                    ui,
+                    on,
+                    egui::RichText::new(txt.clone())
+                        .small()
+                        .color(if on { t.accent } else { hdr_dim() }),
+                    &txt,
+                )
                     .on_hover_text(
                         "musical typing (Ctrl+K): play notes on the computer keyboard\nA S D F G H J K L ; white keys, W E T Y U O P black keys\nZ / X octave down / up, C / V velocity down / up\n(while on, those keys play notes instead of their shortcuts)",
                     )
