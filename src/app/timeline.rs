@@ -242,6 +242,10 @@ pub(crate) struct TimelineUi {
     /// scroll so this (track, tick) is in view on the next frame (a clip
     /// just added from the Drum Kit editor)
     pub(crate) reveal: Option<(usize, Tick)>,
+    /// the Song / Master header was clicked: (its track, `ch` then). It has
+    /// no channel, so `ch` (the lower panel, live input) stays on the last
+    /// instrument track; the highlight goes back to `ch` when that changes
+    pub(crate) song_sel: Option<(usize, usize)>,
 }
 
 impl Default for TimelineUi {
@@ -288,6 +292,7 @@ impl Default for TimelineUi {
             last_touch: None,
             flash: None,
             reveal: None,
+            song_sel: None,
         }
     }
 }
@@ -1141,9 +1146,13 @@ impl App {
         let mut outlines: Vec<(Rect, Stroke)> = vec![];
         let pol = theme::polished();
         let mut glows: Vec<Rect> = vec![];
+        let cur_tr = self.tl_cur_track();
         for tr in first_tr..last_tr {
             let lr = lane_rect(tr);
-            if tr % 2 == 1 {
+            if tr == cur_tr {
+                // the selected track's lane, as its header
+                quad(&mut bodies, lr, t.sel.gamma_multiply(0.12));
+            } else if tr % 2 == 1 {
                 quad(&mut bodies, lr, Color32::from_white_alpha(4));
             }
             quad(
@@ -1750,7 +1759,7 @@ impl App {
                 continue;
             }
             let colr = track_colour_in(&c.tl, tr);
-            let cur = self.ch == tr;
+            let cur = cur_tr == tr;
             hp.rect_filled(
                 hr,
                 3,
@@ -2014,7 +2023,8 @@ impl App {
                 }
             }
             if nresp.clicked() {
-                head_ops.push(HeadOp::Select(tr));
+                let m = ui.input(|i| i.modifiers);
+                head_ops.push(HeadOp::Select(tr, m.shift || m.command));
             }
             if nresp.drag_started() {
                 hd = Some(tr);
@@ -2602,6 +2612,7 @@ impl App {
                         }
                         self.tlv.sel = Some(*sels.last().unwrap_or(&id));
                         self.tlv.sels = sels;
+                        head_ops.push(HeadOp::Pick(cl.track as usize));
                         start_drag = Some(d);
                     }
                     (None, _) => {
@@ -2661,6 +2672,18 @@ impl App {
                                 }
                             }
                         }
+                        // the headers follow: the topmost track with a selected
+                        // clip, else the band's top track
+                        let top =
+                            c.tl.clips
+                                .iter()
+                                .filter(|x| sels.contains(&x.id))
+                                .map(|x| x.track as usize)
+                                .min()
+                                .unwrap_or(r0);
+                        if top < n_tracks {
+                            head_ops.push(HeadOp::Pick(top));
+                        }
                         self.tlv.sel = sels.last().copied();
                         self.tlv.sels = sels;
                         None
@@ -2695,6 +2718,12 @@ impl App {
                         self.tlv.sel = id;
                         self.tlv.sels = id.into_iter().collect();
                     }
+                }
+                // the clicked track becomes the selected track (headers,
+                // lower panel, live input)
+                let pick = hit.map_or(tr, |i| c.tl.clips[i].track as usize);
+                if pick < n_tracks && in_clip_row(p.y) {
+                    head_ops.push(HeadOp::Pick(pick));
                 }
                 if cresp.double_clicked() && tr < n_tracks && tk >= 0.0 && in_clip_row(p.y) {
                     let tk = tk as Tick;
@@ -3077,6 +3106,57 @@ impl App {
         self.tl_apply(TlOp::Speed(tr, v));
     }
 
+    /// the track drawn selected in the headers and lanes: `ch`, or the Song
+    /// / Master track right after its header was clicked
+    pub(crate) fn tl_cur_track(&self) -> usize {
+        match self.tlv.song_sel {
+            Some((m, ch)) if ch == self.ch => m,
+            _ => self.ch,
+        }
+    }
+
+    /// Select timeline track `tr` through the one track selection there is:
+    /// `ch` (headers, lane tint, the lower panel, live MIDI and musical
+    /// typing) and `instr` (the track's instrument). Unless `keep`, clips
+    /// selected on other tracks are let go. The Song / Master track only
+    /// lights up (it has no channel): returns false for it.
+    pub(crate) fn tl_select_track(&mut self, tr: usize, keep: bool) -> bool {
+        let (kind, nch, ni) = self.with(|s| {
+            let t = s.song.timeline.as_deref().and_then(|t| t.tracks.get(tr));
+            (
+                t.map(|t| t.kind),
+                s.song.channels.min(crate::model::MAX_CHANNELS),
+                s.song.instruments.len(),
+            )
+        });
+        if kind == Some(tl::TrackKind::Master) || tr >= nch {
+            self.tlv.song_sel = Some((tr, self.ch));
+            return false;
+        }
+        self.tlv.song_sel = None;
+        self.ch = tr;
+        // the track's instrument (given, else the one it mostly plays), as
+        // the Devices row picks it
+        let given = self.track_slot(tr);
+        if given > 0 && (given as usize) <= ni {
+            self.instr = given;
+        }
+        if !keep {
+            if let Some(c) = self.tlv.cache.as_ref() {
+                let on = |id: &u32| {
+                    c.tl.clips
+                        .iter()
+                        .any(|x| x.id == *id && x.track as usize == tr)
+                };
+                self.tlv.sels.retain(on);
+                if self.tlv.sel.is_some_and(|id| !on(&id)) {
+                    self.tlv.sel = self.tlv.sels.last().copied();
+                }
+            }
+        }
+        true
+    }
+
     fn timeline_head_op(&mut self, op: HeadOp) {
         self.with(|s| {
             let mx = &mut s.song.mixer.channels;
@@ -3084,7 +3164,8 @@ impl App {
                 HeadOp::Mute(i) => mx[i].mute = !mx[i].mute,
                 HeadOp::Solo(i) => mx[i].solo = !mx[i].solo,
                 HeadOp::Volume(i, v) => mx[i].volume = v.clamp(0.0, 2.0),
-                HeadOp::Select(_)
+                HeadOp::Select(..)
+                | HeadOp::Pick(_)
                 | HeadOp::Speed(..)
                 | HeadOp::Move(..)
                 | HeadOp::Add(_)
@@ -3112,20 +3193,22 @@ impl App {
             self.tl_apply(TlOp::Speed(i, v));
             return;
         }
-        if let HeadOp::Select(i) = op {
-            self.ch = i;
-            let given = self.with(|s| {
-                s.song
-                    .timeline
-                    .as_deref()
-                    .and_then(|t| t.tracks.get(i))
-                    .map(|t| t.instr)
-                    .unwrap_or(0)
-            });
-            if given > 0 && (given as usize) <= self.with(|s| s.song.instruments.len()) {
-                self.instr = given;
+        match op {
+            HeadOp::Select(i, keep) => {
+                // a header: the timeline's clip selection keeps only that
+                // track's clips (Shift / Ctrl: keeps them all)
+                if self.tl_select_track(i, keep) {
+                    self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
+                } else {
+                    self.status =
+                        "Song / Master track selected (tempo, master and return lanes)".into();
+                }
             }
-            self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
+            // a clip or the empty lane: its track, clips as the click left them
+            HeadOp::Pick(i) => {
+                self.tl_select_track(i, true);
+            }
+            _ => {}
         }
         self.dirty = true;
     }
@@ -3283,7 +3366,10 @@ enum HeadOp {
     Mute(usize),
     Solo(usize),
     Volume(usize, f32),
-    Select(usize),
+    /// a track header clicked: (track, Shift / Ctrl held)
+    Select(usize, bool),
+    /// a clip, an empty lane spot or a rubber band picked this track
+    Pick(usize),
     Speed(usize, u8),
     /// drag reorder: track, new index
     Move(usize, usize),
