@@ -301,3 +301,67 @@ fn block_length_keys_only_act_where_the_tracker_shows() {
     key(&mut h, Key::PageDown, both);
     assert_eq!(rows(&h), r0 * 2, "the Tracker doubles it");
 }
+
+/// File > New with one track and a note clip of 4 notes (keys 49, 51, 53,
+/// 55), open in the piano roll
+fn roll_with_four_notes() -> (Harness<'static, App>, u32) {
+    let mut h = harness_with(fileio::demo_song());
+    h.state_mut().new_song();
+    frames(&mut h, 2);
+    assert!(h.state_mut().track_add(0));
+    frames(&mut h, 2);
+    let id = h.state().with(|s| {
+        let id = tl::new_note_clip(&mut s.song, 0, 0).unwrap();
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        let c = t.clips.iter().find(|c| c.id == id).unwrap();
+        if let tl::ClipKind::Notes { data } = c.kind {
+            let d = t.notes[data as usize].make_mut();
+            for (n, k) in [49u8, 51, 53, 55].iter().enumerate() {
+                d.notes.push(tl::Note {
+                    start: n as tl::Tick * tl::PPQ,
+                    len: tl::PPQ / 2,
+                    key: *k,
+                    vel: 0xC000,
+                    rel_vel: 0,
+                    instr: 0,
+                    fx: None,
+                    tune: 0.0,
+                    chance: 0,
+                    expr: vec![],
+                });
+            }
+        }
+        let Shared { song, engine, .. } = s;
+        engine.ensure_plan(song);
+        id
+    });
+    frames(&mut h, 2);
+    h.state_mut().tlv.sel = Some(id);
+    h.state_mut().tlv.sels = vec![id];
+    h.state_mut().timeline_open_roll();
+    frames(&mut h, 3);
+    (h, id)
+}
+
+#[test]
+fn undo_does_not_move_the_piano_roll_selection_onto_other_notes() {
+    let (mut h, _) = roll_with_four_notes();
+    // delete the 2nd note (key 51) as one step, then select key 53 (index 1)
+    h.state_mut().snapshot();
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        t.notes[0].make_mut().notes.remove(1);
+    });
+    frames(&mut h, 2);
+    h.state_mut().pr.sel = vec![1];
+    key(&mut h, Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(song(&h, |s| s.timeline.as_ref().unwrap().notes[0].notes.len()), 4);
+    assert!(h.state().pr.sel.is_empty(), "the selection would now be key 51");
+    // so an arrow key after undo moves nothing
+    let keys = |h: &Harness<'static, App>| {
+        song(h, |s| s.timeline.as_ref().unwrap().notes[0].notes.iter().map(|n| n.key).collect::<Vec<_>>())
+    };
+    let k0 = keys(&h);
+    key(&mut h, Key::ArrowUp, egui::Modifiers::NONE);
+    assert_eq!(keys(&h), k0);
+}

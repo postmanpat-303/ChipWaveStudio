@@ -775,6 +775,9 @@ impl App {
         self.arr_sel = self.arr_sel.min(self.order_len().saturating_sub(1));
         self.arr_multi.clear();
         self.sel = None;
+        // piano-roll note ids are indices / rows: after undo they would
+        // point at other notes (timeline clip ids are pruned on refresh)
+        self.pr.forget_selection();
     }
 
     fn rows(&self) -> usize {
