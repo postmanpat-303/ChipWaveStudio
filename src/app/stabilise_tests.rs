@@ -7,6 +7,7 @@ use super::ui_tests::{frame, harness_with, key};
 use super::*;
 use crate::timeline as tl;
 use egui::Key;
+use egui_kittest::kittest::Queryable;
 use egui_kittest::Harness;
 
 fn frames(h: &mut Harness<'static, App>, n: usize) {
@@ -386,4 +387,59 @@ fn tracker_mode_delete_or_mute_with_nothing_selected_does_not_ask_to_switch() {
         assert!(h.state().status.starts_with("Select a clip first"), "{}", h.state().status);
     }
     assert!(song(&h, |s| s.timeline.is_none()) && !h.state().dirty);
+}
+
+fn orphan_in(dir_name: &str) -> crate::recovery::Orphan {
+    let dir = std::env::temp_dir().join(format!("cw-stab-{dir_name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("autosave.cwt");
+    fileio::save_cwt(&fileio::demo_song(), &file).unwrap();
+    crate::recovery::Orphan {
+        dir,
+        file,
+        info: Default::default(),
+        source: "autosave",
+        modified: std::time::SystemTime::now(),
+        crashed: true,
+    }
+}
+
+fn press(h: &mut Harness<'static, App>, label: &str) {
+    let c = h.get_by_label(label).rect().center();
+    super::ui_tests::click_at(h, c);
+    frames(h, 2);
+}
+
+#[test]
+fn recovery_discard_asks_before_deleting_the_copy() {
+    let mut h = harness_with(fileio::demo_song());
+    let o = orphan_in("discard");
+    let dir = o.dir.clone();
+    h.state_mut().orphans.push(o);
+    frames(&mut h, 3);
+    press(&mut h, "Discard");
+    assert!(dir.exists(), "one click must not delete the copy");
+    assert_eq!(h.state().orphans.len(), 1);
+    press(&mut h, "Keep");
+    assert!(dir.exists());
+    press(&mut h, "Discard");
+    press(&mut h, "Delete it");
+    assert!(!dir.exists());
+    assert!(h.state().orphans.is_empty());
+}
+
+#[test]
+fn recovering_a_copy_opens_it_unsaved_and_not_clean_after_undo() {
+    let mut h = harness_with(fileio::demo_song());
+    let o = orphan_in("recover");
+    let dir = o.dir.clone();
+    h.state_mut().orphans.push(o);
+    frames(&mut h, 3);
+    press(&mut h, "Recover");
+    assert!(h.state().orphans.is_empty() && !dir.exists());
+    assert!(h.state().dirty && h.state().path.is_none());
+    assert!(song(&h, |s| s.title.ends_with("(recovered)")));
+    key(&mut h, Key::Z, egui::Modifiers::COMMAND);
+    assert!(h.state().dirty, "a recovered song is on disk nowhere");
 }
