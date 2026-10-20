@@ -1567,13 +1567,13 @@ fn scale_slider_applies_on_release_only() {
         .query_all_by(|n| n.role() == Role::Slider)
         .map(|n| n.rect())
         .filter(|r| (r.center().y - reset.center().y).abs() < 12.0 && r.right() <= reset.left())
-        .last()
+        .max_by(|a, b| a.left().total_cmp(&b.left()))
         .expect("the scale slider");
-    let y = slider.center().y as f32;
-    let from = Pos2::new(slider.left() as f32 + 4.0, y);
+    let y = slider.center().y;
+    let from = Pos2::new(slider.left() + 4.0, y);
     // part way up (at the top end the Reset button scrolls out of the
     // harness window)
-    let to = Pos2::new((slider.left() + (slider.width()) * 0.7) as f32, y);
+    let to = Pos2::new(slider.left() + slider.width() * 0.7, y);
     let ev = |h: &mut Harness<'static, App>, e: egui::Event| {
         h.input_mut().events.push(e);
         frame(h);
@@ -1626,7 +1626,7 @@ fn scale_slider_applies_on_release_only() {
     // Reset to 100 %
     frames(&mut h, 2);
     let c = h.get_by_label("Reset to 100 %").rect().center();
-    click_at(&mut h, Pos2::new(c.x as f32, c.y as f32));
+    click_at(&mut h, Pos2::new(c.x, c.y));
     frames(&mut h, 3);
     assert!((h.state().zoom - 1.0).abs() < 0.001);
     assert!((h.ctx.pixels_per_point() - ppp0).abs() < 0.001);
