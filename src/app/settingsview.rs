@@ -401,16 +401,52 @@ impl App {
                 ui.end_row();
                 ui.label("Scale");
                 ui.horizontal(|ui| {
-                    let mut z = self.zoom;
-                    if ui
+                    // the slider edits a pending value; the UI rescales only
+                    // when it is let go (dragging a live scale moved the
+                    // slider under the pointer)
+                    let mut z = self.zoom_drag.unwrap_or(self.zoom);
+                    let r = ui
                         .add(
                             egui::Slider::new(&mut z, 0.5..=self.max_zoom.max(1.0))
-                                .step_by(0.05)
+                                .step_by(0.25)
                                 .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
                         )
-                        .changed()
+                        .on_hover_text("let go to apply");
+                    if r.changed() || r.dragged() {
+                        // what set_zoom will apply (quarter steps, fits the window)
+                        let q = ((z * 4.0).round() / 4.0).clamp(0.5, self.max_zoom.max(0.5));
+                        self.zoom_drag = Some(q);
+                    }
+                    if let Some(p) = self.zoom_drag {
+                        if r.dragged() {
+                            // the workspace at that scale (window size at 100 %)
+                            let base = ui.ctx().content_rect().size() * ui.ctx().zoom_factor();
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "{:.0} % · {:.0}×{:.0} at this scale",
+                                    p * 100.0,
+                                    base.x / p,
+                                    base.y / p
+                                ))
+                                .strong(),
+                            );
+                        } else {
+                            // let go (or a click / arrow key on the slider)
+                            self.zoom_drag = None;
+                            if (p - self.zoom).abs() > 0.001 {
+                                self.set_zoom(p);
+                            }
+                        }
+                    }
+                    if ui
+                        .add_enabled(
+                            (self.zoom - 1.0).abs() > 0.001,
+                            egui::Button::new("Reset to 100 %"),
+                        )
+                        .clicked()
                     {
-                        self.set_zoom(z);
+                        self.zoom_drag = None;
+                        self.set_zoom(1.0);
                     }
                     ui.label(
                         egui::RichText::new("Ctrl+= / Ctrl+- / Ctrl+0")

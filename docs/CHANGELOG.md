@@ -5,6 +5,8 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 ## Unreleased
 
 ### Workflow and stability
+- **The Settings scale slider no longer jumps under the pointer.** Dragging it used to rescale the whole UI on every frame (and save the settings each time), so the slider moved and resized while you dragged it. It now shows the pending scale and the workspace size it gives (*125 % · 1536×864 at this scale*) and applies on release, in the same 25 % steps that Ctrl+= / Ctrl+- use. **Reset to 100 %** sits next to it, and Ctrl+0 still works.
+- **Crash reports are kept.** Every crash report is also copied to `<config>/crashes/crash-<time>.txt` (the newest 20 are kept), so discarding the recovered song no longer deletes it.
 - **Generate chord progression no longer crashes.** Clicking a style with fewer progressions than the one shown (for example Cinematic's 5th, then Blues) indexed past the end of the list and closed the app. Chord roots from a hand-edited file outside C…B are now safe too.
 - **Track pie submenus stay open on the way to them.** The Colour, Icon, Add and Organize panels now sit clear of the ring, beside their segment, and moving the pointer towards an open panel keeps it open even when it crosses another segment. Resting on another segment for a moment, or leaving the path, switches as before.
 - **Split shows where it will cut.** **S** or **Split…** in the clip menu shows an amber line that follows the pointer, snaps to the grid and says *Split 3.2.000*; the clip under the pointer is outlined. A click cuts it (one undo step), **Esc**, **S** again or a right-click cancels.

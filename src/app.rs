@@ -295,6 +295,9 @@ pub struct App {
     win_rect: Option<[f32; 4]>,
     max_zoom: f32,
     zoom_checked: bool,
+    /// the Settings scale slider's value while it is dragged: applied on
+    /// release, so the UI doesn't rescale under the pointer
+    zoom_drag: Option<f32>,
     themed: bool,
     theme: theme::Theme,
     show_help: bool,
@@ -641,6 +644,7 @@ impl App {
             win_rect: crate::settings::load().window,
             max_zoom: 3.0,
             zoom_checked: false,
+            zoom_drag: None,
             themed: false,
             theme: crate::settings::load().theme(),
             show_help: false,
