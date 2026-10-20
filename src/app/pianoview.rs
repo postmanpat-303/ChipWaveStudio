@@ -145,7 +145,7 @@ pub(crate) struct Puff {
 /// how long a puff of smoke lasts
 const SMOKE_S: f32 = 0.5;
 
-/// note-clip snap grids (ticks, label); 0 = Smart (follows the zoom)
+/// note-clip snap grids (ticks, label); 0 = Auto (follows the zoom)
 const GRIDS: [(Tick, &str); 8] = [
     (4 * PPQ, "Bar"),
     (PPQ, "Beat"),
@@ -153,11 +153,11 @@ const GRIDS: [(Tick, &str); 8] = [
     (ROW, "1/16"),
     (ROW / 2, "1/32"),
     (PPQ / 6, "1/16T"),
-    (0, "Smart"),
+    (0, "Auto"),
     (1, "off"),
 ];
 
-/// Smart snap: the finest of 1/32 … bar that is at least 12 px wide
+/// Auto snap: the finest of 1/32 … bar that is at least 12 px wide
 fn smart_grid(zoom: f32) -> Tick {
     let ppt = zoom as f64 / ROW as f64;
     [ROW / 2, ROW, PPQ / 2, PPQ, 4 * PPQ]
@@ -1075,7 +1075,7 @@ impl App {
                 ui.add_space(6.0);
                 if let Target::Notes { .. } = target {
                     let shown = if self.pr.grid == 0 {
-                        format!("Smart · {}", len_name(smart_grid(self.pr.zoom)))
+                        format!("Auto · {}", len_name(smart_grid(self.pr.zoom)))
                     } else {
                         grid_name(self.pr.grid).to_string()
                     };

@@ -68,7 +68,7 @@ The lower panel has a **Piano roll** tab (next to Order list / Instrument / Auto
 **Toolbar and editing (Unreleased, all targets):** one row, left to right:
 - the clip / block **chip** (track colour) and **ALL** (select every note, Ctrl+A);
 - the tools: **Pointer** (key **1**, the default: click empty space draws a note, drag a note moves it, its right edge resizes it), **Select** (**2**: drag a box on empty space; never draws) and **Pencil** (**3**: click draws, dragging paints a run of notes, each the remembered length, at the mouse's pitch);
-- note clips: the **snap** menu (Bar, Beat, 1/8, 1/16, 1/32, 1/16T, **Smart** = follows the zoom, off), **Quantize** (Q);
+- note clips: the **snap** menu (Bar, Beat, 1/8, 1/16, 1/32, 1/16T, **Auto** = follows the zoom, like the Timeline's Auto, off), **Quantize** (Q);
 - **Fit** (F: zoom to the notes); **Scale** turns the song key on or off (its notes are highlighted; the same key as the Chords window) with the **key** and **scale** menus;
 - **Len**: the length the next click draws (also a menu).
 - note clips: **Chords** shows the **chord lane** above the notes, **Generate** opens *Generate chord progression*, and **Stamp** picks the chord the click draws (see [CHORDS.md › Chord lane](CHORDS.md#chord-lane-in-the-piano-roll-unreleased)).
@@ -94,7 +94,7 @@ The lower panel has a **Piano roll** tab (next to Order list / Instrument / Auto
 
 **Note clips (M3b)** are polyphonic, with free timing:
 - To make one: right-click empty space › **New note clip here**, or **Shift+double-click** empty space. Double-click or **Enter** on a note clip opens it in the roll; double-click opens Tracker clips there too (see [Finding your way around](#finding-your-way-around)).
-- The **snap** menu sets the grid (Bar, Beat, 1/8 … 1/32, 1/16T, Smart, off), and **Q** / **Quantize** snaps the selection (or every note).
+- The **snap** menu sets the grid (Bar, Beat, 1/8 … 1/32, 1/16T, Auto, off), and **Q** / **Quantize** snaps the selection (or every note).
 - **Chord** draws the song key's chord on the clicked scale degree (set the key in the Chords window). Notes in the song key are highlighted.
 - Dragging the edge of a note resizes the whole selection.
 - Note clips loop, trim, split, duplicate (linked) and **make unique** like Tracker clips. They play **on top of** Tracker clips on the same track; they don't replace them.
