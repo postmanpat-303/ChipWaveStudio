@@ -82,8 +82,6 @@ pub(crate) enum AutoOp {
     AddLane(usize, Target),
     /// move song lane `k` onto track `tr` (pin)
     Pin(usize, usize),
-    /// move track `tr`'s lane back to the song lanes
-    Unpin(usize, String),
     /// remove the track lane and the clips' lanes of this target on `tr`
     Remove(usize, String),
     Enable(usize, String, bool),
@@ -905,16 +903,12 @@ pub(crate) fn lanes_ui(
                         Sense::click(),
                     )
                     .on_hover_text(format!(
-                        "{} · {}\nright-click: unpin to the song lanes, clear, remove",
+                        "{} · {}\nright-click: clear, remove",
                         label_of(song, c, tr, tgt),
                         tgt
                     ));
                 let has = tlane.is_some();
                 hresp.context_menu(|ui| {
-                    if has && ui.button("Move to the song lanes (unpin)").clicked() {
-                        ops.push(AutoOp::Unpin(tr, tgt.clone()));
-                        ui.close();
-                    }
                     if has && ui.button("Clear the track lane").clicked() {
                         ops.push(AutoOp::Clear(LaneRef::Track(tr, tgt.clone())));
                         ui.close();
@@ -1422,19 +1416,6 @@ impl App {
                             status = format!("Pinned '{}' to track {:02}", l.label, tr + 1);
                             x.auto.retain(|o| o.target != l.target);
                             x.auto.push(l);
-                        }
-                    }
-                }
-                AutoOp::Unpin(tr, tg) => {
-                    if let Some(x) = t.tracks.get_mut(*tr) {
-                        if let Some(k) = x.auto.iter().position(|l| l.target == *tg) {
-                            let l = x.auto.remove(k);
-                            status = format!(
-                                "'{}' is a song lane again (lower panel > Automation)",
-                                l.label
-                            );
-                            s.song.automation.retain(|o| o.target != l.target);
-                            s.song.automation.push(l);
                         }
                     }
                 }

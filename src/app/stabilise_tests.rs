@@ -240,3 +240,30 @@ fn undo_back_to_the_opened_or_saved_song_is_not_unsaved() {
     assert!(!h.state().dirty, "redone back to the saved song");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn track_lanes_stay_on_their_track_no_unpin_that_springs_back() {
+    use super::timeline::autolanes::AutoOp;
+    use crate::automation::Target;
+    let mut h = opened_demo(0);
+    h.state_mut().auto_op(AutoOp::AddLane(1, Target::ChanVolume(1)));
+    frames(&mut h, 3);
+    let tgt = Target::ChanVolume(1).id();
+    let on_track = |h: &Harness<'static, App>| {
+        song(h, |s| {
+            s.timeline.as_ref().unwrap().tracks[1]
+                .auto
+                .iter()
+                .any(|l| l.target == tgt)
+        })
+    };
+    assert!(on_track(&h));
+    // a song lane left over in timeline mode is pinned onto its track
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        let l = t.tracks[1].auto.pop().unwrap();
+        s.song.automation.push(l);
+    });
+    frames(&mut h, 3);
+    assert!(on_track(&h) && song(&h, |s| s.automation.is_empty()));
+}
