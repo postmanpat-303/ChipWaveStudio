@@ -257,7 +257,10 @@ impl App {
     /// into view on the Timeline above it (it stays where it is if visible)
     pub(super) fn reveal_current_track(&mut self) {
         if self.view == View::Timeline {
-            self.tlv.reveal = Some((self.ch, self.tlv.scroll.max(0.0).ceil() as crate::timeline::Tick));
+            self.tlv.reveal = Some((
+                self.ch,
+                self.tlv.scroll.max(0.0).ceil() as crate::timeline::Tick,
+            ));
         }
     }
 
@@ -303,7 +306,9 @@ impl App {
     pub(super) fn open_sample_editor(&mut self) {
         self.ip.sample = true;
         self.show_instrument_panel();
-        self.status = "Sample editor in the lower panel (Back to the knobs returns; Ctrl+5: full view)".into();
+        self.status =
+            "Sample editor in the lower panel (Back to the knobs returns; Ctrl+5: full view)"
+                .into();
     }
 
     /// the sample editor shown (full view, or in the lower panel): Ctrl+Z
@@ -387,7 +392,13 @@ impl App {
         let inst = format!("{slot:02X} {name} · {tag}");
         let tl_song = self.with(|s| s.song.timeline.is_some());
         if tl_song && self.track_slot(self.ch) == slot {
-            let tname = self.with(|s| s.song.channel_names.get(self.ch).cloned().unwrap_or_default());
+            let tname = self.with(|s| {
+                s.song
+                    .channel_names
+                    .get(self.ch)
+                    .cloned()
+                    .unwrap_or_default()
+            });
             Some(format!("Track {:02} {tname}  ›  {inst}", self.ch + 1))
         } else {
             Some(inst)

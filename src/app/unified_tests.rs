@@ -63,9 +63,14 @@ fn open_in_sample_editor_keeps_the_timeline_on_top() {
     frames(&mut h, 2);
     assert!(!h.state().sample_undo_here(), "pointer on the menu bar");
     let r = exact(&h, "Sample editor");
-    h.input_mut().events.push(egui::Event::PointerMoved(r.center()));
+    h.input_mut()
+        .events
+        .push(egui::Event::PointerMoved(r.center()));
     frames(&mut h, 2);
-    assert!(h.state().sample_undo_here(), "pointer over the sample editor");
+    assert!(
+        h.state().sample_undo_here(),
+        "pointer over the sample editor"
+    );
     // back to the knobs, and Full view on request
     let r = exact(&h, "Back to the knobs");
     click_at(&mut h, r.center());
@@ -141,7 +146,10 @@ fn the_lower_panel_header_names_the_track_and_its_instrument() {
     frames(&mut h, 2);
     let name = h.state().with(|s| s.song.channel_names[0].clone());
     let txt = h.state().lower_breadcrumb().expect("breadcrumb");
-    assert!(txt.starts_with(&format!("Track 01 {name}  ›  {slot:02X} ")), "{txt}");
+    assert!(
+        txt.starts_with(&format!("Track 01 {name}  ›  {slot:02X} ")),
+        "{txt}"
+    );
     exact(&h, &txt);
     // another instrument than the track's: only the instrument
     let other = if slot == 1 { 2 } else { 1 };

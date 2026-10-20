@@ -580,6 +580,13 @@ impl Clip {
             _ => None,
         }
     }
+    /// a note clip's data index in `Timeline::notes` (shared by its linked copies)
+    pub fn notes(&self) -> Option<usize> {
+        match self.kind {
+            ClipKind::Notes { data } => Some(data as usize),
+            _ => None,
+        }
+    }
 }
 
 /// Deterministic per-clip randomness: the only RNG timeline playback may use.

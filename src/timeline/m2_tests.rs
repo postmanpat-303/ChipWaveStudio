@@ -296,3 +296,94 @@ fn the_loop_scope_exports_the_loop_region_once() {
     assert_eq!(crate::export::start_row(&s, o.scope), 8);
     assert_eq!(play_end(sc.timeline.as_deref().unwrap()), 24 * ROW);
 }
+
+// ---- placing clips (unified plan Stage 4a)
+
+fn note_song() -> (Song, u32) {
+    let mut s = crate::fileio::demo_song();
+    crate::timeline::enter_timeline_mode(&mut s);
+    let id = new_note_clip(&mut s, 1, 4 * PPQ * 4).unwrap();
+    let tl = s.timeline.as_deref_mut().unwrap();
+    let i = tl.clips.iter().position(|c| c.id == id).unwrap();
+    tl.clips[i].len = 4 * PPQ * 4;
+    if let ClipKind::Notes { data } = tl.clips[i].kind {
+        tl.notes[data as usize].make_mut().notes.push(Note {
+            start: 0,
+            len: PPQ,
+            key: 49,
+            ..Default::default()
+        });
+    }
+    (s, id)
+}
+
+#[test]
+fn overlaps_find_the_clips_a_placement_would_cover() {
+    let (s, id) = note_song();
+    let tl = s.timeline.as_deref().unwrap();
+    let bar = 4 * PPQ;
+    // the note clip covers bars 5-8 on track 1 (index 1)
+    assert!(overlaps(tl, 1, 0, 4 * bar, &[]).iter().all(|&x| x != id));
+    assert!(overlaps(tl, 1, 7 * bar, 9 * bar, &[]).contains(&id));
+    assert!(!overlaps(tl, 1, 7 * bar, 9 * bar, &[id]).contains(&id));
+    assert!(
+        !overlaps(tl, 1, 8 * bar, 9 * bar, &[]).contains(&id),
+        "touching is not overlapping"
+    );
+}
+
+#[test]
+fn clear_range_keeps_the_parts_outside() {
+    let (mut s, id) = note_song();
+    let bar = 4 * PPQ;
+    let tl = s.timeline.as_deref_mut().unwrap();
+    let others: Vec<u32> = overlaps(tl, 1, 5 * bar, 6 * bar, &[id]);
+    tl.clips.retain(|c| !(others.contains(&c.id)));
+    clear_range(tl, 1, 5 * bar, 6 * bar);
+    assert!(overlaps(tl, 1, 5 * bar, 6 * bar, &[]).is_empty());
+    let mut parts: Vec<(Tick, Tick, Tick)> = tl
+        .clips
+        .iter()
+        .filter(|c| c.track == 1 && c.start >= 4 * bar && c.notes().is_some())
+        .map(|c| (c.start, c.end(), c.offset))
+        .collect();
+    parts.sort();
+    assert_eq!(
+        parts,
+        vec![(4 * bar, 5 * bar, 0), (6 * bar, 8 * bar, 2 * bar)]
+    );
+}
+
+#[test]
+fn free_start_moves_past_the_clips_in_the_way() {
+    let (s, _) = note_song();
+    let bar = 4 * PPQ;
+    let tl = s.timeline.as_deref().unwrap();
+    let at = free_start(tl, 1, 5 * bar, 2 * bar, bar);
+    assert!(at >= 8 * bar, "{at}");
+    assert!(overlaps(tl, 1, at, at + 2 * bar, &[]).is_empty());
+    assert_eq!(at % bar, 0);
+}
+
+#[test]
+fn place_copy_links_or_copies_the_notes() {
+    let (mut s, id) = note_song();
+    let bar = 4 * PPQ;
+    let linked = place_copy(&mut s, id, 2, 20 * bar, false).unwrap();
+    let own = place_copy(&mut s, id, 2, 30 * bar, true).unwrap();
+    let tl = s.timeline.as_deref().unwrap();
+    let get = |k: u32| tl.clips.iter().find(|c| c.id == k).unwrap().clone();
+    let (a, b, c) = (get(id), get(linked), get(own));
+    assert_eq!(b.notes(), a.notes(), "linked: the same notes");
+    assert_ne!(c.notes(), a.notes(), "independent: its own notes");
+    let d = |x: &Clip| tl.notes[x.notes().unwrap()].notes.clone();
+    assert_eq!(d(&c), d(&a), "with the same content");
+    for x in [&b, &c] {
+        assert_eq!((x.len, x.offset, x.loop_len), (a.len, a.offset, a.loop_len));
+        assert_eq!(x.track, 2);
+    }
+    assert_eq!((b.start, c.start), (20 * bar, 30 * bar));
+    // past the last track: nothing
+    let n = s.channels;
+    assert!(place_copy(&mut s, id, n, 0, false).is_none());
+}
