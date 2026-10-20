@@ -152,8 +152,13 @@ fn space_in_the_mixer_plays_the_timeline_not_a_block_loop() {
     frames(&mut h, 2);
     key(&mut h, Key::Space, egui::Modifiers::NONE);
     frames(&mut h, 2);
-    let (playing, looping, tl_on) =
-        h.state().with(|s| (s.engine.playing, s.engine.loop_pattern, s.engine.tl_row().is_some()));
+    let (playing, looping, tl_on) = h.state().with(|s| {
+        (
+            s.engine.playing,
+            s.engine.loop_pattern,
+            s.engine.tl_row().is_some(),
+        )
+    });
     assert!(playing && !looping && tl_on);
     play_rows(&mut h, 8);
     h.state_mut().view = View::Timeline;
@@ -163,5 +168,7 @@ fn space_in_the_mixer_plays_the_timeline_not_a_block_loop() {
     // Enter restarts from the play marker (no block restart)
     key(&mut h, Key::Enter, egui::Modifiers::NONE);
     frames(&mut h, 2);
-    assert!(h.state().with(|s| s.engine.playing && !s.engine.loop_pattern));
+    assert!(h
+        .state()
+        .with(|s| s.engine.playing && !s.engine.loop_pattern));
 }

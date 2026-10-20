@@ -29,8 +29,6 @@ mod chordview;
 mod cliparr;
 #[cfg(test)]
 mod cliparr_tests;
-#[cfg(test)]
-mod focus_tests;
 mod devcards;
 mod devices;
 #[cfg(test)]
@@ -43,6 +41,9 @@ mod edit;
 mod file;
 mod fillview;
 mod filtercard;
+mod focus;
+#[cfg(test)]
+mod focus_tests;
 mod fxplugview;
 mod fxview;
 mod genview;
@@ -1148,6 +1149,7 @@ impl eframe::App for App {
         // the track pie takes the keys while it is open
         self.track_pie(&ctx);
         self.handle_keys(&ctx);
+        self.tracker_guard();
         self.tick_safety();
         self.tick_derived();
         self.plugin_frame(&ctx);
@@ -1247,6 +1249,8 @@ impl eframe::App for App {
         } else {
             self.br.rect = Rect::NOTHING;
         }
+        // a menu may have asked for a hidden view this frame
+        self.tracker_guard();
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.inner_margin(egui::Margin {
                 left: 4,

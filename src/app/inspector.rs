@@ -776,7 +776,10 @@ impl App {
                         }
                         if ui
                             .button("Browse…")
-                            .on_hover_text("the Browser's Instruments tab")
+                            .on_hover_text(
+                                "the Browser's Instruments tab (or drop an instrument from the \
+                                 Browser on this track's header to swap it)",
+                            )
                             .clicked()
                         {
                             browse = true;
@@ -790,13 +793,6 @@ impl App {
                     }
                 }
             }
-            ui.label(
-                egui::RichText::new(
-                    "Drop an instrument from the Browser on this track's header to swap it.",
-                )
-                .small()
-                .color(t.ink2),
-            );
         });
         if let Some(k) = pick {
             self.snapshot();

@@ -212,6 +212,15 @@ impl App {
                 self.sel = None;
             }
             match key {
+                Key::Tab if cmd && !self.tracker_on() => {
+                    self.view = match self.view {
+                        View::Timeline => View::Mixer,
+                        View::Mixer => View::Fx,
+                        View::Fx => View::Sample,
+                        _ => View::Timeline,
+                    }
+                }
+                Key::Num1 | Key::Num2 if cmd && !self.tracker_on() => self.tracker_hidden_note(),
                 Key::Tab if cmd => {
                     self.view = match self.view {
                         View::Pattern => View::Arranger,

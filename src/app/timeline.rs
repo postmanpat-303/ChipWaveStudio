@@ -711,7 +711,13 @@ impl App {
                     .color(Color32::from_rgb(0x1A, 0x1C, 0x1F))
                     .background_color(t.accent),
             )
-            .on_hover_text(if mode {
+            .on_hover_text(if mode && !self.tracker_on() {
+                "This song is arranged here: clips on tracks (track = mixer channel). \
+                 Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
+                 S split, Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
+                 Ctrl+Shift+D make unique. Double-click a clip to edit it in the piano roll, \
+                 empty space to make a new note clip."
+            } else if mode {
                 "This song is arranged here: clips on tracks (track = mixer channel). \
                  Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
                  S split, Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
@@ -2516,6 +2522,11 @@ impl App {
                         Some(cl) => cl
                             .block()
                             .map(|(b, col)| (b, col, (cl.source_at(tk) / ROW) as usize, entry)),
+                        None if mode && !self.tracker_on() => {
+                            // empty space: a new note clip (chords and all)
+                            ops.push(TlOp::NewNotes(tr, tk / bar_ticks * bar_ticks));
+                            None
+                        }
                         None if mode => {
                             // empty space: a new block, starting on the bar
                             ops.push(TlOp::NewClip(tr, tk / bar_ticks * bar_ticks));
@@ -2581,7 +2592,8 @@ impl App {
                         ui.close();
                     }
                 } else {
-                    if ui
+                    if self.tracker_on()
+                        && ui
                         .add(egui::Button::new("Open in Tracker").shortcut_text(if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" }))
                         .clicked()
                     {
@@ -2589,7 +2601,7 @@ impl App {
                         ui.close();
                     }
                     if ui
-                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
+                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if self.extra.dblclick_roll || !self.tracker_on() { "double-click" } else { "Alt+double-click" }))
                         .clicked()
                     {
                         open_roll = true;
@@ -2620,13 +2632,23 @@ impl App {
                     ui.close();
                 }
             } else if let Some((tr, tk)) = menu_at {
-                if ui.button("New clip here").clicked() {
+                let tracker = self.tracker_on();
+                if !tracker
+                    && ui
+                        .add(egui::Button::new("New clip here").shortcut_text("double-click"))
+                        .clicked()
+                {
+                    ops.push(TlOp::NewNotes(tr, tk / bar_ticks * bar_ticks));
+                    ui.close();
+                }
+                if tracker && ui.button("New clip here").clicked() {
                     ops.push(TlOp::NewClip(tr, tk / bar_ticks * bar_ticks));
                     ui.close();
                 }
-                if ui
-                    .add(egui::Button::new("New note clip here").shortcut_text("Shift+double-click"))
-                    .clicked()
+                if tracker
+                    && ui
+                        .add(egui::Button::new("New note clip here").shortcut_text("Shift+double-click"))
+                        .clicked()
                 {
                     ops.push(TlOp::NewNotes(tr, tk / bar_ticks * bar_ticks));
                     ui.close();
@@ -2687,7 +2709,9 @@ impl App {
                     .loop_len
                     .map(|l| format!(" · loops {}x", (cl.len + l - 1) / l))
                     .unwrap_or_default();
-                let dbl = if self.extra.dblclick_roll {
+                let dbl = if !self.tracker_on() {
+                    "double-click: piano roll"
+                } else if self.extra.dblclick_roll {
                     "double-click: piano roll (Alt: Tracker)"
                 } else {
                     "double-click: Tracker (Alt: piano roll)"
@@ -2893,7 +2917,12 @@ impl App {
         }
         self.set_lower(3);
         self.status = if blk.is_some() {
-            "Piano roll: this clip's block column (Alt+double-click or Enter: the Tracker)".into()
+            if self.tracker_on() {
+                "Piano roll: this clip's block column (Alt+double-click or Enter: the Tracker)"
+                    .into()
+            } else {
+                "Piano roll: this Tracker clip (adding a chord makes it a note clip)".into()
+            }
         } else {
             "Piano roll: this note clip".into()
         };
@@ -2901,6 +2930,11 @@ impl App {
 
     /// double-click: the block in the pattern editor, cursor on the column and row
     pub(super) fn timeline_open(&mut self, block: usize, col: usize, row: usize, entry: usize) {
+        if !self.tracker_on() {
+            // the Tracker is hidden: block clips open in the piano roll
+            self.timeline_open_roll();
+            return;
+        }
         let (nb, nch) = self.with(|s| (s.song.patterns.len(), s.song.channels));
         if block >= nb {
             return;

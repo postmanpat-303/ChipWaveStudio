@@ -415,28 +415,18 @@ impl App {
                 }
             });
             ui.menu_button("View", |ui| {
-                for (v, n, _) in VIEWS.iter() {
-                    let sc = view_shortcut(*v);
+                let tracker = self.tracker_on();
+                for (v, n, _) in self.views_shown() {
+                    let sc = view_shortcut(v);
                     if ui
-                        .add(egui::Button::selectable(self.view == *v, *n).shortcut_text(sc))
+                        .add(egui::Button::selectable(self.view == v, n).shortcut_text(sc))
                         .clicked()
                     {
-                        self.view = *v;
+                        self.view = v;
                     }
                 }
                 if ui
-                    .add(
-                        egui::Button::selectable(self.is_default_layout(), "Timeline + Piano roll")
-                            .shortcut_text("Ctrl+6"),
-                    )
-                    .on_hover_text("the default layout: the Timeline on top, the piano roll below")
-                    .clicked()
-                {
-                    self.reset_layout();
-                    ui.close();
-                }
-                if ui
-                    .button("Reset to default layout")
+                    .add(egui::Button::new("Reset to default layout").shortcut_text("Ctrl+6"))
                     .on_hover_text(
                         "Timeline on top, piano roll in the lower panel at its default height \
                          (Ctrl+6); the Inspector and Browser stay as they are",
@@ -447,7 +437,8 @@ impl App {
                     ui.close();
                 }
                 ui.separator();
-                if ui
+                if tracker
+                    && ui
                     .add(
                         egui::Button::selectable(self.extra.adv_edit_open, "Advanced Edit")
                             .shortcut_text("Ctrl+Shift+A"),
@@ -479,8 +470,10 @@ impl App {
                 {
                     self.save_settings();
                 }
-                ui.checkbox(&mut self.show_auto, "Automation lanes");
-                ui.checkbox(&mut self.dock_arranger, "Dock lower panel under the Tracker");
+                if tracker {
+                    ui.checkbox(&mut self.show_auto, "Automation lanes");
+                    ui.checkbox(&mut self.dock_arranger, "Dock lower panel under the Tracker");
+                }
                 let full = !self.lower_visible();
                 if ui
                     .add(egui::Button::selectable(full, "Full-height view").shortcut_text("F11"))
@@ -536,13 +529,15 @@ impl App {
                     self.save_settings();
                 }
                 ui.checkbox(&mut self.follow, "Follow playback");
-                if ui
+                if tracker
+                    && ui
                     .checkbox(&mut self.extra.alt_columns, "Alternate column shading")
                     .on_hover_text("tint every other channel column in the Tracker")
                     .changed()
                 {
                     self.save_settings();
                 }
+                if tracker {
                 ui.horizontal(|ui| {
                     ui.label("Row numbers");
                     let a = ui.selectable_value(&mut self.extra.row_hex, false, "Decimal");
@@ -551,6 +546,7 @@ impl App {
                         self.save_settings();
                     }
                 });
+                }
                 ui.separator();
                 if item(ui, "Settings…", "Ctrl+,") {
                     self.toggle_settings();
@@ -661,7 +657,9 @@ impl App {
                     ui.close();
                 }
                 let tl_mode = self.with(|s| s.song.timeline.is_some());
+                let tracker = self.tracker_on();
                 if tl_mode
+                    && tracker
                     && ui
                         .button("Back to tracker mode…")
                         .on_hover_text("turn the timeline back into blocks and an order list (asks first)")
@@ -671,11 +669,13 @@ impl App {
                     self.tlv.ask_leave = true;
                     ui.close();
                 }
-                ui.separator();
-                if ui.button("Add block").clicked() {
-                    self.add_block();
+                if tracker {
+                    ui.separator();
+                    if ui.button("Add block").clicked() {
+                        self.add_block();
+                    }
+                    ui.menu_button("Block", |ui| self.block_len_menu(ui));
                 }
-                ui.menu_button("Block", |ui| self.block_len_menu(ui));
             });
             ui.menu_button("Help", |ui| {
                 if item(ui, "Keys", "F12") {
@@ -799,8 +799,29 @@ impl App {
                     }
                     self.play(3);
                 }
-                if tool_button(ui, Ic::PlaySong, "Play song", playing && !loop_on, t.accent)
-                    .on_hover_text("play the song from the play marker (Shift+Space; click the ruler to move it)")
+                // the one transport (the view bar's copy is gone): to the
+                // start, play, stop, and where the playhead is
+                let tl_mode = self.with(|s| s.song.timeline.is_some());
+                if super::viewbar::transport_button(
+                    ui,
+                    super::viewbar::Tr::Start,
+                    false,
+                    hdr_text(),
+                    "play marker to the start",
+                ) {
+                    if tl_mode {
+                        self.timeline_seek(0);
+                    } else {
+                        self.seek_to((0, 0));
+                    }
+                }
+                let (play_label, play_tip) = if self.tracker_on() {
+                    ("Play song", "play the song from the play marker (Shift+Space; click the ruler to move it)")
+                } else {
+                    ("Play", "play from the play marker (Space; click the ruler to move it)")
+                };
+                if tool_button(ui, Ic::PlaySong, play_label, playing && !loop_on, t.accent)
+                    .on_hover_text(play_tip)
                     .clicked()
                 {
                     if playing {
@@ -820,6 +841,13 @@ impl App {
                 {
                     self.with(|s| s.engine.stop());
                 }
+                let (pos, _) = self.view_bar_position(playing);
+                ui.label(
+                    egui::RichText::new(pos)
+                        .monospace()
+                        .color(if playing { t.play } else { hdr_text() }),
+                )
+                .on_hover_text("playhead (stopped: the play marker)");
             });
             let mut tempo_r = None;
             group(ui, "TEMPO", |ui| {
@@ -893,13 +921,14 @@ impl App {
                     .on_hover_text("rows the cursor moves after entering a note");
             });
             group_if(!self.extra.view_bar, ui, "VIEW", |ui| {
-                let cur = VIEWS
+                let views = self.views_shown();
+                let cur = views
                     .iter()
                     .position(|v| v.0 == self.view)
                     .unwrap_or(usize::MAX);
-                let items: Vec<(&str, &str)> = VIEWS.iter().map(|v| (v.1, v.2)).collect();
+                let items: Vec<(&str, &str)> = views.iter().map(|v| (v.1, v.2)).collect();
                 if let Some(i) = segmented(ui, &items, cur) {
-                    self.view = VIEWS[i].0;
+                    self.view = views[i].0;
                     self.arr_focus = false;
                 }
                 // the Browser panel on the right (docs/BROWSER.md)

@@ -200,7 +200,11 @@ impl App {
         let learn =
             std::cell::RefCell::new(Vec::<(egui::Response, crate::automation::Target)>::new());
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Mixer").strong());
+            ui.label(egui::RichText::new("Mixer").strong())
+                .on_hover_text(
+                "fader 0 dB = double-click · pan C = double-click · M mute · S solo (F9 / F10) · \
+                 drag the bar under the strips or Shift+wheel to scroll",
+            );
             ui.separator();
             ui.label("Sidechain key")
                 .on_hover_text("notes on this channel duck every channel whose Duck is above 0 %");
@@ -234,14 +238,6 @@ impl App {
             {
                 mix.duck_release = ms / 1000.0;
             }
-            ui.separator();
-            ui.label(
-                egui::RichText::new(
-                    "fader 0 dB = double-click · pan C = double-click · M mute · S solo (F9 / F10)",
-                )
-                .small()
-                .color(th().ink2),
-            );
         });
         ui.add_space(6.0);
         let fader_h = (ui.available_height() - 150.0).clamp(80.0, 320.0);
@@ -533,10 +529,7 @@ impl App {
             p.text(
                 bar.center(),
                 egui::Align2::CENTER_CENTER,
-                format!(
-                    "{} · drag / Shift+wheel to scroll",
-                    mixer_bar_label(a, b, nch, nret)
-                ),
+                mixer_bar_label(a, b, nch, nret),
                 egui::FontId::proportional(11.0),
                 Color32::WHITE,
             );

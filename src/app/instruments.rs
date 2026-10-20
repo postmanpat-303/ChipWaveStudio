@@ -1216,27 +1216,5 @@ impl App {
             );
         });
         ui.add_space(4.0);
-        let showing = matches!(self.view, View::Pattern | View::Timeline)
-            && self.lower_visible()
-            && self.extra.lower_inst;
-        ui.horizontal(|ui| {
-            ui.add_space(10.0);
-            let b = egui::Button::new(if showing {
-                "Editing in the lower panel"
-            } else {
-                "Edit in lower panel"
-            })
-            .shortcut_text("Ctrl+I")
-            .selected(showing)
-            .min_size(egui::vec2(ui.available_width() - 12.0, 24.0));
-            if ui
-                .add(b)
-                .on_hover_text("knobs, tabs and parameter search in the lower panel")
-                .clicked()
-                && !showing
-            {
-                self.show_instrument_panel();
-            }
-        });
     }
 }

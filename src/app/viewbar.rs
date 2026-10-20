@@ -62,15 +62,20 @@ pub(crate) const VTABS: [(VTab, &str, &str); 10] = [
 ];
 
 #[derive(Clone, Copy)]
-enum Tr {
+pub(super) enum Tr {
     Start,
-    Play,
-    Stop,
 }
 
-fn transport_button(ui: &mut egui::Ui, ic: Tr, on: bool, col: Color32, tip: &str) -> bool {
+pub(super) fn transport_button(
+    ui: &mut egui::Ui,
+    ic: Tr,
+    on: bool,
+    col: Color32,
+    tip: &str,
+) -> bool {
     let (r, resp) = ui.allocate_exact_size(egui::vec2(26.0, 22.0), Sense::click());
     let resp = resp.on_hover_text(tip);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tip));
     let p = ui.painter();
     let v = ui.style().interact_selectable(&resp, on);
     p.rect(r, 4, v.weak_bg_fill, v.bg_stroke, egui::StrokeKind::Inside);
@@ -94,20 +99,6 @@ fn transport_button(ui: &mut egui::Ui, ic: Tr, on: bool, col: Color32, tip: &str
                 col,
                 Stroke::NONE,
             ));
-        }
-        Tr::Play => {
-            p.add(egui::Shape::convex_polygon(
-                vec![
-                    c + egui::vec2(-4.0, -6.0),
-                    c + egui::vec2(6.0, 0.0),
-                    c + egui::vec2(-4.0, 6.0),
-                ],
-                col,
-                Stroke::NONE,
-            ));
-        }
-        Tr::Stop => {
-            p.rect_filled(Rect::from_center_size(c, egui::vec2(9.0, 9.0)), 1, col);
         }
     }
     resp.clicked()
@@ -191,85 +182,31 @@ impl App {
         }
     }
 
+    /// tabs the bar shows: the views (the lower-panel tabs have their own
+    /// strip above the lower panel; ORDER and TRACKER only with Settings ›
+    /// Show Tracker)
+    pub(crate) fn vtab_shown(&self, tab: VTab) -> bool {
+        match tab {
+            VTab::Timeline | VTab::Mix | VTab::Fx | VTab::Sample => true,
+            VTab::Arranger | VTab::Tracker => self.tracker_on(),
+            VTab::Piano | VTab::Devices | VTab::Inst | VTab::Auto => false,
+        }
+    }
+
+    /// the bottom bar: one tab per view, and the Inspector / Browser
+    /// toggles (the transport is in the toolbar at the top)
     pub(super) fn view_bar(&mut self, ui: &mut egui::Ui) {
         let t = th();
-        let playing = self.with(|s| s.engine.playing);
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             ui.add_space(6.0);
-            // ---- transport
-            let tl_mode = self.with(|s| s.song.timeline.is_some());
-            if transport_button(ui, Tr::Start, false, hdr_text(), "play marker to the start") {
-                if tl_mode {
-                    self.timeline_seek(0);
-                } else {
-                    self.seek_to((0, 0));
-                }
-            }
-            if transport_button(
-                ui,
-                Tr::Play,
-                playing,
-                t.accent,
-                "play the song from the play marker (Shift+Space; Space in the Timeline)",
-            ) {
-                if playing {
-                    self.with(|s| s.engine.stop());
-                }
-                self.play(0);
-            }
-            if transport_button(
-                ui,
-                Tr::Stop,
-                false,
-                if playing { t.brick } else { hdr_dim() },
-                "stop",
-            ) {
-                self.with(|s| s.engine.stop());
-            }
-            ui.add_space(6.0);
-            let (pos, bpm) = self.view_bar_position(playing);
-            ui.label(
-                egui::RichText::new(pos)
-                    .monospace()
-                    .size(12.0)
-                    .color(if playing { t.play } else { hdr_text() }),
-            )
-            .on_hover_text("playhead (stopped: the play marker)");
-            ui.label(
-                egui::RichText::new(format!("· {bpm:.0} BPM"))
-                    .size(11.0)
-                    .color(hdr_dim()),
-            );
-            ui.add_space(14.0);
-            // ---- the default layout, one click away
-            {
-                let on = self.is_default_layout();
-                let txt = egui::RichText::new("TIMELINE + PIANO")
-                    .size(11.0)
-                    .strong()
-                    .color(if on { t.accent } else { hdr_text() });
-                let b = egui::Button::new(txt)
-                    .min_size(egui::vec2(112.0, 22.0))
-                    .corner_radius(if theme::polished() { 5 } else { 2 })
-                    .stroke(egui::Stroke::new(
-                        1.0,
-                        t.accent.gamma_multiply(if on { 0.9 } else { 0.45 }),
-                    ))
-                    .fill(Color32::from_black_alpha(if t.light { 20 } else { 50 }));
-                if ui
-                    .add(b)
-                    .on_hover_text("the default layout: Timeline on top, piano roll below (Ctrl+6)")
-                    .clicked()
-                {
-                    self.reset_layout();
-                }
-                ui.add_space(8.0);
-            }
             // ---- view tabs
             let cur = self.vtab_current();
             let main = self.vtab_main();
             for (tab, name, tip) in VTABS {
+                if !self.vtab_shown(tab) {
+                    continue;
+                }
                 if tab == VTab::Arranger {
                     ui.add_space(6.0);
                     ui.separator();
@@ -350,7 +287,7 @@ impl App {
     }
 
     /// "bar 12.3 · 0:41.2" (timeline mode) or "pos 03 · row 12" (tracker)
-    fn view_bar_position(&self, playing: bool) -> (String, f32) {
+    pub(super) fn view_bar_position(&self, playing: bool) -> (String, f32) {
         let cue_tl = self.tlv.cue;
         let cue = self.cue;
         self.with(|s| {

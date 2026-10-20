@@ -445,42 +445,21 @@ fn a_b_compare_swaps_the_sound_and_undoes() {
 }
 
 #[test]
-fn sidebar_shows_type_tags_summary_and_the_edit_button() {
+fn sidebar_summary_has_no_edit_box_ctrl_i_opens_the_editor() {
     let mut h = with_inst(analog());
-    // the button shows while the lower panel is on something else
     h.state_mut().set_lower(0);
     frame(&mut h);
-    let r = h
-        .query_all_by(|n| {
-            n.role() == Role::Button
-                && n.label()
-                    .is_some_and(|l| l.starts_with("Edit in lower panel"))
-        })
-        .next()
-        .map(|n| n.rect())
-        .expect("summary button");
-    let c = r.center();
-    h.input_mut().events.push(egui::Event::PointerMoved(c));
-    frame(&mut h);
-    for pressed in [true, false] {
-        h.input_mut().events.push(egui::Event::PointerButton {
-            pos: c,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: Default::default(),
-        });
-        frame(&mut h);
-    }
-    assert!(h.state().extra.lower_inst);
-    // the classic editor is still there
-    h.state_mut().extra.classic_editor = true;
-    frames(&mut h, 2);
+    // the "Edit in lower panel" box is gone (20 Oct 2026 cleanup): Ctrl+I,
+    // the lower panel's Instrument tab and the Inspector's Edit do it
     assert!(h
         .query_all_by(|n| n
             .label()
             .is_some_and(|l| l.starts_with("Edit in lower panel")))
         .next()
         .is_none());
+    super::ui_tests::key(&mut h, egui::Key::I, egui::Modifiers::COMMAND);
+    frames(&mut h, 2);
+    assert!(h.state().extra.lower_inst);
 }
 
 #[test]

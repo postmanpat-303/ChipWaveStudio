@@ -242,7 +242,8 @@ impl App {
         self.pr.focus = true;
     }
 
-    /// the default layout is showing
+    /// the default layout is showing (tests)
+    #[allow(dead_code)]
     pub(super) fn is_default_layout(&self) -> bool {
         self.view == View::Timeline
             && self.lower_visible()
@@ -434,7 +435,12 @@ impl App {
                     "the selected track's instrument and effects, left to right (Ctrl+7)",
                 ),
             ];
+            let tracker = self.tracker_on();
             for (m, name, tip) in [3, 4, 1, 2, 0].map(|k| tabs[k]) {
+                // the Order list is a Tracker view (Settings › Show Tracker)
+                if m == 0 && !tracker {
+                    continue;
+                }
                 let txt = egui::RichText::new(name).strong();
                 if ui
                     .selectable_label(cur == m, txt)
