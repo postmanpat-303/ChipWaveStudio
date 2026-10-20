@@ -1889,7 +1889,7 @@ fn voice_words_and_throat_mode_from_the_voice_panel() {
 }
 
 /// a 2 s "drum loop": 8 decaying noise hits, one every 250 ms (120 BPM 8ths)
-fn loop_instrument() -> Instrument {
+pub(super) fn loop_instrument() -> Instrument {
     let mut n = 0x2545_F491u32;
     let mut d = vec![0.0f32; 96000];
     for h in 0..8 {

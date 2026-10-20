@@ -265,7 +265,7 @@ impl App {
     }
 
     pub(super) fn do_undo(&mut self, redo: bool) {
-        if self.view == View::Sample {
+        if self.sample_undo_here() {
             self.sample_undo(redo);
         } else {
             self.undo(redo);
@@ -367,7 +367,7 @@ impl App {
             });
             ui.menu_button("Edit", |ui| {
                 // the sample editor has its own history
-                let main = self.view != View::Sample;
+                let main = !self.sample_undo_here();
                 let info = format!(
                     "{} undo step(s) kept, {:.1} MB",
                     self.hist.len(),

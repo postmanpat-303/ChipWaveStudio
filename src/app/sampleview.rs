@@ -656,7 +656,7 @@ impl App {
             Some(k) if k >= 100 => self.select_slice(idx, (k - 100) as usize),
             _ => {}
         }
-        if self.view != View::Sample {
+        if !self.sample_shown() {
             return;
         }
         // ---------------------------------------------------------- waveform

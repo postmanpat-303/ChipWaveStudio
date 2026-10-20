@@ -51,6 +51,15 @@ pub(super) struct InstUi {
     pub grid_fx_held: bool,
     /// the full editor (Advanced ›) instead of the simple card
     pub advanced: bool,
+    /// a Sample instrument: its sample editor in the lower panel instead
+    /// of the knobs (Open in Sample editor; Ctrl+5 is the full view)
+    pub sample: bool,
+    /// the pointer was over that sample editor last frame: Ctrl+Z there
+    /// undoes sample edits (the sample editor's own history)
+    pub sample_hover: bool,
+    /// the Timeline's height above its track rows (toolbar, markers,
+    /// ruler, scroll bar) as last drawn; 0 = not drawn yet
+    pub tl_chrome: f32,
     /// the preset the shown sound matches: (instrument, sound, name)
     preset_seen: Option<(usize, InstrumentKind, Option<String>)>,
 }
@@ -276,6 +285,57 @@ impl App {
         self.default_layout();
         self.save_settings();
         self.status = "Timeline + piano roll (the default layout; Ctrl+6)".into();
+    }
+
+    /// "Open in Sample editor": the sample editor in the lower panel, under
+    /// the timeline (the Instrument tab shows it instead of the knobs)
+    pub(super) fn open_sample_editor(&mut self) {
+        self.ip.sample = true;
+        self.show_instrument_panel();
+        self.status = "Sample editor in the lower panel (Back to the knobs returns; Ctrl+5: full view)".into();
+    }
+
+    /// the sample editor shown (full view, or in the lower panel): Ctrl+Z
+    /// and the Edit menu use its own history while the pointer is over it
+    pub(super) fn sample_undo_here(&self) -> bool {
+        self.view == View::Sample || (self.ip.sample_hover && self.sample_shown())
+    }
+
+    /// the sample editor drawn where it is shown
+    pub(super) fn sample_shown(&self) -> bool {
+        self.view == View::Sample
+            || (self.ip.sample
+                && self.extra.lower_inst
+                && self.lower_visible()
+                && matches!(self.view, View::Timeline | View::Pattern))
+    }
+
+    fn lower_sample_editor(&mut self, ui: &mut egui::Ui) {
+        let t = th();
+        self.ip.sample_hover = ui.rect_contains_pointer(ui.max_rect());
+        ui.horizontal(|ui| {
+            ui.add_space(4.0);
+            if ui
+                .button("Back to the knobs")
+                .on_hover_text("the instrument's controls again")
+                .clicked()
+            {
+                self.ip.sample = false;
+            }
+            if ui
+                .button("Full view  Ctrl+5")
+                .on_hover_text("the sample editor over the whole window (the timeline is hidden until you switch back)")
+                .clicked()
+            {
+                self.view = View::Sample;
+            }
+            ui.label(
+                egui::RichText::new("Ctrl+Z over the sample editor undoes sample edits")
+                    .small()
+                    .color(t.ink2),
+            );
+        });
+        self.sample_view(ui);
     }
 
     /// 0 arranger, 1 instrument, 2 automation, 3 piano roll, 4 devices
@@ -542,6 +602,11 @@ impl App {
         }
         if self.ip.ab.as_ref().is_some_and(|a| a.inst != idx) {
             self.ip.ab = None;
+        }
+        self.ip.sample_hover = false;
+        if self.ip.sample && matches!(inst.kind, InstrumentKind::Sample { .. }) {
+            self.lower_sample_editor(ui);
+            return;
         }
         self.gen_ui.sel = self.gen_ui.sel.min(7);
         let orig = inst.clone();
@@ -876,7 +941,7 @@ impl App {
                 Act::Bake => self.bake_gen(idx),
                 Act::SaveLib => self.save_instrument_to_library(idx as u8 + 1),
                 Act::Library => self.open_library(),
-                Act::OpenSample => self.view = View::Sample,
+                Act::OpenSample => self.open_sample_editor(),
                 Act::OpenFx => self.view = View::Fx,
                 Act::AddFx(k) => self.add_effect(idx as u8 + 1, k),
                 Act::AddPluginFx(p) => self.add_plugin_fx(idx as u8 + 1, p),

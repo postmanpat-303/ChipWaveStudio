@@ -110,6 +110,8 @@ mod transpose;
 mod typing;
 #[cfg(test)]
 mod ui_tests;
+#[cfg(test)]
+mod unified_tests;
 mod undo;
 mod updates;
 mod viewbar;
