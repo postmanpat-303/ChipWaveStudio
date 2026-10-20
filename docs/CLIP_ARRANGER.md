@@ -29,6 +29,15 @@ The Tracker view keeps its Instruments list.
 - **‹ ›** page through the scenes when there are more than fit.
 - The Song / Master row isn't launchable.
 
+### Songs with note clips
+
+A song with note or audio clips (every new song, recorded takes, Drum Kit patterns) has no Tracker
+blocks to show, so its scenes are the **clip start times** instead: one scene per start (named after a
+marker there, else *Bar 5*), and each track's slot holds its clip that starts there, with a preview of
+its notes. A scene ▶ loops that stretch of the timeline on every track; a slot ▶ loops its clip with
+the other tracks held (or joins the playing scene). Double-click a slot to open the clip. Songs whose
+clips are all Tracker clips keep the blocks as scenes.
+
 Instruments live in **Browser › Instruments** and in the **Inspector** (I): its Instrument section has
 a picker for the selected track (every note on the track switches, one undo step).
 
@@ -53,5 +62,5 @@ and a level graph of the last few seconds. The same settings as Mixer › Master
 
 ## Not yet (phase 2, see [ROADMAP.md](ROADMAP.md))
 
-Independent per-track slots (track 1 plays block 3 while track 2 plays block 5), note and audio clips in
-slots, and recording a session into the timeline.
+Independent per-track slots (track 1 plays block 3 while track 2 plays block 5), dragging note-clip slots,
+and recording a session into the timeline.
