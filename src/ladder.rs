@@ -67,7 +67,7 @@ const HB: [f32; 12] = [
 
 /// fast odd-symmetric tanh (Padé, exact sign, |x| > 3 clips to ±1)
 #[inline]
-fn tanh_p(x: f32) -> f32 {
+pub(crate) fn tanh_p(x: f32) -> f32 {
     let x = x.clamp(-3.0, 3.0);
     let x2 = x * x;
     x * (27.0 + x2) / (27.0 + 9.0 * x2)

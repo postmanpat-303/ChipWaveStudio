@@ -545,10 +545,12 @@ impl SynthVoice {
         self.gen.gate = self.amp.gate();
         self.gen.vel = self.vel;
         // 38xx etc. on the engine's own ladder (Analog: Cutoff = knob 0,
-        // Res = knob 1; Wave: knobs 2 and 3, when its filter is on)
+        // Res = knob 1; Wave: knobs 2 and 3, when its filter is on;
+        // poly synth: knobs 0 and 1)
         let own_lad: Option<(&[f32], &[crate::gen::MacroDef], usize)> = match &gp.engine {
             GenEngine::Analog(a) => Some((&a.p, &crate::gen2::ANALOG, 0)),
             GenEngine::Wave(w) if w.filter_on => Some((&w.p, &crate::gen_wave::WAVE, 2)),
+            GenEngine::Poly(x) => Some((&x.p, &crate::poly::POLY, crate::poly::CUTOFF)),
             _ => None,
         };
         let ladder = fm_on && !gp.filter_on && own_lad.is_some();

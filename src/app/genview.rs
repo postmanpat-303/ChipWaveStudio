@@ -166,6 +166,8 @@ pub(super) fn gen_panel(
                 "GENERATOR · WAVETABLE"
             } else if matches!(g.engine, GenEngine::Grid(_)) {
                 "GENERATOR · GRID"
+            } else if matches!(g.engine, GenEngine::Poly(_)) {
+                concat!("GENERATOR · ", crate::poly_name!())
             } else {
                 "GENERATOR · DRUM SYNTH"
             })
@@ -819,6 +821,11 @@ impl App {
                 "modular: patch oscillators, filters, envelopes, LFOs, math and delays with cables",
                 4,
             ),
+            (
+                concat!("Generator (", crate::poly_name!(), ")"),
+                "polyphonic subtractive synth: 2 oscillators with unison, sync and sub, 6 blend modes, 7 filter modes, drive, shaper, mono / legato glide",
+                5,
+            ),
         ] {
             ui.menu_button(menu, |ui| {
                 ui.label(egui::RichText::new(tip).small().color(th().ink2));
@@ -828,7 +835,8 @@ impl App {
                         1 => matches!(p.engine, GenEngine::Fm(_)),
                         2 => matches!(p.engine, GenEngine::Noise(_)),
                         3 => matches!(p.engine, GenEngine::Wave(_)),
-                        _ => matches!(p.engine, GenEngine::Grid(_)),
+                        4 => matches!(p.engine, GenEngine::Grid(_)),
+                        _ => matches!(p.engine, GenEngine::Poly(_)),
                     };
                     if !ok {
                         continue;

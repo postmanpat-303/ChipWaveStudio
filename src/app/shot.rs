@@ -825,6 +825,7 @@ impl App {
                 "fx" => super::params::Tab::Fx,
                 "advanced" => super::params::Tab::Advanced,
                 "grid" => super::params::Tab::Grid,
+                "synth" => super::params::Tab::Synth,
                 _ => super::params::Tab::Main,
             };
         }

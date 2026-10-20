@@ -164,7 +164,9 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
                 t.tracks.iter().any(|x| !x.auto.is_empty())
                     || t.clips.iter().any(|c| !c.auto.is_empty())
             });
-        let min_reader = if has_tl_auto {
+        let min_reader = if needs_reader_5(song) {
+            5
+        } else if has_tl_auto {
             4
         } else if has_audio {
             3
@@ -416,8 +418,17 @@ pub fn sanitize_modulation(
 /// write 2 plus `timeline.toml`, so builds older than the timeline refuse
 /// them instead of playing a stale order list. Songs with plugin effect
 /// devices also write 2; songs with audio clips (M4) write 3; songs with
-/// track or clip automation lanes or curved segments (M5) write 4.
-pub const READER_VERSION: u32 = 4;
+/// track or clip automation lanes or curved segments (M5) write 4; songs
+/// with a new generator engine (the poly synth) write 5.
+pub const READER_VERSION: u32 = 5;
+
+/// Version 5: a new generator engine (the poly synth, `GenEngine::Poly`), which an
+/// older reader can't parse. Every other song keeps writing its old version.
+pub fn needs_reader_5(song: &Song) -> bool {
+    song.instruments.iter().any(|i| {
+        matches!(&i.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Poly(_)))
+    })
+}
 
 /// Start of the error for a song that needs a newer app (see [`is_too_new`]).
 const TOO_NEW: &str = "This song was made with a newer version of ChipWave Studio";
@@ -1493,12 +1504,12 @@ mod tests {
         with_manifest(
             &src,
             &newer,
-            Some("format = \"chipwave-song\"\nformat_version = 4\nmin_reader_version = 5\n"),
+            Some("format = \"chipwave-song\"\nformat_version = 4\nmin_reader_version = 6\n"),
         );
         let e = load_cwt(&newer).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(
-            e.contains("reader version 5") && e.contains("Check for updates"),
+            e.contains("reader version 6") && e.contains("Check for updates"),
             "{e}"
         );
         // a missing or odd manifest is treated as version 1
@@ -1510,7 +1521,7 @@ mod tests {
         // text songs: the same rule
         let t = include_str!("../demos/first_run.cwt.toml");
         assert!(song_from_text(t).is_ok());
-        let e = song_from_text(&format!("min_reader_version = 5\n{t}")).unwrap_err();
+        let e = song_from_text(&format!("min_reader_version = 6\n{t}")).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(!is_too_new("zip error"));
         std::fs::remove_dir_all(&dir).ok();

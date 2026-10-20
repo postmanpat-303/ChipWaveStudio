@@ -252,6 +252,51 @@ canvas in the lower panel, polyphonic per voice, every module knob automatable
 and modulatable. There is also a **Grid FX** device. Full guide:
 [GRID.md](GRID.md).
 
+## WaveForge (polyphonic synth, Unreleased)
+
+![WaveForge editor](screenshots/dark-generators-waveforge.png)
+
+**New… > Generator (WaveForge)**. A two-oscillator polyphonic subtractive
+synth in the Generator family, inspired by other synths. Dice, Mutate, locks,
+Bake, 43xy (knobs 0–7: Cutoff, Res, Env amt, Blend, Drive, Shaper, Glide,
+Gain), automation lanes and MIDI learn all work on it. It opens on its own
+**WaveForge** tab: all sections side by side on a wide panel, or one group at a
+time (Osc · Mix · Filter · Envelopes · Voice · Mod) when the panel is narrow.
+
+- **Two oscillators.** **Shape** morphs pulse → saw → octave-up saw; **PW**,
+  **Pitch** (±7 st), **Octave** (32' to 1'), a **Sub** pulse one octave down
+  with its own **Sub PW**, **Sync** (hard sync, 0–60 st above the pitch), and
+  **Voices** (1–16 unison per oscillator) with **Detune**, **Width** and
+  **Pan**. **Phase**: Reset (every note starts at 0) or Free. Band-limited
+  with polyBLEP, so high notes stay clean (the alias test measures −30 dB
+  against −14 dB for a naive saw).
+- **Blend & noise.** Six ways to combine the oscillators: MIX, NEG (inverted
+  oscillator 2), WIPE, AM, SIGN and MAX, plus a **Noise** level and
+  **Colour**.
+- **Filter.** LP, BP and HP at 2 or 4 poles (12 / 24 dB/oct) and a
+  band-reject, built as zero-delay state-variable filters. **Cutoff**, **Res**,
+  **Env amt** (filter envelope), **Key trk**, **Vel > cut**, a pre-filter
+  high-pass (**HP cut**, **HP res**) and **Filter FM** (a sine at **FM freq**
+  moves the cutoff).
+- **Drive & shaper.** **Drive** into the filter with **Feedback** from its
+  output, then a **Shaper** after it (Soft,
+  Hard, Fold, Asym) with a dry/wet mix.
+- **Envelopes.** An ADSR for the filter and one for the amp; **Vel > amp**.
+- **Voice.** **Poly**, **Mono** or **Legato**; **Polyphony** 1–8 notes per
+  track; **Glide** (on clips and live notes); **Gain** and **Pan**. The header
+  shows the voices playing and the oscillator load per note (oscillators ×
+  unison), since there is no hard oscillator cap.
+- **Mod routes.** Eight slots: a source (filter envelope, amp envelope,
+  velocity or key) moves any knob by an amount. A per-voice LFO comes later.
+- **Presets.** WaveForge Init, Saw Lead, Sub Bass, Unison Lead, Supersaw Pad,
+  Pluck, Soft Pad, PWM Bass, Sync Lead, Noise Riser and Dirty Bass. **Init**
+  resets the patch; **Revert** goes back to the patch as it was when the
+  editor opened.
+- **Files.** Songs that use WaveForge are saved as reader version 5 (older
+  versions of ChipWave say the file is too new rather than playing it wrong).
+  Knobs are stored by name, so later versions can add knobs. Songs without it
+  are written exactly as before and render bit-identically.
+
 ## Moog ladder filter
 
 The Synth, Voice and Generator filters can be switched from the default **SVF
@@ -373,6 +418,9 @@ on generator instruments (Unreleased):
   (GPL-3) and Surge XT's wavetable oscillator (Surge Synth Team, GPL-3);
   ideas only, no code, presets or tables copied. Serum's `clm` chunk is read
   for frame sizes (format only).
+- **WaveForge:** polyBLEP oscillators after **V. Välimäki & A. Huovilainen**
+  (IEEE SPM 2007) and zero-delay state-variable filters after **Vadim
+  Zavalishin**'s *The Art of VA Filter Design*; written from scratch.
 - **Robert Moog**'s Minimoog (the Analog voice), **V. Välimäki & A.
   Huovilainen**, IEEE SPM 2007 (polyBLEP).
 - **Vital** by Matt Tytel (GPL-3, https://github.com/mtytel/vital) and

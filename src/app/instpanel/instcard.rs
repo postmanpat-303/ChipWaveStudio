@@ -451,6 +451,49 @@ const GRID: Spec = Spec {
     ]),
     secs: &[],
 };
+/// the poly synth: its eight macro knobs, then oscillator, filter, envelope
+const POLY: Spec = Spec {
+    macros: Macros::Params(&[
+        "ps.0", "ps.1", "ps.2", "ps.3", "ps.4", "ps.5", "ps.6", "ps.7",
+    ]),
+    secs: &[
+        s(
+            "Sound",
+            Some("Osc 1"),
+            &["ps.blend"],
+            &[
+                ("ps.28", None),
+                ("ps.31", None),
+                ("ps.35", None),
+                ("ps.36", None),
+                ("ps.32", None),
+            ],
+        ),
+        s(
+            "Filter",
+            Some("Filter"),
+            &["ps.filter"],
+            &[
+                ("ps.0", None),
+                ("ps.1", None),
+                ("ps.2", None),
+                ("ps.8", None),
+            ],
+        ),
+        s(
+            "Envelope",
+            Some("Amp envelope"),
+            &["ps.mode"],
+            &[
+                ("ps.22", None),
+                ("ps.23", None),
+                ("ps.24", None),
+                ("ps.25", None),
+                ("ps.6", None),
+            ],
+        ),
+    ],
+};
 const SAMPLE: Spec = Spec {
     macros: Macros::None,
     secs: &[Sec {
@@ -484,6 +527,7 @@ pub(crate) fn spec(tag: &str) -> &'static Spec {
         "FM-4" => &FM,
         "Noise" => &NOISE,
         "Grid" => &GRID,
+        crate::poly::POLY_DISPLAY_NAME => &POLY,
         "Sample" => &SAMPLE,
         _ => &PLUGIN,
     }
@@ -531,7 +575,7 @@ pub(crate) fn macros(l: &Layout, sp: &Spec) -> Vec<MacroRt> {
 
 /// the engine macro keys are &'static in the spec already; find it there
 fn leak_key(k: &str) -> &'static str {
-    for sp in [&DRUM, &CHIPFX, &FM, &GRID] {
+    for sp in [&DRUM, &CHIPFX, &FM, &GRID, &POLY] {
         if let Macros::Params(ks) = &sp.macros {
             if let Some(s) = ks.iter().find(|x| **x == k) {
                 return s;

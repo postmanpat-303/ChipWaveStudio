@@ -27,10 +27,13 @@ pub(crate) enum Tab {
     Advanced,
     /// the Grid generator's patching canvas
     Grid,
+    /// the poly synth's own editor (named `poly::POLY_DISPLAY_NAME`)
+    Synth,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 5] = [
+    pub const ALL: [Tab; 6] = [
+        Tab::Synth,
         Tab::Grid,
         Tab::Main,
         Tab::Modulation,
@@ -40,6 +43,7 @@ impl Tab {
     pub fn name(self) -> &'static str {
         match self {
             Tab::Grid => "Grid",
+            Tab::Synth => crate::poly::POLY_DISPLAY_NAME,
             Tab::Main => "Main",
             Tab::Modulation => "Modulation",
             Tab::Fx => "FX",
@@ -77,6 +81,8 @@ pub(crate) enum Custom {
     WaveTable(u8),
     /// Grid generator: the patching canvas (drawn over the whole tab)
     GridCanvas,
+    /// the poly synth's editor (drawn over the whole tab)
+    PolyPanel,
     /// drag-to-modulate: every routing with its depth
     Routings,
 }
@@ -270,6 +276,7 @@ pub(crate) fn type_tag(k: &InstrumentKind) -> &'static str {
             GenEngine::Noise(_) => "Noise",
             GenEngine::Wave(_) => "Wave",
             GenEngine::Grid(_) => "Grid",
+            GenEngine::Poly(_) => crate::poly::POLY_DISPLAY_NAME,
         },
     }
 }
@@ -291,6 +298,7 @@ fallback!(d_an, crate::gen2::AnalogP, Default::default());
 fallback!(d_fm, crate::gen2::FmP, Default::default());
 fallback!(d_nz, crate::gen2::NoiseP, Default::default());
 fallback!(d_wv, crate::gen_wave::WaveP, Default::default());
+fallback!(d_ps, crate::poly::PolyP, Default::default());
 fallback!(d_gd, crate::grid::GridP, crate::grid::GridP::empty());
 fallback!(d_sfx, crate::chipfx::SfxP, Default::default());
 
@@ -356,6 +364,7 @@ engine_acc!(fm, fm_mut, Fm, crate::gen2::FmP, d_fm);
 engine_acc!(nz, nz_mut, Noise, crate::gen2::NoiseP, d_nz);
 engine_acc!(wv, wv_mut, Wave, crate::gen_wave::WaveP, d_wv);
 engine_acc!(gd, gd_mut, Grid, crate::grid::GridP, d_gd);
+engine_acc!(ps, ps_mut, Poly, crate::poly::PolyP, d_ps);
 engine_acc!(sfx, sfx_mut, ChipFx, crate::chipfx::SfxP, d_sfx);
 
 fn drum(i: &Instrument, sel: usize) -> DrumP {
@@ -1636,6 +1645,7 @@ fn generator(b: &mut B, g: &GenPatch, sel: usize) {
         GenEngine::Noise(_) => noise(b),
         GenEngine::Wave(_) => wave(b),
         GenEngine::Grid(x) => grid(b, x),
+        GenEngine::Poly(_) => polysynth(b),
     }
     if !g.engine.own_env() {
         // release + optional filter (drums, kit, chip FX)
@@ -2102,6 +2112,188 @@ fn noise(b: &mut B) {
     }
 }
 
+/// a poly synth choice whose names come from `opts` (index in, index out)
+fn ps_choice<'b>(
+    b: &'b mut B,
+    key: &str,
+    name: &str,
+    opts: Vec<String>,
+    get: impl Fn(&crate::poly::PolyP) -> usize + 'static,
+    set: impl Fn(&mut crate::poly::PolyP, usize) + 'static,
+) -> &'b mut Param {
+    let n = opts.len();
+    let gs: (Get, Set) = (
+        Box::new(move |i| get(ps(i)) as f32),
+        Box::new(move |i, v| {
+            let k = (v.round().max(0.0) as usize).min(n - 1);
+            if let Some(g) = ge_mut(i) {
+                if let GenEngine::Poly(x) = &mut g.engine {
+                    set(x, k);
+                }
+                // the Tracker's glide / legato follow the voice mode
+                g.sync_poly();
+            }
+        }),
+    );
+    b.choice(key, name, opts, gs)
+}
+
+/// the poly synth's cards
+fn polysynth(b: &mut B) {
+    use crate::poly::*;
+    b.card(Tab::Synth, POLY_DISPLAY_NAME);
+    b.custom("ps.panel", POLY_DISPLAY_NAME, Custom::PolyPanel)
+        .tip("the synth's own editor: oscillators, blend, filter, envelopes, voice and routes");
+    let k = |b: &mut B, i: usize| {
+        gen_knob!(b, "ps", ps, ps_mut, POLY, i);
+    };
+    for o in 0..2usize {
+        let base = OSC[o];
+        b.card(Tab::Main, ["Osc 1", "Osc 2"][o]).viz = Some(Box::new(move |i| {
+            let x = ps(i);
+            let w = dsp::weights(x.get(base + SHAPE));
+            let pw = x.get(base + PW);
+            Viz::Wave((0..64).map(|s| dsp::wave(s as f32 / 64.0, pw, w)).collect())
+        }));
+        for j in [
+            SHAPE, PW, OCT, PITCH, SUB, SUB_PW, SYNC, VOICES, DETUNE, WIDTH, OPAN,
+        ] {
+            k(b, base + j);
+        }
+        ps_choice(
+            b,
+            &format!("ps.reset{o}"),
+            "Phase",
+            vec!["Free".into(), "Reset".into()],
+            move |x| x.reset[o] as usize,
+            move |x, v| x.reset[o] = v == 1,
+        )
+        .tip("Reset: every note starts the oscillator at phase 0 (punchy); Free: random phases (wide unison)");
+    }
+    b.card(Tab::Main, "Blend & noise");
+    ps_choice(
+        b,
+        "ps.blend",
+        "Blend op",
+        BlendOp::ALL.iter().map(|x| x.name().to_string()).collect(),
+        |x| x.blend as usize,
+        |x, v| x.blend = BlendOp::ALL[v],
+    )
+    .tip(&format!(
+        "how oscillator 2 combines with oscillator 1. {}",
+        BlendOp::ALL
+            .iter()
+            .map(|x| format!("{}: {}", x.name(), x.tip()))
+            .collect::<Vec<_>>()
+            .join("; ")
+    ));
+    for i in [BLEND, NOISE, COLOUR] {
+        k(b, i);
+    }
+    b.card(Tab::Main, "Filter").viz = Some(Box::new(|i| {
+        let x = ps(i);
+        let m = match x.filter {
+            PolyFilter::Hp2 | PolyFilter::Hp4 => 1,
+            PolyFilter::Bp2 | PolyFilter::Bp4 => 2,
+            _ => 0,
+        };
+        Viz::Filter(x.get(CUTOFF), x.get(RES), m)
+    }));
+    ps_choice(
+        b,
+        "ps.filter",
+        "Mode",
+        PolyFilter::ALL
+            .iter()
+            .map(|x| x.name().to_string())
+            .collect(),
+        |x| x.filter as usize,
+        |x, v| x.filter = PolyFilter::ALL[v],
+    )
+    .tip("low-, band- or high-pass at 12 or 24 dB/octave, or band-reject");
+    for i in [CUTOFF, RES, ENV_AMT, KEYTRK, VEL_CUT, FM_AMT, FM_FREQ] {
+        k(b, i);
+    }
+    b.card(Tab::Main, "Drive & shaper");
+    for i in [HP_CUT, HP_RES, DRIVE, FEEDBACK] {
+        k(b, i);
+    }
+    ps_choice(
+        b,
+        "ps.shaper",
+        "Shaper",
+        ShaperMode::ALL
+            .iter()
+            .map(|x| x.name().to_string())
+            .collect(),
+        |x| x.shaper as usize,
+        |x, v| x.shaper = ShaperMode::ALL[v],
+    )
+    .tip("the waveshaper after the filter: soft saturation, hard clip, wavefolder, asymmetric");
+    for i in [SHAPER, SHAPER_MIX] {
+        k(b, i);
+    }
+    b.card(Tab::Main, "Amp envelope").viz = Some(Box::new(|i| {
+        let x = ps(i);
+        Viz::Adsr(x.get(AEG), x.get(AEG + 1), x.get(AEG + 2), x.get(AEG + 3))
+    }));
+    for i in AEG..AEG + 4 {
+        k(b, i);
+    }
+    b.card(Tab::Main, "Voice");
+    ps_choice(
+        b,
+        "ps.mode",
+        "Voice mode",
+        VoiceMode::ALL.iter().map(|x| x.name().to_string()).collect(),
+        |x| x.mode as usize,
+        |x, v| x.mode = VoiceMode::ALL[v],
+    )
+    .tip("Poly: chords; Mono: one note, each retriggers; Legato: one note, overlapping notes glide without retriggering");
+    ps_choice(
+        b,
+        "ps.polyphony",
+        "Polyphony",
+        (1..=MAX_POLY).map(|n| n.to_string()).collect(),
+        |x| x.polyphony.clamp(1, MAX_POLY) as usize - 1,
+        |x, v| x.polyphony = v as u8 + 1,
+    )
+    .tip("most notes at once per track (Poly mode)");
+    for i in [GLIDE, VEL_AMP, GAIN, PAN] {
+        k(b, i);
+    }
+    b.card(Tab::Modulation, "Filter envelope").viz = Some(Box::new(|i| {
+        let x = ps(i);
+        Viz::Adsr(x.get(FEG), x.get(FEG + 1), x.get(FEG + 2), x.get(FEG + 3))
+    }));
+    for i in FEG..FEG + 4 {
+        k(b, i);
+    }
+    b.card(Tab::Modulation, "Mod routes");
+    let dsts: Vec<String> = route_targets().map(knob_label).collect();
+    for s in 0..MOD_SLOTS {
+        ps_choice(
+            b,
+            &format!("ps.src{s}"),
+            &format!("Src {}", s + 1),
+            ModSrc::ALL.iter().map(|x| x.name().to_string()).collect(),
+            move |x| x.routes[s].src as usize,
+            move |x, v| x.routes[s].src = ModSrc::ALL[v],
+        )
+        .tip("modulation source: filter envelope, amp envelope, velocity or key");
+        ps_choice(
+            b,
+            &format!("ps.dst{s}"),
+            &format!("Dst {}", s + 1),
+            dsts.clone(),
+            move |x| x.routes[s].dst as usize,
+            move |x, v| x.routes[s].dst = v as u8,
+        )
+        .tip("the knob this route moves");
+        k(b, MOD_AMT + s);
+    }
+}
+
 #[allow(clippy::needless_range_loop)] // `o` is captured by the closures
 fn wave(b: &mut B) {
     use crate::gen_wave::{USER, WAVE};
@@ -2415,6 +2607,10 @@ pub(crate) mod tests {
             ("Wave", gen("Wave Supersaw")),
             ("Grid", gen("Grid Saw Bass")),
             (
+                crate::poly::POLY_DISPLAY_NAME,
+                gen(concat!(crate::poly_name!(), " Pluck")),
+            ),
+            (
                 "Sample",
                 inst(InstrumentKind::Sample {
                     file: "x.wav".into(),
@@ -2629,6 +2825,24 @@ pub(crate) mod tests {
                     unreachable!()
                 };
                 r.extend(g.knobs().into_iter().map(|(k, _)| format!("gd.{k}")));
+            }
+            crate::poly::POLY_DISPLAY_NAME => {
+                r.extend(s(&[
+                    "gen.dice",
+                    "ps.panel",
+                    "ps.reset0",
+                    "ps.reset1",
+                    "ps.blend",
+                    "ps.filter",
+                    "ps.shaper",
+                    "ps.mode",
+                    "ps.polyphony",
+                ]));
+                for k in 0..crate::poly::MOD_SLOTS {
+                    r.push(format!("ps.src{k}"));
+                    r.push(format!("ps.dst{k}"));
+                }
+                r.extend((0..crate::poly::PN).map(|k| format!("ps.{k}")));
             }
             "Sample" => r.push("sample.info".into()),
             "CLAP" | "VST3" => r.extend(s(&["plugin.status", "plugin.macros", "plugin.params"])),
