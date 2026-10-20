@@ -1168,6 +1168,8 @@ impl App {
                         self.path = None;
                         let conv = self.convert_on_open();
                         self.reset_cursor();
+                        // not on disk anywhere: undo never makes it "saved"
+                        self.hist.forget_saved();
                         self.dirty = true;
                         self.status = "Recovered - choose File > Save As to keep it".into();
                         if conv {

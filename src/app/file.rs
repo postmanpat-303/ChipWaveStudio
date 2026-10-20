@@ -52,6 +52,8 @@ impl App {
         let nb = self.extra.backups.min(10);
         self.capture_plugins();
         let song = self.with(|s| s.song.clone());
+        // this state is the clean one now (undo back to it is not unsaved)
+        self.hist.mark_saved(&song, std::time::Instant::now());
         let (tx, rx) = std::sync::mpsc::channel();
         let p2 = path.clone();
         std::thread::spawn(move || {
@@ -118,6 +120,7 @@ impl App {
             }
             Err(e) => {
                 self.dirty |= self.save_was_dirty;
+                self.hist.forget_saved();
                 self.status = format!("Save failed: {e} (old file kept; try Save As)");
                 false
             }

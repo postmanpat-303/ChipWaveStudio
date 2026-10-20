@@ -77,8 +77,10 @@ impl App {
         if let Some(d) = self.tlv.drag.as_mut() {
             d.moved |= moved;
         }
+        // the unsaved mark comes from the undo commit when the mouse is let
+        // go, and only if the drag changed something (a drag that snaps
+        // back to where it started is not an edit)
         self.status = what;
-        self.dirty = true;
     }
 
     /// mouse released: an Alt-copy that never moved is taken back; markers
@@ -384,7 +386,9 @@ impl App {
             });
             self.tlv.rename = name.map(|n| (i, n));
         }
-        self.dirty = true;
+        // no `dirty` here: selecting (Ctrl+A) and refused edits ("Nothing to
+        // split here") change nothing; real edits are marked unsaved by the
+        // undo commit at the end of the frame
         if open_roll {
             self.set_lower(3);
         }

@@ -156,3 +156,87 @@ fn after_opening_a_song_the_timeline_has_the_keyboard() {
     frames(&mut h, 2);
     assert!(h.state().pr_active(), "an opened clip takes the keys");
 }
+
+#[test]
+fn selecting_and_refused_edits_do_not_mark_the_song_unsaved() {
+    let mut h = opened_demo(0);
+    key(&mut h, Key::A, egui::Modifiers::COMMAND);
+    assert!(!h.state().tlv.sels.is_empty());
+    assert!(!h.state().dirty, "Ctrl+A is not an edit");
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    // Split with nothing under the mouse or the play marker
+    h.state_mut().tlv.cue = 10_000 * tl::PPQ;
+    key(&mut h, Key::S, egui::Modifiers::NONE);
+    assert!(h.state().status.contains("Nothing to split"), "{}", h.state().status);
+    // Ctrl+L / Ctrl+J with nothing selected
+    key(&mut h, Key::L, egui::Modifiers::COMMAND);
+    key(&mut h, Key::J, egui::Modifiers::COMMAND);
+    assert!(!h.state().dirty, "refused edits are not edits");
+    assert!(!h.state().hist.can_undo());
+    // a real edit still is
+    let id = song(&h, |s| s.timeline.as_ref().unwrap().clips[0].id);
+    h.state_mut().tlv.sels = vec![id];
+    h.state_mut().tlv.sel = Some(id);
+    key(&mut h, Key::M, egui::Modifiers::NONE);
+    assert!(h.state().dirty, "M mutes: unsaved");
+}
+
+#[test]
+fn a_drag_that_snaps_back_is_not_an_edit_and_a_real_move_is() {
+    let mut h = harness_with(fileio::demo_song());
+    key(&mut h, Key::T, egui::Modifiers::COMMAND);
+    h.state_mut().enter_timeline();
+    h.state_mut().undo_reset();
+    h.state_mut().pr.focus = false;
+    h.state_mut().tlv.zoom = 40.0;
+    h.state_mut().tlv.scroll = 0.0;
+    h.state_mut().tlv.snap = super::timeline::Snap::Bar;
+    frames(&mut h, 2);
+    h.state_mut().dirty = false;
+    let id = {
+        let c = h.state().tlv.cache.as_ref().unwrap();
+        c.tl.clips
+            .iter()
+            .find(|c| c.track == 0 && c.len >= 8 * tl::PPQ)
+            .unwrap()
+            .id
+    };
+    let from = h.state().tlv.clip_rect(id).unwrap().center();
+    // 12 px at 40 px a beat snaps back to the same bar
+    super::timeline_m2_tests::drag_m(&mut h, from, from + egui::vec2(12.0, 0.0), egui::Modifiers::NONE);
+    frames(&mut h, 3);
+    assert!(!h.state().dirty, "a drag that moved nothing");
+    assert!(!h.state().hist.can_undo());
+    // a bar further is an edit
+    let from = h.state().tlv.clip_rect(id).unwrap().center();
+    super::timeline_m2_tests::drag_m(&mut h, from, from + egui::vec2(160.0, 0.0), egui::Modifiers::NONE);
+    frames(&mut h, 3);
+    assert!(h.state().dirty, "moved a bar: unsaved");
+    assert!(h.state().hist.can_undo());
+}
+
+#[test]
+fn undo_back_to_the_opened_or_saved_song_is_not_unsaved() {
+    let mut h = opened_demo(0);
+    let id = song(&h, |s| s.timeline.as_ref().unwrap().clips[0].id);
+    h.state_mut().tlv.sels = vec![id];
+    h.state_mut().tlv.sel = Some(id);
+    key(&mut h, Key::M, egui::Modifiers::NONE);
+    assert!(h.state().dirty);
+    key(&mut h, Key::Z, egui::Modifiers::COMMAND);
+    assert!(!song(&h, |s| s.timeline.as_ref().unwrap().clips[0].muted));
+    assert!(!h.state().dirty, "undone back to the opened song");
+    key(&mut h, Key::Y, egui::Modifiers::COMMAND);
+    assert!(h.state().dirty, "redo: unsaved again");
+    // save here: undo past it is unsaved, redo back to it is clean
+    let dir = std::env::temp_dir().join(format!("cw-stabilise-undo-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = dir.join("u.cwt");
+    assert!(h.state_mut().start_save(p.clone(), true));
+    assert!(!h.state().dirty);
+    key(&mut h, Key::Z, egui::Modifiers::COMMAND);
+    assert!(h.state().dirty, "undone past the save");
+    key(&mut h, Key::Y, egui::Modifiers::COMMAND);
+    assert!(!h.state().dirty, "redone back to the saved song");
+    let _ = std::fs::remove_dir_all(&dir);
+}

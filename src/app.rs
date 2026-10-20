@@ -746,7 +746,13 @@ impl App {
             done
         };
         if done {
-            self.dirty = true;
+            // back at the song on disk (opened or last saved): not unsaved
+            let saved = {
+                let shared = self.shared.clone();
+                let s = audio::lock(&shared);
+                self.hist.is_saved(&s.song)
+            };
+            self.dirty = !saved || self.plug.state_dirty;
             self.status = if redo { "Redo".into() } else { "Undo".into() };
         } else {
             self.status = if redo {
