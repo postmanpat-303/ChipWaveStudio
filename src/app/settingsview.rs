@@ -448,6 +448,20 @@ impl App {
                 ui.end_row();
                 ui.label("Tracker");
                 if ui
+                    .checkbox(&mut self.extra.show_tracker, "Show Tracker (experimental)")
+                    .on_hover_text(
+                        "the Tracker and Order list views with their tabs, keys (Ctrl+1, Ctrl+2) \
+                         and menu items. Off (the default): ChipWave is the Timeline and the \
+                         piano roll, and every song opens in timeline mode (it plays the same)",
+                    )
+                    .changed()
+                {
+                    changed = true;
+                }
+                ui.end_row();
+                if self.extra.show_tracker {
+                ui.label("");
+                if ui
                     .checkbox(&mut self.extra.alt_columns, "Alternate column shading")
                     .on_hover_text(
                         "tint every other channel column, with a thin divider between columns",
@@ -495,6 +509,7 @@ impl App {
                     changed |= a.changed() || b.changed();
                 });
                 ui.end_row();
+                }
                 ui.label("Chord menus");
                 ui.horizontal(|ui| {
                     let a = ui

@@ -389,6 +389,14 @@ impl App {
                     .map(|(_, t)| t);
             }
         }
+        // timeline mode: only the Timeline's clips - never the Tracker's
+        // cursor block (it isn't on the Timeline, and with the Tracker
+        // hidden its notes would go nowhere you can see)
+        if self.with(|s| s.song.timeline.is_some())
+            && (self.view == View::Timeline || !self.tracker_on())
+        {
+            return None;
+        }
         Some(Target::Block {
             pattern: self.pattern,
             col: self.ch,
@@ -1664,8 +1672,11 @@ impl App {
                     d.start = start;
                     d.len = self.pr.last_len.max(grid_t);
                     let key = k as u8;
+                    // a chord on a Tracker clip: it becomes a note clip first
+                    let (target, mut s2) = self
+                        .pr_make_room(target, &src, start, key, song_key)
+                        .unwrap_or_else(|| (target, src.clone()));
                     // write the new note(s) now; the drag sets the length
-                    let mut s2 = src.clone();
                     d.id = self.pr_put(&mut s2, target, start, d.len, key, song_key, false);
                     // the drag re-applies its length to this state
                     d.origin = s2.clone();
@@ -1730,7 +1741,10 @@ impl App {
                             && at < len
                             && !notes.iter().any(|n| n.start == at && n.key == k as u8)
                         {
-                            if let Some(mut s2) = self.pr_read(target) {
+                            if let Some(s2) = self.pr_read(target) {
+                                let (target, mut s2) = self
+                                    .pr_make_room(target, &s2, at, k as u8, song_key)
+                                    .unwrap_or((target, s2));
                                 let id =
                                     self.pr_put(&mut s2, target, at, step, k as u8, song_key, true);
                                 self.pr_write(target, s2);
@@ -1830,6 +1844,62 @@ impl App {
             .iter()
             .map(|&i| (key as i32 + i as i32).clamp(1, 120) as u8)
             .collect()
+    }
+
+    /// Chords on a Tracker clip: a Tracker column holds one note at a time,
+    /// so a new note at `start` where another one starts (or a chord from
+    /// the chord helper) first turns the clip - and
+    /// its linked copies - into a note clip (one undo step with the note).
+    /// Returns the new target and its contents; None: draw as before.
+    fn pr_make_room(
+        &mut self,
+        target: Target,
+        src: &Source,
+        start: Tick,
+        key: u8,
+        song_key: Option<chords::Key>,
+    ) -> Option<(Target, Source)> {
+        let Target::Block { pattern, col } = target else {
+            return None;
+        };
+        if self.view != View::Timeline {
+            return None;
+        }
+        // the timeline clip the roll shows
+        let id = {
+            let c = self.tlv.cache.as_ref()?;
+            let plays = |cl: &tl::Clip| cl.block() == Some((pattern, col));
+            self.tlv
+                .sel
+                .filter(|id| c.tl.clips.iter().any(|x| x.id == *id && plays(x)))
+                .or_else(|| c.tl.clips.iter().find(|x| plays(x)).map(|x| x.id))?
+        };
+        // a note already starting there (a later note simply ends the one
+        // before, as in the Tracker), or the chord helper
+        let (notes, _) = notes_of(src, target);
+        let chord = self.pr_chord_keys(key, song_key).len() > 1
+            || notes.iter().any(|n| n.start == start && n.key != key);
+        if !chord {
+            return None;
+        }
+        let data = self.with(|s| tl::block_col_to_notes(&mut s.song, pattern, col));
+        let Some(data) = data else {
+            self.status = "This Tracker clip has volumes or effects between its notes, so it \
+                           holds one note at a time; draw chords in a note clip (double-click \
+                           empty space)"
+                .into();
+            return None;
+        };
+        let t = Target::Notes {
+            data,
+            clip: Some(id),
+        };
+        let src = self.pr_read(t)?;
+        // keep the roll's state (selection, the press in progress)
+        self.pr.target = Some(t);
+        self.dirty = true;
+        self.status = "Chord: this Tracker clip is a note clip now (Ctrl+Z puts it back)".into();
+        Some((t, src))
     }
 
     /// inspector edit of one note

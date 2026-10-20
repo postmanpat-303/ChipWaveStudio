@@ -268,6 +268,62 @@ pub fn make_unique_notes(tl: &mut Timeline, id: u32) -> Option<usize> {
     Some(nd)
 }
 
+/// A Tracker clip column as a note clip, so it can hold chords (the piano
+/// roll does this when a new note would overlap another one): every clip
+/// that plays column `col` of block `pattern` becomes a note clip on one
+/// new note data, so linked copies stay linked. The notes are the column's
+/// as the Tracker plays them, with their instruments, volumes and effect
+/// commands. None, and nothing changes, when the column has a volume or an
+/// effect on a row without a note (a note clip has nowhere to keep it).
+/// Returns the new data index.
+pub fn block_col_to_notes(song: &mut Song, pattern: usize, col: usize) -> Option<usize> {
+    let p = song.patterns.get(pattern)?;
+    let rows = p.rows.min(p.cells.len());
+    let mono = roll::col_notes(p, col);
+    for r in 0..rows {
+        let c = p.cells[r].get(col).copied().unwrap_or_default();
+        let starts = mono.iter().any(|n| n.row == r);
+        if !starts && (c.fx != 0 || c.fxp != 0 || c.vol != 0) {
+            return None;
+        }
+    }
+    let notes = mono
+        .iter()
+        .map(|n| {
+            let c = p.cells[n.row].get(col).copied().unwrap_or_default();
+            Note {
+                start: rows_to_ticks(n.row),
+                len: rows_to_ticks(n.len.max(1)),
+                key: n.key,
+                vel: if n.vol == 0 {
+                    0xFFFF
+                } else {
+                    roll::vel_u16(roll::vol_to_vel(n.vol))
+                },
+                instr: n.instr,
+                fx: (c.fx != 0 || c.fxp != 0).then_some((c.fx, c.fxp)),
+                ..Default::default()
+            }
+        })
+        .collect();
+    let data = NoteClipData {
+        name: p.name.clone(),
+        len: rows_to_ticks(rows.max(1)),
+        notes,
+        chords: vec![],
+    };
+    let tl = song.timeline.as_deref_mut()?;
+    let n = tl.notes.len();
+    tl.notes.push(Shared::new(data));
+    for c in &mut tl.clips {
+        if matches!(c.kind, ClipKind::Block { pattern: b, col: k } if b == pattern && k as usize == col)
+        {
+            c.kind = ClipKind::Notes { data: n as u32 };
+        }
+    }
+    Some(n)
+}
+
 /// A new empty note clip (piano roll, 4 bars) on `track` at `start`.
 /// Returns its id.
 pub fn new_note_clip(song: &mut Song, track: usize, start: Tick) -> Option<u32> {
