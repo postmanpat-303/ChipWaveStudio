@@ -6,13 +6,13 @@ Del's ask: *"fun to use, easy to get results out quick into a working track… i
 
 **Status (0.2.2):** first working version. Implemented: roles (keys 1–7, right-click > Role, badges, saved in `.cwt`); the Song > Fill to length… dialog (Ctrl+Shift+F); five style templates; the DP + annealing generator below; derived blocks with 9 transforms; ghost preview, Lock, Accept (one undo step) and Discard. See [§9](#9-implementation-status-022) for what's deferred.
 
-Builds on the arranger data model in [ARRANGER.md](ARRANGER.md): blocks → play sequences → section list. Auto Arrange only *proposes* a new section list plus derived blocks; nothing is changed until you press Accept.
+Builds on the Order list data model in [ORDER_LIST.md](ORDER_LIST.md): blocks → play sequences → section list. Auto Arrange only *proposes* a new section list plus derived blocks; nothing is changed until you press Accept.
 
 ## 1. Workflow
-1. **Tag blocks with roles:** Intro, Verse, Chorus, Bridge, Breakdown, Outro or Fill. Right-click a block, or press `1`–`7` in the arranger. Untagged blocks are ignored. One role can hold several blocks (Chorus A/B).
+1. **Tag blocks with roles:** Intro, Verse, Chorus, Bridge, Breakdown, Outro or Fill. Right-click a block, or press `1`–`7` in the Order list. Untagged blocks are ignored. One role can hold several blocks (Chorus A/B).
 2. **Pick a target length** (e.g. 3:30) and a **snap** setting (1 / 4 / 8 / 16 bars). Bar length is computed from BPM, speed and lines-per-beat (`bar_secs = beats_per_bar × 60 / bpm`). The generator works in whole bars and reports the real result, e.g. *3:29.1 (122 bars)*. Tempo changes inside blocks are handled by the same pre-scan the ruler uses.
 3. **Pick a style template:** Pop, Chiptune demo-scene, Club build/drop or Ambient.
-4. Press **Generate**. Ghost blocks appear in the arranger. **Preview** plays them, **Reroll** tries a new seed, **Lock** keeps a section on reroll, and **Accept** or **Discard** commits or drops the proposal. Accept is one undo step.
+4. Press **Generate**. Ghost blocks appear in the Order list. **Preview** plays them, **Reroll** tries a new seed, **Lock** keeps a section on reroll, and **Accept** or **Discard** commits or drops the proposal. Accept is one undo step.
 
 ## 2. Style templates
 A template is a small TOML grammar plus a default energy curve. The factory files are in `presets/styles/`. On first use they're copied to the user config folder (`%APPDATA%\ChipWave\styles` on Windows, `~/.config/chipwave/styles` on Linux), where you can edit them or add new ones. **Edit styles…** in the dialog opens that folder, and reopening the dialog reloads them.
@@ -122,7 +122,7 @@ Variation intensity scales with the **Variation %** knob. Transforms are chosen 
 - Each style has a default curve. Dragging re-scores live (debounced 100 ms) and updates the ghost blocks.
 - Section energy is estimated from note density, active channels and average volume, so the generator can match sections to the curve.
 
-## 6. Arranger integration
+## 6. Order list integration
 - **Ghost blocks:** translucent fill with a dashed outline; derived ones are labelled *derived* with a ′ mark. Hovering shows the transform list.
 - **Time display:** live total versus target in the header, plus a time ruler.
 - **Live preview:** loops the ghost song from the cursor. Click a ghost block to audition just that one.
@@ -150,13 +150,13 @@ Variation intensity scales with the **Variation %** knob. Transforms are chosen 
   - section strip with Lock.
 - Generator: DP + annealing, exact length, deterministic.
 - Derived blocks with 9 transforms; they follow their source and bake when edited.
-- Arranger: dashed ghost lane. Preview plays the proposal without touching the song. Accept is one undo step; Discard.
+- Order list: dashed ghost lane. Preview plays the proposal without touching the song. Accept is one undo step; Discard.
 - WAV/MP3 export of the accepted result.
 - Keys: G generate, R reroll, L lock, P preview, H hide/show the dialog, S next style, Up/Down variation, Left/Right section, Enter accept, Esc or Ctrl+Z discard.
 
 **Deferred:**
 - Transforms: Arpeggiate, Chord inversion, Swing, Filter sweep (automation), Tracker echo, Call and response, Ritardando.
-- Arranger: auditioning a single ghost clip by clicking it; hover tooltips on ghost clips.
+- Order list: auditioning a single ghost clip by clicking it; hover tooltips on ghost clips.
 - Live re-scoring while dragging the curve (it regenerates on release instead).
 - Tempo changes inside blocks are not pre-scanned (song BPM is used).
 - Accept with a tempo nudge doesn't undo the BPM change.

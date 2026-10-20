@@ -2,19 +2,19 @@
 
 **Status:** editable (milestones M0, M1 and M2 of [DAW_TIMELINE_PLAN.md](DAW_TIMELINE_PLAN.md), unreleased). A song is in **tracker mode** (the order list decides what plays, and the timeline only shows it) or in **timeline mode** (the clips are the song, and you arrange them here). New songs start in timeline mode, and tracker-mode songs and demos are switched to timeline mode when you open them (below).
 
-![Timeline view: the Velvet Mirrorball demo playing, 14 tracks with headers on the left, coloured block clips with note previews, Intro/Verse/Chorus/Breakdown markers above the bar ruler, the playhead, the mini-map strip, and the instrument editor in the lower panel](screenshots/dark-timeline.png)
+![Timeline view: the Velvet Mirrorball demo playing, 14 tracks with headers on the left, coloured Tracker clips with note previews, Intro/Verse/Chorus/Breakdown markers above the bar ruler, the playhead, the mini-map strip, and the instrument editor in the lower panel](screenshots/dark-timeline.png)
 
 The **Timeline** view (the **Timeline** tab in the VIEW group, **View › Timeline**, or **Ctrl+T**) shows the song the way a DAW does: tracks run down the screen, time runs left to right, and each track holds the clips it plays. It is another view of the same song, so nothing about the song changes when you open it.
 
 - **Tracks are channels.** Track 6 *is* channel 6. It has the same name, the same mixer strip, the same mute/solo and the same meter.
 - **A clip is one column of one block.** If block 06 has notes in columns 1, 2 and 5, playing it from the order list puts a "06" clip on tracks 1, 2 and 5. Empty columns don't get a clip, and an empty column behaves exactly like a gap.
 - When the order list plays the same block several times in a row, the clips merge into one **looped clip**, with small notches where each repeat starts.
-- **Markers** come from the arranger's section roles (Intro, Verse, Chorus…).
+- **Markers** come from the Order list's section roles (Intro, Verse, Chorus…).
 
 The toolbar shows which mode the song is in:
 
 - **Tracker mode · from the order list.** The timeline is worked out from the order list and blocks every time they change. You can look, play, seek and open clips, but the first clip edit (dragging a clip, S, M, Delete, Ctrl+D…) asks *Switch to timeline mode?* (see below). Since 0.2.4.1 a tracker-mode song (a `.cwt`, a demo from File › Demo songs or Help › Load demo song, a recovered song, a file on the command line) is **switched to timeline mode when it is opened**, with the same lossless conversion as the prompt below and no prompt. It plays bit-identically (tests compare the render of every demo). Opening is not an edit: the song isn't marked unsaved and there is no conversion step to undo. The status bar says *Opened in timeline mode. File > Export tracker-compatible copy for 0.2.4.0 and older.* The file on disk is untouched until you save. **Settings › Opening songs › Open tracker songs in timeline mode** (on by default) turns this off: songs then open in tracker mode and play exactly as before, and the first clip edit asks. Screenshots (`--screenshot`) and the command-line tools (`--render`, `--self-test`, `--play-test`) don't convert.
-- **Timeline mode.** The clips are the song. The order list is no longer used (the Arranger says so), and the blocks are the clips' contents. **Back to tracker mode…** turns the timeline back into blocks and an order list.
+- **Timeline mode.** The clips are the song. The order list is no longer used (the Order list says so), and the blocks are the clips' contents. **Back to tracker mode…** turns the timeline back into blocks and an order list.
 
 ## Timeline mode
 
@@ -23,7 +23,7 @@ The toolbar shows which mode the song is in:
 - The switch is lossless: the song plays the **same samples** afterwards (checked by a test for every demo and fixture song, and by `--self-test`).
 - **Undo puts it back.** The switch and the edit that asked for it are separate undo steps, so Ctrl+Z once undoes the edit and twice returns to tracker mode.
 - **Back to tracker mode…** asks first, then turns the timeline into blocks and an order list that play the same (overlapping or partial clips become new blocks). Markers, the loop region and track speeds are dropped. Undo brings the timeline back.
-- **File › New** starts a song in timeline mode (Del's decision). Turning off **Settings › New songs › Open on the Timeline view** gives a tracker-mode song on the pattern editor instead.
+- **File › New** starts a song in timeline mode (Del's decision). Turning off **Settings › New songs › Open on the Timeline view** gives a tracker-mode song on the Tracker instead.
 
 ### Editing clips
 
@@ -39,7 +39,7 @@ The toolbar shows which mode the song is in:
 | Glue | **Ctrl+J**: the selected clips of one track become one clip of a new block "Glue NN" that plays exactly what they played (gaps become empty rows, up to 256 rows) |
 | Mute | **M** mutes or unmutes the selected clips (drawn dim, marked *muted*) |
 | Delete | **Del** or **Backspace** (the blocks stay in the song) |
-| New clip | **Double-click** empty space on a track: a new empty 64-row block on that bar, opened in the pattern editor on that channel |
+| New clip | **Double-click** empty space on a track: a new empty 64-row block on that bar, opened in the Tracker on that channel |
 | Clip menu | **Right-click** a clip: open, split here, duplicate, make unique, glue, mute, delete, loop around the selection, add marker |
 | Track speed | **Right-click** a track header: the ticks per row for this track's effects (slides, `0D` volume slides, filter slides), or *Follow the song*. A track with its own speed shows "speed N" in its header |
 
@@ -63,7 +63,7 @@ Timeline-mode songs save a `timeline.toml` and need this version to open (older 
 
 ## Piano roll and note clips
 
-The lower panel has a **Piano roll** tab (next to Arranger / Instrument / Automation). It edits the clip selected on the Timeline, or the current block column in the pattern editor. Clicking into it gives it the keyboard; clicking elsewhere gives it back.
+The lower panel has a **Piano roll** tab (next to Order list / Instrument / Automation). It edits the clip selected on the Timeline, or the current block column in the Tracker. Clicking into it gives it the keyboard; clicking elsewhere gives it back.
 
 **Toolbar and editing (Unreleased, all targets):** one row, left to right:
 - the clip / block **chip** (track colour) and **ALL** (select every note, Ctrl+A);
@@ -83,7 +83,7 @@ The lower panel has a **Piano roll** tab (next to Arranger / Instrument / Automa
 
 **Eraser:** **right-click** a note deletes it; **right-drag** deletes every note the mouse passes over (the cursor becomes an eraser). The whole swipe is **one undo step**. Deleted notes break into small pixels of their colour that drift up and fade (about half a second; purely visual, skipped with **Settings › Look › Flat**). Right-click on empty space does nothing.
 
-**Block clips and block columns (M3a)** are shown as notes on the row grid, one at a time, as the tracker plays them:
+**Tracker clips and block columns (M3a)** are shown as notes on the row grid, one at a time, as the tracker plays them:
 - Click to draw a note (current instrument, a note-off at its end), the length of the last one. Drag while drawing to set its length.
 - Drag a note (or a selection, together) to move it (time and pitch), and drag its right edge to resize it (this moves the note-off).
 - Right-click (or right-drag) erases notes. Shift/Ctrl+click toggles a note in the selection, and Shift-drag adds a box to it.
@@ -93,11 +93,11 @@ The lower panel has a **Piano roll** tab (next to Arranger / Instrument / Automa
 - Only the cells of the notes you touch change. Drawing a note into silence and deleting it again leaves identical cells.
 
 **Note clips (M3b)** are polyphonic, with free timing:
-- To make one: right-click empty space › **New note clip here**, or **Shift+double-click** empty space. Double-click or **Enter** on a note clip opens it in the roll; double-click opens block clips there too (see [Finding your way around](#finding-your-way-around)).
+- To make one: right-click empty space › **New note clip here**, or **Shift+double-click** empty space. Double-click or **Enter** on a note clip opens it in the roll; double-click opens Tracker clips there too (see [Finding your way around](#finding-your-way-around)).
 - The **snap** menu sets the grid (Bar, Beat, 1/8 … 1/32, 1/16T, Smart, off), and **Q** / **Quantize** snaps the selection (or every note).
 - **Chord** draws the song key's chord on the clicked scale degree (set the key in the Chords window). Notes in the song key are highlighted.
 - Dragging the edge of a note resizes the whole selection.
-- Note clips loop, trim, split, duplicate (linked) and **make unique** like block clips. They play **on top of** block clips on the same track; they don't replace them.
+- Note clips loop, trim, split, duplicate (linked) and **make unique** like Tracker clips. They play **on top of** Tracker clips on the same track; they don't replace them.
 - **Playback:** each track has 8 voices for its note clips. When more notes sound, the oldest released voice is stolen, then the oldest. Notes start at sample accuracy on the row clock and play through the track's insert chain and mixer channel. A note with instrument 00 uses the track's current instrument. Chance draws from the clip seed, so playback, seeks and exports repeat exactly. A seek re-strikes held notes of sustaining instruments. Plugin instruments get the notes too.
 - **MIDI recording:** with **Edit mode** on, **Rec live** on and the timeline playing, keys played on the Timeline view go into a note clip on the cursor track. The clip starts on the bar and grows as you play. Each note is placed at the time it was heard, with the output latency taken off.
 - **Capture:** right-click › **Capture played MIDI here** turns the last phrase you played (recorded or not; a 4 s gap ends a phrase) into a note clip, timed at the song tempo.
@@ -137,14 +137,14 @@ In timeline mode every track can show **automation lanes (M5)** under its header
 
 | Do | How |
 |---|---|
-| Open the view | **Ctrl+T**, the **Timeline** tab, or View › Timeline. **Ctrl+Tab** cycles Arranger → Timeline → Mixer |
+| Open the view | **Ctrl+T**, the **Timeline** tab, or View › Timeline. **Ctrl+Tab** cycles Order list → Timeline → Mixer |
 | Zoom | **Ctrl+wheel** zooms around the mouse. **+** / **−** (keys or toolbar). **Fit** or **F** shows the whole song |
 | Scroll | Wheel scrolls tracks. **Shift+wheel** scrolls time (the wheel scrolls time too when every track fits). Drag the **mini-map** strip under the clips, or the scroll bar on the right. **Home** / **End** jump to the start / end, and **←** / **→** scroll a bar |
 | Track height | **Alt+wheel** |
-| Move the play marker / seek | Click the **ruler** (or the marker strip). Like the arranger it snaps to the bar, and **Alt** gives the exact row. While playing, playback jumps there. Drag to scrub |
+| Move the play marker / seek | Click the **ruler** (or the marker strip). Like the Order list it snaps to the bar, and **Alt** gives the exact row. While playing, playback jumps there. Drag to scrub |
 | Follow | **Follow** in the toolbar pages the view so the playhead stays about a third of the way in |
 | Bars or time | **Bars** / **Time** switches the ruler between bar numbers and minutes:seconds. The readout shows `bar.beat · m:ss` at the playhead, or at the play marker while stopped |
-| Open a clip | **Double-click** a clip: it opens in the lower panel's **Piano roll** tab (a block clip shows that column of its block, which also becomes the pattern editor's current block and channel; a note clip shows its notes). **Alt+double-click**, **Enter** or right-click › **Open in the pattern editor** opens the block in the pattern editor instead, with the cursor in the clip's column (on the row you clicked; Enter: at the clip's start). **Settings › Double-click a clip** swaps the two (*Piano roll*, the default, or *Pattern editor*; Alt always does the other one). Audio clips don't open. Double-clicking an empty part of a track opens the block playing there (tracker mode) or writes a new one (timeline mode) in the pattern editor |
+| Open a clip | **Double-click** a clip: it opens in the lower panel's **Piano roll** tab (a Tracker clip shows that column of its block, which also becomes the Tracker's current block and channel; a note clip shows its notes). **Alt+double-click**, **Enter** or right-click › **Open in the Tracker** opens the block in the Tracker instead, with the cursor in the clip's column (on the row you clicked; Enter: at the clip's start). **Settings › Double-click a clip** swaps the two (*Piano roll*, the default, or *Tracker*; Alt always does the other one). Audio clips don't open. Double-clicking an empty part of a track opens the block playing there (tracker mode) or writes a new one (timeline mode) in the Tracker |
 | Select | Click a clip (outlined). **Esc** clears the selection. The [Inspector](INSPECTOR.md) (**I**) shows the clicked clip or track |
 | Clips and markers | Each clip has a solid title bar in its track's colour over a softer body. The row above the ruler shows each marker as a section band up to the next one (**Markers** / **Bars** captions on the left) |
 | Track header | Coloured strip, an **icon tile** in the track colour with the instrument type's glyph (synth, drum, voice, sample, wave, Grid, plugin; audio and Song/Master tracks have their own), number, name and instrument. **M** / **S** mute and solo the channel. The mini-fader is the mixer volume (double-click for 0 dB), and the meter is the channel's. Click a header to put the pattern cursor on that channel. Drag it up or down to reorder; right-click to add tracks ([Tracks](#tracks-add-reorder-instruments)) |
@@ -160,7 +160,7 @@ Tracks are mixer channels, so these change the song's channels (up to 32). Every
 |---|---|
 | **Add a track** | **+ Add track** under the last track header, or right-click a header › **Add ›** › **Empty track above** / **below** (the [track pie](#track-pie-menu)). A new track is empty, with default mixer settings, named "Track N" |
 | **Add a track with an instrument** | right-click a header › **Add ›** › **Instrument track…**: the [Browser](BROWSER.md) opens on its Instruments tab, and the next instrument you double-click (or Enter) there makes the track, named after it. Or **drag an instrument from the Browser onto the empty area below the last track**: an insertion line and "New track: <name>" show where it goes |
-| **Give a track an instrument** | drag an instrument, preset, `.cwi` file or VST3 / CLAP plugin instrument from the Browser onto the **track's header** (or its row). The header lights up. Every note on the track switches to that instrument (block clips: the track's column of each block; note clips: their notes), and the track remembers it, so the header shows it even while the track is empty and clicking the header makes it the current instrument |
+| **Give a track an instrument** | drag an instrument, preset, `.cwi` file or VST3 / CLAP plugin instrument from the Browser onto the **track's header** (or its row). The header lights up. Every note on the track switches to that instrument (Tracker clips: the track's column of each block; note clips: their notes), and the track remembers it, so the header shows it even while the track is empty and clicking the header makes it the current instrument |
 | **Reorder** | **drag a header up or down** (by its number / name). An insertion line shows where it lands; let go to move it |
 
 When all 32 tracks are used, the add commands are greyed out with "all 32 tracks are used (the channel limit)" and a drop below the tracks says so instead of adding one.
@@ -169,7 +169,7 @@ When all 32 tracks are used, the add commands are greyed out with "all 32 tracks
 
 ## Track pie menu
 
-**Right-click a track header** (in the Timeline's track list, or a channel header in the pattern editor) and a round menu opens around the pointer. The centre says **TRACK** and the track's name; nine segments go round it, clockwise from the top:
+**Right-click a track header** (in the Timeline's track list, or a channel header in the Tracker) and a round menu opens around the pointer. The centre says **TRACK** and the track's name; nine segments go round it, clockwise from the top:
 
 | Segment | What it does |
 |---|---|
@@ -200,11 +200,11 @@ ChipWave starts with the clean song of File › New (no demo; the demos are in F
 
 ![A new song on the Timeline view: no tracks, only Song / Master, and the hint to drag an instrument from the Browser or + Add track](screenshots/dark-timeline-new-song.png)
 
-To go straight to the pattern editor instead, turn off **Settings › New songs › Open on the Timeline view**. Songs you open from disk keep the view you are in.
+To go straight to the Tracker instead, turn off **Settings › New songs › Open on the Timeline view**. Songs you open from disk keep the view you are in.
 
 **The decision (Del, 19 Oct 2026):** new songs start on the Timeline, in **timeline mode** (clips are the song). Existing songs used to open in tracker mode and switch only when asked. **Update (Del, 19 Oct 2026: "default is timeline mode"):** tracker-mode songs and demos now open in timeline mode, playing the same; Settings › Open tracker songs in timeline mode (off) brings the old behaviour back.
 
-![The Amiga theme: the same song with the arranger in the lower panel](screenshots/amiga-timeline.png)
+![The Amiga theme: the same song with the Order list in the lower panel](screenshots/amiga-timeline.png)
 
 ## Performance
 
@@ -291,3 +291,21 @@ Tracker-mode songs are written exactly as before, byte for byte, with `min_reade
 - **Audio clips (M4):** no time-stretch or repitch (`Warp`), no reverse, no per-clip FX, no Slice to sampler or Collect-and-save yet, and files are held in memory (no streaming). Fades are per clip (no automatic crossfades). Audio trims and loops are measured at the tempo where the clip starts, so moving a clip across a tempo change shifts its trim in seconds. A timeline with audio clips can't go back to tracker mode or export a tracker copy. Plugin-delay-compensated tracks don't delay audio clips differently from other sounds on the track.
 - **Automation lanes (M5 + design A):** Song / Master track (tempo / master / returns); write modes + ● Write; Pointer/Pencil/Line/Shape; clip Absolute/Rel+/Rel× (Glue keeps lanes); 38xx diamonds and mod band. Still open: MIDI/plugin GUI recording with pass thinning, piano-roll automation strip, lane↔command convert, rubber-band multi-select/copy. Clip lanes stay inline in `timeline.toml`. Baking into tracker mode is exact only at rows (curves become straight segments a row long).
 - The arm button is in the model but not used yet.
+
+## Glossary
+
+| Term | Means |
+|---|---|
+| **Timeline** | the arrangement: tracks across time |
+| **Clip** | a region on a timeline track: **Note clip**, **Audio clip** or **Tracker clip** |
+| **Tracker** | the row / column editor (Ctrl+1, view tab TRACKER) |
+| **Block** | the tracker's unit: N rows across all channels |
+| **Tracker clip** | a timeline clip that plays one block's column |
+| **Order list** | a tracker song's sequence of blocks (Ctrl+2, view tab ORDER) |
+| **Drum Patterns** | the Browser's step-pattern library; a dropped pattern becomes a Note clip |
+| **timeline mode / tracker mode** | how a song is arranged (clips on tracks, or blocks in an order list) |
+
+## Layout
+
+The toolbar holds transport, tempo and the status lights. Tracker controls (Play block, Octave, Edit / Step) appear only in the Tracker view; their keys work everywhere. The view tab bar runs TIMELINE · PIANO · DEVICES · INST · AUTO · MIX · FX · SAMPLE, then ORDER · TRACKER at the far right. In timeline mode the header carries no mode label: **Song › Back to tracker mode…** turns the song back into blocks and an order list. The lower panel's tabs are Piano roll · Devices · Instrument · Automation · Order list.
+

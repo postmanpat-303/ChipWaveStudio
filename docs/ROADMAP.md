@@ -71,7 +71,7 @@ Each item has a size, **[easy]** (an evening or two), **[medium]** (a few days) 
 - New songs: don't keep the unused empty block 00. [easy] start: `src/model.rs`
 - Clip launcher with scenes (M6, optional). [big] start: `src/timeline.rs`
 - DAWproject import and export (M7, optional). [big] start: `src/fileio.rs`
-- Arranger variation lanes (optional, see [ARRANGER.md](ARRANGER.md)). [big] start: `src/app/arranger.rs`
+- Order list variation lanes (optional, see [ORDER_LIST.md](ORDER_LIST.md)). [big] start: `src/app/arranger.rs`
 
 ## Browser and plugins
 
@@ -167,4 +167,4 @@ Each item has a size, **[easy]** (an evening or two), **[medium]** (a few days) 
 
 ---
 
-Where these came from: the Limits and Not yet notes in [ADVANCED_EDIT.md](ADVANCED_EDIT.md), [BROWSER.md](BROWSER.md), [TIMELINE.md](TIMELINE.md), [DAW_TIMELINE_PLAN.md](DAW_TIMELINE_PLAN.md), [PLUGINS.md](PLUGINS.md), [FX.md](FX.md), [GRID.md](GRID.md), [VOICE.md](VOICE.md), [MODULATION.md](MODULATION.md), [GENERATORS.md](GENERATORS.md), [SOUND_DESIGN.md](SOUND_DESIGN.md), [SETTINGS.md](SETTINGS.md), [MIDI_VST.md](MIDI_VST.md), [PATTERN_EDITOR.md](PATTERN_EDITOR.md), [MACOS.md](MACOS.md), [AMIGA_LITE_PLAN.md](AMIGA_LITE_PLAN.md) and the README's Roadmap. When you finish an item, remove it here and from the guide's Limits list in the same pull request.
+Where these came from: the Limits and Not yet notes in [ADVANCED_EDIT.md](ADVANCED_EDIT.md), [BROWSER.md](BROWSER.md), [TIMELINE.md](TIMELINE.md), [DAW_TIMELINE_PLAN.md](DAW_TIMELINE_PLAN.md), [PLUGINS.md](PLUGINS.md), [FX.md](FX.md), [GRID.md](GRID.md), [VOICE.md](VOICE.md), [MODULATION.md](MODULATION.md), [GENERATORS.md](GENERATORS.md), [SOUND_DESIGN.md](SOUND_DESIGN.md), [SETTINGS.md](SETTINGS.md), [MIDI_VST.md](MIDI_VST.md), [TRACKER.md](TRACKER.md), [MACOS.md](MACOS.md), [AMIGA_LITE_PLAN.md](AMIGA_LITE_PLAN.md) and the README's Roadmap. When you finish an item, remove it here and from the guide's Limits list in the same pull request.

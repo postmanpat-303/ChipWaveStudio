@@ -38,7 +38,7 @@ Enabled inputs and outputs, MIDI thru, clock send/receive and song position, the
 Theme, UI scale (auto from the OS or 75–300 %), pattern font and size, row highlight spacing, hex/decimal rows, colour-blind palette, high contrast, reduce motion (turns off the wave band animation). **Reduce motion is in (Unreleased, `reduce_motion`, default off; Settings › Look › Motion):** the track pie menu then appears and closes at once instead of animating. See [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
 
 ### 2.4 Keys
-Keymap preset (ChipWave / FT2 / ProTracker / OpenMPT / OctaMED), "press a key" rebinding, conflict list, piano layout (physical-key based), and an import/export `keymap.toml` ([PATTERN_EDITOR.md §9](PATTERN_EDITOR.md)).
+Keymap preset (ChipWave / FT2 / ProTracker / OpenMPT / OctaMED), "press a key" rebinding, conflict list, piano layout (physical-key based), and an import/export `keymap.toml` ([TRACKER.md §9](TRACKER.md)).
 
 ### 2.5 Plugins
 Scan folders, scan timeout, parallel scanners, rescan / retry failed, and a link to the full plugin manager. **Find plugins…** (Unreleased) opens the plugin search from the first start again: standard folders, an optional whole-drive search, or folders you pick ([BROWSER.md › Find plugins](BROWSER.md#find-plugins)). Its answer is `plugin_setup_done` (once true, it isn't offered at startup again).
@@ -53,16 +53,16 @@ These are set from the View menu and the lower panel, and saved in `settings.tom
 - the lower panel's height (`lower_h`, 0 = automatic)
 - whether it shows the instrument editor (`lower_inst`), and whether you chose that view
   yourself (`lower_chosen`). With no choice saved it opens on the instrument editor (Unreleased;
-  before, it opened on the arranger)
-- Full-height pattern (`full_height`)
+  before, it opened on the Order list)
+- Full-height view (`full_height`)
 - the classic sidebar instrument editor (`classic_editor`)
 - the collapsed instrument-editor cards (`cards_closed`, as "Type/Card")
-- whether File › New opens on the Timeline view, in timeline mode (`new_in_timeline`, default on; **Settings › New songs**, Unreleased; off = a tracker-mode song on the pattern editor, four empty channels; either way no instruments). See [TIMELINE.md](TIMELINE.md#new-songs)
+- whether File › New opens on the Timeline view, in timeline mode (`new_in_timeline`, default on; **Settings › New songs**, Unreleased; off = a tracker-mode song on the Tracker, four empty channels; either way no instruments). See [TIMELINE.md](TIMELINE.md#new-songs)
 - whether opened tracker-mode songs and demos switch to timeline mode on load (`open_in_timeline`, default on; **Settings › Opening songs › Open tracker songs in timeline mode**, 0.2.4.1; lossless and bit-identical, not an edit; off = they stay in tracker mode and the first timeline edit asks). See [TIMELINE.md](TIMELINE.md)
 - the piano roll chord lane's right-click menus (`chord_list_menu`, default off = the round pie; on = list menus; **Settings › Chord menus**, Unreleased)
-- what double-clicking a clip on the Timeline opens (`dblclick_roll`, default on = the piano roll; **Settings › Double-click a clip**, Unreleased; off = the pattern editor; Alt+double-click does the other one). See [TIMELINE.md](TIMELINE.md#finding-your-way-around)
+- what double-clicking a clip on the Timeline opens (`dblclick_roll`, default on = the piano roll; **Settings › Double-click a clip**, Unreleased; off = the Tracker; Alt+double-click does the other one). See [TIMELINE.md](TIMELINE.md#finding-your-way-around)
 
-- **Inspector and view tab bar** (Unreleased, [INSPECTOR.md](INSPECTOR.md)): `inspector_open` (default off; **I**, Alt+I in the pattern editor) and `view_bar` (default on; View › View tab bar).
+- **Inspector and view tab bar** (Unreleased, [INSPECTOR.md](INSPECTOR.md)): `inspector_open` (default off; **I**, Alt+I in the Tracker) and `view_bar` (default on; View › View tab bar).
 - **The Browser** (Unreleased, [BROWSER.md](BROWSER.md)): whether it is shown (`browser_open`, default on; **Ctrl+B** or the toolbar's **Browser** button), its width (`browser_w`, default 340), your locations (`browser_dirs`), favourites (`browser_favs`, item keys), ratings (`browser_ratings`, key = 1–5) **Auto-play on select** (`browser_autoplay`, default on), **Plugin thumbnails** (`browser_thumbs`, default on), Drum Patterns preview volume (`pattern_vol`) and the Files tab's last folder (`files_dir`). The folder scan is cached in `browser-index.json` next to `settings.toml`.
 
 Older settings files get the defaults.

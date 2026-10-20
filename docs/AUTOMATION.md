@@ -12,7 +12,7 @@
 > **Stages 4–8 (Unreleased):** write modes (Read/Touch/Latch/Write/Off + ● Write); Pointer/Pencil/Line/Shape tools; clip Absolute/Rel+/Rel× (Glue keeps lanes); 38xx diamonds + mod band; unified Filter card labels + A / Cmd 38xx.
 
 
-Automation lanes sit **under the arranger blocks** ([ARRANGER.md](ARRANGER.md)), drawn as glowing curves on dark CRT-style lanes: the "visually cool" part. Curve colours are functional (one saturated colour per lane), while block colours stay muted ([DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md)).
+Automation lanes sit **under the Order list blocks** ([ORDER_LIST.md](ORDER_LIST.md)), drawn as glowing curves on dark CRT-style lanes: the "visually cool" part. Curve colours are functional (one saturated colour per lane), while block colours stay muted ([DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md)).
 
 ## 1. Lanes
 - **Any parameter** can have a lane:
@@ -25,10 +25,10 @@ Automation lanes sit **under the arranger blocks** ([ARRANGER.md](ARRANGER.md)),
   - synth-patch knobs without a target of their own (pulse width, detune, ADSR, glide, LFO depths…: `instrument.N.patch.<key>`, Unreleased)
   - a modulation routing's depth (`mod.K.amount`, −100..+100 %, Unreleased): **Lane** on the Routings card ([MODULATION.md](MODULATION.md))
 - **Modulation** (Unreleased) adds on top of a lane: a modulated parameter moves around the lane's value ([MODULATION.md](MODULATION.md)).
-- **Adding a lane:** "＋ Add lane…" (searchable, using the same list as the effect autocomplete in [PATTERN_EDITOR.md §6](PATTERN_EDITOR.md)), right-click a knob → "Automate", or just move a knob while recording.
+- **Adding a lane:** "＋ Add lane…" (searchable, using the same list as the effect autocomplete in [TRACKER.md §6](TRACKER.md)), right-click a knob → "Automate", or just move a knob while recording.
 - **Lane header:** name, current value in real units, the matching effect command (e.g. `cmd Fcxx`), the curve type, and **R** (read) / **W** (write) toggles. Lanes can be collapsed, reordered, coloured and grouped per channel.
 - **Song or block scope:**
-  - **Song lanes** run across the arranger timeline (the default).
+  - **Song lanes** run across the Order list timeline (the default).
   - **Block lanes** belong to a block and repeat wherever that block is played, which is good for per-pattern wobbles.
   - Both are shown, with block lanes drawn inside the block's span.
 
@@ -44,10 +44,10 @@ Automation lanes sit **under the arranger blocks** ([ARRANGER.md](ARRANGER.md)),
 | **LFO stamp** | Drag a range and pick shape (sine, tri, saw, square, S&H, random), rate (synced 1/64–8 bars), depth and phase. It writes points that stay editable, or a live "LFO segment" kept as a parameter set until flattened. |
 | Select / move | Box-select points, drag, scale vertically (Ctrl-drag) or time-stretch. Copy/paste between lanes with unit conversion. |
 
-Snapping uses the arranger grid (1/16 by default), with Shift to bypass. Hovering a point shows a readout in real units ("bar 18 · 1.2 kHz").
+Snapping uses the Order list grid (1/16 by default), with Shift to bypass. Hovering a point shows a readout in real units ("bar 18 · 1.2 kHz").
 
 ## 3. Recording
-- **Record knobs:** arm with "● Record knobs" (or `Ctrl+R` in the arranger). While playing, moving any on-screen knob or a **MIDI-learned** controller ([MIDI_VST.md](MIDI_VST.md)) writes points.
+- **Record knobs:** arm with "● Record knobs" (or `Ctrl+R` in the Order list). While playing, moving any on-screen knob or a **MIDI-learned** controller ([MIDI_VST.md](MIDI_VST.md)) writes points.
 - **Modes:** *Touch* (writes while held, then returns to the existing curve), *Latch* (keeps the last value until stop), *Overwrite*.
 - Recorded data is thinned on stop. Undo removes the whole pass in one step.
 - **Plugins:** parameter changes coming from plugin GUIs (CLAP param events, VST3 `performEdit`, LV2 port events) are recorded the same way.
@@ -63,5 +63,5 @@ Tracker commands and lanes are two views of the same idea:
 - Lanes are evaluated per sub-block (32–64 samples, as in [SOUND_DESIGN.md §9](SOUND_DESIGN.md)). Bezier segments are pre-tessellated into a lookup with linear interpolation, and parameter values are smoothed.
 - Lanes are stored in `.cwt` as `automation/*.toml`: points `(song_pos_lines, value_normalised, curve_kind, handles)` plus a target id resolved through the song's target table, so moving or renaming a device keeps its automation.
 
-**Implemented in 0.1.7 (first working version):** song-scope lanes under the arranger (show/hide), targets synth cutoff/resonance/drive, instrument amp level, mixer channel volume/pan, master volume and tempo. Breakpoints: click to add (snaps to lines, Shift = free), drag to move, right-click to delete; per-segment shapes Linear/Step/Smooth; Pencil tool (one point per line, no thinning yet). Glowing curve on a dark lane, playhead, value readout. The engine evaluates lanes every 32 samples with smoothing, in realtime and in WAV export; saved in `.cwt` as `automation/NN.toml` (`pos` in lines, `value` normalised 0..1, `shape`); undoable. The first-run demo loads both lanes; lane 2 (delay feedback) maps to the bass filter resonance until a delay return exists. Deferred: block-scope lanes, Bezier handles, recording knobs (touch/latch), LFO stamp, box-select, command ↔ lane conversion, MMD baking, lane reorder/colour/collapse, effect-command override markers.
+**Implemented in 0.1.7 (first working version):** song-scope lanes under the Order list (show/hide), targets synth cutoff/resonance/drive, instrument amp level, mixer channel volume/pan, master volume and tempo. Breakpoints: click to add (snaps to lines, Shift = free), drag to move, right-click to delete; per-segment shapes Linear/Step/Smooth; Pencil tool (one point per line, no thinning yet). Glowing curve on a dark lane, playhead, value readout. The engine evaluates lanes every 32 samples with smoothing, in realtime and in WAV export; saved in `.cwt` as `automation/NN.toml` (`pos` in lines, `value` normalised 0..1, `shape`); undoable. The first-run demo loads both lanes; lane 2 (delay feedback) maps to the bass filter resonance until a delay return exists. Deferred: block-scope lanes, Bezier handles, recording knobs (touch/latch), LFO stamp, box-select, command ↔ lane conversion, MMD baking, lane reorder/colour/collapse, effect-command override markers.
 

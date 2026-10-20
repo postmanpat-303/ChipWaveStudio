@@ -757,7 +757,7 @@ impl App {
                 notes.extend(f.style_errs.iter().cloned());
                 if tagged == 0 {
                     notes.push(
-                        "Tag blocks first: arranger, keys 1–7 (Intro … Fill) or right-click > Role"
+                        "Tag blocks first: Order list, keys 1–7 (Intro … Fill) or right-click > Role"
                             .into(),
                     );
                 }

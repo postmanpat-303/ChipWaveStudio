@@ -164,12 +164,12 @@ pub const DEFAULTS: [(Action, &str, Combo); 33] = [
     (A::Quit, "Quit", Combo::new(Key::Q, true, false)),
     (
         A::ViewPattern,
-        "View: pattern",
+        "View: Tracker",
         Combo::new(Key::Num1, true, false),
     ),
     (
         A::ViewArranger,
-        "View: arranger",
+        "View: Order list",
         Combo::new(Key::Num2, true, false),
     ),
     (
@@ -222,7 +222,7 @@ pub const DEFAULTS: [(Action, &str, Combo); 33] = [
     ),
     (
         A::FullHeight,
-        "Full-height pattern (hide the lower panel)",
+        "Full-height view (hide the lower panel)",
         Combo::new(Key::F11, false, false),
     ),
     (

@@ -163,7 +163,7 @@ impl App {
             self.arr_clip = c;
         }
         if self.arr_clip.is_empty() {
-            self.status = "Arranger clipboard is empty (select clips, Ctrl+C)".into();
+            self.status = "Order list clipboard is empty (select clips, Ctrl+C)".into();
             return;
         }
         let clip = self.arr_clip.clone();
@@ -331,7 +331,7 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             if self.arr_focused() {
                 ui.label(
-                    egui::RichText::new(" ARRANGER ")
+                    egui::RichText::new(" ORDER LIST ")
                         .strong()
                         .monospace()
                         .color(Color32::from_rgb(0x1A, 0x1C, 0x1F))
@@ -339,8 +339,8 @@ impl App {
                 )
                 .on_hover_text("keyboard focus: Ctrl+X/C/V, Del, arrows act on clips");
             } else {
-                ui.label(egui::RichText::new("Arranger").strong().color(th().ink2))
-                    .on_hover_text("click to give the arranger keyboard focus");
+                ui.label(egui::RichText::new("Order list").strong().color(th().ink2))
+                    .on_hover_text("click to give the Order list keyboard focus");
             }
             ui.label(egui::RichText::new("zoom").color(th().ink2));
             if ui.small_button("-").clicked() {

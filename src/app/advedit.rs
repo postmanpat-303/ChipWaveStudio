@@ -256,7 +256,7 @@ impl App {
                 if ui
                     .small_button(if fl { "Dock" } else { "Float" })
                     .on_hover_text(if fl {
-                        "dock right of the pattern"
+                        "dock right of the Tracker"
                     } else {
                         "a floating window"
                     })

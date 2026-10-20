@@ -29,7 +29,7 @@
 ```
 
 <p align="center">
-  <img src="docs/screenshots/pattern-playing.gif" alt="ChipWave 0.2.3.19 playing the Lumen Drift demo: the pattern editor above, the Trance Kick open in the lower-panel instrument editor" width="800">
+  <img src="docs/screenshots/pattern-playing.gif" alt="ChipWave 0.2.3.19 playing the Lumen Drift demo: the Tracker above, the Trance Kick open in the lower-panel instrument editor" width="800">
   <br><sub>Real capture of ChipWave 0.2.3.19 playing the built-in demo song “Lumen Drift”, with the instrument editor in the lower panel.</sub>
 </p>
 
@@ -43,7 +43,7 @@
   <a href="https://github.com/postmanpat-303/BigWaveRadio"><b>BigWave Radio</b></a> (sister project)
 </p>
 
-**ChipWave Studio** is a music tracker inspired by **OctaMED** and the Commodore **Amiga**: the fast, keyboard-driven pattern workflow of a classic tracker, plus a built-in synth, a synthetic Voice instrument, macro-knob Generators (drums, chip FX, analog, FM, noise), a visual arranger, a mixer with sidechain ducking and a true-peak limiter, automation and WAV/MP3 export, in up to 32 channels. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
+**ChipWave Studio** is a music tracker inspired by **OctaMED** and the Commodore **Amiga**: the fast, keyboard-driven pattern workflow of a classic tracker, plus a built-in synth, a synthetic Voice instrument, macro-knob Generators (drums, chip FX, analog, FM, noise), a visual Order list, a mixer with sidechain ducking and a true-peak limiter, automation and WAV/MP3 export, in up to 32 channels. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
 
 > **ChipWave Studio was called ChipWave Tracker until 0.2.3.19.** It was renamed in 0.2.4.0 to tell it apart from an unrelated iOS app called "ChipWave". Same app, same settings, same `.cwt` songs; the old GitHub links redirect here. Website: **[postmanpat-303.github.io/ChipWaveStudio](https://postmanpat-303.github.io/ChipWaveStudio/)**. Details: [docs/RENAME.md](docs/RENAME.md).
 
@@ -56,8 +56,8 @@ All pictures on this page are real captures of the current build (no mockups). T
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/dark-pattern.png" alt="Pattern editor playing the Velvet Mirrorball disco demo, with the Cyber Choir voice open in the lower-panel instrument editor"><br><b>Pattern editor</b>: OctaMED-style blocks (64 rows by default; set the length on the one-line Block bar), note / instrument / volume / effect columns, decimal row numbers (hex in Settings › Look), the classic Z–M keyboard layout, selection, copy/paste, transpose (keys, the Block bar’s -12 / -1 / +1 / +12 buttons or Edit › Transpose) and undo. The cursor follows the playing row. Shown: the “Velvet Mirrorball” disco demo with its Cyber Choir voice in the instrument editor below.</td>
-    <td width="50%"><img src="docs/screenshots/dark-arranger.png" alt="Arranger view of the Velvet Mirrorball demo with clips and automation lanes"><br><b>Arranger</b>: the song order as coloured clips with role badges (Intro, Verse, Chorus, Bridge, Breakdown, Outro), drag to reorder, duplicate, zoom, plus <b>automation lanes</b> for filter sweeps, levels and delay feedback.</td>
+    <td width="50%"><img src="docs/screenshots/dark-pattern.png" alt="Tracker playing the Velvet Mirrorball disco demo, with the Cyber Choir voice open in the lower-panel instrument editor"><br><b>Tracker</b>: OctaMED-style blocks (64 rows by default; set the length on the one-line Block bar), note / instrument / volume / effect columns, decimal row numbers (hex in Settings › Look), the classic Z–M keyboard layout, selection, copy/paste, transpose (keys, the Block bar’s -12 / -1 / +1 / +12 buttons or Edit › Transpose) and undo. The cursor follows the playing row. Shown: the “Velvet Mirrorball” disco demo with its Cyber Choir voice in the instrument editor below.</td>
+    <td width="50%"><img src="docs/screenshots/dark-arranger.png" alt="Order list view of the Velvet Mirrorball demo with clips and automation lanes"><br><b>Order list</b>: the song order as coloured clips with role badges (Intro, Verse, Chorus, Bridge, Breakdown, Outro), drag to reorder, duplicate, zoom, plus <b>automation lanes</b> for filter sweeps, levels and delay feedback.</td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/dark-mixer.png" alt="Mixer with channel strips, send returns and the master limiter"><br><b>Mixer</b>: per-channel fader, pan, mute/solo, peak meters, two send/return buses (delay and reverb) and <b>sidechain ducking</b>: pick a key channel and set Duck % per channel for the trance pump.</td>
@@ -72,7 +72,7 @@ All pictures on this page are real captures of the current build (no mockups). T
     <td width="50%"><img src="docs/screenshots/dark-settings.png" alt="Settings"><br><b>Settings</b>: summary cards for Audio, Look, Keys (remappable), Files &amp; Safety (autosave, backups, crash recovery, update check) and MIDI. <sub>(Captured on a machine without a sound card, hence “no audio output”.)</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/dark-pattern-full.png" alt="Full-height pattern: the lower panel hidden so the tracker fills the window"><br><b>Full-height pattern</b> <sub>(0.2.3.19)</sub>: <code>F11</code>, the <b>Full height</b> button, or dragging the splitter to the bottom hides the lower panel so the pattern fills the window; press <code>F11</code> again to bring it back.</td>
+    <td width="50%"><img src="docs/screenshots/dark-pattern-full.png" alt="Full-height view: the lower panel hidden so the tracker fills the window"><br><b>Full-height view</b> <sub>(0.2.3.19)</sub>: <code>F11</code>, the <b>Full height</b> button, or dragging the splitter to the bottom hides the lower panel so the pattern fills the window; press <code>F11</code> again to bring it back.</td>
     <td width="50%"><img src="docs/screenshots/dark-instrument-fx.png" alt="The FX tab of the instrument editor showing the Disco Strings effect chain as knob cards"><br><b>FX tab</b> <sub>(0.2.3.19)</sub>: an instrument's effect chain as knob cards in the lower panel (here the disco demo’s strings: high-pass and low-pass filters and two chorus/flanger stages), next to the Main, Modulation and Advanced tabs.</td>
   </tr>
 </table>
@@ -81,11 +81,11 @@ All pictures on this page are real captures of the current build (no mockups). T
   <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/instrument.gif" alt="The lower-panel instrument editor browsing the demo’s synth sounds"><br><b>Synth / sound editor</b>: oscillator, unison + detune, stereo width, LP/HP/BP filter (SVF or Moog ladder, clean / vintage, 12/24 dB) with envelope, ADSR, drive, an 808-style metallic source for hats, velocity → cutoff, start delay, 303 glide / legato and accent, and a tempo-syncable LFO to cutoff, amp and pitch. <a href="docs/screenshots/dark-instrument.png">Still</a>.</td>
     <td width="66%" valign="top"><img src="docs/screenshots/mixer-meters.gif" alt="Mixer meters moving while the demo plays"><br><b>Mixer while playing</b>: the pads and bass duck under the kick (sidechain), meters per channel and on the master.
-    <br><br><img src="docs/screenshots/arranger.gif" alt="Arranger playhead moving through the song"><br><b>Arranger while playing</b>: the playhead runs through the clips and the automation curves.</td>
+    <br><br><img src="docs/screenshots/arranger.gif" alt="Order list playhead moving through the song"><br><b>Order list while playing</b>: the playhead runs through the clips and the automation curves.</td>
   </tr>
   <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/dark-instrument-editor.png" alt="The Octave Bass (Analog generator) in the lower-panel instrument editor, with the compact instrument list on the left"></td>
-    <td width="66%" valign="top"><b>Instrument editor</b> <sub>(0.2.3.19)</sub>: every instrument (synth, sample, Voice, generators, Chip FX, CLAP plugins) is edited under the pattern with <b>knobs</b> on side-by-side, collapsible cards in four tabs (Main, Modulation, FX, Advanced), small envelope / filter / wave pictures, presets, A/B compare and <b>parameter search</b> (<code>Ctrl+F</code>). Drag a knob, <code>Ctrl</code>-drag for fine steps, double-click for the default, right-click to automate or MIDI-learn. The lower panel switches between Arranger, Instrument and Automation, resizes with a splitter, and <b>Full-height pattern</b> (<code>F11</code>) hides it. See <a href="docs/INSTRUMENT_EDITOR.md">INSTRUMENT_EDITOR.md</a>.</td>
+    <td width="66%" valign="top"><b>Instrument editor</b> <sub>(0.2.3.19)</sub>: every instrument (synth, sample, Voice, generators, Chip FX, CLAP plugins) is edited under the pattern with <b>knobs</b> on side-by-side, collapsible cards in four tabs (Main, Modulation, FX, Advanced), small envelope / filter / wave pictures, presets, A/B compare and <b>parameter search</b> (<code>Ctrl+F</code>). Drag a knob, <code>Ctrl</code>-drag for fine steps, double-click for the default, right-click to automate or MIDI-learn. The lower panel switches between Order list, Instrument and Automation, resizes with a splitter, and <b>Full-height view</b> (<code>F11</code>) hides it. See <a href="docs/INSTRUMENT_EDITOR.md">INSTRUMENT_EDITOR.md</a>.</td>
   </tr>
   <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/dark-voice.png" alt="Glitch Babble Voice instrument in the lower-panel editor: Voice, Vowels, Words, Output, Filter and Envelope cards"></td>
@@ -93,11 +93,11 @@ All pictures on this page are real captures of the current build (no mockups). T
 </tr>
   <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/dark-mixer-limiter.png" alt="Mixer with the Limiter and loudness panel"></td>
-    <td width="66%" valign="top"><b>Master limiter &amp; loudness</b> <sub>(0.2.3.7)</sub>: the panel pinned to the right of the mixer, captured while the demo plays: a lookahead true-peak limiter (gain, ceiling −1 dBTP, release, gain-reduction bar, bypass = the old soft clipper) and momentary / short-term / integrated LUFS plus true peak (ITU-R BS.1770), with a loudness-target hint. Exports use the same limiter. Also new: pattern effects <code>38</code>–<code>3D</code> for per-row filter cutoff, resonance and cutoff slides, 303 glide (Legato + <code>3C</code>) and accent (<code>3D</code> or a velocity threshold); see <a href="docs/PATTERN_EDITOR.md">PATTERN_EDITOR.md</a> and <a href="docs/MIXER.md">MIXER.md</a>.</td>
+    <td width="66%" valign="top"><b>Master limiter &amp; loudness</b> <sub>(0.2.3.7)</sub>: the panel pinned to the right of the mixer, captured while the demo plays: a lookahead true-peak limiter (gain, ceiling −1 dBTP, release, gain-reduction bar, bypass = the old soft clipper) and momentary / short-term / integrated LUFS plus true peak (ITU-R BS.1770), with a loudness-target hint. Exports use the same limiter. Also new: pattern effects <code>38</code>–<code>3D</code> for per-row filter cutoff, resonance and cutoff slides, 303 glide (Legato + <code>3C</code>) and accent (<code>3D</code> or a velocity threshold); see <a href="docs/TRACKER.md">TRACKER.md</a> and <a href="docs/MIXER.md">MIXER.md</a>.</td>
   </tr>
   <tr>
-    <td width="34%" valign="top"><img src="docs/screenshots/dark-32-channels.png" alt="Pattern editor with a 32-channel song"></td>
-    <td width="66%" valign="top"><b>Up to 32 channels</b> <sub>(0.2.3.8)</sub>: a 32-channel test song in the pattern editor (four sets of kick, hat, clap, bass, three arp voices and a lead). The bar under the grid reads “channels 1–11 of 32”; click or drag it, or Tab through the channels. The mixer strips scroll the same way beside the pinned master.</td>
+    <td width="34%" valign="top"><img src="docs/screenshots/dark-32-channels.png" alt="Tracker with a 32-channel song"></td>
+    <td width="66%" valign="top"><b>Up to 32 channels</b> <sub>(0.2.3.8)</sub>: a 32-channel test song in the Tracker (four sets of kick, hat, clap, bass, three arp voices and a lead). The bar under the grid reads “channels 1–11 of 32”; click or drag it, or Tab through the channels. The mixer strips scroll the same way beside the pinned master.</td>
   </tr>
   <tr>
     <td width="34%" valign="top"><img src="docs/screenshots/dark-chord-helper.png" alt="Chord helper window"></td>
@@ -146,17 +146,17 @@ All pictures on this page are real captures of the current build (no mockups). T
 | | |
 |---|---|
 | 🎹 **MIDI keyboard** | play the current instrument with velocity, sustain and pitch bend; record step or live into the pattern; chord spread; MIDI learn on faders and knobs |
-| 🎚️ **Up to 32 channels** | each song sets its own channel count (1–32); the pattern editor and mixer scroll with a bar showing which channels are in view |
+| 🎚️ **Up to 32 channels** | each song sets its own channel count (1–32); the Tracker and mixer scroll with a bar showing which channels are in view |
 | 🎼 **Chords & scale lock** | song key (pick or detect), chord pads, progressions written as chords, arps or bass, scale lock for typing and MIDI |
 | 📚 **Instrument library** | `.cwi` instrument files, a library folder with categories, factory sounds, audition, rename / reorder / swap instruments |
-| 🎛️ **Effects column** | `01`/`02` slide, `08` note decay, `09` speed, `0C` volume, `0D` volume slide, `0F` tempo; Voice `30`–`37` (`33`/`34` stutter any instrument); filter and acid `38`–`3D` (cutoff, resonance, cutoff slides, 303 glide, accent); `3E` speak word; `3F`–`42` Voice Transform and chrome devices; `43xy` generator macros. Full table: [PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md#5-effect-commands) |
+| 🎛️ **Effects column** | `01`/`02` slide, `08` note decay, `09` speed, `0C` volume, `0D` volume slide, `0F` tempo; Voice `30`–`37` (`33`/`34` stutter any instrument); filter and acid `38`–`3D` (cutoff, resonance, cutoff slides, 303 glide, accent); `3E` speak word; `3F`–`42` Voice Transform and chrome devices; `43xy` generator macros. Full table: [TRACKER.md](docs/TRACKER.md#5-effect-commands) |
 | 🔌 **Plugin instruments** | CLAP instruments such as Surge XT: crash-guarded scanner, browser, native editor (Windows), parameter list, 8 macros for `43xy` and automation, state saved in the song, offline render. VST3 is listed but not hosted yet. [PLUGINS.md](docs/PLUGINS.md) |
 | 🎲 **Generators** | macro-knob instruments: Drum Synth and kits, Chip FX (sfxr), Analog (Moog-style), FM-4, Noise; Dice, Mutate, locks, 16-roll history, Bake to sample; 46 presets |
 | 🗣️ **Voice** | synthetic vowels, babble, stutter, spoken words, Throat (vocal tract) mode and the Transform (metal, digital, sub) |
 | 🧱 **Master limiter** | lookahead true-peak limiter on the master and in every export (ceiling −1 dBTP by default, gain, release, bypass), with a loudness meter: momentary, short-term and integrated LUFS plus true peak, and a loudness-target hint |
 | 🔊 **Samples** | import WAV (button or drag and drop), sample view with loop points and preview, chop / slice into instruments or notes |
 | 💾 **Files** | `.cwt` songs (a ZIP of TOML + WAV you can inspect), autosave, backups and crash recovery |
-| 📼 **Export** | WAV and MP3 with ID3 tags; whole song, the current block or the arranger selection |
+| 📼 **Export** | WAV and MP3 with ID3 tags; whole song, the current block or the Order list selection |
 | 🎵 **Demo songs** | File > Demo songs: “Lumen Drift” (140 BPM uplifting trance), “Hollow Ritual” (147 BPM dark psytrance) and “Velvet Mirrorball” (104 BPM disco with Voice choir, phaser strings and filter sweeps), all original |
 | ⬆️ **Update check** | Help > Check for updates…, and an optional quiet check at startup |
 | 🖥️ **Scaling** | UI scale in 25 % steps (Ctrl+= / Ctrl+-, up to what fits the window), remembers window size and position |
@@ -180,12 +180,12 @@ Two built-in themes, switchable in View > Theme or Settings > Look: **Dark Circu
     <th>Amiga (Workbench Gradient)</th>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/dark-pattern.png" alt="Pattern editor, Dark Circuit"></td>
-    <td><img src="docs/screenshots/amiga-pattern.png" alt="Pattern editor, Amiga"></td>
+    <td><img src="docs/screenshots/dark-pattern.png" alt="Tracker, Dark Circuit"></td>
+    <td><img src="docs/screenshots/amiga-pattern.png" alt="Tracker, Amiga"></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/dark-arranger.png" alt="Arranger, Dark Circuit"></td>
-    <td><img src="docs/screenshots/amiga-arranger.png" alt="Arranger, Amiga"></td>
+    <td><img src="docs/screenshots/dark-arranger.png" alt="Order list, Dark Circuit"></td>
+    <td><img src="docs/screenshots/amiga-arranger.png" alt="Order list, Amiga"></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/dark-mixer.png" alt="Mixer, Dark Circuit"></td>
@@ -225,8 +225,8 @@ On Linux, build it from source (below).
 | `0`–`9` `A`–`F` | hex in the instrument / volume / effect columns |
 | Arrows, `PgUp`/`PgDn`, `Home`/`End` | move (Ctrl+Home/End = first / last block) |
 | `Tab` / `Shift+Tab` | next / previous channel |
-| `Space` / `Shift+Space` | play / stop block (loop) / whole song (from the arranger play marker) |
-| Click / drag the arranger ruler | move the play marker to that bar (jumps there while playing); drag = scrub, `Alt`+click = exact row |
+| `Space` / `Shift+Space` | play / stop block (loop) / whole song (from the Order list play marker) |
+| Click / drag the Order list ruler | move the play marker to that bar (jumps there while playing); drag = scrub, `Alt`+click = exact row |
 | `Enter` / `Ctrl+Enter` | restart block / play from the cursor row |
 | `Esc` | edit mode on / off |
 | `Delete`, `Backspace`, `Insert` | clear, pull up, push down |
@@ -235,7 +235,7 @@ On Linux, build it from source (below).
 | `Ctrl+Z` / `Ctrl+Y` | undo / redo |
 | `Alt +` / `Alt -` (Shift = octave) | transpose selection or channel (also the Block bar **-12 -1 +1 +12** buttons and **Edit › Transpose**, which has *Transpose by…* for -24…+24) |
 | `F9` / `F10` | mute / solo channel |
-| `Ctrl+1`…`5`, `Ctrl+Tab` | Pattern / Arranger / Mixer / FX / Sample view |
+| `Ctrl+1`…`5`, `Ctrl+Tab` | Pattern / Order list / Mixer / FX / Sample view |
 | `Ctrl+6` | the default layout: Timeline on top, piano roll below (also View › Reset to default layout and **TIMELINE + PIANO** in the view tab bar) |
 | `Ctrl+T` | Timeline view (tracks and clips; in timeline mode drag, loop, split, copy clips, [TIMELINE.md](docs/TIMELINE.md)) |
 | `Ctrl+Shift+F` | Fill to length |
@@ -244,11 +244,11 @@ On Linux, build it from source (below).
 | `Ctrl+E` / `Ctrl+Shift+E` | quick WAV export / export dialog |
 | `Ctrl+,` | settings |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | UI scale up / down / 100 % |
-| `Ctrl+I` | instrument editor in the lower panel (again: back to the arranger) |
-| `I` (`Alt+I` in the pattern editor) | show / hide the Inspector: the selected track or clip ([INSPECTOR.md](docs/INSPECTOR.md)) |
+| `Ctrl+I` | instrument editor in the lower panel (again: back to the Order list) |
+| `I` (`Alt+I` in the Tracker) | show / hide the Inspector: the selected track or clip ([INSPECTOR.md](docs/INSPECTOR.md)) |
 | `Ctrl+B` | show / hide the Browser (instruments, plugins, samples, songs…; [BROWSER.md](docs/BROWSER.md)) |
 | `Ctrl+F` | search the instrument's parameters |
-| `F11` | Full-height pattern: hide / show the lower panel |
+| `F11` | Full-height view: hide / show the lower panel |
 | `F12` | the full key list (Help > Keys) |
 
 ```
@@ -279,7 +279,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 ## Documentation
 
 - [ROADMAP.md](docs/ROADMAP.md) — things to add in the future, with good first picks; [CONTRIBUTING.md](CONTRIBUTING.md) — how to build, test and send a pull request
-- [PATTERN_EDITOR.md](docs/PATTERN_EDITOR.md) — the core pattern editor, keymap, 32 channels and all effect commands (00–43)
+- [TRACKER.md](docs/TRACKER.md) — the core Tracker, keymap, 32 channels and all effect commands (00–43)
 - [PACKAGING.md](docs/PACKAGING.md) — Windows/Linux/macOS packages and CI
 - [MACOS.md](docs/MACOS.md): the universal Mac build, installing it, first launch, and building it
 - [STARTER_SOUNDS.md](docs/STARTER_SOUNDS.md) — the psytrance and alien factory presets
@@ -291,7 +291,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md) — the full OctaMED feature blueprint
 - [SOUND_DESIGN.md](docs/SOUND_DESIGN.md) — the synth and effects
 - [FX.md](docs/FX.md) — the FX devices (Phaser and the rest)
-- [ARRANGER.md](docs/ARRANGER.md) — the arranger (the order list as a lane of blocks)
+- [ORDER_LIST.md](docs/ORDER_LIST.md) — the Order list (the order list as a lane of blocks)
 - [TIMELINE.md](docs/TIMELINE.md) — the Timeline view (Ctrl+T) and timeline mode: arrange tracks and clips like a DAW
 - [INSPECTOR.md](docs/INSPECTOR.md) — the Inspector (I) and the view tab bar along the bottom
 - [BROWSER.md](docs/BROWSER.md) — the Browser (Ctrl+B): find and load instruments, plugins, samples, songs, presets, Grid patches and wavetables; drag them onto tracks; Find plugins
@@ -300,7 +300,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [EXPORT.md](docs/EXPORT.md) — WAV/MP3 export
 - [FILE_FORMAT.md](docs/FILE_FORMAT.md) — the `.cwt` song format
 - [UI_SCALING.md](docs/UI_SCALING.md) — screen scaling and layouts
-- [INSTRUMENT_EDITOR.md](docs/INSTRUMENT_EDITOR.md) — the lower-panel instrument editor: knobs, tabs, cards, search, A/B, Full-height pattern (0.2.3.19)
+- [INSTRUMENT_EDITOR.md](docs/INSTRUMENT_EDITOR.md) — the lower-panel instrument editor: knobs, tabs, cards, search, A/B, Full-height view (0.2.3.19)
 - [SAMPLES.md](docs/SAMPLES.md) — the instrument list, importer and chop / slice (0.2.3.10)
 - [INSTRUMENT_LIBRARY.md](docs/INSTRUMENT_LIBRARY.md) — instrument library, `.cwi` files, rename / reorder / swap (0.2.3.9)
 - [CHORDS.md](docs/CHORDS.md) — chord helper and scale lock (0.2.3.9)

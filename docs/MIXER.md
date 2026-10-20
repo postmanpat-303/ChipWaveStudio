@@ -22,7 +22,7 @@ Opened with `F6`, or as a dockable panel. There's one strip per tracker channel,
 | **Pan** | Constant-power (−3 dB centre). Shows C / L50 / R20. Double-click resets. |
 | **Meters** | Peak (cyan) and RMS (green, 300 ms window) with a 1.5 s peak-hold line (yellow). Scale +6 to −60 dBFS. Clip LED latches until clicked. |
 | **Fader** | −∞ to +6 dB, logarithmic taper; value readout in dB below. Shift-drag for fine control, double-click for 0 dB, and typing a number works. |
-| **Mute / Solo** | Same state as the pattern editor channel header ([PATTERN_EDITOR.md §8](PATTERN_EDITOR.md)). Ctrl+click solo is additive. |
+| **Mute / Solo** | Same state as the Tracker channel header ([TRACKER.md §8](TRACKER.md)). Ctrl+click solo is additive. |
 
 ## 2. Returns
 Return A has a synced ping-pong delay and return B a Freeverb-style reverb, both from the built-in FX. Each return has its own fader, mute, meter and EQ low-cut. Returns can feed each other (delay → reverb) with a loop guard.

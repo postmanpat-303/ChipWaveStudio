@@ -88,7 +88,7 @@ impl App {
         self.extra.inspector_open = !self.extra.inspector_open;
         self.save_settings();
         self.status = if self.extra.inspector_open {
-            "Inspector shown (I hides it; Alt+I in the pattern editor)".into()
+            "Inspector shown (I hides it; Alt+I in the Tracker)".into()
         } else {
             "Inspector hidden (I shows it)".into()
         };
@@ -206,7 +206,7 @@ impl App {
         let (title, kind) = match clip.kind {
             tl::ClipKind::Audio { .. } => ("Audio clip", "audio"),
             tl::ClipKind::Notes { .. } => ("Note clip", "notes"),
-            _ => ("Block clip", "block"),
+            _ => ("Tracker clip", "block"),
         };
         let id = clip.id;
         let mut muted = clip.muted;
@@ -347,8 +347,8 @@ impl App {
                     }
                     if kind == "block"
                         && ui
-                            .button("Pattern editor")
-                            .on_hover_text("this clip's block in the pattern editor (Enter)")
+                            .button("Open in Tracker")
+                            .on_hover_text("this clip's block in the Tracker (Enter)")
                             .clicked()
                     {
                         open_pat = true;

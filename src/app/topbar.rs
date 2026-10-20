@@ -65,6 +65,8 @@ fn tool_button(
         .layout_no_wrap(label.to_string(), font, Color32::PLACEHOLDER);
     let size = egui::vec2(10.0 + 18.0 + 6.0 + galley.size().x + 10.0, 26.0);
     let (r, resp) = ui.allocate_exact_size(size, Sense::click());
+    // screen readers (and the UI tests) see its label
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), label));
     if ui.is_rect_visible(r) {
         let v = ui.style().interact_selectable(&resp, on);
         let p = ui.painter();
@@ -119,6 +121,8 @@ fn segmented(ui: &mut egui::Ui, items: &[(&str, &str)], cur: usize) -> Option<us
                 Sense::click(),
             )
             .on_hover_text(items[i].1);
+        let label = items[i].0;
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, i == cur, label));
         let sel = i == cur;
         let on_fill = if t.light { Color32::WHITE } else { t.accent };
         if sel {
@@ -153,6 +157,8 @@ fn segmented(ui: &mut egui::Ui, items: &[(&str, &str)], cur: usize) -> Option<us
     out
 }
 
+/// a toolbar group (calmer header: no visible caption; it's the
+/// group's hover text)
 fn group(ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
     egui::Frame::new()
         .fill(Color32::from_black_alpha(if th().light { 40 } else { 70 }))
@@ -162,10 +168,18 @@ fn group(ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 5.0;
-                ui.label(egui::RichText::new(caption).small().color(hdr_dim()));
                 add(ui);
             });
-        });
+        })
+        .response
+        .on_hover_text(caption);
+}
+
+/// `group` when `on` (tracker-only groups show in the Tracker view only)
+fn group_if(on: bool, ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
+    if on {
+        group(ui, caption, add);
+    }
 }
 
 pub(super) fn hdr_text() -> Color32 {
@@ -189,8 +203,12 @@ fn item(ui: &mut egui::Ui, text: &str, sc: &str) -> bool {
 }
 
 pub(super) const VIEWS: [(View, &str, &str); 6] = [
-    (View::Pattern, "Pattern", "pattern editor (Ctrl+1)"),
-    (View::Arranger, "Arranger", "song arrangement (Ctrl+2)"),
+    (View::Pattern, "Tracker", "the Tracker (Ctrl+1)"),
+    (
+        View::Arranger,
+        "Order list",
+        "the tracker song's blocks in order (Ctrl+2)",
+    ),
     (
         View::Timeline,
         "Timeline",
@@ -434,7 +452,7 @@ impl App {
                         egui::Button::selectable(self.extra.adv_edit_open, "Advanced Edit")
                             .shortcut_text("Ctrl+Shift+A"),
                     )
-                    .on_hover_text("the tracker's block operations panel (docked right of the pattern)")
+                    .on_hover_text("the tracker's block operations panel (docked right of the Tracker)")
                     .clicked()
                 {
                     self.toggle_adv_edit();
@@ -447,7 +465,7 @@ impl App {
                     )
                     .on_hover_text(
                         "the panel on the left that shows the selected track or clip \
-                         (I; in the pattern editor, where I types a note: Alt+I)",
+                         (I; in the Tracker, where I types a note: Alt+I)",
                     )
                     .clicked()
                 {
@@ -462,11 +480,11 @@ impl App {
                     self.save_settings();
                 }
                 ui.checkbox(&mut self.show_auto, "Automation lanes");
-                ui.checkbox(&mut self.dock_arranger, "Dock lower panel under pattern");
+                ui.checkbox(&mut self.dock_arranger, "Dock lower panel under the Tracker");
                 let full = !self.lower_visible();
                 if ui
-                    .add(egui::Button::selectable(full, "Full-height pattern").shortcut_text("F11"))
-                    .on_hover_text("hide the lower panel (arranger, automation, instrument editor)")
+                    .add(egui::Button::selectable(full, "Full-height view").shortcut_text("F11"))
+                    .on_hover_text("hide the lower panel (piano roll, devices, instrument, automation)")
                     .clicked()
                 {
                     self.toggle_full_height();
@@ -507,7 +525,7 @@ impl App {
                 ui.checkbox(&mut self.follow, "Follow playback");
                 if ui
                     .checkbox(&mut self.extra.alt_columns, "Alternate column shading")
-                    .on_hover_text("tint every other channel column in the pattern editor")
+                    .on_hover_text("tint every other channel column in the Tracker")
                     .changed()
                 {
                     self.save_settings();
@@ -629,6 +647,17 @@ impl App {
                     self.chords.open = true;
                     ui.close();
                 }
+                let tl_mode = self.with(|s| s.song.timeline.is_some());
+                if tl_mode
+                    && ui
+                        .button("Back to tracker mode…")
+                        .on_hover_text("turn the timeline back into blocks and an order list (asks first)")
+                        .clicked()
+                {
+                    self.view = View::Timeline;
+                    self.tlv.ask_leave = true;
+                    ui.close();
+                }
                 ui.separator();
                 if ui.button("Add block").clicked() {
                     self.add_block();
@@ -740,9 +769,15 @@ impl App {
             ui.add_space(6.0);
             let playing = self.with(|s| s.engine.playing);
             let t = th();
+            // tracker-only controls (Play block, Octave, Edit / Step) show
+            // in the Tracker view; their keys work everywhere
+            let tracker = self.view == View::Pattern;
             group(ui, "TRANSPORT", |ui| {
                 let loop_on = playing && self.with(|s| s.engine.loop_pattern);
-                if tool_button(ui, Ic::Play, "Play block", loop_on, t.accent)
+                // Play block is a tracker control: shown in the Tracker view
+                // (Space still loops the block everywhere)
+                if tracker
+                    && tool_button(ui, Ic::Play, "Play block", loop_on, t.accent)
                     .on_hover_text("loop the current block (Space)")
                     .clicked()
                 {
@@ -752,7 +787,7 @@ impl App {
                     self.play(3);
                 }
                 if tool_button(ui, Ic::PlaySong, "Play song", playing && !loop_on, t.accent)
-                    .on_hover_text("play the song from the arranger play marker (Shift+Space; click the arranger ruler to move it)")
+                    .on_hover_text("play the song from the play marker (Shift+Space; click the ruler to move it)")
                     .clicked()
                 {
                     if playing {
@@ -789,7 +824,7 @@ impl App {
                 ui.label(egui::RichText::new("Speed").color(hdr_text()));
                 let c2 = ui
                     .add(egui::DragValue::new(&mut speed).range(1..=32))
-                    .on_hover_text("ticks per row (effect 09xx sets it in a pattern)")
+                    .on_hover_text("ticks per row (effect 09xx sets it in the Tracker)")
                     .changed();
                 if c1 || c2 {
                     self.set_tempo(bpm, speed);
@@ -798,7 +833,7 @@ impl App {
             if let Some(r) = tempo_r {
                 self.learn_menu(&r, crate::automation::Target::Tempo);
             }
-            group(ui, "OCTAVE", |ui| {
+            group_if(tracker, ui, "OCTAVE", |ui| {
                 if ui
                     .button(" − ")
                     .on_hover_text("octave down (numpad -)")
@@ -822,7 +857,7 @@ impl App {
                     self.set_octave(self.octave as i32 + 1);
                 }
             });
-            group(ui, "EDIT", |ui| {
+            group_if(tracker, ui, "EDIT", |ui| {
                 let label = if self.edit {
                     "Edit mode ON"
                 } else {
@@ -844,7 +879,7 @@ impl App {
                 ui.add(egui::DragValue::new(&mut self.step).range(0..=16))
                     .on_hover_text("rows the cursor moves after entering a note");
             });
-            group(ui, "VIEW", |ui| {
+            group_if(!self.extra.view_bar, ui, "VIEW", |ui| {
                 let cur = VIEWS
                     .iter()
                     .position(|v| v.0 == self.view)

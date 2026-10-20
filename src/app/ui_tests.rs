@@ -273,7 +273,7 @@ fn type_into(h: &mut Harness<'static, App>, at: Rect, text: &str) {
 }
 
 const TEMPO: &str = "tempo in beats per minute (drag or type)";
-const SPEED: &str = "ticks per row (effect 09xx sets it in a pattern)";
+const SPEED: &str = "ticks per row (effect 09xx sets it in the Tracker)";
 
 #[test]
 fn tempo_typed_then_ctrl_z_while_field_focused() {
@@ -366,7 +366,7 @@ fn speed_and_edit_menu_undo() {
     let t = rects(
         &h,
         Role::SpinButton,
-        Some("ticks per row (effect 09xx sets it in a pattern)"),
+        Some("ticks per row (effect 09xx sets it in the Tracker)"),
     )[0];
     drag(&mut h, t.center(), t.center() + egui::vec2(30.0, 0.0));
     assert_ne!(song(&mut h, |s| s.speed), sp0, "speed dragged");
@@ -962,7 +962,7 @@ fn about_window_is_centred_and_has_credit_tabs() {
     frames(&mut h, 4);
     about_centred(&h);
     exact(&h, "ChipWave Studio");
-    exact(&h, "A tracker for chip and psytrance sounds");
+    exact(&h, "A DAW and tracker for chip and psytrance sounds");
     exact(&h, "Created by Del (postmanpat)");
     exact(&h, "Full notices: THIRD_PARTY_LICENSES.txt");
     // Credits tab: grouped, headed sections with every credit

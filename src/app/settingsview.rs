@@ -446,7 +446,7 @@ impl App {
                     }
                 });
                 ui.end_row();
-                ui.label("Pattern");
+                ui.label("Tracker");
                 if ui
                     .checkbox(&mut self.extra.alt_columns, "Alternate column shading")
                     .on_hover_text(
@@ -461,7 +461,7 @@ impl App {
                 if ui
                     .checkbox(&mut self.extra.new_in_timeline, "Open on the Timeline view")
                     .on_hover_text(
-                        "File > New starts on the Timeline (tracks and clips); off: on the pattern editor",
+                        "File > New starts on the Timeline (tracks and clips); off: on the Tracker",
                     )
                     .changed()
                 {
@@ -488,10 +488,10 @@ impl App {
                 ui.horizontal(|ui| {
                     let a = ui
                         .selectable_value(&mut self.extra.dblclick_roll, true, "Piano roll")
-                        .on_hover_text("Timeline: double-click opens the clip in the lower panel's piano roll (Alt+double-click: the pattern editor)");
+                        .on_hover_text("Timeline: double-click opens the clip in the lower panel's piano roll (Alt+double-click: the Tracker)");
                     let b = ui
-                        .selectable_value(&mut self.extra.dblclick_roll, false, "Pattern editor")
-                        .on_hover_text("Timeline: double-click opens a block clip in the pattern editor (Alt+double-click: the piano roll)");
+                        .selectable_value(&mut self.extra.dblclick_roll, false, "Tracker")
+                        .on_hover_text("Timeline: double-click opens a Tracker clip in the Tracker (Alt+double-click: the piano roll)");
                     changed |= a.changed() || b.changed();
                 });
                 ui.end_row();

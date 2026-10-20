@@ -673,7 +673,7 @@ impl App {
             .on_hover_text(if full {
                 "show the lower panel again (F11)"
             } else {
-                "Full-height pattern: hide the lower panel (F11)"
+                "Full-height view: hide the lower panel (F11)"
             })
             .clicked()
         {

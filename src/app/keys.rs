@@ -15,7 +15,8 @@ impl App {
             .iter()
             .filter_map(|e| self.keymap.translate(e))
             .collect();
-        let channels = self.with(|s| s.song.channels);
+        // at least 1: a timeline song can have no tracks (cursor maths below)
+        let channels = self.with(|s| s.song.channels).max(1);
         let arr_focus = self.arr_focused();
         self.mods = ctx.input(|i| i.modifiers);
         for a in input::clipboard_actions(&events) {

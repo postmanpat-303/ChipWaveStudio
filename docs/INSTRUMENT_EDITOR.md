@@ -1,6 +1,6 @@
 # Instrument editor (lower panel, 0.2.3.19)
 
-Since 0.2.3.19 instruments are edited in the **lower panel** under the pattern editor, with
+Since 0.2.3.19 instruments are edited in the **lower panel** under the Tracker, with
 knobs, tabs and cards, instead of the long slider list in the sidebar. The sidebar keeps the
 compact instrument list.
 
@@ -8,7 +8,7 @@ compact instrument list.
 
 ![The FX tab: the Disco Strings effect chain as knob cards](screenshots/dark-instrument-fx.png)
 
-![Full-height pattern (F11): the lower panel hidden](screenshots/dark-pattern-full.png)
+![Full-height view (F11): the lower panel hidden](screenshots/dark-pattern-full.png)
 
 ## 1. Sidebar
 
@@ -24,28 +24,28 @@ compact instrument list.
 
 ## 2. The lower panel
 
-- **Arranger | Instrument | Automation:** the switch bar at the top of the lower panel.
-  - **Arranger:** the docked arranger.
-  - **Automation:** the arranger with its automation lanes. This is the same as the arranger's
+- **Order list | Instrument | Automation:** the switch bar at the top of the lower panel.
+  - **Order list:** the docked Order list.
+  - **Automation:** the Order list with its automation lanes. This is the same as the Order list's
     Automation checkbox.
   - **Instrument:** this editor.
   - **Default (Unreleased):** the panel opens on **Instrument** for new users and whenever no
     choice has been saved; once you pick a view (the switch, `Ctrl+I`, the sidebar button) it is
     remembered and used on the next start. Settings from 0.2.3.19 / 0.2.4.0 count as "no choice"
-    (they always saved the arranger), so the first start after updating opens on Instrument.
+    (they always saved the Order list), so the first start after updating opens on Instrument.
     Adding an automation lane (right-click › Automate, **+ Lane**) switches the panel to the lanes.
 - **Splitter:** the dotted bar between the pattern and the panel.
   - Drag it to resize.
   - Double-click it for the automatic height.
-  - Drag it to the bottom to hide the panel (Full-height pattern).
+  - Drag it to the bottom to hide the panel (Full-height view).
   - The height is saved in settings.
-- **Full-height pattern** (`F11`, **View › Full-height pattern**, the **Full height** toggle at
+- **Full-height view** (`F11`, **View › Full-height view**, the **Full height** toggle at
   the right of the Block bar, or the button on the switch bar) hides the whole lower panel.
   - Press it again to bring the panel back at the height it had.
   - `Ctrl+I` also brings it back, showing the instrument editor.
   - The state is saved in settings.
   - `F11` is not used for fullscreen by ChipWave. `Ctrl+Shift+F` was taken by Fill to length.
-- **View › Dock lower panel under pattern** (formerly "Dock arranger under pattern") turns the
+- **View › Dock lower panel under pattern** (formerly "Dock Order list under pattern") turns the
   docked panel off altogether.
 
 ## 3. Header
@@ -144,8 +144,8 @@ LFO depths…) are now automatable and modulatable. See [MODULATION.md](MODULATI
   checkbox. It also tests:
   - knob drag + one undo, `Ctrl`-drag, and double-click reset
   - search jump
-  - Full-height pattern (`F11`, the buttons, height restore, `Ctrl+I`)
+  - Full-height view (`F11`, the buttons, height restore, `Ctrl+I`)
   - the splitter (resize, collapse at the bottom)
-  - the switch bar (Arranger / Automation still dock the arranger)
+  - the switch bar (Order list / Automation still dock the Order list)
   - card collapse, A/B, and the sidebar button
   - old settings files

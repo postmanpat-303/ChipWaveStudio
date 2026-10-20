@@ -258,7 +258,7 @@ fn full_height_pattern_hides_the_lower_panel_and_restores_its_height() {
     assert!(h.state().extra.full_height);
     h.state_mut().toggle_full_height();
     frames(&mut h, 2);
-    let b = labelled_rect(&h, Role::Button, "Full-height pattern  F11").expect("switch-bar button");
+    let b = labelled_rect(&h, Role::Button, "Full-height view  F11").expect("switch-bar button");
     let c = b.center();
     h.input_mut().events.push(egui::Event::PointerMoved(c));
     frame(&mut h);
@@ -280,7 +280,7 @@ fn full_height_pattern_hides_the_lower_panel_and_restores_its_height() {
 /// y of the splitter between pattern and lower panel
 fn splitter_y(h: &Harness<'static, App>) -> f32 {
     // the switch bar's Arranger button sits just under it
-    labelled_rect(h, Role::Button, "Arranger")
+    labelled_rect(h, Role::Button, "Order list")
         .map(|r| r.top() - 5.0)
         .expect("switch bar")
 }
@@ -315,7 +315,7 @@ fn switch_bar_keeps_arranger_and_automation_working() {
     h.state_mut().show_instrument_panel();
     frames(&mut h, 2);
     for (name, inst, auto) in [
-        ("Arranger", false, false),
+        ("Order list", false, false),
         ("Automation", false, true),
         ("Instrument", true, false),
     ] {
@@ -487,7 +487,7 @@ fn lower_panel_opens_on_the_instrument_editor_and_remembers_the_choice() {
     assert!(!h.state().extra.lower_chosen);
     assert!(!h.state().arr_docked(), "the arranger isn't docked");
     // the Arranger switch is a choice
-    let b = labelled_rect(&h, Role::Button, "Arranger").expect("Arranger switch");
+    let b = labelled_rect(&h, Role::Button, "Order list").expect("Order list switch");
     let c = b.center();
     h.input_mut().events.push(egui::Event::PointerMoved(c));
     frame(&mut h);

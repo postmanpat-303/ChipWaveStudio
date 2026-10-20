@@ -7,7 +7,7 @@ What this page covers:
 - **Spoken words** (`3E`) and **Throat** mode (0.2.3.10).
 - The **Transform** stages: metallic resonance, digital distortion and sub (`3F`–`42`, 0.2.3.11). They are also available as the chrome FX devices **Metal resonator**, **Digital distortion** and **Sub bass** for any instrument.
 
-All the pattern commands are listed in [PATTERN_EDITOR.md](PATTERN_EDITOR.md#5-effect-commands).
+All the pattern commands are listed in [TRACKER.md](TRACKER.md#5-effect-commands).
 
 A synthetic voice for dark psytrance chops: **"ahh, eee, ohh, err"** vowel
 glitches, babble and stutters. No recorded voice and no samples. Everything

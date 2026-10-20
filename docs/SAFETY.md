@@ -37,7 +37,7 @@ The portable Windows build keeps everything next to the exe ([PACKAGING.md](PACK
 - Recovery folders older than 30 days are cleaned up after asking.
 
 ## 4. Recent files
-- **File → Recent**, plus the start screen: the last 20 songs, with **pinned** ones at the top (📌 toggle). Stored in `recent.toml` in the config folder, with path, last opened, pinned flag, and optional arranger thumbnail.
+- **File → Recent**, plus the start screen: the last 20 songs, with **pinned** ones at the top (📌 toggle). Stored in `recent.toml` in the config folder, with path, last opened, pinned flag, and optional Order list thumbnail.
 - **Missing files** show greyed out with "not found". Actions: **Locate…** (pick the new path and update the entry), **Remove**, or **Remove all missing**. Paths on unplugged drives or network shares are checked with a short timeout so the menu never hangs.
 - It integrates with OS recent lists where available (Windows jump list, macOS Dock recent documents; Linux `recently-used.xbel` is optional).
 

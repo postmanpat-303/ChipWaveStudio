@@ -2,7 +2,7 @@
 
 **Status:** plan **approved by Del on 18 Oct 2026** with the decisions in §12. The feasibility spike is in [`amiga/spike/`](../amiga/spike/) and is kept in the repo. Milestone **M1 Replay** (the `ChipWaveLite <file.mod>` CLI player) is in [`amiga/`](../amiga/README.md).
 
-ChipWave Lite is a small native tracker for AmigaOS 3.x (Kickstart 3.1 and later). It is built twice from the same source: a **68000** build for the A500 (OCS/ECS, 512 KB–1 MB chip RAM where possible) and a **68020** build for the A1200 (2 MB chip RAM). It uses no AGA features. Del runs it in **WinUAE** on Windows. It plays four channels through Paula, has an OctaMED-style pattern editor and a Workbench look, and swaps songs with PC ChipWave. It ships as a bootable **.adf** and an **.lha**.
+ChipWave Lite is a small native tracker for AmigaOS 3.x (Kickstart 3.1 and later). It is built twice from the same source: a **68000** build for the A500 (OCS/ECS, 512 KB–1 MB chip RAM where possible) and a **68020** build for the A1200 (2 MB chip RAM). It uses no AGA features. Del runs it in **WinUAE** on Windows. It plays four channels through Paula, has an OctaMED-style Tracker and a Workbench look, and swaps songs with PC ChipWave. It ships as a bootable **.adf** and an **.lha**.
 
 ## 1. Spike results (what already works)
 
@@ -48,7 +48,7 @@ The quickest WinUAE setup is the A1200 quickstart (68020, 2 MB chip, plus fast R
 
 **In:**
 - Four channels on Paula, played with a ptplayer-based replay (CIA timing, PAL/NTSC). ProTracker effects: `0`–`F` and `E0`–`EF`.
-- OctaMED-style pattern editor:
+- OctaMED-style Tracker:
   - 64-row blocks, 4 tracks, note / instrument / effect columns.
   - The Z–M two-row piano keys, arrows, Tab, octave on F1/F2, edit mode on Esc.
   - Space plays the block, Shift+Space plays the song.
@@ -64,7 +64,7 @@ The quickest WinUAE setup is the A1200 quickstart (68020, 2 MB chip, plus fast R
 
 **Cut, compared with PC ChipWave:**
 - the live synth, Voice, Generators, the FX chain, the mixer and limiter, and automation;
-- the arranger timeline, Fill to length, the chord helper and the instrument library;
+- the Order list timeline, Fill to length, the chord helper and the instrument library;
 - MIDI, more than 4 channels, MP3/WAV export, themes and UI scaling.
 
 From the PC side, synth, Voice and Generator sounds arrive in Lite as rendered 8-bit samples.

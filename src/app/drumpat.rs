@@ -404,7 +404,7 @@ impl App {
         let p = PATTERNS.get(i)?;
         let n = self.with(|s| s.song.channels);
         Some(match d {
-            DropAt::Track(tr, _) => format!("Pattern clip on track {:02}", tr + 1),
+            DropAt::Track(tr, _) => format!("Note clip on track {:02}", tr + 1),
             DropAt::NewTrack(_) if n >= MAX_CHANNELS => "All 32 tracks are used".into(),
             DropAt::NewTrack(_) => format!("New drum track: {} ({})", p.name, p.kit),
             DropAt::Central | DropAt::Fx => "New drum track at the play marker".into(),

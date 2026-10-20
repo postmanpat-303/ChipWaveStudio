@@ -479,7 +479,7 @@ fn generate_with(song: &Song, p: &Params, relaxed: bool) -> Result<Proposal, Str
         .collect();
     if tagged.is_empty() {
         return Err(
-            "No blocks have a role yet. Tag blocks in the arranger: keys 1–7 or right-click."
+            "No blocks have a role yet. Tag blocks in the Order list: keys 1–7 or right-click."
                 .into(),
         );
     }

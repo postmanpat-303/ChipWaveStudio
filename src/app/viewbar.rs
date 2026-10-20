@@ -26,17 +26,13 @@ pub(crate) enum VTab {
     Sample,
 }
 
+/// the view tabs: the DAW views first, then ORDER and TRACKER at the far
+/// right after a divider
 pub(crate) const VTABS: [(VTab, &str, &str); 10] = [
     (
         VTab::Timeline,
         "TIMELINE",
         "tracks and clips over time (Ctrl+T)",
-    ),
-    (VTab::Tracker, "TRACKER", "the pattern editor (Ctrl+1)"),
-    (
-        VTab::Arranger,
-        "ARRANGER",
-        "the order list of blocks (Ctrl+2)",
     ),
     (
         VTab::Piano,
@@ -57,6 +53,12 @@ pub(crate) const VTABS: [(VTab, &str, &str); 10] = [
     (VTab::Mix, "MIX", "the mixer (Ctrl+3)"),
     (VTab::Fx, "FX", "the instrument FX chain (Ctrl+4)"),
     (VTab::Sample, "SAMPLE", "the sample editor (Ctrl+5)"),
+    (
+        VTab::Arranger,
+        "ORDER",
+        "the Order list: the tracker song's blocks in order (Ctrl+2)",
+    ),
+    (VTab::Tracker, "TRACKER", "the Tracker (Ctrl+1)"),
 ];
 
 #[derive(Clone, Copy)]
@@ -262,6 +264,11 @@ impl App {
             let cur = self.vtab_current();
             let main = self.vtab_main();
             for (tab, name, tip) in VTABS {
+                if tab == VTab::Arranger {
+                    ui.add_space(6.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+                }
                 let on = cur == Some(tab);
                 let host_on = !on && main == Some(tab);
                 let txt = egui::RichText::new(name).size(11.0).strong().color(if on {
@@ -302,7 +309,7 @@ impl App {
                     (
                         self.extra.inspector_open,
                         "Inspector",
-                        "show / hide the Inspector on the left (I; Alt+I in the pattern editor)",
+                        "show / hide the Inspector on the left (I; Alt+I in the Tracker)",
                         0,
                     ),
                 ] {

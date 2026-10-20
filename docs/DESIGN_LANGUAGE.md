@@ -29,7 +29,7 @@ ChipWave keeps the *functions* Del liked in Bitwig (horizontal device strips, a 
 | **Source selection** | **Pill tabs in a row** at the top of the cartridge | A left-hand column of mode tabs |
 | **Top bar** | A **wave band**: a gradient header with a wavy bottom edge, holding the patch name and macros | — |
 | **Actions** | Rounded **outline pills** inside the OUT cartridge (RENDER ▸ SMP, FX CHAIN · 4) | A right-hand column of buttons with coloured top strips |
-| **Playhead** | A **wavy yellow line** with a triangle cap (arranger and tracker) | A straight line |
+| **Playhead** | A **wavy yellow line** with a triangle cap (Order list and tracker) | A straight line |
 | **Type** | Monospace caps for labels and values (JetBrains Mono, OFL), giving a tracker/terminal feel | Proportional sans |
 | **Warnings** | **Guru red** (`#FF2A3D`) on black, in a blinking-border box, like an Amiga Guru Meditation | — |
 
@@ -88,7 +88,7 @@ Del's rule: the UI must not look cartoonish. **Surfaces and labels are desaturat
 - **Saturated colours are for data only:** curves and meters (cyan `#22E3FF`, green `#7CFF9B`, magenta `#FF7AD0`, yellow `#FFD400` on dark displays), the cursor, the play position (`#FF7A00`), and values on light panels (blue `#1F5FD1`, or green `#2F6B3F` for status text).
 - Badges are white text on the muted fill, which keeps contrast ≥ 4.5:1.
 - No more than one saturated accent per control. No emoji-like icons as decoration; icons are monochrome glyphs.
-- The plugin manager, auto arrange and pattern editor mockups were re-rendered with this palette. Mockup sources are in [`mockups/src/`](mockups/src/).
+- The plugin manager, auto arrange and Tracker mockups were re-rendered with this palette. Mockup sources are in [`mockups/src/`](mockups/src/).
 
 ### Corner radius (modern rounded look)
 Del asked for a more modern touch, so all surfaces get rounded corners. Values are in logical points and scale with `pixels_per_point`, like everything else ([UI_SCALING.md](UI_SCALING.md)).
@@ -99,7 +99,7 @@ Del asked for a more modern touch, so all surfaces get rounded corners. Values a
 | Buttons, pills, toggles, search fields | fully rounded (height ÷ 2); square tool buttons 6 |
 | Status badges and format tags | pill-shaped (height ÷ 2) |
 | CRT displays (inset) | 6, with the inset bevel following the curve |
-| List row highlights, arranger blocks | 6 |
+| List row highlights, Order list blocks | 6 |
 | Knob wells | circles; slider thumbs 4 |
 - Data marks (curve handles, LEDs, pixel-grid sweeps) stay square on purpose; that's part of the Wave Cartridge identity.
 - **egui:** set `Visuals.window_corner_radius`, `widgets.*.corner_radius` and `menu_corner_radius` via `CornerRadius::same(n)` (the type was called `Rounding` before egui 0.31). Painter rects take a `CornerRadius` directly. Gradient meshes with rounded corners use the tessellated-path approach above.
@@ -161,14 +161,14 @@ Each device or instrument panel in a chain has a slim vertical strip (about 22 p
 ## 5. Mockups
 - Sound designer: [`mockups/sound_designer.png`](mockups/sound_designer.png) / `.svg`
 - FX chain: [`mockups/fx_chain.png`](mockups/fx_chain.png) / `.svg`
-- Arranger: [`mockups/arranger.png`](mockups/arranger.png) / `.svg`
+- Order list: [`mockups/arranger.png`](mockups/arranger.png) / `.svg`
 - Instrument list + browser: [`mockups/samples.png`](mockups/samples.png) / `.svg`
 - MIDI + plugins: [`mockups/midi_plugins.png`](mockups/midi_plugins.png) / `.svg`
 - Variants: `mockups/variants/sound_designer_A_workbench_modern.*`, `mockups/variants/sound_designer_A2_workbench_gradient.*`, `mockups/variants/sound_designer_B_wave_neon.*`
 
 ![Sound designer](mockups/sound_designer.png)
 ![FX chain](mockups/fx_chain.png)
-![Arranger](mockups/arranger.png)
+![Order list](mockups/arranger.png)
 
 ## Themes
 
@@ -176,7 +176,7 @@ Del's direction (Oct 2026): the Amiga look is an option, not the default.
 
 | Theme | Status | Notes |
 |---|---|---|
-| **Dark Circuit** | **Proposed default** | Modern dark grey gradient panels, a thin muted green outer border and glow, and green focus/selection. Mockups: [pattern editor](mockups/variants/pattern_editor_dark_green.png), [sound designer](mockups/variants/sound_designer_dark_green.png) |
+| **Dark Circuit** | **Proposed default** | Modern dark grey gradient panels, a thin muted green outer border and glow, and green focus/selection. Mockups: [Tracker](mockups/variants/pattern_editor_dark_green.png), [sound designer](mockups/variants/sound_designer_dark_green.png) |
 | **Amiga (Workbench Gradient, A2)** | Optional | Light grey gradients with a Workbench-blue header. [Mockup](mockups/variants/sound_designer_A2_workbench_gradient.png) |
 | Workbench Modern (A) | Optional / legacy | Flat Amiga variant |
 | Wave/Neon (B) | Optional | The original cartridge look |

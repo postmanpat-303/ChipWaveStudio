@@ -131,7 +131,7 @@ fn view_tab_bar_switches_views_and_the_old_ways_still_work() {
     frames(&mut h, 2);
     assert!(h.state().extra.lower_inst && h.state().lower_visible());
     assert_eq!(h.state().vtab_current(), Some(super::viewbar::VTab::Inst));
-    h.get_by_label("ARRANGER").click();
+    h.get_by_label("ORDER").click();
     frames(&mut h, 2);
     assert!(h.state().view == View::Arranger);
     // the shortcuts and the toolbar keep working

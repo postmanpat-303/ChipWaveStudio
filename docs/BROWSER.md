@@ -190,13 +190,13 @@ Drag a row out of the Browser. A ghost shows the item and what letting go there 
 | **An instrument slot** in the sidebar list | replaces that slot's sound (notes kept) | added to that slot's FX chain | replaces that slot's sound |
 | **The FX view** | – | added to the current instrument's chain | – |
 | **The Devices row** (lower panel) | replaces the track's instrument, **keeping its effects** | inserted where the marker shows (between two cards; on the instrument card = first) | replaces the track's instrument |
-| **The pattern editor** (or any other view) | a new instrument slot, made current, ready to type with | added to the current instrument's chain | a new sample instrument |
+| **The Tracker** (or any other view) | a new instrument slot, made current, ready to type with | added to the current instrument's chain | a new sample instrument |
 
 The drop indicator on the timeline is an outlined header and a tinted row, or an **insertion line** under the last track with **"New track: <name>"**. A full song (32 tracks) says "All 32 tracks are used" instead.
 
 ### What "the track plays it" means
 
-Tracks are mixer channels (one per pattern column). Assigning an instrument to a track rewrites the instrument number of **every note on that track**: in timeline mode, the notes of the track's block clips (the track's column of each block) and of its note clips; in tracker mode, the channel's column in every block. Effects and volumes stay. The track also remembers the instrument (`instr` in `timeline.toml`), so an empty track's header shows it and clicking the header makes it the current instrument. The whole drop (new slot, notes, new track) is **one undo step**.
+Tracks are mixer channels (one per pattern column). Assigning an instrument to a track rewrites the instrument number of **every note on that track**: in timeline mode, the notes of the track's Tracker clips (the track's column of each block) and of its note clips; in tracker mode, the channel's column in every block. Effects and volumes stay. The track also remembers the instrument (`instr` in `timeline.toml`), so an empty track's header shows it and clicking the header makes it the current instrument. The whole drop (new slot, notes, new track) is **one undo step**.
 
 ## Preview
 

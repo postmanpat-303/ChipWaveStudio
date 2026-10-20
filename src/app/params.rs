@@ -1656,7 +1656,7 @@ fn generator(b: &mut B, g: &GenPatch, sel: usize) {
             Viz::Filter(p.cutoff, p.resonance, mode_ix(p.filter))
         }));
         b.toggle("gen.filter_on", "Filter", fldb!(ge, ge_mut, filter_on))
-            .tip("run the sound through a filter (pattern commands 38-3B move it)");
+            .tip("run the sound through a filter (Tracker effects 38-3B move it)");
         filter_model(b);
         let on = |i: &Instrument| ge(i).filter_on;
         let n = b.l.params.len();
@@ -1993,7 +1993,7 @@ fn analog(b: &mut B) {
         "ms",
         flds!(1000.0, pa, pa_mut, glide),
     )
-    .tip("portamento time (with Legato, or 3C in the pattern)");
+    .tip("portamento time (with Legato, or 3C in the Tracker)");
     b.toggle("gen.legato", "Legato", fldb!(pa, pa_mut, legato))
         .tip("overlapping notes glide instead of retriggering (mono)");
 }
@@ -2208,7 +2208,7 @@ fn wave(b: &mut B) {
         "ms",
         flds!(1000.0, pa, pa_mut, glide),
     )
-    .tip("portamento time (with Legato, or 3C in the pattern)");
+    .tip("portamento time (with Legato, or 3C in the Tracker)");
     b.toggle("gen.legato", "Legato", fldb!(pa, pa_mut, legato))
         .tip("overlapping notes glide instead of retriggering (mono)");
     b.card(Tab::Modulation, "Filter envelope").viz = Some(Box::new(|i| {
@@ -2289,7 +2289,7 @@ fn grid(b: &mut B, g: &crate::grid::GridP) {
         "ms",
         flds!(1000.0, pa, pa_mut, glide),
     )
-    .tip("portamento time (with Legato, or 3C in the pattern)");
+    .tip("portamento time (with Legato, or 3C in the Tracker)");
     b.toggle("gen.legato", "Legato", fldb!(pa, pa_mut, legato))
         .tip("overlapping notes glide instead of retriggering (mono)");
 }

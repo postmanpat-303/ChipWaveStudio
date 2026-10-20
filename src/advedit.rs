@@ -40,12 +40,12 @@ impl Section {
 
     pub fn label(self) -> &'static str {
         match self {
-            Section::Selection => "Selection in pattern",
-            Section::ColumnPattern => "Column in pattern",
+            Section::Selection => "Selection in block",
+            Section::ColumnPattern => "Column in block",
             Section::ColumnSong => "Column in song",
-            Section::TrackPattern => "Track in pattern",
+            Section::TrackPattern => "Track in block",
             Section::TrackSong => "Track in song",
-            Section::Pattern => "Whole pattern",
+            Section::Pattern => "Whole block",
             Section::Song => "Whole song",
         }
     }

@@ -1231,25 +1231,12 @@ impl App {
             .min_size(egui::vec2(ui.available_width() - 12.0, 24.0));
             if ui
                 .add(b)
-                .on_hover_text("knobs, tabs and parameter search under the pattern editor")
+                .on_hover_text("knobs, tabs and parameter search in the lower panel")
                 .clicked()
                 && !showing
             {
                 self.show_instrument_panel();
             }
-        });
-        ui.horizontal(|ui| {
-            ui.add_space(10.0);
-            ui.add(
-                egui::Label::new(
-                    egui::RichText::new(
-                        "Ctrl+F searches its parameters · View › Classic sidebar instrument editor brings back the old layout",
-                    )
-                    .small()
-                    .color(t.ink2),
-                )
-                .wrap(),
-            );
         });
     }
 }

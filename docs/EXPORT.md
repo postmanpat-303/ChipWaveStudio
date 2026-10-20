@@ -5,7 +5,7 @@
 | Scope | Description |
 |---|---|
 | **Whole song** | The full section list from start to end (or to the song-end command) |
-| **Selected range / section** | A loop range from the arranger ruler, or one section/playing sequence (see [ARRANGER.md](ARRANGER.md)) |
+| **Selected range / section** | A loop range from the Order list ruler, or one section/playing sequence (see [ORDER_LIST.md](ORDER_LIST.md)) |
 | **Single block** | One block as it sounds at the current tempo, with an optional loop count (handy for making loops) |
 | **Per-track stems** | One file per track (or per instrument), all the same length and start point so they line up in a DAW. Options: include master FX, skip silent tracks |
 

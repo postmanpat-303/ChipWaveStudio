@@ -7,7 +7,7 @@ use crate::credits::{self, Credit, Group, CREDITS};
 pub(super) const WEBSITE_URL: &str = "https://postmanpat-303.github.io/ChipWaveStudio/";
 pub(super) const GITHUB_URL: &str = "https://github.com/postmanpat-303/ChipWaveStudio";
 pub(super) const LICENCE_URL: &str = "https://www.gnu.org/licenses/gpl-3.0.html";
-pub(super) const TAGLINE: &str = "A tracker for chip and psytrance sounds";
+pub(super) const TAGLINE: &str = "A DAW and tracker for chip and psytrance sounds";
 const DEFAULT_SIZE: egui::Vec2 = egui::vec2(640.0, 560.0);
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]

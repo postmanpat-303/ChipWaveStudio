@@ -2,7 +2,7 @@
 
 **Status (0.2.3.14):** implemented: the `.cwt` ZIP container (TOML + WAV), the single-file text song `.cwt.toml` (used by the demos; `patch = "gen:<preset>"` / `"voice:<preset>"` load factory sounds), `.cwi` instrument files ([INSTRUMENT_LIBRARY.md](INSTRUMENT_LIBRARY.md)), autosave and backups. Up to 32 channels per song (0.2.3.8). New features add fields with defaults, so older songs load unchanged; a song that uses a newer instrument type does not open in an older version. Render-to-sample links, MED/MOD import and file association below are still plans.
 
-`.cwt` is ChipWave's main save format. It holds everything MMD/MOD can't: arranger layout, synth patches and FX chains, render links, settings. MMD/MOD stay **import/export** formats ([OCTAMED_SPEC.md](OCTAMED_SPEC.md)).
+`.cwt` is ChipWave's main save format. It holds everything MMD/MOD can't: Order list layout, synth patches and FX chains, render links, settings. MMD/MOD stay **import/export** formats ([OCTAMED_SPEC.md](OCTAMED_SPEC.md)).
 
 ## 1. Recommendation: a ZIP container with TOML text plus binary samples
 
@@ -140,4 +140,4 @@ Our Octopus-tracker review found its song loader trusts the file without checks,
 - The portable `.exe` (no installer) offers a "Register file types" button in Settings that writes the same per-user keys.
 
 ## 8. Roadmap placement
-**MVP:** you can't make songs without saving them. v1 holds blocks, sequences, sample instruments, song info and settings. Patches, render links and arranger data arrive with phase 1.5 as new files/keys, as the forward-compatibility rules above allow.
+**MVP:** you can't make songs without saving them. v1 holds blocks, sequences, sample instruments, song info and settings. Patches, render links and Order list data arrive with phase 1.5 as new files/keys, as the forward-compatibility rules above allow.

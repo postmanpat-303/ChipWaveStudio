@@ -4,8 +4,21 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
+### One set of names
+- **Tracker** is the row editor everywhere (was "Pattern" / "pattern editor"): the view menu, tooltips, Settings (*double-click a clip: Piano roll / Tracker*, the *Tracker* row), the Inspector (**Open in Tracker**), the clip menu and the key list. Its unit stays the **block**; Advanced Edit's scopes are *Whole block / Track in block / Column in block / Selection in block*.
+- **Order list** is the tracker song's block sequence (was "Arranger"): the view tab is **ORDER**, the lower-panel tab **Order list**.
+- A timeline clip that plays a block column is a **Tracker clip** (was "Block clip"). A drum pattern dropped on a track lands as a **Note clip**. **Drum Patterns** keeps its name. **Full-height pattern** (F11) is now **Full-height view**.
+- Labels only: song files, settings and keys are unchanged. Docs: `TRACKER.md` and `ORDER_LIST.md` (the old `PATTERN_EDITOR.md` and `ARRANGER.md` point to them), glossary in `TIMELINE.md`.
+
+### A calmer layout
+- **Slim toolbar:** transport, tempo and the status lights; the group captions are gone (hover a group for its name). **Play block**, **Octave** and **Edit / Step** show in the Tracker view only; their keys (Space, F1–F8, numpad −/+, Esc) work everywhere. The toolbar's view switch is gone while the view tab bar is on (it duplicated it); with the bar hidden it comes back.
+- **View tabs** run TIMELINE · PIANO · DEVICES · INST · AUTO · MIX · FX · SAMPLE, then a divider and **ORDER · TRACKER** at the far right.
+- **Quieter timeline header:** no "Timeline mode" label or "Back to tracker mode…" button. **Song › Back to tracker mode…** does that now; the TIMELINE badge's tooltip explains the view, and the track / clip count moved into the playhead's tooltip.
+- **Lower panel tabs:** Piano roll · Devices · Instrument · Automation · Order list. Less hint text under the instrument list.
+- Unchanged: the default Timeline + Piano layout, Ctrl+6, Ctrl+7, I, the track pie and every shortcut.
+
 ### Track pie menu
-- **Right-click a track header** (Timeline track list or pattern-editor channel header): a round menu around the pointer, the track's name in the centre, and **Rename**, **Colour ›**, **Icon ›**, **Add ›**, **Devices**, **Routing**, **Organize ›**, **Save CPU** and **Delete** around it. Inspired by other DAWs; requested by Del (postmanpat).
+- **Right-click a track header** (Timeline track list or Tracker channel header): a round menu around the pointer, the track's name in the centre, and **Rename**, **Colour ›**, **Icon ›**, **Add ›**, **Devices**, **Routing**, **Organize ›**, **Save CPU** and **Delete** around it. Inspired by other DAWs; requested by Del (postmanpat).
 - **Buttery motion:** opens in 180 ms with an ease-out (scale and fade, the segments following each other round the ring), closes in 120 ms, hover fades in 80 ms, and the panels pop out from their segment. It repaints only while something moves. New **Settings › Look › Reduce motion** turns the animation off.
 - Point and click, or hold the right button, drag onto a segment and let go. Esc, the centre or a click outside closes it. Arrow keys walk the ring and the panels, Enter chooses. It always fits on screen. Dark and Amiga themes.
 - **Rename** edits the name in the header (Enter or click away keeps it, Esc cancels). **Colour** and **Icon** pop out a swatch panel and a **TRACK ICON** grid (Auto + 16 icons). **Add**: instrument track, audio track, empty track above / below, **Duplicate**. **Organize**: move up / down / to top / to bottom, track speed. **Devices** opens the Devices tab, **Routing** the Inspector's sends. **Delete** removes the track (Ctrl+Z brings it back). Everything is one undo step.

@@ -19,15 +19,15 @@ ppp = os_scale × user_scale
 - Real ppp = `os_scale × user_scale`, for example 150 % OS × 110 % user = 1.65.
 
 ## 2. Everything drawn as vectors
-- Knobs, sliders, arcs, buttons, the filter response curve, envelopes, waveforms, the arranger clips and meters are all drawn with `egui::Painter` (paths, circles, rects, text), never pre-rendered bitmaps. They're crisp at any scale. (The mockups in `docs/mockups/` are SVG for the same reason.)
+- Knobs, sliders, arcs, buttons, the filter response curve, envelopes, waveforms, the Order list clips and meters are all drawn with `egui::Painter` (paths, circles, rects, text), never pre-rendered bitmaps. They're crisp at any scale. (The mockups in `docs/mockups/` are SVG for the same reason.)
 - Icons: SVG drawn as tessellated shapes (via `egui_extras`' SVG loader, rasterised at the current ppp and cached per scale) or simple painter glyphs.
 - Waveform displays compute their min/max columns per **physical** pixel, so a 4K screen shows more detail rather than a stretched low-res picture.
-- Mini pattern previews in the arranger are textures, but they're regenerated at the current ppp when the scale changes.
+- Mini pattern previews in the Order list are textures, but they're regenerated at the current ppp when the scale changes.
 - Line widths that should look 1 px use `1.0 / ppp` points; others scale with the UI.
 
 ## 3. Tracker grid text (crisp monospace)
 - The grid uses a monospace font (default **JetBrains Mono**, SIL OFL 1.1; alternative **IBM Plex Mono**, OFL). Font size defaults to 13 pt and can be set separately from the UI scale (Ctrl+Alt +/−).
-- **Integer-pixel snapping:** row height and column width are rounded to whole physical pixels (`(pt × ppp).round() / ppp`), and each row's y position is snapped too, so glyphs never land on half pixels and blur while scrolling. Same for the arranger grid lines.
+- **Integer-pixel snapping:** row height and column width are rounded to whole physical pixels (`(pt × ppp).round() / ppp`), and each row's y position is snapped too, so glyphs never land on half pixels and blur while scrolling. Same for the Order list grid lines.
 - Column widths come from the measured glyph advance, so any font fits.
 - Row-number column, note/instrument/command columns and track separators have their own colours (see §8).
 
@@ -36,18 +36,18 @@ The layout reacts to the **available size in points** (after scaling), not to ra
 
 | Class | Typical screen (at 100 %) | Width in points | Layout |
 |---|---|---|---|
-| **Compact** | 1366×768 laptop, or 1080p at 150 % | < 1400 | Tabs instead of side panels: Tracker / Arranger / Sound / Instruments. Sound-designer strip scrolls horizontally, and its FX strip opens in place of the main strip. Instrument list collapses to a dropdown. Transport bar squeezes into one row with icons only |
-| **Standard** | 1920×1080 | 1400–2200 | Tracker centre; instrument list docked left; arranger docked above the tracker (collapsible to a 1-row mini-map); sound-designer strip docked at the bottom, FX strip as a tab next to it |
+| **Compact** | 1366×768 laptop, or 1080p at 150 % | < 1400 | Tabs instead of side panels: Tracker / Order list / Sound / Instruments. Sound-designer strip scrolls horizontally, and its FX strip opens in place of the main strip. Instrument list collapses to a dropdown. Transport bar squeezes into one row with icons only |
+| **Standard** | 1920×1080 | 1400–2200 | Tracker centre; instrument list docked left; Order list docked above the tracker (collapsible to a 1-row mini-map); sound-designer strip docked at the bottom, FX strip as a tab next to it |
 | **Large** | 2560×1440 | 2200–3000 | As Standard, plus the FX strip shown under the sound strip at the same time, and the sample/scope panel docked on the right |
 | **4K** | 3840×2160 at 150 % (2560 pt) or 200 % (1920 pt) | (falls into Large/Standard by points) | Same as the matching class; the extra pixels make it sharper rather than smaller. At 100 % OS scale on 4K, ChipWave suggests a 150 % user scale on first run |
-| **Ultrawide** | 3440×1440 (21:9), 5120×1440 (32:9) | aspect ≥ 2.2 | Everything side by side: instruments · tracker · sound strip + FX in one wide row; arranger full width across the top. On 32:9 an extra column holds the mixer/scopes. The tracker never grows wider than its columns (no stretched gaps); the extra space goes to the arranger and docked panels |
-| **Portrait** | 1080×1920, tablets | aspect < 1 | Vertical stack: arranger (short) → tracker (tall, shows more rows) → sound strip, which wraps into two rows (osc + filter, then env + output) |
+| **Ultrawide** | 3440×1440 (21:9), 5120×1440 (32:9) | aspect ≥ 2.2 | Everything side by side: instruments · tracker · sound strip + FX in one wide row; Order list full width across the top. On 32:9 an extra column holds the mixer/scopes. The tracker never grows wider than its columns (no stretched gaps); the extra space goes to the Order list and docked panels |
+| **Portrait** | 1080×1920, tablets | aspect < 1 | Vertical stack: Order list (short) → tracker (tall, shows more rows) → sound strip, which wraps into two rows (osc + filter, then env + output) |
 | **Minimum** | | 1024×640 pt | The window can't be made smaller than this (set via `ViewportBuilder::with_min_inner_size`). Below Compact width, panels hide rather than squash |
 
 Breakpoints have hysteresis (±40 pt) so the layout doesn't flicker while you drag the window edge.
 
 ## 5. Resizable and dockable panels
-Every panel (Tracker, Arranger, Instruments, Sound designer, FX, Sample editor, Scope/Mixer) is a dockable tab you can drag, split, stack or float. Splitters can be dragged; double-click a splitter to restore its default.
+Every panel (Tracker, Order list, Instruments, Sound designer, FX, Sample editor, Scope/Mixer) is a dockable tab you can drag, split, stack or float. Splitters can be dragged; double-click a splitter to restore its default.
 
 Crates evaluated (checked on crates.io, 16 Oct 2026):
 

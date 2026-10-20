@@ -432,7 +432,7 @@ impl App {
                                     Scope::Block(cur_pat),
                                     format!("Block {cur_pat:02}"),
                                 )
-                                .on_hover_text("the block open in the pattern editor, once");
+                                .on_hover_text("the block open in the Tracker, once");
                                 if tl_mode {
                                     ui.add_enabled(
                                         tl_loop,
@@ -451,9 +451,9 @@ impl App {
                                     ui.selectable_value(
                                         &mut d.opts.scope,
                                         Scope::Range(sa, sb),
-                                        format!("Arranger selection {}–{}", sa + 1, sb + 1),
+                                        format!("Order list selection {}–{}", sa + 1, sb + 1),
                                     )
-                                    .on_hover_text("the clips selected in the arranger");
+                                    .on_hover_text("the clips selected in the Order list");
                                 }
                             });
                             ui.end_row();

@@ -700,31 +700,26 @@ impl App {
                     .size(10.5)
                     .color(Color32::from_rgb(0x1A, 0x1C, 0x1F))
                     .background_color(t.accent),
-            );
-            if mode {
-                ui.label(egui::RichText::new("Timeline mode").color(t.ink))
-                    .on_hover_text(
-                        "This song is arranged here: clips on tracks (track = mixer channel). \
-                         Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
-                         S split, Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
-                         Ctrl+Shift+D make unique. Double-click a clip to edit it in the piano roll \
-                         (Alt+double-click or Enter: the pattern editor; Settings can swap them), \
-                         empty space to write a new block. The order list is not used.",
-                    );
-                if ui
-                    .small_button("Back to tracker mode…")
-                    .on_hover_text("turn the timeline back into blocks and an order list (asks first)")
-                    .clicked()
-                {
-                    self.tlv.ask_leave = true;
-                }
+            )
+            .on_hover_text(if mode {
+                "This song is arranged here: clips on tracks (track = mixer channel). \
+                 Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
+                 S split, Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
+                 Ctrl+Shift+D make unique. Double-click a clip to edit it in the piano roll \
+                 (Alt+double-click or Enter: the Tracker; Settings can swap them), \
+                 empty space to write a new block. Song › Back to tracker mode… turns it back."
             } else {
+                "This tracker-mode song's order list, shown as clips per track."
+            });
+            // timeline mode needs no label: Song › Back to tracker
+            // mode… turns it back
+            if !mode {
                 ui.label(egui::RichText::new("Tracker mode · from the order list").color(t.ink2))
                     .on_hover_text(
                         "The timeline shows this song's order list as clips per track (track = mixer channel). \
                          To move, loop and split clips here, switch the song to timeline mode. \
                          Double-click a clip to edit it in the piano roll (Alt+double-click or Enter: \
-                         the pattern editor; Settings can swap them).",
+                         the Tracker; Settings can swap them).",
                     );
                 if ui
                     .small_button("Switch to timeline mode")
@@ -825,15 +820,10 @@ impl App {
                 .monospace()
                 .color(if live.playing { t.play } else { t.ink }),
             )
-            .on_hover_text("playhead (stopped: the play marker) in bar.beat and minutes:seconds");
-            ui.label(
-                egui::RichText::new(format!(
-                    "{n_tracks} tracks · {n_clips} clips · {}",
-                    mmss(c.tl.seconds_at(end, live.bpm))
-                ))
-                .small()
-                .color(t.ink2),
-            );
+            .on_hover_text(format!(
+                "playhead (stopped: the play marker) in bar.beat and minutes:seconds\n{n_tracks} tracks · {n_clips} clips · {}",
+                mmss(c.tl.seconds_at(end, live.bpm))
+            ));
         });
         ui.add_space(2.0);
         let full = ui.available_rect_before_wrap();
@@ -1918,7 +1908,7 @@ impl App {
             let nresp = ui
                 .interact(nr, ui.scope_id().with(("tl_head", tr)), Sense::click_and_drag())
                 .on_hover_text(
-                    "select this track (the pattern editor's cursor channel) · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, devices, routing, organize, delete)",
+                    "select this track (the Tracker's cursor channel) · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, devices, routing, organize, delete)",
                 );
             let is_master = c.tl.tracks[tr].kind == tl::TrackKind::Master;
             if !is_master
@@ -2581,7 +2571,7 @@ impl App {
                     }
                 } else {
                     if ui
-                        .add(egui::Button::new("Open in the pattern editor").shortcut_text(if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" }))
+                        .add(egui::Button::new("Open in Tracker").shortcut_text(if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" }))
                         .clicked()
                     {
                         menu_open_now = true;
@@ -2687,9 +2677,9 @@ impl App {
                     .map(|l| format!(" · loops {}x", (cl.len + l - 1) / l))
                     .unwrap_or_default();
                 let dbl = if self.extra.dblclick_roll {
-                    "double-click: piano roll (Alt: pattern editor)"
+                    "double-click: piano roll (Alt: Tracker)"
                 } else {
-                    "double-click: pattern editor (Alt: piano roll)"
+                    "double-click: Tracker (Alt: piano roll)"
                 };
                 let how = if mode {
                     format!(
@@ -2892,8 +2882,7 @@ impl App {
         }
         self.set_lower(3);
         self.status = if blk.is_some() {
-            "Piano roll: this clip's block column (Alt+double-click or Enter: the pattern editor)"
-                .into()
+            "Piano roll: this clip's block column (Alt+double-click or Enter: the Tracker)".into()
         } else {
             "Piano roll: this note clip".into()
         };

@@ -177,7 +177,7 @@ impl App {
         if self.lower_visible() {
             self.extra.full_height = true;
             self.arr_focus = false;
-            self.status = "Full-height pattern (F11 brings the lower panel back)".into();
+            self.status = "Full-height view (F11 brings the lower panel back)".into();
         } else {
             self.extra.full_height = false;
             self.dock_arranger = true;
@@ -344,7 +344,7 @@ impl App {
                 self.extra.lower_h = self.ip.drag_h0.unwrap_or(0.0);
                 self.extra.full_height = true;
                 self.arr_focus = false;
-                self.status = "Full-height pattern (F11 brings the lower panel back)".into();
+                self.status = "Full-height view (F11 brings the lower panel back)".into();
             }
             self.ip.collapse_pending = false;
             self.ip.drag_h0 = None;
@@ -406,14 +406,16 @@ impl App {
         ui.horizontal_centered(|ui| {
             ui.add_space(4.0);
             let cur = self.lower_mode();
-            for (m, name, tip) in [
-                (0u8, "Arranger", "the song's blocks over time"),
+            // Piano roll, Devices, Instrument, Automation, then the tracker's
+            // Order list
+            let tabs = [
+                (0u8, "Order list", "the song's blocks in order, over time"),
                 (
                     1,
                     "Instrument",
                     "edit the selected instrument with knobs (Ctrl+I)",
                 ),
-                (2, "Automation", "the arranger with its automation lanes"),
+                (2, "Automation", "the Order list with its automation lanes"),
                 (
                     3,
                     "Piano roll",
@@ -424,7 +426,8 @@ impl App {
                     "Devices",
                     "the selected track's instrument and effects, left to right (Ctrl+7)",
                 ),
-            ] {
+            ];
+            for (m, name, tip) in [3, 4, 1, 2, 0].map(|k| tabs[k]) {
                 let txt = egui::RichText::new(name).strong();
                 if ui
                     .selectable_label(cur == m, txt)
@@ -453,7 +456,7 @@ impl App {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(4.0);
                 if ui
-                    .button("Full-height pattern  F11")
+                    .button("Full-height view  F11")
                     .on_hover_text("hide the lower panel; F11 or Ctrl+I bring it back")
                     .clicked()
                 {
@@ -1652,7 +1655,7 @@ impl App {
                     };
                     let label = format!("{} {}", k + 1, name);
                     let tip = format!(
-                        "macro {} drives {name}\n43{:X}y in the pattern, automation lanes and MIDI learn drive it",
+                        "macro {} drives {name}\n43{:X}y in the Tracker, automation lanes and MIDI learn drive it",
                         k + 1,
                         k + 1
                     );

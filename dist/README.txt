@@ -24,35 +24,35 @@ Keys (press "? Keys" in the toolbar for the full list)
   Space / Shift+Space            play/stop current block (loop) / play/stop song (from the play marker)
   Enter / Ctrl+Enter             restart block / play from cursor row
   Esc                            edit mode on/off
-  Ctrl+Z / Ctrl+Y                undo / redo (notes, arranger, sounds, FX, mixer, tempo, channels; each click or
+  Ctrl+Z / Ctrl+Y                undo / redo (notes, Order list, sounds, FX, mixer, tempo, channels; each click or
                                  drag = 1 step; also works while a value field is being typed into)
   Alt +/-  (Shift = octave)      transpose selection (or whole channel)
   Ctrl+= / Ctrl+- / Ctrl+0       UI scale up / down / 100 %
   F9 / F10                       mute / solo channel
-  Ctrl+Tab, Ctrl+1 .. 5          views: Pattern / Arranger / Mixer / FX / Sample
+  Ctrl+Tab, Ctrl+1 .. 5          views: Pattern / Order list / Mixer / FX / Sample
   FX / Sample view: Up / Down    previous / next instrument
   Sample view: Space             preview; drag = select, drag S/E = loop points
   F12                            key list (Help > Keys)
   Ctrl+Q                         quit
   FX device strip                power = bypass, folder = presets, click name =
                                  collapse, drag name = reorder, right-click = menu
-  Ctrl+D / Ctrl+Shift+D          arranger: duplicate clip / as new block (also when docked)
-  Mouse wheel                    pattern: 1 row per notch (Shift = 16); arranger: scroll, Ctrl = zoom
+  Ctrl+D / Ctrl+Shift+D          Order list: duplicate clip / as new block (also when docked)
+  Mouse wheel                    pattern: 1 row per notch (Shift = 16); Order list: scroll, Ctrl = zoom
   Instrument list                Duplicate / Delete... buttons, right-click menu or Edit menu (asks
                                  first when notes use it; Ctrl+Z undoes)
   Ctrl+Shift+K                   debug: show the last 10 input events in the status bar
-  Arranger (click to focus, light outline + ARRANGER tag): click / Shift+click / Ctrl+click select,
+  Order list (click to focus, light outline + ORDER tag): click / Shift+click / Ctrl+click select,
     Ctrl+X / C / V cut / copy / paste after selection (Ctrl+Shift+V = as new blocks),
     Del, Ctrl+A, Shift+Left/Right, right-click menu; click the pattern to focus it again
-  Arranger: Left/Right, Del, Ins, Ctrl+D (Shift = unique copy), +/-  zoom
-  Arranger ruler (bar numbers)   click = move the play marker to that bar (jumps there while
+  Order list: Left/Right, Del, Ins, Ctrl+D (Shift = unique copy), +/-  zoom
+  Order list ruler (bar numbers)   click = move the play marker to that bar (jumps there while
                                  playing), drag = scrub, Alt+click = exact row
   Ctrl+N / Ctrl+O / Ctrl+S       new / open / save .cwt   (Ctrl+Shift+S = save as)
   Ctrl+E                         quick export WAV
   Ctrl+Shift+E                   export dialog (WAV / MP3, tags, range)
   Ctrl+,                         settings (arrows + Enter move/open cards)
   Ctrl+Shift+F                   Song > Fill to length (auto arrange)
-  1-7 / 0 (arranger focus)       block role Intro/Verse/Chorus/Bridge/Breakdown/Outro/Fill / clear
+  1-7 / 0 (Order list focus)       block role Intro/Verse/Chorus/Bridge/Breakdown/Outro/Fill / clear
   Fill dialog                    G generate, R reroll, L lock, P preview, H hide, S style,
                                  Up/Down variation, Left/Right section, Enter accept, Esc discard
   Unsaved prompt                 Enter = save, N = don't save, Esc = cancel
@@ -72,7 +72,7 @@ MIDI keyboard (0.2.3, details in docs/MIDI.md on GitHub)
   Check a keyboard from cmd:  ChipWave.exe --midi-list   and   ChipWave.exe --midi-monitor 15
 
 
-Pattern effects (full table: docs/PATTERN_EDITOR.md on GitHub)
+Pattern effects (full table: docs/TRACKER.md on GitHub)
   01xx / 02xx  slide up / down           08xx  note decay (xx x 10 ms)
   09xx         speed (ticks per row)     0Cxx  set volume      0Dxy  volume slide
   0Fxx         tempo (0F00 = pattern break)
@@ -114,9 +114,9 @@ Master limiter and loudness (0.2.3.7): Mixer > "Limiter & loudness" (right of
   Readout: momentary / short-term / integrated LUFS and true peak (ITU-R BS.1770).
 Audio: "Buffer" in the toolbar (Auto/256/512/1024/2048). The status bar
   shows latency and an underrun counter; latency grows automatically on dropouts.
-Arranger: song order as coloured clips; drag to reorder, click to open a block.
-  "Dock arranger" shows it under the pattern editor.
-Automation: lanes under the arranger (toggle "Automation", "+ Lane"): click = add point,
+Order list: song order as coloured clips; drag to reorder, click to open a block.
+  "Dock Order list" shows it under the Tracker.
+Automation: lanes under the Order list (toggle "Automation", "+ Lane"): click = add point,
   drag = move, right-click = delete, Pencil = draw, Shape = Linear/Step/Smooth.
   Targets: synth cutoff/resonance/drive, amp level, mixer volume/pan, master, tempo.
 Theme: "Dark Circuit (default)" or "Amiga (Workbench Gradient)" (View > Theme).

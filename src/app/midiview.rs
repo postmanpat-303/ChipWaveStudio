@@ -524,7 +524,7 @@ impl App {
                 ui.label("Recording");
                 ui.vertical(|ui| {
                     ui.label(
-                        egui::RichText::new("Edit mode on + Pattern view: notes are written at the cursor and the cursor moves by Step.")
+                        egui::RichText::new("Edit mode on + Tracker: notes are written at the cursor and the cursor moves by Step.")
                             .small()
                             .color(th().ink2),
                     );

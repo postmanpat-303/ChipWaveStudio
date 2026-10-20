@@ -17,11 +17,11 @@ The hat samples (`factory:drums/hat-*.wav`) are placeholders for a small CC0 fac
 ## 1. What gets auto-entered (about 60 s, skippable)
 | Step | What happens on screen | Overlay text |
 |---|---|---|
-| 1 | Pattern editor opens; the cursor moves to channel 1 and types `C-3 01` on rows 00, 04, 08, 0C (Punchy Psy Kick) | "This is the pattern editor. Rows go down, channels go across. That's a kick on every beat." |
+| 1 | Tracker opens; the cursor moves to channel 1 and types `C-3 01` on rows 00, 04, 08, 0C (Punchy Psy Kick) | "This is the Tracker. Rows go down, channels go across. That's a kick on every beat." |
 | 2 | Channel 2: closed hat on rows 02, 06, 0A, 0E; open hat on 0E | "Off-beat hats give the psy bounce." |
 | 3 | Channel 3: Rolling Offbeat Bass `E-1 02` on rows 01-03, 05-07, 09-0B, 0D-0F | "The rolling bass fills the three 16ths between kicks." |
 | 4 | Play starts (Space is highlighted) | "Press Space any time to play or stop." |
-| 5 | The arranger opens; an automation lane **Bass · Filter cutoff** draws a bezier sweep from 180 Hz to 2.4 kHz over 8 bars | "Automation lanes move knobs over time. Watch the bass open up." |
+| 5 | The Order list opens; an automation lane **Bass · Filter cutoff** draws a bezier sweep from 180 Hz to 2.4 kHz over 8 bars | "Automation lanes move knobs over time. Watch the bass open up." |
 | 6 | A second lane, **Delay feedback** (return A, which the bass sends to), draws steps 20 % → 45 % → 65 % | "Delay feedback climbs, so echoes build into the next section." |
 | 7 | Overlay: "Your turn". Arrow keys are highlighted and a single note is suggested | "Move with the arrow keys and press Z…M to play notes. Ctrl+Z undoes anything." |
 

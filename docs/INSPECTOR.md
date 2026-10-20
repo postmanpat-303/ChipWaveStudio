@@ -11,7 +11,7 @@ ChipWave already has.
 | | |
 |---|---|
 | Show / hide | **I**, View › Inspector, the **Inspector** button on the right of the view tab bar, or **×** in its header |
-| In the pattern editor | **Alt+I** (plain **I** types a note there, as before). Alt+I works in every view |
+| In the Tracker | **Alt+I** (plain **I** types a note there, as before). Alt+I works in every view |
 | Text fields | while you type in a text field (search, a name), I is just a letter |
 
 It shows whatever you clicked last:
@@ -30,7 +30,7 @@ It shows whatever you clicked last:
 | **Fade in / Fade out** (audio clips) | in beats, same as dragging the clip's top corners |
 | **Shape** (audio clips) | equal power / linear / S-curve fades |
 | **Piano roll** | opens the clip's notes in the lower panel (same as double-click) |
-| **Pattern editor** (block clips) | the clip's block in the pattern editor (same as Enter) |
+| **Tracker** (Tracker clips) | the clip's block in the Tracker (same as Enter) |
 
 In tracker mode the clips come from the order list, so the clip section is
 read-only and says so; switch the song to timeline mode to edit clips.
@@ -58,7 +58,7 @@ A slim bar above the status line:
   timeline mode, `pos 03 · row 12` in tracker mode, plus the tempo.
 - **TIMELINE + PIANO:** the default layout (Timeline on top, piano roll
   below; Ctrl+6, View › Reset to default layout). Lit while it is showing.
-- **Tabs:** **TIMELINE** · **TRACKER** (pattern editor) · **ARRANGER** ·
+- **Tabs:** **TIMELINE** · **TRACKER** (Tracker) · **ORDER** ·
   **PIANO** (piano roll in the lower panel) · **INST** (instrument editor in
   the lower panel) · **AUTO** (automation lanes in the lower panel) ·
   **MIX** · **FX** · **SAMPLE**. The lit tab is what is showing; when a

@@ -287,7 +287,7 @@ pub(super) fn gen_panel(
             ui.add_space(14.0);
             out.changed |= ui
                 .checkbox(&mut g.filter_on, "Filter")
-                .on_hover_text("run the drum through a filter (pattern commands 38-3B move it)")
+                .on_hover_text("run the drum through a filter (Tracker effects 38-3B move it)")
                 .changed();
             if g.filter_on {
                 out.changed |= filter_model_combo(ui, "gen_fm", &mut g.base);
@@ -449,7 +449,7 @@ fn g2_choices(ui: &mut egui::Ui, g: &mut GenPatch) -> bool {
                 let mut ms = *glide * 1000.0;
                 if ui
                     .add(egui::Slider::new(&mut ms, 0.0..=1000.0).suffix(" ms"))
-                    .on_hover_text("portamento time (with Legato, or 3C in the pattern)")
+                    .on_hover_text("portamento time (with Legato, or 3C in the Tracker)")
                     .changed()
                 {
                     *glide = ms / 1000.0;
@@ -542,7 +542,7 @@ fn g2_choices(ui: &mut egui::Ui, g: &mut GenPatch) -> bool {
                 let mut ms = *glide * 1000.0;
                 if ui
                     .add(egui::Slider::new(&mut ms, 0.0..=1000.0).suffix(" ms"))
-                    .on_hover_text("portamento time (with Legato, or 3C in the pattern)")
+                    .on_hover_text("portamento time (with Legato, or 3C in the Tracker)")
                     .changed()
                 {
                     *glide = ms / 1000.0;
