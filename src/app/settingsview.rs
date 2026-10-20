@@ -450,9 +450,9 @@ impl App {
                 if ui
                     .checkbox(&mut self.extra.show_tracker, "Show Tracker (experimental)")
                     .on_hover_text(
-                        "the Tracker and Order list views with their tabs, keys (Ctrl+1, Ctrl+2) \
-                         and menu items. Off (the default): ChipWave is the Timeline and the \
-                         piano roll, and every song opens in timeline mode (it plays the same)",
+                        "the TRACKER and ORDER tabs, the Order list and the tracker-mode menu items \
+                         (View › Tracker and Ctrl+1 open the Tracker either way). Off (the default): \
+                         every song opens in timeline mode (it plays the same)",
                     )
                     .changed()
                 {

@@ -175,9 +175,10 @@ pub struct Extra {
     #[serde(default = "yes")]
     pub clip_arranger: bool,
     /// Settings › Show Tracker (experimental), off by default (Del, 20 Oct
-    /// 2026: focus on the Timeline and the piano roll). Off: the Tracker and
-    /// Order list views, their tabs, keys and menu items are hidden and
-    /// every song opens in timeline mode. The code and the file format stay.
+    /// 2026: focus on the Timeline and the piano roll). Off: the TRACKER /
+    /// ORDER tabs and the tracker-mode menu items are hidden (View › Tracker
+    /// and Ctrl+1 still open the Tracker) and every song opens in timeline
+    /// mode. The code and the file format stay.
     #[serde(default)]
     pub show_tracker: bool,
     /// Clip Arranger launch quantise: 0 one bar, 1 half a bar, 2 a beat, 3 off
