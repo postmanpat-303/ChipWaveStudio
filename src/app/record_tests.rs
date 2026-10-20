@@ -392,3 +392,162 @@ fn song_master_sits_at_the_bottom_after_add_track() {
     });
     assert_eq!(h.state().tlv.layout.master, Some(3));
 }
+
+// ------------------------------------------- WaveForge on a track (Del's report)
+
+/// Del's report: a track given instrument 2 (WaveForge Supersaw Pad), a
+/// note clip recorded live, a cutoff lane at 1.8 kHz. Live MIDI sounded
+/// right, playback sounded like an Init patch. Checks what the recorded
+/// notes play, that the lane drives instrument 2's cutoff knob, and that
+/// playing (with the editor open) leaves the patch alone.
+#[test]
+fn waveforge_track_records_and_plays_its_own_instrument() {
+    use crate::automation::{Lane, Point, Target};
+    use crate::model::InstrumentKind;
+    use crate::poly::{CUTOFF, POLY};
+    let mut h = new_song(1);
+    let pad = crate::gen::preset(concat!(crate::poly_name!(), " Supersaw Pad")).unwrap();
+    h.state().with(|s| {
+        // 01 a plain synth (Init), 02 the WaveForge pad
+        let mut one = crate::fileio::demo_song().instruments[0].clone();
+        one.name = "Init".into();
+        one.kind = InstrumentKind::Synth(Default::default());
+        let mut two = one.clone();
+        two.name = concat!(crate::poly_name!(), " Supersaw Pad").into();
+        two.kind = InstrumentKind::Gen(pad.clone());
+        s.song.instruments = vec![one, two];
+        s.song.timeline.as_deref_mut().unwrap().tracks[0].instr = 2;
+    });
+    // selecting the track makes its instrument the current one (what
+    // live MIDI plays)
+    h.state_mut().ch = 0;
+    h.state_mut().instr = 2;
+    frames(&mut h, 2);
+    // record an A minor chord for a bar
+    key(&mut h, Key::R, egui::Modifiers::NONE);
+    assert!(h.state().recording());
+    play_rows(&mut h, 16);
+    let now = std::time::Instant::now;
+    for k in [69u8, 72, 76] {
+        h.state_mut().midi_note_on(k, k - 12, 0.8, now());
+    }
+    play_rows(&mut h, 16);
+    for k in [69u8, 72, 76] {
+        h.state_mut().midi_note_off(k);
+    }
+    play_rows(&mut h, 4);
+    key(&mut h, Key::R, egui::Modifiers::NONE);
+    h.state().with(|s| s.engine.stop());
+    frames(&mut h, 2);
+    let clips = note_clips(&h);
+    assert_eq!(clips.len(), 1);
+    let stored: Vec<u8> = clips[0].1.iter().map(|n| n.instr).collect();
+    eprintln!("WFREPRO recorded note instruments: {stored:?}");
+    // the same song with the recorded notes forced to instrument `i`
+    let base = h.state().with(|s| s.song.clone());
+    let with = |i: Option<u8>, lane: Option<f32>, patch: Option<crate::gen::GenPatch>| {
+        let mut s = base.clone();
+        let t = s.timeline.as_deref_mut().unwrap();
+        if let Some(i) = i {
+            for d in t.notes.iter_mut() {
+                for n in d.make_mut().notes.iter_mut() {
+                    n.instr = i;
+                }
+            }
+        }
+        if let Some(hz) = lane {
+            let mut l = Lane::new(Target::Gen(1, CUTOFF), "Cutoff".into());
+            l.points.push(Point {
+                pos: 0.0,
+                value: POLY[CUTOFF].unmap(hz),
+                shape: Default::default(),
+                curve: 0.0,
+            });
+            t.tracks[0].auto.push(l);
+        }
+        if let Some(p) = patch {
+            s.instruments[1].kind = InstrumentKind::Gen(p);
+        }
+        s
+    };
+    let rend = |s: &crate::model::Song| crate::engine::render_song(s, 22050);
+    let fp = |v: &[f32]| {
+        use std::hash::{Hash, Hasher};
+        let mut hs = std::collections::hash_map::DefaultHasher::new();
+        v.iter().for_each(|x| x.to_bits().hash(&mut hs));
+        hs.finish()
+    };
+    let as_rec = rend(&with(None, None, None));
+    let as_1 = rend(&with(Some(1), None, None));
+    let as_2 = rend(&with(Some(2), None, None));
+    eprintln!(
+        "WFREPRO recorded == instrument 1: {}, recorded == instrument 2: {}",
+        fp(&as_rec) == fp(&as_1),
+        fp(&as_rec) == fp(&as_2)
+    );
+    let peak = |v: &[f32]| v.iter().fold(0f32, |a, x| a.max(x.abs()));
+    assert!(peak(&as_2) > 0.01, "instrument 2 sounds");
+    assert_ne!(fp(&as_1), fp(&as_2), "instruments 1 and 2 sound different");
+    // the lane: Target::Gen(1, 0) is instrument 2's Cutoff knob
+    assert_eq!(Target::Gen(1, CUTOFF).id(), "instrument.2.gen.1");
+    // a lane at 1.8 kHz sounds like the patch with Cutoff set to 1.8 kHz,
+    // not like Init
+    let diff = |a: &[f32], b: &[f32]| -> f32 {
+        let e: f32 = a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum();
+        let r: f32 = b.iter().map(|y| y * y).sum();
+        (e / r.max(1e-9)).sqrt()
+    };
+    let lane = rend(&with(Some(2), Some(1800.0), None));
+    let mut set = pad.clone();
+    if let crate::gen::GenEngine::Poly(x) = &mut set.engine {
+        x.set(&[(CUTOFF, 1800.0)]);
+    }
+    let fixed = rend(&with(Some(2), None, Some(set)));
+    let init = rend(&with(
+        Some(2),
+        Some(1800.0),
+        crate::gen::preset(concat!(crate::poly_name!(), " Init")),
+    ));
+    eprintln!(
+        "WFREPRO lane vs knob at 1.8 kHz: {:.4}; lane vs no lane: {:.4}; vs Init + lane: {:.4}",
+        diff(&lane, &fixed),
+        diff(&lane, &as_2),
+        diff(&lane, &init)
+    );
+    assert!(
+        diff(&lane, &fixed) < 0.05,
+        "the lane sets instrument 2's cutoff"
+    );
+    assert!(diff(&lane, &as_2) > 0.05, "the lane does something");
+    assert!(diff(&lane, &init) > 0.5, "and doesn't sound like Init");
+    // playing back with the lane and the WaveForge editor open leaves the
+    // patch alone (no knob written back, nothing reset)
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        let l = with(None, Some(1800.0), None);
+        t.tracks[0].auto = l.timeline.as_deref().unwrap().tracks[0].auto.clone();
+    });
+    h.state_mut().instr = 2;
+    h.state_mut().show_instrument_panel();
+    frames(&mut h, 3);
+    let before = h.state().with(|s| s.song.instruments[1].kind.clone());
+    h.state().with(|s| {
+        let song = &s.song;
+        s.engine.start(song, 0, 0, false, 0);
+    });
+    for _ in 0..20 {
+        play_rows(&mut h, 4);
+        frame(&mut h);
+    }
+    h.state().with(|s| s.engine.stop());
+    frames(&mut h, 2);
+    let after = h.state().with(|s| s.song.instruments[1].kind.clone());
+    assert_eq!(before, after, "playback changed the WaveForge patch");
+    assert_eq!(after, InstrumentKind::Gen(pad), "still the Supersaw Pad");
+    // what the fix is about: the recorded notes play instrument 2
+    assert!(
+        stored.iter().all(|&i| i == 2),
+        "recorded notes carry instrument {stored:?}, not the track's 2"
+    );
+    assert_eq!(fp(&as_rec), fp(&as_2), "recorded notes play instrument 2");
+}
