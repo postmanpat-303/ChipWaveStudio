@@ -684,3 +684,214 @@ fn automation_lane_menu_needs_timeline_mode() {
     assert!(h.state().track_auto.is_none());
     assert!(h.state().status.contains("timeline mode"));
 }
+
+// ------------------------------------------------------- step 4: chord replace
+
+fn cmaj(start: tl::Tick) -> crate::chordgen::ChordMark {
+    crate::chordgen::ChordMark {
+        start,
+        len: chordlane::BAR,
+        root: 0,
+        q: crate::chordgen::Quality::Maj,
+        bass: None,
+    }
+}
+
+fn put_notes(h: &mut Harness<'static, App>, notes: &[(tl::Tick, u8)]) {
+    let t = h.state().pr.target.unwrap();
+    let mut d = note_data(h);
+    d.notes.extend(notes.iter().map(|&(start, key)| tl::Note {
+        start,
+        len: tl::PPQ / 2,
+        key,
+        vel: tl::roll::vel_u16(0.6),
+        ..Default::default()
+    }));
+    h.state_mut().pr_write(t, pianoview::Source::Notes(d));
+    h.state_mut().undo_reset();
+    frame(h);
+}
+
+fn keys_at(d: &tl::NoteClipData) -> Vec<(tl::Tick, u8)> {
+    let mut v: Vec<_> = d.notes.iter().map(|n| (n.start, n.key)).collect();
+    v.sort();
+    v
+}
+
+/// Generate › Apply with notes on: the chord notes replace the notes that
+/// start inside the chord's span (in range, few: no question), the rest of
+/// the clip stays, a second run adds nothing, one undo step
+#[test]
+fn chord_notes_replace_their_span_only_and_never_double() {
+    let mut h = clip_setup();
+    let t = h.state().pr.target.unwrap();
+    let v = crate::chordgen::Voicing::Full;
+    let voiced: Vec<u8> = crate::chordgen::voice(&[cmaj(0)], v, 4)
+        .iter()
+        .map(|x| x.2)
+        .collect();
+    let (lo, hi) = (*voiced.iter().min().unwrap(), *voiced.iter().max().unwrap());
+    // two old notes in the first bar (inside the chord's range), one in bar 2
+    put_notes(
+        &mut h,
+        &[(0, lo + 1), (tl::PPQ, hi - 1), (chordlane::BAR, 30)],
+    );
+    h.state_mut().cl_insert(t, vec![cmaj(0)], true, v, 4);
+    frame(&mut h);
+    assert!(
+        h.state().cl.confirm.is_none(),
+        "2 in-range notes: no question"
+    );
+    let once = note_data(&h);
+    let mut want: Vec<(tl::Tick, u8)> = voiced.iter().map(|&k| (0, k)).collect();
+    want.push((chordlane::BAR, 30));
+    want.sort();
+    assert_eq!(keys_at(&once), want, "span replaced, bar 2 kept");
+    assert_eq!(once.chords.len(), 1);
+    assert!(
+        h.state().status.contains("replaced 2 note(s)"),
+        "{}",
+        h.state().status
+    );
+    // twice: the same
+    h.state_mut().cl_insert(t, vec![cmaj(0)], true, v, 4);
+    frame(&mut h);
+    assert!(h.state().cl.confirm.is_none());
+    assert_eq!(keys_at(&note_data(&h)), want, "no duplicates");
+    // the second run changed nothing, so one undo step goes back to the start
+    h.state_mut().undo(false);
+    frame(&mut h);
+    assert_eq!(
+        keys_at(&note_data(&h)),
+        vec![(0, lo + 1), (tl::PPQ, hi - 1), (chordlane::BAR, 30)]
+    );
+    // Add on top keeps the old notes, and still never doubles
+    h.state_mut().cl.gen.on_top = true;
+    for _ in 0..2 {
+        h.state_mut().cl_insert(t, vec![cmaj(0)], true, v, 4);
+        frame(&mut h);
+    }
+    let mut top: Vec<(tl::Tick, u8)> = voiced.iter().map(|&k| (0, k)).collect();
+    top.extend([(0, lo + 1), (tl::PPQ, hi - 1), (chordlane::BAR, 30)]);
+    top.sort();
+    assert_eq!(keys_at(&note_data(&h)), top);
+}
+
+/// more than 8 notes, or notes outside the chord's pitch range, ask first;
+/// Cancel changes nothing, Replace / Add on top do what they say
+#[test]
+fn chord_replace_asks_before_deleting_many_or_out_of_range_notes() {
+    let mut h = clip_setup();
+    let t = h.state().pr.target.unwrap();
+    let v = crate::chordgen::Voicing::Full;
+    let voiced: Vec<u8> = crate::chordgen::voice(&[cmaj(0)], v, 4)
+        .iter()
+        .map(|x| x.2)
+        .collect();
+    let lo = *voiced.iter().min().unwrap();
+    // 10 in-range notes in the chord's bar
+    let many: Vec<(tl::Tick, u8)> = (0..10).map(|i| (i * tl::PPQ / 4 + 1, lo + 1)).collect();
+    put_notes(&mut h, &many);
+    let before = note_data(&h);
+    h.state_mut().cl_insert(t, vec![cmaj(0)], true, v, 4);
+    frames(&mut h, 2);
+    let c = h.state().cl.confirm.as_ref().expect("asks first");
+    assert_eq!((c.removed, c.outside), (10, 0));
+    assert!(
+        c.scope.contains("track 03") && c.scope.contains("bar 1"),
+        "{}",
+        c.scope
+    );
+    assert!(h
+        .query_by_label_contains("10 note(s) will be deleted")
+        .is_some());
+    assert!(h.query_by_label_contains("Target: ").is_some());
+    assert_eq!(note_data(&h), before, "nothing yet");
+    h.get_by_label("Cancel").click();
+    frames(&mut h, 2);
+    assert!(h.state().cl.confirm.is_none());
+    assert_eq!(
+        note_data(&h),
+        before,
+        "Cancel writes nothing (no markers either)"
+    );
+    // again, Replace
+    h.state_mut().cl_insert(t, vec![cmaj(0)], true, v, 4);
+    frames(&mut h, 2);
+    h.get_by_label("Replace (delete 10)").click();
+    frames(&mut h, 2);
+    let mut want: Vec<(tl::Tick, u8)> = voiced.iter().map(|&k| (0, k)).collect();
+    want.sort();
+    assert_eq!(keys_at(&note_data(&h)), want);
+    assert_eq!(note_data(&h).chords.len(), 1);
+    h.state_mut().undo(false);
+    frame(&mut h);
+    assert_eq!(note_data(&h), before, "one undo step");
+    // a melody note above the chord: asks even though it's only one
+    put_notes(&mut h, &[]);
+    let mut d = note_data(&h);
+    d.notes.clear();
+    h.state_mut().pr_write(t, pianoview::Source::Notes(d));
+    put_notes(&mut h, &[(tl::PPQ, 100)]);
+    h.state_mut().cl_insert(t, vec![cmaj(0)], true, v, 4);
+    frames(&mut h, 2);
+    let c = h
+        .state()
+        .cl
+        .confirm
+        .as_ref()
+        .expect("asks for an out-of-range note");
+    assert_eq!((c.removed, c.outside), (1, 1));
+    assert!(h
+        .query_by_label_contains("outside the new chords' pitch range")
+        .is_some());
+    h.get_by_label("Add on top").click();
+    frames(&mut h, 2);
+    let mut top = want.clone();
+    top.push((tl::PPQ, 100));
+    top.sort();
+    assert_eq!(keys_at(&note_data(&h)), top, "Add on top keeps the melody");
+}
+
+/// the chord pie's "Write notes" replaces too: twice is the same as once
+#[test]
+fn write_notes_from_the_chord_pie_never_doubles() {
+    let mut h = clip_setup();
+    let t = h.state().pr.target.unwrap();
+    h.state_mut().cl_write(t, vec![cmaj(0)], vec![], true);
+    frame(&mut h);
+    let mut counts = vec![];
+    for _ in 0..2 {
+        let ctx = h.ctx.clone();
+        h.state_mut()
+            .cl_open_menu(&ctx, Pos2::new(600.0, 500.0), chordlane::PieOn::Mark(0), t);
+        frames(&mut h, 12);
+        let w = h.state().cl.pie.as_ref().unwrap().0.wedge_centre(7, 75.0);
+        click_at(&mut h, w);
+        frames(&mut h, 2);
+        assert!(h.state().cl.confirm.is_none());
+        counts.push(note_data(&h).notes.len());
+    }
+    assert!(counts[0] >= 3, "the chord's notes: {counts:?}");
+    assert_eq!(counts[0], counts[1], "no duplicates");
+}
+
+/// the Generate dialog names its target clip / bars and the scope
+#[test]
+fn generate_dialog_shows_target_and_scope() {
+    let mut h = clip_setup();
+    h.state_mut().cl_open_gen_at(chordlane::BAR);
+    h.state_mut().cl.gen.write = true;
+    frames(&mut h, 3);
+    assert!(h.query_by_label_contains("track 03, bars 2–").is_some());
+    assert!(h
+        .query_by_label_contains("replaces the notes inside each chord's span only")
+        .is_some());
+    h.get_by_label("Add on top (keep the notes already there)")
+        .click();
+    frames(&mut h, 2);
+    assert!(h.state().cl.gen.on_top);
+    assert!(h
+        .query_by_label_contains("notes added on top of the clip's notes")
+        .is_some());
+}

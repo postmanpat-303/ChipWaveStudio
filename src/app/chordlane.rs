@@ -45,6 +45,74 @@ pub(crate) struct GenDlg {
     pub(crate) write: bool,
     pub(crate) voicing: Voicing,
     pub(crate) octave: u8,
+    /// written notes go on top of the clip's notes; off (the default):
+    /// they replace the notes that start inside each chord's span
+    pub(crate) on_top: bool,
+}
+
+/// a chord-note write waiting for an OK: it would delete more than
+/// [`CONFIRM_OVER`] notes, or notes outside the new chords' pitch range
+pub(crate) struct PendingWrite {
+    t: Target,
+    marks: Vec<ChordMark>,
+    notes: Vec<tl::Note>,
+    spans: Vec<(Tick, Tick)>,
+    /// notes that would be deleted / how many of those are outside the
+    /// chord's pitch range
+    pub(crate) removed: usize,
+    pub(crate) outside: usize,
+    /// "clip … on track NN, bars a–b"
+    pub(crate) scope: String,
+    what: String,
+}
+
+/// more deleted notes than this asks first
+pub(crate) const CONFIRM_OVER: usize = 8;
+
+/// one replace span per chord: (start, end, lowest key, highest key) of
+/// the notes written for it
+pub(crate) fn chord_spans(chords: &[ChordMark], notes: &[tl::Note]) -> Vec<(Tick, Tick, u8, u8)> {
+    chords
+        .iter()
+        .map(|m| {
+            let keys = notes
+                .iter()
+                .filter(|n| n.start >= m.start && n.start < m.end())
+                .map(|n| n.key);
+            let lo = keys.clone().min().unwrap_or(u8::MAX);
+            let hi = keys.max().unwrap_or(0);
+            (m.start, m.end(), lo, hi)
+        })
+        .collect()
+}
+
+/// what replacing would delete: indices into `old` of notes starting
+/// inside a span and not written again unchanged, and how many of those
+/// lie outside their chord's pitch range
+pub(crate) fn replace_plan(
+    old: &[tl::Note],
+    spans: &[(Tick, Tick, u8, u8)],
+    new: &[tl::Note],
+) -> (Vec<usize>, usize) {
+    let mut out = 0;
+    let gone: Vec<usize> = old
+        .iter()
+        .enumerate()
+        .filter_map(|(i, n)| {
+            let sp = spans.iter().find(|s| n.start >= s.0 && n.start < s.1)?;
+            if new
+                .iter()
+                .any(|x| x.start == n.start && x.key == n.key && x.len == n.len)
+            {
+                return None;
+            }
+            if n.key < sp.2 || n.key > sp.3 {
+                out += 1;
+            }
+            Some(i)
+        })
+        .collect();
+    (gone, out)
 }
 
 impl Default for GenDlg {
@@ -55,6 +123,7 @@ impl Default for GenDlg {
             write: false,
             voicing: Voicing::Full,
             octave: 4,
+            on_top: false,
         }
     }
 }
@@ -75,6 +144,8 @@ pub(crate) struct LaneUi {
     t0: Option<Instant>,
     /// screen rect of the lane (tests)
     pub(crate) rect: Rect,
+    /// the "Replace notes?" confirm
+    pub(crate) confirm: Option<PendingWrite>,
 }
 
 impl Default for LaneUi {
@@ -90,6 +161,7 @@ impl Default for LaneUi {
             preview: vec![],
             t0: None,
             rect: Rect::NOTHING,
+            confirm: None,
         }
     }
 }
@@ -150,6 +222,20 @@ impl App {
         notes: Vec<tl::Note>,
         snapshot: bool,
     ) {
+        self.cl_write_ex(t, marks, notes, None, snapshot);
+    }
+
+    /// [`Self::cl_write`]; `replace`: first delete the notes that start
+    /// inside these spans. A written note never doubles one already there
+    /// (same start and key), so writing the same chords twice adds nothing.
+    fn cl_write_ex(
+        &mut self,
+        t: Target,
+        marks: Vec<ChordMark>,
+        notes: Vec<tl::Note>,
+        replace: Option<&[(Tick, Tick)]>,
+        snapshot: bool,
+    ) {
         let Some(Source::Notes(mut d)) = self.pr_read(t) else {
             return;
         };
@@ -165,7 +251,20 @@ impl App {
         let old_len = d.len;
         d.chords = marks;
         d.chords.sort_by_key(|m| m.start);
-        d.notes.extend(notes);
+        if let Some(sp) = replace {
+            let before = d.notes.len();
+            d.notes
+                .retain(|n| !sp.iter().any(|&(a, b)| n.start >= a && n.start < b));
+            if d.notes.len() != before {
+                // roll selections are note indices
+                self.pr.sel.clear();
+            }
+        }
+        for n in notes {
+            if !d.notes.iter().any(|o| o.start == n.start && o.key == n.key) {
+                d.notes.push(n);
+            }
+        }
         if end > d.len {
             d.len = (end + BAR - 1) / BAR * BAR;
         }
@@ -227,12 +326,171 @@ impl App {
             vec![]
         };
         let n = new.len();
-        marks.extend(new);
-        self.cl_write(t, marks, notes, true);
-        self.status = format!(
-            "{n} chord(s) added{}",
-            if write { " with notes" } else { "" }
-        );
+        marks.extend(new.iter().cloned());
+        if write {
+            self.cl_put_notes(
+                t,
+                marks,
+                notes,
+                &new,
+                format!("{n} chord(s) added with notes"),
+            );
+        } else {
+            self.cl_write(t, marks, vec![], true);
+            self.status = format!("{n} chord(s) added");
+        }
+    }
+
+    /// "clip “name” on track NN, bars a–b" (bars of the clip, 1-based)
+    pub(crate) fn cl_scope(&self, t: Target, a: Tick, b: Tick) -> String {
+        let bars = if b > a + BAR {
+            format!("bars {}–{}", a / BAR + 1, (b - 1) / BAR + 1)
+        } else {
+            format!("bar {}", a / BAR + 1)
+        };
+        let clip = match t {
+            Target::Notes { clip: Some(id), .. } => self.with(|s| {
+                let tl = s.song.timeline.as_deref()?;
+                let c = tl.clips.iter().find(|c| c.id == id)?;
+                let name = c
+                    .name
+                    .clone()
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or_else(|| "note clip".into());
+                Some(format!("“{name}” on track {:02}", c.track + 1))
+            }),
+            _ => None,
+        };
+        match clip {
+            Some(c) => format!("{c}, {bars}"),
+            None => format!("this clip, {bars}"),
+        }
+    }
+
+    /// write chord notes: they replace the notes that start inside each
+    /// chord's span (only there), or go on top (Generate's "Add on top").
+    /// Asks first when that would delete more than [`CONFIRM_OVER`] notes
+    /// or notes outside the chords' pitch range. One undo step.
+    fn cl_put_notes(
+        &mut self,
+        t: Target,
+        marks: Vec<ChordMark>,
+        notes: Vec<tl::Note>,
+        chords: &[ChordMark],
+        what: String,
+    ) {
+        if self.cl.gen.on_top {
+            let n = notes.len();
+            self.cl_write_ex(t, marks, notes, None, true);
+            self.status = format!("{what} · {n} note(s) added on top");
+            return;
+        }
+        let Some(Source::Notes(d)) = self.pr_read(t) else {
+            return;
+        };
+        let spans4 = chord_spans(chords, &notes);
+        let (gone, outside) = replace_plan(&d.notes, &spans4, &notes);
+        let spans: Vec<(Tick, Tick)> = spans4.iter().map(|s| (s.0, s.1)).collect();
+        let a = spans.iter().map(|s| s.0).min().unwrap_or(0);
+        let b = spans.iter().map(|s| s.1).max().unwrap_or(0);
+        let scope = self.cl_scope(t, a, b);
+        if gone.len() > CONFIRM_OVER || outside > 0 {
+            self.status = format!(
+                "Replace notes? {} note(s) in {scope} would be deleted",
+                gone.len()
+            );
+            self.cl.confirm = Some(PendingWrite {
+                t,
+                marks,
+                notes,
+                spans,
+                removed: gone.len(),
+                outside,
+                scope,
+                what,
+            });
+            return;
+        }
+        self.cl_write_ex(t, marks, notes, Some(&spans), true);
+        self.status = format!("{what} · replaced {} note(s) in {scope}", gone.len());
+    }
+
+    /// the "Replace notes?" confirm (while a write waits for it)
+    pub(super) fn cl_confirm_window(&mut self, ctx: &egui::Context) {
+        let Some(pw) = &self.cl.confirm else { return };
+        let th = th();
+        let mut choice = None;
+        let mut open = true;
+        let mut cancel = false;
+        egui::Window::new("Replace notes?")
+            .id(egui::Id::unique("cl_replace_confirm"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+            .show(ctx, |ui| {
+                ui.set_max_width(420.0);
+                ui.label(format!("Target: {}", pw.scope));
+                ui.label(
+                    egui::RichText::new(
+                        "Replaces the notes that start inside each chord's span; \
+                         the rest of the clip is kept.",
+                    )
+                    .color(th.ink2),
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(format!("{} note(s) will be deleted", pw.removed)).strong(),
+                );
+                if pw.outside > 0 {
+                    ui.label(format!(
+                        "{} of them are outside the new chords' pitch range \
+                         (a melody or bass line?)",
+                        pw.outside
+                    ));
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .button(
+                            egui::RichText::new(format!("Replace (delete {})", pw.removed))
+                                .strong(),
+                        )
+                        .clicked()
+                    {
+                        choice = Some(true);
+                    }
+                    if ui
+                        .button("Add on top")
+                        .on_hover_text("keep every note and add the chord notes")
+                        .clicked()
+                    {
+                        choice = Some(false);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        cancel = true;
+                    }
+                });
+            });
+        if let Some(replace) = choice {
+            let Some(pw) = self.cl.confirm.take() else {
+                return;
+            };
+            let n = pw.notes.len();
+            if replace {
+                self.cl_write_ex(pw.t, pw.marks, pw.notes, Some(&pw.spans), true);
+                self.status = format!(
+                    "{} · replaced {} note(s) in {}",
+                    pw.what, pw.removed, pw.scope
+                );
+            } else {
+                self.cl_write_ex(pw.t, pw.marks, pw.notes, None, true);
+                self.status = format!("{} · {n} note(s) added on top", pw.what);
+            }
+        } else if cancel || !open {
+            self.cl.confirm = None;
+            self.status = "Chord notes not written".into();
+        }
     }
 
     /// play one chord now (on the track's instrument)
@@ -814,6 +1072,7 @@ impl App {
         }
         self.cl_edit_window(ctx, t);
         self.cl_gen_window(ctx, t);
+        self.cl_confirm_window(ctx);
     }
 
     /// a pie progression at `at` with the dialog's remembered options
@@ -923,9 +1182,13 @@ impl App {
                     .and_then(|c| Voicing::ALL.get(c).copied())
                     .unwrap_or(self.cl.gen.voicing);
                 let notes = self.cl_notes(std::slice::from_ref(&m), v, self.cl.gen.octave);
-                let n = notes.len();
-                self.cl_write(t, marks, notes, true);
-                self.status = format!("{n} note(s) written ({})", v.name());
+                let what = format!(
+                    "{} {} note(s) written ({})",
+                    m.name(self.song_key_or_c()),
+                    notes.len(),
+                    v.name()
+                );
+                self.cl_put_notes(t, marks, notes, std::slice::from_ref(&m), what);
             }
             (8, _) => self.cl.edit = Some(mi),
             _ => {}
@@ -1050,6 +1313,12 @@ impl App {
                 .or_else(|| track.map(|k| format!("track {}", k + 1)))
                 .unwrap_or_else(|| "the track".into())
         });
+        // where Apply writes: the progression's span in this clip
+        let scope = {
+            let a = res.marks.iter().map(|m| m.start).min().unwrap_or(0);
+            let b = res.marks.iter().map(|m| m.end()).max().unwrap_or(a);
+            self.cl_scope(t, a, b)
+        };
         egui::Window::new("Generate chord progression")
             .id(egui::Id::unique("cl_gen_win"))
             .open(&mut open)
@@ -1284,6 +1553,27 @@ impl App {
                         });
                     ui.label("Octave");
                     ui.add(egui::DragValue::new(&mut g.octave).range(1..=7));
+                });
+                // the target and what Apply does to the notes already there
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new("Target:").color(th.ink2));
+                    ui.label(egui::RichText::new(&scope).strong());
+                    let what = if !g.write {
+                        "chord markers only (notes untouched)"
+                    } else if g.on_top {
+                        "notes added on top of the clip's notes"
+                    } else {
+                        "replaces the notes inside each chord's span only"
+                    };
+                    ui.label(egui::RichText::new(format!("· {what}")).color(th.ink2));
+                });
+                ui.add_enabled_ui(g.write, |ui| {
+                    ui.checkbox(&mut g.on_top, "Add on top (keep the notes already there)")
+                        .on_hover_text(
+                            "off: the chord notes replace the notes that start inside each \
+                             chord's span (asks first if that deletes more than 8 notes or \
+                             notes outside the chords' range)",
+                        );
                 });
                 ui.add_space(4.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
