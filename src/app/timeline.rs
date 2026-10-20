@@ -207,6 +207,8 @@ pub(crate) struct TimelineUi {
     pub(crate) lanes: Rect,
     pub(crate) ruler: Rect,
     pub(crate) heads: Rect,
+    /// the playhead as last drawn (ticks; None = stopped) - tests
+    pub(crate) head_drawn: Option<f64>,
     /// time to build and paint the last frame, in microseconds
     pub(crate) frame_us: u128,
     /// audio files being decoded, and decoded ones waiting to be placed
@@ -254,6 +256,7 @@ impl Default for TimelineUi {
             lanes: Rect::NOTHING,
             ruler: Rect::NOTHING,
             heads: Rect::NOTHING,
+            head_drawn: None,
             frame_us: 0,
             imports: vec![],
             ready_audio: vec![],
@@ -923,6 +926,7 @@ impl App {
         self.tlv.zoom = zoom;
         let ppt = zoom as f64 / PPQ as f64; // pixels per tick
         let vis_ticks = lanes.width() as f64 / ppt;
+        self.tlv.head_drawn = live.head;
         // ---- follow the playhead (page so it sits a third in)
         if let Some(h) = live.head {
             if self.follow && !self.tlv.ruler_drag && !self.tlv.overview_drag {

@@ -29,6 +29,8 @@ mod chordview;
 mod cliparr;
 #[cfg(test)]
 mod cliparr_tests;
+#[cfg(test)]
+mod focus_tests;
 mod devcards;
 mod devices;
 #[cfg(test)]
@@ -796,7 +798,24 @@ impl App {
         self.row = (self.row as isize + d).rem_euclid(n) as usize;
     }
 
+    /// Settings › Show Tracker (experimental): the Tracker and Order list
+    /// views, tabs, keys and menu items (off by default)
+    pub(crate) fn tracker_on(&self) -> bool {
+        self.extra.show_tracker
+    }
+
     fn play(&mut self, mode: u8) {
+        // Tracker hidden: every Play (Space, Enter, the buttons) plays the
+        // Timeline from its play marker - no block loops, which have no
+        // timeline playhead
+        let mode = if mode != 0 && !self.tracker_on() && self.with(|s| s.song.timeline.is_some()) {
+            if mode != 1 {
+                self.with(|s| s.engine.stop());
+            }
+            0
+        } else {
+            mode
+        };
         let (pattern, row) = (self.pattern, self.row);
         let cue = self.cue;
         let tl_cue = (self.tlv.cue.max(0) / crate::timeline::ROW) as usize;

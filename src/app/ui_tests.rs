@@ -16,6 +16,8 @@ pub(super) fn harness_with(song: Song) -> Harness<'static, App> {
         .with_size(egui::vec2(1700.0, 1000.0))
         .with_accessibility_check(false)
         .build_eframe(|_cc| app);
+    // the existing UI tests cover the Tracker too (Settings › Show Tracker)
+    h.state_mut().extra.show_tracker = true;
     frame(&mut h);
     frame(&mut h);
     h
