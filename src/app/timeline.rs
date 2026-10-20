@@ -2804,7 +2804,11 @@ impl App {
                         ui.close();
                     }
                 } else {
-                    if ui
+                    // the Tracker only exists with Settings › Show Tracker,
+                    // and only Tracker clips open in it
+                    if self.tracker_on()
+                        && menu_open.is_some()
+                        && ui
                         .add(egui::Button::new("Open in Tracker").shortcut_text(if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" }))
                         .clicked()
                     {
@@ -2812,7 +2816,7 @@ impl App {
                         ui.close();
                     }
                     if ui
-                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
+                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if !self.tracker_on() { "Enter / double-click" } else if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
                         .clicked()
                     {
                         open_roll = true;
@@ -2944,7 +2948,9 @@ impl App {
                     .loop_len
                     .map(|l| format!(" · loops {}x", (cl.len + l - 1) / l))
                     .unwrap_or_default();
-                let dbl = if self.extra.dblclick_roll {
+                let dbl = if !self.tracker_on() {
+                    "double-click: piano roll"
+                } else if self.extra.dblclick_roll {
                     "double-click: piano roll (Alt: Tracker)"
                 } else {
                     "double-click: Tracker (Alt: piano roll)"
@@ -3165,6 +3171,17 @@ impl App {
     pub(super) fn timeline_open(&mut self, block: usize, col: usize, row: usize, entry: usize) {
         let (nb, nch) = self.with(|s| (s.song.patterns.len(), s.song.channels));
         if block >= nb {
+            return;
+        }
+        if !self.tracker_on() && self.view == View::Timeline {
+            // no Tracker: the block column opens in the piano roll under
+            // the timeline instead of replacing it
+            self.pattern = block;
+            self.ch = col.min(nch.saturating_sub(1));
+            self.row = row.min(self.rows().saturating_sub(1));
+            self.sel = None;
+            self.set_lower(3);
+            self.status = "Piano roll: this clip (the timeline stays on top)".into();
             return;
         }
         self.pattern = block;

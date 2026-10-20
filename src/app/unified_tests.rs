@@ -80,3 +80,20 @@ fn open_in_sample_editor_keeps_the_timeline_on_top() {
     frames(&mut h, 2);
     assert_eq!(h.state().view, View::Sample);
 }
+
+#[test]
+fn without_the_tracker_tracker_clips_open_in_the_piano_roll() {
+    let mut h = tl_demo();
+    assert!(!h.state().tracker_on());
+    h.state_mut().set_lower(1);
+    h.state_mut().timeline_open(2, 1, 0, usize::MAX);
+    frames(&mut h, 2);
+    assert_eq!(h.state().view, View::Timeline, "the timeline stays");
+    assert!(h.state().pr.open, "the piano roll shows the clip");
+    assert_eq!((h.state().pattern, h.state().ch), (2, 1));
+    // with the Tracker on, Open in Tracker still opens the Tracker
+    h.state_mut().extra.show_tracker = true;
+    h.state_mut().timeline_open(2, 1, 0, usize::MAX);
+    frames(&mut h, 2);
+    assert_eq!(h.state().view, View::Pattern);
+}
