@@ -56,3 +56,80 @@ fn opening_another_song_forgets_the_old_selection() {
     assert_eq!(clips(&h), n, "Delete removed clips of the newly opened song");
     assert!(!h.state().dirty);
 }
+
+/// the hidden Tracker cursor on a cell with a note
+fn cursor_on_a_note(h: &mut Harness<'static, App>) {
+    let (p, r, c) = song(h, |s| {
+        for (pi, p) in s.patterns.iter().enumerate() {
+            for (ri, row) in p.cells.iter().enumerate() {
+                for (ci, cell) in row.iter().enumerate() {
+                    if cell.note > 0 {
+                        return (pi, ri, ci);
+                    }
+                }
+            }
+        }
+        (0, 0, 0)
+    });
+    h.state_mut().pattern = p;
+    h.state_mut().row = r;
+    h.state_mut().ch = c;
+    h.state_mut().edit = true;
+}
+
+fn cells(s: &Song) -> Vec<Vec<Vec<Cell>>> {
+    s.patterns.iter().map(|p| p.cells.clone()).collect()
+}
+
+#[test]
+fn cut_copy_paste_outside_the_tracker_leave_the_blocks_alone() {
+    let mut h = opened_demo(0);
+    cursor_on_a_note(&mut h);
+    let before = song(&h, cells);
+    for v in [View::Timeline, View::Mixer, View::Fx] {
+        h.state_mut().view = v;
+        frames(&mut h, 2);
+        for e in [egui::Event::Cut, egui::Event::Copy, egui::Event::Paste("C-4 01 .. 0000".into())] {
+            let d = format!("{e:?}");
+            h.input_mut().events.push(e);
+            frames(&mut h, 2);
+            eprintln!("{v:?} {d}: {} '{}'", song(&h, |s| s.channels), h.state().status);
+        }
+        assert_eq!(song(&h, cells), before, "{v:?}: a hidden Tracker block was edited");
+        assert_eq!(h.state().status, super::keys::CLIPBOARD_ELSEWHERE);
+    }
+    assert!(!h.state().dirty);
+    // in the Tracker they still work
+    h.state_mut().view = View::Pattern;
+    frames(&mut h, 2);
+    h.input_mut().events.push(egui::Event::Cut);
+    frames(&mut h, 2);
+    assert_ne!(song(&h, cells), before, "Ctrl+X in the Tracker cuts");
+}
+
+#[test]
+fn clipboard_keys_on_a_song_with_no_tracks_do_not_crash() {
+    let mut h = harness_with(fileio::demo_song());
+    h.state_mut().new_song();
+    frames(&mut h, 3);
+    assert_eq!(song(&h, |s| s.channels), 0);
+    // straight into the Tracker's clipboard code with no tracks (this
+    // panicked: the selection was a rectangle of zero channels)
+    h.state_mut().edit = true;
+    let ctx = h.ctx.clone();
+    h.state_mut().copy(false, &ctx);
+    assert!(h.state().status.starts_with("Nothing to copy"), "{}", h.state().status);
+    h.state_mut().paste(Some("C-4 01 .. 0000".into()));
+    assert!(h.state().status.starts_with("Nothing to paste"), "{}", h.state().status);
+    // and through the keys in every view (opening the Tracker view on an
+    // empty song gives it a track first)
+    for v in [View::Timeline, View::Pattern, View::Arranger] {
+        h.state_mut().view = v;
+        h.state_mut().edit = true;
+        frames(&mut h, 2);
+        for e in [egui::Event::Copy, egui::Event::Cut, egui::Event::Paste("C-4 01 .. 0000".into())] {
+            h.input_mut().events.push(e);
+            frames(&mut h, 2);
+        }
+    }
+}
