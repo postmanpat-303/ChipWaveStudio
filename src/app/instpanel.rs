@@ -16,6 +16,8 @@ const BAR_H: f32 = 26.0;
 const HEAD_H: f32 = 22.0;
 /// width of one dropdown / toggle column in a card
 const CTL_W: f32 = 168.0;
+/// the Timeline's toolbar, markers, ruler and scroll bar before it is drawn
+const TL_CHROME_GUESS: f32 = 110.0;
 
 /// instrument editor state that is not part of the song
 #[derive(Default)]
@@ -247,7 +249,16 @@ impl App {
         self.extra.lower_dev = false;
         self.extra.lower_chosen = true;
         self.arr_focus = false;
+        self.reveal_current_track();
         self.save_settings();
+    }
+
+    /// the lower panel opened or changed: the current track's row scrolls
+    /// into view on the Timeline above it (it stays where it is if visible)
+    pub(super) fn reveal_current_track(&mut self) {
+        if self.view == View::Timeline {
+            self.tlv.reveal = Some((self.ch, self.tlv.scroll.max(0.0).ceil() as crate::timeline::Tick));
+        }
     }
 
     /// The default workspace (Del, 19 Oct 2026): the Timeline on top and
@@ -358,7 +369,29 @@ impl App {
         } else {
             self.show_auto = m == 2;
         }
+        self.reveal_current_track();
         self.save_settings();
+    }
+
+    /// "Track 07 Pad 2 › 07 Supersaw Pad · SYNTH": the instrument shown
+    /// in the lower panel, with the current track first when it is that
+    /// track's instrument
+    pub(super) fn lower_breadcrumb(&self) -> Option<String> {
+        let slot = self.instr;
+        let (name, tag) = self.with(|s| {
+            s.song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .map(|i| (i.name.clone(), params::type_tag(&i.kind).to_string()))
+        })?;
+        let inst = format!("{slot:02X} {name} · {tag}");
+        let tl_song = self.with(|s| s.song.timeline.is_some());
+        if tl_song && self.track_slot(self.ch) == slot {
+            let tname = self.with(|s| s.song.channel_names.get(self.ch).cloned().unwrap_or_default());
+            Some(format!("Track {:02} {tname}  ›  {inst}", self.ch + 1))
+        } else {
+            Some(inst)
+        }
     }
 
     fn lower_mode(&self) -> u8 {
@@ -392,7 +425,20 @@ impl App {
         } else {
             (inner.height() * 0.3).clamp(120.0, 190.0)
         } + BAR_H;
-        let max_h = (inner.height() - 150.0).max(BAR_H + 60.0);
+        // the Timeline keeps at least three track rows above the panel
+        // (laptops: 1366x768), the Tracker its old 150 points
+        let keep = if self.view == View::Timeline {
+            let chrome = if self.ip.tl_chrome > 0.0 {
+                self.ip.tl_chrome
+            } else {
+                TL_CHROME_GUESS
+            };
+            chrome + 3.0 * self.tlv.track_h_pts()
+        } else {
+            150.0
+        };
+        // (7: the splitter between them)
+        let max_h = (inner.height() - keep - 7.0).max(BAR_H + 60.0);
         let min_h = (BAR_H + 96.0).min(max_h);
         let want = if self.extra.lower_h > 0.0 {
             self.extra.lower_h
@@ -413,6 +459,9 @@ impl App {
                 self.pattern_view(ui)
             }
         });
+        if self.view == View::Timeline && self.tlv.lanes.height() > 0.0 {
+            self.ip.tl_chrome = (top.height() - self.tlv.lanes.height()).max(0.0);
+        }
         self.ip.split = Some(split);
         // splitter: drag to resize, to the bottom to hide, double-click = automatic
         let sr = ui
@@ -536,19 +585,10 @@ impl App {
                     self.set_lower(m);
                 }
             }
-            if self.extra.lower_inst {
-                let n = self.with(|s| {
-                    s.song
-                        .instruments
-                        .get((self.instr as usize).wrapping_sub(1))
-                        .map(|i| i.name.clone())
-                });
-                if let Some(n) = n {
-                    ui.label(
-                        egui::RichText::new(format!("· {:02X} {n}", self.instr))
-                            .small()
-                            .color(t.ink2),
-                    );
+            if self.extra.lower_inst || self.extra.lower_dev {
+                if let Some(txt) = self.lower_breadcrumb() {
+                    ui.label(egui::RichText::new(txt).small().color(t.ink2))
+                        .on_hover_text("what the lower panel is editing: the track, when this is its instrument, and the instrument");
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

@@ -27,13 +27,11 @@ pub(super) fn tl_demo() -> Harness<'static, App> {
     tl_song(fileio::demo_song())
 }
 
-#[allow(dead_code)]
 pub(super) fn laptop(h: &mut Harness<'static, App>) {
     h.set_size(egui::vec2(1366.0, 768.0));
     frames(h, 3);
 }
 
-#[allow(dead_code)]
 fn lanes_rows(h: &Harness<'static, App>) -> f32 {
     h.state().tlv.lanes.height() / h.state().tlv.track_h_pts()
 }
@@ -96,4 +94,59 @@ fn without_the_tracker_tracker_clips_open_in_the_piano_roll() {
     h.state_mut().timeline_open(2, 1, 0, usize::MAX);
     frames(&mut h, 2);
     assert_eq!(h.state().view, View::Pattern);
+}
+
+#[test]
+fn the_lower_panel_leaves_three_track_rows_on_a_laptop() {
+    let mut h = tl_demo();
+    laptop(&mut h);
+    for m in [3u8, 1, 4] {
+        h.state_mut().set_lower(m);
+        // even when dragged as high as it goes
+        h.state_mut().extra.lower_h = 5000.0;
+        frames(&mut h, 3);
+        let rows = lanes_rows(&h);
+        assert!(rows >= 2.95, "lower tab {m}: {rows:.2} track rows visible");
+    }
+}
+
+#[test]
+fn opening_the_lower_panel_scrolls_the_current_track_into_view() {
+    let mut h = tl_demo();
+    laptop(&mut h);
+    h.state_mut().extra.full_height = true;
+    frames(&mut h, 2);
+    let last = h.state().with(|s| s.song.channels) - 1;
+    h.state_mut().ch = last;
+    h.state_mut().tlv.scroll_y = 0.0;
+    frames(&mut h, 2);
+    h.state_mut().set_lower(1);
+    frames(&mut h, 4);
+    let (_, row) = h.state().tlv.track_rects(last).expect("track row");
+    let lanes = h.state().tlv.lanes;
+    assert!(
+        row.top() >= lanes.top() - 0.5 && row.bottom() <= lanes.bottom() + 0.5,
+        "track {last} row {row:?} inside the lanes {lanes:?}"
+    );
+}
+
+#[test]
+fn the_lower_panel_header_names_the_track_and_its_instrument() {
+    let mut h = tl_demo();
+    let slot = h.state().track_slot(0);
+    assert!(slot > 0);
+    h.state_mut().ch = 0;
+    h.state_mut().instr = slot;
+    h.state_mut().set_lower(1);
+    frames(&mut h, 2);
+    let name = h.state().with(|s| s.song.channel_names[0].clone());
+    let txt = h.state().lower_breadcrumb().expect("breadcrumb");
+    assert!(txt.starts_with(&format!("Track 01 {name}  ›  {slot:02X} ")), "{txt}");
+    exact(&h, &txt);
+    // another instrument than the track's: only the instrument
+    let other = if slot == 1 { 2 } else { 1 };
+    h.state_mut().instr = other;
+    frames(&mut h, 2);
+    let txt = h.state().lower_breadcrumb().expect("breadcrumb");
+    assert!(txt.starts_with(&format!("{other:02X} ")), "{txt}");
 }

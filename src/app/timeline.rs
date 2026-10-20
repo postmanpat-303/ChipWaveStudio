@@ -179,7 +179,7 @@ pub(crate) struct TimelineUi {
     pub(crate) zoom: f32,
     /// first visible tick (fractional while zooming)
     pub(crate) scroll: f64,
-    scroll_y: f32,
+    pub(crate) scroll_y: f32,
     pub(crate) track_h: f32,
     /// start a new song's layout (a few bars, not "fit one empty block")
     new_song: bool,
@@ -330,6 +330,11 @@ impl TimelineUi {
                 .unwrap_or(bar * 4),
         }
     }
+    /// a track row's height in points
+    pub(crate) fn track_h_pts(&self) -> f32 {
+        self.th()
+    }
+
     fn th(&self) -> f32 {
         if self.track_h > 0.0 {
             self.track_h
