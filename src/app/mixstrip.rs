@@ -188,6 +188,9 @@ pub(super) fn mini_knob(
     let nm = name.to_string();
     let val = value.to_string();
     let x = *v;
+    let nm = ui
+        .data(|d| d.get_temp::<String>(id.with("a11y")))
+        .unwrap_or(nm);
     resp.widget_info(|| {
         let mut w = egui::WidgetInfo::labeled(egui::Role::Slider, enabled, &nm);
         w.value = Some(x as f64);
@@ -371,6 +374,9 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
         let x = r.left() + if b == 0 { 32.0 } else { 78.0 };
         let mut v = c.send[b];
         let vt = format!("{:.0} %", v * 100.0);
+        // screen readers (and the UI tests) hear what the classic slider said
+        let a11y = format!("send {} ({what}): {:.0} %", ["A", "B"][b], v * 100.0);
+        ui.data_mut(|d| d.insert_temp(id.with(("send", b)).with("a11y"), a11y));
         let resp = mini_knob(
             ui,
             Pos2::new(x, ky),
@@ -382,12 +388,15 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
             true,
         )
         .on_hover_text(format!("send {} ({what})", ["A", "B"][b]));
-        c.send[b] = v;
+        if v != c.send[b] {
+            c.send[b] = v;
+        }
         sends.push(resp);
     }
     // pan + duck
     let py = r.top() + 152.0;
-    let mut pn = (*c.pan + 1.0) * 0.5;
+    let pn0 = (*c.pan + 1.0) * 0.5;
+    let mut pn = pn0;
     let pan = mini_knob(
         ui,
         Pos2::new(r.left() + 32.0, py),
@@ -398,21 +407,28 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
         &pan_text(*c.pan),
         true,
     );
-    *c.pan = (pn * 2.0 - 1.0).clamp(-1.0, 1.0);
+    // only an edit writes (no float round trip on every frame)
+    if pn != pn0 {
+        *c.pan = (pn * 2.0 - 1.0).clamp(-1.0, 1.0);
+    }
     if pan.double_clicked() {
         *c.pan = 0.0;
     }
     ember::knob_label(ui.painter(), Pos2::new(r.left() + 80.0, py - 20.0), "Duck", 11.0);
     let mut pct = *c.duck * 100.0;
     let dr = Rect::from_center_size(Pos2::new(r.left() + 80.0, py + 1.0), egui::vec2(46.0, 18.0));
+    let is_key = c.is_key;
     let d = ui
-        .put(
-            dr,
-            egui::DragValue::new(&mut pct)
-                .range(0.0..=100.0)
-                .speed(0.5)
-                .suffix(" %"),
-        )
+        .put(dr, |ui: &mut egui::Ui| {
+            ui.add_enabled(
+                !is_key,
+                egui::DragValue::new(&mut pct)
+                    .range(0.0..=100.0)
+                    .speed(0.5)
+                    .suffix(" %"),
+            )
+        })
+        .on_disabled_hover_text("this is the sidechain key channel")
         .on_hover_text(
             "sidechain ducking: how far this channel dips on each note of the key \
              channel (the 'pump'); double-click = 0",
@@ -495,7 +511,9 @@ pub(super) fn ret(ui: &mut egui::Ui, h: f32, b: usize, title: &str, lvl: &mut f3
         let short: String = info.name.chars().take(7).collect();
         mini_knob(ui, c, id.with(k), &mut v, v0, &short, &info.format(dev.params[k]), dev.enabled)
             .on_hover_text(format!("{} {}", info.name, info.format(dev.params[k])));
-        dev.params[k] = v;
+        if v != v0 {
+            dev.params[k] = v;
+        }
         n += 1;
     }
     let fr = fader_rect(r);
@@ -689,23 +707,26 @@ pub(super) fn master_panel(
     let xs = [row.left() + 40.0, row.center().x, row.right() - 40.0];
     let id = ui.make_persistent_id("ember_master_knobs");
     let en = lim.enabled;
-    let mut g = lim.gain_db / 24.0;
+    // (a knob writes only when it is turned: no float round trips)
+    let g0 = lim.gain_db / 24.0;
+    let mut g = g0;
     big(ui, Pos2::new(xs[0], cy), id.with(0), &mut g, 0.0, "Gain", &format!("{:.1}", lim.gain_db), en)
         .on_hover_text("drives the mix into the limiter: louder, more limiting");
-    if en {
+    if g != g0 {
         lim.gain_db = (g * 24.0 * 10.0).round() / 10.0;
     }
-    let mut c = (lim.ceiling_db + 12.0) / 12.0;
+    let c0 = (lim.ceiling_db + 12.0) / 12.0;
+    let mut c = c0;
     big(ui, Pos2::new(xs[1], cy), id.with(1), &mut c, 11.0 / 12.0, "Ceiling", &format!("{:.1}", lim.ceiling_db), en)
         .on_hover_text("maximum true peak; −1 dBTP is safe for MP3 and streaming");
-    if en {
-        lim.ceiling_db = (c * 12.0 - 12.0).clamp(-12.0, 0.0);
-        lim.ceiling_db = (lim.ceiling_db * 10.0).round() / 10.0;
+    if c != c0 {
+        lim.ceiling_db = ((c * 12.0 - 12.0).clamp(-12.0, 0.0) * 10.0).round() / 10.0;
     }
-    let mut rl = (lim.release_ms.max(10.0) / 10.0).log10() / 2.0;
+    let rl0 = (lim.release_ms.max(10.0) / 10.0).log10() / 2.0;
+    let mut rl = rl0;
     big(ui, Pos2::new(xs[2], cy), id.with(2), &mut rl, 0.45, "Release", &format!("{:.0}", lim.release_ms), en)
         .on_hover_text("how fast the gain comes back after a peak");
-    if en {
+    if rl != rl0 {
         lim.release_ms = (10.0 * 100f32.powf(rl)).round().clamp(10.0, 1000.0);
     }
     // exact values (type or drag)

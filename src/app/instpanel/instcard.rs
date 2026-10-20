@@ -686,7 +686,10 @@ fn big_knob(
     let t = th();
     let (cell, _) = ui.allocate_exact_size(egui::vec2(96.0, MACRO_H - 8.0), Sense::hover());
     let r = if t.ember { 25.0 } else { 21.0 };
-    let c = Pos2::new(cell.center().x, cell.top() + 18.0 + r);
+    let c = Pos2::new(
+        cell.center().x,
+        cell.top() + if t.ember { 20.0 } else { 18.0 } + r,
+    );
     let krect = Rect::from_center_size(c, egui::vec2(r * 2.0 + 8.0, r * 2.0 + 8.0));
     let resp = ui.interact(
         krect,
@@ -736,19 +739,19 @@ fn big_knob(
         crate::ember::knob_big(
             &kp,
             c,
-            r + 8.0,
+            r + 4.0,
             *v,
             bip,
             &compact(value),
             enabled && (*v - if bip { 0.5 } else { 0.0 }).abs() > 0.002,
         );
         if resp.hovered() && enabled {
-            p.circle_stroke(c, r + 9.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.4)));
+            p.circle_stroke(c, r + 5.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.4)));
         }
         let cap =
             super::super::pattern::fit(p, caption, &egui::FontId::proportional(10.0), cell.width());
         p.text(
-            Pos2::new(cell.center().x, c.y + r + 17.0),
+            Pos2::new(cell.center().x, c.y + r + 12.0),
             egui::Align2::CENTER_CENTER,
             cap,
             egui::FontId::proportional(10.0),

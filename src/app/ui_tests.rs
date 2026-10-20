@@ -233,11 +233,8 @@ fn mixer_fader_pan_mute_solo_send_undo_with_ctrl_z() {
     assert!(!song(&mut h, |s| s.mixer.channels[1].solo), "solo undo");
     // send A
     let sa = rects(&h, Role::Slider, Some("send A (delay): 0 %"))[0];
-    drag(
-        &mut h,
-        sa.left_center() + egui::vec2(2.0, 0.0),
-        sa.right_center(),
-    );
+    // far to the right: the end of a slider, or a knob turned past half way
+    drag(&mut h, sa.center(), sa.center() + egui::vec2(140.0, 0.0));
     assert!(
         song(&mut h, |s| s.mixer.channels[0].send[0]) > 0.5,
         "send moved"
@@ -1397,7 +1394,9 @@ fn instrument_glide_legato_and_accent_are_editable_and_undoable() {
         frame(&mut h);
     }
     frames(&mut h, 10);
-    click_exact(&mut h, "Legato");
+    // the box itself (the label can run under the panel's scroll bar)
+    let lr = exact(&h, "Legato");
+    click_at(&mut h, egui::pos2(lr.left() + 8.0, lr.center().y));
     frames(&mut h, 2);
     assert!(patch(&mut h).legato, "legato on");
     // accent threshold: drag the hex value up from 00

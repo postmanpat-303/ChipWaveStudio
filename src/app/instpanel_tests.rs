@@ -558,7 +558,7 @@ fn grid_canvas_adds_modules_unplugs_and_patches_cables_with_undo() {
     assert_eq!(grid_of(&h), g0, "Ctrl+Z removes it");
     // the ladder's "Res" knob (2nd knob) locates its module on the canvas
     let res = labelled_rect(&h, Role::Slider, "Res").expect("Res knob");
-    let kr_min = res.center() - egui::vec2(30.0, 18.0);
+    let kr_min = res.center() - egui::vec2(30.0, super::knob::centre_dy());
     let lad = egui::pos2(
         kr_min.x - 8.0 - 66.0,
         kr_min.y - (20.0 + 22.0 + 2.0 * 16.0 + 4.0),

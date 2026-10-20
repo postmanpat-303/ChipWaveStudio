@@ -1118,9 +1118,25 @@ impl App {
             let col = hex(COLS[b]);
             let hot = resp.hovered() || resp.dragged();
             let p = ui.painter();
-            p.circle_filled(c, if hot { 6.0 } else { 4.5 }, col);
-            if hot {
-                p.circle_stroke(c, 8.0, Stroke::new(1.2, col));
+            if t.ember {
+                // Slate: numbered rings, the touched one with a halo
+                if hot {
+                    crate::ember::glow_dot(p, c, 7.0, t.accent);
+                }
+                p.circle_filled(c, 6.0, hex(0x141619));
+                p.circle_stroke(c, 6.0, Stroke::new(1.4, if hot { t.acc_hot } else { t.ink2 }));
+                p.text(
+                    c,
+                    egui::Align2::CENTER_CENTER,
+                    format!("{}", b + 1),
+                    crate::theme::label_font(9.5),
+                    if hot { t.acc_hot } else { t.ink },
+                );
+            } else {
+                p.circle_filled(c, if hot { 6.0 } else { 4.5 }, col);
+                if hot {
+                    p.circle_stroke(c, 8.0, Stroke::new(1.2, col));
+                }
             }
             if resp.double_clicked() {
                 ops.push(FxOp::Param(i, *gi, fx::EQ[*gi].to_norm(0.0), true));

@@ -31,6 +31,13 @@ Newest first. Older screenshots mentioned below live in `dist/`.
   - Every keyboard shortcut still works.
 - **Save prompt.** It now reads "Save changes to “Song”?" with one line of explanation and three buttons of the same width: **Save** (primary), **Don't save**, **Cancel**. Enter saves, N doesn't save and Esc cancels. Quitting, File › New, opening a song and the demos all use it.
 
+### Slate theme (the Ember skin)
+- **New default theme, Slate:** slate-grey bevelled panels with corner screws, recessed display wells, outlined buttons with an LED dot for the selected one, and an orange accent. **Dark Circuit** and **Amiga** stay in *Settings › Look* (a saved "Dark Circuit (default)" opens as Slate; pick Dark Circuit to go back).
+- **Knobs:** big knobs (silver ring, glossy centre, orange readout, segmented LED arc) for the instrument macros and Master; small knurled knobs with a tick ring for sections, Devices cards and mixer sends / pan.
+- **Mixer rebuilt** to the approved layout: per strip the track colour, insert slots (the track's effects; click opens Devices), A / B send knobs, pan knob, duck, a fader with a dB scale (0 in orange), an LED dot meter with peak hold, an LCD dB readout and M / S. The Master section has Gain / Ceiling / Release knobs, LEVEL L / R and REDUCTION dot rows, loudness and the target. Every function stays (sidechain key and release, duck, sends, returns, limiter, MIDI learn, scrolling).
+- **Glow only on lit things:** curves, meters, LED arcs, readouts, the playhead and selected piano-roll notes (orange with a white rim; unselected notes are light grey).
+- **Fonts:** Inter, Barlow Semi Condensed and Geist Mono (SIL OFL 1.1), embedded and credited in Help › About. Paint only: songs and audio are unchanged. See `docs/STYLE_EMBER.md`.
+
 ### Clip Arranger
 - **Scenes and slots left of the Timeline**, one row per track, lined up with the track rows (inspired by other DAWs). A **scene** is a block: its button plays the block on every track, looping, from the next bar. A **slot** is a track's column of that block with a mini preview of its notes: ▶ plays just that track, **■** on a row stops the track, **■** in the header stops everything, all on the next bar. **Launch:** 1 bar / ½ bar / beat / off. Queued things pulse until their bar; a second click on a queued scene takes it back.
 - **Drag a slot onto the timeline** for a Tracker clip (block + column) on the bar under the mouse. Double-click a slot to open it in the Tracker.

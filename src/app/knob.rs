@@ -9,6 +9,15 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke};
 pub(super) const CELL: egui::Vec2 = egui::vec2(60.0, 66.0);
 const RAD: f32 = 14.0;
 
+/// the knob's centre below its cell's top (Slate: the name sits above it)
+pub(super) fn centre_dy() -> f32 {
+    if th().ember {
+        31.0
+    } else {
+        4.0 + RAD
+    }
+}
+
 pub(super) struct KnobOut {
     pub resp: egui::Response,
     pub changed: bool,
@@ -46,11 +55,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     let t = th();
     let (cell, _) = ui.allocate_exact_size(CELL, Sense::hover());
     // Ember (Slate): name above, a pic-2 knurled knob, value below
-    let kc = if t.ember {
-        Pos2::new(cell.center().x, cell.top() + 31.0)
-    } else {
-        Pos2::new(cell.center().x, cell.top() + 4.0 + RAD)
-    };
+    let kc = Pos2::new(cell.center().x, cell.top() + centre_dy());
     let krect = Rect::from_center_size(kc, egui::vec2(RAD * 2.0 + 6.0, RAD * 2.0 + 6.0));
     let sense = if a.enabled {
         Sense::click_and_drag()
@@ -237,7 +242,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     let mut job = egui::text::LayoutJob::simple_singleline(
         a.value_text.clone(),
         mono,
-        t.value.gamma_multiply(dim),
+        if t.ember { t.ink } else { t.value }.gamma_multiply(dim),
     );
     job.wrap = egui::text::TextWrapping::truncate_at_width(CELL.x);
     job.halign = egui::Align::Center;
@@ -247,8 +252,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     } else {
         kc.y + RAD + 16.0
     };
-    let val_col = if t.ember { t.ink } else { t.value };
-    p.galley(Pos2::new(cell.center().x, val_y), g, val_col);
+    p.galley(Pos2::new(cell.center().x, val_y), g, t.value);
     if let Some(b) = a.badge {
         p.text(
             Pos2::new(cell.left() + 2.0, cell.top() + 2.0),
@@ -424,9 +428,10 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
                 .collect();
             curve(pts, Some(r.bottom() - 1.0));
             let cx = x((cut.max(20.0) / 20.0).log10() / 3.0);
+            let mark = if t.ember { t.acc_hot } else { t.fx };
             p.line_segment(
                 [Pos2::new(cx, inner.top()), Pos2::new(cx, inner.bottom())],
-                Stroke::new(1.0, t.fx.gamma_multiply(0.6)),
+                Stroke::new(1.0, mark.gamma_multiply(if t.ember { 0.35 } else { 0.6 })),
             );
             let txt = if *cut >= 1000.0 {
                 format!("{:.2}k", cut / 1000.0)
@@ -438,7 +443,7 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
                 egui::Align2::LEFT_TOP,
                 txt,
                 egui::FontId::monospace(9.0),
-                t.fx,
+                mark,
             );
         }
         Viz::Wave(w) => {
