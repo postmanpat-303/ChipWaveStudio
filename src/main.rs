@@ -37,6 +37,7 @@ mod midi;
 mod model;
 mod modulation;
 mod plugin;
+mod poly;
 mod presets;
 mod prompt;
 mod recovery;

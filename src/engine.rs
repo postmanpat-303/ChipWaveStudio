@@ -264,6 +264,8 @@ struct Live {
     /// pitch bend as a frequency ratio
     bend: f32,
     age: u32,
+    /// the last note's frequency (poly synth glide)
+    last_f: f32,
 }
 
 impl Live {
@@ -289,6 +291,7 @@ impl Live {
             sustain: false,
             bend: 1.0,
             age: 0,
+            last_f: 0.0,
         }
     }
 }
@@ -524,6 +527,22 @@ impl Engine {
         self.live.rx.take()
     }
 
+    /// sounding voices of instrument `idx` (Tracker channels, note clips and
+    /// live MIDI): the poly synth editor's Voices readout
+    pub fn inst_voices(&self, idx: usize) -> usize {
+        self.chans
+            .iter()
+            .filter(|c| c.active && c.instr == idx)
+            .count()
+            + self.nv.voices_of(idx)
+            + self
+                .live
+                .v
+                .iter()
+                .filter(|v| v.active && v.instr == idx)
+                .count()
+    }
+
     /// number of sounding live (MIDI) voices
     pub fn live_voices(&self) -> usize {
         self.live.v.iter().filter(|v| v.active).count()
@@ -583,31 +602,62 @@ impl Engine {
                     return;
                 };
                 lv.age = lv.age.wrapping_add(1);
+                // the poly synth: Mono / Legato re-use, polyphony limit
+                let poly = notes::poly_patch(inst);
+                let mut steal = None;
+                let mut from = 0.0;
+                if let Some(pp) = poly {
+                    let n = (note as i32 + inst.transpose as i32).clamp(1, 127) as u8;
+                    from = std::mem::replace(&mut lv.last_f, note_freq(n));
+                    let pool = lv.v.iter().map(|v| (v.active, v.down, v.age, v.instr));
+                    match notes::poly_pick(pp, i, pool) {
+                        notes::PolyPick::Reuse(k, retrigger) => {
+                            let v = &mut lv.v[k];
+                            notes::poly_reuse(&mut v.synth, vel, retrigger);
+                            v.key = key;
+                            v.freq = note_freq(n);
+                            v.vol = inst.volume;
+                            v.down = true;
+                            v.held_by_pedal = false;
+                            v.age = lv.age;
+                            lv.owner = i;
+                            lv.ch = ch as usize;
+                            return;
+                        }
+                        notes::PolyPick::Steal(k) => steal = Some(k),
+                        notes::PolyPick::Free => {}
+                    }
+                }
                 // same key again: retrigger its voice; else a free voice; else
                 // steal the oldest released voice, else the oldest one
-                let slot =
-                    lv.v.iter()
-                        .position(|v| v.active && v.key == key)
-                        .or_else(|| lv.v.iter().position(|v| !v.active))
-                        .or_else(|| {
-                            let oldest = |only_released: bool| {
-                                lv.v.iter()
-                                    .enumerate()
-                                    .filter(|(_, v)| !only_released || !v.down)
-                                    .min_by_key(|(_, v)| v.age)
-                                    .map(|(k, _)| k)
-                            };
-                            oldest(true).or_else(|| oldest(false))
-                        })
-                        .unwrap_or(0);
+                let slot = steal
+                    .or_else(|| lv.v.iter().position(|v| v.active && v.key == key))
+                    .or_else(|| lv.v.iter().position(|v| !v.active))
+                    .or_else(|| {
+                        let oldest = |only_released: bool| {
+                            lv.v.iter()
+                                .enumerate()
+                                .filter(|(_, v)| !only_released || !v.down)
+                                .min_by_key(|(_, v)| v.age)
+                                .map(|(k, _)| k)
+                        };
+                        oldest(true).or_else(|| oldest(false))
+                    })
+                    .unwrap_or(0);
                 let n = (note as i32 + inst.transpose as i32).clamp(1, 127) as u8;
                 let v = &mut lv.v[slot];
                 *v = LiveVoice {
                     key,
                     instr: i,
                     freq: note_freq(n),
-                    vol: inst.volume * vel,
-                    synth: {
+                    vol: if poly.is_some() {
+                        inst.volume
+                    } else {
+                        inst.volume * vel
+                    },
+                    synth: if poly.is_some() {
+                        notes::poly_voice(vel, from, lv.age.wrapping_mul(0x85EB_CA6B))
+                    } else {
                         let mut sv = SynthVoice::new();
                         if let InstrumentKind::Voice(vp) = &inst.kind {
                             if let Some(w) = vp.words.first() {
@@ -3057,6 +3107,72 @@ mod tests {
         (b.iter().map(|x| x * x).sum::<f32>() / b.len() as f32).sqrt()
     }
 
+    /// the poly synth's voice modes and polyphony limit (live MIDI), and
+    /// velocity reaching it (allocation-free)
+    #[test]
+    fn poly_synth_voice_modes_live() {
+        use crate::midi::LiveEv;
+        use crate::poly::VoiceMode;
+        let with = |mode: VoiceMode, poly: u8| {
+            let mut song = live_song();
+            let mut g = crate::gen::preset(concat!(crate::poly_name!(), " Init")).unwrap();
+            if let crate::gen::GenEngine::Poly(x) = &mut g.engine {
+                x.mode = mode;
+                x.polyphony = poly;
+            }
+            song.instruments[0].kind = InstrumentKind::Gen(g);
+            song
+        };
+        let mut buf = vec![0.0f32; 1024];
+        let chord = |song: &Song| {
+            let mut e = Engine::new(48000.0);
+            for k in [60, 64, 67, 71] {
+                e.live_event(song, on(k, 0.8, 1));
+                e.render(song, &mut vec![0.0f32; 64]);
+            }
+            e
+        };
+        assert_eq!(chord(&with(VoiceMode::Poly, 8)).live_voices(), 4);
+        assert_eq!(
+            chord(&with(VoiceMode::Poly, 2)).live_voices(),
+            2,
+            "polyphony 2"
+        );
+        for m in [VoiceMode::Mono, VoiceMode::Legato] {
+            let song = with(m, 8);
+            let mut e = chord(&song);
+            assert_eq!(e.live_voices(), 1, "{m:?}: one voice");
+            let n = alloc_count::count(|| {
+                for _ in 0..50 {
+                    e.render(&song, &mut buf);
+                }
+                e.live_event(&song, on(48, 0.5, 1));
+                e.render(&song, &mut buf);
+            });
+            assert_eq!(n, 0, "{m:?} allocated");
+            assert_eq!(e.live_voices(), 1);
+            e.live_event(&song, LiveEv::Off { key: 48 });
+            for _ in 0..100 {
+                e.render(&song, &mut buf);
+            }
+            assert_eq!(e.live_voices(), 0, "{m:?}: released");
+        }
+        // velocity: Init has Vel > amp 50 %
+        let song = with(VoiceMode::Poly, 8);
+        let mut peak = |vel: f32| {
+            let mut e = Engine::new(48000.0);
+            e.live_event(&song, on(60, vel, 1));
+            let mut pk = 0.0f32;
+            for _ in 0..10 {
+                e.render(&song, &mut buf);
+                pk = buf.iter().fold(pk, |a, x| a.max(x.abs()));
+            }
+            pk
+        };
+        let r = peak(0.2) / peak(1.0);
+        assert!((r - 0.6).abs() < 0.05, "velocity 0.2 → {r}");
+    }
+
     /// polyphony, note-off, sustain pedal, pitch bend and voice stealing
     #[test]
     fn live_midi_voices() {
@@ -4090,6 +4206,18 @@ mod tests {
             ("Growl", gen_song("Growl", &[25])),
             ("White Riser", gen_song("White Riser", &[49])),
             ("Vinyl Crackle", gen_song("Vinyl Crackle", &[49])),
+            (
+                concat!(crate::poly_name!(), " Supersaw Pad"),
+                gen_song(concat!(crate::poly_name!(), " Supersaw Pad"), &[37, 41]),
+            ),
+            (
+                concat!(crate::poly_name!(), " Sync Lead"),
+                gen_song(concat!(crate::poly_name!(), " Sync Lead"), &[49, 56]),
+            ),
+            (
+                concat!(crate::poly_name!(), " Dirty Bass"),
+                gen_song(concat!(crate::poly_name!(), " Dirty Bass"), &[25, 25, 37]),
+            ),
         ] {
             let mut song = song;
             // and through the ladder (vintage) with pattern filter + macro commands

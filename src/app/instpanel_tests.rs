@@ -684,3 +684,85 @@ fn every_type_draws_its_simple_card() {
         assert!(has_label(&h, "Advanced ›"), "{ty}");
     }
 }
+
+fn poly_of(h: &Harness<'static, App>) -> crate::poly::PolyP {
+    let i = h.state().instr as usize - 1;
+    h.state().with(|s| match &s.song.instruments[i].kind {
+        InstrumentKind::Gen(crate::gen::GenPatch {
+            engine: crate::gen::GenEngine::Poly(x),
+            ..
+        }) => x.clone(),
+        _ => panic!("not the poly synth"),
+    })
+}
+
+#[test]
+fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
+    use crate::poly::*;
+    let inst = Instrument {
+        name: "Lead".into(),
+        volume: 0.8,
+        transpose: 0,
+        fx: vec![],
+        kind: InstrumentKind::Gen(
+            crate::gen::preset(concat!(crate::poly_name!(), " Saw Lead")).unwrap(),
+        ),
+    };
+    let mut h = with_inst(inst);
+    h.state_mut().show_instrument_panel();
+    h.state_mut().ip.advanced = true;
+    h.state_mut().extra.lower_h = 640.0;
+    frames(&mut h, 3);
+    assert_eq!(h.state().ip.tab, Tab::Synth, "opens on its own editor");
+    assert_eq!(Tab::Synth.name(), POLY_DISPLAY_NAME);
+    // the wide window: layout A, every section at once
+    assert!(h.state().ip.poly.wide, "1700 px: layout A");
+    for k in [
+        "O1 Shape",
+        "O2 Detune",
+        "Cutoff",
+        "F.Attack",
+        "A.Release",
+        "Glide",
+        "Mod 8",
+    ] {
+        assert!(labelled_rect(&h, Role::Slider, k).is_some(), "{k} drawn");
+    }
+    // an LED selector: the filter mode
+    let p0 = poly_of(&h);
+    let r = h
+        .query_all_by(|n| n.role() == Role::RadioButton && n.label().as_deref() == Some("BP 24"))
+        .next()
+        .expect("BP 24 LED")
+        .rect();
+    assert!(r.right() <= 1700.0, "layout A fits the window: {r:?}");
+    ui_tests::click_at(&mut h, r.center());
+    frames(&mut h, 2);
+    assert_eq!(poly_of(&h).filter, PolyFilter::Bp4);
+    // Revert: back to the patch as loaded
+    let r = h
+        .query_all_by(|n| {
+            n.label()
+                .as_deref()
+                .is_some_and(|l| l.eq_ignore_ascii_case("revert"))
+        })
+        .next()
+        .expect("Revert button")
+        .rect()
+        .center();
+    ui_tests::click_at(&mut h, r);
+    frames(&mut h, 2);
+    assert_eq!(poly_of(&h), p0, "Revert restores the loaded patch");
+    // a narrow panel: layout B, one group of sections at a time
+    h.set_size(egui::vec2(900.0, 1000.0));
+    frames(&mut h, 3);
+    assert!(!h.state().ip.poly.wide, "900 px: layout B");
+    assert!(labelled_rect(&h, Role::Slider, "O1 Shape").is_some());
+    assert!(
+        labelled_rect(&h, Role::Slider, "Cutoff").is_none(),
+        "filter on its own tab"
+    );
+    h.state_mut().ip.poly.sec = 2;
+    frames(&mut h, 2);
+    assert!(labelled_rect(&h, Role::Slider, "Cutoff").is_some());
+}

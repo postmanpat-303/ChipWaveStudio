@@ -8,6 +8,7 @@ use super::*;
 
 pub(super) mod gridcanvas;
 pub(super) mod instcard;
+pub(super) mod polyview;
 
 /// lower-panel switch bar height
 const BAR_H: f32 = 26.0;
@@ -41,6 +42,8 @@ pub(super) struct InstUi {
     pub mod_sel: Option<u32>,
     /// the Grid canvas (cable being dragged, add position)
     grid: gridcanvas::GridUi,
+    /// the poly synth editor (section shown, Revert snapshot)
+    pub poly: polyview::PolyUi,
     /// the Grid FX patch window: (instrument, device) and its canvas state
     pub grid_fx: Option<(usize, usize)>,
     pub grid_fx_ui: gridcanvas::GridUi,
@@ -525,10 +528,13 @@ impl App {
                 inst: idx,
                 ..Default::default()
             };
-            // a Grid opens on its patch
+            // a Grid opens on its patch, the poly synth on its editor
             if let InstrumentKind::Gen(g) = &inst.kind {
                 if matches!(g.engine, crate::gen::GenEngine::Grid(_)) {
                     self.ip.tab = Tab::Grid;
+                }
+                if matches!(g.engine, crate::gen::GenEngine::Poly(_)) {
+                    self.ip.tab = Tab::Synth;
                 }
             }
         }
@@ -724,6 +730,8 @@ impl App {
         let cards: Vec<&params::Card> = layout.cards.iter().filter(|c| c.tab == tab).collect();
         if tab == Tab::Grid {
             self.grid_canvas(ui, &layout, &mut inst, &mut cx);
+        } else if tab == Tab::Synth {
+            self.poly_panel(ui, &layout, &mut inst, &mut cx);
         } else {
             egui::ScrollArea::horizontal()
                 .id_salt(("inst_cards", idx, tab))
@@ -1012,6 +1020,7 @@ fn custom_size(c: Custom, card_h: f32) -> (f32, f32) {
         Custom::FxChain => (210.0, 64.0),
         Custom::WaveTable(_) => (210.0, 64.0),
         Custom::GridCanvas => (210.0, 40.0),
+        Custom::PolyPanel => (210.0, 40.0),
         Custom::Modulators => (300.0, card_h - HEAD_H - 10.0),
         Custom::Routings => (330.0, card_h - HEAD_H - 10.0),
     }

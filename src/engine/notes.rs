@@ -79,6 +79,8 @@ pub(super) struct NoteState {
     age: u32,
     /// some voice is active (rendering is skipped otherwise)
     pub(super) any: bool,
+    /// per track: the last note's frequency (poly synth glide)
+    last_f: [f32; MAX_CHANNELS],
 }
 
 impl NoteState {
@@ -89,6 +91,7 @@ impl NoteState {
             clock: 0.0,
             age: 0,
             any: false,
+            last_f: [0.0; MAX_CHANNELS],
         }
     }
 
@@ -101,6 +104,7 @@ impl NoteState {
                 .map_or(0, |v| v.partition_point(|n| (n.start as f64) < t));
         }
         self.clock = t;
+        self.last_f = [0.0; MAX_CHANNELS];
     }
 
     /// release every held note (synth voices fade with their envelope)
@@ -127,6 +131,11 @@ impl NoteState {
         self.any = false;
     }
 
+    /// active voices of instrument `idx` (the poly synth's Voices readout)
+    pub(super) fn voices_of(&self, idx: usize) -> usize {
+        self.v.iter().filter(|v| v.active && v.instr == idx).count()
+    }
+
     /// the number of sounding note voices on `track` (tests)
     #[cfg(test)]
     pub(super) fn sounding(&self, track: usize) -> usize {
@@ -145,6 +154,77 @@ impl NoteState {
                 held[v.instr] = true;
             }
         }
+    }
+}
+
+/// the poly synth patch of an instrument (None for every other kind)
+pub(super) fn poly_patch(inst: &crate::model::Instrument) -> Option<&crate::poly::PolyP> {
+    match &inst.kind {
+        InstrumentKind::Gen(g) => match &g.engine {
+            crate::gen::GenEngine::Poly(x) => Some(x),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Poly synth voice choice in a pool: `(active, held, age, instrument)` per
+/// voice. Mono / Legato: `Reuse(k)` the newest voice of the instrument
+/// (`retrigger` false = Legato glide). Poly: at `polyphony` voices of the
+/// instrument, steal its oldest (released first); else `Free`.
+pub(super) enum PolyPick {
+    Reuse(usize, bool),
+    Steal(usize),
+    Free,
+}
+
+pub(super) fn poly_pick(
+    pp: &crate::poly::PolyP,
+    instr: usize,
+    pool: impl Iterator<Item = (bool, bool, u32, usize)> + Clone,
+) -> PolyPick {
+    use crate::poly::VoiceMode;
+    let mine = pool
+        .enumerate()
+        .filter(move |(_, (a, _, _, i))| *a && *i == instr);
+    if pp.mode != VoiceMode::Poly {
+        if let Some((k, (_, held, _, _))) = mine.clone().max_by_key(|(_, v)| v.2) {
+            return PolyPick::Reuse(k, !(pp.mode == VoiceMode::Legato && held));
+        }
+        return PolyPick::Free;
+    }
+    if mine.clone().count() >= pp.polyphony.max(1) as usize {
+        let oldest = |only_released: bool| {
+            mine.clone()
+                .filter(|(_, v)| !only_released || !v.1)
+                .min_by_key(|(_, v)| v.2)
+                .map(|(k, _)| k)
+        };
+        if let Some(k) = oldest(true).or_else(|| oldest(false)) {
+            return PolyPick::Steal(k);
+        }
+    }
+    PolyPick::Free
+}
+
+/// a fresh poly synth voice: velocity to the synth (the patch's Vel > amp
+/// and Vel > cut use it), a glide from `from` Hz (0 = none), its own seed
+pub(super) fn poly_voice(vel: f32, from: f32, seed: u32) -> SynthVoice {
+    let mut sv = SynthVoice::seeded(seed);
+    sv.vel = vel;
+    sv.gen.ps.glide_from = from;
+    sv
+}
+
+/// re-use a poly synth voice for a new note (Mono / Legato)
+pub(super) fn poly_reuse(sv: &mut SynthVoice, vel: f32, retrigger: bool) {
+    sv.gen.ps.glide_from = sv.gen.ps.sounding();
+    sv.vel = vel;
+    if retrigger {
+        sv.gen.ps.retrigger = true;
+        // the gate the poly synth reads (its own envelopes do the rest)
+        sv.amp = crate::synth::Env::new();
+        sv.fenv = crate::synth::Env::new();
     }
 }
 
@@ -178,10 +258,34 @@ pub(super) fn note_on(
     }
     st.age = st.age.wrapping_add(1);
     let base = ch * NOTE_VOICES;
+    let poly = poly_patch(inst);
+    let mut steal = None;
+    let mut from = 0.0;
+    if let Some(pp) = poly {
+        let key = (n.key as i32 + inst.transpose as i32).clamp(1, 127) as u8;
+        let freq = note_freq(key) * 2f32.powf(n.tune / 12.0);
+        from = std::mem::replace(&mut st.last_f[ch], freq);
+        let pool = st.v[base..base + NOTE_VOICES]
+            .iter()
+            .map(|v| (v.active && !v.plug, v.down, v.age, v.instr));
+        match poly_pick(pp, idx, pool) {
+            PolyPick::Reuse(k, retrigger) => {
+                let v = &mut st.v[base + k];
+                poly_reuse(&mut v.synth, n.vel, retrigger);
+                v.freq = freq;
+                v.vol = inst.volume;
+                v.down = true;
+                v.off_at = n.end as f64;
+                v.age = st.age;
+                return;
+            }
+            PolyPick::Steal(k) => steal = Some(k),
+            PolyPick::Free => {}
+        }
+    }
     let pool = &st.v[base..base + NOTE_VOICES];
-    let slot = pool
-        .iter()
-        .position(|v| !v.active)
+    let slot = steal
+        .or_else(|| pool.iter().position(|v| !v.active))
         .or_else(|| {
             let oldest = |only_released: bool| {
                 pool.iter()
@@ -208,6 +312,11 @@ pub(super) fn note_on(
     v.freq = note_freq(key) * 2f32.powf(n.tune / 12.0);
     v.vol = vol;
     v.synth = SynthVoice::new();
+    if poly.is_some() {
+        // velocity goes to the synth (Vel > amp), not the voice volume
+        v.vol = inst.volume;
+        v.synth = poly_voice(n.vel, from, st.age.wrapping_mul(0x9E37_79B9));
+    }
     if let InstrumentKind::Voice(vp) = &inst.kind {
         if let Some(w) = vp.words.first() {
             v.synth.vox.speak(w);

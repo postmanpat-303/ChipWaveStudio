@@ -365,7 +365,7 @@ fn soft(x: f32) -> f32 {
 
 /// in-phase triangle fold (same shape as the Drive device's fold)
 #[inline]
-fn fold(x: f32) -> f32 {
+pub(crate) fn fold(x: f32) -> f32 {
     let y = x * 0.5;
     1.0 - ((y + 1.0).rem_euclid(4.0) - 2.0).abs()
 }
