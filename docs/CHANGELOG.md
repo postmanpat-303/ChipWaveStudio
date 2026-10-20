@@ -2,6 +2,12 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## Unreleased
+
+- **The piano roll shows the playhead in sync with the Timeline.** It is the Timeline's own: the transport while it plays and the play marker when stopped, mapped through the clip's start, trim and loop into the clip you're editing (so it's right in every loop pass, and for Tracker clips too). It's hidden outside the clip, and with **Follow** on the roll pages along with it.
+- **The Clip Arranger shows note clips.** In a new song (note clips, recorded takes, Drum Kit patterns) it showed the empty Tracker blocks *00 Block…* as scenes, with only empty dots in the slots, because it read only the Tracker blocks. A song with note or audio clips now gets one scene per clip start time (named after a marker there, else *Bar 5*); each track's clip sits in its slot with a preview of its notes. A scene ▶ loops that stretch on every track, a slot ▶ loops its clip with the other tracks held, and double-click opens the clip. Songs whose clips are all Tracker clips keep the blocks as scenes. Songs play and render exactly as before.
+- **Track pie › Add puts an instrument on the track by name:** WaveForge, Drum Kit, Synth, Analog, FM-4, Wavetable, Grid, Noise, Drum Synth, Chip FX and Voice (one undo step; the editor opens), plus **Browse…** for the Browser's Instruments (it was *Change instrument…*). The track entries follow under **TRACKS**.
+
 ## 0.2.5.0: WaveForge, Drum Kit and a steadier workflow
 
 Released 2026-10-20. Highlights (details in the sections below):

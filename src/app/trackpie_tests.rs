@@ -229,7 +229,12 @@ fn submenu_entries_map_to_real_actions() {
     info.full = true;
     assert!(sub_items(Seg::Add, &info).iter().all(|i| matches!(
         i.act,
-        None | Some(PieAct::Automation | PieAct::ChangeInstrument | PieAct::DrumPattern)
+        None | Some(
+            PieAct::Automation
+                | PieAct::ChangeInstrument
+                | PieAct::DrumPattern
+                | PieAct::NewInstrument(_)
+        )
     )));
     info.timeline = false;
     assert!(sub_items(Seg::Icon, &info).iter().all(|i| i.act.is_none()));
