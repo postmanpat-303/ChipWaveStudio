@@ -559,6 +559,87 @@ impl App {
     }
 }
 
+/// screenshots (--view record-*)
+impl App {
+    pub(super) fn shot_record(&mut self, view: &str) {
+        let bar = 4 * PPQ;
+        match view {
+            "record-recording" => {
+                // a take in progress on the Pad 1 track: chords and a
+                // melody, the last note still held
+                self.ch = 5;
+                self.extra.midi.velocity = true;
+                self.rec_start();
+                let render = |a: &App, rows: u64| {
+                    a.with(|s| {
+                        let audio::Shared { song, engine, .. } = s;
+                        let target = engine.rows_played + rows;
+                        let mut buf = vec![0.0f32; 256];
+                        let mut guard = 0;
+                        while engine.rows_played < target && engine.playing && guard < 100_000 {
+                            engine.render(song, &mut buf);
+                            guard += 1;
+                        }
+                    })
+                };
+                let now = Instant::now;
+                let chords: [&[u8]; 4] =
+                    [&[57, 60, 64], &[53, 57, 60], &[48, 52, 55], &[55, 59, 62]];
+                for (i, c) in chords.iter().enumerate() {
+                    for (j, &k) in c.iter().enumerate() {
+                        self.midi_note_on(k, k - 11, 0.55 + 0.1 * j as f32, now());
+                    }
+                    render(self, 6);
+                    self.midi_note_on(72 + i as u8, 61 + i as u8, 0.9, now());
+                    render(self, 4);
+                    for &k in c.iter() {
+                        self.midi_note_off(k);
+                    }
+                    if i < 3 {
+                        self.midi_note_off(72 + i as u8);
+                    }
+                    render(self, 6);
+                }
+                self.set_lower(3);
+                self.pr.fit = true;
+            }
+            "record-typing" => {
+                // musical typing on, the piano roll open on a note clip,
+                // a chord held on the keyboard (A D G)
+                self.ch = 5;
+                let id = self.with(|s| tl::new_note_clip(&mut s.song, 5, self.tlv.cue));
+                if let Some(id) = id {
+                    self.tlv.sel = Some(id);
+                    self.tlv.sels = vec![id];
+                }
+                self.set_lower(3);
+                self.typing_toggle();
+                for k in [egui::Key::A, egui::Key::D, egui::Key::G] {
+                    self.typing_on(k);
+                }
+            }
+            "record-master" => {
+                // Del's song: two tracks, then + Add track, then Song / Master
+                self.new_song();
+                self.track_add(0);
+                self.track_add(1);
+                self.with(|s| {
+                    if let Some(t) = s.song.timeline.as_deref_mut() {
+                        if let Some(tr) = t.tracks.get_mut(1) {
+                            tr.name = "Track 1 copy".into();
+                        }
+                    }
+                    let id = tl::new_note_clip(&mut s.song, 0, 0);
+                    let _ = id.map(|_| tl::new_note_clip(&mut s.song, 1, 2 * bar));
+                });
+                self.tlv.cue = 0;
+                self.extra.browser_open = false;
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 impl App {
     pub(super) fn noterec_take_done(&self) -> bool {

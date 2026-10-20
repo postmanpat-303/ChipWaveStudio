@@ -98,6 +98,9 @@ pub const VIEWS: [&str; 61] = [
     "focus-chord",
     "focus-prompt",
     "focus-window",
+    "record-recording",
+    "record-typing",
+    "record-master",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -118,7 +121,7 @@ fn save_png(path: &std::path::Path, img: &egui::ColorImage) -> Result<(), String
 
 impl App {
     fn shot_setup(&mut self, ctx: &egui::Context, view: &str) {
-        if view.starts_with("focus-") {
+        if view.starts_with("focus-") || view.starts_with("record-") {
             self.shot_focus(view);
             return;
         }

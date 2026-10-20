@@ -198,6 +198,10 @@ ChipWave starts with the clean song of File › New (no demo; the demos are in F
 
 **File › New** (Ctrl+N) is a clean project: timeline mode on the Timeline view, **no tracks and no instruments**, only the **Song / Master** track (tempo, master and return automation), with the piano roll below, default tempo (125 BPM) and time signature. The lanes say *"Drag an instrument from the Browser here, or + Add track"*: a Browser drop makes the first track with that instrument; **+ Add track** makes an empty one (double-click it to write a block). Undo takes either back. Leaving timeline mode with no tracks gives the song one empty channel, since the tracker needs a column.
 
+The **Song / Master** track always sits at the bottom of the track list: the tracks, **+ Add track**, a divider, then Song / Master. Its lanes and Clip Arranger row follow, so rows stay lined up, and new tracks go above it. This is display only; the song file keeps its order.
+
+**Record** (toolbar ●, or **R**) records MIDI or musical typing (**Ctrl+K**) live onto the armed or selected track: into the note clip under the playhead, or a new Take clip. Loop recording overdubs, and a take is one undo step. With the toolbar's **Click** (metronome) on, it counts in one bar. See [MIDI.md](MIDI.md#recording).
+
 ![A new song on the Timeline view: no tracks, only Song / Master, and the hint to drag an instrument from the Browser or + Add track](screenshots/dark-timeline-new-song.png)
 
 To go straight to the Tracker instead, turn off **Settings › New songs › Open on the Timeline view**. Songs you open from disk keep the view you are in.

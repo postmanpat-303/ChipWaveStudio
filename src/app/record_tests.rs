@@ -91,7 +91,9 @@ fn record_off_by_default_and_step_input_is_a_toggle() {
     assert!(!h.state().recording());
     // Del's case: edit mode on, stopped, a clip in the piano roll - MIDI
     // keys only play; they no longer go in one after the other
-    let id = h.state().with(|s| tl::new_note_clip(&mut s.song, 0, 0).unwrap());
+    let id = h
+        .state()
+        .with(|s| tl::new_note_clip(&mut s.song, 0, 0).unwrap());
     {
         let a = h.state_mut();
         a.view = View::Timeline;
@@ -133,7 +135,10 @@ fn record_takes_notes_at_their_played_time_length_and_velocity() {
     key(&mut h, Key::R, egui::Modifiers::NONE);
     assert!(h.state().recording(), "R records");
     assert!(h.state().with(|s| s.engine.playing), "and plays");
-    assert!(!h.state().with(|s| s.engine.counting_in()), "no count-in: metronome off");
+    assert!(
+        !h.state().with(|s| s.engine.counting_in()),
+        "no count-in: metronome off"
+    );
     // a bar in, a chord (C E G) held for 4 rows, then D two rows later
     // held over the chord's end (overlapping)
     play_rows(&mut h, 16);
@@ -183,12 +188,15 @@ fn record_takes_notes_at_their_played_time_length_and_velocity() {
 fn record_into_the_clip_under_the_playhead_and_loop_overdubs() {
     let mut h = new_song(1);
     // a clip at bar 2 (4 bars long): recording there goes into it
-    let id = h.state().with(|s| tl::new_note_clip(&mut s.song, 0, 4 * PPQ).unwrap());
+    let id = h
+        .state()
+        .with(|s| tl::new_note_clip(&mut s.song, 0, 4 * PPQ).unwrap());
     h.state_mut().timeline_seek(4 * PPQ + 2 * PPQ);
     frames(&mut h, 2);
     key(&mut h, Key::R, egui::Modifiers::NONE);
     play_rows(&mut h, 1);
-    h.state_mut().midi_note_on(60, 49, 1.0, std::time::Instant::now());
+    h.state_mut()
+        .midi_note_on(60, 49, 1.0, std::time::Instant::now());
     play_rows(&mut h, 1);
     h.state_mut().midi_note_off(60);
     key(&mut h, Key::R, egui::Modifiers::NONE);
@@ -211,7 +219,12 @@ fn record_into_the_clip_under_the_playhead_and_loop_overdubs() {
     key(&mut h, Key::R, egui::Modifiers::NONE);
     for pass in 0..2 {
         play_rows(&mut h, 4 + pass);
-        h.state_mut().midi_note_on(60 + pass as u8, 49 + pass as u8, 1.0, std::time::Instant::now());
+        h.state_mut().midi_note_on(
+            60 + pass as u8,
+            49 + pass as u8,
+            1.0,
+            std::time::Instant::now(),
+        );
         play_rows(&mut h, 1);
         h.state_mut().midi_note_off(60 + pass as u8);
         // to the loop's end and round
@@ -239,9 +252,13 @@ fn count_in_waits_a_bar_with_clicks_and_records_nothing_during_it() {
     let peak = render_frames(&mut h, sr);
     assert!(peak > 0.05, "count-in clicks: {peak}");
     assert_eq!(tl_tick(&h).unwrap(), t0, "the song waits");
-    h.state_mut().midi_note_on(60, 49, 1.0, std::time::Instant::now());
+    h.state_mut()
+        .midi_note_on(60, 49, 1.0, std::time::Instant::now());
     h.state_mut().midi_note_off(60);
-    assert!(note_clips(&h).is_empty(), "nothing recorded in the count-in");
+    assert!(
+        note_clips(&h).is_empty(),
+        "nothing recorded in the count-in"
+    );
     render_frames(&mut h, sr + 256);
     assert!(!h.state().with(|s| s.engine.counting_in()));
     assert!(tl_tick(&h).unwrap() > t0, "then it plays");
@@ -261,7 +278,9 @@ fn count_in_waits_a_bar_with_clicks_and_records_nothing_during_it() {
 #[test]
 fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
     let mut h = new_song(1);
-    let id = h.state().with(|s| tl::new_note_clip(&mut s.song, 0, 16 * PPQ).unwrap());
+    let id = h
+        .state()
+        .with(|s| tl::new_note_clip(&mut s.song, 0, 16 * PPQ).unwrap());
     h.state_mut().tlv.sel = Some(id);
     h.state_mut().tlv.sels = vec![id];
     frames(&mut h, 2);
@@ -272,10 +291,13 @@ fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
         "the toolbar shows it with its octave"
     );
     // S would split the selected clip: now it is a note
-    let n0 = h.state().with(|s| s.song.timeline.as_deref().unwrap().clips.len());
+    let n0 = h
+        .state()
+        .with(|s| s.song.timeline.as_deref().unwrap().clips.len());
     key(&mut h, Key::S, egui::Modifiers::NONE);
     assert_eq!(
-        h.state().with(|s| s.song.timeline.as_deref().unwrap().clips.len()),
+        h.state()
+            .with(|s| s.song.timeline.as_deref().unwrap().clips.len()),
         n0,
         "no shortcut"
     );
@@ -317,7 +339,10 @@ fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
     // C4 = MIDI 60 = tracker note 49
     assert_eq!(keys, vec![49, 53, 56, 62]);
     let s0 = take.1.iter().find(|n| n.key == 49).unwrap().start;
-    assert!(take.1.iter().filter(|n| n.key < 60).all(|n| n.start == s0), "a chord");
+    assert!(
+        take.1.iter().filter(|n| n.key < 60).all(|n| n.start == s0),
+        "a chord"
+    );
     // C / V: velocity
     key(&mut h, Key::C, egui::Modifiers::NONE);
     assert!((h.state().typing.vel - 0.7).abs() < 1e-4);
@@ -334,7 +359,10 @@ fn song_master_sits_at_the_bottom_after_add_track() {
     frames(&mut h, 2);
     let (n, master_last) = h.state().with(|s| {
         let t = s.song.timeline.as_deref().unwrap();
-        (t.tracks.len(), t.tracks.last().unwrap().kind == tl::TrackKind::Master)
+        (
+            t.tracks.len(),
+            t.tracks.last().unwrap().kind == tl::TrackKind::Master,
+        )
     });
     assert_eq!(n, 3);
     assert!(master_last, "the song file keeps Master last");
@@ -345,9 +373,15 @@ fn song_master_sits_at_the_bottom_after_add_track() {
     let add = exact(&h, "+ Add track");
     assert!(add.top() >= h1.bottom(), "+ Add track below the tracks");
     assert!(hm.top() >= add.bottom(), "Master below + Add track");
-    assert!(rowm.right() > hm.right(), "the Master row runs across the lanes, aligned");
+    assert!(
+        rowm.right() > hm.right(),
+        "the Master row runs across the lanes, aligned"
+    );
     assert!(lay.in_gap(lay.top[2] - 10.0));
-    assert!(lay.part_at(lay.top[2] - 10.0).is_none(), "the gap is no track");
+    assert!(
+        lay.part_at(lay.top[2] - 10.0).is_none(),
+        "the gap is no track"
+    );
     // a new track goes above Master
     h.get_by_label("+ Add track").click();
     frames(&mut h, 3);

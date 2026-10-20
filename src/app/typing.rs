@@ -176,7 +176,7 @@ impl App {
         keep
     }
 
-    fn typing_on(&mut self, key: Key) {
+    pub(super) fn typing_on(&mut self, key: Key) {
         let Some(k) = NOTE_KEYS.iter().position(|(x, _)| *x == key) else {
             return;
         };

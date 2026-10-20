@@ -109,6 +109,7 @@ impl App {
                         "Chord: this Tracker clip is a note clip now (Ctrl+Z puts it back)".into();
                 }
             }
+            v if v.starts_with("record-") => self.shot_record(v),
             _ => {}
         }
     }

@@ -71,9 +71,6 @@ mod narrow_tests;
 #[cfg(test)]
 mod newsong_tests;
 mod noterec;
-mod typing;
-#[cfg(test)]
-mod record_tests;
 #[cfg(test)]
 mod opentl_tests;
 mod params;
@@ -86,6 +83,8 @@ mod plugsetup;
 #[cfg(test)]
 mod prollpan_tests;
 mod radial;
+#[cfg(test)]
+mod record_tests;
 mod sampleview;
 mod settingsview;
 pub mod shot;
@@ -103,6 +102,7 @@ mod trackpie;
 #[cfg(test)]
 mod trackpie_tests;
 mod transpose;
+mod typing;
 #[cfg(test)]
 mod ui_tests;
 mod undo;

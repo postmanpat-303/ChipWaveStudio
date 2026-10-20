@@ -224,8 +224,8 @@ impl Chan {
 }
 
 mod audioclips;
-pub mod metro;
 pub mod launch;
+pub mod metro;
 mod notes;
 pub mod patprev;
 #[cfg(test)]
