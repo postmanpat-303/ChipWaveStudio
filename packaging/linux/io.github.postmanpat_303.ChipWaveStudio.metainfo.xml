@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.5.0" date="2026-10-20">
+      <description><p>WaveForge polyphonic synth; Drum Kit instrument with step sequencer, groove generator and Add to track; new notes play the track's instrument; split preview, chord replace, track pie Add menu; consistency and stability fixes.</p></description>
+    </release>
     <release version="0.2.4.1" date="2026-10-19">
       <description><p>Timeline with clips, piano roll, automation lanes and audio clips; VST3 and plugin effects; the Browser; Devices; Wave and Grid generators; Advanced Edit; starts on an empty song; faster audio engine.</p></description>
     </release>

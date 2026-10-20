@@ -252,12 +252,49 @@ canvas in the lower panel, polyphonic per voice, every module knob automatable
 and modulatable. There is also a **Grid FX** device. Full guide:
 [GRID.md](GRID.md).
 
-## WaveForge (polyphonic synth, Unreleased)
+## Drum Kit (0.2.5.0)
+
+![Drum Kit editor](screenshots/drumkit-editor.png)
+
+**New… › Drum Kit** (or a Drum Kit in the Browser). One instrument with up
+to **32 pads**. Each pad is a Drum Synth voice (kick, snare, hat, clap, tom
+or perc with its own model and eight macros) with a **trigger key**, tune,
+pan, level, decay, attack, **velocity depth**, a **choke group** (an open hat
+cut by the closed one) and mute / solo. Choke groups and velocity depth work
+on note clips, live MIDI and pattern previews. It is a generator, so Dice,
+Mutate, locks, Bake, `.cwi` presets and automation work on it (pad *p*'s
+macro *m* is knob *p*·8+*m*; pads past the first eight are not automatable
+yet).
+
+- **Kits:** 13 presets of 16 pads, one per Drum Patterns kit (Psy, 808,
+  909, Techno, Trap, Lo-fi, Chip, Acoustic-ish, Disco, Latin, DnB,
+  Synthwave, Dembow). **Dice kit** rolls new sounds for the pads.
+- **Pads:** click a pad to hear and select it; **+ Add pad** up to 32;
+  right-click to duplicate or remove. The Sound tab edits the selected pad.
+- **Step sequencer:** the pattern is a note clip on the kit's track. Lanes
+  for the pads it uses (*All pads* shows every one), drag-paint steps, a
+  velocity lane, 16 / 32 / 64 steps with pages, **swing** (50–75 %, kept
+  with the pattern), **Play loop**, *Insert at marker*, *Clear lane*,
+  shift left / right, linked copies and *Make unique*.
+- **Generate:** a new groove from the pattern library, played on this kit:
+  style, energy, fill and seed, **Preview**, **Keep as pattern**,
+  **Replace pattern** and **Regenerate**.
+- **Add to track:** puts the pattern at the play marker's bar on the kit's
+  track, or after its last clip when that bar is taken, or on a new track.
+  One undo step; the status line says where, and the new clip flashes.
+- **Laptop layout:** when the panel is short or narrow (for example 1366×768
+  or 1280×720) the editor uses a compact layout: a toolbar, the sequencer
+  and Pads / Sound / Generate side tabs.
+- **Old kits:** *Convert to Drum Kit* turns a Kit (eight pieces picked by
+  the note within the octave) into a Drum Kit that plays the same notes
+  bit-identically. Songs with a Drum Kit are saved as reader version 5.
+
+## WaveForge (polyphonic synth, 0.2.5.0)
 
 ![WaveForge editor](screenshots/dark-generators-waveforge.png)
 
 **New… > Generator (WaveForge)**. A two-oscillator polyphonic subtractive
-synth in the Generator family, inspired by other synths. Dice, Mutate, locks,
+synth in the Generator family, inspired by classic subtractive synths. Dice, Mutate, locks,
 Bake, 43xy (knobs 0–7: Cutoff, Res, Env amt, Blend, Drive, Shaper, Glide,
 Gain), automation lanes and MIDI learn all work on it. It opens on its own
 **WaveForge** tab: all sections side by side on a wide panel, or one group at a
