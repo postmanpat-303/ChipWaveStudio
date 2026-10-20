@@ -551,3 +551,251 @@ fn waveforge_track_records_and_plays_its_own_instrument() {
     );
     assert_eq!(fp(&as_rec), fp(&as_2), "recorded notes play instrument 2");
 }
+
+/// 01 Init (a plain synth), 02 the WaveForge Supersaw Pad; track 01 is
+/// assigned 02, the other tracks nothing
+fn instr_song(tracks: usize) -> Harness<'static, App> {
+    use crate::model::InstrumentKind;
+    let mut h = new_song(tracks);
+    let pad = crate::gen::preset(concat!(crate::poly_name!(), " Supersaw Pad")).unwrap();
+    h.state().with(|s| {
+        let mut one = crate::fileio::demo_song().instruments[0].clone();
+        one.name = "Init".into();
+        one.kind = InstrumentKind::Synth(Default::default());
+        let mut two = one.clone();
+        two.name = concat!(crate::poly_name!(), " Supersaw Pad").into();
+        two.kind = InstrumentKind::Gen(pad);
+        s.song.instruments = vec![one, two];
+        s.song.timeline.as_deref_mut().unwrap().tracks[0].instr = 2;
+    });
+    frames(&mut h, 2);
+    h
+}
+
+/// a note clip on `tr` at `at` with an A minor chord for a bar, its notes
+/// stored with instrument `instr` (0 = none, as older takes were)
+fn chord_clip(h: &Harness<'static, App>, tr: usize, at: tl::Tick, instr: u8) -> u32 {
+    h.state().with(|s| {
+        let id = tl::new_note_clip(&mut s.song, tr, at).unwrap();
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        let c = t.clips.iter().find(|c| c.id == id).unwrap();
+        let tl::ClipKind::Notes { data } = c.kind else {
+            unreachable!()
+        };
+        t.notes[data as usize].make_mut().notes = [58u8, 61, 65]
+            .iter()
+            .map(|&key| tl::Note {
+                start: 0,
+                len: 4 * PPQ,
+                key,
+                instr,
+                ..Default::default()
+            })
+            .collect();
+        id
+    })
+}
+
+fn clip_instrs(h: &Harness<'static, App>, id: u32) -> Vec<u8> {
+    note_clips(h)
+        .into_iter()
+        .find(|(c, _)| c.id == id)
+        .unwrap()
+        .1
+        .iter()
+        .map(|n| n.instr)
+        .collect()
+}
+
+fn song_fp(s: &crate::model::Song) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let v = crate::engine::render_song(s, 22050);
+    let mut hs = std::collections::hash_map::DefaultHasher::new();
+    v.iter().for_each(|x| x.to_bits().hash(&mut hs));
+    hs.finish()
+}
+
+/// "Use the track's instrument" on an old take (notes stored with no
+/// instrument): the clip then renders exactly as if it had been recorded
+/// on instrument 02, notes that have an instrument and other clips are
+/// left alone, and Ctrl+Z puts it back.
+#[test]
+fn use_track_instrument_stamps_an_old_take_with_the_tracks_instrument() {
+    let mut h = instr_song(2);
+    let a = chord_clip(&h, 0, 0, 0);
+    // a note in the take that already has an instrument (01) stays 01
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        let c = t.clips.iter().find(|c| c.id == a).unwrap();
+        let tl::ClipKind::Notes { data } = c.kind else {
+            unreachable!()
+        };
+        t.notes[data as usize].make_mut().notes.push(tl::Note {
+            start: 8 * PPQ,
+            len: 2 * PPQ,
+            key: 46,
+            instr: 1,
+            ..Default::default()
+        });
+    });
+    // other clips: track 01 at bar 5 (instrument 01 notes), track 02
+    // (no assigned instrument) with no-instrument notes
+    let b = chord_clip(&h, 0, 16 * PPQ, 1);
+    let c = chord_clip(&h, 1, 0, 0);
+    frames(&mut h, 2);
+    let base = h.state().with(|s| s.song.clone());
+    // expected: only clip A's no-instrument notes on 02
+    let mut want = base.clone();
+    {
+        let t = want.timeline.as_deref_mut().unwrap();
+        let cl = t.clips.iter().find(|x| x.id == a).unwrap();
+        let tl::ClipKind::Notes { data } = cl.kind else {
+            unreachable!()
+        };
+        for n in t.notes[data as usize]
+            .make_mut()
+            .notes
+            .iter_mut()
+            .filter(|n| n.instr == 0)
+        {
+            n.instr = 2;
+        }
+    }
+    // the clip menu's state: 3 notes to stamp, track instrument 02
+    let st = h.state().with(|s| {
+        super::timeline::use_instr_state(
+            s.song.timeline.as_deref().unwrap(),
+            &[a],
+            s.song.instruments.len(),
+        )
+    });
+    assert_eq!(st, (Some(3), Some(2)));
+    h.state_mut().tlv.sels = vec![a];
+    h.state_mut().tlv.sel = Some(a);
+    h.state_mut().tl_apply(super::timeline::TlOp::UseTrackInstr);
+    frames(&mut h, 2);
+    assert!(
+        h.state().status.contains("3 notes now play 02"),
+        "{}",
+        h.state().status
+    );
+    assert_eq!(clip_instrs(&h, a), vec![2, 2, 2, 1]);
+    assert_eq!(clip_instrs(&h, b), vec![1, 1, 1], "other clips untouched");
+    assert_eq!(clip_instrs(&h, c), vec![0, 0, 0], "other tracks untouched");
+    let now = h.state().with(|s| s.song.clone());
+    assert_eq!(now.timeline, want.timeline, "only clip A changed");
+    let (fp_now, fp_want, fp_base) = (song_fp(&now), song_fp(&want), song_fp(&base));
+    assert_eq!(fp_now, fp_want, "renders as instrument 02");
+    assert_ne!(fp_now, fp_base, "and it sounds different from before");
+    // nothing left to stamp: the menu item is disabled
+    let st = h.state().with(|s| {
+        super::timeline::use_instr_state(
+            s.song.timeline.as_deref().unwrap(),
+            &[a],
+            s.song.instruments.len(),
+        )
+    });
+    assert_eq!(st.0, Some(0));
+    // one undo step back to the old take
+    key(&mut h, Key::Z, egui::Modifiers::COMMAND);
+    frames(&mut h, 2);
+    assert_eq!(clip_instrs(&h, a), vec![0, 0, 0, 1], "Ctrl+Z restores it");
+    let back = h.state().with(|s| s.song.clone());
+    assert_eq!(back.timeline, base.timeline);
+    assert_eq!(song_fp(&back), fp_base);
+}
+
+/// No assigned instrument: nothing changes and the status says why. A
+/// linked copy on another track keeps its notes (the clip is made unique).
+#[test]
+fn use_track_instrument_needs_an_assigned_instrument_and_spares_other_tracks() {
+    let mut h = instr_song(2);
+    let c = chord_clip(&h, 1, 0, 0);
+    frames(&mut h, 2);
+    let st = h.state().with(|s| {
+        super::timeline::use_instr_state(
+            s.song.timeline.as_deref().unwrap(),
+            &[c],
+            s.song.instruments.len(),
+        )
+    });
+    assert_eq!(st, (Some(3), None), "disabled: no assigned instrument");
+    let before = h.state().with(|s| s.song.timeline.clone());
+    h.state_mut().tlv.sels = vec![c];
+    h.state_mut().tl_apply(super::timeline::TlOp::UseTrackInstr);
+    frames(&mut h, 2);
+    assert!(
+        h.state().status.contains("no instrument assigned"),
+        "{}",
+        h.state().status
+    );
+    assert_eq!(h.state().with(|s| s.song.timeline.clone()), before);
+    // a linked copy of a track-01 clip on track 02
+    let a = chord_clip(&h, 0, 0, 0);
+    let copy = h.state().with(|s| {
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        let src = t.clips.iter().find(|x| x.id == a).unwrap().clone();
+        let id = t.new_id();
+        t.clips.push(tl::Clip {
+            id,
+            track: 1,
+            start: 16 * PPQ,
+            ..src
+        });
+        t.sort();
+        id
+    });
+    // and one on the same track, which shares the stamp
+    let same = h.state().with(|s| {
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        let src = t.clips.iter().find(|x| x.id == a).unwrap().clone();
+        let id = t.new_id();
+        t.clips.push(tl::Clip {
+            id,
+            start: 32 * PPQ,
+            ..src
+        });
+        t.sort();
+        id
+    });
+    frames(&mut h, 2);
+    h.state_mut().tlv.sels = vec![a];
+    h.state_mut().tl_apply(super::timeline::TlOp::UseTrackInstr);
+    frames(&mut h, 2);
+    assert_eq!(clip_instrs(&h, a), vec![2, 2, 2]);
+    assert_eq!(
+        clip_instrs(&h, same),
+        vec![2, 2, 2],
+        "a linked copy on the same track follows"
+    );
+    assert_eq!(
+        clip_instrs(&h, copy),
+        vec![0, 0, 0],
+        "the copy on track 02 is untouched"
+    );
+    assert_eq!(clip_instrs(&h, c), vec![0, 0, 0]);
+}
+
+/// The piano roll header shows "Use track instrument" while its clip has
+/// notes without an instrument (the hint), and it stamps them.
+#[test]
+fn piano_roll_header_offers_use_track_instrument() {
+    let mut h = instr_song(1);
+    let a = chord_clip(&h, 0, 0, 0);
+    frames(&mut h, 2);
+    h.state_mut().tlv.sels = vec![a];
+    h.state_mut().tlv.sel = Some(a);
+    h.state_mut().set_lower(3);
+    frames(&mut h, 4);
+    assert!(
+        h.query_by_label("Use track instrument").is_some(),
+        "the hint shows"
+    );
+    h.get_by_label("Use track instrument").click();
+    frames(&mut h, 3);
+    assert_eq!(clip_instrs(&h, a), vec![2, 2, 2]);
+    assert!(
+        h.query_by_label("Use track instrument").is_none(),
+        "gone once every note has one"
+    );
+}

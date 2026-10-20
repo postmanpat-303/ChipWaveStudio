@@ -146,6 +146,7 @@ impl App {
                 | TlOp::Delete
                 | TlOp::Mute
                 | TlOp::MakeUnique
+                | TlOp::UseTrackInstr
                 | TlOp::Glue
                 | TlOp::LoopFromSelection
         );
@@ -252,6 +253,51 @@ impl App {
                             song.patterns[*b].name
                         ),
                         (_, n) => format!("{n} clips now play their own blocks"),
+                    }
+                }
+                TlOp::UseTrackInstr => {
+                    let mut notes = 0;
+                    let mut clips = 0;
+                    let mut unassigned = 0;
+                    let mut first: Option<(usize, u8)> = None;
+                    for &id in &sels {
+                        let t = song.timeline.as_deref().unwrap();
+                        let Some(c) = t.clips.iter().find(|c| c.id == id && matches!(c.kind, tl::ClipKind::Notes { .. })) else {
+                            continue;
+                        };
+                        let tr = c.track as usize;
+                        if tl::unset_instr_notes(t, id) == 0 {
+                            continue;
+                        }
+                        let slot = tl::assigned_instr(song, tr);
+                        if slot == 0 {
+                            unassigned += 1;
+                            continue;
+                        }
+                        let n = tl::use_track_instr(song, id);
+                        if n > 0 {
+                            notes += n;
+                            clips += 1;
+                            first.get_or_insert((tr, slot));
+                        }
+                    }
+                    match first {
+                        Some((tr, slot)) if clips == 1 => {
+                            let name = song.instruments.get(slot as usize - 1).map_or(String::new(), |i| i.name.clone());
+                            format!(
+                                "{notes} note{} now play{} {slot:02} {name}, track {:02}'s instrument (Ctrl+Z undoes)",
+                                plural(notes),
+                                if notes == 1 { "s" } else { "" },
+                                tr + 1
+                            )
+                        }
+                        Some(_) => format!(
+                            "{notes} notes in {clips} clips now play their track's instrument (Ctrl+Z undoes)"
+                        ),
+                        None if unassigned > 0 => {
+                            "The track has no instrument assigned: give it one in the Inspector first".into()
+                        }
+                        None => "Every note already has an instrument: nothing to change".into(),
                     }
                 }
                 TlOp::Glue => match tl::glue(song, &sels) {

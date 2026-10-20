@@ -141,6 +141,9 @@ pub(crate) enum TlOp {
     Delete,
     Mute,
     MakeUnique,
+    /// "Use the track's instrument": the selected note clips' notes
+    /// without an instrument get their track's assigned one
+    UseTrackInstr,
     Glue,
     LoopFromSelection,
     ToggleLoop,
@@ -2749,6 +2752,7 @@ impl App {
             }
         }
         let n_sel = self.tlv.sels.len();
+        let n_instr = self.with(|s| s.song.instruments.len());
         let menu_at = self.tlv.menu_at;
         let menu_open: Option<(usize, usize, usize)> = self
             .tlv
@@ -2821,6 +2825,30 @@ impl App {
                 for (l, k, op) in items {
                     if ui.add(egui::Button::new(l).shortcut_text(k)).clicked() {
                         ops.push(op);
+                        ui.close();
+                    }
+                }
+                // "Use the track's instrument" (note clips): their notes
+                // without an instrument get the track's assigned one
+                let (unset, assigned) = use_instr_state(&c.tl, &self.tlv.sels, n_instr);
+                if unset.is_some() {
+                    let tip = match (unset, assigned) {
+                        (Some(0), _) => "every note in this clip already has an instrument".to_string(),
+                        (_, None) => "the track has no instrument assigned: give it one in the Inspector (or drop one on the track) first".to_string(),
+                        (Some(n), Some(k)) => format!(
+                            "{n} note{} without an instrument play whatever the channel last played; this gives them the track's instrument {k:02} (notes that have one are left alone, one undo step)",
+                            if n == 1 { "" } else { "s" }
+                        ),
+                        (None, _) => String::new(),
+                    };
+                    let on = matches!((unset, assigned), (Some(n), Some(_)) if n > 0);
+                    if ui
+                        .add_enabled(on, egui::Button::new("Use the track's instrument"))
+                        .on_hover_text(tip.clone())
+                        .on_disabled_hover_text(tip)
+                        .clicked()
+                    {
+                        ops.push(TlOp::UseTrackInstr);
                         ui.close();
                     }
                 }
@@ -3428,4 +3456,29 @@ impl App {
             self.status = "Split cancelled".into();
         }
     }
+}
+
+/// The clip menu's "Use the track's instrument" state for the selection:
+/// (notes without an instrument in the selected note clips, None when no
+/// note clip is selected; the first such clip's track instrument when it
+/// is assigned and exists, `n_instr` = the song's instrument count)
+pub(crate) fn use_instr_state(
+    t: &tl::Timeline,
+    sels: &[u32],
+    n_instr: usize,
+) -> (Option<usize>, Option<u8>) {
+    let mut unset: Option<usize> = None;
+    let mut assigned: Option<u8> = None;
+    for c in t.clips.iter().filter(|c| sels.contains(&c.id)) {
+        if !matches!(c.kind, tl::ClipKind::Notes { .. }) {
+            continue;
+        }
+        let n = tl::unset_instr_notes(t, c.id);
+        *unset.get_or_insert(0) += n;
+        let k = t.track_instr(c.track as usize);
+        if n > 0 && assigned.is_none() && k > 0 && k as usize <= n_instr {
+            assigned = Some(k);
+        }
+    }
+    (unset, assigned)
 }

@@ -268,6 +268,85 @@ pub fn make_unique_notes(tl: &mut Timeline, id: u32) -> Option<usize> {
     Some(nd)
 }
 
+/// The instrument track `tr` is assigned (`Track::instr`) when it is a
+/// real instrument of the song, else 0 (none, or a deleted one).
+pub fn assigned_instr(song: &Song, tr: usize) -> u8 {
+    let k = song.timeline.as_deref().map_or(0, |t| t.track_instr(tr));
+    if k as usize <= song.instruments.len() {
+        k
+    } else {
+        0
+    }
+}
+
+/// How many of note clip `id`'s notes have no instrument of their own
+/// (instrument 0: they play whatever the channel last played).
+pub fn unset_instr_notes(tl: &Timeline, id: u32) -> usize {
+    let Some(i) = find(tl, id) else {
+        return 0;
+    };
+    let ClipKind::Notes { data } = tl.clips[i].kind else {
+        return 0;
+    };
+    tl.notes
+        .get(data as usize)
+        .map_or(0, |d| d.notes.iter().filter(|n| n.instr == 0).count())
+}
+
+/// "Use the track's instrument" on note clip `id`: its notes without an
+/// instrument (0) get the track's assigned instrument; notes that already
+/// have one are left alone. Linked copies on the same track share the
+/// notes and change with it; when a copy sits on another track (where
+/// those notes may play another instrument) this track's copies get
+/// their own notes first, so no other track's clip changes. Returns the notes stamped
+/// (0, and nothing changes, when the track has no assigned instrument or
+/// the clip has no such notes).
+pub fn use_track_instr(song: &mut Song, id: u32) -> usize {
+    let Some(tl) = song.timeline.as_deref() else {
+        return 0;
+    };
+    let Some(i) = find(tl, id) else {
+        return 0;
+    };
+    let ClipKind::Notes { data } = tl.clips[i].kind else {
+        return 0;
+    };
+    let tr = tl.clips[i].track;
+    let slot = assigned_instr(song, tr as usize);
+    if slot == 0 || unset_instr_notes(tl, id) == 0 {
+        return 0;
+    }
+    let shared_elsewhere = tl
+        .clips
+        .iter()
+        .any(|c| c.track != tr && matches!(c.kind, ClipKind::Notes { data: d } if d == data));
+    let tl = song.timeline.as_deref_mut().unwrap();
+    let data = if shared_elsewhere {
+        // this track's copies get their own notes together
+        let Some(d) = tl.notes.get(data as usize).map(|d| (**d).clone()) else {
+            return 0;
+        };
+        tl.notes.push(Shared::new(d));
+        let nd = tl.notes.len() - 1;
+        for c in tl.clips.iter_mut().filter(|c| c.track == tr) {
+            if matches!(c.kind, ClipKind::Notes { data: d } if d == data) {
+                c.kind = ClipKind::Notes { data: nd as u32 };
+            }
+        }
+        nd
+    } else {
+        data as usize
+    };
+    let mut n = 0;
+    if let Some(d) = tl.notes.get_mut(data) {
+        for note in d.make_mut().notes.iter_mut().filter(|x| x.instr == 0) {
+            note.instr = slot;
+            n += 1;
+        }
+    }
+    n
+}
+
 /// A Tracker clip column as a note clip, so it can hold chords (the piano
 /// roll does this when a new note would overlap another one): every clip
 /// that plays column `col` of block `pattern` becomes a note clip on one
