@@ -61,6 +61,8 @@ mod keys;
 mod knob;
 mod lanes;
 #[cfg(test)]
+mod launcher_ui_tests;
+#[cfg(test)]
 mod layout_tests;
 mod library;
 mod midiview;

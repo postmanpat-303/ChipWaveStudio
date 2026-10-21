@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 73] = [
+pub const VIEWS: [&str; 74] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -103,6 +103,7 @@ pub const VIEWS: [&str; 73] = [
     "cliparranger-notes",
     "drop-preview",
     "drop-ask",
+    "cliparranger-launcher",
     "focus-playing",
     "focus-chord",
     "focus-prompt",
@@ -413,7 +414,7 @@ impl App {
                 }
                 self.dirty = false;
             }
-            "cliparranger-notes" | "drop-preview" | "drop-ask" => {
+            "cliparranger-notes" | "drop-preview" | "drop-ask" | "cliparranger-launcher" => {
                 // a new song: a take on track 01 at bars 1 and 5, a Drum Kit
                 // pattern on track 02 (launched a few frames later)
                 self.new_song();
@@ -849,6 +850,7 @@ impl App {
                 | "cliparranger"
                 | "cliparranger-drag"
                 | "cliparranger-notes"
+                | "cliparranger-launcher"
         ) && std::env::var_os("CHIPWAVE_SHOT_NOPLAY").is_none()
         {
             self.play(3);
@@ -1086,6 +1088,13 @@ impl App {
             self.ca_slot(0, 1);
         }
         if view == "cliparranger-notes" && f == CAPTURE_AT - 6 {
+            self.ca_scene(0);
+        }
+        if view == "cliparranger-launcher" && f == SETUP_AT + 16 {
+            // Capture, a variation of the Verse, then scene 1 plays
+            self.ca_capture_now();
+        }
+        if view == "cliparranger-launcher" && f == SETUP_AT + 20 {
             self.ca_scene(0);
         }
         if view == "cliparranger" && f == CAPTURE_AT - 6 {

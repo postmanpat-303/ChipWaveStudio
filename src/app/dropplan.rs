@@ -117,7 +117,7 @@ impl App {
                 }
                 DropSrc::Clip(id) => {
                     let t = song.timeline.as_deref()?;
-                    let c = t.clips.iter().find(|c| c.id == id)?;
+                    let c = t.any_clip(id)?;
                     let name = c
                         .name
                         .clone()

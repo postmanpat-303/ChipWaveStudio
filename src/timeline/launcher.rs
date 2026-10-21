@@ -148,3 +148,25 @@ pub fn launch_spans(tl: &Timeline, c: &Clip) -> Vec<NoteSpan> {
     v.sort_by_key(|n| (n.start, n.key));
     v
 }
+
+/// Remove scene row `k` and its launcher clips; later rows move up.
+pub fn launch_delete_scene(tl: &mut Timeline, k: usize) -> bool {
+    if k >= tl.scenes.len() {
+        return false;
+    }
+    tl.scenes.remove(k);
+    tl.launcher.retain(|l| l.scene as usize != k);
+    for l in &mut tl.launcher {
+        if l.scene as usize > k {
+            l.scene -= 1;
+        }
+    }
+    true
+}
+
+/// A new empty scene row at the end; returns its index.
+pub fn launch_add_scene(tl: &mut Timeline) -> usize {
+    let k = tl.scenes.len();
+    ensure_scene(tl, k);
+    k
+}

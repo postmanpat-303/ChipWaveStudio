@@ -123,6 +123,24 @@ impl Engine {
         (tr < MAX_CHANNELS && self.nv.lmask & bit(tr) != 0).then(|| self.nv.lp[tr].id)
     }
 
+    /// how far track `tr`'s launcher clip is into its current pass (0..1)
+    pub fn launch_progress(&self, tr: usize) -> Option<f32> {
+        let id = self.launched(tr)?;
+        let len = self
+            .tl
+            .plan
+            .as_deref()?
+            .launch
+            .iter()
+            .find(|l| l.id == id)?
+            .len;
+        if len <= 0 || !self.playing {
+            return Some(0.0);
+        }
+        let rel = self.launch_clock() - self.nv.lp[tr].origin as f64;
+        Some((rel.rem_euclid(len as f64) / len as f64) as f32)
+    }
+
     /// tracks held silent by the Clip Arranger (bit per track)
     pub fn held(&self) -> u64 {
         self.held

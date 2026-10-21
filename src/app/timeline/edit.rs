@@ -762,7 +762,7 @@ fn place_dropped(
         DropSrc::Clip(id) => song
             .timeline
             .as_deref()
-            .and_then(|t| t.clips.iter().find(|c| c.id == id))
+            .and_then(|t| t.any_clip(id))
             .map(|c| c.len),
         // placed by `App::drop_pattern` (it adds the kit)
         DropSrc::Pattern(_) => None,

@@ -224,6 +224,9 @@ pub(crate) struct PianoUi {
     /// the playhead as last drawn: (tick in the clip's source, playing);
     /// None when it is outside the clip (tests, screenshots)
     pub(crate) head: Option<(f64, bool)>,
+    /// a Clip Arranger launcher clip shown in the roll (while no timeline
+    /// clip is selected; Stage 4b)
+    pub(crate) launch: Option<u32>,
 }
 
 impl PianoUi {
@@ -274,6 +277,7 @@ impl Default for PianoUi {
             step_used: false,
             step_input: false,
             head: None,
+            launch: None,
         }
     }
 }
@@ -382,6 +386,21 @@ impl App {
     /// the roll's target: the selected timeline clip, else the current
     /// block column
     pub(super) fn pr_target(&self) -> Option<Target> {
+        if self.view == View::Timeline && self.tlv.sel.is_none() {
+            // a launcher clip (no timeline clip selected): its notes
+            let data = self.pr.launch.and_then(|id| {
+                self.with(|s| {
+                    s.song
+                        .timeline
+                        .as_deref()
+                        .and_then(|t| t.launch_clip(id))
+                        .and_then(|l| l.clip.notes())
+                })
+            });
+            if let Some(data) = data {
+                return Some(Target::Notes { data, clip: None });
+            }
+        }
         if self.view == View::Timeline {
             if let Some(id) = self.tlv.sel {
                 let c = self.tlv.cache.as_ref()?;

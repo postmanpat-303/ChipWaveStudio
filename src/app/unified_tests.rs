@@ -164,7 +164,7 @@ fn the_lower_panel_header_names_the_track_and_its_instrument() {
 
 /// a new song with two tracks, the Clip Arranger on, a take of 8 notes at
 /// bar 1 on track 01; returns the harness and the clip id
-fn notes_song() -> (Harness<'static, App>, u32) {
+pub(super) fn notes_song() -> (Harness<'static, App>, u32) {
     let mut h = harness_with(fileio::demo_song());
     h.state_mut().extra.show_tracker = false;
     h.state_mut().extra.reduce_motion = true;
@@ -199,7 +199,7 @@ fn notes_song() -> (Harness<'static, App>, u32) {
     (h, id)
 }
 
-fn clip(h: &Harness<'static, App>, id: u32) -> crate::timeline::Clip {
+pub(super) fn clip(h: &Harness<'static, App>, id: u32) -> crate::timeline::Clip {
     h.state().with(|s| {
         s.song
             .timeline
@@ -214,7 +214,7 @@ fn clip(h: &Harness<'static, App>, id: u32) -> crate::timeline::Clip {
 }
 
 /// the clip a drop placed (it is selected)
-fn newest(h: &Harness<'static, App>) -> crate::timeline::Clip {
+pub(super) fn newest(h: &Harness<'static, App>) -> crate::timeline::Clip {
     let id = h.state().tlv.sel.expect("the placed clip is selected");
     clip(h, id)
 }
@@ -225,12 +225,12 @@ fn n_clips(h: &Harness<'static, App>) -> usize {
 }
 
 /// the screen point of `tick` on track `tr` (as last drawn)
-fn at(h: &Harness<'static, App>, tr: usize, tick: crate::timeline::Tick) -> Pos2 {
+pub(super) fn at(h: &Harness<'static, App>, tr: usize, tick: crate::timeline::Tick) -> Pos2 {
     let (_, row) = h.state().tlv.track_rects(tr).unwrap();
     Pos2::new(h.state().tlv.x_of(tick) + 6.0, row.center().y)
 }
 
-const BAR: crate::timeline::Tick = 4 * crate::timeline::PPQ;
+pub(super) const BAR: crate::timeline::Tick = 4 * crate::timeline::PPQ;
 
 #[test]
 fn dragging_a_note_slot_makes_a_linked_copy_on_the_bar_with_a_preview() {

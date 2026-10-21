@@ -377,6 +377,16 @@ fn fingerprint(song: &Song) -> u64 {
         for c in &t.clips {
             put(c.id as u64);
         }
+        // the launcher's rows (its clips are in the plan key)
+        for l in &t.launcher {
+            put(l.scene as u64 | (l.clip.id as u64) << 16);
+        }
+        for sc in &t.scenes {
+            for b in sc.name.bytes() {
+                put(b as u64);
+            }
+            put(0x2_0000);
+        }
         for d in &t.notes {
             for b in d.name.bytes() {
                 put(b as u64);
