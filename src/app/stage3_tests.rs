@@ -118,3 +118,48 @@ fn a_track_without_an_instrument_offers_the_chooser() {
     assert!(h.query_by_label(label).is_none());
     assert!(h.state().extra.lower_inst, "its editor shows");
 }
+
+#[test]
+fn a_shared_instrument_says_so_and_a_track_gets_its_own_copy() {
+    let (mut h, id) = two_instrument_song();
+    // track 02 plays instrument 02 too (assigned)
+    h.state()
+        .with(|s| s.song.timeline.as_deref_mut().unwrap().tracks[1].instr = 2);
+    frames(&mut h, 2);
+    let p = head_spot(&h, 0);
+    click_at(&mut h, p);
+    frames(&mut h, 3);
+    assert_eq!(h.state_mut().shared_with(), vec![1]);
+    let label = "Also used by track 02: edits here change it too";
+    assert!(h.query_by_label(label).is_some());
+    let n0 = h.state().with(|s| s.song.instruments.len());
+    let r = exact(&h, "Make a separate copy for this track");
+    click_at(&mut h, r.center());
+    frames(&mut h, 3);
+    let (n1, mine, theirs, notes) = h.state().with(|s| {
+        let t = s.song.timeline.as_deref().unwrap();
+        let d = t
+            .clips
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap()
+            .notes()
+            .unwrap();
+        (
+            s.song.instruments.len(),
+            t.tracks[0].instr,
+            t.tracks[1].instr,
+            t.notes[d].notes.iter().map(|n| n.instr).collect::<Vec<_>>(),
+        )
+    });
+    assert_eq!(n1, n0 + 1);
+    assert_eq!((mine as usize, theirs), (n1, 2));
+    assert!(notes.iter().all(|&i| i as usize == n1), "{notes:?}");
+    assert_eq!(h.state().instr as usize, n1, "its editor edits the copy");
+    assert!(h.query_by_label(label).is_none());
+    assert!(h.state_mut().shared_with().is_empty());
+    // one undo step
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(h.state().with(|s| s.song.instruments.len()), n0);
+}

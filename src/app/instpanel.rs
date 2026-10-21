@@ -22,6 +22,9 @@ const TL_CHROME_GUESS: f32 = 110.0;
 /// instrument editor state that is not part of the song
 #[derive(Default)]
 pub(super) struct InstUi {
+    /// other tracks that play the current track's instrument: (song key,
+    /// track, instrument, those tracks), worked out when one changes
+    pub shared: Option<(u64, usize, u8, Vec<usize>)>,
     pub tab: Tab,
     pub query: String,
     /// Ctrl+F: focus the search box next frame
@@ -548,6 +551,14 @@ impl App {
                 |ui| self.instrument_chooser(ui),
             );
             Rect::from_min_max(Pos2::new(body.left(), strip.bottom() + 2.0), body.max)
+        } else if self.extra.lower_inst && !self.extra.lower_dev && !self.shared_with().is_empty() {
+            // the instrument is shared: say so, offer a copy for this track (3.5)
+            let strip = Rect::from_min_size(body.min, egui::vec2(body.width(), 26.0));
+            ui.scope_builder(
+                egui::UiBuilder::new().max_rect(strip.shrink2(egui::vec2(8.0, 2.0))),
+                |ui| self.shared_notice(ui),
+            );
+            Rect::from_min_max(Pos2::new(body.left(), strip.bottom() + 2.0), body.max)
         } else {
             body
         };
@@ -579,6 +590,157 @@ impl App {
             })
         });
         real && self.track_instrument(self.ch).is_none()
+    }
+
+    /// the other Timeline tracks that play the current track's instrument
+    /// (D6), when this track can get a copy of its own (note clips only)
+    pub(super) fn shared_with(&mut self) -> Vec<usize> {
+        if self.view != View::Timeline {
+            return vec![];
+        }
+        let Some(key) = self.tlv.cache.as_ref().map(|c| c.key) else {
+            return vec![];
+        };
+        // (plus what the song key may not cover: the tracks' instruments)
+        let key = self.with(|s| {
+            let mut k = key ^ (s.song.instruments.len() as u64) << 48;
+            for (i, t) in s
+                .song
+                .timeline
+                .as_deref()
+                .map_or(&[][..], |t| &t.tracks[..])
+                .iter()
+                .enumerate()
+            {
+                k = k.rotate_left(5) ^ (t.instr as u64) << (i % 8);
+            }
+            k
+        });
+        let (tr, ins) = (self.ch, self.instr);
+        if let Some((k, t, i, v)) = &self.ip.shared {
+            if (*k, *t, *i) == (key, tr, ins) {
+                return v.clone();
+            }
+        }
+        let (nch, blocks) = self.with(|s| {
+            let t = s.song.timeline.as_deref();
+            (
+                t.map_or(0, |t| t.tracks.len()).min(s.song.channels),
+                t.is_some_and(|t| {
+                    t.clips
+                        .iter()
+                        .any(|c| c.track as usize == tr && c.block().is_some())
+                }),
+            )
+        });
+        let mine = self.track_instrument(tr);
+        let v: Vec<usize> = if blocks || mine != Some(ins) {
+            vec![]
+        } else {
+            (0..nch)
+                .filter(|&k| k != tr && self.track_instrument(k) == Some(ins))
+                .collect()
+        };
+        self.ip.shared = Some((key, tr, ins, v.clone()));
+        v
+    }
+
+    fn shared_notice(&mut self, ui: &mut egui::Ui) {
+        let t = th();
+        let others = self.shared_with();
+        let names: Vec<String> = others
+            .iter()
+            .take(3)
+            .map(|k| format!("{:02}", k + 1))
+            .collect();
+        let more = if others.len() > 3 {
+            format!(" and {} more", others.len() - 3)
+        } else {
+            String::new()
+        };
+        let mut copy = false;
+        ui.horizontal_centered(|ui| {
+            ui.label(
+                egui::RichText::new(format!(
+                    "Also used by track{} {}{more}: edits here change {} too",
+                    if others.len() == 1 { "" } else { "s" },
+                    names.join(", "),
+                    if others.len() == 1 { "it" } else { "them" }
+                ))
+                .color(t.ink2),
+            );
+            if ui
+                .add(egui::Button::new("Make a separate copy for this track").small())
+                .on_hover_text(
+                    "a copy of the instrument that only this track plays (its note clips switch \
+                     to it; one undo step)",
+                )
+                .clicked()
+            {
+                copy = true;
+            }
+        });
+        if copy {
+            self.track_own_instrument(self.ch);
+        }
+    }
+
+    /// track `tr` gets its own copy of the instrument it shares: the copy
+    /// becomes its instrument and its note clips play it (clips whose notes
+    /// are linked to another track's get notes of their own first)
+    pub(super) fn track_own_instrument(&mut self, tr: usize) {
+        let Some(old) = self.track_instrument(tr) else {
+            return;
+        };
+        self.snapshot();
+        let new = self.with(|s| {
+            let n = s.song.duplicate_instrument(old as usize - 1)?;
+            let new = (n + 1) as u8;
+            let t = s.song.timeline.as_deref_mut()?;
+            if let Some(k) = t.tracks.get_mut(tr) {
+                k.instr = new;
+            }
+            let ids: Vec<u32> = t
+                .clips
+                .iter()
+                .chain(t.launcher.iter().map(|l| &l.clip))
+                .filter(|c| c.track as usize == tr && c.notes().is_some())
+                .map(|c| c.id)
+                .collect();
+            for id in ids {
+                let Some(d) = t.any_clip(id).and_then(|c| c.notes()) else {
+                    continue;
+                };
+                let elsewhere = t
+                    .clips
+                    .iter()
+                    .chain(t.launcher.iter().map(|l| &l.clip))
+                    .any(|c| c.notes() == Some(d) && c.track as usize != tr);
+                let d = if elsewhere {
+                    match crate::timeline::make_unique_notes(t, id) {
+                        Some(d) => d,
+                        None => continue,
+                    }
+                } else {
+                    d
+                };
+                for n in &mut t.notes[d].make_mut().notes {
+                    if n.instr == old || n.instr == 0 {
+                        n.instr = new;
+                    }
+                }
+            }
+            Some(new)
+        });
+        if let Some(new) = new {
+            self.instr = new;
+            self.ip.shared = None;
+            self.dirty = true;
+            self.status = format!(
+                "Track {:02} now plays its own copy, instrument {new:02} (the other tracks keep {old:02})",
+                tr + 1
+            );
+        }
     }
 
     /// "Choose an instrument" for the current track: the built-ins and
