@@ -187,6 +187,26 @@ pub fn move_note(p: &mut Pattern, col: usize, row: usize, to_row: usize, key: u8
 /// before row 0, past the block's last row or outside keys 1..=120.
 /// Returns the notes' new rows (the selection).
 pub fn move_notes(p: &mut Pattern, col: usize, rows: &[usize], drow: i64, dk: i32) -> Vec<usize> {
+    shift_notes(p, col, rows, drow, dk, false)
+}
+
+/// Copy the notes starting at `rows` by `drow` rows and `dk` semitones
+/// (clamped as [`move_notes`]); the originals stay. A block column holds one
+/// note at a time, so a copy ends a note sounding where it starts and
+/// replaces notes that start inside it (as a moved note does). Returns the
+/// copies' rows.
+pub fn copy_notes(p: &mut Pattern, col: usize, rows: &[usize], drow: i64, dk: i32) -> Vec<usize> {
+    shift_notes(p, col, rows, drow, dk, true)
+}
+
+fn shift_notes(
+    p: &mut Pattern,
+    col: usize,
+    rows: &[usize],
+    drow: i64,
+    dk: i32,
+    keep: bool,
+) -> Vec<usize> {
     let ns: Vec<MonoNote> = col_notes(p, col)
         .into_iter()
         .filter(|n| rows.contains(&n.row))
@@ -202,7 +222,7 @@ pub fn move_notes(p: &mut Pattern, col: usize, rows: &[usize], drow: i64, dk: i3
     let hi_k = ns.iter().map(|n| n.key as i32).max().unwrap_or(120);
     let dk = dk.clamp(1 - lo_k, 120 - hi_k);
     // take them all out (with their note-offs), then put them back moved
-    for n in &ns {
+    for n in ns.iter().filter(|_| !keep) {
         if let Some(c) = cell_mut(p, n.row, col) {
             c.note = 0;
             c.instr = 0;
@@ -308,6 +328,206 @@ pub fn transpose(notes: &mut [Note], idx: &[usize], semis: i32) {
             n.key = (n.key as i32 + semis).clamp(1, 120) as u8;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// piano roll clipboard: copy, paste, duplicate, Ctrl-drag copies
+
+/// The notes at `idx` as clipboard notes: sorted by (start, key), with the
+/// earliest at tick 0. Returns them and where the earliest started.
+pub fn clip_notes(notes: &[Note], idx: &[usize]) -> (Vec<Note>, Tick) {
+    let mut out: Vec<Note> = idx.iter().filter_map(|&i| notes.get(i).cloned()).collect();
+    let from = out.iter().map(|n| n.start).min().unwrap_or(0);
+    for n in &mut out {
+        n.start -= from;
+    }
+    out.sort_by_key(|n| (n.start, n.key));
+    out.dedup();
+    (out, from)
+}
+
+/// The block column notes starting at `rows` as clipboard notes (as
+/// [`clip_notes`]). No volume (the instrument's level) is full velocity
+/// `0xFFFF`, the same mapping as [`notes_to_block`]; effect commands stay
+/// on their rows.
+pub fn clip_block(p: &Pattern, col: usize, rows: &[usize]) -> (Vec<Note>, Tick) {
+    let notes: Vec<Note> = col_notes(p, col)
+        .into_iter()
+        .filter(|n| rows.contains(&n.row))
+        .map(|n| Note {
+            start: rows_to_ticks(n.row),
+            len: rows_to_ticks(n.len),
+            key: n.key,
+            vel: if n.vol == 0 {
+                0xFFFF
+            } else {
+                vel_u16(vol_to_vel(n.vol))
+            },
+            instr: n.instr,
+            ..Default::default()
+        })
+        .collect();
+    let idx: Vec<usize> = (0..notes.len()).collect();
+    clip_notes(&notes, &idx)
+}
+
+/// From the clipboard's first start to its last end, rounded up to whole
+/// `grid` steps (where a duplicate goes, so it stays in time)
+pub fn clip_span(clip: &[Note], grid: Tick) -> Tick {
+    let g = grid.max(1);
+    let end = clip.iter().map(|n| n.start + n.len).max().unwrap_or(0);
+    ((end + g - 1).div_euclid(g) * g).max(g)
+}
+
+/// Paste clipboard notes into a note clip with the first at `at` and every
+/// key `dk` semitones higher (each kept in 1..=120). Notes that would start
+/// at or past `len` (the clip's end) are left out. The copies go after the
+/// existing notes; returns their indices (the new selection) and how many
+/// were left out.
+pub fn paste_notes(
+    notes: &mut Vec<Note>,
+    clip: &[Note],
+    at: Tick,
+    dk: i32,
+    len: Tick,
+) -> (Vec<usize>, usize) {
+    let mut out = vec![];
+    let mut dropped = 0;
+    for c in clip {
+        let start = at.max(0) + c.start;
+        if start >= len {
+            dropped += 1;
+            continue;
+        }
+        let mut n = c.clone();
+        n.start = start;
+        n.key = (n.key as i32 + dk).clamp(1, 120) as u8;
+        notes.push(n);
+        out.push(notes.len() - 1);
+    }
+    (out, dropped)
+}
+
+/// Copies of the notes at `idx` moved by `dt` ticks and `dk` semitones (the
+/// group clamped at tick 0 and the key range, as a move is); the originals
+/// stay. Returns the copies' indices.
+pub fn copy_shifted(notes: &mut Vec<Note>, idx: &[usize], dt: Tick, dk: i32) -> Vec<usize> {
+    let picked: Vec<Note> = idx.iter().filter_map(|&i| notes.get(i).cloned()).collect();
+    if picked.is_empty() {
+        return vec![];
+    }
+    let min = picked.iter().map(|n| n.start).min().unwrap_or(0);
+    let dt = dt.max(-min);
+    let lo = picked.iter().map(|n| n.key as i32).min().unwrap_or(1);
+    let hi = picked.iter().map(|n| n.key as i32).max().unwrap_or(120);
+    let dk = dk.clamp(1 - lo, 120 - hi);
+    picked
+        .into_iter()
+        .map(|mut n| {
+            n.start += dt;
+            n.key = (n.key as i32 + dk) as u8;
+            notes.push(n);
+            notes.len() - 1
+        })
+        .collect()
+}
+
+/// Paste clipboard notes into a block column with the first at row
+/// `at_row` (rounded to rows). A column holds one note at a time: notes
+/// that start on the same row keep the last (highest) one, a note ends
+/// where the next one starts, and notes past the block's end are left out.
+/// Returns the rows written (the new selection) and how many were left out.
+pub fn paste_block(
+    p: &mut Pattern,
+    col: usize,
+    clip: &[Note],
+    at_row: usize,
+    dk: i32,
+) -> (Vec<usize>, usize) {
+    let rows = p.rows.min(p.cells.len());
+    let mut sorted: Vec<&Note> = clip.iter().collect();
+    sorted.sort_by_key(|n| (n.start, n.key));
+    let mut out: Vec<usize> = vec![];
+    let mut dropped = 0;
+    for n in sorted {
+        let r = at_row + ((n.start.max(0) + ROW / 2) / ROW) as usize;
+        if r >= rows {
+            dropped += 1;
+            continue;
+        }
+        let len = ((n.len + ROW / 2) / ROW).max(1) as usize;
+        let vol = if n.vel == 0xFFFF {
+            0
+        } else {
+            vel_to_vol(vel_f(n.vel))
+        };
+        let key = (n.key as i32 + dk).clamp(1, 120) as u8;
+        put_note(p, col, r, len, key, n.instr, vol);
+        if out.last() == Some(&r) {
+            dropped += 1;
+        } else {
+            out.push(r);
+        }
+    }
+    // a later note may have cut an earlier one away entirely
+    let starts: Vec<usize> = col_notes(p, col).iter().map(|n| n.row).collect();
+    out.retain(|r| starts.contains(r));
+    (out, dropped)
+}
+
+/// first line of the system clipboard text for piano roll notes
+pub const NOTES_HEADER: &str = "ChipWave notes v1";
+
+/// Text form of clipboard notes for the system clipboard (one note per
+/// line: start, length, key, velocity, instrument, effect, parameter), so
+/// another ChipWave window can paste them and Ctrl+V always has text.
+pub fn notes_to_text(clip: &[Note]) -> String {
+    let mut s = format!("{NOTES_HEADER}\n");
+    for n in clip {
+        let (fx, fxp) = n.fx.unwrap_or((0, 0));
+        s.push_str(&format!(
+            "{} {} {} {} {} {} {} {}\n",
+            n.start,
+            n.len,
+            n.key,
+            n.vel,
+            n.instr,
+            u8::from(n.fx.is_some()),
+            fx,
+            fxp
+        ));
+    }
+    s
+}
+
+pub fn notes_from_text(t: &str) -> Option<Vec<Note>> {
+    let mut lines = t.lines();
+    if lines.next()?.trim() != NOTES_HEADER {
+        return None;
+    }
+    let mut out = vec![];
+    for l in lines.filter(|l| !l.trim().is_empty()) {
+        let v: Vec<i64> = l
+            .split_whitespace()
+            .map(|x| x.parse().ok())
+            .collect::<Option<_>>()?;
+        let [start, len, key, vel, instr, has_fx, fx, fxp] = v[..] else {
+            return None;
+        };
+        if !(1..=120).contains(&key) || len < 1 || start < 0 {
+            return None;
+        }
+        out.push(Note {
+            start,
+            len,
+            key: key as u8,
+            vel: vel.clamp(0, 0xFFFF) as u16,
+            instr: instr.clamp(0, 255) as u8,
+            fx: (has_fx != 0).then_some((fx.clamp(0, 255) as u8, fxp.clamp(0, 255) as u8)),
+            ..Default::default()
+        });
+    }
+    (!out.is_empty()).then_some(out)
 }
 
 /// Write note data into a new block, one column per voice: overlapping notes
@@ -538,5 +758,147 @@ mod tests {
         assert_eq!(p.cells[3][1].note, 0, "no note-off when 56 ends at row 4");
         assert_eq!(p.cells[4][1].note, NOTE_OFF);
         assert!(notes_to_block(&d, 16 * ROW, 1, "N", 4).is_err());
+    }
+
+    fn n(start: Tick, len: Tick, key: u8) -> Note {
+        Note {
+            start,
+            len,
+            key,
+            vel: 0xC000,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn clip_notes_are_relative_sorted_and_keep_everything() {
+        let mut a = n(4 * ROW, ROW, 60);
+        a.fx = Some((0x0C, 0x20));
+        a.instr = 3;
+        a.chance = 50;
+        let notes = vec![
+            n(0, ROW, 40),
+            a.clone(),
+            n(2 * ROW, ROW, 64),
+            n(2 * ROW, ROW, 62),
+        ];
+        let (c, from) = clip_notes(&notes, &[1, 2, 3]);
+        assert_eq!(from, 2 * ROW);
+        assert_eq!(
+            c.iter().map(|x| (x.start, x.key)).collect::<Vec<_>>(),
+            vec![(0, 62), (0, 64), (2 * ROW, 60)]
+        );
+        assert_eq!((c[2].fx, c[2].instr, c[2].chance), (a.fx, 3, 50));
+        assert!(clip_notes(&notes, &[]).0.is_empty());
+        assert_eq!(clip_span(&c, ROW), 3 * ROW);
+        assert_eq!(clip_span(&c, 4 * ROW), 4 * ROW, "rounded up to the grid");
+    }
+
+    #[test]
+    fn paste_appends_copies_selects_them_and_leaves_out_past_the_end() {
+        let mut notes = vec![n(0, ROW, 49), n(ROW, ROW, 51)];
+        let before = notes.clone();
+        let (c, _) = clip_notes(&notes, &[0, 1]);
+        let (sel, dropped) = paste_notes(&mut notes, &c, 8 * ROW, 0, 16 * ROW);
+        assert_eq!(sel, vec![2, 3]);
+        assert_eq!(dropped, 0);
+        assert_eq!(&notes[..2], &before[..], "originals untouched");
+        assert_eq!((notes[2].start, notes[2].key), (8 * ROW, 49));
+        assert_eq!((notes[3].start, notes[3].key), (9 * ROW, 51));
+        // the second would start at the clip end: left out
+        let (sel, dropped) = paste_notes(&mut notes, &c, 15 * ROW, 12, 16 * ROW);
+        assert_eq!((sel, dropped), (vec![4], 1));
+        assert_eq!(notes[4].key, 61);
+        // keys stay in range
+        let (sel, _) = paste_notes(&mut notes, &c, 0, 100, 16 * ROW);
+        assert!(sel.iter().all(|&i| notes[i].key == 120));
+    }
+
+    #[test]
+    fn copy_shifted_keeps_originals_and_clamps_the_group() {
+        let mut notes = vec![n(2 * ROW, ROW, 110), n(4 * ROW, ROW, 118)];
+        let ids = copy_shifted(&mut notes, &[0, 1], -8 * ROW, 5);
+        assert_eq!(ids, vec![2, 3]);
+        assert_eq!(notes.len(), 4);
+        assert_eq!((notes[0].start, notes[0].key), (2 * ROW, 110));
+        // clamped at tick 0 and key 120, shape kept
+        assert_eq!((notes[2].start, notes[2].key), (0, 112));
+        assert_eq!((notes[3].start, notes[3].key), (2 * ROW, 120));
+        assert!(copy_shifted(&mut notes, &[9], ROW, 0).is_empty());
+    }
+
+    #[test]
+    fn block_copy_keeps_the_originals_and_move_still_moves() {
+        let p0 = pat();
+        let mut p = p0.clone();
+        let rows = copy_notes(&mut p, 0, &[0], 5, 2);
+        assert_eq!(rows, vec![5]);
+        let ns = col_notes(&p, 0);
+        assert_eq!(ns[0].row, 0, "original stays");
+        assert_eq!((ns[0].key, ns[0].len), (49, 4));
+        assert_eq!((ns[1].row, ns[1].key, ns[1].instr), (5, 51, 1));
+        assert_eq!(ns[1].len, 4, "keeps its length");
+        assert!(
+            ns.iter().all(|x| x.row != 8),
+            "the note starting inside it is replaced (one note at a time)"
+        );
+        assert_eq!(p.cells[10][0].fx, 0x01, "effects stay on their rows");
+        // the same shift as a move takes the original away
+        let mut m = p0.clone();
+        assert_eq!(move_notes(&mut m, 0, &[0], 5, 2), vec![5]);
+        assert_eq!(col_notes(&m, 0)[0].row, 5);
+        assert_eq!(m.cells[0][0].note, 0);
+    }
+
+    #[test]
+    fn block_clipboard_round_trips_through_paste() {
+        let p0 = pat();
+        let (c, from) = clip_block(&p0, 0, &[0, 8]);
+        assert_eq!(from, 0);
+        assert_eq!(c.len(), 2);
+        assert_eq!((c[0].start, c[0].len, c[0].vel), (0, 4 * ROW, 0xFFFF));
+        assert_eq!(c[1].start, 8 * ROW);
+        // into the empty column 1 of a fresh block
+        let mut p = Pattern::new("t", 16, 2);
+        let (rows, dropped) = paste_block(&mut p, 1, &c, 2, 0);
+        assert_eq!((rows, dropped), (vec![2, 10], 0));
+        let ns = col_notes(&p, 1);
+        assert_eq!(
+            (ns[0].row, ns[0].key, ns[0].instr, ns[0].vol),
+            (2, 49, 1, 0)
+        );
+        assert_eq!(
+            (ns[1].row, ns[1].key, ns[1].vol),
+            (10, 52, 33),
+            "volume kept"
+        );
+        // past the block end: left out
+        let mut p = Pattern::new("t", 16, 2);
+        let (rows, dropped) = paste_block(&mut p, 0, &c, 12, 0);
+        assert_eq!((rows, dropped), (vec![12], 1));
+        // a chord in a mono column keeps the top note
+        let chord = vec![n(0, ROW, 49), n(0, ROW, 53)];
+        let mut p = Pattern::new("t", 16, 1);
+        let (rows, dropped) = paste_block(&mut p, 0, &chord, 0, 0);
+        assert_eq!((rows, dropped), (vec![0], 1));
+        assert_eq!(p.cells[0][0].note, 53);
+    }
+
+    #[test]
+    fn clipboard_text_round_trips() {
+        let mut a = n(0, ROW, 49);
+        a.fx = Some((0x0C, 0x20));
+        a.instr = 2;
+        let c = vec![a, n(3 * ROW, 2 * ROW, 61)];
+        let t = notes_to_text(&c);
+        assert!(t.starts_with(NOTES_HEADER));
+        assert_eq!(notes_from_text(&t), Some(c));
+        assert_eq!(notes_from_text("hello"), None);
+        assert_eq!(notes_from_text(&format!("{NOTES_HEADER}\n1 2 x\n")), None);
+        assert_eq!(
+            notes_from_text(&format!("{NOTES_HEADER}\n0 1 200 0 0 0 0 0\n")),
+            None
+        );
+        assert_eq!(notes_from_text(NOTES_HEADER), None);
     }
 }
