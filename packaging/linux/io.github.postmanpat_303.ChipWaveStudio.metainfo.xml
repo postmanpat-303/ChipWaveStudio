@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.7.0" date="2026-10-21">
+      <description><p>Racks and Nested Device Chains: a device tree under the Timeline, Add Device, Split for parallel paths, layered rack instruments, Save Custom Rack and My Racks; piano roll copy and paste; the Automation tab only with the Tracker; new demo song Oceans 11 (music by Martin Galway).</p></description>
+    </release>
     <release version="0.2.6.0" date="2026-10-21">
       <description><p>One workflow: persistent Timeline layout, one drop system with preview, snap and an overlap question, Clip Arranger launcher clips with per-track launch and linked copies, the track's instrument on a header click, pies for clips, launcher clips and drum patterns, clip names and colours; themed title bar on Windows; ChipWave Instruments in the Browser.</p></description>
     </release>

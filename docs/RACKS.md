@@ -1,6 +1,6 @@
 # Racks and Nested Device Chains
 
-ChipWave Studio 0.2.6 (test builds) adds **Nested Device Chains**, a panel
+ChipWave Studio 0.2.7.0 adds **Nested Device Chains**, a panel
 under the Timeline that shows an instrument, its layers and their effects as
 a tree. It also adds **racks**: one instrument made of up to four
 instruments that play together. You can save racks to **My Racks** and use

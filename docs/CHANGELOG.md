@@ -2,8 +2,29 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
-## Unreleased
+## 0.2.7.0: Racks and Nested Device Chains
 
+Released 2026-10-21. Highlights (details below):
+- **Nested Device Chains.** Click a track and its instrument opens under the Timeline as a tree: the instrument, its layers and every effect in order, with the selected item's full controls beside it. **+ Add Device**, drag to reorder or move a device into another chain (Ctrl: copy), Bypass, Duplicate, Remove, all undoable.
+- **Split**, a new device that sends the sound down 2 to 4 parallel paths, each with its own effects, Level and Pan, and mixes them back.
+- **Racks:** *Make a rack from this instrument* turns an instrument into up to 4 layers that play together, each with On, Level, Pan, Transpose, a key range and its own effects, plus **Rack effects** on the mix.
+- **Save Custom Rack… and My Racks:** save a rack with a name, description, sound type and tags; it lives in a `Racks` folder that survives restarts. **Browser › My Racks** searches, loads, previews, renames, duplicates, updates and deletes them. A missing plugin effect is reported, with **Find plugins…** or **Load anyway** (bypassed, settings kept).
+- **Piano roll copy and paste:** Ctrl-drag copies notes, Ctrl+C / X / V / D copy, cut, paste and duplicate.
+- **The Automation tab only shows with the Tracker**; track automation lives in the Timeline's lanes.
+- **New demo song "Oceans 11"**: music by Martin Galway, arranged by Del (postmanpat), made only from Chip FX, effects and a Drum Kit.
+- Songs with a rack or a Split are saved as reader version 7, which older versions refuse cleanly. Every other song saves, plays and renders exactly as before (checked against 0.2.6.0's renders).
+
+### Known limits
+- Plugin instruments can't be layers, and plugin effects on a layer probably pass the sound through unchanged.
+- Live MIDI playing and the note preview play only the first layer.
+- Plugin effects and automation can't go inside a Split.
+- Tracker slides, vibrato and arpeggio don't reach the layers.
+- No per-layer mixer sends, no racks inside racks and no velocity ranges yet.
+- There's no *Make a rack* in the track pie yet.
+
+### Details
+- **Nested Device Chains** (Ctrl+7) replaces the old Devices row in the lower panel; **Cards** brings the old card row back and **Fold tree** narrows the tree. See [RACKS.md](RACKS.md).
+- **Rack files** (`.cwr`) are versioned and validated before loading; the format is in [racks/FORMAT.md](racks/FORMAT.md). Updating a rack keeps the 3 newest old versions in `Racks/.backup`, and deleting moves it to `Racks/Deleted`.
 - **Piano roll: copy and paste.** Ctrl-drag notes to drop copies (the originals stay; Ctrl counts when you let go), Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste notes at the playhead (again: right after them; into another clip too), Ctrl+D duplicates the selection right after itself. One undo step each; only while the roll has the keyboard (docs/TIMELINE.md › Piano roll).
 - **The lower panel's Automation tab only shows with the Tracker.** It was the Tracker's Order list with its song lanes, so in the Timeline it showed nothing useful; it now hides with the Order list tab (Settings › Show Tracker brings both back), and a panel left on it opens the piano roll instead. A track's automation is in its lanes under the track: the **A** button on the header, Track pie › Add › Automation lane, or **+ lane**.
 - **New demo song "Oceans 11"** (File › Demo songs): music by Martin Galway, the great composer on Commodore 64, arranged by Del (postmanpat) as a melodic chiptune in G minor, 125 BPM, about 3:27, made only from Chip FX instruments, one Drum Kit and the built-in effects (gentle ducking, ping-pong echo, reverb, filter sweeps). It opens on the Timeline with one named clip per section. Generator: `scripts/make_oceans_11.py`. Notes: [research/oceans-11.md](research/oceans-11.md).
