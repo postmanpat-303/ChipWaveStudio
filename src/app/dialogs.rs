@@ -144,6 +144,30 @@ impl App {
 
     /// keys for dialogs / the settings screen; true = consumed
     pub(super) fn modal_key(&mut self, key: Key, m: egui::Modifiers, ctx: &egui::Context) -> bool {
+        if self.opie.is_some() {
+            // a pie: Esc closes it, other keys do nothing behind it
+            if key == Key::Escape {
+                self.obj_pie_escape();
+            }
+            return true;
+        }
+        if key == Key::Escape && self.clip_rename.is_some() {
+            return self.obj_pie_escape();
+        }
+        if key == Key::Escape && self.ca.drag.is_some() {
+            // a slot drag in progress: Esc drops nothing
+            self.ca.drag = None;
+            self.status = "Drag cancelled".into();
+            return true;
+        }
+        if self.drop_ask.is_some() {
+            // the clip-drop question: Esc cancels, nothing edits behind it
+            if key == Key::Escape {
+                self.drop_ask = None;
+                self.status = "Not placed (cancelled)".into();
+            }
+            return true;
+        }
         if self.prompt.is_some() {
             match key {
                 Key::Enter => self.answer(Choice::Save, ctx),

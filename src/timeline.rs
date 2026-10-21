@@ -168,6 +168,31 @@ pub struct Timeline {
     pub view: TimelineView,
     /// next clip id to hand out
     pub next_id: u32,
+    /// the Clip Arranger's own clips (docs/unified/PLAN.md D1): not on the
+    /// timeline, so the plan, render and export leave them out; they share
+    /// the note pool and the id space with `clips`. Saved only when there
+    /// are some (other songs save byte-identically).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub launcher: Vec<LaunchClip>,
+    /// the launcher's scene rows (names); a launcher clip's `scene` indexes it
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub scenes: Vec<Scene>,
+}
+
+/// A clip in the Clip Arranger (launcher), in scene row `scene`. The clip's
+/// `track` is its track; `start` is unused (0); notes live in the pool.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LaunchClip {
+    pub scene: u16,
+    pub clip: Clip,
+}
+
+/// A launcher scene row.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Scene {
+    pub name: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -577,6 +602,13 @@ impl Clip {
     pub fn audio(&self) -> Option<usize> {
         match self.kind {
             ClipKind::Audio { asset } => Some(asset as usize),
+            _ => None,
+        }
+    }
+    /// a note clip's data index in `Timeline::notes` (shared by its linked copies)
+    pub fn notes(&self) -> Option<usize> {
+        match self.kind {
+            ClipKind::Notes { data } => Some(data as usize),
             _ => None,
         }
     }
@@ -1372,6 +1404,21 @@ impl Timeline {
             && self.loop_on == o.loop_on
             && self.end == o.end
             && self.next_id == o.next_id
+            && self.launcher == o.launcher
+            && self.scenes == o.scenes
+    }
+
+    /// a clip by id, on the timeline or in the launcher
+    pub fn any_clip(&self, id: u32) -> Option<&Clip> {
+        self.clips
+            .iter()
+            .find(|c| c.id == id)
+            .or_else(|| self.launcher.iter().map(|l| &l.clip).find(|c| c.id == id))
+    }
+
+    /// the launcher clip with this id
+    pub fn launch_clip(&self, id: u32) -> Option<&LaunchClip> {
+        self.launcher.iter().find(|l| l.clip.id == id)
     }
 
     /// Make a loaded timeline safe for `song`: drop clips on missing tracks
@@ -1396,6 +1443,31 @@ impl Timeline {
             if c.loop_len.is_some_and(|l| l <= 0) {
                 c.loop_len = None;
             }
+        }
+        // launcher clips: note clips on real tracks with real notes
+        let notes = self.notes.len();
+        self.launcher.retain(|l| {
+            (l.clip.track as usize) < nch
+                && l.clip.len > 0
+                && matches!(l.clip.kind, ClipKind::Notes { data } if (data as usize) < notes)
+        });
+        for l in &mut self.launcher {
+            l.clip.start = 0;
+            if l.clip.loop_len.is_some_and(|x| x <= 0) {
+                l.clip.loop_len = None;
+            }
+        }
+        let rows = self
+            .launcher
+            .iter()
+            .map(|l| l.scene as usize + 1)
+            .max()
+            .unwrap_or(0);
+        if self.scenes.len() < rows {
+            let n = self.scenes.len();
+            self.scenes.extend((n..rows).map(|k| Scene {
+                name: format!("Scene {}", k + 1),
+            }));
         }
         // the Song / Master track sits after the channel tracks: keep it
         // (with its tempo / master / return lanes) while fitting the rest
@@ -1438,6 +1510,8 @@ pub fn from_toml(text: &str) -> Result<Timeline, String> {
 
 mod autoplan;
 mod edit;
+mod launcher;
+pub use launcher::*;
 mod migrate;
 pub use migrate::{ensure_master_track, migrate_song_lanes};
 mod plan;
@@ -1446,6 +1520,8 @@ pub use autoplan::*;
 pub use edit::*;
 pub use plan::*;
 
+#[cfg(test)]
+mod launcher_tests;
 #[cfg(test)]
 mod m2_tests;
 #[cfg(test)]

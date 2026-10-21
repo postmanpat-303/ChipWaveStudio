@@ -520,6 +520,18 @@ impl App {
                     changed = true;
                 }
                 ui.end_row();
+                ui.label("Lower panel");
+                if ui
+                    .checkbox(&mut self.extra.follow_select, "Follow the Timeline selection")
+                    .on_hover_text(
+                        "clicking a track header shows its instrument's editor under the Timeline, \
+                         clicking a clip shows the clip (piano roll); off: the lower panel stays as it is",
+                    )
+                    .changed()
+                {
+                    changed = true;
+                }
+                ui.end_row();
                 ui.label("New songs");
                 if ui
                     .checkbox(&mut self.extra.new_in_timeline, "Open on the Timeline view")
@@ -567,6 +579,17 @@ impl App {
                     let b = ui
                         .selectable_value(&mut self.extra.chord_list_menu, true, "List")
                         .on_hover_text("Piano roll chord lane: right-click opens a normal list menu");
+                    changed |= a.changed() || b.changed();
+                });
+                ui.end_row();
+                ui.label("Clip menus");
+                ui.horizontal(|ui| {
+                    let a = ui
+                        .selectable_value(&mut self.extra.clip_list_menu, false, "Pie")
+                        .on_hover_text("right-click a Timeline clip, a launcher clip or the Drum Kit steps: a round menu");
+                    let b = ui
+                        .selectable_value(&mut self.extra.clip_list_menu, true, "List")
+                        .on_hover_text("right-click opens the plain list menus");
                     changed |= a.changed() || b.changed();
                 });
                 ui.end_row();

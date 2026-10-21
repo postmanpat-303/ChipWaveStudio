@@ -221,6 +221,14 @@ pub(crate) struct PianoUi {
     /// Step input on (the header's toggle; off by default): MIDI and
     /// musical-typing keys go in one step after the other
     pub(crate) step_input: bool,
+    /// the playhead as last drawn: (tick in the clip's source, playing);
+    /// None when it is outside the clip (tests, screenshots)
+    pub(crate) head: Option<(f64, bool)>,
+    /// a Clip Arranger launcher clip shown in the roll (while no timeline
+    /// clip is selected; Stage 4b)
+    pub(crate) launch: Option<u32>,
+    /// the toolbar's clip chip as drawn (tests)
+    pub(crate) chip: String,
 }
 
 impl PianoUi {
@@ -270,6 +278,9 @@ impl Default for PianoUi {
             step: None,
             step_used: false,
             step_input: false,
+            head: None,
+            launch: None,
+            chip: String::new(),
         }
     }
 }
@@ -378,6 +389,23 @@ impl App {
     /// the roll's target: the selected timeline clip, else the current
     /// block column
     pub(super) fn pr_target(&self) -> Option<Target> {
+        if self.view == View::Timeline && self.tlv.sel.is_none() {
+            // a launcher clip (no timeline clip selected): its notes
+            let data = self.pr.launch.and_then(|id| {
+                self.with(|s| {
+                    s.song
+                        .timeline
+                        .as_deref()
+                        .and_then(|t| t.launch_clip(id))
+                        // while its track is the current one
+                        .filter(|l| l.clip.track as usize == self.ch)
+                        .and_then(|l| l.clip.notes())
+                })
+            });
+            if let Some(data) = data {
+                return Some(Target::Notes { data, clip: None });
+            }
+        }
         if self.view == View::Timeline {
             if let Some(id) = self.tlv.sel {
                 let c = self.tlv.cache.as_ref()?;
@@ -1139,6 +1167,7 @@ impl App {
             .flatten();
         let mut tool_edit: Option<RNote> = None;
         let mut use_instr_clip: Option<u32> = None;
+        let mut make_unique: Option<u32> = None;
         ui.scope_builder(egui::UiBuilder::new().max_rect(tool.shrink2(egui::vec2(6.0, 1.0))), |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
@@ -1146,10 +1175,18 @@ impl App {
                 let (label, tip) = match target {
                     Target::Block { pattern, col } => {
                         let name = self.with(|s| s.song.patterns.get(pattern).map(|p| p.name.clone()).unwrap_or_default());
-                        (
-                            format!("Block {pattern:02} {name} · ch {}", col + 1),
-                            format!("block {pattern:02} {name}, channel {}", col + 1),
-                        )
+                        if self.tracker_on() {
+                            (
+                                format!("Block {pattern:02} {name} · ch {}", col + 1),
+                                format!("block {pattern:02} {name}, channel {}", col + 1),
+                            )
+                        } else {
+                            // without the Tracker: a clip on a track (5.5)
+                            (
+                                format!("Clip {pattern:02} {name} · Track {:02}", col + 1),
+                                format!("clip {pattern:02} {name} on track {:02}", col + 1),
+                            )
+                        }
                     }
                     Target::Notes { .. } => {
                         let name = match &src {
@@ -1161,6 +1198,24 @@ impl App {
                     }
                 };
                 pr_chip(ui, chip_col, &label).on_hover_text(tip);
+                self.pr.chip = label;
+                // linked clips (D4): the count and Make unique
+                if let Target::Notes { data, clip } = target {
+                    let owner = clip.or(self.pr.launch);
+                    let (a, b) = self.with(|s| s.song.timeline.as_deref().map_or((0, 0), |t| tl::linked(t, data)));
+                    if a + b > 1 {
+                        let tip = format!(
+                            "Linked: {} clips ({a} in the arrangement, {b} in the launcher) share these notes, so an \
+                             edit here changes all of them · click: Make unique (this clip gets its own copy)",
+                            a + b
+                        );
+                        if pr_btn(ui, &format!("Linked ×{}", a + b), false, owner.is_some(), &tip).clicked() {
+                            if let Some(id) = owner {
+                                make_unique = Some(id);
+                            }
+                        }
+                    }
+                }
                 if pr_btn(ui, "ALL", false, true, "select every note (Ctrl+A)").clicked() {
                     self.pr.sel = notes.iter().map(|n| n.id).collect();
                     self.pr.focus = true;
@@ -1369,6 +1424,20 @@ impl App {
             self.tl_apply(super::timeline::TlOp::UseTrackInstr);
             self.tlv.sel = sel;
             self.tlv.sels = sels;
+        }
+        if let Some(id) = make_unique {
+            let ok = self.with(|s| {
+                s.song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|t| tl::make_unique_notes(t, id))
+                    .is_some()
+            });
+            if ok {
+                self.pr.sel.clear();
+                self.dirty = true;
+                self.status = "Made unique: this clip has its own notes now (edits no longer change the others)".into();
+            }
         }
         if let (Some(e), Some(n)) = (tool_edit, sel_note) {
             self.pr_set_note(target, n, e);
@@ -1629,40 +1698,72 @@ impl App {
             FontId::proportional(10.0),
             t.ink2,
         );
-        // playhead (block loop or song in this block)
-        let clip = match target {
-            Target::Notes { clip: Some(id), .. } => self
-                .tlv
-                .cache
-                .as_ref()
-                .and_then(|c| c.tl.clips.iter().find(|x| x.id == id))
-                .cloned(),
-            _ => None,
-        };
-        let ph = self.with(|s| {
-            let e = &s.engine;
-            match target {
-                Target::Notes { .. } => {
-                    let c = clip.as_ref()?;
-                    let t = e.tl_ticks()?;
-                    let tk = t as Tick;
-                    (tk >= c.start && tk < c.end())
-                        .then(|| c.source_at(tk) as f64 + (t - tk as f64))
-                }
-                Target::Block { pattern, .. }
-                    if e.playing && e.pattern == pattern && s.song.timeline.is_none() =>
-                {
-                    Some(tl::rows_to_ticks(e.row) as f64 + e.row_phase() as f64 * ROW as f64)
-                }
-                _ => None,
-            }
+        // playhead: the Timeline's own (the transport while it plays, the
+        // play marker when stopped), mapped through the clip's start, trim
+        // and loop into this clip; a Tracker block loop in tracker mode
+        let tl_now = self.with(|s| {
+            s.song
+                .timeline
+                .is_some()
+                .then(|| match super::timeline::tl_head(&s.engine) {
+                    Some(h) => (h, true),
+                    None => (self.tlv.cue as f64, false),
+                })
         });
-        if let Some(ph) = ph {
+        let ph: Option<(f64, bool)> = match (tl_now, self.tlv.cache.as_ref()) {
+            (Some((h, live)), Some(c)) => {
+                let tk = h.floor() as Tick;
+                let inside = |x: &&tl::Clip| tk >= x.start && tk < x.end();
+                let clip = match target {
+                    Target::Notes { clip: Some(id), .. } => {
+                        c.tl.clips.iter().find(|x| x.id == id).filter(inside)
+                    }
+                    Target::Notes { data, clip: None } => c.tl.clips.iter().filter(inside).find(
+                        |x| matches!(x.kind, tl::ClipKind::Notes { data: d } if d as usize == data),
+                    ),
+                    Target::Block { pattern, col } => {
+                        c.tl.clips
+                            .iter()
+                            .filter(inside)
+                            .find(|x| x.block() == Some((pattern, col)))
+                    }
+                };
+                clip.map(|x| (x.source_at(tk) as f64 + (h - tk as f64), live))
+            }
+            _ => self.with(|s| {
+                let e = &s.engine;
+                match target {
+                    Target::Block { pattern, .. } if e.playing && e.pattern == pattern => Some((
+                        tl::rows_to_ticks(e.row) as f64 + e.row_phase() as f64 * ROW as f64,
+                        true,
+                    )),
+                    _ => None,
+                }
+            }),
+        };
+        self.pr.head = ph;
+        if let Some((ph, live)) = ph {
             let x = self.pr.x_of(0) + (ph * self.pr.ppt()) as f32;
             if grid_r.x_range().contains(x) {
-                p.vline(x, grid_r.y_range(), Stroke::new(1.5, t.play));
+                let col = if live {
+                    t.play
+                } else {
+                    t.play.gamma_multiply(0.55)
+                };
+                p.vline(x, grid_r.union(vel_r).y_range(), Stroke::new(1.5, col));
             }
-            ui.ctx().request_repaint();
+            if live {
+                // Follow (the Timeline's toggle): page so the playhead stays
+                // in view, a third in, like the Timeline
+                if self.follow && !ui.input(|i| i.pointer.any_down()) {
+                    let vis = grid_r.width() as f64 / self.pr.ppt();
+                    let s = self.pr.scroll_x;
+                    if ph < s || ph > s + vis * 0.92 {
+                        self.pr.scroll_x = (ph - vis / 3.0).max(0.0);
+                    }
+                }
+                ui.ctx().request_repaint();
+            }
         }
         if self.pr.focus {
             p.rect_stroke(
@@ -2068,10 +2169,11 @@ impl App {
         }
         let data = self.with(|s| tl::block_col_to_notes(&mut s.song, pattern, col));
         let Some(data) = data else {
-            self.status = "This Tracker clip has volumes or effects between its notes, so it \
-                           holds one note at a time; draw chords in a note clip (double-click \
-                           empty space)"
-                .into();
+            self.status = format!(
+                "This {} has volumes or effects between its notes, so it holds one note at a \
+                 time; draw chords in a note clip (double-click empty space)",
+                self.clip_word()
+            );
             return None;
         };
         let t = Target::Notes {
@@ -2082,7 +2184,10 @@ impl App {
         // keep the roll's state (selection, the press in progress)
         self.pr.target = Some(t);
         self.dirty = true;
-        self.status = "Chord: this Tracker clip is a note clip now (Ctrl+Z puts it back)".into();
+        self.status = format!(
+            "Chord: this {} is a note clip now (Ctrl+Z puts it back)",
+            self.clip_word()
+        );
         Some((t, src))
     }
 

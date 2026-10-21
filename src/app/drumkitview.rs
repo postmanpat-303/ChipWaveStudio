@@ -1439,7 +1439,21 @@ impl App {
                 }
                 let id = ui.make_persistent_id(("dk_cell", p, k));
                 let resp = ui.interact(cr, id, egui::Sense::click_and_drag());
-                if resp.drag_started() || resp.clicked() && self.dk.paint.is_none() {
+                if resp.secondary_clicked() && !self.extra.clip_list_menu {
+                    // the pattern's pie, on this pad's lane
+                    self.dk.sel = p;
+                    if let Some(at) = resp.interact_pointer_pos() {
+                        self.opie_req = Some((
+                            super::objpie::PieFor::Drum {
+                                clip: c.id,
+                                data: c.data,
+                                track: c.track,
+                                pad: p,
+                            },
+                            at,
+                        ));
+                    }
+                } else if resp.drag_started() || resp.clicked() && self.dk.paint.is_none() {
                     let want = on.is_none();
                     self.dk.paint = Some(want);
                     self.dk.sel = p;
@@ -2296,3 +2310,115 @@ impl App {
 #[cfg(test)]
 #[path = "drumkitview_tests.rs"]
 mod tests;
+
+impl App {
+    /// the step grid's pie (objpie.rs): pattern clip `clip` (notes `data`)
+    /// on `track`, the lane of pad `pad`
+    pub(crate) fn dk_pie(
+        &mut self,
+        clip: u32,
+        data: usize,
+        track: usize,
+        pad: usize,
+        label: &str,
+        child: Option<&str>,
+    ) {
+        let slot = self.dk.inst as u8 + 1;
+        let Some((kit, d, start, len)) = self.with(|s| {
+            let kit = dk::kit_of(s.song.instruments.get(self.dk.inst)?)?.clone();
+            let t = s.song.timeline.as_deref()?;
+            let c = t.clips.iter().find(|c| c.id == clip)?;
+            Some((kit, (**t.notes.get(data)?).clone(), c.start, c.len))
+        }) else {
+            return;
+        };
+        let ins = if self.dk_track(slot) == Some(track) {
+            0
+        } else {
+            slot
+        };
+        let key = kit.pads.get(pad).map(|p| p.key);
+        let swing = d.drum.as_ref().map_or(0.0, |m| m.swing);
+        let steps = ((d.len + ROW - 1) / ROW).max(1) as usize;
+        let mut nd = d.clone();
+        match (label, child) {
+            ("Play", _) => {
+                let c = Cur {
+                    id: clip,
+                    data,
+                    track,
+                    start,
+                    len,
+                    d,
+                };
+                self.dk_play(&c);
+                return;
+            }
+            ("Generate", _) => {
+                self.dk.tab = 2;
+                self.status = "Generate: a new groove from the pattern library, in this kit".into();
+                return;
+            }
+            ("Copy pattern", _) => {
+                let c = Cur {
+                    id: clip,
+                    data,
+                    track,
+                    start,
+                    len,
+                    d,
+                };
+                self.dk_new_pattern(track, Some(&c));
+                self.status =
+                    "A copy of this pattern of its own, right after it: change it freely".into();
+                return;
+            }
+            ("Fill", c) => {
+                let Some(key) = key else { return };
+                let every = match c {
+                    Some("Every 8th") => 2,
+                    Some("Every 16th") => 1,
+                    _ => 4,
+                };
+                nd.notes.retain(|n| !on_pad(&kit, n, pad));
+                for k in (0..steps).step_by(every) {
+                    dk::toggle(&mut nd.notes, key, k, true, swing, tl::vel_from_7(100), ins);
+                }
+                self.status = format!(
+                    "Pad lane {} filled ({})",
+                    pad + 1,
+                    c.unwrap_or("Every beat").to_lowercase()
+                );
+            }
+            ("Variation", _) => {
+                // off-beat hits move a step later, every third one (repeatable)
+                let mut moved = 0;
+                let mut i = 0;
+                for n in nd.notes.iter_mut() {
+                    let k = dk::step_of(n.start);
+                    if !k.is_multiple_of(4) {
+                        i += 1;
+                        if i % 3 == 1 && k + 1 < steps {
+                            n.start = dk::step_tick(k + 1, swing);
+                            moved += 1;
+                        }
+                    }
+                }
+                nd.notes.sort_by_key(|n| (n.start, n.key));
+                nd.notes
+                    .dedup_by(|a, b| a.start == b.start && a.key == b.key);
+                self.status = format!("Variation: {moved} off-beat hits moved a step");
+            }
+            ("Clear", Some("All lanes")) => {
+                nd.notes.clear();
+                self.status = "Pattern cleared (Ctrl+Z brings it back)".into();
+            }
+            ("Clear", _) => {
+                nd.notes.retain(|n| !on_pad(&kit, n, pad));
+                self.status = format!("Pad lane {} cleared", pad + 1);
+            }
+            _ => return,
+        }
+        self.dk_write(data, nd);
+    }
+}

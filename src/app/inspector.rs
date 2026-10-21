@@ -216,6 +216,7 @@ impl App {
         let (title, kind) = match clip.kind {
             tl::ClipKind::Audio { .. } => ("Audio clip", "audio"),
             tl::ClipKind::Notes { .. } => ("Note clip", "notes"),
+            _ if !self.tracker_on() => ("Clip", "block"),
             _ => ("Tracker clip", "block"),
         };
         let id = clip.id;
@@ -245,6 +246,8 @@ impl App {
         let mut changed = false;
         let mut open_roll = false;
         let mut open_pat = false;
+        let mut rename = false;
+        let mut colour: Option<Option<&str>> = None;
         section(ui, "clip", title, |ui| {
             ui.label(egui::RichText::new(name).strong().color(t.ink));
             if let Some(f) = &file {
@@ -276,6 +279,37 @@ impl App {
                 );
             }
             ui.add_enabled_ui(mode, |ui| {
+                // its own name and colour (also on its pie, right-click)
+                row(ui, "Name", |ui| {
+                    if ui
+                        .button("Rename…")
+                        .on_hover_text("the clip's own name; linked copies keep theirs")
+                        .clicked()
+                    {
+                        rename = true;
+                    }
+                });
+                row(ui, "Colour", |ui| {
+                    let cur = clip
+                        .colour
+                        .and_then(|c| super::objpie::COLOURS.iter().find(|x| x.1 == c))
+                        .map_or("Auto", |x| x.0);
+                    egui::ComboBox::from_id_salt("insp_clip_colour")
+                        .selected_text(cur)
+                        .show_ui(ui, |ui| {
+                            if ui
+                                .selectable_label(cur == "Auto", "Auto (the track's)")
+                                .clicked()
+                            {
+                                colour = Some(None);
+                            }
+                            for (n, _) in super::objpie::COLOURS {
+                                if ui.selectable_label(cur == n, n).clicked() {
+                                    colour = Some(Some(n));
+                                }
+                            }
+                        });
+                });
                 row(ui, "Mute", |ui| {
                     if ui
                         .checkbox(&mut muted, "Muted")
@@ -358,6 +392,7 @@ impl App {
                         open_roll = true;
                     }
                     if kind == "block"
+                        && self.tracker_on()
                         && ui
                             .button("Open in Tracker")
                             .on_hover_text("this clip's block in the Tracker (Enter)")
@@ -387,6 +422,12 @@ impl App {
                 engine.ensure_plan(song);
             });
             self.dirty = true;
+        }
+        if rename {
+            self.start_clip_rename(id);
+        }
+        if let Some(c) = colour {
+            self.set_clip_colour(&[id], c);
         }
         if open_roll {
             self.tlv.sel = Some(id);
@@ -827,7 +868,7 @@ impl App {
         }
         if edit && slot > 0 {
             self.instr = slot;
-            self.show_instrument_panel();
+            self.show_instrument_editor();
         }
         if browse {
             self.open_browser_tab(crate::browser::Tab::Instruments);

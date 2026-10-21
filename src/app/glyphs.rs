@@ -38,6 +38,8 @@ pub(crate) enum Glyph {
     Rack,
     Route,
     Folder,
+    /// Save CPU (on the roadmap; not drawn anywhere yet)
+    #[allow(dead_code)]
     Snow,
     Trash,
 }

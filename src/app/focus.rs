@@ -105,8 +105,10 @@ impl App {
                         self.tlv.cue = start;
                     }
                     self.timeline_open_roll();
-                    self.status =
-                        "Chord: this Tracker clip is a note clip now (Ctrl+Z puts it back)".into();
+                    self.status = format!(
+                        "Chord: this {} is a note clip now (Ctrl+Z puts it back)",
+                        self.clip_word()
+                    );
                 }
             }
             v if v.starts_with("record-") => self.shot_record(v),

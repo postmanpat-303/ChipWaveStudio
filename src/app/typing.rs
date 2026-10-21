@@ -109,23 +109,57 @@ impl App {
         self.track_instr(self.ch)
     }
 
-    /// the instrument a track plays new notes on: the track's assigned
-    /// instrument (Timeline), else the selected one. Typing, the roll's
-    /// key and note auditions and chord previews all use it.
-    pub(super) fn track_instr(&self, ch: usize) -> u8 {
-        let given = self.with(|s| {
-            s.song
+    /// "The track's instrument" (docs/unified/PLAN.md D6), the one rule
+    /// for every place that asks: the track's assigned instrument
+    /// (`Track::instr`, when it is a real one), else the slot its clips play
+    /// most (Tracker cells in its column, note-clip notes on the track),
+    /// else none. Computed, never written, so songs don't change on save.
+    pub(super) fn track_instrument(&self, tr: usize) -> Option<u8> {
+        self.with(|s| {
+            let ni = s.song.instruments.len();
+            let given = s
+                .song
                 .timeline
                 .as_deref()
-                .and_then(|t| t.tracks.get(ch))
-                .map_or(0, |t| t.instr)
-        });
-        // (a deleted instrument: the selected one)
-        if given > 0 && given as usize <= self.with(|s| s.song.instruments.len()) {
-            given
-        } else {
-            self.instr.max(1)
-        }
+                .and_then(|t| t.tracks.get(tr))
+                .map_or(0, |t| t.instr);
+            if given > 0 {
+                // assigned, but deleted since: missing, not a guess
+                return (given as usize <= ni).then_some(given);
+            }
+            let mut count = [0usize; 256];
+            for p in &s.song.patterns {
+                for r in &p.cells {
+                    if let Some(c) = r.get(tr) {
+                        if c.instr > 0 {
+                            count[c.instr as usize] += 1;
+                        }
+                    }
+                }
+            }
+            if let Some(t) = s.song.timeline.as_deref() {
+                for c in t.clips.iter().filter(|c| c.track as usize == tr) {
+                    if let Some(d) = c.notes().and_then(|d| t.notes.get(d)) {
+                        for n in &d.notes {
+                            if n.instr > 0 {
+                                count[n.instr as usize] += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            match (1..256).max_by_key(|&i| count[i]) {
+                Some(i) if count[i] > 0 && i <= ni => Some(i as u8),
+                _ => None,
+            }
+        })
+    }
+
+    /// the instrument a track plays new notes on: the track's instrument
+    /// (`track_instrument`), else the selected one. Typing, the roll's key
+    /// and note auditions and chord previews all use it.
+    pub(super) fn track_instr(&self, ch: usize) -> u8 {
+        self.track_instrument(ch).unwrap_or(self.instr.max(1))
     }
 
     /// Ctrl+K, and (while on) the typing keys: taken out of `events`

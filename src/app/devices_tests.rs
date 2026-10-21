@@ -1,6 +1,7 @@
 //! The lower panel's Devices tab (0.2.4): showing the selected track's
 //! chain, Browser › Effects drops at a position, reorder by dragging a
 //! card's title, undo, and every device body drawing
+use super::fxview::FxOp;
 use super::ui_tests::{self, drag, frame, harness_with, key};
 use super::*;
 use crate::browser::{Item, Tab};
@@ -308,5 +309,149 @@ fn advanced_on_the_instrument_card_opens_the_full_editor() {
     assert!(
         h.state().extra.lower_inst,
         "Advanced › shows the Instrument tab"
+    );
+}
+
+/// '03 Monique' (Del, 0.2.5.0): instrument 03 is a plugin played on track 3;
+/// Devices showing on it, nothing has played yet
+fn plugin_devices() -> Harness<'static, App> {
+    let mut song = crate::plugin::tests::plugin_song();
+    song.instruments.swap(0, 2);
+    for p in &mut song.patterns {
+        for row in &mut p.cells {
+            if row[0].note != 0 {
+                row[2] = row[0];
+                row[0] = Default::default();
+            }
+            if row[2].instr == 1 {
+                row[2].instr = 3;
+            }
+        }
+    }
+    if let Some(tl) = song.timeline.as_deref_mut() {
+        if let Some(t) = tl.tracks.get_mut(2) {
+            t.instr = 3;
+        }
+    }
+    let mut h = harness_with(song);
+    key(&mut h, Key::Num7, egui::Modifiers::COMMAND);
+    h.state_mut().ch = 2;
+    h.state_mut().instr = 3;
+    h.state_mut().dev.follow_ch = 2;
+    frames(&mut h, 3);
+    assert!(h.state().with(|s| s.engine.plugins.slot(2, 2)).is_some());
+    h
+}
+
+/// a live note on track 3 (as the piano / a MIDI keyboard sends it), the
+/// audio callback's render, then the insert chain and the late output
+fn live_note(h: &Harness<'static, App>) -> ((usize, usize), f32) {
+    live_note_on(h, 3, 2)
+}
+
+fn live_note_on(h: &Harness<'static, App>, instr: u8, ch: u8) -> ((usize, usize), f32) {
+    h.state().with(|s| {
+        let crate::audio::Shared { song, engine, .. } = s;
+        let ev = |on| {
+            if on {
+                crate::midi::LiveEv::On {
+                    key: 60,
+                    note: 49,
+                    vel: 1.0,
+                    instr,
+                    ch,
+                }
+            } else {
+                crate::midi::LiveEv::Off { key: 60 }
+            }
+        };
+        engine.live_event(song, ev(true));
+        let mut buf = vec![0.0f32; 512];
+        for _ in 0..20 {
+            engine.render(song, &mut buf);
+        }
+        engine.live_event(song, ev(false));
+        // after the release: only an effect tail is left
+        let mut late = 0.0f32;
+        for k in 0..60 {
+            engine.render(song, &mut buf);
+            if k >= 20 {
+                late += buf.iter().map(|x| x * x).sum::<f32>();
+            }
+        }
+        (engine.chain_info(ch as usize), late)
+    })
+}
+
+#[test]
+fn devices_row_edits_on_a_plugin_track_are_heard_without_the_timeline() {
+    let mut h = plugin_devices();
+    let (info, dry) = live_note(&h);
+    assert_eq!(info, (2, 0), "the plugin's own (empty) chain");
+    // + → Browser › Effects → Reverb, never visiting the timeline
+    let ctx = h.ctx.clone();
+    h.state_mut().br_load(&fx_item(FxKind::Reverb), &ctx);
+    frames(&mut h, 2);
+    assert_eq!(chain(&h, 3), vec![FxKind::Reverb]);
+    let (info, wet) = live_note(&h);
+    assert_eq!(info, (2, 1), "the reverb reached the engine");
+    // (the demo's send return keeps a little tail of its own)
+    assert!(wet > dry * 10.0, "the reverb tail is heard: {wet} vs {dry}");
+    // bypass from the card's power button: dry again
+    h.state_mut().apply_fx_ops(2, vec![FxOp::Toggle(0)]);
+    let (_, off) = live_note(&h);
+    assert!(off < wet * 0.1, "bypassed: {off} vs {wet}");
+    h.state_mut().apply_fx_ops(2, vec![FxOp::Toggle(0)]);
+    // a parameter (mix to 0): the tail goes
+    let mix = crate::fx::params(FxKind::Reverb)
+        .iter()
+        .position(|p| p.name.eq_ignore_ascii_case("mix"))
+        .expect("reverb mix");
+    h.state_mut()
+        .apply_fx_ops(2, vec![FxOp::Param(0, mix, 0.0, true)]);
+    let (_, dry2) = live_note(&h);
+    assert!(dry2 < wet * 0.1, "mix 0: {dry2} vs {wet}");
+    // add a second device, reorder, remove
+    h.state_mut()
+        .apply_fx_ops(2, vec![FxOp::Add(FxKind::Delay, None), FxOp::Move(1, 0)]);
+    assert_eq!(chain(&h, 3), vec![FxKind::Delay, FxKind::Reverb]);
+    assert_eq!(live_note(&h).0, (2, 2));
+    h.state_mut()
+        .apply_fx_ops(2, vec![FxOp::Remove(0), FxOp::Remove(0)]);
+    let (info, gone) = live_note(&h);
+    assert_eq!(info, (2, 0));
+    assert!(gone < wet * 0.1, "removed: {gone} vs {wet}");
+}
+
+#[test]
+fn devices_row_edits_are_heard_while_the_song_plays() {
+    let mut h = plugin_devices();
+    h.state().with(|s| {
+        let crate::audio::Shared { song, engine, .. } = s;
+        engine.start(song, 0, 0, true, 0);
+    });
+    let ctx = h.ctx.clone();
+    h.state_mut().br_load(&fx_item(FxKind::Reverb), &ctx);
+    frames(&mut h, 2);
+    let (info, _) = live_note(&h);
+    assert_eq!(info, (2, 1), "playing: the reverb reached the engine");
+}
+
+#[test]
+fn devices_row_edits_on_a_built_in_track_are_heard_live() {
+    let mut h = devices();
+    let ch = h.state().ch as u8;
+    // start from an empty chain
+    h.state().with(|s| s.song.instruments[6].fx.clear());
+    frames(&mut h, 2);
+    let (_, dry) = live_note_on(&h, 7, ch);
+    let ctx = h.ctx.clone();
+    h.state_mut().br_load(&fx_item(FxKind::Reverb), &ctx);
+    frames(&mut h, 2);
+    assert_eq!(chain(&h, 7), vec![FxKind::Reverb]);
+    let (_, wet) = live_note_on(&h, 7, ch);
+    assert!(
+        (wet - dry).abs() > dry.max(1e-3) * 0.2,
+        "the reverb changed the live sound: {wet} vs {dry}"
     );
 }

@@ -14,6 +14,9 @@ use crate::model::{Song, MAX_CHANNELS};
 pub struct Cue {
     /// block to loop from the boundary (None: keep what plays)
     pub scene: Option<usize>,
+    /// timeline songs: timeline rows [a, b) to loop from the boundary
+    /// (a scene or slot of note / audio clips; None: keep what plays)
+    pub span: Option<(u32, u32)>,
     /// tracks (bit per track) that play again from the boundary
     pub on: u64,
     /// tracks that stop (go silent) from the boundary
@@ -23,6 +26,10 @@ pub struct Cue {
     /// the boundary: a row where `(pos - phase) % every == 0` (1 = next row)
     pub every: u32,
     pub phase: u32,
+    /// launcher clips (Stage 4b): the clip id each track plays from the
+    /// boundary, looped (0: no change). The track leaves the arrangement
+    /// until it is stopped (`off`) or the transport starts again.
+    pub clips: [u32; MAX_CHANNELS],
 }
 
 /// bit of track `tr` in a [`Cue`] mask
@@ -43,6 +50,16 @@ impl Engine {
             if let Some(b) = c.scene.filter(|&b| b < song.patterns.len()) {
                 self.start(song, 0, 0, true, b);
                 self.held = c.off & !c.on;
+            } else if let Some((a, b)) = c.span.filter(|s| s.1 > s.0 && song.timeline.is_some()) {
+                self.start(song, 0, a as usize, false, 0);
+                self.tl_span = Some((a as usize, b as usize));
+                self.held = c.off & !c.on;
+            } else if c.clips.iter().any(|&x| x != 0) && song.timeline.is_some() {
+                // launcher clips from a stop: the transport runs from the
+                // start with only the launched tracks sounding
+                self.start(song, 0, 0, false, 0);
+                self.held = c.off & !c.on;
+                self.launch_clips(&c);
             }
             return;
         }
@@ -52,10 +69,23 @@ impl Engine {
         } else {
             if c.scene.is_some() {
                 q.scene = c.scene;
+                q.span = None;
+                q.halt = false;
+            }
+            if c.span.is_some() {
+                q.span = c.span;
+                q.scene = None;
                 q.halt = false;
             }
             q.on = (q.on & !c.off) | c.on;
             q.off = (q.off & !c.on) | c.off;
+            for tr in 0..MAX_CHANNELS {
+                if c.clips[tr] != 0 {
+                    q.clips[tr] = c.clips[tr];
+                } else if c.off & bit(tr) != 0 {
+                    q.clips[tr] = 0;
+                }
+            }
             q.every = c.every;
             q.phase = c.phase;
         }
@@ -67,6 +97,50 @@ impl Engine {
         self.cue = None;
     }
 
+    /// start the cue's launcher clips at this row (their tracks' arrangement
+    /// notes, Tracker note and audio clips end)
+    fn launch_clips(&mut self, c: &Cue) {
+        let origin = self.rows_played as i64 * crate::timeline::ROW;
+        for (tr, &id) in c.clips.iter().enumerate() {
+            if id == 0 {
+                continue;
+            }
+            let b = bit(tr);
+            self.nv.release_where(&mut self.plugins, b);
+            if self.nv.lmask & b == 0 {
+                self.av.cut_track(tr);
+                if let Some(ch) = self.chans.get_mut(tr) {
+                    ch.synth.amp.release();
+                }
+            }
+            self.nv.lmask |= b;
+            self.nv.lp[tr] = super::notes::LPlay::new(id, origin);
+        }
+    }
+
+    /// the launcher clip track `tr` plays (None: the arrangement or nothing)
+    pub fn launched(&self, tr: usize) -> Option<u32> {
+        (tr < MAX_CHANNELS && self.nv.lmask & bit(tr) != 0).then(|| self.nv.lp[tr].id)
+    }
+
+    /// how far track `tr`'s launcher clip is into its current pass (0..1)
+    pub fn launch_progress(&self, tr: usize) -> Option<f32> {
+        let id = self.launched(tr)?;
+        let len = self
+            .tl
+            .plan
+            .as_deref()?
+            .launch
+            .iter()
+            .find(|l| l.id == id)?
+            .len;
+        if len <= 0 || !self.playing {
+            return Some(0.0);
+        }
+        let rel = self.launch_clock() - self.nv.lp[tr].origin as f64;
+        Some((rel.rem_euclid(len as f64) / len as f64) as f32)
+    }
+
     /// tracks held silent by the Clip Arranger (bit per track)
     pub fn held(&self) -> u64 {
         self.held
@@ -75,6 +149,15 @@ impl Engine {
     /// a scene (block loop) is what plays now
     pub fn scene(&self) -> Option<usize> {
         (self.playing && self.loop_pattern && !self.tl.on).then_some(self.pattern)
+    }
+
+    /// timeline songs: the launched span (timeline rows [a, b)) that loops now
+    pub fn span(&self) -> Option<(usize, usize)> {
+        if self.playing && self.tl.on {
+            self.tl_span
+        } else {
+            None
+        }
     }
 
     /// the pending launch
@@ -96,6 +179,7 @@ impl Engine {
         if c.halt {
             self.stop();
             self.held = 0;
+            self.tl_span = None;
             return false;
         }
         if let Some(b) = c.scene.filter(|&b| b < song.patterns.len()) {
@@ -106,13 +190,28 @@ impl Engine {
                 self.av.release_all();
             }
             self.loop_pattern = true;
+            self.tl_span = None;
             self.pattern = b;
             self.row = 0;
             if let Some(k) = song.order.iter().position(|&x| x == b) {
                 self.order_pos = k;
             }
         }
+        if let Some((a, b)) = c.span.filter(|s| s.1 > s.0 && self.tl.plan.is_some()) {
+            // loop the span from its start: from a block loop the timeline
+            // takes over again (the plan is kept up to date by the UI)
+            self.tl.on = true;
+            self.loop_pattern = false;
+            self.tl_span = Some((a as usize, b as usize));
+            let a = a as usize;
+            self.tl.row = a;
+            self.tl_cursors(a);
+            self.notes_jump(song, a, false);
+        }
         self.held = (self.held | c.off) & !c.on;
+        // a stopped track leaves its launcher clip; launched ones start now
+        self.nv.lmask &= !c.off;
+        self.launch_clips(&c);
         // a held track's sounding notes end now (its gain ramps to 0 too)
         for (i, ch) in self.chans.iter_mut().enumerate().take(MAX_CHANNELS) {
             if c.off & (1u64 << i) != 0 {

@@ -15,7 +15,6 @@
 //! Under it sits a small Master panel (volume, limiter drive and ceiling,
 //! level and gain-reduction meters, loudness). Ctrl+8 or View › Clip
 //! Arranger shows the Instruments list there instead.
-use super::timeline::TlOp;
 use super::*;
 use crate::engine::launch::{bit, Cue};
 use crate::timeline::{self as tl, Tick, ROW};
@@ -37,9 +36,9 @@ const STOP_W: f32 = 24.0;
 const HIST: usize = 120;
 
 #[derive(Default)]
-struct SlotPrev {
+pub(crate) struct SlotPrev {
     /// (start, length) as fractions of the block, and the note
-    notes: Vec<(f32, f32, u8)>,
+    pub(crate) notes: Vec<(f32, f32, u8)>,
     lo: u8,
     hi: u8,
 }
@@ -47,13 +46,21 @@ struct SlotPrev {
 pub(crate) struct CaUi {
     /// first scene shown (the grid pages through the blocks)
     pub(crate) first: usize,
-    /// a slot being dragged to the timeline: (block, column)
-    pub(crate) drag: Option<(usize, usize)>,
+    /// a slot being dragged to the timeline (docs/unified/PLAN.md 4a)
+    pub(crate) drag: Option<super::dropplan::DropSrc>,
     /// the side panel's rect this frame (drawn after the Timeline)
     pub(crate) rect: Rect,
-    /// mini previews per [block][column], for `key`
+    /// mini previews per [scene][track], for `key`
     key: Option<u64>,
-    prev: Vec<Vec<SlotPrev>>,
+    pub(crate) prev: Vec<Vec<SlotPrev>>,
+    /// timeline songs with note or audio clips: the scenes (None: the
+    /// scenes are the blocks), for `key`
+    pub(crate) secs: Option<Vec<Section>>,
+    /// the scenes are the launcher's own clips (`Timeline::launcher`;
+    /// docs/unified/PLAN.md Stage 4b), not the arrangement's
+    pub(crate) launch: bool,
+    /// the status line as last drawn (tests)
+    pub(crate) line: String,
     /// the scene seen playing last frame (the grid pages to a new one)
     seen: Option<usize>,
     /// as last drawn (tests, screenshots)
@@ -63,8 +70,9 @@ pub(crate) struct CaUi {
     pub(crate) stop_rects: Vec<(usize, Rect)>,
     pub(crate) stop_all: Rect,
     pub(crate) master: Rect,
-    /// screenshots: hold the slot drag at this point
+    /// screenshots: hold the slot drag at this point, with these keys
     pub(crate) shot_drag: Option<Pos2>,
+    pub(crate) shot_mods: egui::Modifiers,
     /// master level history for the Master panel's graph (newest last)
     hist: std::collections::VecDeque<f32>,
 }
@@ -77,6 +85,9 @@ impl Default for CaUi {
             rect: Rect::NOTHING,
             key: None,
             prev: vec![],
+            secs: None,
+            launch: false,
+            line: String::new(),
             seen: None,
             scene_rects: vec![],
             slot_rects: vec![],
@@ -84,6 +95,7 @@ impl Default for CaUi {
             stop_all: Rect::NOTHING,
             master: Rect::NOTHING,
             shot_drag: None,
+            shot_mods: egui::Modifiers::NONE,
             hist: Default::default(),
         }
     }
@@ -119,6 +131,164 @@ fn previews(song: &Song) -> Vec<Vec<SlotPrev>> {
                         if sp.notes.len() < PREVIEW_NOTES {
                             sp.notes
                                 .push((r as f32 / n as f32, (end - r) as f32 / n as f32, k));
+                        }
+                    }
+                    sp
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// A scene of a timeline song with note or audio clips: the clips that
+/// start on one tick, one per track (docs/CLIP_ARRANGER.md).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Section {
+    pub(crate) start: Tick,
+    /// the end of its longest clip
+    pub(crate) end: Tick,
+    /// a marker on its start, else "Bar N" (or "N.b" off the bar)
+    pub(crate) name: String,
+    /// per track: the clip that starts there
+    pub(crate) clips: Vec<Option<u32>>,
+}
+
+/// The scenes of a timeline song that has note or audio clips (new songs,
+/// recorded takes, Drum Kit patterns): one per clip start time, in time
+/// order, with each track's clip that starts there. None for a song whose
+/// clips are all Tracker clips: its scenes stay the blocks.
+pub(crate) fn sections(song: &Song) -> Option<Vec<Section>> {
+    let t = song.timeline.as_deref()?;
+    if t.clips.iter().all(|c| c.block().is_some()) {
+        return None;
+    }
+    let nch = song.channels.min(MAX_CHANNELS);
+    let on_track = |c: &&tl::Clip| (c.track as usize) < nch && c.len > 0;
+    let mut starts: Vec<Tick> = t.clips.iter().filter(on_track).map(|c| c.start).collect();
+    starts.sort_unstable();
+    starts.dedup();
+    Some(
+        starts
+            .into_iter()
+            .map(|s| {
+                let mut clips = vec![None; nch];
+                let mut end = s;
+                for c in t.clips.iter().filter(on_track).filter(|c| c.start == s) {
+                    let slot = &mut clips[c.track as usize];
+                    if slot.is_none() {
+                        *slot = Some(c.id);
+                    }
+                    end = end.max(c.end());
+                }
+                let name = match t.markers.iter().find(|m| m.tick == s && !m.name.is_empty()) {
+                    Some(m) => m.name.clone(),
+                    None => {
+                        let p = t.bar_pos(s);
+                        if p.beat == 1 && p.tick == 0 {
+                            format!("Bar {}", p.bar)
+                        } else {
+                            format!("{}.{}", p.bar, p.beat)
+                        }
+                    }
+                };
+                Section {
+                    start: s,
+                    end,
+                    name,
+                    clips,
+                }
+            })
+            .collect(),
+    )
+}
+
+/// The launcher's scene rows as scenes (Stage 4b): per track the launcher
+/// clip in that row. None while the song has no launcher clips or scenes
+/// (the grid then shows the arrangement).
+pub(crate) fn launcher_sections(song: &Song) -> Option<Vec<Section>> {
+    let t = song.timeline.as_deref()?;
+    if t.launcher.is_empty() && t.scenes.is_empty() {
+        return None;
+    }
+    let nch = song.channels.min(MAX_CHANNELS);
+    Some(
+        t.scenes
+            .iter()
+            .enumerate()
+            .map(|(k, sc)| Section {
+                start: 0,
+                end: 0,
+                name: sc.name.clone(),
+                clips: (0..nch)
+                    .map(|tr| tl::launch_at(t, tr, k).map(|l| l.clip.id))
+                    .collect(),
+            })
+            .collect(),
+    )
+}
+
+/// a section's timeline rows [a, b) (what its launch loops)
+pub(crate) fn sec_rows(s: &Section) -> (u32, u32) {
+    let a = (s.start / ROW).max(0) as u32;
+    let b = ((s.end + ROW - 1) / ROW).max(0) as u32;
+    (a, b.max(a + 1))
+}
+
+/// the slot previews of `secs` (per scene, per track): a note clip's notes
+/// as they play in the clip (offset and loop), a Tracker clip's column,
+/// an audio clip as one bar
+fn section_previews(song: &Song, secs: &[Section], blocks: &[Vec<SlotPrev>]) -> Vec<Vec<SlotPrev>> {
+    let Some(t) = song.timeline.as_deref() else {
+        return vec![];
+    };
+    secs.iter()
+        .map(|s| {
+            s.clips
+                .iter()
+                .map(|id| {
+                    let mut sp = SlotPrev {
+                        lo: 255,
+                        ..Default::default()
+                    };
+                    let Some(c) = id.and_then(|id| t.any_clip(id)) else {
+                        return sp;
+                    };
+                    let len = c.len.max(1) as f32;
+                    match c.kind {
+                        tl::ClipKind::Notes { data } => {
+                            let Some(d) = t.notes.get(data as usize) else {
+                                return sp;
+                            };
+                            let lp = c.loop_len.filter(|&l| l > 0);
+                            for n in &d.notes {
+                                let mut at = n.start - c.offset;
+                                if let Some(l) = lp {
+                                    at = at.rem_euclid(l);
+                                }
+                                while at < c.len && sp.notes.len() < PREVIEW_NOTES {
+                                    if at >= 0 {
+                                        sp.lo = sp.lo.min(n.key);
+                                        sp.hi = sp.hi.max(n.key);
+                                        sp.notes.push((at as f32 / len, n.len as f32 / len, n.key));
+                                    }
+                                    match lp {
+                                        Some(l) => at += l,
+                                        None => break,
+                                    }
+                                }
+                            }
+                        }
+                        tl::ClipKind::Block { pattern, col } => {
+                            if let Some(b) = blocks.get(pattern).and_then(|v| v.get(col as usize)) {
+                                sp.notes = b.notes.clone();
+                                sp.lo = b.lo;
+                                sp.hi = b.hi;
+                            }
+                        }
+                        tl::ClipKind::Audio { .. } => {
+                            sp.notes.push((0.0, 1.0, 60));
+                            sp.lo = 60;
+                            sp.hi = 60;
                         }
                     }
                     sp
@@ -208,8 +378,110 @@ impl App {
         });
     }
 
+    /// sections: track `tr`'s clip in scene `k`
+    pub(crate) fn ca_clip(&self, tr: usize, k: usize) -> Option<u32> {
+        self.ca
+            .secs
+            .as_ref()?
+            .get(k)?
+            .clips
+            .get(tr)
+            .copied()
+            .flatten()
+    }
+
+    /// sections: double-click a slot opens its clip (piano roll; a
+    /// Tracker clip in the Tracker)
+    fn ca_open_clip(&mut self, tr: usize, k: usize) {
+        let Some(id) = self.ca_clip(tr, k) else {
+            return;
+        };
+        self.ch = tr;
+        self.tlv.sels = vec![id];
+        self.tlv.sel = Some(id);
+        let block = self.with(|s| {
+            s.song
+                .timeline
+                .as_deref()
+                .and_then(|t| t.clips.iter().find(|c| c.id == id))
+                .and_then(|c| c.block())
+        });
+        match block {
+            Some((b, col)) => self.timeline_open(b, col, 0, usize::MAX),
+            None => self.set_lower(3),
+        }
+    }
+
+    /// sections: scene `k` loops its span on every track
+    fn ca_scene_sec(&mut self, k: usize) {
+        let Some(s) = self.ca.secs.as_ref().and_then(|x| x.get(k)).cloned() else {
+            return;
+        };
+        let span = sec_rows(&s);
+        if self.with(|x| x.engine.cue().is_some_and(|c| c.span == Some(span))) {
+            self.with(|x| x.engine.cancel_cue());
+            self.status = format!("Scene {} no longer queued", s.name);
+            return;
+        }
+        self.ca_launch(Cue {
+            span: Some(span),
+            on: u64::MAX,
+            ..Default::default()
+        });
+        self.status = format!(
+            "Scene {}: every track plays its clips there, looping, from the next {}",
+            s.name,
+            self.ca_when()
+        );
+    }
+
+    /// sections: slot ▶ plays track `tr`'s clip in scene `k` (the other
+    /// tracks keep playing when that scene already plays; otherwise the
+    /// scene starts with only this track)
+    fn ca_slot_sec(&mut self, tr: usize, k: usize) {
+        let Some(s) = self.ca.secs.as_ref().and_then(|x| x.get(k)).cloned() else {
+            return;
+        };
+        let span = sec_rows(&s);
+        let (now, queued, nch) = self.with(|x| {
+            (
+                x.engine.span().map(|(a, b)| (a as u32, b as u32)),
+                x.engine.cue().and_then(|c| c.span),
+                x.song.channels,
+            )
+        });
+        let all = (0..nch).fold(0u64, |m, q| m | bit(q));
+        let c = if queued == Some(span) || (queued.is_none() && now == Some(span)) {
+            Cue {
+                on: bit(tr),
+                ..Default::default()
+            }
+        } else {
+            Cue {
+                span: Some(span),
+                on: bit(tr),
+                off: all & !bit(tr),
+                ..Default::default()
+            }
+        };
+        self.ca_launch(c);
+        self.ch = tr;
+        self.status = format!(
+            "Track {:02} plays its clip at {} from the next {}",
+            tr + 1,
+            s.name,
+            self.ca_when()
+        );
+    }
+
     /// scene ▶: block `b` on every track
     pub(crate) fn ca_scene(&mut self, b: usize) {
+        if self.ca.launch {
+            return self.ca_scene_launch(b);
+        }
+        if self.ca.secs.is_some() {
+            return self.ca_scene_sec(b);
+        }
         // a second click on the scene waiting for its bar takes it back
         if self.with(|s| s.engine.cue().is_some_and(|c| c.scene == Some(b))) {
             self.with(|s| s.engine.cancel_cue());
@@ -232,6 +504,12 @@ impl App {
     /// slot ▶: track `tr` plays block `b` (the other tracks keep what they
     /// do in that scene; a new scene starts with only this track)
     pub(crate) fn ca_slot(&mut self, tr: usize, b: usize) {
+        if self.ca.launch {
+            return self.ca_slot_launch(tr, b);
+        }
+        if self.ca.secs.is_some() {
+            return self.ca_slot_sec(tr, b);
+        }
         let (now, queued, nch) = self.with(|s| {
             (
                 s.engine.scene(),
@@ -260,6 +538,246 @@ impl App {
             tr + 1,
             self.ca_when()
         );
+    }
+
+    // ---------------------------------------------- launcher clips (4b)
+
+    /// launcher: slot ▶ plays track `tr`'s clip in scene `k`, looping, from
+    /// the next boundary; the other tracks play on (from a stop: only it)
+    fn ca_slot_launch(&mut self, tr: usize, k: usize) {
+        let Some(id) = self.ca_clip(tr, k) else {
+            return;
+        };
+        let (playing, nch) = self.with(|s| (s.engine.playing, s.song.channels));
+        let all = (0..nch).fold(0u64, |m, q| m | bit(q));
+        let mut c = Cue {
+            on: bit(tr),
+            off: if playing { 0 } else { all & !bit(tr) },
+            ..Default::default()
+        };
+        c.clips[tr] = id;
+        self.ca_launch(c);
+        self.ch = tr;
+        let name = self
+            .ca
+            .secs
+            .as_ref()
+            .and_then(|x| x.get(k))
+            .map(|s| s.name.clone());
+        self.status = format!(
+            "Track {:02} plays its clip in {} from the next {}, looping",
+            tr + 1,
+            name.unwrap_or_default(),
+            self.ca_when()
+        );
+    }
+
+    /// launcher: scene ▶ plays every clip of scene `k`; tracks without one
+    /// stop. A second click while it waits takes it back.
+    fn ca_scene_launch(&mut self, k: usize) {
+        let Some(sc) = self.ca.secs.as_ref().and_then(|x| x.get(k)).cloned() else {
+            return;
+        };
+        let nch = self.with(|s| s.song.channels).min(MAX_CHANNELS);
+        let mut c = Cue::default();
+        for tr in 0..nch {
+            match sc.clips.get(tr).copied().flatten() {
+                Some(id) => {
+                    c.clips[tr] = id;
+                    c.on |= bit(tr);
+                }
+                None => c.off |= bit(tr),
+            }
+        }
+        let same = self.with(|s| {
+            s.engine
+                .cue()
+                .is_some_and(|q| q.clips == c.clips && c.on != 0)
+        });
+        if same {
+            self.with(|s| s.engine.cancel_cue());
+            self.status = format!("Scene {} no longer queued", sc.name);
+            return;
+        }
+        if c.on == 0 {
+            self.status = format!(
+                "Scene {} has no clips yet: double-click a slot for one",
+                sc.name
+            );
+            return;
+        }
+        self.ca_launch(c);
+        self.status = format!(
+            "Scene {}: its clips play, each looping on its track, from the next {}",
+            sc.name,
+            self.ca_when()
+        );
+    }
+
+    /// launcher: double-click opens the clip in the piano roll; an empty
+    /// slot gets a new one-bar clip first (it plays the track's instrument)
+    pub(super) fn ca_open_launch(&mut self, tr: usize, k: usize) {
+        let id = match self.ca_clip(tr, k) {
+            Some(id) => id,
+            None => {
+                let bar = self.pat_bar();
+                let Some(id) = self.with(|s| {
+                    s.song
+                        .timeline
+                        .as_deref_mut()
+                        .map(|t| tl::launch_new(t, tr, k, bar))
+                }) else {
+                    return;
+                };
+                self.status = format!(
+                    "New clip on track {:02}: draw its notes in the piano roll; ▶ plays it",
+                    tr + 1
+                );
+                self.dirty = true;
+                id
+            }
+        };
+        self.ch = tr;
+        self.tlv.sels.clear();
+        self.tlv.sel = None;
+        self.pr.launch = Some(id);
+        self.set_lower(3);
+    }
+
+    /// Capture plus a variation of the first clip (screenshots)
+    pub(super) fn ca_capture_now(&mut self) {
+        let secs = self.with(|s| sections(&s.song));
+        self.ca.secs = secs;
+        self.ca.launch = false;
+        self.ca_capture();
+        let first = self.with(|s| {
+            s.song
+                .timeline
+                .as_deref()
+                .and_then(|t| t.launcher.first())
+                .map(|l| l.clip.id)
+        });
+        if let Some(id) = first {
+            self.ca_variation(id);
+        }
+    }
+
+    /// "Capture": the arrangement's scenes become launcher clips, linked
+    fn ca_capture(&mut self) {
+        let Some(secs) = self.ca.secs.clone().filter(|_| !self.ca.launch) else {
+            return;
+        };
+        let rows: Vec<(String, Vec<(usize, u32)>)> = secs
+            .iter()
+            .map(|s| {
+                (
+                    s.name.clone(),
+                    s.clips
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(tr, id)| id.map(|id| (tr, id)))
+                        .collect(),
+                )
+            })
+            .collect();
+        let n = self.with(|s| {
+            let t = s.song.timeline.as_deref_mut()?;
+            let mut try_t = t.clone();
+            let n = tl::launch_capture(&mut try_t, &rows);
+            if n > 0 {
+                *t = try_t;
+            }
+            Some(n)
+        });
+        self.status = match n {
+            Some(0) | None => "Nothing captured: only note clips can be launcher clips".into(),
+            Some(n) => {
+                self.dirty = true;
+                format!(
+                    "Captured {n} clip{} into {} scenes of the launcher (linked: editing their notes \
+                     changes the arrangement's too · Ctrl+Z undoes)",
+                    if n == 1 { "" } else { "s" },
+                    rows.len()
+                )
+            }
+        };
+    }
+
+    fn ca_add_scene(&mut self) {
+        let k = self.with(|s| s.song.timeline.as_deref_mut().map(tl::launch_add_scene));
+        if let Some(k) = k {
+            self.dirty = true;
+            self.status = format!(
+                "Scene {} added: double-click its slots for new clips",
+                k + 1
+            );
+        }
+    }
+
+    fn ca_delete_scene(&mut self, k: usize) {
+        let ok = self.with(|s| {
+            s.song
+                .timeline
+                .as_deref_mut()
+                .is_some_and(|t| tl::launch_delete_scene(t, k))
+        });
+        if ok {
+            self.dirty = true;
+            self.status = "Scene deleted with its clips (Ctrl+Z brings it back)".into();
+        }
+    }
+
+    /// a new scene after `k` with independent copies of its clips
+    fn ca_duplicate_scene(&mut self, k: usize) {
+        let n = self.with(|s| {
+            let t = s.song.timeline.as_deref_mut()?;
+            let name = t.scenes.get(k)?.name.clone();
+            let ids: Vec<(usize, u32)> = t
+                .launcher
+                .iter()
+                .filter(|l| l.scene as usize == k)
+                .map(|l| (l.clip.track as usize, l.clip.id))
+                .collect();
+            let at = tl::launch_add_scene(t);
+            t.scenes[at].name = format!("{name} copy");
+            for (tr, id) in &ids {
+                tl::launch_copy(t, *id, *tr, at, true);
+            }
+            Some(ids.len())
+        });
+        if let Some(n) = n {
+            self.dirty = true;
+            self.status = format!("Scene duplicated with {n} independent clip copies");
+        }
+    }
+
+    pub(super) fn ca_variation(&mut self, id: u32) {
+        let v = self.with(|s| {
+            s.song
+                .timeline
+                .as_deref_mut()
+                .and_then(|t| tl::launch_variation(t, id))
+        });
+        if v.is_some() {
+            self.dirty = true;
+            self.status =
+                "Variation: an independent copy in the next free scene (its own notes)".into();
+        }
+    }
+
+    pub(super) fn ca_delete(&mut self, id: u32) {
+        if self.with(|s| {
+            s.song
+                .timeline
+                .as_deref_mut()
+                .is_some_and(|t| tl::launch_delete(t, id))
+        }) {
+            if self.pr.launch == Some(id) {
+                self.pr.launch = None;
+            }
+            self.dirty = true;
+            self.status = "Launcher clip deleted (Ctrl+Z brings it back)".into();
+        }
     }
 
     /// row ■: track `tr` goes silent at the next boundary
@@ -326,7 +844,19 @@ impl App {
         // previews follow the song (the timeline's cache key changes on edits)
         let key = self.tlv.cache.as_ref().map(|c| c.key);
         if key.is_none() || key != self.ca.key {
-            self.ca.prev = self.with(|s| previews(&s.song));
+            let (prev, secs, launch) = self.with(|s| {
+                let blocks = previews(&s.song);
+                if let Some(x) = launcher_sections(&s.song) {
+                    return (section_previews(&s.song, &x, &blocks), Some(x), true);
+                }
+                match sections(&s.song) {
+                    Some(x) => (section_previews(&s.song, &x, &blocks), Some(x), false),
+                    None => (blocks, None, false),
+                }
+            });
+            self.ca.prev = prev;
+            self.ca.secs = secs;
+            self.ca.launch = launch;
             self.ca.key = key;
         }
         let (names, nch, cols, playing, scene, cue, held, prog) = self.with(|s| {
@@ -362,9 +892,58 @@ impl App {
                 prog,
             )
         });
+        // timeline songs with note / audio clips: the scenes are sections
+        // (a launched span is the playing scene; queued spans show as scenes)
+        let secs = self.ca.secs.clone();
+        let launch = self.ca.launch;
+        let (names, scene, prog, cue) = match &secs {
+            Some(x) if launch => (
+                x.iter().map(|s| s.name.clone()).collect(),
+                None,
+                0.0,
+                cue.map(|c| Cue { scene: None, ..c }),
+            ),
+            Some(x) => {
+                let (span, tlrow) = self.with(|s| (s.engine.span(), s.engine.tl_row()));
+                let of = |sp: (u32, u32)| x.iter().position(|s| sec_rows(s) == sp);
+                let scene = span.and_then(|(a, b)| of((a as u32, b as u32)));
+                let prog = match (span, tlrow) {
+                    (Some((a, b)), Some(r)) => {
+                        (r.saturating_sub(a) as f32 + 0.5) / (b - a).max(1) as f32
+                    }
+                    _ => 0.0,
+                };
+                let cue = cue.map(|c| Cue {
+                    scene: c.span.and_then(of),
+                    ..c
+                });
+                (x.iter().map(|s| s.name.clone()).collect(), scene, prog, cue)
+            }
+            None => (names, scene, prog, cue),
+        };
         // the arrangement playing: the block under the playhead on each track
         let mut under: Vec<Option<(usize, f32)>> = vec![None; nch];
-        if playing && scene.is_none() {
+        if let (Some(x), true, None) = (&secs, playing, scene) {
+            // sections: the clip under the playhead on each track
+            let head = self.with(|s| {
+                s.engine
+                    .tl_row()
+                    .map(|_| s.engine.song_pos as f64 * ROW as f64)
+            });
+            if let (Some(c), Some(h)) = (self.tlv.cache.as_ref(), head) {
+                for cl in c.tl.clips.iter().filter(|c| !c.muted) {
+                    let (a, z) = (cl.start as f64, cl.end() as f64);
+                    let tr = cl.track as usize;
+                    if h >= a && h < z && tr < nch {
+                        if let Some(k) =
+                            x.iter().position(|s| s.clips.get(tr) == Some(&Some(cl.id)))
+                        {
+                            under[tr] = Some((k, ((h - a) / (z - a)) as f32));
+                        }
+                    }
+                }
+            }
+        } else if playing && scene.is_none() {
             let head = self.with(|s| {
                 s.engine
                     .tl_row()
@@ -380,6 +959,26 @@ impl App {
                         }
                     }
                 }
+            }
+        }
+        if let (Some(x), true) = (&secs, launch) {
+            // launcher clips playing: their scene and how far into the pass
+            let lp: Vec<(Option<u32>, f32)> = self.with(|s| {
+                (0..nch)
+                    .map(|tr| {
+                        (
+                            s.engine.launched(tr),
+                            s.engine.launch_progress(tr).unwrap_or(0.0),
+                        )
+                    })
+                    .collect()
+            });
+            for (tr, (id, f)) in lp.into_iter().enumerate() {
+                under[tr] = id.and_then(|id| {
+                    x.iter()
+                        .position(|s| s.clips.get(tr) == Some(&Some(id)))
+                        .map(|k| (k, f))
+                });
             }
         }
         let inner = top.shrink2(egui::vec2(12.0, 6.0));
@@ -402,8 +1001,10 @@ impl App {
         let sw = (gx1 - gx0) / nvis as f32;
         // ---- title row: name, launch quantise, pages
         let title = Rect::from_min_size(inner.min, egui::vec2(inner.width(), 24.0));
+        let mut title_op: Option<u8> = None;
         ui.scope_builder(
             egui::UiBuilder::new()
+                .id_salt("ca_title")
                 .max_rect(title)
                 .layout(egui::Layout::left_to_right(egui::Align::Center)),
             |ui| {
@@ -486,6 +1087,7 @@ impl App {
         });
         let k_pulse = pulse(ui, calm || cue.is_none());
         let mut clicked_scene = None;
+        let mut scene_op: Option<(usize, u8)> = None;
         for k in 0..nvis {
             let b = first + k;
             let Some(name) = names.get(b) else { break };
@@ -493,18 +1095,45 @@ impl App {
                 Pos2::new(gx0 + k as f32 * sw + 2.0, hy0),
                 Pos2::new(gx0 + (k + 1) as f32 * sw - 2.0, hy1),
             );
-            let resp = ui
-                .interact(sr, ui.make_persistent_id(("ca_scene", b)), Sense::click())
-                .on_hover_text(format!(
+            let tip = if launch {
+                format!(
+                    "Scene {name}: play its clips, each looping on its track, from the next {}; tracks \
+                     without a clip in it stop · right-click: rename or delete the scene",
+                    self.ca_when()
+                )
+            } else if secs.is_some() {
+                format!(
+                    "Scene {name}: play the clips that start here on every track, looping, from the next {} \
+                     (click again while it waits to take it back)",
+                    self.ca_when()
+                )
+            } else {
+                format!(
                     "Scene {name}: play block {b:02} on every track, looping, from the next {} \
                      (click again while it waits to take it back)",
                     self.ca_when()
-                ));
+                )
+            };
+            let resp = ui
+                .interact(sr, ui.make_persistent_id(("ca_scene", b)), Sense::click())
+                .on_hover_text(tip);
             resp.widget_info(|| {
                 egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Scene {name}"))
             });
             if resp.clicked() {
                 clicked_scene = Some(b);
+            }
+            if launch {
+                resp.context_menu(|ui| {
+                    if ui.button("Delete scene").clicked() {
+                        scene_op = Some((b, 1));
+                        ui.close();
+                    }
+                    if ui.button("Duplicate scene").clicked() {
+                        scene_op = Some((b, 2));
+                        ui.close();
+                    }
+                });
             }
             let on = lit_scene == Some(b);
             let q = queued_scene == Some(b);
@@ -587,6 +1216,30 @@ impl App {
         );
         let pc = p.with_clip_rect(clip_all);
         let mut act: Option<(u8, usize, usize)> = None;
+        let mut slot_op: Option<(u32, u8)> = None;
+        // linked counts of the launcher's clips (the ×N badge, D4)
+        // and their own colour and name (Stage 5)
+        let links: std::collections::HashMap<u32, (usize, Option<u32>, Option<String>)> = if launch
+        {
+            self.with(|s| {
+                s.song
+                    .timeline
+                    .as_deref()
+                    .map_or_else(Default::default, |t| {
+                        t.launcher
+                            .iter()
+                            .filter_map(|l| {
+                                let d = l.clip.notes()?;
+                                let (a, b) = tl::linked(t, d);
+                                let name = l.clip.name.clone().filter(|n| !n.is_empty());
+                                Some((l.clip.id, (a + b, l.clip.colour, name)))
+                            })
+                            .collect()
+                    })
+            })
+        } else {
+            Default::default()
+        };
         for tr in 0..nch {
             let Some((hr, _)) = self.tlv.track_rects(tr) else {
                 continue;
@@ -613,17 +1266,55 @@ impl App {
                     Pos2::new(gx0 + k as f32 * sw + 2.0, row.top()),
                     Pos2::new(gx0 + (k + 1) as f32 * sw - 2.0, row.bottom()),
                 );
-                let empty = self
-                    .ca
-                    .prev
-                    .get(b)
-                    .and_then(|v| v.get(tr))
-                    .is_none_or(|s| s.notes.is_empty());
+                let lid = if launch { self.ca_clip(tr, b) } else { None };
+                let empty = if launch {
+                    lid.is_none()
+                } else {
+                    self.ca
+                        .prev
+                        .get(b)
+                        .and_then(|v| v.get(tr))
+                        .is_none_or(|s| s.notes.is_empty())
+                };
                 let strip = Rect::from_min_max(sr.min, Pos2::new(sr.left() + 15.0, sr.bottom()));
                 let vis = sr.intersect(clip_all);
                 self.ca.slot_rects.push((tr, b, strip, sr));
                 if empty {
                     pc.circle_filled(sr.center(), 2.2, t.empty);
+                    if launch && vis.is_positive() {
+                        let resp = ui
+                            .interact(
+                                vis,
+                                ui.make_persistent_id(("ca_empty", tr, b)),
+                                Sense::click(),
+                            )
+                            .on_hover_text(format!(
+                                "{}: empty slot of track {:02} · double-click: a new clip here, \
+                                 open in the piano roll (it plays the track's instrument)",
+                                names[b],
+                                tr + 1
+                            ));
+                        resp.widget_info(|| {
+                            egui::WidgetInfo::labeled(
+                                egui::Role::Button,
+                                true,
+                                format!("Empty slot {:02} {b:02}", tr + 1),
+                            )
+                        });
+                        if resp.hovered() {
+                            pc.rect_stroke(
+                                sr,
+                                4.0,
+                                Stroke::new(1.0, Color32::from_white_alpha(40)),
+                                egui::StrokeKind::Inside,
+                            );
+                        }
+                        if resp.double_clicked() {
+                            act = Some((2, tr, b));
+                        } else if resp.clicked() {
+                            act = Some((3, tr, b));
+                        }
+                    }
                     continue;
                 }
                 // playing here: the scene (track not held), or the arrangement's clip
@@ -633,20 +1324,69 @@ impl App {
                     under[tr].filter(|x| x.0 == b).map(|x| x.1)
                 };
                 any_play |= pl.is_some();
-                let queued = cue.is_some_and(|c| {
-                    let target = c.scene.or(scene);
-                    target == Some(b) && c.on & bit(tr) != 0 && (c.scene.is_some() || row_held)
-                }) && pl.is_none_or(|_| row_held);
+                let queued = if launch {
+                    cue.is_some_and(|c| c.clips[tr] != 0 && Some(c.clips[tr]) == lid)
+                } else {
+                    cue.is_some_and(|c| {
+                        let target = c.scene.or(scene);
+                        target == Some(b) && c.on & bit(tr) != 0 && (c.scene.is_some() || row_held)
+                    }) && pl.is_none_or(|_| row_held)
+                };
                 let hover_id = ui.make_persistent_id(("ca_slot", tr, b));
                 let resp = ui.interact(vis, hover_id, Sense::click_and_drag());
                 let strip_hover = resp.hover_pos().is_some_and(|q| strip.contains(q));
-                let resp = resp.on_hover_text(format!(
-                    "{}: track {:02}'s column of block {b:02}. ▶ plays it from the next {} · drag it onto the \
-                     timeline for a Tracker clip · double-click opens it in the Tracker",
-                    names[b],
-                    tr + 1,
-                    self.ca_when()
-                ));
+                let tip = if launch {
+                    format!(
+                        "{}: track {:02}'s launcher clip. ▶ plays it, looping, from the next {} (the other \
+                         tracks play on) · drag it onto the timeline for a linked copy (Alt: an independent \
+                         one) · double-click opens it in the piano roll · right-click: play, edit, place, rename, colour…",
+                        names[b],
+                        tr + 1,
+                        self.ca_when()
+                    )
+                } else if secs.is_some() {
+                    format!(
+                        "{}: track {:02}'s clip. ▶ plays it, looping, from the next {} · drag it onto the \
+                         timeline for a linked copy (Alt: an independent one) · double-click opens it",
+                        names[b],
+                        tr + 1,
+                        self.ca_when()
+                    )
+                } else {
+                    format!(
+                        "{}: track {:02}'s column of block {b:02}. ▶ plays it from the next {} · drag it onto the \
+                         timeline for a {} · double-click opens it in the Tracker",
+                        names[b],
+                        tr + 1,
+                        self.ca_when(),
+                        self.clip_word()
+                    )
+                };
+                let resp = resp.on_hover_text(tip);
+                if let (Some(id), false, true) =
+                    (lid, self.extra.clip_list_menu, resp.secondary_clicked())
+                {
+                    if let Some(p) = resp.interact_pointer_pos() {
+                        self.opie_req = Some((super::objpie::PieFor::Launch(id), p));
+                    }
+                } else if let (Some(id), true) = (lid, self.extra.clip_list_menu) {
+                    resp.context_menu(|ui| {
+                        if ui
+                            .button("Duplicate (variation)")
+                            .on_hover_text(
+                                "an independent copy in the next free scene of this track",
+                            )
+                            .clicked()
+                        {
+                            slot_op = Some((id, 1));
+                            ui.close();
+                        }
+                        if ui.button("Delete").clicked() {
+                            slot_op = Some((id, 2));
+                            ui.close();
+                        }
+                    });
+                }
                 resp.widget_info(|| {
                     egui::WidgetInfo::labeled(
                         egui::Role::Button,
@@ -654,14 +1394,26 @@ impl App {
                         format!("Slot {:02} {b:02}", tr + 1),
                     )
                 });
-                if resp.drag_started() && !resp.drag_started_by(egui::PointerButton::Secondary) {
-                    self.ca.drag = Some((b, tr));
+                let src = if secs.is_some() {
+                    self.ca_clip(tr, b).map(super::dropplan::DropSrc::Clip)
+                } else {
+                    Some(super::dropplan::DropSrc::Block { block: b, col: tr })
+                };
+                if resp.drag_started()
+                    && !resp.drag_started_by(egui::PointerButton::Secondary)
+                    && src.is_some()
+                {
+                    self.ca.drag = src;
                 } else if resp.double_clicked() {
                     act = Some((2, tr, b));
                 } else if resp.clicked() {
                     act = Some(if strip_hover { (1, tr, b) } else { (3, tr, b) });
                 }
                 let dim = if row_held { 0.55 } else { 1.0 };
+                let look = lid.and_then(|id| links.get(&id));
+                let col = look.and_then(|x| x.1).map_or(col, |x| {
+                    Color32::from_rgb((x >> 16) as u8, (x >> 8) as u8, x as u8)
+                });
                 let fill = if pl.is_some() {
                     theme::mix(col, Color32::BLACK, 0.15)
                 } else {
@@ -714,7 +1466,38 @@ impl App {
                         );
                     }
                 }
-                if self.ca.drag == Some((b, tr)) {
+                if let Some(name) = look
+                    .and_then(|x| x.2.as_deref())
+                    .filter(|_| sr.height() >= 22.0)
+                {
+                    pc.text(
+                        Pos2::new(strip.right() + 3.0, sr.bottom() - 2.0),
+                        egui::Align2::LEFT_BOTTOM,
+                        name,
+                        FontId::proportional(10.5),
+                        t.ink,
+                    );
+                }
+                if let Some(n) = look.map(|x| x.0).filter(|&n| n > 1) {
+                    let g = pc.layout_no_wrap(format!("×{n}"), FontId::proportional(10.5), t.ink);
+                    let br = Rect::from_min_size(
+                        Pos2::new(sr.right() - g.size().x - 7.0, sr.top() + 2.0),
+                        g.size() + egui::vec2(5.0, 1.0),
+                    );
+                    pc.rect_filled(br, 3.0, Color32::from_black_alpha(150));
+                    pc.galley(br.min + egui::vec2(2.5, 0.5), g, t.ink);
+                }
+                // the launcher clip open in the piano roll (5.6)
+                if lid.is_some() && lid == self.pr.launch && self.pr.open && self.tlv.sel.is_none()
+                {
+                    pc.rect_stroke(
+                        sr,
+                        4.0,
+                        Stroke::new(1.5, t.accent),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+                if self.ca.drag.is_some() && self.ca.drag == src {
                     pc.rect_stroke(
                         sr.expand(1.0),
                         5.0,
@@ -819,17 +1602,103 @@ impl App {
             }
         }
         // status line under the rows
-        let msg = self.ca_status(&names, scene, cue, held, nch, playing);
-        p.with_clip_rect(top.shrink(6.0)).text(
+        let msg = if launch {
+            let n = (0..nch).filter(|&k| under[k].is_some()).count();
+            let mut m = if n > 0 {
+                format!("{n} launcher clip{} playing", if n == 1 { "" } else { "s" })
+            } else {
+                "Launcher: ▶ plays a clip · double-click an empty slot for a new one".into()
+            };
+            if cue.is_some() {
+                m += &format!(" · changes queued (next {})", self.ca_when());
+            }
+            m
+        } else if secs.is_some() {
+            format!(
+                "From the arrangement · {}",
+                self.ca_status(&names, scene, cue, held, nch, playing)
+            )
+        } else {
+            self.ca_status(&names, scene, cue, held, nch, playing)
+        };
+        // the launcher's own button at the status line's right end
+        let mut text_clip = top.shrink(6.0);
+        if secs.is_some() {
+            let (label, tip, op) = if launch {
+                (
+                    "+ Scene",
+                    "a new empty scene row (double-click its slots for new clips)".to_string(),
+                    1,
+                )
+            } else {
+                (
+                    "Capture",
+                    "Capture into the launcher: these scenes become clips of the launcher's own, \
+                     linked to the arrangement's (editing the notes changes both; position, length \
+                     and name are each clip's own)"
+                        .to_string(),
+                    2,
+                )
+            };
+            let w = if launch { 58.0 } else { 60.0 };
+            let br = Rect::from_center_size(
+                Pos2::new(inner.right() - w / 2.0, top.bottom() - 13.0),
+                egui::vec2(w, 18.0),
+            );
+            text_clip.max.x = br.left() - 6.0;
+            let resp = ui
+                .put(
+                    br,
+                    egui::Button::new(egui::RichText::new(label).size(11.0)).small(),
+                )
+                .on_hover_text(tip);
+            if resp.clicked() {
+                title_op = Some(op);
+            }
+        }
+        p.with_clip_rect(text_clip).text(
             Pos2::new(gx0 + 2.0, top.bottom() - 13.0),
             egui::Align2::LEFT_CENTER,
-            msg,
+            msg.clone(),
             FontId::proportional(11.5),
             t.ink2,
         );
+        self.ca.line = msg;
+        match title_op {
+            Some(1) => self.ca_add_scene(),
+            Some(2) => self.ca_capture(),
+            _ => {}
+        }
+        match scene_op {
+            Some((k, 1)) => self.ca_delete_scene(k),
+            Some((k, 2)) => self.ca_duplicate_scene(k),
+            _ => {}
+        }
+        match slot_op {
+            Some((id, 1)) => self.ca_variation(id),
+            Some((id, 2)) => self.ca_delete(id),
+            _ => {}
+        }
         match act {
             Some((1, tr, b)) => self.ca_slot(tr, b),
+            Some((2, tr, b)) if launch => self.ca_open_launch(tr, b),
+            Some((2, tr, b)) if secs.is_some() => self.ca_open_clip(tr, b),
+            Some((3, tr, b)) if launch => {
+                self.ch = tr;
+                if let Some(id) = self.ca_clip(tr, b) {
+                    self.tlv.sels.clear();
+                    self.tlv.sel = None;
+                    self.pr.launch = Some(id);
+                }
+            }
             Some((2, tr, b)) => self.timeline_open(b, tr, 0, usize::MAX),
+            Some((3, tr, b)) if secs.is_some() => {
+                self.ch = tr;
+                if let Some(id) = self.ca_clip(tr, b) {
+                    self.tlv.sels = vec![id];
+                    self.tlv.sel = Some(id);
+                }
+            }
             Some((3, tr, _)) => self.ch = tr,
             Some((4, tr, _)) => self.ca_stop(tr),
             _ => {}
@@ -871,94 +1740,38 @@ impl App {
         s
     }
 
-    /// a slot dragged onto the timeline: a Tracker clip on the bar under it
+    /// a slot dragged onto the timeline: the drop preview, then a copy of
+    /// the slot's clip where it says (see dropplan.rs)
     fn ca_drag(&mut self, ctx: &egui::Context) {
-        let Some((b, col)) = self.ca.drag else { return };
-        let (pos, down, released) = match self.ca.shot_drag {
-            Some(q) => (Some(q), true, false),
+        let Some(src) = self.ca.drag else { return };
+        let (pos, down, released, mods, esc) = match self.ca.shot_drag {
+            Some(q) => (Some(q), true, false, self.ca.shot_mods, false),
             None => ctx.input(|i| {
                 (
                     i.pointer.latest_pos(),
                     i.pointer.primary_down(),
                     i.pointer.primary_released(),
+                    i.modifiers,
+                    i.key_pressed(Key::Escape),
                 )
             }),
         };
-        let target = pos
-            .and_then(|q| self.tlv.drop_at(q))
-            .and_then(|(tr, tick)| {
-                let tr = tr.ok()?;
-                let tick = tick?;
-                let at = self.with(|s| {
-                    s.song.timeline.as_deref().map(|t| {
-                        let sig = t.sig_at(tick);
-                        let bar = sig.bar_ticks().max(1);
-                        let from = if tick >= sig.tick { sig.tick } else { 0 };
-                        from + (tick - from).max(0) / bar * bar
-                    })
-                })?;
-                Some((tr, at))
-            });
-        let nch = self.with(|s| s.song.channels);
-        let target = target.filter(|(tr, _)| *tr < nch);
+        if esc {
+            self.ca.drag = None;
+            self.status = "Drag cancelled".into();
+            return;
+        }
+        let plan = pos.and_then(|q| self.drop_plan(q, src, mods.shift));
         if released || !down {
             self.ca.drag = None;
-            if let (Some((tr, at)), true) = (target, released) {
-                self.tl_apply(TlOp::PlaceBlock {
-                    block: b as u16,
-                    col: col as u8,
-                    track: tr as u8,
-                    at,
-                });
+            if released {
+                self.drop_release(src, plan, mods.alt);
             }
             return;
         }
-        let t = th();
-        let layer = egui::LayerId::new(egui::Order::Tooltip, egui::Id::NULL.with("ca_drag"));
-        let p = ctx.layer_painter(layer);
-        let (name, rows) = self.with(|s| {
-            s.song
-                .patterns
-                .get(b)
-                .map_or((String::new(), 64), |x| (x.name.clone(), x.rows))
-        });
-        let hint = match target {
-            Some((tr, at)) => {
-                if let Some((_, row)) = self.tlv.track_rects(tr) {
-                    let x0 = self.tlv.x_of(at);
-                    let x1 = self.tlv.x_of(at + tl::rows_to_ticks(rows.max(1)));
-                    let g = Rect::from_min_max(
-                        Pos2::new(x0.max(self.tlv.lanes.left()), row.top() + 2.0),
-                        Pos2::new(x1.min(self.tlv.lanes.right()), row.bottom() - 2.0),
-                    );
-                    p.rect_filled(row, 0.0, t.accent.gamma_multiply(0.10));
-                    if g.is_positive() {
-                        p.rect_filled(g, 3.0, t.accent.gamma_multiply(0.30));
-                        p.rect_stroke(g, 3.0, Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
-                    }
-                }
-                let bar =
-                    self.with(|s| s.song.timeline.as_deref().map_or(1, |x| x.bar_pos(at).bar));
-                format!("Tracker clip on track {:02}, bar {bar}", tr + 1)
-            }
-            None => "drop it on a track in the timeline".into(),
-        };
-        if let Some(q) = pos {
-            let txt = format!("{b:02} {name} · column {}", col + 1);
-            let g = p.layout_no_wrap(txt, FontId::proportional(12.0), t.ink);
-            let hg = p.layout_no_wrap(
-                hint,
-                FontId::proportional(10.5),
-                if target.is_some() { t.accent } else { t.ink2 },
-            );
-            let w = g.size().x.max(hg.size().x) + 16.0;
-            let r = Rect::from_min_size(q + egui::vec2(14.0, 10.0), egui::vec2(w, 36.0));
-            p.rect_filled(r, 4.0, t.cart_top);
-            p.rect_stroke(r, 4.0, Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
-            p.galley(r.min + egui::vec2(8.0, 4.0), g, t.ink);
-            p.galley(r.min + egui::vec2(8.0, 20.0), hg, t.ink2);
-        }
-        ctx.set_cursor_icon(if target.is_some() {
+        self.drop_paint(ctx, src, plan.as_ref(), pos, mods.alt);
+        let ok = plan.as_ref().is_some_and(|p| p.bad.is_none());
+        ctx.set_cursor_icon(if ok {
             egui::CursorIcon::Grabbing
         } else {
             egui::CursorIcon::NoDrop

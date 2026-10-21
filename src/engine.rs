@@ -405,6 +405,9 @@ pub struct Engine {
     cue: Option<launch::Cue>,
     /// Clip Arranger: tracks held silent (bit per track; 0 = none)
     held: u64,
+    /// Clip Arranger, timeline songs: the timeline rows [a, b) a launched
+    /// scene or slot loops (overrides the timeline loop; None = off)
+    tl_span: Option<(usize, usize)>,
 }
 
 /// Timeline-mode playback: the plan being played, the row position and the
@@ -514,6 +517,7 @@ impl Engine {
             patprev: None,
             cue: None,
             held: 0,
+            tl_span: None,
         }
     }
 
@@ -572,6 +576,17 @@ impl Engine {
                     if let Some(inst) = song.instruments.get(i) {
                         if matches!(inst.kind, InstrumentKind::Plugin(_)) {
                             let n = (note as i32 + inst.transpose as i32).clamp(1, 127) as u8;
+                            // the plugin sounds through this channel's insert
+                            // chain, which refresh_fx gives to `c.instr`: make
+                            // that the plugin's own chain (its Devices row)
+                            // unless a song note holds the channel
+                            if let Some(c) = self.chans.get_mut(ch as usize) {
+                                if c.instr == usize::MAX && c.tail.instr == usize::MAX {
+                                    self.chains[ch as usize].sync(&inst.fx, i, self.sr);
+                                } else if !self.playing && !c.active && c.instr != i {
+                                    c.instr = i;
+                                }
+                            }
                             self.plugins.live_on(
                                 i,
                                 ch as usize,
@@ -821,6 +836,8 @@ impl Engine {
         self.playing = true;
         self.cue = None;
         self.held = 0;
+        self.tl_span = None;
+        self.nv.lmask = 0;
         // audio clips still fading from the last play end now
         self.av.release_all();
         self.av.starting = true;
@@ -1059,6 +1076,10 @@ impl Engine {
         ch: usize,
         row: usize,
     ) -> Cell {
+        if self.nv.lmask >> ch.min(63) & 1 == 1 {
+            // a launcher clip plays on this track instead
+            return Cell::default();
+        }
         let Some(segs) = plan.tracks.get(ch) else {
             return Cell::default();
         };
@@ -1089,6 +1110,8 @@ impl Engine {
         }
         if self.tl.on {
             // timeline mode: `row` is the timeline row; state is chased
+            // (a seek leaves a launched span loop)
+            self.tl_span = None;
             self.ensure_plan(song);
             self.tick = 0;
             self.song_ended = false;
@@ -1199,6 +1222,7 @@ impl Engine {
         self.playing = false;
         self.metro.cancel();
         self.cue = None;
+        self.nv.lmask = 0;
         self.nv.release_all(&mut self.plugins);
         self.av.release_all();
         self.plugins.all_off();
@@ -1220,6 +1244,13 @@ impl Engine {
             }
             _ => None,
         }
+    }
+
+    /// (owner instrument, device count) of channel `ch`'s insert chain (tests)
+    #[cfg(test)]
+    pub fn chain_info(&self, ch: usize) -> (usize, usize) {
+        let c = &self.chains[ch];
+        (c.owner, c.states.len())
     }
 
     /// the phoneme a Voice note on `ch` is speaking (tests)
@@ -1610,6 +1641,8 @@ impl Engine {
             };
             let mut next = self.tl.row + 1;
             let mut jump = false;
+            // a launched Clip Arranger span loops instead of the timeline loop
+            let lp = self.tl_span.or(lp);
             if let Some((a, b)) = lp {
                 if next == b {
                     next = a;
@@ -2214,7 +2247,11 @@ impl Engine {
         let pp_rate = self.pp_begin(song);
         let nch = song.channels.min(MAX_CHANNELS);
         // note clips (timeline mode): the plan can't change during a callback
-        let note_plan = self.tl.plan.clone().filter(|p| self.tl.on && p.has_notes());
+        let note_plan = self
+            .tl
+            .plan
+            .clone()
+            .filter(|p| self.tl.on && (p.has_notes() || self.nv.lmask != 0));
         // stopped without `stop` (export tails): audio clips fade out
         if !self.playing && self.av.any {
             self.av.release_all();
@@ -2282,6 +2319,11 @@ impl Engine {
                 if let Some(p) = note_plan.as_deref() {
                     if self.playing && self.tl.on {
                         let t = self.tl_clock();
+                        let lc = if self.nv.lmask != 0 {
+                            self.launch_clock()
+                        } else {
+                            0.0
+                        };
                         notes::note_events(
                             &mut self.nv,
                             &mut self.mods.feed,
@@ -2291,13 +2333,14 @@ impl Engine {
                             &mut self.plugins,
                             nch,
                             t,
+                            lc,
                         );
                     }
                 }
                 if let Some(p) = audio_plan.as_deref() {
                     if self.playing && self.tl.on {
                         let t = self.tl_clock();
-                        self.av.events(p, nch, t, self.sr);
+                        self.av.events(p, nch, t, self.sr, self.nv.lmask);
                     }
                 }
             }

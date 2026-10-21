@@ -34,6 +34,7 @@ mod devices;
 #[cfg(test)]
 mod devices_tests;
 mod dialogs;
+mod dropplan;
 mod drumkitview;
 mod drumpat;
 #[cfg(test)]
@@ -48,6 +49,8 @@ mod focus_tests;
 mod fxplugview;
 mod fxview;
 mod genview;
+#[cfg(test)]
+mod glyph_tests;
 mod glyphs;
 mod inspector;
 #[cfg(test)]
@@ -59,6 +62,8 @@ mod instruments;
 mod keys;
 mod knob;
 mod lanes;
+#[cfg(test)]
+mod launcher_ui_tests;
 #[cfg(test)]
 mod layout_tests;
 mod library;
@@ -73,6 +78,9 @@ mod narrow_tests;
 #[cfg(test)]
 mod newsong_tests;
 mod noterec;
+mod objpie;
+#[cfg(test)]
+mod objpie_tests;
 #[cfg(test)]
 mod opentl_tests;
 mod params;
@@ -88,6 +96,8 @@ mod radial;
 #[cfg(test)]
 mod record_tests;
 mod sampleview;
+#[cfg(test)]
+mod scenario_tests;
 mod settingsview;
 pub mod shot;
 pub mod showcase;
@@ -95,11 +105,15 @@ pub mod showcase;
 mod showcase_tests;
 #[cfg(test)]
 mod stabilise_tests;
+#[cfg(test)]
+mod stage3_tests;
 mod timeline;
 #[cfg(test)]
 mod timeline_m2_tests;
 #[cfg(test)]
 mod timeline_tests;
+#[cfg(test)]
+mod tlselect_tests;
 mod topbar;
 mod trackauto;
 mod trackops;
@@ -111,6 +125,8 @@ mod typing;
 #[cfg(test)]
 mod ui_tests;
 mod undo;
+#[cfg(test)]
+mod unified_tests;
 mod updates;
 mod viewbar;
 mod voiceview;
@@ -204,6 +220,8 @@ pub struct App {
     last_heartbeat: std::time::Instant,
     /// crashed sessions found at start (recovery dialog)
     orphans: Vec<crate::recovery::Orphan>,
+    /// a drop over clips waiting for Replace / Place after it / Cancel
+    drop_ask: Option<dropplan::DropAsk>,
     smp: sampleview::SampleEd,
     extra: crate::settings::Extra,
     /// update check state (Help > Check for updates…, startup check)
@@ -245,6 +263,12 @@ pub struct App {
     show_info: bool,
     /// action waiting for the Save / Don't save / Cancel answer
     prompt: Option<crate::prompt::Pending>,
+    /// a pie open on a clip, launcher clip or drum pattern (objpie.rs)
+    opie: Option<(radial::Radial, objpie::PieFor)>,
+    /// the clip Rename window
+    clip_rename: Option<objpie::ClipRename>,
+    /// a pie to open at the next `obj_pie_frame`
+    opie_req: Option<(objpie::PieFor, Pos2)>,
     /// user chose "Don't save" (recovery copy may be deleted on exit)
     discarded: bool,
     allow_close: bool,
@@ -299,6 +323,8 @@ pub struct App {
     win_rect: Option<[f32; 4]>,
     max_zoom: f32,
     zoom_checked: bool,
+    /// the title bar colours last given to Windows (DWM); None: not yet
+    titlebar: Option<crate::titlebar::Colours>,
     /// the Settings scale slider's value while it is dragged: applied on
     /// release, so the UI doesn't rescale under the pointer
     zoom_drag: Option<f32>,
@@ -588,6 +614,7 @@ impl App {
             load_warnings: Vec::new(),
             last_heartbeat: std::time::Instant::now(),
             orphans,
+            drop_ask: None,
             smp: Default::default(),
             extra: crate::settings::load().extra,
             upd: Default::default(),
@@ -613,6 +640,9 @@ impl App {
             rename_view: View::Pattern,
             show_info: false,
             prompt: None,
+            opie: None,
+            clip_rename: None,
+            opie_req: None,
             discarded: false,
             allow_close: false,
             arr_flash: None,
@@ -649,6 +679,7 @@ impl App {
             win_rect: crate::settings::load().window,
             max_zoom: 3.0,
             zoom_checked: false,
+            titlebar: None,
             zoom_drag: None,
             themed: false,
             theme: crate::settings::load().theme(),
@@ -835,6 +866,12 @@ impl App {
     /// views, tabs, keys and menu items (off by default)
     pub(crate) fn tracker_on(&self) -> bool {
         self.extra.show_tracker
+    }
+
+    /// the status bar's Row / Instr / Oct / Step readout: only while the
+    /// Tracker (pattern editor) is the view
+    pub(crate) fn status_cursor_visible(&self) -> bool {
+        self.view == View::Pattern
     }
 
     fn play(&mut self, mode: u8) {
@@ -1083,6 +1120,8 @@ impl eframe::App for App {
         self.load_warnings_window(ui.ctx());
         self.too_new_window(ui.ctx());
         self.timeline_prompts(ui.ctx());
+        self.drop_ask_window(ui.ctx());
+        self.obj_pie_frame(ui.ctx());
         self.instr_delete_dialog(ui.ctx());
         self.block_len_dialog(ui.ctx());
         self.chord_window(ui.ctx());
@@ -1190,6 +1229,12 @@ impl eframe::App for App {
         self.tick_derived();
         self.plugin_frame(&ctx);
 
+        // the native title bar in the theme's colours (Windows; again after
+        // a theme change)
+        let bar = crate::titlebar::for_theme(&th());
+        if self.titlebar != Some(bar) && crate::titlebar::apply(bar) {
+            self.titlebar = Some(bar);
+        }
         let full = ui.max_rect();
         theme::gradient(ui.painter(), full, th().bg_top, th().bg_bot);
 
@@ -1209,24 +1254,49 @@ impl eframe::App for App {
                     .inner_margin(egui::Margin::symmetric(0, 5)),
             )
             .show(ui, |ui| self.toolbar(ui));
-        egui::Panel::bottom("status").exact_size(26.0).frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(12, 4))).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                if let Some(log) = &self.key_log {
-                    let v: Vec<&str> = log.iter().map(|s| s.as_str()).collect();
-                    ui.label(
-                        egui::RichText::new(format!("keys: {}", v.join("  ")))
-                            .monospace()
-                            .color(th().fx),
-                    );
-                } else {
-                    ui.label(egui::RichText::new(&self.status).color(Color32::WHITE));
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let (peak, len) = self.with(|s| (s.engine.peak, s.song.length_seconds()));
-                    ui.label(egui::RichText::new(format!("Row {}/{} · Instr {:02X} · Oct {} · Step {} · length {}:{:04.1} · peak {:.0} %", self.row_text(self.row, self.rows()), self.rows(), self.instr, self.octave, self.step, (len / 60.0) as u32, len % 60.0, peak * 100.0)).color(Color32::WHITE).monospace());
+        egui::Panel::bottom("status")
+            .exact_size(26.0)
+            .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(12, 4)))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if let Some(log) = &self.key_log {
+                        let v: Vec<&str> = log.iter().map(|s| s.as_str()).collect();
+                        ui.label(
+                            egui::RichText::new(format!("keys: {}", v.join("  ")))
+                                .monospace()
+                                .color(th().fx),
+                        );
+                    } else {
+                        ui.label(egui::RichText::new(&self.status).color(Color32::WHITE));
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let (peak, len) = self.with(|s| (s.engine.peak, s.song.length_seconds()));
+                        // the tracker's cursor readout only with the Tracker in view
+                        let cursor = if self.status_cursor_visible() {
+                            format!(
+                                "Row {}/{} · Instr {:02X} · Oct {} · Step {} · ",
+                                self.row_text(self.row, self.rows()),
+                                self.rows(),
+                                self.instr,
+                                self.octave,
+                                self.step
+                            )
+                        } else {
+                            String::new()
+                        };
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{cursor}length {}:{:04.1} · peak {:.0} %",
+                                (len / 60.0) as u32,
+                                len % 60.0,
+                                peak * 100.0
+                            ))
+                            .color(Color32::WHITE)
+                            .monospace(),
+                        );
+                    });
                 });
             });
-        });
         if self.extra.view_bar {
             let t = th();
             egui::Panel::bottom("viewbar")

@@ -16,10 +16,15 @@ const BAR_H: f32 = 26.0;
 const HEAD_H: f32 = 22.0;
 /// width of one dropdown / toggle column in a card
 const CTL_W: f32 = 168.0;
+/// the Timeline's toolbar, markers, ruler and scroll bar before it is drawn
+const TL_CHROME_GUESS: f32 = 110.0;
 
 /// instrument editor state that is not part of the song
 #[derive(Default)]
 pub(super) struct InstUi {
+    /// other tracks that play the current track's instrument: (song key,
+    /// track, instrument, those tracks), worked out when one changes
+    pub shared: Option<(u64, usize, u8, Vec<usize>)>,
     pub tab: Tab,
     pub query: String,
     /// Ctrl+F: focus the search box next frame
@@ -51,6 +56,15 @@ pub(super) struct InstUi {
     pub grid_fx_held: bool,
     /// the full editor (Advanced ›) instead of the simple card
     pub advanced: bool,
+    /// a Sample instrument: its sample editor in the lower panel instead
+    /// of the knobs (Open in Sample editor; Ctrl+5 is the full view)
+    pub sample: bool,
+    /// the pointer was over that sample editor last frame: Ctrl+Z there
+    /// undoes sample edits (the sample editor's own history)
+    pub sample_hover: bool,
+    /// the Timeline's height above its track rows (toolbar, markers,
+    /// ruler, scroll bar) as last drawn; 0 = not drawn yet
+    pub tl_chrome: f32,
     /// the preset the shown sound matches: (instrument, sound, name)
     preset_seen: Option<(usize, InstrumentKind, Option<String>)>,
 }
@@ -238,7 +252,19 @@ impl App {
         self.extra.lower_dev = false;
         self.extra.lower_chosen = true;
         self.arr_focus = false;
+        self.reveal_current_track();
         self.save_settings();
+    }
+
+    /// the lower panel opened or changed: the current track's row scrolls
+    /// into view on the Timeline above it (it stays where it is if visible)
+    pub(super) fn reveal_current_track(&mut self) {
+        if self.view == View::Timeline {
+            self.tlv.reveal = Some((
+                self.ch,
+                self.tlv.scroll.max(0.0).ceil() as crate::timeline::Tick,
+            ));
+        }
     }
 
     /// The default workspace (Del, 19 Oct 2026): the Timeline on top and
@@ -278,6 +304,69 @@ impl App {
         self.status = "Timeline + piano roll (the default layout; Ctrl+6)".into();
     }
 
+    /// "Open in Sample editor": the sample editor in the lower panel, under
+    /// the timeline (the Instrument tab shows it instead of the knobs)
+    pub(super) fn open_sample_editor(&mut self) {
+        self.ip.sample = true;
+        self.show_instrument_panel();
+        self.status =
+            "Sample editor in the lower panel (Back to the knobs returns; Ctrl+5: full view)"
+                .into();
+    }
+
+    /// the sample editor shown (full view, or in the lower panel): Ctrl+Z
+    /// and the Edit menu use its own history while the pointer is over it
+    pub(super) fn sample_undo_here(&self) -> bool {
+        self.view == View::Sample || (self.ip.sample_hover && self.sample_shown())
+    }
+
+    /// the sample editor drawn where it is shown
+    pub(super) fn sample_shown(&self) -> bool {
+        self.view == View::Sample
+            || (self.ip.sample
+                && self.extra.lower_inst
+                && self.lower_visible()
+                && matches!(self.view, View::Timeline | View::Pattern))
+    }
+
+    fn lower_sample_editor(&mut self, ui: &mut egui::Ui) {
+        let t = th();
+        self.ip.sample_hover = ui.rect_contains_pointer(ui.max_rect());
+        ui.horizontal(|ui| {
+            ui.add_space(4.0);
+            if ui
+                .button("Back to the knobs")
+                .on_hover_text("the instrument's controls again")
+                .clicked()
+            {
+                self.ip.sample = false;
+            }
+            if ui
+                .button("Full view  Ctrl+5")
+                .on_hover_text("the sample editor over the whole window (the timeline is hidden until you switch back)")
+                .clicked()
+            {
+                self.view = View::Sample;
+            }
+            ui.label(
+                egui::RichText::new("Ctrl+Z over the sample editor undoes sample edits")
+                    .small()
+                    .color(t.ink2),
+            );
+        });
+        self.sample_view(ui);
+    }
+
+    /// the current instrument's editor in the lower panel: one path for
+    /// a header click, the Instruments list and Inspector › Edit (3.2, 3.6)
+    pub(super) fn show_instrument_editor(&mut self) {
+        if matches!(self.view, View::Timeline | View::Pattern) {
+            self.set_lower(1);
+        } else {
+            self.show_instrument_panel();
+        }
+    }
+
     /// 0 arranger, 1 instrument, 2 automation, 3 piano roll, 4 devices
     pub(super) fn set_lower(&mut self, m: u8) {
         // the Order list is a Tracker view: hidden, the piano roll stands in
@@ -298,7 +387,53 @@ impl App {
         } else {
             self.show_auto = m == 2;
         }
+        self.reveal_current_track();
         self.save_settings();
+    }
+
+    /// "Track 07 Pad 2 › 07 Supersaw Pad · SYNTH": the instrument shown
+    /// in the lower panel, with the current track first when it is that
+    /// track's instrument
+    pub(super) fn lower_breadcrumb(&self) -> Option<String> {
+        let slot = self.instr;
+        let (name, tag) = self.with(|s| {
+            s.song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .map(|i| (i.name.clone(), params::type_tag(&i.kind).to_string()))
+        })?;
+        let inst = format!("{slot:02X} {name} · {tag}");
+        let tl_song = self.with(|s| s.song.timeline.is_some());
+        if tl_song && self.track_slot(self.ch) == slot {
+            let tname = self.with(|s| {
+                s.song
+                    .channel_names
+                    .get(self.ch)
+                    .cloned()
+                    .unwrap_or_default()
+            });
+            // the clip being edited on this track (5.6): the Timeline's
+            // selection, else the launcher clip open in the piano roll
+            let clip = match self.pr.launch.filter(|_| self.tlv.sel.is_none()) {
+                Some(id) => self.with(|s| {
+                    let t = s.song.timeline.as_deref()?;
+                    let c = t.any_clip(id)?;
+                    (c.track as usize == self.ch).then(|| super::objpie::launch_name(t, c))
+                }),
+                None => self
+                    .tlv
+                    .sel
+                    .and_then(|id| self.tlv.clip_label(id))
+                    .filter(|(c, _)| c.track as usize == self.ch && c.audio().is_none())
+                    .map(|(_, n)| n),
+            };
+            Some(match clip {
+                Some(c) => format!("Track {:02} {tname}  ›  {c}  ›  {inst}", self.ch + 1),
+                None => format!("Track {:02} {tname}  ›  {inst}", self.ch + 1),
+            })
+        } else {
+            Some(inst)
+        }
     }
 
     fn lower_mode(&self) -> u8 {
@@ -332,7 +467,20 @@ impl App {
         } else {
             (inner.height() * 0.3).clamp(120.0, 190.0)
         } + BAR_H;
-        let max_h = (inner.height() - 150.0).max(BAR_H + 60.0);
+        // the Timeline keeps at least three track rows above the panel
+        // (laptops: 1366x768), the Tracker its old 150 points
+        let keep = if self.view == View::Timeline {
+            let chrome = if self.ip.tl_chrome > 0.0 {
+                self.ip.tl_chrome
+            } else {
+                TL_CHROME_GUESS
+            };
+            chrome + 3.0 * self.tlv.track_h_pts()
+        } else {
+            150.0
+        };
+        // (7: the splitter between them)
+        let max_h = (inner.height() - keep - 7.0).max(BAR_H + 60.0);
         let min_h = (BAR_H + 96.0).min(max_h);
         let want = if self.extra.lower_h > 0.0 {
             self.extra.lower_h
@@ -353,6 +501,9 @@ impl App {
                 self.pattern_view(ui)
             }
         });
+        if self.view == View::Timeline && self.tlv.lanes.height() > 0.0 {
+            self.ip.tl_chrome = (top.height() - self.tlv.lanes.height()).max(0.0);
+        }
         self.ip.split = Some(split);
         // splitter: drag to resize, to the bottom to hide, double-click = automatic
         let sr = ui
@@ -418,6 +569,27 @@ impl App {
             );
             return;
         }
+        // a track with no instrument: "Choose an instrument" over the editor
+        // (the track pie's Add list; 3.3)
+        let body = if self.extra.lower_inst && !self.extra.lower_dev && self.chooser_wanted() {
+            let h = if body.width() < 1200.0 { 52.0 } else { 30.0 };
+            let strip = Rect::from_min_size(body.min, egui::vec2(body.width(), h));
+            ui.scope_builder(
+                egui::UiBuilder::new().max_rect(strip.shrink2(egui::vec2(8.0, 3.0))),
+                |ui| self.instrument_chooser(ui),
+            );
+            Rect::from_min_max(Pos2::new(body.left(), strip.bottom() + 2.0), body.max)
+        } else if self.extra.lower_inst && !self.extra.lower_dev && !self.shared_with().is_empty() {
+            // the instrument is shared: say so, offer a copy for this track (3.5)
+            let strip = Rect::from_min_size(body.min, egui::vec2(body.width(), 26.0));
+            ui.scope_builder(
+                egui::UiBuilder::new().max_rect(strip.shrink2(egui::vec2(8.0, 2.0))),
+                |ui| self.shared_notice(ui),
+            );
+            Rect::from_min_max(Pos2::new(body.left(), strip.bottom() + 2.0), body.max)
+        } else {
+            body
+        };
         ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
             if self.extra.lower_dev {
                 self.devices_view(ui)
@@ -429,6 +601,214 @@ impl App {
                 self.arranger_view(ui)
             }
         });
+    }
+
+    /// the current Timeline track has no instrument (D6: none assigned and
+    /// none played by its clips)
+    pub(super) fn chooser_wanted(&self) -> bool {
+        if self.view != View::Timeline {
+            return false;
+        }
+        let real = self.with(|s| {
+            s.song.timeline.as_deref().is_some_and(|t| {
+                t.tracks.get(self.ch).is_some_and(|k| {
+                    k.kind != crate::timeline::TrackKind::Master
+                        && k.kind != crate::timeline::TrackKind::Audio
+                })
+            })
+        });
+        real && self.track_instrument(self.ch).is_none()
+    }
+
+    /// the other Timeline tracks that play the current track's instrument
+    /// (D6), when this track can get a copy of its own (note clips only)
+    pub(super) fn shared_with(&mut self) -> Vec<usize> {
+        if self.view != View::Timeline {
+            return vec![];
+        }
+        let Some(key) = self.tlv.cache.as_ref().map(|c| c.key) else {
+            return vec![];
+        };
+        // (plus what the song key may not cover: the tracks' instruments)
+        let key = self.with(|s| {
+            let mut k = key ^ (s.song.instruments.len() as u64) << 48;
+            for (i, t) in s
+                .song
+                .timeline
+                .as_deref()
+                .map_or(&[][..], |t| &t.tracks[..])
+                .iter()
+                .enumerate()
+            {
+                k = k.rotate_left(5) ^ (t.instr as u64) << (i % 8);
+            }
+            k
+        });
+        let (tr, ins) = (self.ch, self.instr);
+        if let Some((k, t, i, v)) = &self.ip.shared {
+            if (*k, *t, *i) == (key, tr, ins) {
+                return v.clone();
+            }
+        }
+        let (nch, blocks) = self.with(|s| {
+            let t = s.song.timeline.as_deref();
+            (
+                t.map_or(0, |t| t.tracks.len()).min(s.song.channels),
+                t.is_some_and(|t| {
+                    t.clips
+                        .iter()
+                        .any(|c| c.track as usize == tr && c.block().is_some())
+                }),
+            )
+        });
+        let mine = self.track_instrument(tr);
+        let v: Vec<usize> = if blocks || mine != Some(ins) {
+            vec![]
+        } else {
+            (0..nch)
+                .filter(|&k| k != tr && self.track_instrument(k) == Some(ins))
+                .collect()
+        };
+        self.ip.shared = Some((key, tr, ins, v.clone()));
+        v
+    }
+
+    fn shared_notice(&mut self, ui: &mut egui::Ui) {
+        let t = th();
+        let others = self.shared_with();
+        let names: Vec<String> = others
+            .iter()
+            .take(3)
+            .map(|k| format!("{:02}", k + 1))
+            .collect();
+        let more = if others.len() > 3 {
+            format!(" and {} more", others.len() - 3)
+        } else {
+            String::new()
+        };
+        let mut copy = false;
+        ui.horizontal_centered(|ui| {
+            ui.label(
+                egui::RichText::new(format!(
+                    "Also used by track{} {}{more}: edits here change {} too",
+                    if others.len() == 1 { "" } else { "s" },
+                    names.join(", "),
+                    if others.len() == 1 { "it" } else { "them" }
+                ))
+                .color(t.ink2),
+            );
+            if ui
+                .add(egui::Button::new("Make a separate copy for this track").small())
+                .on_hover_text(
+                    "a copy of the instrument that only this track plays (its note clips switch \
+                     to it; one undo step)",
+                )
+                .clicked()
+            {
+                copy = true;
+            }
+        });
+        if copy {
+            self.track_own_instrument(self.ch);
+        }
+    }
+
+    /// track `tr` gets its own copy of the instrument it shares: the copy
+    /// becomes its instrument and its note clips play it (clips whose notes
+    /// are linked to another track's get notes of their own first)
+    pub(super) fn track_own_instrument(&mut self, tr: usize) {
+        let Some(old) = self.track_instrument(tr) else {
+            return;
+        };
+        self.snapshot();
+        let new = self.with(|s| {
+            let n = s.song.duplicate_instrument(old as usize - 1)?;
+            let new = (n + 1) as u8;
+            let t = s.song.timeline.as_deref_mut()?;
+            if let Some(k) = t.tracks.get_mut(tr) {
+                k.instr = new;
+            }
+            let ids: Vec<u32> = t
+                .clips
+                .iter()
+                .chain(t.launcher.iter().map(|l| &l.clip))
+                .filter(|c| c.track as usize == tr && c.notes().is_some())
+                .map(|c| c.id)
+                .collect();
+            for id in ids {
+                let Some(d) = t.any_clip(id).and_then(|c| c.notes()) else {
+                    continue;
+                };
+                let elsewhere = t
+                    .clips
+                    .iter()
+                    .chain(t.launcher.iter().map(|l| &l.clip))
+                    .any(|c| c.notes() == Some(d) && c.track as usize != tr);
+                let d = if elsewhere {
+                    match crate::timeline::make_unique_notes(t, id) {
+                        Some(d) => d,
+                        None => continue,
+                    }
+                } else {
+                    d
+                };
+                for n in &mut t.notes[d].make_mut().notes {
+                    if n.instr == old || n.instr == 0 {
+                        n.instr = new;
+                    }
+                }
+            }
+            Some(new)
+        });
+        if let Some(new) = new {
+            self.instr = new;
+            self.ip.shared = None;
+            self.dirty = true;
+            self.status = format!(
+                "Track {:02} now plays its own copy, instrument {new:02} (the other tracks keep {old:02})",
+                tr + 1
+            );
+        }
+    }
+
+    /// "Choose an instrument" for the current track: the built-ins and
+    /// Browse… (the same list and actions as the track pie's Add)
+    fn instrument_chooser(&mut self, ui: &mut egui::Ui) {
+        let t = th();
+        let tr = self.ch;
+        let full = self.with(|s| s.song.instruments.len() >= 255);
+        let mut pick = None;
+        let mut browse = false;
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(4.0, 3.0);
+            ui.label(
+                egui::RichText::new(format!("Track {:02} has no instrument · Choose an instrument:", tr + 1))
+                    .strong()
+                    .color(t.ink),
+            );
+            for b in super::trackpie::Builtin::ALL {
+                if ui
+                    .add_enabled(!full, egui::Button::new(b.label()).small())
+                    .on_hover_text(b.tip())
+                    .on_disabled_hover_text("all 255 instrument slots are used")
+                    .clicked()
+                {
+                    pick = Some(b);
+                }
+            }
+            if ui
+                .add(egui::Button::new("Browse…").small())
+                .on_hover_text("the Browser's Instruments (your Favourites first): the one you pick plays this track")
+                .clicked()
+            {
+                browse = true;
+            }
+        });
+        if let Some(b) = pick {
+            self.track_new_instrument(tr, b);
+        } else if browse {
+            self.track_change_instrument(tr);
+        }
     }
 
     /// Arranger | Instrument | Automation, and Full-height pattern
@@ -476,19 +856,10 @@ impl App {
                     self.set_lower(m);
                 }
             }
-            if self.extra.lower_inst {
-                let n = self.with(|s| {
-                    s.song
-                        .instruments
-                        .get((self.instr as usize).wrapping_sub(1))
-                        .map(|i| i.name.clone())
-                });
-                if let Some(n) = n {
-                    ui.label(
-                        egui::RichText::new(format!("· {:02X} {n}", self.instr))
-                            .small()
-                            .color(t.ink2),
-                    );
+            if self.extra.lower_inst || self.extra.lower_dev || self.pr.open {
+                if let Some(txt) = self.lower_breadcrumb() {
+                    ui.add(egui::Label::new(egui::RichText::new(txt).small().color(t.ink2)).truncate())
+                        .on_hover_text("what the lower panel is editing: the track, its clip, and the instrument (the track's, when the track shows)");
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -542,6 +913,11 @@ impl App {
         }
         if self.ip.ab.as_ref().is_some_and(|a| a.inst != idx) {
             self.ip.ab = None;
+        }
+        self.ip.sample_hover = false;
+        if self.ip.sample && matches!(inst.kind, InstrumentKind::Sample { .. }) {
+            self.lower_sample_editor(ui);
+            return;
         }
         self.gen_ui.sel = self.gen_ui.sel.min(7);
         let orig = inst.clone();
@@ -876,7 +1252,7 @@ impl App {
                 Act::Bake => self.bake_gen(idx),
                 Act::SaveLib => self.save_instrument_to_library(idx as u8 + 1),
                 Act::Library => self.open_library(),
-                Act::OpenSample => self.view = View::Sample,
+                Act::OpenSample => self.open_sample_editor(),
                 Act::OpenFx => self.view = View::Fx,
                 Act::AddFx(k) => self.add_effect(idx as u8 + 1, k),
                 Act::AddPluginFx(p) => self.add_plugin_fx(idx as u8 + 1, p),

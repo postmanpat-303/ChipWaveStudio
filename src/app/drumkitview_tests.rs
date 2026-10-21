@@ -329,3 +329,45 @@ fn a_tall_panel_uses_the_full_layout() {
     assert!(st.dk.cells.len() >= 8 * 16);
     assert!(st.dk.ctl.iter().any(|c| c.0 == "add"));
 }
+
+/// Stage 5: right-click the step grid: the pattern's pie (Fill, Clear,
+/// Copy pattern), each one undo step
+#[test]
+fn the_step_grid_pie_fills_clears_and_duplicates() {
+    let (mut h, slot, id) = kit_harness();
+    let (p, _, r) = *h
+        .state()
+        .dk
+        .cells
+        .iter()
+        .find(|c| c.0 == 0 && c.1 == 2)
+        .expect("cell drawn");
+    let key = h.with_kit(slot, |k| k.pads[p].key);
+    super::super::objpie_tests::right_click(&mut h, r.center());
+    assert!(
+        matches!(
+            h.state().opie.as_ref().map(|x| x.1),
+            Some(super::super::objpie::PieFor::Drum { clip, pad: 0, .. }) if clip == id
+        ),
+        "the pattern's pie on lane 1"
+    );
+    assert!(notes(&h, id).is_empty(), "a right-click toggles nothing");
+    super::super::objpie_tests::pick(&mut h, "Fill", Some("Every beat"));
+    let n = notes(&h, id);
+    assert!(n.len() >= 4, "{n:?}");
+    assert!(n
+        .iter()
+        .all(|x| x.key == key && dk::step_of(x.start).is_multiple_of(4)));
+    // Clear > This lane
+    super::super::objpie_tests::right_click(&mut h, r.center());
+    super::super::objpie_tests::pick(&mut h, "Clear", Some("This lane"));
+    assert!(notes(&h, id).is_empty());
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert!(!notes(&h, id).is_empty(), "undo brings the fill back");
+    // Copy pattern: a new clip of its own
+    let n0 = clip_count(&h);
+    super::super::objpie_tests::right_click(&mut h, r.center());
+    super::super::objpie_tests::pick(&mut h, "Copy pattern", None);
+    assert_eq!(clip_count(&h), n0 + 1, "{}", h.state().status);
+}

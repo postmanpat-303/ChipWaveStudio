@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 70] = [
+pub const VIEWS: [&str; 79] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -78,6 +78,7 @@ pub const VIEWS: [&str; 70] = [
     "grid",
     "grid-fx",
     "browser",
+    "browser-instruments",
     "browser-samples",
     "browser-drop",
     "browser-patterns",
@@ -100,6 +101,14 @@ pub const VIEWS: [&str; 70] = [
     "split-preview",
     "cliparranger",
     "cliparranger-drag",
+    "cliparranger-notes",
+    "drop-preview",
+    "drop-ask",
+    "cliparranger-launcher",
+    "clip-pie",
+    "launcher-pie",
+    "drum-pie",
+    "chooser",
     "focus-playing",
     "focus-chord",
     "focus-prompt",
@@ -165,6 +174,18 @@ impl App {
                     }
                 }
                 self.br.sel = keys.first().cloned();
+            }
+            "browser-instruments" => {
+                // Browser › ChipWave Instruments; FM-4 just dropped on track 3:
+                // selected, its editor open under the Timeline
+                self.enter_timeline();
+                self.default_layout();
+                self.br.filter.tab = crate::browser::Tab::Instruments;
+                self.br.filter.category = Some(crate::browser::TOOLS_CAT.into());
+                self.br_refresh();
+                self.track_new_instrument(2, super::trackpie::Builtin::Fm4);
+                self.br.sel = Some("tool:FM-4".into());
+                self.dirty = false;
             }
             "browser-samples" => {
                 self.view = View::Timeline;
@@ -408,6 +429,75 @@ impl App {
                 if view == "cliparranger" {
                     self.ca_scene(3);
                 }
+                self.dirty = false;
+            }
+            "cliparranger-notes"
+            | "drop-preview"
+            | "drop-ask"
+            | "cliparranger-launcher"
+            | "clip-pie"
+            | "launcher-pie"
+            | "drum-pie" => {
+                // a new song: a take on track 01 at bars 1 and 5, a Drum Kit
+                // pattern on track 02 (launched a few frames later)
+                self.new_song();
+                for k in 0..2 {
+                    self.track_insert(k, if k == 0 { "Lead" } else { "Drums" });
+                }
+                self.view = View::Timeline;
+                self.default_layout();
+                self.extra.clip_arranger = true;
+                self.extra.reduce_motion = true;
+                self.track_new_instrument(0, super::trackpie::Builtin::WaveForge);
+                self.with(|s| {
+                    use crate::timeline::{self as tl, PPQ};
+                    let bar = 4 * PPQ;
+                    for (at, base) in [(0, 57u8), (4 * bar, 60)] {
+                        let Some(id) = tl::new_note_clip(&mut s.song, 0, at) else {
+                            continue;
+                        };
+                        let t = s.song.timeline.as_deref_mut().unwrap();
+                        let c = t.clips.iter_mut().find(|c| c.id == id).unwrap();
+                        c.len = 4 * bar;
+                        let tl::ClipKind::Notes { data } = c.kind else {
+                            continue;
+                        };
+                        let d = t.notes[data as usize].make_mut();
+                        d.name = if base == 57 {
+                            "Verse".into()
+                        } else {
+                            "Hook".into()
+                        };
+                        d.len = 4 * bar;
+                        for k in 0..16i64 {
+                            let step = [0u8, 3, 7, 10, 12, 10, 7, 3][k as usize % 8];
+                            d.notes.push(tl::Note {
+                                start: k * PPQ,
+                                len: PPQ - PPQ / 4,
+                                key: base + step,
+                                instr: 1,
+                                ..Default::default()
+                            });
+                        }
+                    }
+                });
+                if let Some(i) = crate::drumpat::PATTERNS
+                    .iter()
+                    .position(|p| p.name == "Full-on Drive")
+                {
+                    self.pat_place_now(i, 1, 0);
+                }
+                self.ch = 0;
+                self.dirty = false;
+            }
+            "chooser" => {
+                // a new song's track without an instrument: the chooser
+                self.new_song();
+                self.track_insert(0, "Lead");
+                self.view = View::Timeline;
+                self.default_layout();
+                self.tl_select_track(0, false);
+                self.set_lower(1);
                 self.dirty = false;
             }
             "trackpie" | "trackpie-icons" | "trackpie-colour" | "trackpie-add" | "trackauto"
@@ -792,6 +882,8 @@ impl App {
                 | "timeline-switch"
                 | "cliparranger"
                 | "cliparranger-drag"
+                | "cliparranger-notes"
+                | "cliparranger-launcher"
         ) && std::env::var_os("CHIPWAVE_SHOT_NOPLAY").is_none()
         {
             self.play(3);
@@ -1023,16 +1115,57 @@ impl App {
                 self.shot_pr(ctx, &m);
             }
         }
+        if view == "cliparranger-notes" && f == SETUP_AT + 20 {
+            // the Hook slot on track 01 plays (the drums held); the Bar 1
+            // scene is queued for the next bar
+            self.ca_slot(0, 1);
+        }
+        if view == "cliparranger-notes" && f == CAPTURE_AT - 6 {
+            self.ca_scene(0);
+        }
+        if matches!(view.as_str(), "clip-pie" | "launcher-pie" | "drum-pie") {
+            self.shot_obj_pie(&view, f);
+        }
+        if view == "cliparranger-launcher" && f == SETUP_AT + 16 {
+            // Capture, a variation of the Verse, then scene 1 plays
+            self.ca_capture_now();
+        }
+        if view == "cliparranger-launcher" && f == SETUP_AT + 20 {
+            self.ca_scene(0);
+        }
         if view == "cliparranger" && f == CAPTURE_AT - 6 {
             // queued for the next bar: Pad 1 plays block 04, Kick stops
             self.ca_slot(5, 4);
             self.ca_stop(0);
         }
+        if (view == "drop-preview" || view == "drop-ask") && f == SETUP_AT + 12 {
+            // the Verse slot (track 01, bar 1) dragged onto its own track at
+            // bar 3, over itself: the red preview, then the question
+            use super::dropplan::DropSrc;
+            let at = 2 * 4 * crate::timeline::PPQ;
+            let id = self.with(|s| {
+                s.song
+                    .timeline
+                    .as_deref()
+                    .and_then(|t| t.clips.iter().find(|c| c.track == 0 && c.start == 0))
+                    .map(|c| c.id)
+            });
+            if let (Some(id), Some((_, row))) = (id, self.tlv.track_rects(0)) {
+                let p = Pos2::new(self.tlv.x_of(at) + 30.0, row.center().y);
+                if view == "drop-ask" {
+                    let plan = self.drop_plan(p, DropSrc::Clip(id), false);
+                    self.drop_release(DropSrc::Clip(id), plan, false);
+                } else {
+                    self.ca.drag = Some(DropSrc::Clip(id));
+                    self.ca.shot_drag = Some(p);
+                }
+            }
+        }
         if view == "cliparranger-drag" && f == SETUP_AT + 12 {
             let at = 40 * 4 * crate::timeline::PPQ;
             if let Some((_, row)) = self.tlv.track_rects(4) {
                 let x = self.tlv.x_of(at) + 30.0;
-                self.ca.drag = Some((2, 4));
+                self.ca.drag = Some(super::dropplan::DropSrc::Block { block: 2, col: 4 });
                 self.ca.shot_drag = Some(Pos2::new(x, row.center().y));
             }
         }
@@ -1644,7 +1777,12 @@ impl App {
             let info = self.pie_info(tr);
             let at = super::trackpie::sub_items(super::trackpie::SEGS[3], &info)
                 .iter()
-                .position(|i| i.act == Some(super::trackpie::PieAct::Automation));
+                .position(|i| {
+                    i.act
+                        == Some(super::trackpie::PieAct::NewInstrument(
+                            super::trackpie::Builtin::WaveForge,
+                        ))
+                });
             if let Some(p) = &mut self.pie {
                 p.sub_key = at;
             }
@@ -1686,6 +1824,85 @@ impl App {
 
     /// `--view split-preview`: S on the timeline with the pointer over a
     /// clip on track 2 (the amber split line, its label, the clip outlined)
+    /// Stage 5: the pies on the Verse clip, its launcher copy and the
+    /// Drum Kit pattern's step grid
+    fn shot_obj_pie(&mut self, view: &str, f: u32) {
+        use super::objpie::PieFor;
+        let clip_on = |me: &Self, tr: u16| {
+            me.with(|s| {
+                s.song
+                    .timeline
+                    .as_deref()?
+                    .clips
+                    .iter()
+                    .find(|c| c.track == tr && c.start == 0)
+                    .map(|c| (c.id, c.notes()))
+            })
+        };
+        match (view, f) {
+            ("launcher-pie", x) if x == SETUP_AT + 12 => self.ca_capture_now(),
+            ("drum-pie", x) if x == SETUP_AT + 12 => {
+                if let Some((id, _)) = clip_on(self, 1) {
+                    self.tlv.sel = Some(id);
+                    self.tlv.sels = vec![id];
+                    self.ch = 1;
+                    self.instr = self.track_instr(1);
+                    self.set_lower(1);
+                }
+            }
+            ("clip-pie", x) if x == SETUP_AT + 20 => {
+                if let (Some((id, _)), Some((_, row))) = (clip_on(self, 0), self.tlv.track_rects(0))
+                {
+                    self.tlv.sel = Some(id);
+                    self.tlv.sels = vec![id];
+                    let p = Pos2::new(self.tlv.x_of(2 * crate::timeline::PPQ), row.center().y);
+                    self.opie_req = Some((PieFor::Clip(id), p));
+                }
+            }
+            ("launcher-pie", x) if x == SETUP_AT + 24 => {
+                let lid = self.with(|s| {
+                    let t = s.song.timeline.as_deref()?;
+                    crate::timeline::launch_at(t, 0, 0).map(|l| l.clip.id)
+                });
+                let r = self
+                    .ca
+                    .slot_rects
+                    .iter()
+                    .find(|x| x.0 == 0 && x.1 == 0)
+                    .map(|x| x.3);
+                if let (Some(id), Some(r)) = (lid, r) {
+                    self.opie_req = Some((PieFor::Launch(id), r.center()));
+                }
+            }
+            ("drum-pie", x) if x == SETUP_AT + 24 => {
+                let cell = self.dk.cells.iter().find(|c| c.0 == 0 && c.1 == 4).copied();
+                if let (Some((id, Some(data))), Some((p, _, r))) = (clip_on(self, 1), cell) {
+                    self.opie_req = Some((
+                        PieFor::Drum {
+                            clip: id,
+                            data,
+                            track: 1,
+                            pad: p,
+                        },
+                        r.center(),
+                    ));
+                }
+            }
+            // the outer ring of one wedge, as when the mouse is on it
+            (v, x) if x == SETUP_AT + 30 => {
+                let want = match v {
+                    "clip-pie" => "Duplicate",
+                    "launcher-pie" => "Place",
+                    _ => "Fill",
+                };
+                if let Some((pie, _)) = &mut self.opie {
+                    pie.hover = pie.items.iter().position(|x| x.label == want);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn shot_split(&mut self) {
         let Some(c) = self.tlv.cache.as_ref() else {
             return;

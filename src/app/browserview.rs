@@ -375,7 +375,13 @@ impl App {
         }
         self.br.items_key = key;
         if self.br.builtin.is_empty() {
-            self.br.builtin = br::builtin_items();
+            // ChipWave Instruments: the track pie's Add list
+            let tools: Vec<(&str, &str)> = super::trackpie::Builtin::ALL
+                .iter()
+                .map(|b| (b.label(), b.tip()))
+                .collect();
+            self.br.builtin = br::tool_items(&tools);
+            self.br.builtin.extend(br::builtin_items());
         }
         let mut v = self.br.builtin.clone();
         v.extend(br::library_items(&self.br.library));
@@ -488,6 +494,7 @@ impl App {
     /// decoded on a worker thread)
     pub(crate) fn br_instrument(&mut self, it: &Item, act: Act) {
         match &it.src {
+            Src::Tool(k) => self.br_tool(*k as usize, act),
             Src::Plugin(f) if f.desc.is_instrument() => {
                 if act == Act::Preview {
                     self.status = "Plugins aren't previewed: drop or double-click to load".into();
@@ -591,6 +598,34 @@ impl App {
                 if n == 1 { "" } else { "s" }
             ),
         };
+    }
+
+    /// a ChipWave Instruments row: the track pie's Add (one code path) on
+    /// the track it went to, else on a new track at the end
+    fn br_tool(&mut self, k: usize, act: Act) {
+        let Some(&b) = super::trackpie::Builtin::ALL.get(k) else {
+            return;
+        };
+        let n = self.with(|s| s.song.channels);
+        match act {
+            Act::Preview => {
+                if let Some((name, kind)) = b.make() {
+                    let inst = Instrument {
+                        name,
+                        volume: 0.8,
+                        transpose: 0,
+                        fx: vec![],
+                        kind,
+                    };
+                    self.br_preview_inst(&inst);
+                }
+            }
+            Act::Track(tr) if tr < n => self.track_new_instrument(tr, b),
+            // dropped on an instrument card: the selected track's
+            Act::Replace(_) if self.ch < n => self.track_new_instrument(self.ch, b),
+            Act::NewTrack(at) => self.track_new_with_instrument(at, b),
+            _ => self.track_new_with_instrument(n, b),
+        }
     }
 
     fn br_preview_inst(&mut self, inst: &Instrument) {
@@ -1092,35 +1127,10 @@ impl App {
         })
     }
 
-    /// the instrument track `tr` mostly plays (else the current one)
+    /// the instrument track `tr` plays (`track_instrument`), else the
+    /// current one
     pub(super) fn track_slot(&self, tr: usize) -> u8 {
-        let from_track = self.with(|s| {
-            s.song
-                .timeline
-                .as_deref()
-                .and_then(|t| t.tracks.get(tr))
-                .map(|t| t.instr)
-                .unwrap_or(0)
-        });
-        if from_track > 0 {
-            return from_track;
-        }
-        let mut count = [0usize; 256];
-        self.with(|s| {
-            for p in &s.song.patterns {
-                for r in &p.cells {
-                    if let Some(c) = r.get(tr) {
-                        if c.instr > 0 {
-                            count[c.instr as usize] += 1;
-                        }
-                    }
-                }
-            }
-        });
-        match (1..256).max_by_key(|&i| count[i]) {
-            Some(i) if count[i] > 0 => i as u8,
-            _ => self.instr,
-        }
+        self.track_instrument(tr).unwrap_or(self.instr)
     }
 
     pub(crate) fn br_drop(&mut self, it: &Item, d: DropAt, ctx: &egui::Context) {

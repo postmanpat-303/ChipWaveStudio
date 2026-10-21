@@ -799,3 +799,67 @@ fn piano_roll_header_offers_use_track_instrument() {
         "gone once every note has one"
     );
 }
+
+/// The piano roll's playhead is the Timeline's: the play marker when
+/// stopped, the transport while playing, mapped through the clip's start
+/// and loop into the clip; it is hidden outside the clip, and with Follow
+/// on the roll pages to keep it in view.
+#[test]
+fn piano_roll_playhead_follows_the_timeline_through_the_clip_start_and_loop() {
+    let mut h = instr_song(1);
+    let bar = 4 * PPQ;
+    // a clip at bar 3, four bars long, looping its first bar
+    let a = chord_clip(&h, 0, 2 * bar, 2);
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        let c = t.clips.iter_mut().find(|c| c.id == a).unwrap();
+        c.len = 4 * bar;
+        c.loop_len = Some(bar);
+    });
+    h.state_mut().tlv.sels = vec![a];
+    h.state_mut().tlv.sel = Some(a);
+    h.state_mut().set_lower(3);
+    frames(&mut h, 4);
+    // stopped: the play marker, at bar 4 beat 2 = one beat into the loop
+    h.state_mut().tlv.cue = 3 * bar + PPQ;
+    frames(&mut h, 2);
+    assert_eq!(h.state().pr.head, Some((PPQ as f64, false)));
+    // outside the clip: no line
+    h.state_mut().tlv.cue = 0;
+    frames(&mut h, 2);
+    assert_eq!(h.state().pr.head, None);
+    // playing from bar 5 beat 3 (the third pass of the loop)
+    let row = ((4 * bar + 2 * PPQ) / ROW) as usize;
+    h.state().with(|s| {
+        let song = &s.song;
+        s.engine.start(song, 0, row, false, 0);
+    });
+    for _ in 0..3 {
+        play_rows(&mut h, 3);
+        frame(&mut h);
+        let tl_head = h
+            .state()
+            .with(|s| super::timeline::tl_head(&s.engine))
+            .unwrap();
+        assert_eq!(
+            h.state().tlv.head_drawn,
+            Some(tl_head),
+            "the Timeline draws the same head"
+        );
+        let (src, live) = h.state().pr.head.expect("inside the clip");
+        let want = (tl_head - (2 * bar) as f64).rem_euclid(bar as f64);
+        assert!(live);
+        assert!((src - want).abs() < 1e-6, "{src} vs {want}");
+    }
+    // Follow: zoomed in and scrolled away, the roll pages to the playhead
+    h.state_mut().pr.zoom = 100.0;
+    h.state_mut().pr.scroll_x = 3.0 * bar as f64;
+    frame(&mut h);
+    let (src, _) = h.state().pr.head.unwrap();
+    let s = h.state().pr.scroll_x;
+    assert!(
+        s <= src && src - s < 2.0 * PPQ as f64,
+        "in view: {s} .. {src}"
+    );
+    h.state().with(|s| s.engine.stop());
+}

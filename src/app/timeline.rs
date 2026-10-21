@@ -1,5 +1,5 @@
 //! Timeline view (docs/TIMELINE.md): the song as tracks (= mixer channels) x
-//! time, Bitwig-style. M1 is read-only: in tracker mode the timeline is
+//! time, as in other DAWs. M1 is read-only: in tracker mode the timeline is
 //! derived from the order list (`crate::timeline::from_order`) and cached
 //! until the song changes. One painter-based widget: clips, previews and
 //! grid go into a few meshes, only visible tracks and clips are touched
@@ -164,22 +164,28 @@ pub(crate) enum TlOp {
         track: u8,
         at: Tick,
     },
-    /// a Clip Arranger slot (block, column) as a Tracker clip on `track` at `at`
-    PlaceBlock {
-        block: u16,
-        col: u8,
+    /// a dropped clip (docs/unified/PLAN.md Stage 4a): `src` on `track` at
+    /// `at`, linked or (`unique`) independent; `fit` says what happens to
+    /// clips in the way (`grid`: where Place after it lands)
+    Place {
+        src: super::dropplan::DropSrc,
         track: u8,
         at: Tick,
+        unique: bool,
+        fit: super::dropplan::Fit,
+        grid: Tick,
     },
 }
 
 pub(crate) struct TimelineUi {
     pub(crate) cache: Option<Cache>,
+    /// while clips are moved: the clips they now overlap (outlined red)
+    pub(crate) move_over: Vec<u32>,
     /// pixels per beat (0 = fit on the next frame)
     pub(crate) zoom: f32,
     /// first visible tick (fractional while zooming)
     pub(crate) scroll: f64,
-    scroll_y: f32,
+    pub(crate) scroll_y: f32,
     pub(crate) track_h: f32,
     /// start a new song's layout (a few bars, not "fit one empty block")
     new_song: bool,
@@ -242,6 +248,10 @@ pub(crate) struct TimelineUi {
     /// scroll so this (track, tick) is in view on the next frame (a clip
     /// just added from the Drum Kit editor)
     pub(crate) reveal: Option<(usize, Tick)>,
+    /// the Song / Master header was clicked: (its track, `ch` then). It has
+    /// no channel, so `ch` (the lower panel, live input) stays on the last
+    /// instrument track; the highlight goes back to `ch` when that changes
+    pub(crate) song_sel: Option<(usize, usize)>,
 }
 
 impl Default for TimelineUi {
@@ -267,6 +277,7 @@ impl Default for TimelineUi {
             menu_marker: None,
             grid_now: PPQ,
             split_arm: false,
+            move_over: vec![],
             split_at: None,
             time_ruler: false,
             ruler_drag: false,
@@ -288,6 +299,7 @@ impl Default for TimelineUi {
             last_touch: None,
             flash: None,
             reveal: None,
+            song_sel: None,
         }
     }
 }
@@ -330,6 +342,11 @@ impl TimelineUi {
                 .unwrap_or(bar * 4),
         }
     }
+    /// a track row's height in points
+    pub(crate) fn track_h_pts(&self) -> f32 {
+        self.th()
+    }
+
     fn th(&self) -> f32 {
         if self.track_h > 0.0 {
             self.track_h
@@ -364,6 +381,16 @@ fn fingerprint(song: &Song) -> u64 {
         }
         for c in &t.clips {
             put(c.id as u64);
+        }
+        // the launcher's rows (its clips are in the plan key)
+        for l in &t.launcher {
+            put(l.scene as u64 | (l.clip.id as u64) << 16);
+        }
+        for sc in &t.scenes {
+            for b in sc.name.bytes() {
+                put(b as u64);
+            }
+            put(0x2_0000);
         }
         for d in &t.notes {
             for b in d.name.bytes() {
@@ -618,6 +645,12 @@ struct Live {
     any_solo: bool,
 }
 
+/// Timeline mode: the playhead tick while the timeline plays (the one
+/// source the Timeline, the piano roll and the Clip Arranger draw from)
+pub(crate) fn tl_head(e: &crate::engine::Engine) -> Option<f64> {
+    e.tl_row().map(|_| e.song_pos as f64 * ROW as f64)
+}
+
 /// adaptive bar-label step: 1, 2, 4, 8 ... bars so labels stay >= `min_px` apart
 fn bar_step(bar_px: f32, min_px: f32) -> i64 {
     let mut s = 1;
@@ -680,7 +713,7 @@ impl App {
         let head = if !e.playing {
             None
         } else if c.mode {
-            e.tl_row().map(|_| e.song_pos as f64 * ROW as f64)
+            tl_head(e)
         } else if e.loop_pattern {
             c.order
                 .iter()
@@ -1135,9 +1168,13 @@ impl App {
         let mut outlines: Vec<(Rect, Stroke)> = vec![];
         let pol = theme::polished();
         let mut glows: Vec<Rect> = vec![];
+        let cur_tr = self.tl_cur_track();
         for tr in first_tr..last_tr {
             let lr = lane_rect(tr);
-            if tr % 2 == 1 {
+            if tr == cur_tr {
+                // the selected track's lane, as its header
+                quad(&mut bodies, lr, t.sel.gamma_multiply(0.12));
+            } else if tr % 2 == 1 {
                 quad(&mut bodies, lr, Color32::from_white_alpha(4));
             }
             quad(
@@ -1236,6 +1273,8 @@ impl App {
                 };
                 // solid title bar in the track colour over a softer body
                 // (the musical data keeps the saturation; 0.2.4 polish)
+                // the clip's own colour (5.4), else the track's
+                let col = clip.colour.map_or(col, |x| hex(x & 0xFF_FFFF));
                 let body_c = theme::mix(t.crt_bot, col, if t.ember { 0.46 } else { 0.34 } * k);
                 let head_c = theme::mix(
                     t.crt_bot,
@@ -1373,7 +1412,16 @@ impl App {
                     };
                     if r.width() > 26.0 {
                         let vis_l = r.left().max(lanes.left()) + 4.0;
-                        let mut name = d.name.clone();
+                        let mut name = clip
+                            .name
+                            .clone()
+                            .filter(|n| !n.is_empty())
+                            .unwrap_or_else(|| d.name.clone());
+                        // linked (D4): how many clips share these notes
+                        let (na, nb) = tl::linked(&c.tl, data as usize);
+                        if na + nb > 1 {
+                            name.push_str(&format!(" ×{}", na + nb));
+                        }
                         if clip.muted {
                             name.push_str(" · muted");
                         }
@@ -1744,7 +1792,7 @@ impl App {
                 continue;
             }
             let colr = track_colour_in(&c.tl, tr);
-            let cur = self.ch == tr;
+            let cur = cur_tr == tr;
             hp.rect_filled(
                 hr,
                 3,
@@ -1995,9 +2043,11 @@ impl App {
             }
             let nresp = ui
                 .interact(nr, ui.scope_id().with(("tl_head", tr)), Sense::click_and_drag())
-                .on_hover_text(
-                    "select this track (the Tracker's cursor channel) · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, devices, routing, organize, delete)",
-                );
+                .on_hover_text(if self.tracker_on() {
+                    "select this track (the Tracker's cursor channel) · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, devices, routing, organize, delete)"
+                } else {
+                    "select this track · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, edit, devices, routing, organize, delete)"
+                });
             let is_master = c.tl.tracks[tr].kind == tl::TrackKind::Master;
             if !is_master
                 && nresp.hovered()
@@ -2008,7 +2058,8 @@ impl App {
                 }
             }
             if nresp.clicked() {
-                head_ops.push(HeadOp::Select(tr));
+                let m = ui.input(|i| i.modifiers);
+                head_ops.push(HeadOp::Select(tr, m.shift || m.command));
             }
             if nresp.drag_started() {
                 hd = Some(tr);
@@ -2596,6 +2647,7 @@ impl App {
                         }
                         self.tlv.sel = Some(*sels.last().unwrap_or(&id));
                         self.tlv.sels = sels;
+                        head_ops.push(HeadOp::Pick(cl.track as usize));
                         start_drag = Some(d);
                     }
                     (None, _) => {
@@ -2655,6 +2707,18 @@ impl App {
                                 }
                             }
                         }
+                        // the headers follow: the topmost track with a selected
+                        // clip, else the band's top track
+                        let top =
+                            c.tl.clips
+                                .iter()
+                                .filter(|x| sels.contains(&x.id))
+                                .map(|x| x.track as usize)
+                                .min()
+                                .unwrap_or(r0);
+                        if top < n_tracks {
+                            head_ops.push(HeadOp::Pick(top));
+                        }
                         self.tlv.sel = sels.last().copied();
                         self.tlv.sels = sels;
                         None
@@ -2689,6 +2753,12 @@ impl App {
                         self.tlv.sel = id;
                         self.tlv.sels = id.into_iter().collect();
                     }
+                }
+                // the clicked track becomes the selected track (headers,
+                // lower panel, live input)
+                let pick = hit.map_or(tr, |i| c.tl.clips[i].track as usize);
+                if pick < n_tracks && in_clip_row(p.y) {
+                    head_ops.push(HeadOp::Pick(pick));
                 }
                 if cresp.double_clicked() && tr < n_tracks && tk >= 0.0 && in_clip_row(p.y) {
                     let tk = tk as Tick;
@@ -2737,6 +2807,7 @@ impl App {
             }
         }
         // right-click: the clip menu (also offers to switch in tracker mode)
+        let mut pie_open: Option<(u32, Pos2)> = None;
         if !armed && cresp.secondary_clicked() {
             if let Some(p) = cresp.interact_pointer_pos() {
                 let tk = tick_of(p.x).max(0.0) as Tick;
@@ -2748,6 +2819,14 @@ impl App {
                         self.tlv.sel = x;
                         self.tlv.sels = x.into_iter().collect();
                     }
+                }
+                // a note or Tracker clip: its pie (Settings › Clip menus)
+                let pie_clip = id.filter(|&id| {
+                    mode && !self.extra.clip_list_menu
+                        && c.tl.clips.iter().any(|x| x.id == id && x.audio().is_none())
+                });
+                if let Some(id) = pie_clip {
+                    pie_open = Some((id, p));
                 }
             }
         }
@@ -2772,7 +2851,10 @@ impl App {
             .and_then(|id| c.tl.clips.iter().find(|x| x.id == id))
             .filter(|cl| cl.audio().is_some());
         // (no menu while the split preview is on: right-click cancels it)
-        let menu_resp = if armed {
+        if let Some((id, p)) = pie_open {
+            self.opie_req = Some((super::objpie::PieFor::Clip(id), p));
+        }
+        let menu_resp = if armed || pie_open.is_some() || self.opie.is_some() {
             ui.interact(
                 Rect::NOTHING,
                 ui.scope_id().with("tl_no_menu"),
@@ -2798,7 +2880,11 @@ impl App {
                         ui.close();
                     }
                 } else {
-                    if ui
+                    // the Tracker only exists with Settings › Show Tracker,
+                    // and only Tracker clips open in it
+                    if self.tracker_on()
+                        && menu_open.is_some()
+                        && ui
                         .add(egui::Button::new("Open in Tracker").shortcut_text(if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" }))
                         .clicked()
                     {
@@ -2806,7 +2892,7 @@ impl App {
                         ui.close();
                     }
                     if ui
-                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
+                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if !self.tracker_on() { "Enter / double-click" } else if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
                         .clicked()
                     {
                         open_roll = true;
@@ -2938,7 +3024,9 @@ impl App {
                     .loop_len
                     .map(|l| format!(" · loops {}x", (cl.len + l - 1) / l))
                     .unwrap_or_default();
-                let dbl = if self.extra.dblclick_roll {
+                let dbl = if !self.tracker_on() {
+                    "double-click: piano roll"
+                } else if self.extra.dblclick_roll {
                     "double-click: piano roll (Alt: Tracker)"
                 } else {
                     "double-click: Tracker (Alt: piano roll)"
@@ -2996,6 +3084,20 @@ impl App {
         }
         if let Some(e) = edit {
             self.timeline_drag_edit(e);
+        }
+        if !self.tlv.move_over.is_empty() && self.tlv.drag.is_some() {
+            // moved over other clips: no question while dragging, but they
+            // show red (and the status says what plays)
+            let fp = ui.ctx().layer_painter(egui::LayerId::new(
+                egui::Order::Foreground,
+                egui::Id::NULL.with("tl_move_over"),
+            ));
+            let fp = fp.with_clip_rect(lanes);
+            for id in self.tlv.move_over.iter().chain(self.tlv.sels.iter()) {
+                if let Some(r) = self.tlv.clip_rect(*id) {
+                    fp.rect_stroke(r, 3.0, Stroke::new(2.0, t.brick), egui::StrokeKind::Outside);
+                }
+            }
         }
         if end_drag {
             self.timeline_drag_end();
@@ -3071,6 +3173,57 @@ impl App {
         self.tl_apply(TlOp::Speed(tr, v));
     }
 
+    /// the track drawn selected in the headers and lanes: `ch`, or the Song
+    /// / Master track right after its header was clicked
+    pub(crate) fn tl_cur_track(&self) -> usize {
+        match self.tlv.song_sel {
+            Some((m, ch)) if ch == self.ch => m,
+            _ => self.ch,
+        }
+    }
+
+    /// Select timeline track `tr` through the one track selection there is:
+    /// `ch` (headers, lane tint, the lower panel, live MIDI and musical
+    /// typing) and `instr` (the track's instrument). Unless `keep`, clips
+    /// selected on other tracks are let go. The Song / Master track only
+    /// lights up (it has no channel): returns false for it.
+    pub(crate) fn tl_select_track(&mut self, tr: usize, keep: bool) -> bool {
+        let (kind, nch, ni) = self.with(|s| {
+            let t = s.song.timeline.as_deref().and_then(|t| t.tracks.get(tr));
+            (
+                t.map(|t| t.kind),
+                s.song.channels.min(crate::model::MAX_CHANNELS),
+                s.song.instruments.len(),
+            )
+        });
+        if kind == Some(tl::TrackKind::Master) || tr >= nch {
+            self.tlv.song_sel = Some((tr, self.ch));
+            return false;
+        }
+        self.tlv.song_sel = None;
+        self.ch = tr;
+        // the track's instrument (given, else the one it mostly plays), as
+        // the Devices row picks it
+        let given = self.track_slot(tr);
+        if given > 0 && (given as usize) <= ni {
+            self.instr = given;
+        }
+        if !keep {
+            if let Some(c) = self.tlv.cache.as_ref() {
+                let on = |id: &u32| {
+                    c.tl.clips
+                        .iter()
+                        .any(|x| x.id == *id && x.track as usize == tr)
+                };
+                self.tlv.sels.retain(on);
+                if self.tlv.sel.is_some_and(|id| !on(&id)) {
+                    self.tlv.sel = self.tlv.sels.last().copied();
+                }
+            }
+        }
+        true
+    }
+
     fn timeline_head_op(&mut self, op: HeadOp) {
         self.with(|s| {
             let mx = &mut s.song.mixer.channels;
@@ -3078,7 +3231,8 @@ impl App {
                 HeadOp::Mute(i) => mx[i].mute = !mx[i].mute,
                 HeadOp::Solo(i) => mx[i].solo = !mx[i].solo,
                 HeadOp::Volume(i, v) => mx[i].volume = v.clamp(0.0, 2.0),
-                HeadOp::Select(_)
+                HeadOp::Select(..)
+                | HeadOp::Pick(_)
                 | HeadOp::Speed(..)
                 | HeadOp::Move(..)
                 | HeadOp::Add(_)
@@ -3106,20 +3260,52 @@ impl App {
             self.tl_apply(TlOp::Speed(i, v));
             return;
         }
-        if let HeadOp::Select(i) = op {
-            self.ch = i;
-            let given = self.with(|s| {
-                s.song
-                    .timeline
-                    .as_deref()
-                    .and_then(|t| t.tracks.get(i))
-                    .map(|t| t.instr)
-                    .unwrap_or(0)
-            });
-            if given > 0 && (given as usize) <= self.with(|s| s.song.instruments.len()) {
-                self.instr = given;
+        match op {
+            HeadOp::Select(i, keep) => {
+                // a header: the timeline's clip selection keeps only that
+                // track's clips (Shift / Ctrl: keeps them all)
+                if self.tl_select_track(i, keep) {
+                    if self.extra.follow_select && !keep {
+                        // its instrument's editor (or the chooser) below
+                        self.show_instrument_editor();
+                    }
+                    self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
+                } else {
+                    self.status =
+                        "Song / Master track selected (tempo, master and return lanes)".into();
+                }
             }
-            self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
+            // a clip or the empty lane: its track, clips as the click left them
+            HeadOp::Pick(i) => {
+                // (a selection, not an edit: the song stays saved)
+                self.tl_select_track(i, true);
+                // a clip clicked while the instrument editor shows: the
+                // clip's editor instead (3.2)
+                if self.extra.follow_select && self.extra.lower_inst && self.tlv.sel.is_some() {
+                    let kind = self.tlv.sel.and_then(|id| {
+                        let c = self.tlv.cache.as_ref()?;
+                        c.tl.clips
+                            .iter()
+                            .find(|x| x.id == id)
+                            .map(|x| x.audio().is_some())
+                    });
+                    // (a Drum Kit track's clips are edited in the kit's
+                    // step grid, which is the instrument editor: it stays)
+                    let kit = self.with(|s| {
+                        s.song
+                            .instruments
+                            .get((self.instr as usize).wrapping_sub(1))
+                            .is_some_and(super::drumpat::is_kit)
+                    });
+                    if kind == Some(false) && !kit {
+                        self.set_lower(3);
+                        // the Timeline keeps the keyboard (Delete, Ctrl+D)
+                        self.pr.focus = false;
+                    }
+                }
+                return;
+            }
+            _ => {}
         }
         self.dirty = true;
     }
@@ -3148,7 +3334,7 @@ impl App {
                 "Piano roll: this clip's block column (Alt+double-click or Enter: the Tracker)"
                     .into()
             } else {
-                "Piano roll: this Tracker clip (adding a chord makes it a note clip)".into()
+                "Piano roll: this clip (adding a chord makes it a note clip)".into()
             }
         } else {
             "Piano roll: this note clip".into()
@@ -3159,6 +3345,17 @@ impl App {
     pub(super) fn timeline_open(&mut self, block: usize, col: usize, row: usize, entry: usize) {
         let (nb, nch) = self.with(|s| (s.song.patterns.len(), s.song.channels));
         if block >= nb {
+            return;
+        }
+        if !self.tracker_on() && self.view == View::Timeline {
+            // no Tracker: the block column opens in the piano roll under
+            // the timeline instead of replacing it
+            self.pattern = block;
+            self.ch = col.min(nch.saturating_sub(1));
+            self.row = row.min(self.rows().saturating_sub(1));
+            self.sel = None;
+            self.set_lower(3);
+            self.status = "Piano roll: this clip (the timeline stays on top)".into();
             return;
         }
         self.pattern = block;
@@ -3277,7 +3474,10 @@ enum HeadOp {
     Mute(usize),
     Solo(usize),
     Volume(usize, f32),
-    Select(usize),
+    /// a track header clicked: (track, Shift / Ctrl held)
+    Select(usize, bool),
+    /// a clip, an empty lane spot or a rubber band picked this track
+    Pick(usize),
     Speed(usize, u8),
     /// drag reorder: track, new index
     Move(usize, usize),
@@ -3422,6 +3622,19 @@ impl TimelineUi {
     pub(crate) fn tracks_bottom(&self) -> f32 {
         (self.heads.top() + self.layout.total() - self.scroll_y)
             .clamp(self.heads.top(), self.heads.bottom() - 2.0)
+    }
+
+    /// tick under screen x as last drawn (not snapped, at least 0)
+    pub(crate) fn tick_at(&self, x: f32) -> Tick {
+        let t =
+            self.scroll + (x - self.lanes.left()) as f64 * PPQ as f64 / self.zoom.max(0.01) as f64;
+        t.max(0.0) as Tick
+    }
+
+    /// the snap grid in ticks as last drawn (the toolbar's snap setting at
+    /// this zoom)
+    pub(crate) fn snap_grid(&self) -> Tick {
+        self.grid_now.max(1)
     }
 
     /// screen x of tick `t` as last drawn

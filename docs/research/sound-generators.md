@@ -2,7 +2,7 @@
 
 Status: research only (no code changed). Written 2026-10-18 against ChipWave 0.2.3.10 (`bf58402`).
 Goal: let people **make sounds from scratch inside ChipWave**, with no WAVs and no MIDI, inspired by
-Bitwig Studio's instruments and by analogue Moog-style synths. It should feel like a tracker:
+the instruments of other DAWs and by classic subtractive (Moog-style) synths. It should feel like a tracker:
 quick to get a sound with one click, deep if you want to tweak.
 
 All GitHub repos and licences below were checked against the GitHub API (`/repos/...`,
@@ -47,26 +47,22 @@ TPT SVF, 3 envelopes, 1 LFO, unison). What it lacks for "generate any sound from
 4. **No wavetable** (and no spectral/warp tricks like Vital's).
 5. **No dedicated drum generators.** Kicks/snares are hand-tuned Synth patches with one pitch env and no click/body/snap controls.
 6. **No one-click generator / randomiser** (sfxr-style) and **no category preset browser for built-in sounds**, only 4 built-in drum presets.
-7. Only **one LFO and no general modulation routing**. Bitwig and Vital both live on "drag a modulator onto any knob".
+7. Only **one LFO and no general modulation routing**. Other DAWs and Vital both live on "drag a modulator onto any knob".
 
 ---
 
-## 2. Bitwig Studio's generators (what to learn from)
+## 2. Another DAW's generators (what to learn from)
 
-Sources: Bitwig user guide v5.3 [Synth chapter](https://www.bitwig.com/userguide/latest/synth/),
-[Kick](https://www.bitwig.com/userguide/latest/kick/), [Hi-hat](https://www.bitwig.com/userguide/latest/hi-hat/),
-[Snare](https://www.bitwig.com/userguide/latest/snare/), [The Grid](https://www.bitwig.com/userguide/latest/welcome_to_the_grid/),
-[Polymer page](https://www.bitwig.com/polymer/), [Phase-4 page](https://www.bitwig.com/phase-4/), and the
-[6.0](https://downloads.bitwig.com/6.0/Release-Notes-6.0.html) / [6.1](https://downloads.bitwig.com/6.1/Release-Notes-6.1.html) release notes.
-Bitwig is closed source; we take **ideas and layouts only**.
+Sources: that DAW's user guide (synth, drum and modular chapters), product pages and release notes.
+That DAW is closed source; we take **ideas and layouts only**.
 
 | Device | What it is | Idea for ChipWave |
 |---|---|---|
-| **Polysynth** | 2 identical oscillators. Each has a *Shape* knob that crossfades pulse(+1 oct) ← saw → saw(+1 oct), PW, a sub pulse, hard sync to a tunable master (0–60 st), and 1–16 unison voices with width. **Blend operators** between osc 1/2: MIX, NEG, WIPE, AM, SIGN, MAX. Noise, filter FM, pre-HP, drive, 7-mode filter with a waveshaper, FEG/AEG | One-knob "Shape" morph, sync, and blend operators are cheap and very characterful. Easy to add to our Synth |
-| **FM-4** | 4 sine ops, ratio + Hz offset each, noise with resonant LP and drive, a **5×4 modulation matrix** (any op → any op incl. self-feedback, 0–999), a separate audio mixer, AEG | Matrix FM fits a tracker's grid-like UI perfectly: a 4×4 number grid, editable like pattern cells |
-| **Phase-4** | 4 oscillators doing **phase distortion** (5 algorithms, Shape, Formant, phase) **plus phase modulation** from each other; a PD/PM order arrow; global Shape/Mod XY pad; filter FM from each osc | CZ-style PD is cheap and great for chippy/acid sounds; the XY pad is a nice "macro" idea |
-| **Polymer** | Pick **one oscillator, one filter, one envelope**. Osc: Sine, Triangle, Pulse, Saw, Union (pulse+saw+tri blend, drifting), Phase-1 (PD + feedback), **Swarm** (8-voice unison saw/sine), **Bite** (dual osc: exp FM, sync, PWM, ring), **Wavetable** (custom unison modes), **Scrawl** (drawable). Filters: Low-pass LD (ladder), **Low-pass MG ("inspired by Mr Moog", mix-bus saturation via Drive)**, Sallen-Key (16 configs), SVF, XP (Oberheim), Comb, Vowels, Fizz, Rasp, Ripple. Env: ADSR, AR, AD (loop), Pluck, Segments. Plus sub osc, sync-to-sub, PM from sub (0–800 %), noise, HP, *Resonance Limit* | **The best template for ChipWave's "Analog" generator**: slot-based, simple, swappable modules. Note: the guide has **no "Pulsar" or separate "Sub" module** in Polymer; *Sub* is a front-panel sub osc, not a module |
-| **The Grid** | 180+ module modular environment (Poly/FX/Note Grid); Polymer converts to a Poly Grid | Too big for ChipWave now. A full modular is out of scope; slot-based generators give 80 % of the value |
+| **Two-oscillator subtractive synth** | 2 identical oscillators. Each has a *Shape* knob that crossfades pulse(+1 oct) ← saw → saw(+1 oct), PW, a sub pulse, hard sync to a tunable master (0–60 st), and 1–16 unison voices with width. **Blend operators** between osc 1/2: MIX, NEG, WIPE, AM, SIGN, MAX. Noise, filter FM, pre-HP, drive, 7-mode filter with a waveshaper, FEG/AEG | One-knob "Shape" morph, sync, and blend operators are cheap and very characterful. Easy to add to our Synth |
+| **4-operator FM synth** | 4 sine ops, ratio + Hz offset each, noise with resonant LP and drive, a **5×4 modulation matrix** (any op → any op incl. self-feedback, 0–999), a separate audio mixer, AEG | Matrix FM fits a tracker's grid-like UI perfectly: a 4×4 number grid, editable like pattern cells |
+| **Phase-distortion synth** | 4 oscillators doing **phase distortion** (5 algorithms, Shape, Formant, phase) **plus phase modulation** from each other; a PD/PM order arrow; global Shape/Mod XY pad; filter FM from each osc | CZ-style PD is cheap and great for chippy/acid sounds; the XY pad is a nice "macro" idea |
+| **One-oscillator synth** | Pick **one oscillator, one filter, one envelope**. Osc: Sine, Triangle, Pulse, Saw, Union (pulse+saw+tri blend, drifting), Phase-1 (PD + feedback), **Swarm** (8-voice unison saw/sine), **Bite** (dual osc: exp FM, sync, PWM, ring), **Wavetable** (custom unison modes), **Scrawl** (drawable). Filters: Low-pass LD (ladder), **Low-pass MG ("inspired by Mr Moog", mix-bus saturation via Drive)**, Sallen-Key (16 configs), SVF, XP (Oberheim), Comb, Vowels, Fizz, Rasp, Ripple. Env: ADSR, AR, AD (loop), Pluck, Segments. Plus sub osc, sync-to-sub, PM from sub (0–800 %), noise, HP, *Resonance Limit* | **The best template for ChipWave's "Analog" generator**: slot-based, simple, swappable modules. Note: the guide has **no "Pulsar" or separate "Sub" module** in it; *Sub* is a front-panel sub osc, not a module |
+| **Modular environment** | 180+ module modular environment (instrument, FX and note patches); the one-oscillator synth converts to a modular patch | Too big for ChipWave now. A full modular is out of scope; slot-based generators give 80 % of the value |
 | **Drum families** | **v1** (ex E-Kick/E-Snare/E-Hat/E-Clap/E-Tom/E-Cowbell); **v8** (TR-808-inspired: Kick, Snare, Clap, Hat, Tom, Cowbell, Cymbal, Claves, Maracas, Rimshot); **v9** (TR-909-inspired); **v0** (original hybrids: Kick, Snare, Hat, Cymbal, Tom and **Zap Kick, "a psy-inspired kick drum"**) | See details below; these map 1:1 onto a ChipWave Drum Synth |
 | v1 Kick | Slightly rectified sine, AD env (fixed attack), Click, Tone (LP), pitch mod (amount st, decay, contour) | Minimal kick |
 | v0 Kick | **Tune, Decay, Punch (pitch env), Click ("initial chaos"), Shape (osc sharpness), Body (shell emphasis), Noise (+stereo)**, velocity sens | **The ideal macro set for our kick: 7 knobs** |
@@ -77,8 +73,8 @@ Bitwig is closed source; we take **ideas and layouts only**.
 | v0 Snare | Tune, Decay, Noise (+width), Click, **Shell level / Ringing / Size / Spread** | Shell resonators make snares sound real |
 | **Organ** | Drawbar-style organ | Additive "drawbar" mode in our Analog/Wavetable is enough |
 | **Sampler (6.1)** | Slicing, Repitch/Cycles (wavetable from samples, now with Pulse/Partials characters)/Textures/**Fragments** (granular)/**Spectral** | Cycles (sample → wavetable) is a nice follow-up for our wavetable engine |
-| **Modulators** | The "Unified Modulation System" ([chapter 16](https://www.bitwig.com/userguide/latest/modulators_device_nesting_and_more/)): add LFO/ADSR/Random/Steps/Segments/Keytrack/Expressions/Macro modulators to any device, click the modulator's routing button, then **drag on any knob** to set a per-target amount (shown as a ring). 6.0 added circular modulations | The UI pattern to copy (Vital does the same, see §4) |
-| **Randomize (Note FX)** | Randomizes notes, not patches | Bitwig has **no global patch "dice"**, so ChipWave can do better here (sfxr-style) |
+| **Modulators** | The DAW's modulation system (its user guide, modulators chapter): add LFO/ADSR/Random/Steps/Segments/Keytrack/Expressions/Macro modulators to any device, click the modulator's routing button, then **drag on any knob** to set a per-target amount (shown as a ring). 6.0 added circular modulations | The UI pattern to copy (Vital does the same, see §4) |
+| **Randomize (Note FX)** | Randomizes notes, not patches | That DAW has **no global patch "dice"**, so ChipWave can do better here (sfxr-style) |
 
 ---
 
@@ -126,7 +122,7 @@ continuous **LP → BP → HP "blend"** knob. That's one filter with many shapes
 - **Drift** (what makes it "analog"): per-voice, per-oscillator slow random pitch walk (filtered noise
   or a Perlin-style smooth random, ±0–10 cents, 0.1–2 Hz), random start phase per note (or "free-running"),
   tiny per-voice cutoff spread (±3–5 %), and envelope time spread (±2 %). Surge XT's oscillator "Drift"
-  parameter and Polymer's "Union … drifting" do exactly this. Odin2 and Vital use random phase too.
+  parameter and the one-oscillator synth's "Union … drifting" do exactly this. Odin2 and Vital use random phase too.
 - **Saturation**: tanh/asymmetric soft clip at the mixer (Minimoog "overload") and in the ladder; DC blocker after it.
 - **Oversampling** 2× for the non-linear ladder (cheap halfband, as Vital does with `iir_halfband_decimator`).
 
@@ -220,7 +216,7 @@ For ChipWave's tracker look: draw these in the Dark Circuit / Amiga Workbench th
   + **noise** through BP/HP with its own decay ("snappy") + click. Plaits `AnalogSnareDrum` uses 5 resonant modes + noise.
 - **Hi-hat** = 6 detuned squares at 808 ratios (we have these) → BP 7–10 kHz → HP, short or long decay,
   closed/open choke group. Alternatives: **ring-modulated square pairs** (Plaits `HiHat` has "square noise"
-  or "ring-mod" metallic sources, MIT), **noise → comb** + **FM hit** (Bitwig v1 Hat), **sine-bank FM** (v0 Hat).
+  or "ring-mod" metallic sources, MIT), **noise → comb** + **FM hit** (another DAW's hi-hat device), **sine-bank FM** (v0 Hat).
 - **Clap** = noise → BP (~1–1.5 kHz) with **3–4 retriggered 8–12 ms bursts** then a longer tail
   (808 style: sawtooth-shaped multi-envelope) + a little reverb.
 - **Tom** = like a kick with a higher pitch, less pitch-env depth, and a bit of noise; **conga** = shorter, with a resonant pitch blip.
@@ -246,7 +242,7 @@ For ChipWave's tracker look: draw these in the Dark Circuit / Amiga Workbench th
   FM osc1 → osc2, **drawn envelopes** for amplitude, frequency, filter cutoff and distortion drive, per-layer and
   global filters, and distortion types (hard clip, tan, atan, log, exp, polynomial). Exports SFZ and kits as JSON. The
   "**draw the pitch curve of the kick**" UI is the thing to copy.
-- **Bitwig v0 drums**: 5–8 **macro knobs per drum** (Tune, Decay, Punch, Click, Shape, Body, Noise),
+- **Another DAW's macro drums**: 5–8 **macro knobs per drum** (Tune, Decay, Punch, Click, Shape, Body, Noise),
   which hides the DSP. **This is the UI level a tracker wants.**
 - **Dice with sensible ranges** = define per-generator param **ranges for each category**
   (e.g. Kick: tune 40–65 Hz, punch 18–48 st, punch decay 8–60 ms, decay 0.15–0.9 s, click 0–0.6),
@@ -279,7 +275,7 @@ GPL-3 OK = may we copy code into ChipWave (with notices)?
 | VCV Rack | github.com/VCVRack/Rack | GPL-3.0-or-later (LICENSE.md) | C++ | 4429 | Modular framework (reference for a future "Grid") | Hard (framework) | Yes |
 | VCV Fundamental | github.com/VCVRack/Fundamental | GPL-3.0-or-later (LICENSE.md) | C | 259 | VCO (minBLEP + sync), VCF (ladder-ish), Noise, Random, ADSR modules | Easy | **Yes** |
 | Cardinal | github.com/DISTRHO/Cardinal | GPL-3.0 | C++ | 3225 | VCV Rack + many open modules in one plugin; module catalogue to learn from | Hard | Yes |
-| **Bespoke Synth** | github.com/BespokeSynth/BespokeSynth | GPL-3.0 | C++ | 4742 | Bitwig-Grid-like live modular; Karplus-Strong, FM synth, drum synth, "Drum Player" | Hard (as a whole) | Yes |
+| **Bespoke Synth** | github.com/BespokeSynth/BespokeSynth | GPL-3.0 | C++ | 4742 | Live modular in the style of other DAWs' modular environments; Karplus-Strong, FM synth, drum synth, "Drum Player" | Hard (as a whole) | Yes |
 | Faust libraries | github.com/grame-cncm/faustlibraries | Per-function (mostly LGPL / MIT / STK; declared before each function) | Faust | 258 | `vaeffects.lib` (moog_vcf, Korg35, diode ladder), `oscillators.lib` (PolyBLEP, BLIT), `physmodels.lib`, `pinktrombone.lib`, `dx7/` | Easy (algorithms read like maths) | **Yes, per function** (check each declare) |
 | **fundsp** | github.com/SamiPerttu/fundsp | MIT OR Apache-2.0 | **Rust** | 1226 | `moog`/`moog_hz` ladder, PolyBLEP `poly_saw/square/pulse`, DSF saw/square, organ/pluck, noise colours | **Already Rust** (could depend, or read) | **Yes** |
 | glicol | github.com/chaosprint/glicol | MIT | Rust | 3012 | Graph DSP nodes (osc, filters, envelopes, sequencers) | Already Rust | Yes |
@@ -332,7 +328,7 @@ Honourable mentions: **fundsp** (Rust ladder/PolyBLEP to cross-check), **Actuate
 ### 6.2 Ideas that especially suit a tracker
 - **sfxr-style "Chip FX" generator**: category buttons → instant chippy instrument; ideal for ChipWave's OctaMED roots.
 - **Geonkick-style kick designer**: draw the pitch curve; tune the tail to the song key (we have key detection in the chord helper!).
-- **Macro-knob drums** (Bitwig v0): 6–8 knobs per drum, quick to tweak while the pattern loops.
+- **Macro-knob drums** (as in other DAWs): 6–8 knobs per drum, quick to tweak while the pattern loops.
 - **"Bake to sample"**: render any generator note to a Sample instrument (the OctaMED synth→sample habit), then chop it in the existing sample editor.
 - **Pattern commands drive generator macros** (like 38–3B for the filter): e.g. a `3Fxy` "macro x = y" command per row, so drum punch/decay can change every step.
 - **Seeded dice**: store the seed in the instrument, so a pattern can even re-roll per row in future (glitch hats).
@@ -349,7 +345,7 @@ All serde-defaulted so old songs and `.cwi` files still load. Every engine rende
 | Engine | Contents | Macros (front page) |
 |---|---|---|
 | **Analog** (Moog-style) | 3 osc (Saw/Tri/Square/Pulse/Tri-saw/Sine, octave 32'–2', fine, level), osc 3 → LFO option, **hard sync 2→1**, **FM 3→1**, ring mod, noise (white/pink), **mixer overload** (tanh), **ladder filter** (TPT, 12/24 dB, LP↔BP↔HP blend, drive, self-oscillation, key-track) with Vintage (Huovilainen-style per-stage tanh, 2× OS) / Clean modes, **drift** (pitch/phase/cutoff spread, Perlin), unison stacks (Vital-style octave/chord), glide, legato | Cutoff, Resonance, Contour, Drive, Detune, Drift, Glide, Brightness |
-| **FM-4** | 4 sine ops (ratio + Hz offset, level, fixed-freq option), **4×4 matrix incl. feedback** + noise column (Bitwig FM-4 model), per-op AD(S)R, 8 algorithm presets to fill the matrix, optional PD "shape" per op (Phase-4 idea) | Index, Ratio, Feedback, Brightness, Attack, Decay, Noise, Shape |
+| **FM-4** | 4 sine ops (ratio + Hz offset, level, fixed-freq option), **4×4 matrix incl. feedback** + noise column (after other DAWs' 4-operator FM devices), per-op AD(S)R, 8 algorithm presets to fill the matrix, optional PD "shape" per op (phase-distortion idea) | Index, Ratio, Feedback, Brightness, Attack, Decay, Noise, Shape |
 | **Wavetable** | 64–256 frame tables, 2048 samples/frame, mip-mapped; **table builder** from keyframes: basic shapes, harmonic sliders (drawbars), draw, **AKWF CC0 waves**, **"speak to wavetable" from our Voice engine**, sample → table; modifiers: warp (power), fold, window, spectral LP/HP, smear, phase disperse, harmonic stretch; **frame position** + PD warps (sync, bend, squeeze, PW, quantize) | Position, Warp, Warp amt, Spectral, Fold, Unison, Detune, Width |
 | **Drum Synth** | Kit of generators: **Kick** (v0/808/909/Zap), **Snare** (sines/shell modes + noise snappy), **Hat** (808 squares / ring-mod / comb+FM; closed/open choke), **Clap** (multi-burst noise), **Tom/Conga**, **Perc** (cowbell, claves/rim, cymbal, zap). Each is one instrument; a "Kit" helper creates 8 at once | Kick: Tune, Punch, Punch time, Decay, Click, Body, Drive, Noise; Snare: Tune, Tone, Snappy, Decay, Shell, Click…; Hat: Tune, Decay, Metal↔Noise, Tone, Width, Choke |
 | **Chip FX** (sfxr) | sfxr's 22 params (wave, envelope, slide, delta slide, vibrato, arp, duty sweep, repeat, phaser, LP/HP sweeps) + bfxr extra waves; plays pitched from the pattern or as one-shots | Categories as buttons: Coin, Laser, Explosion, Powerup, Hit, Jump, Blip, **+ Zap, Riser, Downlifter** |
@@ -415,4 +411,4 @@ Chip FX page: sfxr's category buttons down the left, sliders right.
 Credits to add as each lands (README credits + About + THIRD_PARTY_LICENSES + source headers):
 Emilie Gillet / Mutable Instruments (MIT) for drum models; DrPetter (sfxr, MIT) and bzar (sfxr-rs, MIT); Yoshinosuke Horiuchi (SC-808) via Sonic Pi (MIT); Matt Tytel (Vital, GPL-3) for wavetable/warp/filter ideas
 (no "Vital" naming); Surge XT team (GPL-3); Stilson & Smith, Huovilainen, D'Angelo & Välimäki, Zavalishin papers;
-ddiakopoulos/MoogLadders authors per model; Adventure Kid (AKWF, CC0) if waves are bundled; Bitwig for UI inspiration only (no code, closed source).
+ddiakopoulos/MoogLadders authors per model; Adventure Kid (AKWF, CC0) if waves are bundled; other DAWs for UI inspiration only (no code, closed source).

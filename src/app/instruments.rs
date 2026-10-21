@@ -197,6 +197,10 @@ impl App {
                             .push((slot, r.rect.intersect(ui.clip_rect())));
                         if r.clicked() {
                             self.instr = slot;
+                            // the lower panel follows (3.6): its editor
+                            if self.extra.follow_select && self.view == View::Timeline {
+                                self.show_instrument_editor();
+                            }
                         }
                         if r.double_clicked() {
                             self.start_rename(slot, n.clone());
@@ -245,9 +249,23 @@ impl App {
                                 self.paste_effects(slot, true);
                                 ui.close();
                             }
-                            if ui.button("Open in FX view").clicked() {
+                            // a timeline song: its effects in the lower panel's
+                            // Devices tab, under the timeline (the FX view stays
+                            // in View › FX)
+                            let tl_song = self.with(|s| s.song.timeline.is_some());
+                            let (lab, tip) = if tl_song {
+                                ("Show effects (Devices)", "this instrument's effect chain in the lower panel, under the timeline")
+                            } else {
+                                ("Open in FX view", "this instrument's effect chain in the FX view")
+                            };
+                            if ui.button(lab).on_hover_text(tip).clicked() {
                                 self.instr = slot;
-                                self.view = View::Fx;
+                                if tl_song {
+                                    self.view = View::Timeline;
+                                    self.set_lower(4);
+                                } else {
+                                    self.view = View::Fx;
+                                }
                                 ui.close();
                             }
                             ui.separator();

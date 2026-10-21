@@ -73,7 +73,7 @@ Read from `src/app/arranger.rs` (song lanes), `src/app/lanes.rs` (bar, menu, lab
     automated knob doesn't say it's being overridden. The knob just jumps back.
 17. **Knob moves can't be recorded.** There's no Read/Touch/Latch, and track lanes have no
     "record knobs" (deferred in TIMELINE.md M5).
-18. **No "show lane for the knob I just touched"** (Ableton, Reaper and Bitwig all have it).
+18. **No "show lane for the knob I just touched"** (Ableton, Reaper and other DAWs all have it).
 
 ### 1.5 Filters specifically
 19. **There are 8+ different filter UIs.**
@@ -93,7 +93,7 @@ Read from `src/app/arranger.rs` (song lanes), `src/app/lanes.rs` (bar, menu, lab
 | DAW | Where lanes live | Choosing the parameter | Write modes | Clip-level | Notes |
 |---|---|---|---|---|---|
 | **Ableton Live 12** | One main lane per track under the header (A key), plus "+" extra lanes | Two choosers: **Device ▸ Control**. LEDs mark automated items; "Show automated parameters only" | Arrangement record (overdub), Re-enable Automation button | **Clip envelopes**: *modulation* (relative, blue) vs automation (absolute, red) | Click any device knob in Automation mode to show its lane. "Show Automation in New Lane" on right-click |
-| **Bitwig 5/6** | Track automation lanes under the track (expandable) | Parameter chooser in the lane header; touching a knob shows its lane | Arranger automation write: Latch / Touch / Write | **Clip automation**, absolute or **relative (additive ±50 % / multiplicative)**; automation clips (Bitwig 6) | Modulators are separate from automation; mod ranges are drawn on knobs |
+| **Another DAW (studied)** | Track automation lanes under the track (expandable) | Parameter chooser in the lane header; touching a knob shows its lane | Arranger automation write: Latch / Touch / Write | **Clip automation**, absolute or **relative (additive ±50 % / multiplicative)**; automation clips (in its latest version) | Modulators are separate from automation; mod ranges are drawn on knobs |
 | **FL Studio** | **Automation clips** in the Playlist (on any track) | Right-click knob › *Create automation clip* | Record via the Automation button; **Event editor** per pattern | Pattern events (Edit events) | Clips can be looped, cloned and converted to LFO mode |
 | **Logic Pro** | Lanes under each track (A), a disclosure triangle for more | Lane popup menu: **Plug-in ▸ Parameter**. Touch a control to show it | **Read / Touch / Latch / Write**, plus Trim and Relative | Region automation | Touch is the everyday mode; Latch for new levels |
 | **Reaper 7** | Envelope lanes under the track, or overlaid on media | **Envelope Manager**: tree by FX, search, Visible/Armed/Active | Trim/Read / Read / Touch / Latch / Latch preview / Write | Take envelopes | "Show track envelope for **last touched** FX parameter" action; per-envelope arm |
@@ -104,24 +104,24 @@ Read from `src/app/arranger.rs` (song lanes), `src/app/lanes.rs` (bar, menu, lab
 
 **Synths and FX expose filters the same way everywhere:** a Filter section with **type**
 (LP/BP/HP/Notch), **slope** (12/24 dB), **Cutoff** (log, shown in Hz/kHz), **Resonance**
-(0–100 %), **Env amount** (bipolar), **Key track** and **Drive**. Serum, Vital, Bitwig
-Filter+/Polymer, Ableton Auto Filter and Wavetable, Logic Alchemy and Retro Synth all use
+(0–100 %), **Env amount** (bipolar), **Key track** and **Drive**. Serum, Vital, other DAWs'
+filter devices, Ableton Auto Filter and Wavetable, Logic Alchemy and Retro Synth all use
 it, usually with a **draggable response curve** (X = cutoff, Y = resonance).
 The cutoff lane in every DAW is **log-scaled with Hz ticks**.
 
 ### What's most standard (and why)
-1. **Lanes under the track they belong to, which fold away.** This covers Ableton, Bitwig,
+1. **Lanes under the track they belong to, which fold away.** This covers Ableton,
    Logic, Reaper, Cubase and Studio One. Automation lives where the sound is, and folding
    keeps the arrangement readable.
 2. **A Device ▸ Parameter picker in the lane header**, with "automated only" LEDs and
    search (Ableton, Logic, Reaper). It scales to plugins with hundreds of parameters.
-3. **Touch a knob and its lane shows** (Ableton, Bitwig, Logic, Reaper). It's the fastest
+3. **Touch a knob and its lane shows** (Ableton, Logic, Reaper and others). It's the fastest
    path from "I want this to move" to drawing.
 4. **Read / Touch / Latch (+ Write)** for recording knob and controller moves (Logic, Pro
-   Tools, Reaper, Cubase, Studio One, Bitwig). Touch is the everyday default.
+   Tools, Reaper, Cubase, Studio One and others). Touch is the everyday default.
 5. **Real-unit value scale** (Hz, dB, %), with log for cutoff.
 6. **Clip/region envelopes** that move with the clip, often **relative** (Ableton
-   modulation, Bitwig additive/multiplicative, Logic region and Studio One part
+   modulation, additive/multiplicative clip modes in other DAWs, Logic region and Studio One part
    automation). This suits loop-based electronic music, where a filter wobble belongs to
    the bassline clip.
 7. **Shape tools** (line, curve, sine/tri/saw/square stamps), range selection, and
@@ -167,7 +167,7 @@ The goal is one lane system that works the same in timeline mode and in tracker 
 ### 3.2 Editing tools (in the timeline toolbar, while a lane has focus)
 | Tool | Behaviour |
 |---|---|
-| **Pointer** (default) | Click a point to select it. Drag a point to move it. **Double-click** an empty spot to add a point (Ableton and Bitwig). Drag on empty space for a **rubber band** selection. Shift-drag to fine-tune the value. |
+| **Pointer** (default) | Click a point to select it. Drag a point to move it. **Double-click** an empty spot to add a point (Ableton and others). Drag on empty space for a **rubber band** selection. Shift-drag to fine-tune the value. |
 | **Pencil** | Freehand draw, thinned with Ramer–Douglas–Peucker. Snaps to the grid in step mode. |
 | **Line** | Drag to draw a straight ramp, which replaces whatever is in that span. |
 | **Curve** | Alt-drag a segment to bend it (`Point.curve` already exists). |
@@ -214,7 +214,7 @@ The goal is one lane system that works the same in timeline mode and in tracker 
   - **Absolute:** replaces the track lane while the clip plays (today's "innermost wins").
   - **Relative + (additive ±50 %):** adds to the track lane.
   - **Relative × (multiplicative 0–100 %):** scales it.
-  - The relative modes come from Bitwig. They let a "filter wobble" clip sit on top of a
+  - The relative modes come from another DAW. They let a "filter wobble" clip sit on top of a
     long track-level cutoff rise.
 - Relative clip lanes are drawn **blue/dashed** on top of the track curve. The result
   (track + clip) is shown as a faint ghost.
@@ -312,8 +312,8 @@ change (lane `owner`, clip lane `mode`) is optional and only written when used.
 
 ## Sources
 - Ableton Live 12 manual: Automation and Editing Envelopes; Clip Envelopes; Arrangement View.
-- Bitwig user guide: Automation; The Automation Editor Panel; Bitwig 6 release notes
-  (automation clips, relative clip automation).
+- Another DAW's user guide and release notes: automation, the automation editor,
+  automation clips and relative clip automation.
 - Image-Line FL Studio manual: Automation Clips; Event Editor.
 - Apple Logic Pro user guide: Choose automation modes (Read/Touch/Latch/Write/Trim/Relative).
 - REAPER 7 Envelope Manager; SOS "Automation Action"; REAPER last-touched-parameter actions.

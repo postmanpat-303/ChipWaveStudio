@@ -54,4 +54,4 @@ opt-level = 1
 [target."cfg(windows)".dependencies]
 # fast maths instead of the slow mingw/msvcrt ones (src/winmath.rs)
 libm = "0.2.16"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem", "Win32_NetworkManagement_WNet", "Win32_Security"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_System_Threading", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem", "Win32_NetworkManagement_WNet", "Win32_Security"] }

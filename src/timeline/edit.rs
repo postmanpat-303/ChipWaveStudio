@@ -256,15 +256,21 @@ pub fn make_unique(song: &mut Song, id: u32) -> Option<usize> {
 /// Make unique for a note clip: it gets its own copy of the note data.
 /// Returns the new data index.
 pub fn make_unique_notes(tl: &mut Timeline, id: u32) -> Option<usize> {
-    let i = find(tl, id)?;
-    let ClipKind::Notes { data } = tl.clips[i].kind else {
-        return None;
-    };
-    let mut d = (**tl.notes.get(data as usize)?).clone();
+    let data = tl.any_clip(id)?.notes()?;
+    let mut d = (**tl.notes.get(data)?).clone();
     d.name = format!("{} copy", d.name);
     tl.notes.push(Shared::new(d));
     let nd = tl.notes.len() - 1;
-    tl.clips[i].kind = ClipKind::Notes { data: nd as u32 };
+    let kind = ClipKind::Notes { data: nd as u32 };
+    match find(tl, id) {
+        Some(i) => tl.clips[i].kind = kind,
+        // a launcher clip
+        None => {
+            if let Some(l) = tl.launcher.iter_mut().find(|l| l.clip.id == id) {
+                l.clip.kind = kind;
+            }
+        }
+    }
     Some(nd)
 }
 
@@ -695,4 +701,113 @@ pub fn set_loop(tl: &mut Timeline, a: Tick, b: Tick) {
     let (a, b) = (a.min(b).max(0), a.max(b).max(0));
     tl.loop_range = Some((a, b.max(a + ROW)));
     tl.loop_on = true;
+}
+
+// ------------------------------------------------------------ placing clips
+// (docs/unified/PLAN.md Stage 4a: one drop system, nothing overwritten
+// silently)
+
+/// Ids of the clips on `track` that overlap `[a, b)`, except `skip`.
+pub fn overlaps(tl: &Timeline, track: usize, a: Tick, b: Tick, skip: &[u32]) -> Vec<u32> {
+    tl.clips
+        .iter()
+        .filter(|c| c.track as usize == track && !skip.contains(&c.id))
+        .filter(|c| c.len > 0 && c.start < b && c.end() > a)
+        .map(|c| c.id)
+        .collect()
+}
+
+/// the clips (not in `ids`) that the clips `ids` overlap on their tracks
+pub fn covered(tl: &Timeline, ids: &[u32]) -> Vec<u32> {
+    let mut out: Vec<u32> = vec![];
+    for c in tl.clips.iter().filter(|c| ids.contains(&c.id)) {
+        for o in overlaps(tl, c.track as usize, c.start, c.end(), ids) {
+            if !out.contains(&o) {
+                out.push(o);
+            }
+        }
+    }
+    out
+}
+
+/// Clear `[a, b)` on `track`: clips inside it go, clips across its edges
+/// are split there and only their part inside goes (what "Replace" does
+/// before a clip is placed there). Returns how many clips were touched.
+pub fn clear_range(tl: &mut Timeline, track: usize, a: Tick, b: Tick, skip: &[u32]) -> usize {
+    let ids = overlaps(tl, track, a, b, skip);
+    let mut gone = vec![];
+    for id in &ids {
+        let mut id = *id;
+        let Some(i) = find(tl, id) else { continue };
+        let (s, e) = (tl.clips[i].start, tl.clips[i].end());
+        if s < a {
+            // keep the left part; the rest is a new clip
+            match split(tl, id, a) {
+                Some(r) => id = r,
+                None => continue,
+            }
+        }
+        if e > b {
+            // the part after `b` stays
+            let _ = split(tl, id, b);
+        }
+        gone.push(id);
+    }
+    delete(tl, &gone);
+    ids.len()
+}
+
+/// The first start at or after `start` (on the `grid`) where a clip of
+/// `len` fits on `track` without overlapping any clip ("Place after it").
+pub fn free_start(tl: &Timeline, track: usize, start: Tick, len: Tick, grid: Tick) -> Tick {
+    let grid = grid.max(1);
+    let mut at = start.max(0);
+    // each pass moves past one overlapping clip, so this ends
+    for _ in 0..=tl.clips.len() {
+        let hit = tl
+            .clips
+            .iter()
+            .filter(|c| c.track as usize == track && c.len > 0)
+            .filter(|c| c.start < at + len.max(1) && c.end() > at)
+            .map(|c| c.end())
+            .max();
+        match hit {
+            Some(end) => at = (end + grid - 1) / grid * grid,
+            None => break,
+        }
+    }
+    at
+}
+
+/// A copy of clip `src` on `track` at `start`: its content (linked: the
+/// same notes, block or audio file), length, trim, loop, name, colour,
+/// gain, fades and clip automation. `unique`: the copy gets its own notes
+/// or block (an independent copy). Returns the new id.
+pub fn place_copy(
+    song: &mut Song,
+    src: u32,
+    track: usize,
+    start: Tick,
+    unique: bool,
+) -> Option<u32> {
+    let nch = song.channels.min(MAX_CHANNELS);
+    if track >= nch {
+        return None;
+    }
+    let tl = song.timeline.as_deref_mut()?;
+    // a timeline clip, or a launcher clip placed in the arrangement
+    let c = tl.any_clip(src)?.clone();
+    let nid = tl.new_id();
+    let mut n = c;
+    n.id = nid;
+    n.seed = seed_for(nid);
+    n.track = track as u16;
+    n.start = start.max(0);
+    tl.clips.push(n);
+    tl.sort();
+    if unique && make_unique_notes(tl, nid).is_none() {
+        // a Tracker clip: its own block (an audio clip keeps its file)
+        let _ = make_unique(song, nid);
+    }
+    Some(nid)
 }

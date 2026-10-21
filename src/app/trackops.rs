@@ -94,6 +94,62 @@ impl App {
         );
     }
 
+    /// the pie's Add › WaveForge, Drum Kit, …: a new built-in instrument
+    /// (its Init or first preset) plays track `tr`; one undo step, and its
+    /// editor opens
+    pub(crate) fn track_new_instrument(&mut self, tr: usize, b: super::trackpie::Builtin) {
+        let Some((name, kind)) = b.make() else {
+            self.status = format!("No {} preset to start from", b.label());
+            return;
+        };
+        if self.with(|s| s.song.instruments.len() >= 255) {
+            self.status = "All 255 instrument slots are used".into();
+            return;
+        }
+        self.snapshot();
+        self.undo_hold += 1;
+        self.add_instrument(&name, kind);
+        let slot = self.instr;
+        let n = self.with(|s| crate::chanops::assign_track_instrument(&mut s.song, tr, slot));
+        self.undo_hold -= 1;
+        // the track is selected (headers, lanes, the lower panel)
+        self.tl_select_track(tr, false);
+        self.instr = slot;
+        self.dirty = true;
+        self.show_instrument_panel();
+        self.status = format!(
+            "Track {:02} now plays {slot:02X} {name}{}",
+            tr + 1,
+            if n > 0 {
+                format!(" ({n} note{} changed)", if n == 1 { "" } else { "s" })
+            } else {
+                String::new()
+            }
+        );
+    }
+
+    /// Browser › ChipWave Instruments dropped below the tracks (or loaded):
+    /// a new track at `at`, named after the instrument, playing a new `b`;
+    /// one undo step
+    pub(crate) fn track_new_with_instrument(&mut self, at: usize, b: super::trackpie::Builtin) {
+        if self.with(|s| s.song.channels) >= MAX_CHANNELS {
+            self.status =
+                "All 32 tracks are used (the channel limit): drop onto a track instead".into();
+            return;
+        }
+        if self.with(|s| s.song.instruments.len() >= 255) {
+            self.status = "All 255 instrument slots are used".into();
+            return;
+        }
+        self.snapshot();
+        self.undo_hold += 1;
+        if self.track_insert(at, b.label()) {
+            let at = self.ch;
+            self.track_new_instrument(at, b);
+        }
+        self.undo_hold -= 1;
+    }
+
     /// the pie's Drum pattern…: the Browser's Drum Patterns tab; the next
     /// pick goes on track `tr` at the play marker
     pub(super) fn track_drum_pattern(&mut self, tr: usize) {

@@ -178,7 +178,8 @@ impl AudioState {
     }
 
     /// Clip starts and ends due at timeline tick `t` (once per sample).
-    pub(super) fn events(&mut self, plan: &Plan, nch: usize, t: f64, sr: f32) {
+    /// `skip`: tracks playing a launcher clip (their audio clips don't start)
+    pub(super) fn events(&mut self, plan: &Plan, nch: usize, t: f64, sr: f32, skip: u64) {
         self.clock = t;
         if self.any {
             for v in self.v[..nch * AUDIO_VOICES].iter_mut() {
@@ -198,11 +199,18 @@ impl AudioState {
                     break;
                 }
                 self.cur[ch] += 1;
-                if (s.end as f64) > t {
+                if (s.end as f64) > t && skip >> ch.min(63) & 1 == 0 {
                     let s = *s;
                     self.start(plan, ch, &s, t, sr, false);
                 }
             }
+        }
+    }
+
+    /// end the audio clips sounding on `track` (a launcher clip takes over)
+    pub(super) fn cut_track(&mut self, track: usize) {
+        for v in self.v[track * AUDIO_VOICES..(track + 1) * AUDIO_VOICES].iter_mut() {
+            v.active = false;
         }
     }
 

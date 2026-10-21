@@ -422,8 +422,14 @@ impl App {
     }
 
     /// (timeline mode) the clip and, for a new track, the track and its kit:
-    /// one undo step
+    /// one undo step; `at` is floored to the bar
     pub(crate) fn pat_place_now(&mut self, i: usize, track: u8, at: tl::Tick) {
+        self.pat_place_at(i, track, at, true);
+    }
+
+    /// `pat_place_now`; `to_bar` false: exactly at `at` (a drop that was
+    /// snapped by the drop preview already)
+    pub(crate) fn pat_place_at(&mut self, i: usize, track: u8, at: tl::Tick, to_bar: bool) {
         let Some(p) = PATTERNS.get(i) else { return };
         let new = track == u8::MAX;
         let n = self.with(|s| s.song.channels);
@@ -496,7 +502,11 @@ impl App {
             let sig = t.sig_at(at);
             let bar = sig.bar_ticks().max(1);
             let from = if at >= sig.tick { sig.tick } else { 0 };
-            let start = from + (at - from).max(0) / bar * bar;
+            let start = if to_bar {
+                from + (at - from).max(0) / bar * bar
+            } else {
+                at.max(0)
+            };
             let id = tl::new_note_clip(song, tr, start)?;
             let t = song.timeline.as_deref_mut()?;
             let k = t.clips.iter().position(|c| c.id == id)?;
@@ -1361,6 +1371,6 @@ impl App {
 }
 
 /// a Kit or a Drum Kit (the note picks the drum)
-fn is_kit(i: &Instrument) -> bool {
+pub(super) fn is_kit(i: &Instrument) -> bool {
     matches!(&i.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Kit(_) | crate::gen::GenEngine::Drums(_)))
 }

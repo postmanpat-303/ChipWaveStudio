@@ -53,6 +53,7 @@ mod speech;
 mod synth;
 mod theme;
 mod timeline;
+mod titlebar;
 mod transform;
 mod update;
 mod voice;

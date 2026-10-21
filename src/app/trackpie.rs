@@ -1,8 +1,8 @@
 //! The track pie menu (inspired by other DAWs; requested by Del (postmanpat), 19 Oct 2026): right-click
 //! a track header (Timeline track list or tracker channel header) and a
 //! radial menu opens centred on the pointer. The centre disc names the
-//! track; nine segments around it: Rename, Colour, Icon, Add, Devices,
-//! Routing, Organize, Save CPU, Delete. Point to highlight (the segment
+//! track; nine segments around it: Rename, Colour, Icon, Add, Edit,
+//! Devices, Routing, Organize, Delete. Point to highlight (the segment
 //! lightens with an accent arc on the rim), click (or release the right
 //! button after dragging onto one) to choose; Esc, the centre or a click
 //! outside cancels. Colour / Icon / Add / Organize pop out a submenu next to
@@ -40,10 +40,11 @@ pub(crate) enum Seg {
     Colour,
     Icon,
     Add,
+    /// the track's instrument editor in the lower panel (or the chooser)
+    Edit,
     Devices,
     Routing,
     Organize,
-    SaveCpu,
     Delete,
 }
 
@@ -53,10 +54,10 @@ pub(crate) const SEGS: [Seg; 9] = [
     Seg::Colour,
     Seg::Icon,
     Seg::Add,
+    Seg::Edit,
     Seg::Devices,
     Seg::Routing,
     Seg::Organize,
-    Seg::SaveCpu,
     Seg::Delete,
 ];
 
@@ -70,7 +71,7 @@ impl Seg {
             Seg::Devices => "Devices",
             Seg::Routing => "Routing",
             Seg::Organize => "Organize",
-            Seg::SaveCpu => "Save CPU",
+            Seg::Edit => "Edit",
             Seg::Delete => "Delete",
         }
     }
@@ -83,7 +84,7 @@ impl Seg {
             Seg::Devices => Glyph::Rack,
             Seg::Routing => Glyph::Route,
             Seg::Organize => Glyph::Folder,
-            Seg::SaveCpu => Glyph::Snow,
+            Seg::Edit => Glyph::Keys,
             Seg::Delete => Glyph::Trash,
         }
     }
@@ -95,6 +96,7 @@ impl Seg {
     pub(crate) fn act(self) -> Option<PieAct> {
         match self {
             Seg::Rename => Some(PieAct::Rename),
+            Seg::Edit => Some(PieAct::EditInstrument),
             Seg::Devices => Some(PieAct::Devices),
             Seg::Routing => Some(PieAct::Routing),
             Seg::Delete => Some(PieAct::Delete),
@@ -135,6 +137,134 @@ pub(crate) enum PieAct {
     ChangeInstrument,
     /// the Browser's Drum Patterns tab: the next pick goes on this track
     DrumPattern,
+    /// the track's instrument editor (the chooser when it has none)
+    EditInstrument,
+    /// a new built-in instrument (its Init / first preset) becomes this
+    /// track's instrument
+    NewInstrument(Builtin),
+}
+
+/// the built-in instruments the pie's Add › puts straight on a track
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Builtin {
+    WaveForge,
+    DrumKit,
+    Synth,
+    Analog,
+    Fm4,
+    Wavetable,
+    Grid,
+    Noise,
+    DrumSynth,
+    ChipFx,
+    Voice,
+}
+
+impl Builtin {
+    pub(crate) const ALL: [Builtin; 11] = [
+        Builtin::WaveForge,
+        Builtin::DrumKit,
+        Builtin::Synth,
+        Builtin::Analog,
+        Builtin::Fm4,
+        Builtin::Wavetable,
+        Builtin::Grid,
+        Builtin::Noise,
+        Builtin::DrumSynth,
+        Builtin::ChipFx,
+        Builtin::Voice,
+    ];
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Builtin::WaveForge => crate::poly::POLY_DISPLAY_NAME,
+            Builtin::DrumKit => "Drum Kit",
+            Builtin::Synth => "Synth",
+            Builtin::Analog => "Analog",
+            Builtin::Fm4 => "FM-4",
+            Builtin::Wavetable => "Wavetable",
+            Builtin::Grid => "Grid",
+            Builtin::Noise => "Noise",
+            Builtin::DrumSynth => "Drum Synth",
+            Builtin::ChipFx => "Chip FX",
+            Builtin::Voice => "Voice",
+        }
+    }
+    pub(crate) fn tip(self) -> &'static str {
+        match self {
+            Builtin::WaveForge => "WaveForge polyphonic synth · starts on Saw Lead",
+            Builtin::DrumKit => "Drum Kit: 16 pads and a step sequencer · starts on Psy Kit",
+            Builtin::Synth => "the classic ChipWave synth · starts on Supersaw lead",
+            Builtin::Analog => "Analog: 3 oscillators into a ladder filter · starts on Warm Lead",
+            Builtin::Fm4 => "FM-4: four-operator FM · starts on E-Piano",
+            Builtin::Wavetable => "Wavetable synth · starts on Wave Supersaw",
+            Builtin::Grid => "Grid: a modular patch · starts on Grid Saw Bass",
+            Builtin::Noise => "Noise: risers, impacts, wind · starts on White Riser",
+            Builtin::DrumSynth => "Drum Synth: a synthesized kit on the keys · starts on Psy Kit",
+            Builtin::ChipFx => "Chip FX: sfxr game sounds · starts on Blip",
+            Builtin::Voice => "Voice: synthetic vowels and words · starts on Choir Eee",
+        }
+    }
+    /// the browser row's glyph (`glyphs::glyph_for`)
+    pub(crate) fn glyph_tag(self) -> &'static str {
+        match self {
+            Builtin::WaveForge | Builtin::Synth | Builtin::Fm4 => "Synth",
+            Builtin::DrumKit | Builtin::DrumSynth => "Drum",
+            Builtin::Analog => "Analog",
+            Builtin::Wavetable => "Wave",
+            Builtin::Grid => "Grid",
+            Builtin::Noise => "Noise",
+            Builtin::ChipFx => "Chip FX",
+            Builtin::Voice => "Voice",
+        }
+    }
+    /// a fresh instrument: its name and kind, on a playable preset (the
+    /// one named in `tip`), else the engine's first preset
+    pub(crate) fn make(self) -> Option<(String, InstrumentKind)> {
+        use crate::gen::GenEngine as G;
+        let gen = |f: fn(&G) -> bool, prefer: &str| {
+            let all = crate::gen::presets();
+            let pick = all
+                .iter()
+                .find(|(n, _, p)| f(&p.engine) && *n == prefer)
+                .or_else(|| all.iter().find(|(_, _, p)| f(&p.engine)))
+                .cloned();
+            pick.map(|(n, _, mut p)| {
+                p.base.name = n.into();
+                (n.to_string(), InstrumentKind::Gen(p))
+            })
+        };
+        match self {
+            Builtin::WaveForge => gen(|e| matches!(e, G::Poly(_)), "WaveForge Saw Lead"),
+            Builtin::DrumKit => crate::drumkit::presets()
+                .into_iter()
+                .next()
+                .map(|(n, _, p)| (n, InstrumentKind::Gen(p))),
+            Builtin::Synth => Some(match crate::presets::factory("psytrance/supersaw-lead") {
+                Some(mut p) => {
+                    p.name = "Supersaw lead".into();
+                    ("Supersaw lead".into(), InstrumentKind::Synth(p))
+                }
+                None => ("Synth".into(), InstrumentKind::Synth(Default::default())),
+            }),
+            Builtin::Analog => gen(|e| matches!(e, G::Analog(_)), "Warm Lead"),
+            Builtin::Fm4 => gen(|e| matches!(e, G::Fm(_)), "E-Piano"),
+            Builtin::Wavetable => gen(|e| matches!(e, G::Wave(_)), "Wave Supersaw"),
+            Builtin::Grid => gen(|e| matches!(e, G::Grid(_)), "Grid Saw Bass"),
+            Builtin::Noise => gen(|e| matches!(e, G::Noise(_)), "White Riser"),
+            Builtin::DrumSynth => gen(|e| matches!(e, G::Kit(_)), "Psy Kit"),
+            Builtin::ChipFx => gen(|e| matches!(e, G::ChipFx(_)), "Blip"),
+            Builtin::Voice => Some(match crate::voice::preset("Choir Eee") {
+                Some(mut v) => {
+                    v.base.name = "Choir Eee".into();
+                    ("Choir Eee".into(), InstrumentKind::Voice(v))
+                }
+                None => (
+                    "Voice".into(),
+                    InstrumentKind::Voice(crate::voice::VoicePatch::default()),
+                ),
+            }),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -166,13 +296,15 @@ pub(crate) struct TrackInfo {
     pub(crate) icon: TrackIcon,
     pub(crate) speed: u8,
     pub(crate) full: bool,
+    /// all 255 instrument slots are used
+    pub(crate) instr_full: bool,
 }
 
 pub(crate) fn sub_title(seg: Seg) -> &'static str {
     match seg {
         Seg::Colour => "TRACK COLOUR",
         Seg::Icon => "TRACK ICON",
-        Seg::Add => "ADD",
+        Seg::Add => "ADD · INSTRUMENT FOR THIS TRACK",
         Seg::Organize => "ORGANIZE",
         _ => "",
     }
@@ -238,7 +370,28 @@ pub(crate) fn sub_items(seg: Seg, i: &TrackInfo) -> Vec<Item> {
         }
         Seg::Add => {
             let ok = |a: PieAct| (!i.full).then_some(a);
-            vec![
+            // first: an instrument for this track (two per row)
+            let mut v: Vec<Item> = Builtin::ALL
+                .iter()
+                .map(|&b| {
+                    text(
+                        b.label(),
+                        (!i.instr_full).then_some(PieAct::NewInstrument(b)),
+                        if i.instr_full {
+                            "all 255 instrument slots are used"
+                        } else {
+                            b.tip()
+                        },
+                    )
+                })
+                .collect();
+            v.push(text(
+                "Browse…",
+                Some(PieAct::ChangeInstrument),
+                "the Browser's Instruments (your Favourites first): the one you pick plays this track",
+            ));
+            // then: tracks
+            v.extend([
                 text(
                     "Instrument track…",
                     ok(PieAct::AddInstrument),
@@ -247,11 +400,6 @@ pub(crate) fn sub_items(seg: Seg, i: &TrackInfo) -> Vec<Item> {
                     } else {
                         "pick an instrument in the Browser for a new track below"
                     },
-                ),
-                text(
-                    "Change instrument…",
-                    Some(PieAct::ChangeInstrument),
-                    "the Browser (your Favourites first): the instrument you pick replaces this track's",
                 ),
                 text(
                     "Drum pattern…",
@@ -310,7 +458,8 @@ pub(crate) fn sub_items(seg: Seg, i: &TrackInfo) -> Vec<Item> {
                         need_tl
                     },
                 ),
-            ]
+            ]);
+            v
         }
         Seg::Organize => {
             let first = i.index == 0;
@@ -352,6 +501,7 @@ pub(crate) fn sub_items(seg: Seg, i: &TrackInfo) -> Vec<Item> {
                     )
                 });
             }
+            v.push(text("Save CPU (coming soon)", None, SAVE_CPU_TIP));
             v
         }
         _ => vec![],
@@ -363,11 +513,15 @@ pub(crate) fn sub_grid(seg: Seg) -> (usize, Vec2) {
     match seg {
         Seg::Icon => (4, egui::vec2(44.0, 34.0)),
         Seg::Colour => (6, egui::vec2(28.0, 28.0)),
+        Seg::Add => (2, egui::vec2(150.0, 26.0)),
         _ => (1, egui::vec2(184.0, 26.0)),
     }
 }
 
 const SUB_PAD: f32 = 10.0;
+/// Add ›: the instrument entries (built-ins and Browse…) before the track ones
+pub(crate) const ADD_INSTR_ITEMS: usize = Builtin::ALL.len() + 1;
+const GROUP_GAP: f32 = 22.0;
 const SUB_HEAD: f32 = 26.0;
 
 /// the submenu's size and its items' rects relative to its top-left
@@ -379,7 +533,8 @@ pub(crate) fn sub_layout(seg: Seg, items: &[Item]) -> (Vec2, Vec<Rect>) {
     let w = SUB_PAD * 2.0 + cols as f32 * cell.x + (cols - 1) as f32 * gap;
     let w = w.max(200.0);
     let top = SUB_PAD + SUB_HEAD;
-    let h = top + rows as f32 * cell.y + (rows - 1) as f32 * gap + SUB_PAD;
+    let group = if seg == Seg::Add { GROUP_GAP } else { 0.0 };
+    let h = top + rows as f32 * cell.y + (rows - 1) as f32 * gap + SUB_PAD + group;
     let mut rects = vec![Rect::NOTHING; items.len()];
     let mut n = 0;
     for (k, it) in items.iter().enumerate() {
@@ -390,6 +545,12 @@ pub(crate) fn sub_layout(seg: Seg, items: &[Item]) -> (Vec2, Vec<Rect>) {
             );
         } else {
             let (c, r) = (n % cols, n / cols);
+            // Add ›: a gap between the instruments and the track entries
+            let group = if seg == Seg::Add && n >= ADD_INSTR_ITEMS {
+                GROUP_GAP
+            } else {
+                0.0
+            };
             let x0 = if cols == 1 {
                 SUB_PAD
             } else {
@@ -398,7 +559,7 @@ pub(crate) fn sub_layout(seg: Seg, items: &[Item]) -> (Vec2, Vec<Rect>) {
             rects[k] = Rect::from_min_size(
                 Pos2::new(
                     x0 + c as f32 * (cell.x + gap),
-                    top + r as f32 * (cell.y + gap),
+                    top + r as f32 * (cell.y + gap) + group,
                 ),
                 if cols == 1 {
                     egui::vec2(w - 2.0 * SUB_PAD, cell.y)
@@ -712,8 +873,8 @@ fn pal(t: &crate::theme::Theme) -> Pal {
     }
 }
 
-fn seg_enabled(seg: Seg) -> bool {
-    seg != Seg::SaveCpu
+fn seg_enabled(_seg: Seg) -> bool {
+    true
 }
 
 const SAVE_CPU_TIP: &str = "Save CPU (freeze / deactivate a track): coming soon (docs/ROADMAP.md)";
@@ -755,6 +916,7 @@ impl App {
                 icon: t.map_or(TrackIcon::Auto, |t| t.icon),
                 speed: t.map_or(0, |t| t.speed),
                 full: s.song.channels >= MAX_CHANNELS,
+                instr_full: s.song.instruments.len() >= 255,
             }
         })
     }
@@ -792,10 +954,6 @@ impl App {
                     p.sub_key = None;
                 }
             }
-            return;
-        }
-        if !seg_enabled(seg) {
-            self.status = SAVE_CPU_TIP.into();
             return;
         }
         if let Some(a) = seg.act() {
@@ -1238,6 +1396,19 @@ impl App {
                 FontId::proportional(11.0 * sc),
                 pl.ink2.gamma_multiply(ks),
             );
+            // Add ›: the track entries under their own caption
+            if SEGS[si] == Seg::Add {
+                if let Some(q) = rects.get(ADD_INSTR_ITEMS) {
+                    let y = r.min.y + q.top() - GROUP_GAP / 2.0 - 2.0;
+                    painter.text(
+                        tf(Pos2::new(r.min.x + SUB_PAD + 2.0, y)),
+                        egui::Align2::LEFT_CENTER,
+                        "TRACKS",
+                        FontId::proportional(11.0 * sc),
+                        pl.ink2.gamma_multiply(ks),
+                    );
+                }
+            }
             let mut tip: Option<(&'static str, Pos2)> = None;
             for (k, it) in items.iter().enumerate() {
                 let q = rects[k].translate(r.min.to_vec2());
@@ -1355,12 +1526,6 @@ impl App {
                 tooltip(&painter, &pl, s, at + egui::vec2(0.0, 6.0), screen);
             }
         }
-        // Save CPU: why it does nothing yet
-        if open && key == Some(7) && sub.is_none() {
-            let a = seg_angle(7);
-            let at = centre + egui::vec2(a.cos(), a.sin()) * (R_OUT + 14.0);
-            tooltip(&painter, &pl, SAVE_CPU_TIP, at, screen);
-        }
         if animating {
             ctx.request_repaint();
         }
@@ -1435,6 +1600,12 @@ impl App {
             }
             PieAct::AddInstrument => self.track_add_with(tr + 1),
             PieAct::ChangeInstrument => self.track_change_instrument(tr),
+            PieAct::EditInstrument => {
+                self.tl_select_track(tr, false);
+                self.ch = tr;
+                self.show_instrument_editor();
+            }
+            PieAct::NewInstrument(b) => self.track_new_instrument(tr, b),
             PieAct::DrumPattern => self.track_drum_pattern(tr),
             PieAct::Automation => {
                 let at = self.pie.as_ref().map_or(Pos2::new(200.0, 200.0), |p| {
