@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod about;
+#[cfg(test)]
+mod acceptance_tests;
 mod advedit;
 #[cfg(test)]
 mod advedit_tests;
