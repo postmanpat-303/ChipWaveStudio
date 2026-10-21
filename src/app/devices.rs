@@ -572,7 +572,20 @@ impl App {
         inside(ui, egui::UiBuilder::new().max_rect(kr), |ui| {
             ui.set_clip_rect(kr.intersect(ui.clip_rect()));
             if self.inst_key_knobs(ui, idx, devcards::knobs_fit(kr.width()).min(4)) == 0 {
-                ui.label(egui::RichText::new("its controls are in Advanced ›").color(t.ink2));
+                let rack = self.with(|s| {
+                    matches!(
+                        s.song.instruments.get(idx).map(|i| &i.kind),
+                        Some(InstrumentKind::Rack(_))
+                    )
+                });
+                ui.label(
+                    egui::RichText::new(if rack {
+                        "layers: see the tree"
+                    } else {
+                        "its controls are in Advanced ›"
+                    })
+                    .color(t.ink2),
+                );
             }
         });
         let b = Rect::from_min_max(

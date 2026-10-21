@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 79] = [
+pub const VIEWS: [&str; 83] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -116,6 +116,10 @@ pub const VIEWS: [&str; 79] = [
     "record-recording",
     "record-typing",
     "record-master",
+    "racks-panel",
+    "racks-add-device",
+    "racks-save",
+    "racks-browser",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -381,6 +385,9 @@ impl App {
                     self.dev.shot_at = Some(1);
                 }
                 self.dirty = false;
+            }
+            "racks-panel" | "racks-add-device" | "racks-save" | "racks-browser" => {
+                self.shot_racks(view);
             }
             "plugin-setup" => {
                 self.view = View::Timeline;
@@ -1901,6 +1908,113 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Racks (docs/racks/PLAN.md): the Supersaw Pad made a rack with a
+    /// second layer whose chain has a Split (Drive | dry); the panel, Add
+    /// Device, Save Custom Rack, or Browser › My Racks (racks saved in the
+    /// Racks folder first)
+    fn shot_racks(&mut self, view: &str) {
+        use crate::fx::{Device, FxKind};
+        self.enter_timeline();
+        self.default_layout();
+        self.instr = 7;
+        let nch = self.with(|s| s.song.channels);
+        if let Some(c) = (0..nch).find(|&c| self.track_slot(c) == 7) {
+            self.ch = c;
+        }
+        self.dev.follow_ch = self.ch;
+        self.make_rack(6);
+        self.add_layer(6, None);
+        let b = self.with(|s| match &s.song.instruments[6].kind {
+            InstrumentKind::Rack(r) => r.layers.get(1).map(|l| l.slot),
+            _ => None,
+        });
+        let Some(b) = b else { return };
+        self.with(|s| s.song.instruments[b].name = "Glass Bell".into());
+        self.apply_fx_ops(
+            b,
+            vec![super::fxview::FxOp::Insert(
+                usize::MAX,
+                Box::new(Device::split()),
+            )],
+        );
+        let at = self.with(|s| s.song.instruments[b].fx.len() - 1);
+        self.apply_fx_ops(
+            b,
+            vec![super::chains::wrap(
+                &[at as u8, 0],
+                super::fxview::FxOp::Add(FxKind::Drive, None),
+            )],
+        );
+        self.apply_fx_ops(
+            b,
+            vec![super::chains::wrap(
+                &[at as u8, 1],
+                super::fxview::FxOp::Add(FxKind::Delay, None),
+            )],
+        );
+        self.with(|s| s.song.instruments[6].name = "Glass Keys".into());
+        self.set_lower(4);
+        self.extra.browser_open = false;
+        self.dev.sel = Some(super::chains::Sel::Dev(
+            b,
+            crate::fx::DevPath::from_slice(&[at as u8]).unwrap(),
+        ));
+        match view {
+            "racks-add-device" => self.open_add_device(b, vec![at as u8, 1], usize::MAX),
+            "racks-save" => {
+                self.dev.sel = Some(super::chains::Sel::Inst(6));
+                self.open_save_rack(6);
+                if let Some(f) = &mut self.dev.save_rack {
+                    f.description =
+                        "bright keys with a bell on top, the bell through a Split".into();
+                    f.sound_type = "Keys".into();
+                    f.tags = "bright, glass, layered".into();
+                    f.focus = false;
+                }
+            }
+            "racks-browser" => {
+                self.dev.sel = Some(super::chains::Sel::Inst(6));
+                if let Some(d) = crate::racks::dir() {
+                    let _ = std::fs::create_dir_all(&d);
+                    for (name, desc, ty, tags) in [
+                        (
+                            "Glass Keys",
+                            "bright keys with a bell on top",
+                            "Keys",
+                            "bright, glass",
+                        ),
+                        (
+                            "Reese Wall",
+                            "two detuned saws, one through a Split",
+                            "Bass",
+                            "dark, wide",
+                        ),
+                        ("Choir Pad", "voice and strings layered", "Pad", "soft"),
+                    ] {
+                        let info = crate::racks::RackInfo {
+                            name: name.into(),
+                            description: desc.into(),
+                            sound_type: ty.into(),
+                            tags: tags.split(", ").map(String::from).collect(),
+                            created: crate::racks::today(),
+                            updated: crate::racks::today(),
+                        };
+                        let p = d.join(crate::racks::file_name(name));
+                        if let Ok(r) = self.with(|s| crate::racks::from_song(&s.song, 6, info)) {
+                            let _ = crate::racks::save(&r, &p);
+                        }
+                    }
+                    self.dev.my_racks.sel = Some(d.join(crate::racks::file_name("Glass Keys")));
+                }
+                self.dev.racks_dirty = true;
+                self.extra.browser_open = true;
+                self.br.filter.tab = crate::browser::Tab::Racks;
+            }
+            _ => {}
+        }
+        self.dirty = false;
     }
 
     fn shot_split(&mut self) {

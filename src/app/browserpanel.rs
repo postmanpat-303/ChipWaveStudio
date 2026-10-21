@@ -410,7 +410,11 @@ impl App {
                 .color(Color32::from_rgb(0x1a, 0x1c, 0x1f))
                 .background_color(rgb(Fmt::Cwi.colour()));
             ui.label(g);
-            let n_tab = self.br.items.iter().filter(|i| i.in_tab(tab)).count();
+            let n_tab = if tab == Tab::Racks {
+                self.dev.my_racks.list.len()
+            } else {
+                self.br.items.iter().filter(|i| i.in_tab(tab)).count()
+            };
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
                     .small_button("×")

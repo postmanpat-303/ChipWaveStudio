@@ -626,7 +626,12 @@ impl App {
                     let small = FontId::proportional(11.0);
                     let after = |p: &egui::Painter, g: Rect, s: &str, c: Color32| {
                         if !slim && !s.is_empty() {
-                            p.text(
+                            // stop short of the row's "+ Add …" link
+                            let clip = Rect::from_min_max(
+                                Pos2::new(g.right(), r.top()),
+                                Pos2::new((r.right() - 100.0).max(g.right()), r.bottom()),
+                            );
+                            p.with_clip_rect(clip.intersect(p.clip_rect())).text(
                                 Pos2::new(g.right() + 8.0, r.center().y),
                                 egui::Align2::LEFT_CENTER,
                                 s,
@@ -827,7 +832,7 @@ impl App {
                                 font.clone(),
                                 t.ink,
                             );
-                            after(&p, g, "each plays every note it takes, then they are mixed", t.ink2);
+                            after(&p, g, "all play each note, then mix", t.ink2);
                             if !slim
                                 && n_layers < crate::model::MAX_LAYERS
                                 && link(
@@ -1036,9 +1041,19 @@ impl App {
                         super::rackops::no_rack_reason(&s.song, i),
                     )
                 });
+                // narrow (Browser open on a laptop): the name on its own line
+                let narrow = ui.available_width() < 560.0;
+                if narrow {
+                    ui.horizontal(|ui| {
+                        ui.add_space(6.0);
+                        ui.add(egui::Label::new(egui::RichText::new(&crumb).strong()).truncate());
+                    });
+                }
                 ui.horizontal(|ui| {
                     ui.add_space(6.0);
-                    ui.add(egui::Label::new(egui::RichText::new(crumb).strong()).truncate());
+                    if !narrow {
+                        ui.add(egui::Label::new(egui::RichText::new(&crumb).strong()).truncate());
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if !rack
                             && ui
@@ -1074,11 +1089,14 @@ impl App {
                     self.devices_inst_card(ui, h, i);
                     self.dev.inst_folded = fold;
                     self.dev.card_w = keep;
-                    ui.add_space(10.0);
-                    ui.vertical(|ui| {
-                        ui.set_width((ui.available_width() - 8.0).max(120.0));
-                        self.chains_flow(ui, root);
-                    });
+                    // the signal flow beside the card, when there is room for it
+                    if ui.available_width() > 150.0 {
+                        ui.add_space(10.0);
+                        ui.vertical(|ui| {
+                            ui.set_width(ui.available_width() - 8.0);
+                            self.chains_flow(ui, root);
+                        });
+                    }
                 });
             }
             Sel::Path(i, sp, p) => {
@@ -1168,6 +1186,8 @@ impl App {
                         let inner = rest.shrink(8.0);
                         ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
                             if d.kind == FxKind::Split {
+                                // one path under another
+                                ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                                 ui.label(
                                     egui::RichText::new("PATHS").small().strong().color(t.ink2),
                                 );
@@ -1188,6 +1208,7 @@ impl App {
                                             local.push(FxOp::AddPath(k));
                                         }
                                     });
+                                });
                                 return;
                             }
                             let more_h = (inner.height() - 64.0).max(80.0);
