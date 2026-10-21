@@ -254,6 +254,9 @@ pub const CREDITS: &[Credit] = &[
         "Transform: the \u{201c}metal\u{201d} ratios are its cymbal oscillator frequencies", "", "", ""),
     c(Inspiration, "Roland TB-303", "Roland",
         "Glide and accent (the 3C / 3D effects) imitate it", "", "", ""),
+    c(Inspiration, "Martin Galway", "the great composer on Commodore 64",
+        "Demo song \u{201c}Oceans 11\u{201d}: a ChipWave arrangement of his music (melody, chords and bass)",
+        "", "Original music by Martin Galway; arranged by Del (postmanpat)", ""),
     // Research & papers
     c(Research, "Peterson & Barney (1952)", "G. E. Peterson, H. L. Barney",
         "Vowel data (the ER and AE vowels)", "", "JASA 24(2)",
