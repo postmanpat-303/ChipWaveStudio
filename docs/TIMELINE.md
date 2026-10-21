@@ -94,6 +94,15 @@ The lower panel has a **Piano roll** tab (next to Order list / Instrument / Auto
 
 **Moving a selection:** press on **any selected note** (after Ctrl+A too) and drag: the whole selection moves together in time and pitch, snapped to the grid, keeping its shape, as **one undo step**; faint ghosts stay at the old spot while you drag. The group stops at bar 0, at the block's last row and at the top and bottom keys (no note gets squashed). Pressing a selected note without moving keeps the selection; a click on it (press and release) selects just that note. Dragging the right edge resizes the whole selection (note clips; block columns resize the grabbed note).
 
+**Copy and paste (Unreleased):** while the roll has the keyboard (click into it):
+- **Ctrl-drag** selected notes: the originals stay and **copies** move with the mouse (a **+ copy** label and a copy cursor while Ctrl is held). Ctrl counts **when you let go**: press or release it at any point during the drag to choose copy or move. The copies become the selection; one undo step.
+- **Ctrl+C** copies the selected notes, **Ctrl+X** cuts them (one undo step), **Ctrl+V** pastes them at the **playhead** (the play marker when stopped) if it is inside the clip, snapped down to the grid; otherwise where they were copied from. In the Tracker, a block column pastes at the cursor row. Timing and pitches are kept and the pasted notes become the selection; **Ctrl+V again** pastes the next copy right after them. Paste works into **another clip** (select it, then Ctrl+V), between note clips and Tracker columns, and from another ChipWave window (the notes also go to the system clipboard as text).
+- **Ctrl+D** duplicates the selection **right after itself** (its length rounded up to the grid); press again to keep repeating it.
+- **Ctrl+A** selects every note, **Del** / **Backspace** deletes the selection.
+- Each is **one undo step**. In a **linked** clip (*Linked ×N*) the copies are part of the shared notes, so every linked copy gets them (use *Make unique* first to change only this one).
+- Notes that would start past the clip's end are left out (the status line says how many). A Tracker column holds one note at a time: a copy that lands on a note ends it or replaces notes that start inside it, and only the top note of a chord is kept.
+- With the roll not focused, Ctrl+C / X / V keep their Tracker and Order list meaning, and Ctrl+D on the Timeline still duplicates clips. Musical typing (Ctrl+K) is unchanged.
+
 **Navigating (hold to pan):** **press and hold** on empty grid for **¼ s** without moving (6 px), and the cursor becomes a grab hand: drag to scroll time and pitch together; let go and nothing is drawn. A quick click still draws a note, and a quick press-and-drag still draws / boxes / paints as before. **Middle-drag** pans straight away. The pan stops at the start, half a screen past the end and the key range. (Space+drag is not a pan: Space is play / stop.)
 
 **Eraser:** **right-click** a note deletes it; **right-drag** deletes every note the mouse passes over (the cursor becomes an eraser). The whole swipe is **one undo step**. Deleted notes break into small pixels of their colour that drift up and fade (about half a second; purely visual, skipped with **Settings › Look › Flat**). Right-click on empty space does nothing.
@@ -104,7 +113,7 @@ The lower panel has a **Piano roll** tab (next to Order list / Instrument / Auto
 - Right-click (or right-drag) erases notes. Shift/Ctrl+click toggles a note in the selection, and Shift-drag adds a box to it.
 - The **velocity lane** sets the volume column.
 - Effect commands show as badges above the grid. Edit the selected note's instrument, velocity and effect in the bar at the top.
-- Keys: **Del** deletes, **arrows** move (Shift+Up/Down = octave), **Ctrl+A** selects all, **1 / 2 / 3** pick Pointer / Select / Pencil, **F** fits, **Q** quantises (note clips), **+/−** zooms, **Esc** clears the selection. Ctrl+wheel zooms; wheel and Shift+wheel scroll.
+- Keys: **Del** deletes, **arrows** move (Shift+Up/Down = octave), **Ctrl+A** selects all, **Ctrl+C / X / V** copy / cut / paste, **Ctrl+D** duplicates, **Ctrl-drag** copies, **1 / 2 / 3** pick Pointer / Select / Pencil, **F** fits, **Q** quantises (note clips), **+/−** zooms, **Esc** clears the selection. Ctrl+wheel zooms; wheel and Shift+wheel scroll.
 - Only the cells of the notes you touch change. Drawing a note into silence and deleting it again leaves identical cells.
 
 **Note clips (M3b)** are polyphonic, with free timing:

@@ -2,6 +2,10 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## Unreleased
+
+- **Piano roll: copy and paste.** Ctrl-drag notes to drop copies (the originals stay; Ctrl counts when you let go), Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste notes at the playhead (again: right after them; into another clip too), Ctrl+D duplicates the selection right after itself. One undo step each; only while the roll has the keyboard (docs/TIMELINE.md › Piano roll).
+
 ## 0.2.6.0: One workflow
 
 Released 2026-10-21. Highlights (details below):

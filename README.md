@@ -264,6 +264,7 @@ On Linux, build it from source (below).
 | `Delete`, `Backspace`, `Insert` | clear, pull up, push down |
 | `Shift`+arrows, mouse drag, `Ctrl+A` | select (again = whole block) |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | copy / cut / paste |
+| Piano roll (click into it): `Ctrl+C` / `Ctrl+X` / `Ctrl+V`, `Ctrl+D`, `Ctrl`-drag | copy / cut / paste notes (at the playhead, also into another clip), duplicate the selection after itself, drag copies of the selected notes ([TIMELINE.md](docs/TIMELINE.md)) |
 | `Ctrl+Z` / `Ctrl+Y` | undo / redo |
 | `Alt +` / `Alt -` (Shift = octave) | transpose selection or channel (also the Block bar **-12 -1 +1 +12** buttons and **Edit › Transpose**, which has *Transpose by…* for -24…+24) |
 | `F9` / `F10` | mute / solo channel |
