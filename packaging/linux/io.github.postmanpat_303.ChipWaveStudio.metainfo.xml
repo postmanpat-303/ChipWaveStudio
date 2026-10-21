@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.6.0" date="2026-10-21">
+      <description><p>One workflow: persistent Timeline layout, one drop system with preview, snap and an overlap question, Clip Arranger launcher clips with per-track launch and linked copies, the track's instrument on a header click, pies for clips, launcher clips and drum patterns, clip names and colours; themed title bar on Windows; ChipWave Instruments in the Browser.</p></description>
+    </release>
     <release version="0.2.5.0" date="2026-10-20">
       <description><p>WaveForge polyphonic synth; Drum Kit instrument with step sequencer, groove generator and Add to track; new notes play the track's instrument; split preview, chord replace, track pie Add menu; consistency and stability fixes.</p></description>
     </release>

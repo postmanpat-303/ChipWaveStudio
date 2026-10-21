@@ -2,8 +2,28 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
-## Unreleased
+## 0.2.6.0: One workflow
 
+Released 2026-10-21. Highlights (details below):
+- **One workflow on the Timeline.** The Timeline stays on top with the lower panel under it (also at 1366×768); one drop system for Clip Arranger slots and Browser patterns with a preview, snap and an overlap question; Clip Arranger **launcher clips** with per-track launch and linked **×N** copies; a header click shows the track's instrument, a clip click shows the clip; **pies** for clips, launcher clips and drum patterns; clip **names and colours**; the lower panel names the track, clip and instrument it edits.
+- **One rule for "the track's instrument"**, a chooser for a track without one, and a notice when an instrument is shared by several tracks.
+- **Windows: the title bar follows the theme.** The native title bar takes the theme's colours (dark mode, caption, text and border), and changes with it.
+- **ChipWave Instruments in the Browser**, **Track pie › Add** by instrument name, and the track and clip selection follow each other.
+- **Fixes:** effects added to a plugin instrument are heard at once; the Tracker readout in the status bar only shows with the Tracker; the piano roll's playhead follows the Timeline; the Clip Arranger shows note clips as scenes; symbols such as → and ▶ no longer show as missing-glyph boxes.
+- **No other DAW is named** in the app, the docs or the credits any more; features say "inspired by other DAWs".
+- Songs with launcher clips are saved as reader version 6, which older versions refuse cleanly. Every other song saves, plays and renders exactly as before (checked against 0.2.5.0's renders).
+
+### Known limits
+- The launcher holds **note clips only** (no Tracker or audio clips), and Capture works on songs made of note clips.
+- **No recording into a launcher slot** yet, and generators can't write into a launcher clip yet.
+- The drum pie's **Variation** is simple: it moves some off-beat hits a step later. It doesn't generate a new groove.
+- Some **Tracker wording remains in block mode** (a new empty song's Clip Arranger shows *00 Block 00*; block slots say they open in the Tracker).
+- Audio clips keep their list menu (no pie).
+
+### Details
+- **Windows: the native title bar in the theme's colours** (DWM dark mode, caption / text / border colour; re-applied on theme change; no effect on other systems).
+- **Other DAWs are no longer named** in the credits, licences, README, docs, research notes and code comments; old CHANGELOG entries were reworded.
+- **Symbols draw everywhere:** Inter is now a fallback font for every text style, so the drop preview's →, the launcher's ▶ and ✓ show instead of boxes; a test checks the symbols the new views use.
 - **The Timeline stays on top.** *Open in Sample editor* opens it in the lower panel under the Timeline (**Back to the knobs**, or **Full view** / Ctrl+5 for the old full-screen view); Ctrl+Z over it undoes sample edits. With the Tracker hidden, opening a Tracker clip shows it in the piano roll, and *Show effects* opens Devices. The lower panel always leaves at least three track rows (also at 1366×768), scrolls the current track into view, and its header names the track and the instrument it edits (*Track 03 Bass › 05 Sub · WaveForge*).
 - **One way to drop clips, with a preview.** Dragging a Clip Arranger slot (Tracker blocks and now note clips too) or a Browser drum pattern onto the Timeline shows where it lands before you let go: the target track, a ghost clip, a snap line with its bar on the ruler (the toolbar's Snap; Shift: rows), and a card that says which track, which instrument plays it and whether it's a linked copy or (Alt) an independent one. Nothing is overwritten silently: over other clips it asks **Replace / Place after it / Keep both / Cancel**. The Song / Master row or the space below the tracks makes a new track. Esc cancels; one undo step.
 - **The Clip Arranger gets clips of its own.** **Capture** turns its scenes into launcher clips (linked to the arrangement's notes). Slot ▶ plays one clip per track on the next boundary while the other tracks play on, so you can mix clips from different scenes; scene ▶ plays a row. Double-click an empty slot for a new clip in the piano roll; drag a clip onto the Timeline for a linked copy (Alt: independent); right-click for Duplicate (variation) and Delete, and **+ Scene** for a new row. Linked clips show **×N** (slots, Timeline clip names) and the piano roll's **Linked ×N** makes one unique. Songs with launcher clips need this version (reader 6); songs without them save, play and render exactly as before.

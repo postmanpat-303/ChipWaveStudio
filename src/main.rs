@@ -1,8 +1,8 @@
 // ChipWave Studio - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-/// Display version (Cargo: 0.2.5+fix.0 -> "0.2.5.0"; the updater compares it part by part).
-pub const VERSION: &str = "0.2.5.0";
+/// Display version (Cargo: 0.2.6+fix.0 -> "0.2.6.0"; the updater compares it part by part).
+pub const VERSION: &str = "0.2.6.0";
 
 mod advedit;
 mod app;
