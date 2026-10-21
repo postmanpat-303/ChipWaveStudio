@@ -789,7 +789,8 @@ pub fn place_copy(
         return None;
     }
     let tl = song.timeline.as_deref_mut()?;
-    let c = tl.clips.get(find(tl, src)?)?.clone();
+    // a timeline clip, or a launcher clip placed in the arrangement
+    let c = tl.any_clip(src)?.clone();
     let nid = tl.new_id();
     let mut n = c;
     n.id = nid;

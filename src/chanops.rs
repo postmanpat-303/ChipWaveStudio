@@ -84,6 +84,10 @@ pub fn remap_channels(song: &mut Song, map: &[usize], n: usize, new_name: &str) 
         }
         tl.tracks = tracks;
         tl.clips.retain(|c| (c.track as usize) < old_n);
+        tl.launcher.retain(|l| (l.clip.track as usize) < old_n);
+        for l in &mut tl.launcher {
+            l.clip.track = map[l.clip.track as usize] as u16;
+        }
         for c in &mut tl.clips {
             c.track = map[c.track as usize] as u16;
             if let crate::timeline::ClipKind::Block { col, .. } = &mut c.kind {
@@ -289,6 +293,7 @@ pub fn remove_channel(song: &mut Song, at: usize) -> Result<(), String> {
             tl.tracks.remove(k);
         }
         tl.clips.retain(|c| c.track as usize != k);
+        tl.launcher.retain(|l| l.clip.track as usize != k);
         // auto_open bits above k move down one (the Song / Master track)
         let b = tl.view.auto_open;
         let low = if k == 0 { 0 } else { b & ((1u64 << k) - 1) };

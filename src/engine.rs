@@ -837,6 +837,7 @@ impl Engine {
         self.cue = None;
         self.held = 0;
         self.tl_span = None;
+        self.nv.lmask = 0;
         // audio clips still fading from the last play end now
         self.av.release_all();
         self.av.starting = true;
@@ -1075,6 +1076,10 @@ impl Engine {
         ch: usize,
         row: usize,
     ) -> Cell {
+        if self.nv.lmask >> ch.min(63) & 1 == 1 {
+            // a launcher clip plays on this track instead
+            return Cell::default();
+        }
         let Some(segs) = plan.tracks.get(ch) else {
             return Cell::default();
         };
@@ -1217,6 +1222,7 @@ impl Engine {
         self.playing = false;
         self.metro.cancel();
         self.cue = None;
+        self.nv.lmask = 0;
         self.nv.release_all(&mut self.plugins);
         self.av.release_all();
         self.plugins.all_off();
@@ -2241,7 +2247,11 @@ impl Engine {
         let pp_rate = self.pp_begin(song);
         let nch = song.channels.min(MAX_CHANNELS);
         // note clips (timeline mode): the plan can't change during a callback
-        let note_plan = self.tl.plan.clone().filter(|p| self.tl.on && p.has_notes());
+        let note_plan = self
+            .tl
+            .plan
+            .clone()
+            .filter(|p| self.tl.on && (p.has_notes() || self.nv.lmask != 0));
         // stopped without `stop` (export tails): audio clips fade out
         if !self.playing && self.av.any {
             self.av.release_all();
@@ -2309,6 +2319,11 @@ impl Engine {
                 if let Some(p) = note_plan.as_deref() {
                     if self.playing && self.tl.on {
                         let t = self.tl_clock();
+                        let lc = if self.nv.lmask != 0 {
+                            self.launch_clock()
+                        } else {
+                            0.0
+                        };
                         notes::note_events(
                             &mut self.nv,
                             &mut self.mods.feed,
@@ -2318,13 +2333,14 @@ impl Engine {
                             &mut self.plugins,
                             nch,
                             t,
+                            lc,
                         );
                     }
                 }
                 if let Some(p) = audio_plan.as_deref() {
                     if self.playing && self.tl.on {
                         let t = self.tl_clock();
-                        self.av.events(p, nch, t, self.sr);
+                        self.av.events(p, nch, t, self.sr, self.nv.lmask);
                     }
                 }
             }

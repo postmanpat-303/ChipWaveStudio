@@ -26,6 +26,10 @@ pub struct Cue {
     /// the boundary: a row where `(pos - phase) % every == 0` (1 = next row)
     pub every: u32,
     pub phase: u32,
+    /// launcher clips (Stage 4b): the clip id each track plays from the
+    /// boundary, looped (0: no change). The track leaves the arrangement
+    /// until it is stopped (`off`) or the transport starts again.
+    pub clips: [u32; MAX_CHANNELS],
 }
 
 /// bit of track `tr` in a [`Cue`] mask
@@ -50,6 +54,12 @@ impl Engine {
                 self.start(song, 0, a as usize, false, 0);
                 self.tl_span = Some((a as usize, b as usize));
                 self.held = c.off & !c.on;
+            } else if c.clips.iter().any(|&x| x != 0) && song.timeline.is_some() {
+                // launcher clips from a stop: the transport runs from the
+                // start with only the launched tracks sounding
+                self.start(song, 0, 0, false, 0);
+                self.held = c.off & !c.on;
+                self.launch_clips(&c);
             }
             return;
         }
@@ -69,6 +79,13 @@ impl Engine {
             }
             q.on = (q.on & !c.off) | c.on;
             q.off = (q.off & !c.on) | c.off;
+            for tr in 0..MAX_CHANNELS {
+                if c.clips[tr] != 0 {
+                    q.clips[tr] = c.clips[tr];
+                } else if c.off & bit(tr) != 0 {
+                    q.clips[tr] = 0;
+                }
+            }
             q.every = c.every;
             q.phase = c.phase;
         }
@@ -78,6 +95,32 @@ impl Engine {
     /// drop a pending launch (nothing changes at the boundary)
     pub fn cancel_cue(&mut self) {
         self.cue = None;
+    }
+
+    /// start the cue's launcher clips at this row (their tracks' arrangement
+    /// notes, Tracker note and audio clips end)
+    fn launch_clips(&mut self, c: &Cue) {
+        let origin = self.rows_played as i64 * crate::timeline::ROW;
+        for (tr, &id) in c.clips.iter().enumerate() {
+            if id == 0 {
+                continue;
+            }
+            let b = bit(tr);
+            self.nv.release_where(&mut self.plugins, b);
+            if self.nv.lmask & b == 0 {
+                self.av.cut_track(tr);
+                if let Some(ch) = self.chans.get_mut(tr) {
+                    ch.synth.amp.release();
+                }
+            }
+            self.nv.lmask |= b;
+            self.nv.lp[tr] = super::notes::LPlay::new(id, origin);
+        }
+    }
+
+    /// the launcher clip track `tr` plays (None: the arrangement or nothing)
+    pub fn launched(&self, tr: usize) -> Option<u32> {
+        (tr < MAX_CHANNELS && self.nv.lmask & bit(tr) != 0).then(|| self.nv.lp[tr].id)
     }
 
     /// tracks held silent by the Clip Arranger (bit per track)
@@ -148,6 +191,9 @@ impl Engine {
             self.notes_jump(song, a, false);
         }
         self.held = (self.held | c.off) & !c.on;
+        // a stopped track leaves its launcher clip; launched ones start now
+        self.nv.lmask &= !c.off;
+        self.launch_clips(&c);
         // a held track's sounding notes end now (its gain ramps to 0 too)
         for (i, ch) in self.chans.iter_mut().enumerate().take(MAX_CHANNELS) {
             if c.off & (1u64 << i) != 0 {

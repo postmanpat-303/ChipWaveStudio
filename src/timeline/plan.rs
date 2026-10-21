@@ -115,6 +115,19 @@ pub struct Plan {
     /// the tempo map and start tempo (audio seeks)
     pub tempo: Vec<TempoPoint>,
     pub bpm: f32,
+    /// launcher clips (Stage 4b; empty without them, so other songs play
+    /// exactly as before)
+    pub launch: Vec<LaunchNotes>,
+}
+
+/// A launcher clip as the engine plays it: its notes from tick 0, looping
+/// at `len`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LaunchNotes {
+    pub id: u32,
+    pub track: usize,
+    pub len: Tick,
+    pub notes: Vec<NoteSpan>,
 }
 
 impl Plan {
@@ -224,6 +237,25 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
     for p in &tl.tempo {
         (p.tick, p.bpm.to_bits(), p.ramp).hash(&mut h);
     }
+    // launcher clips (only when there are some: other keys stay the same)
+    for l in &tl.launcher {
+        let c = &l.clip;
+        (c.id, c.track, c.len, c.offset, c.loop_len, c.seed).hash(&mut h);
+        if let Some(d) = c.notes().and_then(|k| tl.notes.get(k)) {
+            for n in &d.notes {
+                (
+                    n.start,
+                    n.len,
+                    n.key,
+                    n.vel,
+                    n.instr,
+                    n.chance,
+                    n.tune.to_bits(),
+                )
+                    .hash(&mut h);
+            }
+        }
+    }
     h.finish()
 }
 
@@ -305,6 +337,7 @@ pub fn build_plan(song: &Song, tl: &Timeline) -> Plan {
         pcm: tl.audio.iter().map(|a| a.pcm.clone()).collect(),
         tempo: tl.tempo.clone(),
         bpm: song.bpm,
+        launch: launch_plan(tl),
     }
 }
 
@@ -358,61 +391,84 @@ pub fn audio_spans(song: &Song, tl: &Timeline, nch: usize) -> Vec<Vec<AudioSpan>
 pub fn note_spans(tl: &Timeline, nch: usize) -> Vec<Vec<NoteSpan>> {
     let mut out: Vec<Vec<NoteSpan>> = vec![vec![]; nch];
     for c in &tl.clips {
-        let ClipKind::Notes { data } = c.kind else {
-            continue;
-        };
-        if c.len <= 0 || c.muted || c.track as usize >= nch {
+        if c.notes().is_none() || c.len <= 0 || c.muted || c.track as usize >= nch {
             continue;
         }
-        let Some(d) = tl.notes.get(data as usize) else {
-            continue;
-        };
-        let v = &mut out[c.track as usize];
-        let push = |v: &mut Vec<NoteSpan>, n: &Note, u: Tick, cap: Tick, rng: &mut ClipRng| {
-            if n.chance > 0 && n.chance < 100 && rng.next_f32() * 100.0 >= n.chance as f32 {
-                return;
-            }
-            if u < 0 || u >= c.len {
-                return;
-            }
-            let end = (u + n.len.max(1)).min(cap).min(c.len);
-            if end <= u || n.key == 0 || n.key > 120 {
-                return;
-            }
-            v.push(NoteSpan {
-                start: c.start + u,
-                end: c.start + end,
-                key: n.key,
-                vel: n.vel as f32 / 65535.0,
-                instr: n.instr,
-                tune: n.tune,
-            });
-        };
-        match c.loop_len.filter(|l| *l > 0) {
-            Some(l) => {
-                // pass k plays source [k*l, (k+1)*l) at clip time k*l - offset
-                let off = c.offset.rem_euclid(l);
-                let passes = ((c.len + off) + l - 1) / l;
-                for k in 0..passes.min(100_000) {
-                    let mut rng = ClipRng::new(c.seed, k as u32);
-                    let base = k * l - off;
-                    for n in d.notes.iter().filter(|n| n.start >= 0 && n.start < l) {
-                        push(v, n, base + n.start, base + l, &mut rng);
-                    }
-                }
-            }
-            None => {
-                let mut rng = ClipRng::new(c.seed, 0);
-                for n in &d.notes {
-                    push(v, n, n.start - c.offset, Tick::MAX, &mut rng);
-                }
-            }
-        }
+        clip_note_spans(tl, c, &mut out[c.track as usize]);
     }
     for v in &mut out {
         v.sort_by_key(|n| (n.start, n.key));
     }
     out
+}
+
+/// The notes note clip `c` plays, in timeline ticks, appended to `v`
+/// (unsorted; see [`note_spans`]).
+pub(crate) fn clip_note_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>) {
+    let ClipKind::Notes { data } = c.kind else {
+        return;
+    };
+    if c.len <= 0 {
+        return;
+    }
+    let Some(d) = tl.notes.get(data as usize) else {
+        return;
+    };
+    let push = |v: &mut Vec<NoteSpan>, n: &Note, u: Tick, cap: Tick, rng: &mut ClipRng| {
+        if n.chance > 0 && n.chance < 100 && rng.next_f32() * 100.0 >= n.chance as f32 {
+            return;
+        }
+        if u < 0 || u >= c.len {
+            return;
+        }
+        let end = (u + n.len.max(1)).min(cap).min(c.len);
+        if end <= u || n.key == 0 || n.key > 120 {
+            return;
+        }
+        v.push(NoteSpan {
+            start: c.start + u,
+            end: c.start + end,
+            key: n.key,
+            vel: n.vel as f32 / 65535.0,
+            instr: n.instr,
+            tune: n.tune,
+        });
+    };
+    match c.loop_len.filter(|l| *l > 0) {
+        Some(l) => {
+            // pass k plays source [k*l, (k+1)*l) at clip time k*l - offset
+            let off = c.offset.rem_euclid(l);
+            let passes = ((c.len + off) + l - 1) / l;
+            for k in 0..passes.min(100_000) {
+                let mut rng = ClipRng::new(c.seed, k as u32);
+                let base = k * l - off;
+                for n in d.notes.iter().filter(|n| n.start >= 0 && n.start < l) {
+                    push(v, n, base + n.start, base + l, &mut rng);
+                }
+            }
+        }
+        None => {
+            let mut rng = ClipRng::new(c.seed, 0);
+            for n in &d.notes {
+                push(v, n, n.start - c.offset, Tick::MAX, &mut rng);
+            }
+        }
+    }
+}
+
+/// The launcher clips as the engine plays them when launched (Stage 4b):
+/// each clip's notes from tick 0, in launcher order.
+pub fn launch_plan(tl: &Timeline) -> Vec<LaunchNotes> {
+    tl.launcher
+        .iter()
+        .filter(|l| l.clip.len > 0)
+        .map(|l| LaunchNotes {
+            id: l.clip.id,
+            track: l.clip.track as usize,
+            len: l.clip.len,
+            notes: launch_spans(tl, &l.clip),
+        })
+        .collect()
 }
 
 /// The cell track `tr` plays at timeline row `row`, given the segment `s`

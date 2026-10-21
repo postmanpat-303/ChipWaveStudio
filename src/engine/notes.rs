@@ -3,7 +3,7 @@
 //! on the row clock. Only runs when the timeline has note clips, so
 //! tracker songs and block-only timelines render exactly as before.
 use super::*;
-use crate::timeline::{NoteSpan, Plan, ROW};
+use crate::timeline::{NoteSpan, Plan, Tick, ROW};
 
 /// voices per track for note clips
 pub const NOTE_VOICES: usize = 8;
@@ -69,6 +69,31 @@ impl NoteVoice {
     }
 }
 
+/// a launcher clip playing on a track (Stage 4b): it loops from `origin`
+/// on the launch clock (rows played since the start, never jumps back)
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct LPlay {
+    /// launcher clip id
+    pub(super) id: u32,
+    /// its index in `Plan::launch` (checked against `id` each use)
+    idx: usize,
+    pub(super) origin: Tick,
+    pass: i64,
+    cur: usize,
+}
+
+impl LPlay {
+    pub(super) fn new(id: u32, origin: Tick) -> Self {
+        Self {
+            id,
+            idx: usize::MAX,
+            origin,
+            pass: -1,
+            cur: 0,
+        }
+    }
+}
+
 pub(super) struct NoteState {
     /// NOTE_VOICES per track, preallocated (no allocation while playing)
     pub(super) v: Vec<NoteVoice>,
@@ -81,6 +106,10 @@ pub(super) struct NoteState {
     pub(super) any: bool,
     /// per track: the last note's frequency (poly synth glide)
     last_f: [f32; MAX_CHANNELS],
+    /// tracks playing a launcher clip instead of the arrangement (bit per
+    /// track; 0 = none, and then nothing below runs)
+    pub(super) lmask: u64,
+    pub(super) lp: [LPlay; MAX_CHANNELS],
 }
 
 impl NoteState {
@@ -92,6 +121,8 @@ impl NoteState {
             age: 0,
             any: false,
             last_f: [0.0; MAX_CHANNELS],
+            lmask: 0,
+            lp: [LPlay::default(); MAX_CHANNELS],
         }
     }
 
@@ -109,7 +140,15 @@ impl NoteState {
 
     /// release every held note (synth voices fade with their envelope)
     pub(super) fn release_all(&mut self, plugins: &mut crate::plugin::Rack) {
+        self.release_where(plugins, u64::MAX);
+    }
+
+    /// release the held notes of the tracks in `mask` (bit per track)
+    pub(super) fn release_where(&mut self, plugins: &mut crate::plugin::Rack, mask: u64) {
         for (k, v) in self.v.iter_mut().enumerate() {
+            if mask >> (k / NOTE_VOICES).min(63) & 1 == 0 {
+                continue;
+            }
             if v.active && v.down {
                 v.down = false;
                 if v.plug {
@@ -362,11 +401,19 @@ pub(super) fn note_events(
     plugins: &mut crate::plugin::Rack,
     nch: usize,
     t: f64,
+    lc: f64,
 ) {
     st.clock = t;
+    let lmask = st.lmask;
     if st.any {
         for (k, v) in st.v[..nch * NOTE_VOICES].iter_mut().enumerate() {
-            if v.active && v.down && t >= v.off_at {
+            // launcher notes end on the launch clock
+            let now = if lmask != 0 && lmask >> (k / NOTE_VOICES) & 1 == 1 {
+                lc
+            } else {
+                t
+            };
+            if v.active && v.down && now >= v.off_at {
                 v.down = false;
                 if v.plug {
                     plugins.live_off(PLUG_TAG + k as u16);
@@ -379,6 +426,10 @@ pub(super) fn note_events(
         }
     }
     for ch in 0..nch {
+        if lmask != 0 && lmask >> ch & 1 == 1 {
+            launch_events(st, feed, plan, song, chans, plugins, ch, lc);
+            continue;
+        }
         let Some(spans) = plan.notes.get(ch) else {
             continue;
         };
@@ -392,6 +443,58 @@ pub(super) fn note_events(
             }
         }
     }
+}
+
+/// Note-ons of the launcher clip playing on track `ch` at launch-clock
+/// tick `lc`: the clip loops from its origin, pass after pass.
+#[allow(clippy::too_many_arguments)]
+fn launch_events(
+    st: &mut NoteState,
+    feed: &mut crate::modulation::NoteFeed,
+    plan: &Plan,
+    song: &Song,
+    chans: &mut [Chan],
+    plugins: &mut crate::plugin::Rack,
+    ch: usize,
+    lc: f64,
+) {
+    let mut lp = st.lp[ch];
+    let idx = match plan.launch.get(lp.idx) {
+        Some(x) if x.id == lp.id => lp.idx,
+        _ => match plan.launch.iter().position(|x| x.id == lp.id) {
+            Some(i) => i,
+            None => return,
+        },
+    };
+    lp.idx = idx;
+    let ln = &plan.launch[idx];
+    let rel = lc - lp.origin as f64;
+    if ln.len <= 0 || rel < 0.0 {
+        st.lp[ch] = lp;
+        return;
+    }
+    let pass = (rel / ln.len as f64).floor() as i64;
+    if pass != lp.pass {
+        lp.pass = pass;
+        lp.cur = 0;
+    }
+    let base = lp.origin + pass * ln.len;
+    let local = lc - base as f64;
+    while let Some(n) = ln.notes.get(lp.cur) {
+        if n.start as f64 > local {
+            break;
+        }
+        lp.cur += 1;
+        if (n.end as f64) > local {
+            let m = NoteSpan {
+                start: base + n.start,
+                end: base + n.end,
+                ..*n
+            };
+            note_on(st, feed, song, chans, plugins, ch, &m);
+        }
+    }
+    st.lp[ch] = lp;
 }
 
 /// Seek / start at tick `t`: notes that started before `t` and are still
@@ -443,6 +546,13 @@ impl Engine {
         (self.tl.row as f64 + ph) * ROW as f64
     }
 
+    /// the launch clock (Stage 4b): `tl_clock` on the rows played since the
+    /// start instead of the timeline row, so it never jumps back when the
+    /// arrangement loops
+    pub(super) fn launch_clock(&self) -> f64 {
+        self.tl_clock() + (self.rows_played as f64 - self.tl.row as f64) * ROW as f64
+    }
+
     /// timeline position in ticks while the timeline plays (recording)
     pub fn tl_ticks(&self) -> Option<f64> {
         (self.tl.on && self.playing).then(|| self.tl_clock())
@@ -450,7 +560,9 @@ impl Engine {
 
     /// note voices: release, and find the notes from timeline row `row`
     pub(super) fn notes_jump(&mut self, song: &Song, row: usize, strike: bool) {
-        self.nv.release_all(&mut self.plugins);
+        // launcher clips play on through a jump of the arrangement
+        let keep = self.nv.lmask;
+        self.nv.release_where(&mut self.plugins, !keep);
         let Some(plan) = self.tl.plan.clone() else {
             return;
         };
