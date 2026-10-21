@@ -96,6 +96,8 @@ struct PrDrag {
     /// note's length now follows it (until then it keeps the remembered
     /// length, so a slightly long or wobbly click doesn't shorten it)
     moved: bool,
+    /// a move last applied as copies (Ctrl held): the originals stay
+    copy: bool,
 }
 
 /// A left press on empty grid held this long without moving turns into a
@@ -229,6 +231,14 @@ pub(crate) struct PianoUi {
     pub(crate) launch: Option<u32>,
     /// the toolbar's clip chip as drawn (tests)
     pub(crate) chip: String,
+    /// copied notes (Ctrl+C / Ctrl+X): the first at tick 0, `clip_from`
+    /// where it was; `clip_text` is what went to the system clipboard
+    pub(crate) clip: Vec<tl::Note>,
+    clip_from: Tick,
+    clip_text: String,
+    /// the last paste: (target, the playhead base it used, where the next
+    /// Ctrl+V goes), so pasting again lays the copies end to end
+    paste_next: Option<(Target, Option<Tick>, Tick)>,
 }
 
 impl PianoUi {
@@ -281,6 +291,10 @@ impl Default for PianoUi {
             head: None,
             launch: None,
             chip: String::new(),
+            clip: vec![],
+            clip_from: 0,
+            clip_text: String::new(),
+            paste_next: None,
         }
     }
 }
@@ -714,8 +728,18 @@ impl App {
     // ------------------------------------------------------------ edits
 
     /// Apply a drag from its origin: everything is recomputed from the
-    /// state at the press, so a gesture is one clean edit.
-    fn pr_apply_drag(&mut self, d: &PrDrag, t: Target, tick: f64, key: i32, len_ext: Tick) {
+    /// state at the press, so a gesture is one clean edit. `copy` (Ctrl
+    /// held, checked again on every frame up to the drop): a move leaves
+    /// the originals and moves copies, which become the selection.
+    fn pr_apply_drag(
+        &mut self,
+        d: &PrDrag,
+        t: Target,
+        tick: f64,
+        key: i32,
+        len_ext: Tick,
+        copy: bool,
+    ) {
         let grid = self.pr_grid();
         let mut src = d.origin.clone();
         match (&mut src, t) {
@@ -749,7 +773,11 @@ impl App {
                         } else {
                             vec![d.id]
                         };
-                        self.pr.sel = roll::move_notes(p, col, &rows, drow, dk);
+                        self.pr.sel = if copy {
+                            roll::copy_notes(p, col, &rows, drow, dk)
+                        } else {
+                            roll::move_notes(p, col, &rows, drow, dk)
+                        };
                     }
                     DragK::Band(_) | DragK::Paint(_) => return,
                 }
@@ -776,9 +804,20 @@ impl App {
                 DragK::Move => {
                     let dt = tl::snap(d.start + (tick - d.grab_tick) as Tick, grid) - d.start;
                     let dk = key - d.grab_key;
-                    let min_start = self
-                        .pr
-                        .sel
+                    // the notes at the press (the selection then, or the
+                    // grabbed one): copies change the live selection
+                    let ids: Vec<usize> = if d.sel.contains(&d.id) {
+                        d.sel.clone()
+                    } else {
+                        vec![d.id]
+                    };
+                    if copy {
+                        self.pr.sel = roll::copy_shifted(&mut n.notes, &ids, dt, dk);
+                        self.pr_write(t, src);
+                        return;
+                    }
+                    self.pr.sel = ids.clone();
+                    let min_start = ids
                         .iter()
                         .filter_map(|&i| n.notes.get(i))
                         .map(|x| x.start)
@@ -786,9 +825,7 @@ impl App {
                         .unwrap_or(0);
                     let dt = dt.max(-min_start);
                     // keep the chord shape: clamp the group, not each note
-                    let (lo, hi) = self
-                        .pr
-                        .sel
+                    let (lo, hi) = ids
                         .iter()
                         .filter_map(|&i| n.notes.get(i))
                         .fold((120i32, 1i32), |(a, b), x| {
@@ -799,7 +836,7 @@ impl App {
                     } else {
                         dk
                     };
-                    for &i in &self.pr.sel {
+                    for &i in &ids {
                         if let Some(x) = n.notes.get_mut(i) {
                             x.start += dt;
                             x.key = (x.key as i32 + dk).clamp(1, 120) as u8;
@@ -1017,6 +1054,164 @@ impl App {
         self.pr_write(t, Source::Notes(d));
     }
 
+    // ------------------------------------------------- clipboard (Ctrl+C X V D)
+
+    /// the selected notes as clipboard notes, and where the first starts
+    fn pr_sel_clip(&self, t: Target) -> Option<(Vec<tl::Note>, Tick)> {
+        if self.pr.sel.is_empty() {
+            return None;
+        }
+        let src = self.pr_read(t)?;
+        let (c, from) = match (&src, t) {
+            (Source::Block(p), Target::Block { col, .. }) => roll::clip_block(p, col, &self.pr.sel),
+            (Source::Notes(d), _) => roll::clip_notes(&d.notes, &self.pr.sel),
+            _ => return None,
+        };
+        (!c.is_empty()).then_some((c, from))
+    }
+
+    /// Ctrl+C / Ctrl+X: the selected notes to the roll's clipboard (and as
+    /// text to the system clipboard); cut also deletes them (one undo step)
+    pub(super) fn pr_copy(&mut self, cut: bool, ctx: &egui::Context) {
+        let Some((c, from)) = self.pr.target.and_then(|t| self.pr_sel_clip(t)) else {
+            self.status =
+                "Select notes to copy first (click, Shift+click, drag a box or Ctrl+A)".into();
+            return;
+        };
+        let n = c.len();
+        self.pr.clip_text = roll::notes_to_text(&c);
+        // this also makes egui deliver Event::Paste on Ctrl+V
+        ctx.copy_text(self.pr.clip_text.clone());
+        self.pr.clip = c;
+        self.pr.clip_from = from;
+        self.pr.paste_next = None;
+        if cut {
+            self.pr_delete();
+        }
+        self.status = format!(
+            "{} {n} note(s) · Ctrl+V pastes them at the playhead (in any clip)",
+            if cut { "Cut" } else { "Copied" }
+        );
+    }
+
+    /// where Ctrl+V puts the first note: the playhead (or play marker) in
+    /// this clip, on the grid; in the Tracker the cursor row; else None
+    /// (the notes go back where they were copied from)
+    fn pr_paste_base(&self, t: Target) -> Option<Tick> {
+        let g = self.pr_grid().max(1);
+        if let Some((h, _)) = self.pr.head {
+            return Some((h.max(0.0) as Tick).div_euclid(g) * g);
+        }
+        match t {
+            Target::Block { .. } if self.view == View::Pattern => Some(tl::rows_to_ticks(self.row)),
+            _ => None,
+        }
+    }
+
+    /// write clipboard notes into `t` with the first at `at` as one undo
+    /// step; they become the selection. Returns (pasted, left out).
+    fn pr_paste_clip(&mut self, t: Target, clip: &[tl::Note], at: Tick) -> Option<(usize, usize)> {
+        let mut src = self.pr_read(t)?;
+        let (sel, dropped) = match (&mut src, t) {
+            (Source::Block(p), Target::Block { col, .. }) => {
+                roll::paste_block(p, col, clip, (at.max(0) / ROW) as usize, 0)
+            }
+            (Source::Notes(d), _) => {
+                let len = d.len.max(1);
+                roll::paste_notes(&mut d.notes, clip, at, 0, len)
+            }
+            _ => return None,
+        };
+        if sel.is_empty() {
+            return Some((0, dropped));
+        }
+        self.snapshot();
+        let n = sel.len();
+        self.pr.sel = sel;
+        self.pr_write(t, src);
+        Some((n, dropped))
+    }
+
+    fn left_out(dropped: usize) -> String {
+        if dropped == 0 {
+            String::new()
+        } else {
+            format!(
+                " · {dropped} left out (past the clip's end, or a second note on one row of a \
+                 Tracker column)"
+            )
+        }
+    }
+
+    /// Ctrl+V: paste the copied notes at the playhead (see
+    /// [`Self::pr_paste_base`]), keeping their timing and pitches; `text`
+    /// is the system clipboard (notes copied in another ChipWave window)
+    pub(super) fn pr_paste(&mut self, text: Option<String>) {
+        if let Some(c) = text
+            .as_deref()
+            .filter(|x| *x != self.pr.clip_text)
+            .and_then(roll::notes_from_text)
+        {
+            self.pr.clip_text = text.unwrap_or_default();
+            self.pr.clip = c;
+            self.pr.clip_from = 0;
+            self.pr.paste_next = None;
+        }
+        let Some(t) = self.pr.target else {
+            return;
+        };
+        if self.pr.clip.is_empty() {
+            self.status = "Nothing to paste (select notes and press Ctrl+C first)".into();
+            return;
+        }
+        let base = self.pr_paste_base(t);
+        let at = match (base, self.pr.paste_next) {
+            // again at the same spot: after the last paste
+            (b, Some((pt, pb, next))) if pt == t && pb == b => next,
+            (Some(b), _) => b,
+            (None, _) => self.pr.clip_from,
+        };
+        let clip = self.pr.clip.clone();
+        match self.pr_paste_clip(t, &clip, at) {
+            Some((0, _)) => {
+                self.status = "Nothing pasted: the playhead is past the end of this clip".into()
+            }
+            Some((n, dropped)) => {
+                let next = at + roll::clip_span(&clip, self.pr_grid());
+                self.pr.paste_next = Some((t, base, next));
+                self.status = format!(
+                    "Pasted {n} note(s){} · Ctrl+V again pastes after them",
+                    Self::left_out(dropped)
+                );
+            }
+            None => {}
+        }
+    }
+
+    /// Ctrl+D: a copy of the selection right after it (its length rounded
+    /// up to the grid), selected, so Ctrl+D again repeats it once more
+    pub(super) fn pr_duplicate(&mut self) {
+        let Some(t) = self.pr.target else { return };
+        let Some((c, from)) = self.pr_sel_clip(t) else {
+            self.status = "Select notes to duplicate first (Ctrl+A selects all)".into();
+            return;
+        };
+        let at = from + roll::clip_span(&c, self.pr_grid());
+        match self.pr_paste_clip(t, &c, at) {
+            Some((0, _)) => {
+                self.status =
+                    "Nothing duplicated: there is no room after the selection in this clip".into()
+            }
+            Some((n, dropped)) => {
+                self.status = format!(
+                    "Duplicated {n} note(s) after the selection{}",
+                    Self::left_out(dropped)
+                )
+            }
+            None => {}
+        }
+    }
+
     /// keys while the roll has focus; true = used
     pub(super) fn pr_key(&mut self, key: Key, m: egui::Modifiers) -> bool {
         let grid = self.pr_grid();
@@ -1037,6 +1232,7 @@ impl App {
                     self.pr.sel = notes_of(&src, t).0.iter().map(|n| n.id).collect();
                 }
             }
+            Key::D if m.command && !m.shift && !m.alt => self.pr_duplicate(),
             Key::Q if !m.command => self.pr_quantise(),
             Key::Num1 if !m.command => self.pr.tool = PrTool::Pointer,
             Key::Num2 if !m.command => self.pr.tool = PrTool::Select,
@@ -1569,8 +1765,14 @@ impl App {
                 .unwrap_or(t.note),
             _ => t.note,
         };
-        // a group being moved: ghosts where the notes were
-        if let Some(d) = self.pr.drag.as_ref().filter(|d| d.kind == DragK::Move) {
+        // a group being moved: ghosts where the notes were (copies: the
+        // originals are still there)
+        if let Some(d) = self
+            .pr
+            .drag
+            .as_ref()
+            .filter(|d| d.kind == DragK::Move && !d.copy)
+        {
             let ids: &[usize] = if d.sel.contains(&d.id) {
                 &d.sel
             } else {
@@ -1911,6 +2113,7 @@ impl App {
                 heard: 0,
                 sel: vec![],
                 moved: false,
+                copy: false,
             };
             match hit {
                 Some((n, edge)) => {
@@ -2012,7 +2215,7 @@ impl App {
                             if let Some(x) = self.pr.drag.as_mut() {
                                 x.moved = true;
                             }
-                            self.pr_apply_drag(&d, target, tk, k, grid_t);
+                            self.pr_apply_drag(&d, target, tk, k, grid_t, false);
                             self.pr.last_len = (tl::snap(tk as Tick, grid_t) - d.start).max(grid_t);
                         }
                     }
@@ -2042,7 +2245,26 @@ impl App {
                         }
                     }
                     DragK::Move => {
-                        self.pr_apply_drag(&d, target, tk, k, grid_t);
+                        // Ctrl held: copies (decided again up to the drop)
+                        let copy = mods.command;
+                        self.pr_apply_drag(&d, target, tk, k, grid_t, copy);
+                        if let Some(x) = self.pr.drag.as_mut() {
+                            x.copy = copy;
+                        }
+                        if copy {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::Copy);
+                            let n = self.pr.sel.len();
+                            ui.painter().text(
+                                pos + egui::vec2(14.0, -14.0),
+                                egui::Align2::LEFT_BOTTOM,
+                                format!("+ copy {n}"),
+                                FontId::proportional(11.0),
+                                t.ink,
+                            );
+                            self.status = format!(
+                                "Copying {n} note(s): let go to drop the copies (release Ctrl first to move instead)"
+                            );
+                        }
                         // hear the new pitch when it changes
                         let nk = (d.key as i32 + k - d.grab_key).clamp(1, 120) as u8;
                         if self.pr.drag.as_ref().is_some_and(|x| x.heard != nk) {
@@ -2056,6 +2278,18 @@ impl App {
             }
         }
         if resp.drag_stopped() {
+            // Ctrl decides at the drop: pressed or let go after the last
+            // mouse move, the move becomes copies or back
+            if let (Some(d), Some(pos)) = (self.pr.drag.clone(), latest) {
+                if d.kind == DragK::Move && d.copy != mods.command {
+                    let tk = self.pr.tick_at(pos.x);
+                    let k = self.pr.key_at(pos.y).clamp(1, 120);
+                    self.pr_apply_drag(&d, target, tk, k, grid_t, mods.command);
+                }
+                if d.kind == DragK::Move && mods.command {
+                    self.status = format!("Copied {} note(s) (Ctrl+Z undoes)", self.pr.sel.len());
+                }
+            }
             self.pr.drag = None;
         }
         // ---- input: velocity lane
