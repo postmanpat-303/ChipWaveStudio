@@ -504,3 +504,175 @@ fn plugin_thumbnails_setting_defaults_on() {
     let k = crate::plugin::thumb::key("vst3", "ABCDEF", "1.0");
     assert!(k.contains("vst3"));
 }
+
+// ---- Browser › Instruments › ChipWave Instruments (Del, 0.2.5.x)
+
+/// the ChipWave Instruments rows as listed (names in order)
+fn tool_rows(h: &mut Harness<'static, App>) -> Vec<(String, Pos2)> {
+    h.state_mut().br.filter.tab = crate::browser::Tab::Instruments;
+    h.state_mut().br.filter.query.clear();
+    h.state_mut().br.filter.category = Some(crate::browser::TOOLS_CAT.into());
+    frames(h, 3);
+    let rows = h.state().br.row_rects.clone();
+    rows.into_iter()
+        .map(|(k, r)| {
+            (
+                k.strip_prefix("tool:").unwrap_or(&k).to_string(),
+                r.center(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn chipwave_instruments_lead_the_instruments_tab_with_the_pies_add_list() {
+    use super::trackpie::{sub_items, Builtin, ItemKind, Seg, TrackInfo, ADD_INSTR_ITEMS};
+    let mut h = tl_harness();
+    // the pie's Add entries (without Browse…)
+    let info = TrackInfo {
+        tracks: 4,
+        timeline: true,
+        ..Default::default()
+    };
+    let pie: Vec<String> = sub_items(Seg::Add, &info)[..ADD_INSTR_ITEMS - 1]
+        .iter()
+        .map(|i| match &i.kind {
+            ItemKind::Text(s) => s.clone(),
+            _ => String::new(),
+        })
+        .collect();
+    let all: Vec<&str> = Builtin::ALL.iter().map(|b| b.label()).collect();
+    assert_eq!(pie, all);
+    let names: Vec<String> = tool_rows(&mut h).into_iter().map(|r| r.0).collect();
+    assert_eq!(names, all, "the same set, in the pie's order");
+    for want in [
+        "Grid",
+        "Drum Kit",
+        "WaveForge",
+        "FM-4",
+        "Chip FX",
+        "Noise",
+        "Wavetable",
+        "Analog",
+        "Synth",
+        "Drum Synth",
+        "Voice",
+    ] {
+        assert!(names.iter().any(|n| n == want), "{want}");
+    }
+    // first in the Category column and at the top of the unfiltered list
+    h.state_mut().br.filter.category = None;
+    frames(&mut h, 3);
+    let first = h.state().br.row_rects.first().unwrap().0.clone();
+    assert_eq!(first, format!("tool:{}", all[0]));
+    let cats = crate::browser::column_values(
+        &h.state().br.items,
+        &h.state().br.filter,
+        &[],
+        |i| &i.category,
+        true,
+        false,
+    );
+    assert_eq!(cats[0].0, crate::browser::TOOLS_CAT);
+    // every one starts on a playable preset, not a bare Init
+    for b in Builtin::ALL {
+        let (name, _) = b.make().unwrap();
+        assert!(!name.to_lowercase().contains("init"), "{b:?}: {name}");
+        assert!(
+            b.tip().contains(name.trim_start_matches("WaveForge ")),
+            "{b:?}"
+        );
+    }
+}
+
+#[test]
+fn a_chipwave_instrument_dropped_on_a_track_plays_it_and_opens_its_editor() {
+    let mut h = tl_harness();
+    h.state_mut().undo_reset();
+    let before = song(&mut h, |s| s.clone());
+    let rows = tool_rows(&mut h);
+    let (_, p) = rows.iter().find(|r| r.0 == "FM-4").cloned().unwrap();
+    let (head, _) = h.state().tlv.track_rects(2).expect("track 3 header");
+    drag(&mut h, p, head.center());
+    frames(&mut h, 3);
+    let n = song(&mut h, |s| s.instruments.len());
+    assert_eq!(n, before.instruments.len() + 1, "one new instrument");
+    let (name, slot) = song(&mut h, |s| {
+        (
+            s.instruments[n - 1].name.clone(),
+            s.timeline.as_ref().unwrap().tracks[2].instr,
+        )
+    });
+    assert_eq!(name, "E-Piano");
+    assert_eq!(slot as usize, n, "given to track 3");
+    assert_eq!(
+        song(&mut h, |s| s.channels),
+        before.channels,
+        "no new track"
+    );
+    // the track is selected, its full editor open below the timeline
+    assert_eq!(h.state().ch, 2);
+    assert_eq!(h.state().tl_cur_track(), 2);
+    assert_eq!(h.state().instr as usize, n);
+    assert_eq!(h.state().view, View::Timeline);
+    assert!(h.state().extra.lower_inst, "the instrument editor is open");
+    // one undo step takes it all back
+    ctrl(&mut h, Key::Z);
+    frames(&mut h, 2);
+    assert_eq!(
+        song(&mut h, |s| s.instruments.len()),
+        before.instruments.len()
+    );
+    assert_eq!(
+        song(&mut h, |s| s.timeline.as_ref().unwrap().tracks[2].instr),
+        before.timeline.as_ref().unwrap().tracks[2].instr
+    );
+    assert_eq!(song(&mut h, |s| s.patterns.clone()), before.patterns);
+}
+
+#[test]
+fn a_chipwave_instrument_dropped_below_the_tracks_makes_a_new_track() {
+    let mut h = tl_harness();
+    h.state_mut().set_channels(4);
+    frames(&mut h, 3);
+    h.state_mut().undo_reset();
+    let n0 = song(&mut h, |s| s.channels);
+    let i0 = song(&mut h, |s| s.instruments.len());
+    let rows = tool_rows(&mut h);
+    let (_, p) = rows.iter().find(|r| r.0 == "Drum Kit").cloned().unwrap();
+    let y = h.state().tlv.tracks_bottom() + 30.0;
+    let x = h.state().tlv.heads.center().x;
+    drag(&mut h, p, Pos2::new(x, y));
+    frames(&mut h, 3);
+    assert_eq!(song(&mut h, |s| s.channels), n0 + 1);
+    assert_eq!(song(&mut h, |s| s.channel_names[n0].clone()), "Drum Kit");
+    let slot = song(&mut h, |s| s.instruments.len());
+    assert_eq!(slot, i0 + 1);
+    assert!(song(&mut h, |s| matches!(
+        &s.instruments[slot - 1].kind,
+        InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Drums(_))
+    )));
+    assert_eq!(
+        song(&mut h, |s| s.timeline.as_ref().unwrap().tracks[n0].instr) as usize,
+        slot
+    );
+    assert_eq!(h.state().ch, n0);
+    assert!(h.state().extra.lower_inst);
+    // the new track and its instrument are one undo step
+    ctrl(&mut h, Key::Z);
+    frames(&mut h, 2);
+    assert_eq!(
+        song(&mut h, |s| (s.channels, s.instruments.len())),
+        (n0, i0)
+    );
+    // double-click: a new track at the end too
+    let rows = tool_rows(&mut h);
+    let (_, p) = rows.iter().find(|r| r.0 == "Analog").cloned().unwrap();
+    dbl(&mut h, p);
+    frames(&mut h, 3);
+    assert_eq!(song(&mut h, |s| s.channels), n0 + 1);
+    assert_eq!(
+        song(&mut h, |s| s.instruments.last().unwrap().name.clone()),
+        "Warm Lead"
+    );
+}

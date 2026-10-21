@@ -217,6 +217,34 @@ pub enum Src {
     Pattern(usize),
     /// a built-in insert effect
     Fx(crate::fx::FxKind),
+    /// one of the ChipWave Instruments (the track pie's Add list, by index):
+    /// a new instrument on a playable preset, given to a track
+    Tool(u8),
+}
+
+/// the Instruments tab's first category: the built-in instruments, as the
+/// track pie's Add lists them
+pub const TOOLS_CAT: &str = "ChipWave Instruments";
+
+/// the ChipWave Instruments rows: (label, tooltip) in the pie's order
+pub fn tool_items(tools: &[(&str, &str)]) -> Vec<Item> {
+    tools
+        .iter()
+        .enumerate()
+        .map(|(i, (label, tip))| {
+            item(
+                format!("tool:{label}"),
+                (*label).into(),
+                Tab::Instruments,
+                Fmt::Cwi,
+                TOOLS_CAT,
+                "ChipWave",
+                Loc::Library,
+                (*tip).into(),
+                Src::Tool(i as u8),
+            )
+        })
+        .collect()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -971,6 +999,12 @@ pub fn filter(
         Sort::Type => v.sort_by_key(|&i| (items[i].fmt, items[i].category.to_lowercase(), name(i))),
         Sort::Rating => v.sort_by_key(|&i| (std::cmp::Reverse(rating(i)), name(i))),
     }
+    // the ChipWave Instruments come first, in their own (the pie's) order
+    let tool = |i: usize| match items[i].src {
+        Src::Tool(k) if items[i].category == TOOLS_CAT => Some(k),
+        _ => None,
+    };
+    v.sort_by_key(|&i| tool(i).map_or((1, 0), |k| (0, k)));
     v
 }
 
@@ -995,7 +1029,10 @@ pub fn column_values(
     }) {
         *m.entry(col(it).to_string()).or_default() += 1;
     }
-    m.into_iter().collect()
+    let mut v: Vec<(String, usize)> = m.into_iter().collect();
+    // ChipWave Instruments heads the Category column
+    v.sort_by_key(|(c, _)| c != TOOLS_CAT);
+    v
 }
 
 // ------------------------------------------------------------------ loading

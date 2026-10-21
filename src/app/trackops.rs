@@ -112,7 +112,9 @@ impl App {
         let slot = self.instr;
         let n = self.with(|s| crate::chanops::assign_track_instrument(&mut s.song, tr, slot));
         self.undo_hold -= 1;
-        self.ch = tr;
+        // the track is selected (headers, lanes, the lower panel)
+        self.tl_select_track(tr, false);
+        self.instr = slot;
         self.dirty = true;
         self.show_instrument_panel();
         self.status = format!(
@@ -124,6 +126,28 @@ impl App {
                 String::new()
             }
         );
+    }
+
+    /// Browser › ChipWave Instruments dropped below the tracks (or loaded):
+    /// a new track at `at`, named after the instrument, playing a new `b`;
+    /// one undo step
+    pub(crate) fn track_new_with_instrument(&mut self, at: usize, b: super::trackpie::Builtin) {
+        if self.with(|s| s.song.channels) >= MAX_CHANNELS {
+            self.status =
+                "All 32 tracks are used (the channel limit): drop onto a track instead".into();
+            return;
+        }
+        if self.with(|s| s.song.instruments.len() >= 255) {
+            self.status = "All 255 instrument slots are used".into();
+            return;
+        }
+        self.snapshot();
+        self.undo_hold += 1;
+        if self.track_insert(at, b.label()) {
+            let at = self.ch;
+            self.track_new_instrument(at, b);
+        }
+        self.undo_hold -= 1;
     }
 
     /// the pie's Drum pattern…: the Browser's Drum Patterns tab; the next

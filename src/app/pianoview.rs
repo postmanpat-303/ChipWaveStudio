@@ -394,6 +394,8 @@ impl App {
                         .timeline
                         .as_deref()
                         .and_then(|t| t.launch_clip(id))
+                        // while its track is the current one
+                        .filter(|l| l.clip.track as usize == self.ch)
                         .and_then(|l| l.clip.notes())
                 })
             });

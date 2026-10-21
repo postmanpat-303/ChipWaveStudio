@@ -187,28 +187,41 @@ impl Builtin {
     }
     pub(crate) fn tip(self) -> &'static str {
         match self {
-            Builtin::WaveForge => "a new WaveForge polyphonic synth (Init) plays this track",
-            Builtin::DrumKit => "a new Drum Kit (16 pads, step sequencer) plays this track",
-            Builtin::Synth => "a new plain synth (Init) plays this track",
-            Builtin::Analog => "a new Analog generator (3 oscillators, ladder) plays this track",
-            Builtin::Fm4 => "a new FM-4 generator (4 operators) plays this track",
-            Builtin::Wavetable => "a new Wavetable generator plays this track",
-            Builtin::Grid => "a new Grid (modular) generator plays this track",
-            Builtin::Noise => "a new Noise generator (risers, impacts, wind) plays this track",
-            Builtin::DrumSynth => "a new Drum Synth kit plays this track",
-            Builtin::ChipFx => "a new Chip FX (sfxr) generator plays this track",
-            Builtin::Voice => "a new Voice instrument (synthetic vowels) plays this track",
+            Builtin::WaveForge => "WaveForge polyphonic synth · starts on Saw Lead",
+            Builtin::DrumKit => "Drum Kit: 16 pads and a step sequencer · starts on Psy Kit",
+            Builtin::Synth => "the classic ChipWave synth · starts on Supersaw lead",
+            Builtin::Analog => "Analog: 3 oscillators into a ladder filter · starts on Warm Lead",
+            Builtin::Fm4 => "FM-4: four-operator FM · starts on E-Piano",
+            Builtin::Wavetable => "Wavetable synth · starts on Wave Supersaw",
+            Builtin::Grid => "Grid: a modular patch · starts on Grid Saw Bass",
+            Builtin::Noise => "Noise: risers, impacts, wind · starts on White Riser",
+            Builtin::DrumSynth => "Drum Synth: a synthesized kit on the keys · starts on Psy Kit",
+            Builtin::ChipFx => "Chip FX: sfxr game sounds · starts on Blip",
+            Builtin::Voice => "Voice: synthetic vowels and words · starts on Choir Eee",
         }
     }
-    /// a fresh instrument: its name and kind (the engine's Init preset,
-    /// else its first preset, as in New instrument)
+    /// the browser row's glyph (`glyphs::glyph_for`)
+    pub(crate) fn glyph_tag(self) -> &'static str {
+        match self {
+            Builtin::WaveForge | Builtin::Synth | Builtin::Fm4 => "Synth",
+            Builtin::DrumKit | Builtin::DrumSynth => "Drum",
+            Builtin::Analog => "Analog",
+            Builtin::Wavetable => "Wave",
+            Builtin::Grid => "Grid",
+            Builtin::Noise => "Noise",
+            Builtin::ChipFx => "Chip FX",
+            Builtin::Voice => "Voice",
+        }
+    }
+    /// a fresh instrument: its name and kind, on a playable preset (the
+    /// one named in `tip`), else the engine's first preset
     pub(crate) fn make(self) -> Option<(String, InstrumentKind)> {
         use crate::gen::GenEngine as G;
         let gen = |f: fn(&G) -> bool, prefer: &str| {
             let all = crate::gen::presets();
             let pick = all
                 .iter()
-                .find(|(n, _, p)| f(&p.engine) && n.ends_with(prefer))
+                .find(|(n, _, p)| f(&p.engine) && *n == prefer)
                 .or_else(|| all.iter().find(|(_, _, p)| f(&p.engine)))
                 .cloned();
             pick.map(|(n, _, mut p)| {
@@ -217,23 +230,35 @@ impl Builtin {
             })
         };
         match self {
-            Builtin::WaveForge => gen(|e| matches!(e, G::Poly(_)), " Init"),
+            Builtin::WaveForge => gen(|e| matches!(e, G::Poly(_)), "WaveForge Saw Lead"),
             Builtin::DrumKit => crate::drumkit::presets()
                 .into_iter()
                 .next()
                 .map(|(n, _, p)| (n, InstrumentKind::Gen(p))),
-            Builtin::Synth => Some(("Synth".into(), InstrumentKind::Synth(Default::default()))),
-            Builtin::Analog => gen(|e| matches!(e, G::Analog(_)), " Init"),
-            Builtin::Fm4 => gen(|e| matches!(e, G::Fm(_)), " Init"),
-            Builtin::Wavetable => gen(|e| matches!(e, G::Wave(_)), " Init"),
-            Builtin::Grid => gen(|e| matches!(e, G::Grid(_)), " Init"),
-            Builtin::Noise => gen(|e| matches!(e, G::Noise(_)), " Init"),
+            Builtin::Synth => Some(match crate::presets::factory("psytrance/supersaw-lead") {
+                Some(mut p) => {
+                    p.name = "Supersaw lead".into();
+                    ("Supersaw lead".into(), InstrumentKind::Synth(p))
+                }
+                None => ("Synth".into(), InstrumentKind::Synth(Default::default())),
+            }),
+            Builtin::Analog => gen(|e| matches!(e, G::Analog(_)), "Warm Lead"),
+            Builtin::Fm4 => gen(|e| matches!(e, G::Fm(_)), "E-Piano"),
+            Builtin::Wavetable => gen(|e| matches!(e, G::Wave(_)), "Wave Supersaw"),
+            Builtin::Grid => gen(|e| matches!(e, G::Grid(_)), "Grid Saw Bass"),
+            Builtin::Noise => gen(|e| matches!(e, G::Noise(_)), "White Riser"),
             Builtin::DrumSynth => gen(|e| matches!(e, G::Kit(_)), "Psy Kit"),
-            Builtin::ChipFx => gen(|e| matches!(e, G::ChipFx(_)), " Init"),
-            Builtin::Voice => Some((
-                "Voice".into(),
-                InstrumentKind::Voice(crate::voice::VoicePatch::default()),
-            )),
+            Builtin::ChipFx => gen(|e| matches!(e, G::ChipFx(_)), "Blip"),
+            Builtin::Voice => Some(match crate::voice::preset("Choir Eee") {
+                Some(mut v) => {
+                    v.base.name = "Choir Eee".into();
+                    ("Choir Eee".into(), InstrumentKind::Voice(v))
+                }
+                None => (
+                    "Voice".into(),
+                    InstrumentKind::Voice(crate::voice::VoicePatch::default()),
+                ),
+            }),
         }
     }
 }
