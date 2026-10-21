@@ -495,7 +495,7 @@ fn a_browser_drum_pattern_drop_previews_snaps_and_asks_over_a_clip() {
     let crate::browser::Src::Pattern(pi) = it.src else {
         unreachable!()
     };
-    let p = crate::drumpat::PATTERNS[pi].clone();
+    let p = crate::drumpat::PATTERNS[pi];
     // over track 01 one bar and one beat in: snapped to the beat, over the take
     let to = at(&h, 0, BAR + crate::timeline::PPQ);
     let plan = h
