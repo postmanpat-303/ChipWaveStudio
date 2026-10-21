@@ -95,6 +95,9 @@ mod pluginview;
 mod plugsetup;
 #[cfg(test)]
 mod prollpan_tests;
+#[cfg(test)]
+mod rack_tests;
+mod rackops;
 mod radial;
 #[cfg(test)]
 mod record_tests;

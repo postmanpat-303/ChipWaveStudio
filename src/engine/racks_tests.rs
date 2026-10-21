@@ -53,6 +53,29 @@ pub(crate) fn render(song: &Song, secs: f32) -> Vec<f32> {
     out
 }
 
+/// the song in timeline mode with one note clip on track 1: `keys` played
+/// on instrument `slot` (1-based), a beat each
+pub(crate) fn clip_song(mut s: Song, slot: u8, keys: &[u8]) -> Song {
+    s.patterns[0].cells[0][0] = Cell::default();
+    crate::timeline::enter_timeline_mode(&mut s);
+    let id = crate::timeline::new_note_clip(&mut s, 0, 0).unwrap();
+    let t = s.timeline.as_deref_mut().unwrap();
+    let c = t.clips.iter_mut().find(|c| c.id == id).unwrap();
+    let data = c.notes().unwrap();
+    t.notes[data].make_mut().notes = keys
+        .iter()
+        .enumerate()
+        .map(|(k, &key)| crate::timeline::Note {
+            start: k as i64 * crate::timeline::PPQ,
+            len: crate::timeline::PPQ * 3 / 4,
+            key,
+            instr: slot,
+            ..Default::default()
+        })
+        .collect();
+    s
+}
+
 /// mean absolute difference
 pub(crate) fn diff(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum::<f32>() / a.len().max(1) as f32

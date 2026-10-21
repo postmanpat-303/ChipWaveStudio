@@ -60,6 +60,39 @@ impl App {
                 })
                 .collect()
         });
+        // list order: each rack followed by its layers (indented)
+        let order: Vec<(usize, Option<usize>)> = self.with(|s| {
+            let n = s.song.instruments.len();
+            let mut placed = vec![false; n];
+            let mut v = vec![];
+            for i in 0..n {
+                if placed[i] {
+                    continue;
+                }
+                let owner = s.song.rack_of(i);
+                if owner.is_some_and(|r| r != i && r < n) {
+                    // listed under its rack
+                    continue;
+                }
+                placed[i] = true;
+                v.push((i, None));
+                if let InstrumentKind::Rack(r) = &s.song.instruments[i].kind {
+                    for l in &r.layers {
+                        if l.slot < n && !placed[l.slot] {
+                            placed[l.slot] = true;
+                            v.push((l.slot, Some(i)));
+                        }
+                    }
+                }
+            }
+            // anything a damaged rack left out still shows
+            for (i, p) in placed.iter().enumerate() {
+                if !p {
+                    v.push((i, None));
+                }
+            }
+            v
+        });
         let tags: Vec<&'static str> = self.with(|s| {
             s.song
                 .instruments
@@ -142,7 +175,8 @@ impl App {
                 .max_height(max_h.min(visible as f32 * row_h + 2.0).max(row_h))
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
-                    for (i, (n, tag)) in names.iter().enumerate() {
+                    for &(i, rack_of) in &order {
+                        let (n, tag) = &names[i];
                         let slot = (i + 1) as u8;
                         let kind = if tag.is_empty() { "synth" } else { tag.trim() };
                         let ttag = tags.get(i).copied().unwrap_or("");
@@ -190,9 +224,23 @@ impl App {
                                 continue;
                             }
                         }
-                        let label = format!("{:02X}  {}{}", slot, n, tag);
-                        let r =
-                            instrument_row(ui, row_h, slot, n, ttag, self.instr == slot, &label);
+                        // rack layers sit indented under their rack
+                        let (shown, label) = match rack_of {
+                            Some(r) => (
+                                format!("    · {n}"),
+                                format!("{:02X}  {}{} (layer of {:02X})", slot, n, tag, r + 1),
+                            ),
+                            None => (n.clone(), format!("{:02X}  {}{}", slot, n, tag)),
+                        };
+                        let r = instrument_row(
+                            ui,
+                            row_h,
+                            slot,
+                            &shown,
+                            ttag,
+                            self.instr == slot,
+                            &label,
+                        );
                         self.br
                             .slot_rects
                             .push((slot, r.rect.intersect(ui.clip_rect())));
@@ -336,6 +384,24 @@ impl App {
                                 ui.close();
                             }
                             ui.separator();
+                            let no_rack = self.with(|s| {
+                                super::rackops::no_rack_reason(&s.song, slot as usize - 1)
+                            });
+                            if ui
+                                .add_enabled(
+                                    no_rack.is_none(),
+                                    egui::Button::new("Make a rack from this instrument"),
+                                )
+                                .on_hover_text(
+                                    "this sound becomes layer A of a rack in the same slot (it sounds the same)",
+                                )
+                                .on_disabled_hover_text(no_rack.unwrap_or(""))
+                                .clicked()
+                            {
+                                self.make_rack(slot as usize - 1);
+                                self.set_lower(4);
+                                ui.close();
+                            }
                             if ui.button("Duplicate instrument").clicked() {
                                 self.duplicate_instrument(slot);
                                 ui.close();

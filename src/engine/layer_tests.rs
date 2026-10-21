@@ -2,7 +2,7 @@
 //! and B sounds like A and B played together; key ranges, level, pan and
 //! on/off work; each layer goes through its own effects; nothing
 //! allocates while a rack plays; songs without a rack never make a layer.
-use super::racks_tests::{diff, one_note_song, render};
+use super::racks_tests::{clip_song, diff, one_note_song, render};
 use super::*;
 use crate::fx::{Device, FxKind};
 use crate::model::{Layer, RackP};
@@ -51,29 +51,6 @@ fn rack_song(layers: Vec<Layer>) -> Song {
 
 fn ab() -> Vec<Layer> {
     vec![Layer::new(1), Layer::new(2)]
-}
-
-/// the song in timeline mode with one note clip on track 1: `keys` played
-/// on instrument `slot` (1-based), a beat each
-fn clip_song(mut s: Song, slot: u8, keys: &[u8]) -> Song {
-    s.patterns[0].cells[0][0] = Cell::default();
-    crate::timeline::enter_timeline_mode(&mut s);
-    let id = crate::timeline::new_note_clip(&mut s, 0, 0).unwrap();
-    let t = s.timeline.as_deref_mut().unwrap();
-    let c = t.clips.iter_mut().find(|c| c.id == id).unwrap();
-    let data = c.notes().unwrap();
-    t.notes[data].make_mut().notes = keys
-        .iter()
-        .enumerate()
-        .map(|(k, &key)| crate::timeline::Note {
-            start: k as i64 * crate::timeline::PPQ,
-            len: crate::timeline::PPQ * 3 / 4,
-            key,
-            instr: slot,
-            ..Default::default()
-        })
-        .collect();
-    s
 }
 
 /// the master stage is tanh with the limiter off: undo it to add mixes

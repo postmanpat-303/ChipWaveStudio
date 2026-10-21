@@ -885,6 +885,48 @@ impl Song {
         }
     }
 
+    /// Make instrument `idx` a rack with itself as the first layer, sounding
+    /// the same: the sound moves to a new slot (the layer, at 0 dB, no
+    /// transpose); the rack keeps the name, volume, transpose and effects,
+    /// so every note, clip and effect lane still points at it. Lanes on the
+    /// sound itself (cutoff, macros, patch...) follow it to the layer.
+    /// Returns the layer's slot; None for a rack, a layer, a plugin
+    /// instrument (not a layer yet) or a full song.
+    pub fn make_rack(&mut self, idx: usize) -> Option<usize> {
+        let inst = self.instruments.get(idx)?;
+        if matches!(
+            inst.kind,
+            InstrumentKind::Rack(_) | InstrumentKind::Plugin(_)
+        ) || self.rack_of(idx).is_some()
+            || self.instruments.len() >= 255
+        {
+            return None;
+        }
+        let layer = Instrument {
+            name: inst.name.clone(),
+            volume: 1.0,
+            transpose: 0,
+            fx: vec![],
+            kind: inst.kind.clone(),
+        };
+        let slot = self.instruments.len();
+        self.instruments.push(layer);
+        self.instruments[idx].kind = InstrumentKind::Rack(RackP {
+            layers: vec![Layer::new(slot)],
+        });
+        for lanes in self.lane_lists_mut() {
+            for l in lanes.iter_mut() {
+                if lane_instrument(&l.target) == Some(idx) {
+                    let what = l.target.splitn(3, '.').nth(2).unwrap_or("");
+                    if !(what.starts_with("fx.") || what == "level") {
+                        l.target = with_lane_instrument(&l.target, slot);
+                    }
+                }
+            }
+        }
+        Some(slot)
+    }
+
     /// the rack (0-based) that has slot `idx` as a layer, if any
     pub fn rack_of(&self, idx: usize) -> Option<usize> {
         self.instruments.iter().position(|i| match &i.kind {

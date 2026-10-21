@@ -28,6 +28,8 @@ pub(crate) enum Sel {
     Dev(usize, DevPath),
     /// path `.2` of the Split at `.1`
     Path(usize, DevPath, usize),
+    /// layer `.1` of rack `.0`
+    Layer(usize, usize),
 }
 
 /// where Add Device puts the new device
@@ -68,6 +70,10 @@ pub(crate) enum RowKind {
     Dev(usize, DevPath),
     /// path `.2` of the Split at `.1` (instrument `.0`)
     Path(usize, DevPath, usize),
+    /// "Layers": the heading of rack `.0`'s layers
+    Layers(usize),
+    /// layer `.1` of rack `.0`
+    Layer(usize, usize),
     /// a quiet line ("none yet")
     Note(String),
 }
@@ -88,6 +94,8 @@ fn fold_key(kind: &RowKind) -> String {
         RowKind::Effects(i) => format!("e{i}"),
         RowKind::Dev(i, p) => format!("d{i}.{:?}", p.as_slice()),
         RowKind::Path(i, sp, p) => format!("p{i}.{:?}.{p}", sp.as_slice()),
+        RowKind::Layers(i) => format!("ls{i}"),
+        RowKind::Layer(i, k) => format!("l{i}.{k}"),
         RowKind::Note(_) => String::new(),
     }
 }
@@ -117,8 +125,43 @@ pub(crate) fn tree_rows(song: &Song, root: usize, closed: &[String]) -> Vec<Row>
     if !push(&mut out, 0, RowKind::Inst(root), true) {
         return out;
     }
+    // a rack: its layers (each with its own effects), then the rack's effects
+    if let InstrumentKind::Rack(r) = &_inst.kind {
+        if push(&mut out, 1, RowKind::Layers(root), true) {
+            if r.layers.is_empty() {
+                push(
+                    &mut out,
+                    2,
+                    RowKind::Note("no layers yet: + Add layer".into()),
+                    false,
+                );
+            }
+            for (k, l) in r.layers.iter().enumerate() {
+                if push(&mut out, 2, RowKind::Layer(root, k), true)
+                    && song.instruments.get(l.slot).is_some()
+                {
+                    chain_rows(song, l.slot, &mut out, 3, closed);
+                }
+            }
+        }
+    }
     chain_rows(song, root, &mut out, 1, closed);
     out
+}
+
+/// the instruments a rack's tree shows: the rack and its layer slots
+pub(crate) fn in_tree(song: &Song, root: usize, i: usize) -> bool {
+    i == root
+        || matches!(&song.instruments.get(root).map(|x| &x.kind),
+            Some(InstrumentKind::Rack(r)) if r.layers.iter().any(|l| l.slot == i))
+}
+
+/// layer `k` of rack `rack`
+pub(crate) fn layer_of(song: &Song, rack: usize, k: usize) -> Option<&crate::model::Layer> {
+    match &song.instruments.get(rack)?.kind {
+        InstrumentKind::Rack(r) => r.layers.get(k),
+        _ => None,
+    }
 }
 
 /// "Effects" and one row per device of instrument `idx`'s own chain
@@ -205,7 +248,7 @@ fn dev_rows(idx: usize, d: &Device, at: DevPath, out: &mut Vec<Row>, depth: u8, 
 pub(crate) fn sel_device(song: &Song, sel: Sel) -> Option<&Device> {
     match sel {
         Sel::Dev(i, p) | Sel::Path(i, p, _) => fx::dev_at(&song.instruments.get(i)?.fx, &p),
-        Sel::Inst(_) => None,
+        Sel::Inst(_) | Sel::Layer(..) => None,
     }
 }
 
@@ -237,6 +280,14 @@ pub(crate) fn sel_crumb(song: &Song, sel: Sel) -> String {
     };
     match sel {
         Sel::Inst(i) => name(i),
+        Sel::Layer(r, k) => format!(
+            "{} › Layer {} › {}",
+            name(r),
+            super::rackops::layer_letter(k),
+            layer_of(song, r, k)
+                .map(|l| name(l.slot))
+                .unwrap_or_default()
+        ),
         Sel::Dev(i, p) => {
             let fxl = &song.instruments[i].fx;
             let d = sel_device(song, sel).map(|d| d.title()).unwrap_or_default();
@@ -262,7 +313,11 @@ impl App {
     pub(crate) fn chains_root(&self) -> Option<usize> {
         let n = self.with(|s| s.song.instruments.len());
         let i = (self.instr as usize).wrapping_sub(1);
-        (i < n).then_some(i)
+        if i >= n {
+            return None;
+        }
+        // a layer opens its rack's tree
+        Some(self.with(|s| s.song.rack_of(i)).unwrap_or(i))
     }
 
     /// a selection that no longer exists (undo, removed device, another
@@ -270,17 +325,29 @@ impl App {
     fn chains_fix_sel(&mut self, root: usize) {
         let ok = match self.dev.sel {
             Some(Sel::Inst(i)) => i == root,
+            Some(Sel::Layer(r, k)) => r == root && self.with(|x| layer_of(&x.song, r, k).is_some()),
             Some(s @ Sel::Dev(i, _)) => {
-                i == root && self.with(|x| sel_device(&x.song, s).is_some())
+                self.with(|x| in_tree(&x.song, root, i) && sel_device(&x.song, s).is_some())
             }
-            Some(s @ Sel::Path(i, _, p)) => {
-                i == root
-                    && self.with(|x| sel_device(&x.song, s).is_some_and(|d| p < d.paths.len()))
-            }
+            Some(s @ Sel::Path(i, _, p)) => self.with(|x| {
+                in_tree(&x.song, root, i)
+                    && sel_device(&x.song, s).is_some_and(|d| p < d.paths.len())
+            }),
             None => false,
         };
         if !ok {
-            self.dev.sel = Some(Sel::Inst(root));
+            // a layer picked in the Instruments list: its row in the rack
+            let cur = (self.instr as usize).wrapping_sub(1);
+            let k = self.with(|x| match &x.song.instruments.get(root).map(|i| &i.kind) {
+                Some(InstrumentKind::Rack(r)) if cur != root => {
+                    r.layers.iter().position(|l| l.slot == cur)
+                }
+                _ => None,
+            });
+            self.dev.sel = Some(match k {
+                Some(k) => Sel::Layer(root, k),
+                None => Sel::Inst(root),
+            });
         }
     }
 
@@ -446,6 +513,13 @@ impl App {
         let mut toggle: Option<String> = None;
         let mut pick: Option<Sel> = None;
         let mut add: Option<(usize, Vec<u8>, usize)> = None;
+        let mut add_layer: Option<usize> = None;
+        let mut layer_set: Option<(usize, usize, crate::model::Layer)> = None;
+        let (is_rack, n_layers) =
+            self.with(|s| match &s.song.instruments.get(root).map(|i| &i.kind) {
+                Some(InstrumentKind::Rack(r)) => (true, r.layers.len()),
+                _ => (false, 0),
+            });
         let mut drawn: Vec<(Rect, RowKind)> = vec![];
         let pointer = ui.ctx().pointer_latest_pos();
         let released = ui.input(|i| i.pointer.any_released());
@@ -500,6 +574,7 @@ impl App {
                         RowKind::Inst(i) => Some(Sel::Inst(*i)),
                         RowKind::Dev(i, p) => Some(Sel::Dev(*i, *p)),
                         RowKind::Path(i, sp, p) => Some(Sel::Path(*i, *sp, *p)),
+                        RowKind::Layer(r, k) => Some(Sel::Layer(*r, *k)),
                         _ => None,
                     };
                     let is_sel = this_sel == Some(sel);
@@ -572,14 +647,26 @@ impl App {
                             after(&p, g, &tag, t.ink2);
                         }
                         RowKind::Effects(i) => {
+                            let rack = *i == root && is_rack;
                             let g = p.text(
                                 Pos2::new(x, r.center().y),
                                 egui::Align2::LEFT_CENTER,
-                                "Effects",
+                                if rack { "Rack effects" } else { "Effects" },
                                 font.clone(),
                                 t.ink,
                             );
-                            after(&p, g, "in order, after the instrument", t.ink2);
+                            after(
+                                &p,
+                                g,
+                                if rack {
+                                    "after the layers are mixed"
+                                } else if *i != root {
+                                    "this layer only"
+                                } else {
+                                    "in order, after the instrument"
+                                },
+                                t.ink2,
+                            );
                             if !slim
                                 && link(
                                     ui,
@@ -723,6 +810,88 @@ impl App {
                                 }
                             });
                         }
+                        RowKind::Layers(rk) => {
+                            let g = p.text(
+                                Pos2::new(x, r.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                "Layers",
+                                font.clone(),
+                                t.ink,
+                            );
+                            after(&p, g, "each plays every note it takes, then they are mixed", t.ink2);
+                            if !slim
+                                && n_layers < crate::model::MAX_LAYERS
+                                && link(
+                                    ui,
+                                    r,
+                                    ui.make_persistent_id(("chains_add_l", *rk)),
+                                    "+ Add layer",
+                                    "a new synth layer (pick an instrument already in the song in the rack's detail)",
+                                )
+                            {
+                                add_layer = Some(*rk);
+                            }
+                        }
+                        RowKind::Layer(rk, k) => {
+                            let info = self.with(|s| {
+                                let l = layer_of(&s.song, *rk, *k)?.clone();
+                                let x = s.song.instruments.get(l.slot)?;
+                                Some((
+                                    l,
+                                    x.name.clone(),
+                                    params::type_tag(&x.kind).to_string(),
+                                    matches!(x.kind, InstrumentKind::Plugin(_)),
+                                ))
+                            });
+                            let Some((l, name, tag, plug)) = info else {
+                                continue;
+                            };
+                            let dot = Rect::from_center_size(
+                                Pos2::new(x + 5.0, r.center().y),
+                                egui::vec2(14.0, 14.0),
+                            );
+                            let dr = ui
+                                .interact(
+                                    dot,
+                                    ui.make_persistent_id(("chains_lon", *rk, *k)),
+                                    Sense::click(),
+                                )
+                                .on_hover_text(if l.on {
+                                    "on: click to mute this layer"
+                                } else {
+                                    "muted: click to switch it on"
+                                });
+                            if l.on {
+                                p.circle_filled(dot.center(), 4.5, t.accent);
+                            } else {
+                                p.circle_stroke(dot.center(), 4.0, Stroke::new(1.2, t.ink2));
+                            }
+                            if dr.clicked() {
+                                let mut nl = l.clone();
+                                nl.on = !nl.on;
+                                layer_set = Some((*rk, *k, nl));
+                            }
+                            let live = l.on && !plug;
+                            let g = p.text(
+                                Pos2::new(x + 14.0, r.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                format!(
+                                    "Layer {}  {:02X} {name}",
+                                    super::rackops::layer_letter(*k),
+                                    l.slot + 1
+                                ),
+                                font.clone(),
+                                if live { t.ink } else { t.ink2 },
+                            );
+                            let note = if plug {
+                                "plugin instruments can't play in a rack yet".to_string()
+                            } else if !l.on {
+                                "muted".to_string()
+                            } else {
+                                layer_summary(&l, &tag)
+                            };
+                            after(&p, g, &note, if plug || !l.on { t.brick } else { t.ink2 });
+                        }
                         RowKind::Note(s) => {
                             p.text(
                                 Pos2::new(x, r.center().y),
@@ -794,6 +963,12 @@ impl App {
         if let Some((i, chain, at)) = add {
             self.open_add_device(i, chain, at);
         }
+        if let Some(r) = add_layer {
+            self.add_layer(r, None);
+        }
+        if let Some((r, k, l)) = layer_set {
+            self.set_layer(r, k, l, true);
+        }
     }
 
     /// Add Device for the chain `chain` of instrument `inst`, at `at`
@@ -822,6 +997,11 @@ impl App {
                 self.open_add_device(i, c, usize::MAX)
             }
             Some(Sel::Inst(i)) => self.open_add_device(i, vec![], usize::MAX),
+            // a layer: the end of that layer's own chain
+            Some(Sel::Layer(r, k)) => {
+                let slot = self.with(|s| layer_of(&s.song, r, k).map(|l| l.slot));
+                self.open_add_device(slot.unwrap_or(r), vec![], usize::MAX)
+            }
             None => self.open_add_device(root, vec![], usize::MAX),
         }
     }
@@ -837,18 +1017,40 @@ impl App {
         let t = th();
         let crumb = self.with(|s| sel_crumb(&s.song, sel));
         match sel {
+            Sel::Layer(r, k) => {
+                self.layer_detail(ui, r, k, crumb);
+            }
             Sel::Inst(i) => {
+                let (rack, no_rack) = self.with(|s| {
+                    (
+                        matches!(s.song.instruments[i].kind, InstrumentKind::Rack(_)),
+                        super::rackops::no_rack_reason(&s.song, i),
+                    )
+                });
                 ui.horizontal(|ui| {
                     ui.add_space(6.0);
                     ui.add(egui::Label::new(egui::RichText::new(crumb).strong()).truncate());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .button("Open full editor  Ctrl+I")
-                            .on_hover_text("every control of this instrument (the Instrument tab)")
-                            .clicked()
+                        if !rack
+                            && ui
+                                .button("Open full editor  Ctrl+I")
+                                .on_hover_text("every control of this instrument (the Instrument tab)")
+                                .clicked()
                         {
                             self.instr = (i + 1) as u8;
                             self.set_lower(1);
+                        }
+                        if rack {
+                            self.rack_add_layer_buttons(ui, i);
+                        } else if ui
+                            .add_enabled(no_rack.is_none(), egui::Button::new("Make a rack from this instrument"))
+                            .on_hover_text(
+                                "this sound becomes layer A of a rack in the same slot (it sounds the same); then add more layers",
+                            )
+                            .on_disabled_hover_text(no_rack.unwrap_or(""))
+                            .clicked()
+                        {
+                            self.make_rack(i);
                         }
                     });
                 });
@@ -1096,6 +1298,197 @@ impl App {
             }
         });
         let _ = inst;
+    }
+
+    /// "+ Add layer" and "Add an instrument as a layer" for rack `r`
+    fn rack_add_layer_buttons(&mut self, ui: &mut egui::Ui, r: usize) {
+        let (n, cands) = self.with(|s| {
+            let n = layer_count(&s.song, r);
+            let c: Vec<(usize, String, Option<&'static str>)> = s
+                .song
+                .instruments
+                .iter()
+                .enumerate()
+                .filter(|(k, _)| *k != r)
+                .map(|(k, x)| {
+                    (
+                        k,
+                        format!("{:02X} {}", k + 1, x.name),
+                        super::rackops::no_layer_reason(&s.song, r, k),
+                    )
+                })
+                .collect();
+            (n, c)
+        });
+        let full = n >= crate::model::MAX_LAYERS;
+        ui.add_enabled_ui(!full, |ui| {
+            ui.menu_button("Add an instrument as a layer", |ui| {
+                ui.label(
+                    egui::RichText::new("it keeps its slot; the rack plays it too")
+                        .small()
+                        .color(th().ink2),
+                );
+                egui::ScrollArea::vertical()
+                    .max_height(260.0)
+                    .show(ui, |ui| {
+                        for (k, name, why) in &cands {
+                            if ui
+                                .add_enabled(why.is_none(), egui::Button::new(name))
+                                .on_disabled_hover_text(why.unwrap_or(""))
+                                .clicked()
+                            {
+                                self.add_layer(r, Some(*k));
+                                ui.close();
+                            }
+                        }
+                    });
+            })
+            .response
+            .on_disabled_hover_text("a rack has at most 4 layers");
+            if ui
+                .button("+ Add layer")
+                .on_hover_text("a new synth layer (at most 4)")
+                .on_disabled_hover_text("a rack has at most 4 layers")
+                .clicked()
+            {
+                self.add_layer(r, None);
+            }
+        });
+    }
+
+    /// layer `k` of rack `r`: its settings (mockup 1), its instrument card
+    fn layer_detail(&mut self, ui: &mut egui::Ui, r: usize, k: usize, crumb: String) {
+        let t = th();
+        let Some((l, plug)) = self.with(|s| {
+            let l = layer_of(&s.song, r, k)?.clone();
+            let plug = matches!(
+                s.song.instruments.get(l.slot).map(|x| &x.kind),
+                Some(InstrumentKind::Plugin(_))
+            );
+            Some((l, plug))
+        }) else {
+            return;
+        };
+        ui.horizontal(|ui| {
+            ui.add_space(6.0);
+            ui.add(egui::Label::new(egui::RichText::new(crumb).strong()).truncate());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .button("Remove layer")
+                    .on_hover_text("out of the rack; the instrument stays in the song (Ctrl+Z brings the layer back)")
+                    .clicked()
+                {
+                    self.remove_layer(r, k);
+                }
+                if ui
+                    .button("Open full editor  Ctrl+I")
+                    .on_hover_text("every control of this layer's instrument (the Instrument tab)")
+                    .clicked()
+                {
+                    self.instr = (l.slot + 1) as u8;
+                    self.set_lower(1);
+                }
+            });
+        });
+        if plug {
+            ui.label(
+                egui::RichText::new(
+                    "Plugin instruments can't play in a rack yet: this layer is silent. Use it on a track of its own.",
+                )
+                .color(t.brick),
+            );
+        }
+        let h = (ui.available_height() - 6.0).max(120.0);
+        let w = super::devcards::CARD_W.min(ui.available_width() * 0.5);
+        let mut nl = l.clone();
+        let mut step = false;
+        let mut changed = false;
+        ui.horizontal_top(|ui| {
+            ui.add_space(4.0);
+            ui.vertical(|ui| {
+                ui.set_width((ui.available_width() - w - 16.0).clamp(200.0, 330.0));
+                ui.label(egui::RichText::new("LAYER").small().strong().color(t.ink2));
+                if ui
+                    .checkbox(&mut nl.on, "On")
+                    .on_hover_text("a muted layer plays nothing")
+                    .changed()
+                {
+                    changed = true;
+                    step = true;
+                }
+                let mut slider = |ui: &mut egui::Ui, s: egui::Slider, tip: &str| {
+                    let r = ui.add(s.clamping(egui::SliderClamping::Edits)).on_hover_text(tip);
+                    if r.changed() {
+                        changed = true;
+                        step |= r.drag_started() || !r.dragged();
+                    }
+                };
+                slider(
+                    ui,
+                    egui::Slider::new(&mut nl.level_db, -60.0..=6.0)
+                        .text("Level")
+                        .suffix(" dB")
+                        .fixed_decimals(1),
+                    "this layer's level in the rack (0 dB = as its instrument sounds)",
+                );
+                slider(
+                    ui,
+                    egui::Slider::new(&mut nl.pan, -1.0..=1.0).text("Pan").fixed_decimals(2),
+                    "left -1 · centre 0 · right +1",
+                );
+                slider(
+                    ui,
+                    egui::Slider::new(&mut nl.transpose, -48..=48)
+                        .text("Transpose")
+                        .suffix(" st"),
+                    "semitones, on top of the rack's and the instrument's own transpose",
+                );
+                ui.label(egui::RichText::new("KEY RANGE").small().strong().color(t.ink2));
+                let mut lo = nl.key_lo.max(1);
+                let mut hi = nl.key_hi.max(1);
+                slider(
+                    ui,
+                    egui::Slider::new(&mut lo, 1..=127)
+                        .text("Lowest")
+                        .custom_formatter(|v, _| crate::model::note_name(v as u8)),
+                    "the lowest note this layer plays",
+                );
+                slider(
+                    ui,
+                    egui::Slider::new(&mut hi, 1..=127)
+                        .text("Highest")
+                        .custom_formatter(|v, _| crate::model::note_name(v as u8)),
+                    "the highest note this layer plays",
+                );
+                if lo != nl.key_lo.max(1) {
+                    nl.key_lo = if lo <= 1 { 0 } else { lo };
+                    nl.key_hi = nl.key_hi.max(nl.key_lo);
+                }
+                if hi != nl.key_hi.max(1) {
+                    nl.key_hi = hi;
+                    nl.key_lo = nl.key_lo.min(hi);
+                }
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(
+                        "Tracker blocks play layers with the note and its volume; slides, vibrato and arpeggio don't reach layers yet.",
+                    )
+                    .small()
+                    .color(t.ink2),
+                );
+            });
+            ui.add_space(10.0);
+            let keep = self.dev.card_w;
+            self.dev.card_w = w;
+            let fold = self.dev.inst_folded;
+            self.dev.inst_folded = false;
+            self.devices_inst_card(ui, h, l.slot);
+            self.dev.inst_folded = fold;
+            self.dev.card_w = keep;
+        });
+        if changed && nl != l {
+            self.set_layer(r, k, nl, step);
+        }
     }
 
     /// "MOVE OR COPY": buttons for the other chains this device can go in
@@ -1563,6 +1956,38 @@ pub(crate) fn flow_text(song: &Song, root: usize) -> String {
         return String::new();
     };
     let mut parts = vec![format!("{:02X} {}", root + 1, inst.name)];
+    if let InstrumentKind::Rack(r) = &inst.kind {
+        let ls: Vec<String> = r
+            .layers
+            .iter()
+            .enumerate()
+            .map(|(k, l)| {
+                let mut v = vec![song
+                    .instruments
+                    .get(l.slot)
+                    .map(|x| x.name.clone())
+                    .unwrap_or_default()];
+                if let Some(x) = song.instruments.get(l.slot) {
+                    v.extend(x.fx.iter().map(dev_flow));
+                }
+                format!(
+                    "{}: {}{}",
+                    super::rackops::layer_letter(k),
+                    v.join(" › "),
+                    if l.on { "" } else { " (muted)" }
+                )
+            })
+            .collect();
+        parts[0] = format!(
+            "{} [{}]",
+            parts[0],
+            if ls.is_empty() {
+                "no layers".to_string()
+            } else {
+                ls.join(" | ")
+            }
+        );
+    }
     for d in &inst.fx {
         parts.push(dev_flow(d));
     }
@@ -1600,6 +2025,36 @@ fn dev_flow(d: &Device) -> String {
 
 /// a place in a chain: instrument, chain prefix, index (usize::MAX = the end)
 pub(crate) type ChainAt = (usize, Vec<u8>, usize);
+
+/// how many layers rack `r` has (0 for anything else)
+pub(crate) fn layer_count(song: &Song, r: usize) -> usize {
+    match &song.instruments.get(r).map(|i| &i.kind) {
+        Some(InstrumentKind::Rack(x)) => x.layers.len(),
+        _ => 0,
+    }
+}
+
+/// "Synth · -3.0 dB · keys C-3..B-5 · +12 st"
+fn layer_summary(l: &crate::model::Layer, tag: &str) -> String {
+    let mut v = vec![tag.to_string()];
+    if l.level_db != 0.0 {
+        v.push(format!("{:+.1} dB", l.level_db));
+    }
+    if l.pan != 0.0 {
+        v.push(format!("pan {:+.2}", l.pan));
+    }
+    if l.key_lo > 0 || l.key_hi < 127 {
+        v.push(format!(
+            "keys {}..{}",
+            crate::model::note_name(l.key_lo.max(1)),
+            crate::model::note_name(l.key_hi.max(1))
+        ));
+    }
+    if l.transpose != 0 {
+        v.push(format!("{:+} st", l.transpose));
+    }
+    v.join(" · ")
+}
 
 /// a device row dropped somewhere in the tree
 #[derive(Clone, Debug, PartialEq)]
