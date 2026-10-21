@@ -369,8 +369,9 @@ impl App {
 
     /// 0 arranger, 1 instrument, 2 automation, 3 piano roll, 4 devices
     pub(super) fn set_lower(&mut self, m: u8) {
-        // the Order list is a Tracker view: hidden, the piano roll stands in
-        let m = if m == 0 && !self.tracker_on() && self.view != View::Pattern {
+        // the Order list and its Automation lanes are Tracker views: hidden,
+        // the piano roll stands in
+        let m = if (m == 0 || m == 2) && !self.lower_tracker_tabs() {
             3
         } else {
             m
@@ -436,6 +437,23 @@ impl App {
         }
     }
 
+    /// the lower panel's Tracker tabs (Order list, Automation) show: with
+    /// Settings › Show Tracker, or in the Tracker view itself
+    pub(super) fn lower_tracker_tabs(&self) -> bool {
+        self.tracker_on() || self.view == View::Pattern
+    }
+
+    /// the lower panel is on a Tracker tab that is hidden (Tracker off, e.g.
+    /// from saved settings or a song lane): the piano roll stands in, so
+    /// nothing is stuck on a tab that isn't there. Not saved: turning the
+    /// Tracker back on doesn't need it undone, the tabs are just there again
+    pub(super) fn lower_fallback(&mut self) {
+        if !self.lower_tracker_tabs() && matches!(self.lower_mode(), 0 | 2) {
+            self.pr.open = true;
+            self.arr_focus = false;
+        }
+    }
+
     fn lower_mode(&self) -> u8 {
         if self.extra.lower_dev {
             4
@@ -452,6 +470,7 @@ impl App {
 
     /// the pattern editor over the lower panel, with the splitter between
     pub(super) fn pattern_and_lower(&mut self, ui: &mut egui::Ui, inner: Rect) {
+        self.lower_fallback();
         let t = th();
         let nl = self.with(|s| s.song.automation.len());
         let auto_h = if self.pr.open && !self.extra.lower_inst {
@@ -829,7 +848,11 @@ impl App {
                     "Instrument",
                     "edit the selected instrument with knobs (Ctrl+I)",
                 ),
-                (2, "Automation", "the Order list with its automation lanes"),
+                (
+                    2,
+                    "Automation",
+                    "the Order list with its song automation lanes (Tracker)",
+                ),
                 (
                     3,
                     "Piano roll",
@@ -841,11 +864,12 @@ impl App {
                     "the selected track's instrument and effects, left to right (Ctrl+7)",
                 ),
             ];
-            let tracker = self.tracker_on() || self.view == View::Pattern;
+            let tracker = self.lower_tracker_tabs();
             for (m, name, tip) in [3, 4, 1, 2, 0].map(|k| tabs[k]) {
-                // the Order list belongs to the Tracker (Settings › Show
-                // Tracker, or the Tracker view itself)
-                if m == 0 && !tracker {
+                // the Order list and its Automation lanes belong to the
+                // Tracker (Settings › Show Tracker, or the Tracker view
+                // itself); the Timeline's automation is under each track
+                if (m == 0 || m == 2) && !tracker {
                     continue;
                 }
                 if crate::ember::tab(ui, cur == m, name)
@@ -1805,7 +1829,7 @@ impl App {
                         "Add automation lane"
                     })
                     .on_hover_text(
-                        "open this parameter's lane under its track (timeline) or in the Automation tab",
+                        "open this parameter's lane under its track (Timeline), or in the Automation tab (Tracker)",
                     )
                     .clicked()
                 {

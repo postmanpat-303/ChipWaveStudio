@@ -5,6 +5,7 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 ## Unreleased
 
 - **Piano roll: copy and paste.** Ctrl-drag notes to drop copies (the originals stay; Ctrl counts when you let go), Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste notes at the playhead (again: right after them; into another clip too), Ctrl+D duplicates the selection right after itself. One undo step each; only while the roll has the keyboard (docs/TIMELINE.md › Piano roll).
+- **The lower panel's Automation tab only shows with the Tracker.** It was the Tracker's Order list with its song lanes, so in the Timeline it showed nothing useful; it now hides with the Order list tab (Settings › Show Tracker brings both back), and a panel left on it opens the piano roll instead. A track's automation is in its lanes under the track: the **A** button on the header, Track pie › Add › Automation lane, or **+ lane**.
 
 ## 0.2.6.0: One workflow
 
