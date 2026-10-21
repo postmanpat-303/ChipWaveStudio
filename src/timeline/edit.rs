@@ -711,11 +711,24 @@ pub fn overlaps(tl: &Timeline, track: usize, a: Tick, b: Tick, skip: &[u32]) -> 
         .collect()
 }
 
+/// the clips (not in `ids`) that the clips `ids` overlap on their tracks
+pub fn covered(tl: &Timeline, ids: &[u32]) -> Vec<u32> {
+    let mut out: Vec<u32> = vec![];
+    for c in tl.clips.iter().filter(|c| ids.contains(&c.id)) {
+        for o in overlaps(tl, c.track as usize, c.start, c.end(), ids) {
+            if !out.contains(&o) {
+                out.push(o);
+            }
+        }
+    }
+    out
+}
+
 /// Clear `[a, b)` on `track`: clips inside it go, clips across its edges
 /// are split there and only their part inside goes (what "Replace" does
 /// before a clip is placed there). Returns how many clips were touched.
-pub fn clear_range(tl: &mut Timeline, track: usize, a: Tick, b: Tick) -> usize {
-    let ids = overlaps(tl, track, a, b, &[]);
+pub fn clear_range(tl: &mut Timeline, track: usize, a: Tick, b: Tick, skip: &[u32]) -> usize {
+    let ids = overlaps(tl, track, a, b, skip);
     let mut gone = vec![];
     for id in &ids {
         let mut id = *id;

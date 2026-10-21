@@ -286,3 +286,36 @@ fn new_and_unique_note_clips() {
     let back = from_toml(&to_toml(t).unwrap()).unwrap();
     assert_eq!(&back, t);
 }
+
+/// unified plan Stage 4a: a clip dropped somewhere else plays exactly what
+/// the same clip written there by hand plays, linked or independent
+#[test]
+fn a_placed_copy_plays_its_notes_at_the_new_place() {
+    let notes = |p| vec![n(0, 4 * ROW, 61, p), n(4 * ROW, 2 * ROW, 65, p)];
+    let at = |start: Tick| {
+        let mut a = song();
+        tl(&mut a).clips.clear();
+        let p = pad(&a);
+        let id = note_clip(&mut a, start, notes(p));
+        tl(&mut a)
+            .clips
+            .iter_mut()
+            .find(|c| c.id == id)
+            .unwrap()
+            .len = 8 * ROW;
+        (a, id)
+    };
+    let (by_hand, _) = at(16 * ROW);
+    let want = render_song(&by_hand, SR);
+    assert!(onset(&want) >= 16 * ROW_FRAMES - 1, "silent before bar 2");
+    for unique in [false, true] {
+        let (mut b, id) = at(0);
+        let k = place_copy(&mut b, id, 1, 16 * ROW, unique).unwrap();
+        delete(tl(&mut b), &[id]);
+        assert!(tl(&mut b).clips.iter().any(|c| c.id == k));
+        assert!(
+            same(&render_song(&b, SR), &want),
+            "unique {unique}: the copy sounds like the clip written there"
+        );
+    }
+}

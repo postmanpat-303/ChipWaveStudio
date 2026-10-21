@@ -339,7 +339,7 @@ fn clear_range_keeps_the_parts_outside() {
     let tl = s.timeline.as_deref_mut().unwrap();
     let others: Vec<u32> = overlaps(tl, 1, 5 * bar, 6 * bar, &[id]);
     tl.clips.retain(|c| !(others.contains(&c.id)));
-    clear_range(tl, 1, 5 * bar, 6 * bar);
+    clear_range(tl, 1, 5 * bar, 6 * bar, &[]);
     assert!(overlaps(tl, 1, 5 * bar, 6 * bar, &[]).is_empty());
     let mut parts: Vec<(Tick, Tick, Tick)> = tl
         .clips
