@@ -183,3 +183,63 @@ fn a_launcher_clip_pie_places_it_after_the_last_clip() {
     );
     assert_eq!(c.notes(), l.notes(), "a linked copy (D3)");
 }
+
+/// 5.4-5.6: the Inspector renames and colours, the lower panel says which
+/// track, clip and instrument it edits, no Tracker words without it
+#[test]
+fn the_inspector_and_the_lower_panel_name_the_clip() {
+    let (mut h, a) = notes_song();
+    h.state().with(|s| {
+        s.song
+            .instruments
+            .push(fileio::demo_song().instruments[0].clone());
+        s.song.timeline.as_deref_mut().unwrap().tracks[0].instr = 1;
+    });
+    h.state_mut().rename_clip(a, "Verse riff");
+    h.state_mut().set_clip_colour(&[a], Some("Teal"));
+    assert_eq!(clip(&h, a).colour, Some(0x4F9A96));
+    h.state_mut().ch = 0;
+    h.state_mut().instr = 1;
+    h.state_mut().tlv.sel = Some(a);
+    h.state_mut().tlv.sels = vec![a];
+    h.state_mut().set_lower(1);
+    frames(&mut h, 3);
+    let txt = h.state().lower_breadcrumb().expect("breadcrumb");
+    assert!(txt.starts_with("Track 01 "), "{txt}");
+    assert!(txt.contains("›  Verse riff  ›  01 "), "{txt}");
+    // the Inspector: Rename… opens the window, Colour shows the clip's
+    h.state_mut().extra.inspector_open = true;
+    h.state_mut().inspector_shot(true);
+    frames(&mut h, 3);
+    h.query_by_label_contains("Teal").expect("the colour shown");
+    h.get_by_label("Rename…").click();
+    frames(&mut h, 2);
+    assert_eq!(h.state().clip_rename.as_ref().map(|r| r.id), Some(a));
+    h.key_press(egui::Key::Escape);
+    frames(&mut h, 2);
+    assert!(h.state().clip_rename.is_none());
+    assert_eq!(
+        clip(&h, a).name.as_deref(),
+        Some("Verse riff"),
+        "cancel keeps it"
+    );
+    assert_eq!(h.state().clip_word(), "clip", "the Tracker is hidden");
+}
+
+/// 5.5: a Tracker clip in the piano roll without the Tracker reads as a
+/// clip on a track
+#[test]
+fn a_block_clip_without_the_tracker_says_clip_and_track() {
+    let mut h = super::unified_tests::tl_demo();
+    assert!(!h.state().tracker_on());
+    h.state_mut().set_lower(1);
+    h.state_mut().timeline_open(2, 1, 0, usize::MAX);
+    frames(&mut h, 3);
+    assert!(h.state().pr.open);
+    let chip = h.state().pr.chip.clone();
+    assert!(
+        chip.starts_with("Clip ") && chip.contains(" · Track 0"),
+        "{chip}"
+    );
+    assert!(!chip.contains("Block") && !chip.contains(" ch "), "{chip}");
+}

@@ -1355,10 +1355,11 @@ impl App {
                 } else {
                     format!(
                         "{}: track {:02}'s column of block {b:02}. ▶ plays it from the next {} · drag it onto the \
-                         timeline for a Tracker clip · double-click opens it in the Tracker",
+                         timeline for a {} · double-click opens it in the Tracker",
                         names[b],
                         tr + 1,
-                        self.ca_when()
+                        self.ca_when(),
+                        self.clip_word()
                     )
                 };
                 let resp = resp.on_hover_text(tip);
@@ -1485,6 +1486,16 @@ impl App {
                     );
                     pc.rect_filled(br, 3.0, Color32::from_black_alpha(150));
                     pc.galley(br.min + egui::vec2(2.5, 0.5), g, t.ink);
+                }
+                // the launcher clip open in the piano roll (5.6)
+                if lid.is_some() && lid == self.pr.launch && self.pr.open && self.tlv.sel.is_none()
+                {
+                    pc.rect_stroke(
+                        sr,
+                        4.0,
+                        Stroke::new(1.5, t.accent),
+                        egui::StrokeKind::Inside,
+                    );
                 }
                 if self.ca.drag.is_some() && self.ca.drag == src {
                     pc.rect_stroke(

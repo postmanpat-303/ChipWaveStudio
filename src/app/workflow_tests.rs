@@ -528,6 +528,8 @@ fn s_shows_a_snapped_split_line_and_only_the_click_splits() {
 #[test]
 fn split_from_the_menu_waits_for_the_click_and_right_click_cancels() {
     let (mut h, cl) = split_setup();
+    // the list menu (Settings › Clip menus › List; the pie has Split… too)
+    h.state_mut().extra.clip_list_menu = true;
     let before = tl_now(&h);
     let r = h.state().tlv.clip_rect(cl.id).unwrap();
     let p = Pos2::new(

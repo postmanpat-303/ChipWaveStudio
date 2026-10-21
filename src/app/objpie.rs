@@ -135,6 +135,16 @@ pub(crate) fn drum_items() -> Vec<RadialItem> {
 }
 
 impl App {
+    /// what a block clip is called: "Tracker clip" with the Tracker shown,
+    /// else just "clip" (5.5)
+    pub(crate) fn clip_word(&self) -> &'static str {
+        if self.tracker_on() {
+            "Tracker clip"
+        } else {
+            "clip"
+        }
+    }
+
     /// open a pie at `at`
     pub(crate) fn open_obj_pie(&mut self, on: PieFor, at: Pos2, ctx: &egui::Context) {
         let (items, title, sub) = match on {
@@ -495,7 +505,9 @@ impl App {
                     te.request_focus();
                     r.focus = false;
                 }
-                if te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    cancel = true;
+                } else if te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                     ok = true;
                 }
                 ui.horizontal(|ui| {

@@ -227,6 +227,8 @@ pub(crate) struct PianoUi {
     /// a Clip Arranger launcher clip shown in the roll (while no timeline
     /// clip is selected; Stage 4b)
     pub(crate) launch: Option<u32>,
+    /// the toolbar's clip chip as drawn (tests)
+    pub(crate) chip: String,
 }
 
 impl PianoUi {
@@ -278,6 +280,7 @@ impl Default for PianoUi {
             step_input: false,
             head: None,
             launch: None,
+            chip: String::new(),
         }
     }
 }
@@ -1172,10 +1175,18 @@ impl App {
                 let (label, tip) = match target {
                     Target::Block { pattern, col } => {
                         let name = self.with(|s| s.song.patterns.get(pattern).map(|p| p.name.clone()).unwrap_or_default());
-                        (
-                            format!("Block {pattern:02} {name} · ch {}", col + 1),
-                            format!("block {pattern:02} {name}, channel {}", col + 1),
-                        )
+                        if self.tracker_on() {
+                            (
+                                format!("Block {pattern:02} {name} · ch {}", col + 1),
+                                format!("block {pattern:02} {name}, channel {}", col + 1),
+                            )
+                        } else {
+                            // without the Tracker: a clip on a track (5.5)
+                            (
+                                format!("Clip {pattern:02} {name} · Track {:02}", col + 1),
+                                format!("clip {pattern:02} {name} on track {:02}", col + 1),
+                            )
+                        }
                     }
                     Target::Notes { .. } => {
                         let name = match &src {
@@ -1187,6 +1198,7 @@ impl App {
                     }
                 };
                 pr_chip(ui, chip_col, &label).on_hover_text(tip);
+                self.pr.chip = label;
                 // linked clips (D4): the count and Make unique
                 if let Target::Notes { data, clip } = target {
                     let owner = clip.or(self.pr.launch);
@@ -2157,10 +2169,11 @@ impl App {
         }
         let data = self.with(|s| tl::block_col_to_notes(&mut s.song, pattern, col));
         let Some(data) = data else {
-            self.status = "This Tracker clip has volumes or effects between its notes, so it \
-                           holds one note at a time; draw chords in a note clip (double-click \
-                           empty space)"
-                .into();
+            self.status = format!(
+                "This {} has volumes or effects between its notes, so it holds one note at a \
+                 time; draw chords in a note clip (double-click empty space)",
+                self.clip_word()
+            );
             return None;
         };
         let t = Target::Notes {
@@ -2171,7 +2184,10 @@ impl App {
         // keep the roll's state (selection, the press in progress)
         self.pr.target = Some(t);
         self.dirty = true;
-        self.status = "Chord: this Tracker clip is a note clip now (Ctrl+Z puts it back)".into();
+        self.status = format!(
+            "Chord: this {} is a note clip now (Ctrl+Z puts it back)",
+            self.clip_word()
+        );
         Some((t, src))
     }
 

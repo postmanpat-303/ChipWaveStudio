@@ -412,7 +412,25 @@ impl App {
                     .cloned()
                     .unwrap_or_default()
             });
-            Some(format!("Track {:02} {tname}  ›  {inst}", self.ch + 1))
+            // the clip being edited on this track (5.6): the Timeline's
+            // selection, else the launcher clip open in the piano roll
+            let clip = match self.pr.launch.filter(|_| self.tlv.sel.is_none()) {
+                Some(id) => self.with(|s| {
+                    let t = s.song.timeline.as_deref()?;
+                    let c = t.any_clip(id)?;
+                    (c.track as usize == self.ch).then(|| super::objpie::launch_name(t, c))
+                }),
+                None => self
+                    .tlv
+                    .sel
+                    .and_then(|id| self.tlv.clip_label(id))
+                    .filter(|(c, _)| c.track as usize == self.ch && c.audio().is_none())
+                    .map(|(_, n)| n),
+            };
+            Some(match clip {
+                Some(c) => format!("Track {:02} {tname}  ›  {c}  ›  {inst}", self.ch + 1),
+                None => format!("Track {:02} {tname}  ›  {inst}", self.ch + 1),
+            })
         } else {
             Some(inst)
         }
@@ -838,10 +856,10 @@ impl App {
                     self.set_lower(m);
                 }
             }
-            if self.extra.lower_inst || self.extra.lower_dev {
+            if self.extra.lower_inst || self.extra.lower_dev || self.pr.open {
                 if let Some(txt) = self.lower_breadcrumb() {
-                    ui.label(egui::RichText::new(txt).small().color(t.ink2))
-                        .on_hover_text("what the lower panel is editing: the track, when this is its instrument, and the instrument");
+                    ui.add(egui::Label::new(egui::RichText::new(txt).small().color(t.ink2)).truncate())
+                        .on_hover_text("what the lower panel is editing: the track, its clip, and the instrument (the track's, when the track shows)");
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

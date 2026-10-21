@@ -837,7 +837,7 @@ fn over_note(t: &tl::Timeline, over: &[u32]) -> String {
         t.bar_pos(c.start).bar,
         c.track + 1,
         if blocks {
-            "of overlapping Tracker clips, the one that starts later plays"
+            "these clips hide each other: the one that starts later plays"
         } else {
             "both play"
         }

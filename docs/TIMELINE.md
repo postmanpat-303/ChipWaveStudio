@@ -41,7 +41,8 @@ The toolbar shows which mode the song is in:
 | Mute | **M** mutes or unmutes the selected clips (drawn dim, marked *muted*) |
 | Delete | **Del** or **Backspace** (the blocks stay in the song) |
 | New clip | **Double-click** empty space on a track: a new empty 64-row block on that bar, opened in the Tracker on that channel |
-| Clip menu | **Right-click** a clip: open, split…, duplicate, make unique, glue, mute, delete, loop around the selection, add marker |
+| Clip pie | **Right-click** a note or Tracker clip: a round menu with **Edit** (piano roll; Tracker when it shows), **Split…**, **Duplicate** › linked copy / independent copy / repeat ×2 / ×4, **Make unique**, **Colour** › Auto or one of eight, **Rename**, **Mute**, **Delete**, **To launcher** (note clips: a linked copy in the Clip Arranger's first free slot of the track) and **Notes** › use the track's instrument / glue / loop around. Click a wedge or a child in the outer ring; the centre, a click outside or **Esc** closes it. Each choice is one undo step. Audio clips keep their list menu. Settings › **Clip menus › List** brings back the list menu for every clip |
+| Clip name and colour | A clip's own **name** (pie or Inspector › Rename…; empty shows its notes' or block's name again) and **colour** (pie or Inspector › Colour; Auto = the track's). Linked copies keep their own name and colour; the notes stay shared |
 | Track speed | **Right-click** a track header: the ticks per row for this track's effects (slides, `0D` volume slides, filter slides), or *Follow the song*. A track with its own speed shows "speed N" in its header |
 
 Each gesture is one undo step (a drag records when you let go). The status line shows the position while dragging.

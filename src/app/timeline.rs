@@ -2043,9 +2043,11 @@ impl App {
             }
             let nresp = ui
                 .interact(nr, ui.scope_id().with(("tl_head", tr)), Sense::click_and_drag())
-                .on_hover_text(
-                    "select this track (the Tracker's cursor channel) · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, devices, routing, organize, delete)",
-                );
+                .on_hover_text(if self.tracker_on() {
+                    "select this track (the Tracker's cursor channel) · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, devices, routing, organize, delete)"
+                } else {
+                    "select this track · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, edit, devices, routing, organize, delete)"
+                });
             let is_master = c.tl.tracks[tr].kind == tl::TrackKind::Master;
             if !is_master
                 && nresp.hovered()
@@ -3332,7 +3334,7 @@ impl App {
                 "Piano roll: this clip's block column (Alt+double-click or Enter: the Tracker)"
                     .into()
             } else {
-                "Piano roll: this Tracker clip (adding a chord makes it a note clip)".into()
+                "Piano roll: this clip (adding a chord makes it a note clip)".into()
             }
         } else {
             "Piano roll: this note clip".into()
