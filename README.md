@@ -14,16 +14,16 @@
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/6VWhFZxexIc"><img src="docs/screenshots/promo-thumb.jpg" alt="Watch the ChipWave Studio promo on YouTube" width="640"></a>
-  <br><sub>▶ Watch the promo on YouTube · more demos on <a href="https://www.youtube.com/@whatgoesaround1551">the channel</a></sub>
+  <a href="https://youtu.be/wfN6oKmpKYA"><img src="docs/screenshots/promo-studio.jpg" alt="Watch the ChipWave Studio promo on YouTube" width="640"></a>
+  <br><sub>▶ <a href="https://youtu.be/wfN6oKmpKYA">Watch the promo on YouTube</a> · <a href="https://youtu.be/gc3MeYp60Zw">Watch the Short</a> · more demos on <a href="https://www.youtube.com/@whatgoesaround1551">the channel</a></sub>
 </p>
 
 ```
  ┌──────────────────────────────────────────────────────────────────────────┐
  │  C H I P W A V E   S T U D I O            v0.2.7.0     BPM 140  SPD 06  │
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
- │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ OctaMED-inspired  │
- │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ tracker + synth   │
+ │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ free music studio │
+ │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ sequencer + synth │
  │  02  │ ... .. .. … │ ... .. .. … │ C-5 03 38 0814   │ Windows · Linux   │
  └──────┴─────────────┴─────────────┴──────────────────┴───────────────────┘
 ```
@@ -44,7 +44,7 @@
   <a href="https://github.com/postmanpat-303/BigWaveRadio"><b>BigWave Radio</b></a> (sister project)
 </p>
 
-**ChipWave Studio** is a music tracker inspired by **OctaMED** and the Commodore **Amiga**: the fast, keyboard-driven pattern workflow of a classic tracker, plus a built-in synth, a synthetic Voice instrument, macro-knob Generators (drums, chip FX, analog, FM, noise), the WaveForge polyphonic synth, a Drum Kit with a step sequencer, a visual Order list, a mixer with sidechain ducking and a true-peak limiter, automation and WAV/MP3 export, in up to 32 channels. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
+**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Stack sounds into **racks** with Nested Device Chains, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and for those who love the classic way there is an optional OctaMED-style **Tracker** view. Up to 32 tracks per song. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
 
 > **ChipWave Studio was called ChipWave Tracker until 0.2.3.19.** It was renamed in 0.2.4.0 to tell it apart from an unrelated iOS app called "ChipWave". Same app, same settings, same `.cwt` songs; the old GitHub links redirect here. Website: **[postmanpat-303.github.io/ChipWaveStudio](https://postmanpat-303.github.io/ChipWaveStudio/)**. Details: [docs/RENAME.md](docs/RENAME.md).
 
