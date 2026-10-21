@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod about;
+#[cfg(test)]
+mod acceptance_tests;
 mod advedit;
 #[cfg(test)]
 mod advedit_tests;
@@ -24,6 +26,9 @@ mod blocklen;
 mod browser_tests;
 mod browserpanel;
 mod browserview;
+mod chains;
+#[cfg(test)]
+mod chains_tests;
 mod chordlane;
 mod chordview;
 mod cliparr;
@@ -74,6 +79,8 @@ mod modview;
 #[cfg(test)]
 mod modview_tests;
 #[cfg(test)]
+mod myracks_tests;
+#[cfg(test)]
 mod narrow_tests;
 #[cfg(test)]
 mod newsong_tests;
@@ -94,6 +101,12 @@ mod pluginview;
 mod plugsetup;
 #[cfg(test)]
 mod prollpan_tests;
+#[cfg(test)]
+mod rack_sweep_tests;
+#[cfg(test)]
+mod rack_tests;
+mod rackops;
+mod rackui;
 mod radial;
 #[cfg(test)]
 mod record_tests;
@@ -105,6 +118,8 @@ pub mod shot;
 pub mod showcase;
 #[cfg(test)]
 mod showcase_tests;
+#[cfg(test)]
+mod split_tests;
 #[cfg(test)]
 mod stabilise_tests;
 #[cfg(test)]
@@ -1442,6 +1457,7 @@ impl eframe::App for App {
         self.plugin_browser(&ctx);
         self.plugin_setup_window(&ctx);
         self.showcase_window(&ctx);
+        self.save_rack_window(&ctx);
         self.browser_drag(&ctx);
         // window close button: ask first when there are unsaved changes
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {

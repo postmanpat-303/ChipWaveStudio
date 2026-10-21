@@ -35,6 +35,8 @@ fn fx_item(kind: FxKind) -> Item {
 /// the demo, Devices showing on instrument 7 (Supersaw Pad: filter + chorus)
 fn devices() -> Harness<'static, App> {
     let mut h = harness_with(fileio::demo_song());
+    // the 0.2.4 card row (Nested Device Chains' Cards)
+    h.state_mut().extra.chains_cards = true;
     key(&mut h, Key::Num7, egui::Modifiers::COMMAND);
     h.state_mut().instr = 7;
     h.state_mut().dev.follow_ch = h.state().ch;
@@ -334,6 +336,7 @@ fn plugin_devices() -> Harness<'static, App> {
         }
     }
     let mut h = harness_with(song);
+    h.state_mut().extra.chains_cards = true;
     key(&mut h, Key::Num7, egui::Modifiers::COMMAND);
     h.state_mut().ch = 2;
     h.state_mut().instr = 3;

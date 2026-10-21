@@ -12,17 +12,17 @@ const PLUG_TAG: u16 = 0x100;
 
 #[derive(Clone)]
 pub(super) struct NoteVoice {
-    instr: usize,
-    freq: f32,
-    vol: f32,
-    synth: SynthVoice,
-    pos: f64,
+    pub(super) instr: usize,
+    pub(super) freq: f32,
+    pub(super) vol: f32,
+    pub(super) synth: SynthVoice,
+    pub(super) pos: f64,
     pub(super) active: bool,
     /// still before its note-off
-    down: bool,
+    pub(super) down: bool,
     /// timeline tick of the note-off
-    off_at: f64,
-    age: u32,
+    pub(super) off_at: f64,
+    pub(super) age: u32,
     /// the note plays on a plugin instrument (no synth voice)
     plug: bool,
 }
@@ -53,7 +53,7 @@ impl NoteVoice {
         (x * self.vol, xr * self.vol)
     }
 
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             instr: usize::MAX,
             freq: 0.0,
@@ -110,6 +110,8 @@ pub(super) struct NoteState {
     /// track; 0 = none, and then nothing below runs)
     pub(super) lmask: u64,
     pub(super) lp: [LPlay; MAX_CHANNELS],
+    /// rack layers (empty until a song has a rack)
+    pub(super) layers: super::layers::Layers,
 }
 
 impl NoteState {
@@ -123,6 +125,7 @@ impl NoteState {
             last_f: [0.0; MAX_CHANNELS],
             lmask: 0,
             lp: [LPlay::default(); MAX_CHANNELS],
+            layers: Default::default(),
         }
     }
 
@@ -145,6 +148,7 @@ impl NoteState {
 
     /// release the held notes of the tracks in `mask` (bit per track)
     pub(super) fn release_where(&mut self, plugins: &mut crate::plugin::Rack, mask: u64) {
+        self.layers.release_where(mask);
         for (k, v) in self.v.iter_mut().enumerate() {
             if mask >> (k / NOTE_VOICES).min(63) & 1 == 0 {
                 continue;
@@ -163,6 +167,7 @@ impl NoteState {
     }
 
     pub(super) fn silence(&mut self) {
+        self.layers.silence();
         for v in &mut self.v {
             v.active = false;
             v.down = false;
@@ -173,6 +178,13 @@ impl NoteState {
     /// active voices of instrument `idx` (the poly synth's Voices readout)
     pub(super) fn voices_of(&self, idx: usize) -> usize {
         self.v.iter().filter(|v| v.active && v.instr == idx).count()
+            + self
+                .layers
+                .banks
+                .iter()
+                .flat_map(|b| &b.v)
+                .filter(|v| v.active && v.instr == idx)
+                .count()
     }
 
     /// the number of sounding note voices on `track` (tests)
@@ -188,7 +200,11 @@ impl NoteState {
 impl NoteState {
     /// mark the instruments with a held note (modulator envelopes)
     pub(super) fn mark_held(&self, held: &mut [bool; 256]) {
-        for v in &self.v {
+        for v in self
+            .v
+            .iter()
+            .chain(self.layers.banks.iter().flat_map(|b| &b.v))
+        {
             if v.active && v.down && v.instr < 256 {
                 held[v.instr] = true;
             }
@@ -294,6 +310,22 @@ pub(super) fn note_on(
     // a track with only note clips: its insert chain follows their instrument
     if c.instr == usize::MAX {
         c.instr = idx;
+    }
+    // a rack is silent itself: its layers play the note
+    if matches!(inst.kind, InstrumentKind::Rack(_)) {
+        let gain = inst.volume * n.vel;
+        st.layers.on(
+            song,
+            ch,
+            idx,
+            n.key,
+            n.tune,
+            gain,
+            n.vel,
+            false,
+            n.end as f64,
+        );
+        return;
     }
     st.age = st.age.wrapping_add(1);
     let base = ch * NOTE_VOICES;
@@ -405,6 +437,7 @@ pub(super) fn note_events(
 ) {
     st.clock = t;
     let lmask = st.lmask;
+    st.layers.events(nch, t, lc, lmask);
     if st.any {
         for (k, v) in st.v[..nch * NOTE_VOICES].iter_mut().enumerate() {
             // launcher notes end on the launch clock

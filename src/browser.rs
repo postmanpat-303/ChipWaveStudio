@@ -131,11 +131,14 @@ pub enum Tab {
     Patterns,
     /// the file system: drives, quick locations, folders (src/drives.rs)
     Files,
+    /// your saved custom racks (.cwr in the Racks folder, src/racks.rs)
+    Racks,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 11] = [
+    pub const ALL: [Tab; 12] = [
         Tab::Instruments,
+        Tab::Racks,
         Tab::Effects,
         Tab::Plugins,
         Tab::Samples,
@@ -160,12 +163,13 @@ impl Tab {
             Tab::Midi => "MIDI",
             Tab::Patterns => "Drum Patterns",
             Tab::Files => "Files",
+            Tab::Racks => "My Racks",
         }
     }
     /// the tab's colour (the format it is mostly about)
     pub fn fmt(self) -> Fmt {
         match self {
-            Tab::Instruments | Tab::Presets => Fmt::Cwi,
+            Tab::Instruments | Tab::Presets | Tab::Racks => Fmt::Cwi,
             Tab::Effects => Fmt::Fx,
             Tab::Plugins => Fmt::Vst3,
             Tab::Samples => Fmt::Wav,
@@ -621,6 +625,7 @@ fn kind_label(k: &InstrumentKind) -> &'static str {
         InstrumentKind::Voice(_) => "Voice",
         InstrumentKind::Gen(g) => engine_name(&g.engine),
         InstrumentKind::Plugin(_) => "Plugin",
+        InstrumentKind::Rack(_) => "Rack",
     }
 }
 

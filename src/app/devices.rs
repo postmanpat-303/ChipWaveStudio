@@ -48,6 +48,29 @@ pub(crate) struct DevUi {
     pub(crate) open: std::collections::HashSet<(usize, u64)>,
     /// this frame's card width (every card the same; narrower when many)
     pub(crate) card_w: f32,
+    /// Nested Device Chains: the selected row
+    pub(crate) sel: Option<super::chains::Sel>,
+    /// ... the device row being dragged
+    pub(crate) tree_drag: Option<super::chains::Sel>,
+    /// ... the rows as last drawn
+    pub(crate) tree_rows: Vec<(Rect, super::chains::RowKind)>,
+    /// `cards` are tree rows (top to bottom), not the card row
+    pub(crate) vertical: bool,
+    /// drawing a device inside a Split: no automate / modulate handles
+    /// (D8) and no meter
+    pub(crate) no_auto: bool,
+    /// the panel was opened by selecting a track header or an instrument
+    /// (a clip click then shows the clip, as the Instrument tab does)
+    pub(crate) by_select: bool,
+    /// a device row dropped in the tree (handled after the frame's ops)
+    pub(crate) tree_drop: Option<super::chains::TreeDrop>,
+    /// the Add Device window is open for this chain
+    pub(crate) add: Option<super::chains::AddAt>,
+    /// the Save Custom Rack dialog is open
+    pub(crate) save_rack: Option<super::rackui::SaveRack>,
+    /// My Racks should be listed again (a rack was saved or changed)
+    pub(crate) racks_dirty: bool,
+    pub(crate) my_racks: super::rackui::MyRacks,
 }
 
 impl Default for DevUi {
@@ -63,6 +86,17 @@ impl Default for DevUi {
             shot_at: None,
             open: Default::default(),
             card_w: CARD_W,
+            sel: None,
+            tree_drag: None,
+            tree_rows: vec![],
+            vertical: false,
+            no_auto: false,
+            by_select: false,
+            tree_drop: None,
+            add: None,
+            save_rack: None,
+            racks_dirty: true,
+            my_racks: Default::default(),
         }
     }
 }
@@ -230,6 +264,11 @@ impl App {
     /// the lower panel's Devices tab
     pub(super) fn devices_view(&mut self, ui: &mut egui::Ui) {
         self.devices_follow();
+        if !self.extra.chains_cards {
+            self.chains_view(ui);
+            return;
+        }
+        self.dev.vertical = false;
         let t = th();
         let n = self.with(|s| s.song.instruments.len());
         if n > 0 && (self.instr == 0 || self.instr as usize > n) {
@@ -245,6 +284,14 @@ impl App {
                     "drag effects in from Browser › Effects · drag a card's title to reorder · \
                  right-click a card for more · … shows a device's other parameters",
                 );
+            if ui
+                .small_button("Tree")
+                .on_hover_text("back to Nested Device Chains' tree and detail view")
+                .clicked()
+            {
+                self.extra.chains_cards = false;
+                self.save_settings();
+            }
             let n_fx = chain.as_ref().map_or(0, |c| c.len());
             ui.add(
                 egui::Label::new(
@@ -314,7 +361,7 @@ impl App {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.add_space(4.0);
-                    inst_rect = self.devices_inst_card(ui, h);
+                    inst_rect = self.devices_inst_card(ui, h, idx);
                     chevron(ui, h);
                     for (i, d) in chain.iter().enumerate() {
                         let r = self.devices_card(
@@ -364,9 +411,8 @@ impl App {
 
     /// the instrument card, as compact as the effects: its picture, four key
     /// knobs and Advanced › for the full editor (the Instrument tab)
-    fn devices_inst_card(&mut self, ui: &mut egui::Ui, h: f32) -> Rect {
+    pub(super) fn devices_inst_card(&mut self, ui: &mut egui::Ui, h: f32, idx: usize) -> Rect {
         let t = th();
-        let idx = (self.instr as usize).wrapping_sub(1);
         let (name, tag) = self.with(|s| {
             s.song
                 .instruments
@@ -468,12 +514,8 @@ impl App {
         } else {
             FontId::proportional(12.5)
         };
-        let label = super::pattern::fit(
-            &p,
-            &format!("{:02X} {name}", self.instr),
-            &nf,
-            name_r.width(),
-        );
+        let label =
+            super::pattern::fit(&p, &format!("{:02X} {name}", idx + 1), &nf, name_r.width());
         p.text(
             name_r.left_center(),
             egui::Align2::LEFT_CENTER,
@@ -530,7 +572,20 @@ impl App {
         inside(ui, egui::UiBuilder::new().max_rect(kr), |ui| {
             ui.set_clip_rect(kr.intersect(ui.clip_rect()));
             if self.inst_key_knobs(ui, idx, devcards::knobs_fit(kr.width()).min(4)) == 0 {
-                ui.label(egui::RichText::new("its controls are in Advanced ›").color(t.ink2));
+                let rack = self.with(|s| {
+                    matches!(
+                        s.song.instruments.get(idx).map(|i| &i.kind),
+                        Some(InstrumentKind::Rack(_))
+                    )
+                });
+                ui.label(
+                    egui::RichText::new(if rack {
+                        "layers: see the tree"
+                    } else {
+                        "its controls are in Advanced ›"
+                    })
+                    .color(t.ink2),
+                );
             }
         });
         let b = Rect::from_min_max(
@@ -542,6 +597,7 @@ impl App {
             .on_hover_text("every control of this instrument (the Instrument tab's full editor)")
             .clicked()
         {
+            self.instr = (idx + 1) as u8;
             self.ip.advanced = true;
             self.set_lower(1);
         }
@@ -552,7 +608,7 @@ impl App {
     /// name to drag, "…", remove), one graph, its 2-4 key knobs; "…" adds a
     /// column with the other parameters, presets and reset
     #[allow(clippy::too_many_arguments)]
-    fn devices_card(
+    pub(super) fn devices_card(
         &mut self,
         ui: &mut egui::Ui,
         owner: usize,
@@ -874,7 +930,11 @@ impl App {
                     Rect::from_min_max(g.min, Pos2::new(g.right() - 14.0, g.bottom())),
                     d,
                 );
-                let gr = self.with(|s| s.engine.comp_gr_db(owner, i));
+                let gr = if self.dev.no_auto {
+                    0.0
+                } else {
+                    self.with(|s| s.engine.comp_gr_db(owner, i))
+                };
                 devcards::gr_meter(&p, g, gr);
                 if gr > 0.05 {
                     ui.ctx()
@@ -911,11 +971,12 @@ impl App {
                 }
             }
             FxKind::Plugin => self.devices_plugin_face(ui, owner, d, g),
+            FxKind::Split => split_graph(&p, g, d),
         }
     }
 
     /// the "…" column: every other parameter as a row, then presets / reset
-    fn devices_more(
+    pub(super) fn devices_more(
         &mut self,
         ui: &mut egui::Ui,
         owner: usize,
@@ -982,11 +1043,13 @@ impl App {
                         &pi.format(v0),
                         pi.to_norm(pi.def),
                     );
-                    let tid = crate::automation::Target::Fx(owner, i, k);
-                    let mut lane = false;
-                    self.mod_slider(ui, &resp, &tid.id(), v0, Some(&mut lane));
-                    if lane {
-                        self.add_lane(tid);
+                    if !self.dev.no_auto {
+                        let tid = crate::automation::Target::Fx(owner, i, k);
+                        let mut lane = false;
+                        self.mod_slider(ui, &resp, &tid.id(), v0, Some(&mut lane));
+                        if lane {
+                            self.add_lane(tid);
+                        }
                     }
                     if let Some((v, first)) = out {
                         ops.push(FxOp::Param(i, k, v, first));
@@ -1056,11 +1119,13 @@ impl App {
                         auto_led: None,
                     },
                 );
-                let tid = crate::automation::Target::Fx(owner, i, k);
-                let mut lane = false;
-                self.mod_slider(ui, &out.resp, &tid.id(), v0, Some(&mut lane));
-                if lane {
-                    self.add_lane(tid);
+                if !self.dev.no_auto {
+                    let tid = crate::automation::Target::Fx(owner, i, k);
+                    let mut lane = false;
+                    self.mod_slider(ui, &out.resp, &tid.id(), v0, Some(&mut lane));
+                    if lane {
+                        self.add_lane(tid);
+                    }
                 }
                 if out.changed {
                     let first = out.resp.drag_started() || !out.resp.dragged();
@@ -1344,6 +1409,44 @@ fn reverb_graph(p: &egui::Painter, r: Rect, d: &Device) {
 }
 
 /// an accent curve (Ember: acc-hot over a bloom)
+/// a Split: the sound fanning out into its paths and back together
+fn split_graph(p: &egui::Painter, r: Rect, d: &Device) {
+    let t = th();
+    devcards::well(p, r);
+    let n = d.paths.len().max(1);
+    let (a, b) = (
+        Pos2::new(r.left() + 14.0, r.center().y),
+        Pos2::new(r.right() - 14.0, r.center().y),
+    );
+    for (k, path) in d.paths.iter().enumerate() {
+        let y = r.top() + r.height() * (k as f32 + 0.5) / n as f32;
+        let col = if path.on {
+            t.accent
+        } else {
+            t.ink2.gamma_multiply(0.5)
+        };
+        let l = Pos2::new(r.left() + r.width() * 0.3, y);
+        let rr = Pos2::new(r.right() - r.width() * 0.3, y);
+        p.line_segment([a, l], Stroke::new(1.5, col));
+        p.line_segment([l, rr], Stroke::new(1.5, col));
+        p.line_segment([rr, b], Stroke::new(1.5, col));
+        p.text(
+            Pos2::new(r.center().x, y - 2.0),
+            egui::Align2::CENTER_BOTTOM,
+            format!(
+                "{} · {} device{}",
+                super::fxview::path_letter(k),
+                path.devices.len(),
+                if path.devices.len() == 1 { "" } else { "s" }
+            ),
+            FontId::proportional(10.5),
+            t.ink,
+        );
+    }
+    p.circle_filled(a, 3.0, t.ink);
+    p.circle_filled(b, 3.0, t.ink);
+}
+
 fn acc_line(p: &egui::Painter, pts: Vec<Pos2>, w: f32) {
     let t = th();
     if t.ember {
@@ -1367,6 +1470,34 @@ pub(crate) fn paint_marker(p: &egui::Painter, x: f32, y: egui::Rangef) {
             a,
             Stroke::NONE,
         ));
+    }
+}
+
+/// the same marker lying down (Nested Device Chains' tree rows)
+pub(crate) fn paint_marker_h(p: &egui::Painter, y: f32, x: egui::Rangef) {
+    let a = th().accent;
+    p.hline(x, y, Stroke::new(3.0, a));
+    p.add(egui::Shape::convex_polygon(
+        vec![
+            Pos2::new(x.min, y - 6.0),
+            Pos2::new(x.min, y + 6.0),
+            Pos2::new(x.min + 7.0, y),
+        ],
+        a,
+        Stroke::NONE,
+    ));
+}
+
+/// where a Browser effect dropped at `p` lands in the shown chain (card
+/// row: by x; Nested Device Chains' tree: by y)
+pub(crate) fn drop_index(vertical: bool, cards: &[Rect], p: Pos2) -> usize {
+    if vertical {
+        cards
+            .iter()
+            .position(|r| p.y < r.center().y)
+            .unwrap_or(cards.len())
+    } else {
+        insert_index(cards, p.x)
     }
 }
 

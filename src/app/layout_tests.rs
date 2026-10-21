@@ -84,7 +84,7 @@ fn lower_panel_tabs_piano_devices_instrument_automation_order() {
     };
     let xs = [
         "Piano roll",
-        "Devices",
+        "Nested Device Chains",
         "Instrument",
         "Automation",
         "Order list",

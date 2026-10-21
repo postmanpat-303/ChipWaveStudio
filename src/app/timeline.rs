@@ -3266,8 +3266,8 @@ impl App {
                 // track's clips (Shift / Ctrl: keeps them all)
                 if self.tl_select_track(i, keep) {
                     if self.extra.follow_select && !keep {
-                        // its instrument's editor (or the chooser) below
-                        self.show_instrument_editor();
+                        // its instrument's chains / editor (or the chooser) below
+                        self.show_selection_panel();
                     }
                     self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
                 } else {
@@ -3281,7 +3281,10 @@ impl App {
                 self.tl_select_track(i, true);
                 // a clip clicked while the instrument editor shows: the
                 // clip's editor instead (3.2)
-                if self.extra.follow_select && self.extra.lower_inst && self.tlv.sel.is_some() {
+                if self.extra.follow_select
+                    && (self.extra.lower_inst || (self.extra.lower_dev && self.dev.by_select))
+                    && self.tlv.sel.is_some()
+                {
                     let kind = self.tlv.sel.and_then(|id| {
                         let c = self.tlv.cache.as_ref()?;
                         c.tl.clips

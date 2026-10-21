@@ -185,6 +185,18 @@ pub(super) fn icon(p: &egui::Painter, ic: Icon, c: Pos2, s: f32, col: Color32) {
             }
         }
         Icon::Tab(Tab::Files) => super::drumpat::folder_icon(p, c, s, col),
+        Icon::Tab(Tab::Racks) => {
+            // stacked layers
+            for k in 0..3 {
+                let y = (k as f32 - 1.0) * s * 0.24;
+                p.rect_stroke(
+                    Rect::from_center_size(c + v(0.0, y), v(s * 0.78, s * 0.18)),
+                    2,
+                    st,
+                    egui::StrokeKind::Inside,
+                );
+            }
+        }
         Icon::Tab(Tab::Midi) => {
             let r = Rect::from_center_size(c, v(s * 0.8, s * 0.6));
             p.rect_stroke(r, 1, st, egui::StrokeKind::Inside);
@@ -398,7 +410,11 @@ impl App {
                 .color(Color32::from_rgb(0x1a, 0x1c, 0x1f))
                 .background_color(rgb(Fmt::Cwi.colour()));
             ui.label(g);
-            let n_tab = self.br.items.iter().filter(|i| i.in_tab(tab)).count();
+            let n_tab = if tab == Tab::Racks {
+                self.dev.my_racks.list.len()
+            } else {
+                self.br.items.iter().filter(|i| i.in_tab(tab)).count()
+            };
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
                     .small_button("×")
@@ -542,7 +558,7 @@ impl App {
                     );
                     let resp = resp.on_hover_text(match tb {
                         Tab::Instruments => "instruments: blank synths, generator presets, your .cwi library, this song's instruments",
-                        Tab::Effects => "effects: ChipWave's built-ins, Grid FX patches and your effect plugins; double-click adds to the selected track, or drag into Devices or onto a track",
+                        Tab::Effects => "effects: ChipWave's built-ins, Grid FX patches and your effect plugins; double-click adds to the selected track, or drag into Nested Device Chains or onto a track",
                         Tab::Plugins => "CLAP and VST3 plugins from the plugin scan (instruments and effects)",
                         Tab::Samples => "WAV, FLAC, MP3 and Ogg files in your locations",
                         Tab::Songs => "demo songs and .cwt songs in your locations (MOD/MED: import planned)",
@@ -552,6 +568,7 @@ impl App {
                         Tab::Midi => "MIDI files in your locations (import planned)",
                         Tab::Patterns => "Drum Patterns: ready-made grooves by style with their own kit; preview in time with the song, drag onto the timeline",
                         Tab::Files => "your drives and folders: Home, Music, Desktop, Downloads, network drives",
+                        Tab::Racks => "My Racks: the racks you saved (Save Custom Rack… in Nested Device Chains); double-click loads one onto the selected track",
                     });
                     if resp.clicked() && !on {
                         self.br.filter.tab = tb;
@@ -577,9 +594,11 @@ impl App {
             se.request_focus();
         }
         // ---- Drum Patterns / Files: their own body (app/drumpat.rs)
-        if matches!(tab, Tab::Patterns | Tab::Files) {
+        if matches!(tab, Tab::Patterns | Tab::Files | Tab::Racks) {
             if tab == Tab::Patterns {
                 self.patterns_body(ui);
+            } else if tab == Tab::Racks {
+                self.racks_body(ui);
             } else {
                 self.files_body(ui);
             }
@@ -846,11 +865,11 @@ impl App {
             })
             .response
             .on_hover_text(
-                "double-click an effect to add it to the end of this chain; drag it into the Devices row to put it in between, or onto any track",
+                "double-click an effect to add it to the end of this chain; drag it into Nested Device Chains to put it in between, or onto any track",
             );
             if !self.devices_visible()
                 && ui
-                    .small_button("Show Devices  Ctrl+7")
+                    .small_button("Show device chains  Ctrl+7")
                     .on_hover_text("the chain in the lower panel")
                     .clicked()
             {
@@ -1618,6 +1637,17 @@ impl App {
                         t.accent,
                     );
                 }
+            }
+            Some(DropAt::Device(i)) if self.dev.vertical => {
+                let y = match self.dev.cards.get(*i) {
+                    Some(r) => r.top(),
+                    None => self
+                        .dev
+                        .cards
+                        .last()
+                        .map_or(self.dev.inst.bottom() + super::chains::ROW, |r| r.bottom()),
+                };
+                super::devices::paint_marker_h(&p, y, self.dev.row.x_range().shrink(8.0));
             }
             Some(DropAt::Device(i)) => {
                 let x = super::devices::marker_x(self.dev.inst, &self.dev.cards, *i);

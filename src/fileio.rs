@@ -164,7 +164,9 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
                 t.tracks.iter().any(|x| !x.auto.is_empty())
                     || t.clips.iter().any(|c| !c.auto.is_empty())
             });
-        let min_reader = if needs_reader_6(song) {
+        let min_reader = if needs_reader_7(song) {
+            7
+        } else if needs_reader_6(song) {
             6
         } else if needs_reader_5(song) {
             5
@@ -422,8 +424,19 @@ pub fn sanitize_modulation(
 /// devices also write 2; songs with audio clips (M4) write 3; songs with
 /// track or clip automation lanes or curved segments (M5) write 4; songs
 /// with a new generator engine (WaveForge, Drum Kit) write 5; songs with
-/// Clip Arranger clips of their own (launcher clips) write 6.
-pub const READER_VERSION: u32 = 6;
+/// Clip Arranger clips of their own (launcher clips) write 6; songs with a
+/// Split (Nested Device Chains) or a rack instrument write 7.
+pub const READER_VERSION: u32 = 7;
+
+/// Version 7: a Split device or a rack instrument (docs/racks/PLAN.md),
+/// which an older reader would play wrongly or drop. Every other song
+/// keeps writing its old version.
+pub fn needs_reader_7(song: &Song) -> bool {
+    song.instruments.iter().any(|i| {
+        matches!(i.kind, InstrumentKind::Rack(_))
+            || i.fx.iter().any(|d| d.kind == crate::fx::FxKind::Split)
+    })
+}
 
 /// Version 6: launcher clips (`Timeline::launcher`), which an older reader
 /// would silently drop. Every other song keeps writing its old version.
@@ -614,6 +627,8 @@ pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
         timeline: None,
         modulation: Default::default(),
     };
+    // racks: layers point at real, non-rack slots (docs/racks/FORMAT.md)
+    song.fix_racks();
     // drag-to-modulate (docs/MODULATION.md)
     if let Ok(b) = read_entry(&mut z, "modulation.toml") {
         match toml::from_str::<crate::modulation::Modulation>(&String::from_utf8_lossy(&b)) {
@@ -1529,12 +1544,12 @@ mod tests {
         with_manifest(
             &src,
             &newer,
-            Some("format = \"chipwave-song\"\nformat_version = 4\nmin_reader_version = 7\n"),
+            Some("format = \"chipwave-song\"\nformat_version = 4\nmin_reader_version = 8\n"),
         );
         let e = load_cwt(&newer).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(
-            e.contains("reader version 7") && e.contains("Check for updates"),
+            e.contains("reader version 8") && e.contains("Check for updates"),
             "{e}"
         );
         // a missing or odd manifest is treated as version 1
@@ -1546,7 +1561,7 @@ mod tests {
         // text songs: the same rule
         let t = include_str!("../demos/first_run.cwt.toml");
         assert!(song_from_text(t).is_ok());
-        let e = song_from_text(&format!("min_reader_version = 7\n{t}")).unwrap_err();
+        let e = song_from_text(&format!("min_reader_version = 8\n{t}")).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(!is_too_new("zip error"));
         std::fs::remove_dir_all(&dir).ok();

@@ -389,7 +389,7 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
             None => {}
         }
         if resp
-            .on_hover_text("this track's effects: click to edit them in Devices")
+            .on_hover_text("this track's effects: click to edit them in Nested Device Chains")
             .clicked()
         {
             open_inserts = true;

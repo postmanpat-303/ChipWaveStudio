@@ -260,6 +260,7 @@ pub(crate) fn type_tag(k: &InstrumentKind) -> &'static str {
         InstrumentKind::Voice(_) => "Voice",
         InstrumentKind::Plugin(p) if p.format == "vst3" => "VST3",
         InstrumentKind::Plugin(_) => "CLAP",
+        InstrumentKind::Rack(_) => "Rack",
         InstrumentKind::Synth(p) => {
             if p.filter_model == crate::ladder::FilterModel::Svf {
                 "Synth"
@@ -665,6 +666,13 @@ pub(crate) fn build(inst: &Instrument, idx: usize, kit_sel: usize) -> Layout {
             b.card(Tab::Advanced, "All parameters");
             b.custom("plugin.params", "Parameters", Custom::PluginParams)
                 .tip("every parameter of the plugin (right-click one to put it on a macro)");
+        }
+        InstrumentKind::Rack(r) => {
+            b.card(Tab::Main, "Rack").note = format!(
+                "{} layer{} · add, remove and set them up in Nested Device Chains (Ctrl+7)",
+                r.layers.len(),
+                if r.layers.len() == 1 { "" } else { "s" }
+            );
         }
     }
     output(&mut b, inst, idx);
