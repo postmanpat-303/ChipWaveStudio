@@ -107,6 +107,8 @@ pub mod showcase;
 #[cfg(test)]
 mod showcase_tests;
 #[cfg(test)]
+mod split_tests;
+#[cfg(test)]
 mod stabilise_tests;
 #[cfg(test)]
 mod stage3_tests;

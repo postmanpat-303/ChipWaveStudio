@@ -19,6 +19,180 @@ pub(super) enum FxOp {
     Param(usize, usize, f32, bool),
     /// a Grid FX device's new patch, starts a new undo step
     Grid(usize, Box<crate::grid::GridP>, bool),
+    /// a ready device in at an index (Add Device, Ctrl-drop copies, moves
+    /// between chains)
+    Insert(usize, Box<Device>),
+    /// Nested Device Chains: the op inside path `.1` of the Split at `.0`
+    In(usize, usize, Box<FxOp>),
+    /// Split `.0` gets one more path (at most 4)
+    AddPath(usize),
+    /// path `.1` of Split `.0` goes (at least 2 stay)
+    RemovePath(usize, usize),
+    /// path on / off
+    PathOn(usize, usize),
+    /// path level in dB, starts a new undo step
+    PathLevel(usize, usize, f32, bool),
+    /// path pan -1..1, starts a new undo step
+    PathPan(usize, usize, f32, bool),
+}
+
+impl FxOp {
+    /// the op starts a new undo step (knob drags after the first frame don't)
+    pub(super) fn new_step(&self) -> bool {
+        match self {
+            FxOp::Param(_, _, _, f)
+            | FxOp::Grid(_, _, f)
+            | FxOp::PathLevel(_, _, _, f)
+            | FxOp::PathPan(_, _, _, f) => *f,
+            FxOp::In(_, _, op) => op.new_step(),
+            _ => true,
+        }
+    }
+}
+
+/// An op on a chain inside a Split (`depth` Splits deep, 1 or 2): plain
+/// list edits, no automation lanes (D8), no plugin effects (D7), no Split
+/// deeper than allowed. Also used for the Split's own path settings.
+pub(super) fn apply_local(c: &mut Vec<Device>, op: FxOp, depth: usize) -> String {
+    let full = c.len() >= fx::MAX_DEVICES;
+    match op {
+        FxOp::Add(k, p) => apply_local(
+            c,
+            FxOp::Insert(usize::MAX, Box::new({
+                let mut d = if k == FxKind::Split {
+                    Device::split()
+                } else {
+                    Device::new(k)
+                };
+                if let Some(p) = p {
+                    apply_preset(&mut d, p);
+                }
+                d
+            })),
+            depth,
+        ),
+        FxOp::Insert(_, d) if full => {
+            let _ = d;
+            "That chain is full (16 devices)".into()
+        }
+        FxOp::Insert(_, d) if depth > 0 && d.has_plugin() => format!(
+            "{} can't go inside a Split yet: plugin effects go in the main chain or a layer's chain",
+            d.title()
+        ),
+        FxOp::Insert(_, d) if depth + d.split_depth() > fx::MAX_SPLIT_DEPTH => {
+            let _ = d;
+            "One Split can sit inside another, but not deeper".into()
+        }
+        FxOp::Insert(at, d) => {
+            let name = d.title();
+            let at = at.min(c.len());
+            c.insert(at, *d);
+            format!("Added {name}")
+        }
+        FxOp::Remove(i) if i < c.len() => {
+            let d = c.remove(i);
+            format!("Removed {} (Ctrl+Z brings it back)", d.title())
+        }
+        FxOp::Dup(i) if i < c.len() && !full => {
+            let mut d = c[i].clone();
+            d.renew_uid();
+            c.insert(i + 1, d);
+            "Duplicated device".into()
+        }
+        FxOp::Toggle(i) if i < c.len() => {
+            c[i].enabled = !c[i].enabled;
+            format!(
+                "{} {}",
+                c[i].title(),
+                if c[i].enabled { "on" } else { "bypassed" }
+            )
+        }
+        FxOp::Collapse(i) if i < c.len() => {
+            c[i].collapsed = !c[i].collapsed;
+            String::new()
+        }
+        FxOp::Move(from, to) if from < c.len() => {
+            let n = c.len();
+            let to = to.min(n);
+            if to == from || to == from + 1 {
+                return String::new();
+            }
+            let d = c.remove(from);
+            c.insert(if to > from { to - 1 } else { to }, d);
+            "Moved device".into()
+        }
+        FxOp::Preset(i, p) if i < c.len() => {
+            apply_preset(&mut c[i], p);
+            fx::presets(c[i].kind)
+                .get(p)
+                .map(|x| format!("Preset: {}", x.0))
+                .unwrap_or_default()
+        }
+        FxOp::Grid(i, g, _) => {
+            if let Some(d) = c.get_mut(i).filter(|d| d.kind == FxKind::Grid) {
+                d.grid = Some(g);
+            }
+            String::new()
+        }
+        FxOp::Param(i, p, v, _) => {
+            if let Some(x) = c.get_mut(i).and_then(|d| d.params.get_mut(p)) {
+                *x = v.clamp(0.0, 1.0);
+            }
+            String::new()
+        }
+        FxOp::In(i, p, op) => {
+            match c
+                .get_mut(i)
+                .filter(|d| d.kind == FxKind::Split)
+                .and_then(|d| d.paths.get_mut(p))
+            {
+                Some(path) => apply_local(&mut path.devices, *op, depth + 1),
+                None => String::new(),
+            }
+        }
+        FxOp::AddPath(i) => match c.get_mut(i).filter(|d| d.kind == FxKind::Split) {
+            Some(d) if d.paths.len() < fx::MAX_PATHS => {
+                d.paths.push(fx::FxPath::default());
+                format!("Path {} added (dry until you add devices)", path_letter(d.paths.len() - 1))
+            }
+            Some(_) => "A Split has at most 4 paths".into(),
+            None => String::new(),
+        },
+        FxOp::RemovePath(i, p) => match c.get_mut(i).filter(|d| d.kind == FxKind::Split) {
+            Some(d) if d.paths.len() > 2 && p < d.paths.len() => {
+                d.paths.remove(p);
+                format!("Path {} removed (Ctrl+Z brings it back)", path_letter(p))
+            }
+            Some(_) => "A Split keeps at least 2 paths".into(),
+            None => String::new(),
+        },
+        FxOp::PathOn(i, p) => {
+            if let Some(x) = c.get_mut(i).and_then(|d| d.paths.get_mut(p)) {
+                x.on = !x.on;
+                return format!("Path {} {}", path_letter(p), if x.on { "on" } else { "muted" });
+            }
+            String::new()
+        }
+        FxOp::PathLevel(i, p, v, _) => {
+            if let Some(x) = c.get_mut(i).and_then(|d| d.paths.get_mut(p)) {
+                x.level_db = v.clamp(-60.0, 6.0);
+            }
+            String::new()
+        }
+        FxOp::PathPan(i, p, v, _) => {
+            if let Some(x) = c.get_mut(i).and_then(|d| d.paths.get_mut(p)) {
+                x.pan = v.clamp(-1.0, 1.0);
+            }
+            String::new()
+        }
+        FxOp::AddPlugin(_) => "Plugin effects can't go inside a Split yet".into(),
+        _ => String::new(),
+    }
+}
+
+/// "A", "B", ... for path `p`
+pub(crate) fn path_letter(p: usize) -> char {
+    (b'A' + p.min(25) as u8) as char
 }
 
 fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
@@ -294,7 +468,7 @@ impl App {
                 self.plug.state_dirty = true;
                 self.capture_plugins();
             }
-            if !matches!(op, FxOp::Param(_, _, _, false) | FxOp::Grid(_, _, false)) {
+            if op.new_step() {
                 self.snapshot();
             }
             let msg = self.with(|s| {
@@ -303,8 +477,23 @@ impl App {
                 };
                 let c = &mut inst.fx;
                 match op {
+                    FxOp::Insert(at, d) if c.len() < fx::MAX_DEVICES => {
+                        let name = d.title();
+                        if d.split_depth() > fx::MAX_SPLIT_DEPTH {
+                            return "One Split can sit inside another, but not deeper".into();
+                        }
+                        match s.song.insert_device(idx, at, *d) {
+                            Some(_) => format!("Added {name}"),
+                            None => String::new(),
+                        }
+                    }
+                    FxOp::Insert(..) => "Chain is full (16 devices)".into(),
                     FxOp::Add(k, p) if c.len() < fx::MAX_DEVICES => {
-                        let mut d = Device::new(k);
+                        let mut d = if k == FxKind::Split {
+                            Device::split()
+                        } else {
+                            Device::new(k)
+                        };
                         if let Some(p) = p {
                             apply_preset(&mut d, p);
                         }
@@ -361,6 +550,13 @@ impl App {
                         }
                         String::new()
                     }
+                    // a Split's paths and what is in them: plain list edits
+                    op @ (FxOp::In(..)
+                    | FxOp::AddPath(_)
+                    | FxOp::RemovePath(..)
+                    | FxOp::PathOn(..)
+                    | FxOp::PathLevel(..)
+                    | FxOp::PathPan(..)) => apply_local(c, op, 0),
                     _ => String::new(),
                 }
             });

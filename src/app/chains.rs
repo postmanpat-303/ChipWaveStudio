@@ -10,7 +10,7 @@
 //! Original ChipWave code.
 use super::fxview::FxOp;
 use super::*;
-use crate::fx::{self, DevPath, Device};
+use crate::fx::{self, DevPath, Device, FxKind};
 
 /// one row of the tree
 pub(crate) const ROW: f32 = 21.0;
@@ -26,6 +26,35 @@ pub(crate) enum Sel {
     Inst(usize),
     /// a device of instrument `.0`'s chain
     Dev(usize, DevPath),
+    /// path `.2` of the Split at `.1`
+    Path(usize, DevPath, usize),
+}
+
+/// where Add Device puts the new device
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct AddAt {
+    pub(crate) inst: usize,
+    /// the chain: `[]` the instrument's, `[i, p]` path p of Split i, ...
+    pub(crate) chain: Vec<u8>,
+    /// index in that chain (usize::MAX = the end)
+    pub(crate) at: usize,
+    pub(crate) query: String,
+    pub(crate) pick: Option<AddPick>,
+    pub(crate) focus: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum AddPick {
+    Kind(FxKind),
+    Plugin(crate::plugin::PluginPatch),
+}
+
+/// `op` addressed into the chain at `prefix` (`[]` = the instrument's)
+pub(crate) fn wrap(prefix: &[u8], op: FxOp) -> FxOp {
+    match prefix {
+        [i, p, rest @ ..] => FxOp::In(*i as usize, *p as usize, Box::new(wrap(rest, op))),
+        _ => op,
+    }
 }
 
 /// what a row shows
@@ -37,6 +66,8 @@ pub(crate) enum RowKind {
     Effects(usize),
     /// a device
     Dev(usize, DevPath),
+    /// path `.2` of the Split at `.1` (instrument `.0`)
+    Path(usize, DevPath, usize),
     /// a quiet line ("none yet")
     Note(String),
 }
@@ -56,6 +87,7 @@ fn fold_key(kind: &RowKind) -> String {
         RowKind::Inst(i) => format!("i{i}"),
         RowKind::Effects(i) => format!("e{i}"),
         RowKind::Dev(i, p) => format!("d{i}.{:?}", p.as_slice()),
+        RowKind::Path(i, sp, p) => format!("p{i}.{:?}.{p}", sp.as_slice()),
         RowKind::Note(_) => String::new(),
     }
 }
@@ -116,22 +148,83 @@ fn chain_rows(song: &Song, idx: usize, out: &mut Vec<Row>, depth: u8, closed: &[
             open: true,
         });
     }
-    for (i, _) in inst.fx.iter().enumerate() {
+    for (i, d) in inst.fx.iter().enumerate() {
+        dev_rows(idx, d, DevPath::top(i), out, depth + 1, closed);
+    }
+}
+
+/// a device's row, and for a Split its paths and their devices
+fn dev_rows(idx: usize, d: &Device, at: DevPath, out: &mut Vec<Row>, depth: u8, closed: &[String]) {
+    let kind = RowKind::Dev(idx, at);
+    let split = d.kind == FxKind::Split;
+    let key = if split {
+        fold_key(&kind)
+    } else {
+        String::new()
+    };
+    let open = !split || !closed.contains(&key);
+    out.push(Row {
+        depth,
+        kind,
+        key,
+        open,
+    });
+    if !split || !open {
+        return;
+    }
+    for (p, path) in d.paths.iter().enumerate() {
+        let kind = RowKind::Path(idx, at, p);
+        let key = fold_key(&kind);
+        let open = !closed.contains(&key);
         out.push(Row {
             depth: depth + 1,
-            kind: RowKind::Dev(idx, DevPath::top(i)),
-            key: String::new(),
-            open: true,
+            kind,
+            key,
+            open,
         });
+        if !open {
+            continue;
+        }
+        if path.devices.is_empty() {
+            out.push(Row {
+                depth: depth + 2,
+                kind: RowKind::Note("dry: the sound as it comes in".into()),
+                key: String::new(),
+                open: true,
+            });
+        }
+        for (j, x) in path.devices.iter().enumerate() {
+            if let Some(c) = at.child(p, j) {
+                dev_rows(idx, x, c, out, depth + 2, closed);
+            }
+        }
     }
 }
 
 /// the device a selection points at
 pub(crate) fn sel_device(song: &Song, sel: Sel) -> Option<&Device> {
     match sel {
-        Sel::Dev(i, p) => fx::dev_at(&song.instruments.get(i)?.fx, &p),
+        Sel::Dev(i, p) | Sel::Path(i, p, _) => fx::dev_at(&song.instruments.get(i)?.fx, &p),
         Sel::Inst(_) => None,
     }
+}
+
+/// "Effects › Split › Path B" for the chain `prefix` of `fx`
+pub(crate) fn chain_crumb(fx: &[Device], prefix: &[u8]) -> String {
+    let mut out = vec!["Effects".to_string()];
+    let mut c = fx;
+    let mut rest = prefix;
+    while let [i, p, more @ ..] = rest {
+        let Some(d) = c.get(*i as usize) else { break };
+        out.push(d.title());
+        out.push(format!("Path {}", super::fxview::path_letter(*p as usize)));
+        match d.paths.get(*p as usize) {
+            Some(x) => c = &x.devices,
+            None => break,
+        }
+        rest = more;
+    }
+    out.join(" › ")
 }
 
 /// "Instrument › EQ" style breadcrumb for the detail header
@@ -145,13 +238,21 @@ pub(crate) fn sel_crumb(song: &Song, sel: Sel) -> String {
     match sel {
         Sel::Inst(i) => name(i),
         Sel::Dev(i, p) => {
+            let fxl = &song.instruments[i].fx;
             let d = sel_device(song, sel).map(|d| d.title()).unwrap_or_default();
             format!(
-                "{} › Effects › {d}  (device {} of {})",
+                "{} › {} › {d}  (device {} of {})",
                 name(i),
+                chain_crumb(fxl, p.chain()),
                 p.index() + 1,
-                fx::chain_at(&song.instruments[i].fx, p.chain()).map_or(0, |c| c.len())
+                fx::chain_at(fxl, p.chain()).map_or(0, |c| c.len())
             )
+        }
+        Sel::Path(i, sp, p) => {
+            let fxl = &song.instruments[i].fx;
+            let mut pre = sp.as_slice().to_vec();
+            pre.push(p as u8);
+            format!("{} › {}", name(i), chain_crumb(fxl, &pre))
         }
     }
 }
@@ -171,6 +272,10 @@ impl App {
             Some(Sel::Inst(i)) => i == root,
             Some(s @ Sel::Dev(i, _)) => {
                 i == root && self.with(|x| sel_device(&x.song, s).is_some())
+            }
+            Some(s @ Sel::Path(i, _, p)) => {
+                i == root
+                    && self.with(|x| sel_device(&x.song, s).is_some_and(|d| p < d.paths.len()))
             }
             None => false,
         };
@@ -222,6 +327,15 @@ impl App {
             ui.label(egui::RichText::new(tag).small().color(t.ink2));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(4.0);
+                if ui
+                    .button("+ Add Device")
+                    .on_hover_text(
+                        "a ChipWave effect, a Split or a plugin effect: after the selected device, or at the end of the selected chain",
+                    )
+                    .clicked()
+                {
+                    self.add_device_here();
+                }
                 if ui
                     .button("Cards")
                     .on_hover_text(
@@ -311,6 +425,11 @@ impl App {
         for (i, v) in by_inst {
             self.apply_fx_ops(i, v);
         }
+        if let Some(m) = self.dev.tree_drop.take() {
+            self.chains_drop(m);
+        }
+        let ctx = ui.ctx().clone();
+        self.add_device_window(&ctx);
     }
 
     /// the tree column
@@ -326,9 +445,11 @@ impl App {
         let slim = self.extra.chains_tree_folded;
         let mut toggle: Option<String> = None;
         let mut pick: Option<Sel> = None;
+        let mut add: Option<(usize, Vec<u8>, usize)> = None;
         let mut drawn: Vec<(Rect, RowKind)> = vec![];
         let pointer = ui.ctx().pointer_latest_pos();
         let released = ui.input(|i| i.pointer.any_released());
+        let ctrl = ui.input(|i| i.modifiers.command);
         ui.painter()
             .rect_filled(ui.max_rect(), 4.0, t.ink2.gamma_multiply(0.05));
         ui.horizontal(|ui| {
@@ -336,12 +457,34 @@ impl App {
             ui.label(egui::RichText::new("CHAINS").small().strong().color(t.ink2));
             if !slim {
                 ui.label(
-                    egui::RichText::new("drag rows to reorder · right-click for more")
-                        .small()
-                        .color(t.ink2),
+                    egui::RichText::new(
+                        "drag rows to reorder · Ctrl-drop copies · right-click for more",
+                    )
+                    .small()
+                    .color(t.ink2),
                 );
             }
         });
+        let link = |ui: &mut egui::Ui, r: Rect, id: egui::Id, text: &str, tip: &str| -> bool {
+            let g = ui.painter().layout_no_wrap(
+                text.to_string(),
+                FontId::proportional(11.5),
+                th().accent,
+            );
+            let b = Rect::from_min_size(
+                Pos2::new(r.right() - g.size().x - 10.0, r.center().y - 8.0),
+                egui::vec2(g.size().x + 6.0, 16.0),
+            );
+            let resp = ui.interact(b, id, Sense::click()).on_hover_text(tip);
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Link, true, text));
+            if resp.hovered() {
+                ui.painter()
+                    .rect_filled(b, 3.0, th().accent.gamma_multiply(0.15));
+            }
+            ui.painter()
+                .galley(b.min + egui::vec2(3.0, 1.0), g, th().accent);
+            resp.clicked()
+        };
         egui::ScrollArea::vertical()
             .id_salt("chains_tree")
             .auto_shrink([false, false])
@@ -356,6 +499,7 @@ impl App {
                     let this_sel = match &row.kind {
                         RowKind::Inst(i) => Some(Sel::Inst(*i)),
                         RowKind::Dev(i, p) => Some(Sel::Dev(*i, *p)),
+                        RowKind::Path(i, sp, p) => Some(Sel::Path(*i, *sp, *p)),
                         _ => None,
                     };
                     let is_sel = this_sel == Some(sel);
@@ -366,16 +510,14 @@ impl App {
                     } else if resp.hovered() {
                         p.rect_filled(r, 3.0, t.ink.gamma_multiply(0.06));
                     }
-                    // guide line for nesting
-                    if row.depth > 0 {
+                    for k in 0..row.depth {
                         p.vline(
-                            x0 - INDENT * 0.5,
+                            r.left() + 6.0 + k as f32 * INDENT + INDENT * 0.5,
                             r.y_range(),
-                            Stroke::new(1.0, t.border.gamma_multiply(0.5)),
+                            Stroke::new(1.0, t.border.gamma_multiply(0.45)),
                         );
                     }
                     let mut x = x0;
-                    // fold arrow (text, so it reads as a control)
                     if !row.key.is_empty() {
                         let a = Rect::from_min_size(Pos2::new(x, r.top()), egui::vec2(14.0, ROW));
                         let ar = ui
@@ -397,6 +539,18 @@ impl App {
                     }
                     x += 15.0;
                     let font = FontId::proportional(12.5);
+                    let small = FontId::proportional(11.0);
+                    let after = |p: &egui::Painter, g: Rect, s: &str, c: Color32| {
+                        if !slim && !s.is_empty() {
+                            p.text(
+                                Pos2::new(g.right() + 8.0, r.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                s,
+                                FontId::proportional(11.0),
+                                c,
+                            );
+                        }
+                    };
                     match &row.kind {
                         RowKind::Inst(i) => {
                             let (name, tag) = self.with(|s| {
@@ -415,15 +569,7 @@ impl App {
                                 FontId::proportional(13.0),
                                 t.acc_hot,
                             );
-                            if !slim {
-                                p.text(
-                                    Pos2::new(g.right() + 8.0, r.center().y),
-                                    egui::Align2::LEFT_CENTER,
-                                    tag,
-                                    FontId::proportional(11.0),
-                                    t.ink2,
-                                );
-                            }
+                            after(&p, g, &tag, t.ink2);
                         }
                         RowKind::Effects(i) => {
                             let g = p.text(
@@ -433,92 +579,156 @@ impl App {
                                 font.clone(),
                                 t.ink,
                             );
-                            if !slim {
-                                p.text(
-                                    Pos2::new(g.right() + 8.0, r.center().y),
-                                    egui::Align2::LEFT_CENTER,
-                                    "in order, after the instrument",
-                                    FontId::proportional(11.0),
-                                    t.ink2,
-                                );
+                            after(&p, g, "in order, after the instrument", t.ink2);
+                            if !slim
+                                && link(
+                                    ui,
+                                    r,
+                                    ui.make_persistent_id(("chains_add_e", *i)),
+                                    "+ Add device",
+                                    "Add Device: a ChipWave effect, a Split or a plugin effect at the end of this chain",
+                                )
+                            {
+                                add = Some((*i, vec![], usize::MAX));
                             }
-                            let _ = i;
+                        }
+                        RowKind::Path(i, sp, pi) => {
+                            let path = self.with(|s| {
+                                sel_device(&s.song, Sel::Path(*i, *sp, *pi))
+                                    .and_then(|d| d.paths.get(*pi).cloned())
+                            });
+                            let Some(path) = path else {
+                                continue;
+                            };
+                            let dot = Rect::from_center_size(
+                                Pos2::new(x + 5.0, r.center().y),
+                                egui::vec2(14.0, 14.0),
+                            );
+                            let dr = ui
+                                .interact(
+                                    dot,
+                                    ui.make_persistent_id(("chains_pon", *i, *sp, *pi)),
+                                    Sense::click(),
+                                )
+                                .on_hover_text(if path.on {
+                                    "on: click to mute this path"
+                                } else {
+                                    "muted: click to switch it on"
+                                });
+                            if path.on {
+                                p.circle_filled(dot.center(), 4.5, t.accent);
+                            } else {
+                                p.circle_stroke(dot.center(), 4.0, Stroke::new(1.2, t.ink2));
+                            }
+                            if dr.clicked() {
+                                ops.push((*i, wrap(sp.chain(), FxOp::PathOn(sp.index(), *pi))));
+                            }
+                            let g = p.text(
+                                Pos2::new(x + 14.0, r.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                format!("Path {}", super::fxview::path_letter(*pi)),
+                                font.clone(),
+                                if path.on { t.ink } else { t.ink2 },
+                            );
+                            after(&p, g, &path_summary(&path), t.ink2);
+                            if !slim
+                                && link(
+                                    ui,
+                                    r,
+                                    ui.make_persistent_id(("chains_add_p", *i, *sp, *pi)),
+                                    "+ Add device",
+                                    "Add Device at the end of this path",
+                                )
+                            {
+                                let mut c = sp.as_slice().to_vec();
+                                c.push(*pi as u8);
+                                add = Some((*i, c, usize::MAX));
+                            }
                         }
                         RowKind::Dev(i, path) => {
                             let d =
                                 self.with(|s| sel_device(&s.song, Sel::Dev(*i, *path)).cloned());
-                            if let Some(d) = d {
-                                // power: a dot you click (bypass)
-                                let dot = Rect::from_center_size(
-                                    Pos2::new(x + 5.0, r.center().y),
-                                    egui::vec2(14.0, 14.0),
-                                );
-                                let dr = ui
-                                    .interact(
-                                        dot,
-                                        ui.make_persistent_id(("chains_pw", *i, *path)),
-                                        Sense::click(),
-                                    )
-                                    .on_hover_text(if d.enabled {
-                                        "on: click to bypass"
-                                    } else {
-                                        "bypassed: click to switch it on"
-                                    });
-                                if d.enabled {
-                                    p.circle_filled(dot.center(), 4.5, t.accent);
+                            let Some(d) = d else {
+                                continue;
+                            };
+                            let dot = Rect::from_center_size(
+                                Pos2::new(x + 5.0, r.center().y),
+                                egui::vec2(14.0, 14.0),
+                            );
+                            let dr = ui
+                                .interact(
+                                    dot,
+                                    ui.make_persistent_id(("chains_pw", *i, *path)),
+                                    Sense::click(),
+                                )
+                                .on_hover_text(if d.enabled {
+                                    "on: click to bypass"
                                 } else {
-                                    p.circle_stroke(dot.center(), 4.0, Stroke::new(1.2, t.ink2));
-                                }
-                                if dr.clicked() {
-                                    ops.push((*i, FxOp::Toggle(path.index())));
-                                }
-                                let label = format!("{}  {}", path.index() + 1, d.title());
-                                let g = p.text(
-                                    Pos2::new(x + 14.0, r.center().y),
-                                    egui::Align2::LEFT_CENTER,
-                                    label,
-                                    font.clone(),
-                                    if d.enabled { t.ink } else { t.ink2 },
-                                );
-                                if !d.enabled {
-                                    p.text(
-                                        Pos2::new(g.right() + 8.0, r.center().y),
-                                        egui::Align2::LEFT_CENTER,
-                                        "bypassed",
-                                        FontId::proportional(11.0),
-                                        t.brick,
-                                    );
-                                }
-                                if resp.drag_started() {
-                                    self.dev.tree_drag = Some(Sel::Dev(*i, *path));
-                                }
-                                resp.context_menu(|ui| {
-                                    ui.label(egui::RichText::new(d.title()).strong());
-                                    let k = path.index();
-                                    for (txt, op) in [
-                                        (
-                                            if d.enabled { "Bypass" } else { "Enable" },
-                                            FxOp::Toggle(k),
-                                        ),
-                                        ("Duplicate", FxOp::Dup(k)),
-                                        ("Move up", FxOp::Move(k, k.saturating_sub(1))),
-                                        ("Move down", FxOp::Move(k, k + 2)),
-                                        ("Remove", FxOp::Remove(k)),
-                                    ] {
-                                        if ui.button(txt).clicked() {
-                                            ops.push((*i, op));
-                                            ui.close();
-                                        }
-                                    }
+                                    "bypassed: click to switch it on"
                                 });
+                            if d.enabled {
+                                p.circle_filled(dot.center(), 4.5, t.accent);
+                            } else {
+                                p.circle_stroke(dot.center(), 4.0, Stroke::new(1.2, t.ink2));
                             }
+                            let k = path.index();
+                            let pre = path.chain().to_vec();
+                            if dr.clicked() {
+                                ops.push((*i, wrap(&pre, FxOp::Toggle(k))));
+                            }
+                            let g = p.text(
+                                Pos2::new(x + 14.0, r.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                format!("{}  {}", k + 1, d.title()),
+                                font.clone(),
+                                if d.enabled { t.ink } else { t.ink2 },
+                            );
+                            if !d.enabled {
+                                after(&p, g, "bypassed", t.brick);
+                            } else if d.kind == FxKind::Split {
+                                after(&p, g, &format!("{} parallel paths", d.paths.len()), t.ink2);
+                                if !slim
+                                    && d.paths.len() < fx::MAX_PATHS
+                                    && link(
+                                        ui,
+                                        r,
+                                        ui.make_persistent_id(("chains_addpath", *i, *path)),
+                                        "+ Add path",
+                                        "one more parallel path (dry until you add devices; at most 4)",
+                                    )
+                                {
+                                    ops.push((*i, wrap(&pre, FxOp::AddPath(k))));
+                                }
+                            }
+                            if resp.drag_started() {
+                                self.dev.tree_drag = Some(Sel::Dev(*i, *path));
+                            }
+                            resp.context_menu(|ui| {
+                                ui.label(egui::RichText::new(d.title()).strong());
+                                for (txt, op) in [
+                                    (if d.enabled { "Bypass" } else { "Enable" }, FxOp::Toggle(k)),
+                                    ("Duplicate", FxOp::Dup(k)),
+                                    ("Move up", FxOp::Move(k, k.saturating_sub(1))),
+                                    ("Move down", FxOp::Move(k, k + 2)),
+                                    ("Remove", FxOp::Remove(k)),
+                                ] {
+                                    if ui.button(txt).clicked() {
+                                        ops.push((*i, wrap(&pre, op)));
+                                        ui.close();
+                                    }
+                                }
+                                if ui.button("Add device after this…").clicked() {
+                                    add = Some((*i, pre.clone(), k + 1));
+                                    ui.close();
+                                }
+                            });
                         }
                         RowKind::Note(s) => {
                             p.text(
                                 Pos2::new(x, r.center().y),
                                 egui::Align2::LEFT_CENTER,
                                 s,
-                                FontId::proportional(11.0),
+                                small.clone(),
                                 t.ink2,
                             );
                         }
@@ -533,15 +743,24 @@ impl App {
                     drawn.push((r, row.kind.clone()));
                 }
             });
-        // drag a device row: a marker between rows, then the move
+        // drag a device row: a marker where it lands (any chain it may go
+        // in), then the move; Ctrl held on the drop copies it
         if let Some(Sel::Dev(i, from)) = self.dev.tree_drag {
-            let target = pointer.and_then(|p| drop_slot(&drawn, i, from, p));
-            if let Some((y, to)) = target {
+            let target = pointer.and_then(|p| drop_target(&drawn, p));
+            if let Some((y, (ti, chain, at))) = target {
                 let r = ui.max_rect();
                 super::devices::paint_marker_h(ui.painter(), y, r.x_range().shrink(8.0));
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                ui.ctx().set_cursor_icon(if ctrl {
+                    egui::CursorIcon::Copy
+                } else {
+                    egui::CursorIcon::Grabbing
+                });
                 if released {
-                    ops.push((i, FxOp::Move(from.index(), to)));
+                    self.dev.tree_drop = Some(TreeDrop {
+                        from: (i, from),
+                        to: (ti, chain, at),
+                        copy: ctrl,
+                    });
                 }
             }
             if released {
@@ -572,6 +791,39 @@ impl App {
         if let Some(s) = pick {
             self.dev.sel = Some(s);
         }
+        if let Some((i, chain, at)) = add {
+            self.open_add_device(i, chain, at);
+        }
+    }
+
+    /// Add Device for the chain `chain` of instrument `inst`, at `at`
+    pub(crate) fn open_add_device(&mut self, inst: usize, chain: Vec<u8>, at: usize) {
+        self.dev.add = Some(AddAt {
+            inst,
+            chain,
+            at,
+            query: String::new(),
+            pick: Some(AddPick::Kind(FxKind::Eq)),
+            focus: true,
+        });
+    }
+
+    /// where the header's + Add Device puts a device: after the selected
+    /// device, at the end of a selected path, else at the end of the chain
+    pub(crate) fn add_device_here(&mut self) {
+        let Some(root) = self.chains_root() else {
+            return;
+        };
+        match self.dev.sel {
+            Some(Sel::Dev(i, p)) => self.open_add_device(i, p.chain().to_vec(), p.index() + 1),
+            Some(Sel::Path(i, sp, p)) => {
+                let mut c = sp.as_slice().to_vec();
+                c.push(p as u8);
+                self.open_add_device(i, c, usize::MAX)
+            }
+            Some(Sel::Inst(i)) => self.open_add_device(i, vec![], usize::MAX),
+            None => self.open_add_device(root, vec![], usize::MAX),
+        }
     }
 
     /// the detail area: the selected row's controls
@@ -588,7 +840,7 @@ impl App {
             Sel::Inst(i) => {
                 ui.horizontal(|ui| {
                     ui.add_space(6.0);
-                    ui.label(egui::RichText::new(crumb).strong());
+                    ui.add(egui::Label::new(egui::RichText::new(crumb).strong()).truncate());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
                             .button("Open full editor  Ctrl+I")
@@ -618,11 +870,32 @@ impl App {
                     });
                 });
             }
+            Sel::Path(i, sp, p) => {
+                ui.horizontal(|ui| {
+                    ui.add_space(6.0);
+                    ui.add(egui::Label::new(egui::RichText::new(crumb).strong()).truncate());
+                });
+                ui.add_space(4.0);
+                if let Some(d) = self.with(|s| sel_device(&s.song, sel).cloned()) {
+                    let mut local = vec![];
+                    ui.horizontal(|ui| {
+                        ui.add_space(8.0);
+                        ui.vertical(|ui| {
+                            self.split_path_controls(ui, i, &d, p, &mut local);
+                        });
+                    });
+                    for op in local {
+                        ops.push((i, wrap(sp.chain(), op_at(sp.index(), op))));
+                    }
+                }
+            }
             Sel::Dev(i, path) => {
                 let Some(d) = self.with(|s| sel_device(&s.song, sel).cloned()) else {
                     return;
                 };
                 let k = path.index();
+                let pre = path.chain().to_vec();
+                let nested = path.depth() > 0;
                 ui.horizontal(|ui| {
                     ui.add_space(6.0);
                     ui.add(egui::Label::new(egui::RichText::new(crumb).strong()).truncate());
@@ -632,14 +905,14 @@ impl App {
                             .on_hover_text("remove (Ctrl+Z brings it back)")
                             .clicked()
                         {
-                            ops.push((i, FxOp::Remove(k)));
+                            ops.push((i, wrap(&pre, FxOp::Remove(k))));
                         }
                         if ui
                             .button("Duplicate")
                             .on_hover_text("a copy right after it")
                             .clicked()
                         {
-                            ops.push((i, FxOp::Dup(k)));
+                            ops.push((i, wrap(&pre, FxOp::Dup(k))));
                         }
                         let b = if d.enabled { "Bypass" } else { "Enable" };
                         if ui
@@ -647,7 +920,7 @@ impl App {
                             .on_hover_text("bypass: the sound passes it unchanged")
                             .clicked()
                         {
-                            ops.push((i, FxOp::Toggle(k)));
+                            ops.push((i, wrap(&pre, FxOp::Toggle(k))));
                         }
                     });
                 });
@@ -656,22 +929,22 @@ impl App {
                     fx::chain_at(&s.song.instruments[i].fx, path.chain()).map_or(0, |c| c.len())
                 });
                 let mut local: Vec<FxOp> = vec![];
+                let mut moves: Vec<TreeDrop> = vec![];
                 ui.horizontal_top(|ui| {
                     ui.add_space(4.0);
                     let keep = self.dev.card_w;
-                    self.dev.card_w = super::devcards::CARD_W.min(ui.available_width() * 0.45);
+                    self.dev.card_w = super::devcards::CARD_W.min(ui.available_width() * 0.42);
                     let mut card = d.clone();
                     card.collapsed = false;
-                    let key = super::devcards::open_key(
-                        &self.with(|s| {
-                            fx::chain_at(&s.song.instruments[i].fx, path.chain())
-                                .map(|c| c.to_vec())
-                                .unwrap_or_default()
-                        }),
-                        k,
-                    );
+                    let siblings = self.with(|s| {
+                        fx::chain_at(&s.song.instruments[i].fx, path.chain())
+                            .map(|c| c.to_vec())
+                            .unwrap_or_default()
+                    });
+                    let key = super::devcards::open_key(&siblings, k);
                     // the card without its own "…" column: All parameters is beside it
                     self.dev.open.remove(&(i, key));
+                    self.dev.no_auto = nested;
                     self.devices_card(ui, i, k, &card, key, h, n, &mut local);
                     self.dev.card_w = keep;
                     ui.add_space(10.0);
@@ -683,16 +956,50 @@ impl App {
                         super::devcards::well(ui.painter(), rest);
                         let inner = rest.shrink(8.0);
                         ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                            if d.kind == FxKind::Split {
+                                ui.label(
+                                    egui::RichText::new("PATHS").small().strong().color(t.ink2),
+                                );
+                                egui::ScrollArea::vertical()
+                                    .id_salt(("split_paths", i, path))
+                                    .auto_shrink([false, false])
+                                    .show(ui, |ui| {
+                                        for p in 0..d.paths.len() {
+                                            self.split_path_controls(ui, i, &d, p, &mut local);
+                                            ui.separator();
+                                        }
+                                        if d.paths.len() < fx::MAX_PATHS
+                                            && ui
+                                                .button("+ Add path")
+                                                .on_hover_text("one more parallel path (at most 4)")
+                                                .clicked()
+                                        {
+                                            local.push(FxOp::AddPath(k));
+                                        }
+                                    });
+                                return;
+                            }
+                            let more_h = (inner.height() - 64.0).max(80.0);
                             ui.label(
-                                egui::RichText::new("ALL PARAMETERS")
-                                    .small()
-                                    .strong()
-                                    .color(t.ink2),
+                                egui::RichText::new("ALL PARAMETERS").small().strong().color(t.ink2),
                             );
-                            self.devices_more(ui, i, k, &card, &mut local);
+                            ui.allocate_ui(egui::vec2(inner.width(), more_h), |ui| {
+                                self.devices_more(ui, i, k, &card, &mut local);
+                            });
+                            if nested {
+                                ui.label(
+                                    egui::RichText::new(
+                                        "Automation lanes: devices in the main chain and layer chains only for now",
+                                    )
+                                    .small()
+                                    .color(t.ink2),
+                                );
+                            }
+                            self.move_or_copy(ui, i, path, &d, &mut moves);
                         });
                     });
                 });
+                self.dev.no_auto = false;
                 if self.dev.drag.is_some() && ui.input(|x| x.pointer.any_released()) {
                     self.dev.drag = None;
                 }
@@ -701,10 +1008,531 @@ impl App {
                     if matches!(op, FxOp::Collapse(_)) {
                         continue;
                     }
-                    ops.push((i, op));
+                    let op = match op {
+                        // the card addresses the device by its index in its chain
+                        FxOp::AddPath(_) => FxOp::AddPath(k),
+                        o => o,
+                    };
+                    ops.push((i, wrap(&pre, op)));
+                }
+                if let Some(m) = moves.pop() {
+                    self.dev.tree_drop = Some(m);
                 }
             }
         }
+    }
+
+    /// one path of Split `d`: on / off, level, pan, remove (ops addressed
+    /// to the Split by its own index, wrapped by the caller)
+    fn split_path_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        inst: usize,
+        d: &Device,
+        p: usize,
+        local: &mut Vec<FxOp>,
+    ) {
+        let Some(path) = d.paths.get(p) else {
+            return;
+        };
+        // the Split's own index is filled in by the caller (op_at)
+        let k = usize::MAX;
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(format!("Path {}", super::fxview::path_letter(p))).strong(),
+            );
+            ui.label(
+                egui::RichText::new(path_summary(path))
+                    .small()
+                    .color(th().ink2),
+            );
+        });
+        ui.horizontal(|ui| {
+            let mut on = path.on;
+            if ui
+                .checkbox(&mut on, "On")
+                .on_hover_text("a muted path adds nothing to the sound")
+                .changed()
+            {
+                local.push(FxOp::PathOn(k, p));
+            }
+            let mut lv = path.level_db;
+            let r = ui
+                .add(
+                    egui::Slider::new(&mut lv, -60.0..=6.0)
+                        .text("Level")
+                        .suffix(" dB")
+                        .fixed_decimals(1)
+                        // only edits round: showing -6.02 dB must not change it
+                        .clamping(egui::SliderClamping::Edits),
+                )
+                .on_hover_text(
+                    "this path's level in the mix (0 dB = as it comes out of its devices)",
+                );
+            if r.changed() {
+                local.push(FxOp::PathLevel(k, p, lv, r.drag_started() || !r.dragged()));
+            }
+        });
+        ui.horizontal(|ui| {
+            let mut pan = path.pan;
+            let r = ui
+                .add(
+                    egui::Slider::new(&mut pan, -1.0..=1.0)
+                        .text("Pan")
+                        .fixed_decimals(2)
+                        .clamping(egui::SliderClamping::Edits),
+                )
+                .on_hover_text("left -1 · centre 0 · right +1");
+            if r.changed() {
+                local.push(FxOp::PathPan(k, p, pan, r.drag_started() || !r.dragged()));
+            }
+            if d.paths.len() > 2
+                && ui
+                    .button("Remove path")
+                    .on_hover_text("this path and its devices go (Ctrl+Z brings them back)")
+                    .clicked()
+            {
+                local.push(FxOp::RemovePath(k, p));
+            }
+        });
+        let _ = inst;
+    }
+
+    /// "MOVE OR COPY": buttons for the other chains this device can go in
+    fn move_or_copy(
+        &mut self,
+        ui: &mut egui::Ui,
+        inst: usize,
+        at: DevPath,
+        d: &Device,
+        moves: &mut Vec<TreeDrop>,
+    ) {
+        let t = th();
+        let targets = self.with(|s| move_targets(&s.song, inst, at, d));
+        if targets.is_empty() {
+            return;
+        }
+        ui.add_space(4.0);
+        ui.label(
+            egui::RichText::new("MOVE OR COPY")
+                .small()
+                .strong()
+                .color(t.ink2),
+        )
+        .on_hover_text("or drag the row in the tree; hold Ctrl while dropping to copy");
+        let copy = ui.input(|i| i.modifiers.command);
+        ui.horizontal_wrapped(|ui| {
+            for (label, to) in targets {
+                if ui
+                    .small_button(format!("To {label}"))
+                    .on_hover_text("moves it to the end of that chain (Ctrl-click copies)")
+                    .clicked()
+                {
+                    moves.push(TreeDrop {
+                        from: (inst, at),
+                        to,
+                        copy,
+                    });
+                }
+            }
+        });
+    }
+
+    /// a device dropped (or Move to…): within its chain a plain move, to
+    /// another chain (a Split's path, the main chain, another instrument's
+    /// chain) a move with its automation lanes dropped when it goes inside
+    /// a Split (D8); `copy` leaves the original. One undo step.
+    pub(crate) fn chains_drop(&mut self, m: TreeDrop) {
+        let (fi, from) = m.from;
+        let (ti, to, at) = m.to;
+        if fi == ti && to.as_slice() == from.chain() {
+            let op = if m.copy {
+                let d = self.with(|s| {
+                    s.song
+                        .instruments
+                        .get(fi)
+                        .and_then(|x| fx::dev_at(&x.fx, &from).cloned())
+                });
+                let Some(mut d) = d else {
+                    return;
+                };
+                d.renew_uid();
+                FxOp::Insert(at, Box::new(d))
+            } else {
+                FxOp::Move(from.index(), at)
+            };
+            self.apply_fx_ops(fi, vec![wrap(&to, op)]);
+            return;
+        }
+        let Some(d) = self.with(|s| {
+            s.song
+                .instruments
+                .get(fi)
+                .and_then(|x| fx::dev_at(&x.fx, &from).cloned())
+        }) else {
+            return;
+        };
+        // where it may go (also checked by the ops themselves)
+        let own = from.as_slice();
+        if fi == ti && to.len() > own.len() && to.starts_with(own) {
+            self.status = "A Split can't go inside itself".into();
+            return;
+        }
+        if !to.is_empty() && d.has_plugin() {
+            self.status = format!(
+                "{} can't go inside a Split yet: plugin effects go in the main chain or a layer's chain",
+                d.title()
+            );
+            return;
+        }
+        if to.len() / 2 + d.split_depth() > fx::MAX_SPLIT_DEPTH {
+            self.status = "One Split can sit inside another, but not deeper".into();
+            return;
+        }
+        let full = self.with(|s| {
+            s.song
+                .instruments
+                .get(ti)
+                .and_then(|x| fx::chain_at(&x.fx, &to))
+                .is_none_or(|c| c.len() >= fx::MAX_DEVICES)
+        });
+        if full {
+            self.status = "That chain is full (16 devices)".into();
+            return;
+        }
+        self.snapshot();
+        let mut nd = d.clone();
+        if m.copy {
+            nd.renew_uid();
+        }
+        let name = d.title();
+        let moved = self.with(|s| {
+            // in first, then the original out (its path shifts when the
+            // new device went in before it in a chain it sits under)
+            let at_real = if to.is_empty() {
+                s.song.insert_device(ti, at, nd)?
+            } else {
+                let c = fx::chain_at_mut(&mut s.song.instruments.get_mut(ti)?.fx, &to)?;
+                let a = at.min(c.len());
+                c.insert(a, nd);
+                a
+            };
+            if m.copy {
+                return Some(());
+            }
+            let mut src = from.as_slice().to_vec();
+            if fi == ti && src.len() > to.len() && src.starts_with(&to) {
+                let k = to.len();
+                if src[k] as usize >= at_real {
+                    src[k] += 1;
+                }
+            }
+            let src = DevPath::from_slice(&src)?;
+            if src.depth() == 0 {
+                s.song.remove_device(fi, src.index())?;
+            } else {
+                let c = fx::chain_at_mut(&mut s.song.instruments.get_mut(fi)?.fx, src.chain())?;
+                if src.index() < c.len() {
+                    c.remove(src.index());
+                }
+            }
+            Some(())
+        });
+        if moved.is_some() {
+            let where_ = self.with(|s| {
+                s.song
+                    .instruments
+                    .get(ti)
+                    .map(|x| chain_label(&x.fx, &to))
+                    .unwrap_or_default()
+            });
+            self.status = format!(
+                "{} {name} to {where_}{}",
+                if m.copy { "Copied" } else { "Moved" },
+                if !to.is_empty() && from.depth() == 0 && !m.copy {
+                    " (its automation lanes stay in the main chain only)"
+                } else {
+                    ""
+                }
+            );
+            self.dirty = true;
+            self.dev.sel = None;
+        }
+    }
+
+    /// the Add Device window (mockup 3): ChipWave effects with a line each,
+    /// the Split container, plugin effects (not inside a Split, D7);
+    /// search, Enter adds, Esc closes
+    pub(crate) fn add_device_window(&mut self, ctx: &egui::Context) {
+        let Some(mut a) = self.dev.add.clone() else {
+            return;
+        };
+        let t = th();
+        let inside = !a.chain.is_empty();
+        let depth = a.chain.len() / 2;
+        let (target, n_in_chain) = self.with(|s| {
+            let Some(x) = s.song.instruments.get(a.inst) else {
+                return (String::new(), 0);
+            };
+            let c = fx::chain_at(&x.fx, &a.chain).map_or(&[][..], |c| c);
+            let pos = if a.at >= c.len() {
+                match c.last() {
+                    Some(l) => format!("at the end, after {}", l.title()),
+                    None => "as the first device".into(),
+                }
+            } else if a.at == 0 {
+                "at the start".into()
+            } else {
+                format!("after {}", c[a.at - 1].title())
+            };
+            (
+                format!(
+                    "to {:02X} {} › {}, {pos}",
+                    a.inst + 1,
+                    x.name,
+                    chain_crumb(&x.fx, &a.chain)
+                ),
+                c.len(),
+            )
+        });
+        let q = a.query.to_lowercase();
+        let hit = |s: &str, b: &str| {
+            q.is_empty() || s.to_lowercase().contains(&q) || b.to_lowercase().contains(&q)
+        };
+        let kinds: Vec<FxKind> = FxKind::ALL
+            .into_iter()
+            .filter(|k| hit(k.name(), k.blurb()))
+            .collect();
+        let split_ok = depth < fx::MAX_SPLIT_DEPTH;
+        // listed inside a Split too, greyed (D7)
+        let plugins: Vec<crate::plugin::PluginPatch> = crate::plugin::scan::cache()
+            .effects()
+            .into_iter()
+            .map(super::fxplugview::patch_of)
+            .filter(|p| hit(&p.name, &p.vendor))
+            .collect();
+        let split_hit = split_ok && hit("Split parallel paths", FxKind::Split.blurb());
+        // typing keeps a visible device highlighted, so Enter adds what shows
+        let visible = match &a.pick {
+            Some(AddPick::Kind(FxKind::Split)) => split_hit,
+            Some(AddPick::Kind(k)) => kinds.contains(k),
+            Some(AddPick::Plugin(p)) => !inside && plugins.contains(p),
+            None => false,
+        };
+        if !visible {
+            a.pick = kinds
+                .first()
+                .map(|k| AddPick::Kind(*k))
+                .or_else(|| split_hit.then_some(AddPick::Kind(FxKind::Split)))
+                .or_else(|| {
+                    (!inside)
+                        .then(|| plugins.first().cloned().map(AddPick::Plugin))
+                        .flatten()
+                });
+        }
+        let mut add = false;
+        let mut close = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) && a.pick.is_some() {
+            add = true;
+        }
+        let screen = ctx.content_rect();
+        let size = egui::vec2(
+            (screen.width() - 80.0).clamp(420.0, 720.0),
+            (screen.height() - 120.0).clamp(300.0, 470.0),
+        );
+        egui::Window::new("Add Device")
+            .id(egui::Id::unique("chains_add_device"))
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .fixed_size(size)
+            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("ADD DEVICE").strong().size(15.0));
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(&target).color(t.accent)).truncate(),
+                    );
+                });
+                let te = ui.add(
+                    egui::TextEdit::singleline(&mut a.query)
+                        .hint_text("Search devices · name or what it does")
+                        .desired_width(f32::INFINITY),
+                );
+                if a.focus {
+                    te.request_focus();
+                    a.focus = false;
+                }
+                ui.add_space(4.0);
+                let body_h = size.y - 110.0;
+                ui.columns(2, |cols| {
+                    let ui = &mut cols[0];
+                    ui.label(egui::RichText::new("CHIPWAVE EFFECTS").small().strong().color(t.ink2));
+                    egui::ScrollArea::vertical()
+                        .id_salt("add_dev_fx")
+                        .max_height(body_h)
+                        .show(ui, |ui| {
+                            for k in &kinds {
+                                let on = a.pick == Some(AddPick::Kind(*k));
+                                let r = ui
+                                    .horizontal(|ui| {
+                                        let b = ui.add_sized(
+                                            egui::vec2(140.0, 18.0),
+                                            egui::Button::selectable(on, k.name()),
+                                        );
+                                        ui.label(egui::RichText::new(k.blurb()).small().color(t.ink2));
+                                        b
+                                    })
+                                    .inner;
+                                if r.clicked() {
+                                    a.pick = Some(AddPick::Kind(*k));
+                                }
+                                if r.double_clicked() {
+                                    a.pick = Some(AddPick::Kind(*k));
+                                    add = true;
+                                }
+                            }
+                            if kinds.is_empty() {
+                                ui.label(egui::RichText::new("nothing matches").color(t.ink2));
+                            }
+                        });
+                    let ui = &mut cols[1];
+                    ui.label(egui::RichText::new("CONTAINERS").small().strong().color(t.ink2));
+                    if hit("Split parallel paths", FxKind::Split.blurb()) {
+                        let on = a.pick == Some(AddPick::Kind(FxKind::Split));
+                        let r = ui
+                            .add_enabled(
+                                split_ok,
+                                egui::Button::selectable(on, "Split · parallel paths"),
+                            )
+                            .on_hover_text(
+                                "the sound goes through 2-4 paths at once and is mixed back; an empty path is the dry sound",
+                            )
+                            .on_disabled_hover_text("one Split can sit inside another, not deeper");
+                        if r.clicked() {
+                            a.pick = Some(AddPick::Kind(FxKind::Split));
+                        }
+                        if r.double_clicked() {
+                            a.pick = Some(AddPick::Kind(FxKind::Split));
+                            add = true;
+                        }
+                        ui.label(
+                            egui::RichText::new(
+                                "2 paths at -6 dB to start, so the sound is unchanged until you add devices",
+                            )
+                            .small()
+                            .color(t.ink2),
+                        );
+                    }
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new("PLUGIN EFFECTS (CLAP / VST3)").small().strong().color(t.ink2),
+                    );
+                    if inside {
+                        ui.label(
+                            egui::RichText::new(
+                                "Not inside a Split yet: plugin effects go in the main chain or a layer's chain.",
+                            )
+                            .small()
+                            .color(t.ink2),
+                        );
+                    }
+                    if plugins.is_empty() {
+                        ui.label(
+                            egui::RichText::new(
+                                "No effect plugins found (Settings › Plugins › Find plugins…)",
+                            )
+                            .small()
+                            .color(t.ink2),
+                        );
+                    } else {
+                        egui::ScrollArea::vertical()
+                            .id_salt("add_dev_plug")
+                            .max_height((body_h * 0.5).max(60.0))
+                            .show(ui, |ui| {
+                                for p in &plugins {
+                                    let on = a.pick == Some(AddPick::Plugin(p.clone()));
+                                    let label = if p.format == "vst3" {
+                                        format!("{} (VST3)", p.name)
+                                    } else {
+                                        p.name.clone()
+                                    };
+                                    let r = ui
+                                        .add_enabled(!inside, egui::Button::selectable(on, label))
+                                        .on_hover_text(&p.vendor)
+                                        .on_disabled_hover_text(
+                                            "plugin effects can't go inside a Split yet",
+                                        );
+                                    if r.clicked() {
+                                        a.pick = Some(AddPick::Plugin(p.clone()));
+                                    }
+                                    if r.double_clicked() {
+                                        a.pick = Some(AddPick::Plugin(p.clone()));
+                                        add = true;
+                                    }
+                                }
+                            });
+                    }
+                    ui.add_space(6.0);
+                    ui.label(egui::RichText::new("ALSO").small().strong().color(t.ink2));
+                    ui.label(
+                        egui::RichText::new(
+                            "· drag any effect from Browser › Effects onto a row\n· Enter adds the highlighted device, Esc closes",
+                        )
+                        .small()
+                        .color(t.ink2),
+                    );
+                });
+                ui.separator();
+                ui.horizontal(|ui| {
+                    let what = match &a.pick {
+                        Some(AddPick::Kind(k)) => k.name().to_string(),
+                        Some(AddPick::Plugin(p)) => p.name.clone(),
+                        None => "nothing picked".into(),
+                    };
+                    ui.label(egui::RichText::new(what).strong().color(t.accent));
+                    ui.label(
+                        egui::RichText::new(format!("→ position {} of {}", a.at.min(n_in_chain) + 1, n_in_chain + 1))
+                            .color(t.ink2),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add_enabled(a.pick.is_some(), egui::Button::new("Add  (Enter)"))
+                            .clicked()
+                        {
+                            add = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            close = true;
+                        }
+                    });
+                });
+            });
+        if add {
+            let at = a.at;
+            match a.pick.clone() {
+                Some(AddPick::Kind(k)) => {
+                    let d = if k == FxKind::Split {
+                        Device::split()
+                    } else {
+                        Device::new(k)
+                    };
+                    self.apply_fx_ops(a.inst, vec![wrap(&a.chain, FxOp::Insert(at, Box::new(d)))]);
+                    let idx = at.min(n_in_chain);
+                    let sel = DevPath::from_slice(&[a.chain.clone(), vec![idx as u8]].concat());
+                    self.dev.sel = sel.map(|p| Sel::Dev(a.inst, p));
+                }
+                Some(AddPick::Plugin(p)) if !inside => {
+                    self.add_plugin_fx_at((a.inst + 1) as u8, p, at);
+                    let idx = at.min(n_in_chain);
+                    self.dev.sel = Some(Sel::Dev(a.inst, DevPath::top(idx)));
+                }
+                _ => {}
+            }
+            self.dev.add = None;
+            return;
+        }
+        self.dev.add = if close { None } else { Some(a) };
     }
 
     /// "Signal flow": the order the sound goes through, in words
@@ -744,43 +1572,163 @@ pub(crate) fn flow_text(song: &Song, root: usize) -> String {
 
 fn dev_flow(d: &Device) -> String {
     let mut s = d.title();
+    if d.kind == FxKind::Split {
+        let paths: Vec<String> = d
+            .paths
+            .iter()
+            .enumerate()
+            .map(|(k, p)| {
+                let inner: Vec<String> = p.devices.iter().map(dev_flow).collect();
+                format!(
+                    "{}: {}",
+                    super::fxview::path_letter(k),
+                    if inner.is_empty() {
+                        "dry".to_string()
+                    } else {
+                        inner.join(" › ")
+                    }
+                )
+            })
+            .collect();
+        s = format!("Split [{}]", paths.join(" | "));
+    }
     if !d.enabled {
         s.push_str(" (bypassed)");
     }
     s
 }
 
-/// where a dragged device row lands: (marker y, index in its chain) for
-/// rows of the same chain as `from`
-fn drop_slot(
-    drawn: &[(Rect, RowKind)],
-    inst: usize,
-    from: DevPath,
-    p: Pos2,
-) -> Option<(f32, usize)> {
-    let same: Vec<(Rect, usize)> = drawn
-        .iter()
-        .filter_map(|(r, k)| match k {
-            RowKind::Dev(i, q) if *i == inst && q.chain() == from.chain() => Some((*r, q.index())),
-            _ => None,
-        })
-        .collect();
-    let first = same.first()?;
-    let last = same.last()?;
-    if p.y < first.0.top() - ROW || p.y > last.0.bottom() + ROW {
-        return None;
+/// a place in a chain: instrument, chain prefix, index (usize::MAX = the end)
+pub(crate) type ChainAt = (usize, Vec<u8>, usize);
+
+/// a device row dropped somewhere in the tree
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TreeDrop {
+    pub(crate) from: (usize, DevPath),
+    /// instrument, chain prefix, index (usize::MAX = the end)
+    pub(crate) to: (usize, Vec<u8>, usize),
+    pub(crate) copy: bool,
+}
+
+/// "Path B", "Effects", ... a chain's short name for buttons
+fn chain_label(fx: &[Device], prefix: &[u8]) -> String {
+    match prefix {
+        [] => "the main chain".into(),
+        _ => {
+            let c = chain_crumb(fx, prefix);
+            c.rsplit(" › ")
+                .take(2)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect::<Vec<_>>()
+                .join(" › ")
+        }
     }
-    let to = same
+}
+
+/// every chain of instrument `inst` that device `d` (at `at`) may move to:
+/// the main chain and each Split path, minus its own chain and anything
+/// inside itself; plugin effects stay out of Splits (D7)
+pub(crate) fn move_targets(
+    song: &Song,
+    inst: usize,
+    at: DevPath,
+    d: &Device,
+) -> Vec<(String, ChainAt)> {
+    let Some(i) = song.instruments.get(inst) else {
+        return vec![];
+    };
+    let mut chains: Vec<Vec<u8>> = vec![vec![]];
+    fn walk(c: &[Device], pre: &mut Vec<u8>, out: &mut Vec<Vec<u8>>) {
+        for (k, x) in c.iter().enumerate() {
+            if x.kind != FxKind::Split {
+                continue;
+            }
+            for (p, path) in x.paths.iter().enumerate() {
+                pre.push(k as u8);
+                pre.push(p as u8);
+                out.push(pre.clone());
+                walk(&path.devices, pre, out);
+                pre.pop();
+                pre.pop();
+            }
+        }
+    }
+    walk(&i.fx, &mut vec![], &mut chains);
+    let own = at.as_slice();
+    chains
+        .into_iter()
+        .filter(|c| c.as_slice() != at.chain())
+        // not into itself
+        .filter(|c| !(c.len() > own.len() && c.starts_with(own)))
+        .filter(|c| c.is_empty() || !d.has_plugin())
+        .filter(|c| c.len() / 2 + d.split_depth() <= fx::MAX_SPLIT_DEPTH)
+        .map(|c| (chain_label(&i.fx, &c), (inst, c, usize::MAX)))
+        .collect()
+}
+
+/// an op from a Split's path controls (addressed with usize::MAX) for the
+/// Split at index `k`
+fn op_at(k: usize, op: FxOp) -> FxOp {
+    match op {
+        FxOp::PathOn(_, p) => FxOp::PathOn(k, p),
+        FxOp::PathLevel(_, p, v, f) => FxOp::PathLevel(k, p, v, f),
+        FxOp::PathPan(_, p, v, f) => FxOp::PathPan(k, p, v, f),
+        FxOp::RemovePath(_, p) => FxOp::RemovePath(k, p),
+        FxOp::AddPath(_) => FxOp::AddPath(k),
+        o => o,
+    }
+}
+
+/// "0 dB · C" / "-4.0 dB · L 30 · muted"
+fn path_summary(p: &fx::FxPath) -> String {
+    let pan = if p.pan.abs() < 0.005 {
+        "C".to_string()
+    } else if p.pan < 0.0 {
+        format!("L {:.0}", -p.pan * 100.0)
+    } else {
+        format!("R {:.0}", p.pan * 100.0)
+    };
+    let mut s = format!("{:.1} dB · {pan}", p.level_db);
+    if !p.on {
+        s.push_str(" · muted");
+    }
+    s
+}
+
+/// where a dragged device row lands: (marker y, (instrument, chain,
+/// index)). Over a device row: before it (upper half) or after it; over
+/// a path or Effects heading: the start of that chain.
+fn drop_target(drawn: &[(Rect, RowKind)], p: Pos2) -> Option<(f32, ChainAt)> {
+    // on a row, or just below the last one of a chain (the "+ Add device"
+    // line): after that row
+    let (r, k) = drawn
         .iter()
-        .find(|(r, _)| p.y < r.center().y)
-        .map(|(_, k)| *k)
-        .unwrap_or(last.1 + 1);
-    let y = same
-        .iter()
-        .find(|(_, k)| *k == to)
-        .map(|(r, _)| r.top())
-        .unwrap_or(last.0.bottom());
-    Some((y, to))
+        .find(|(r, _)| r.y_range().contains(p.y))
+        .or_else(|| {
+            drawn
+                .iter()
+                .filter(|(r, _)| r.bottom() <= p.y && p.y - r.bottom() < 24.0)
+                .max_by(|a, b| a.0.bottom().total_cmp(&b.0.bottom()))
+                .filter(|(_, k)| matches!(k, RowKind::Dev(..)))
+        })?;
+    match k {
+        RowKind::Dev(i, q) => {
+            let after = p.y > r.center().y;
+            Some((
+                if after { r.bottom() } else { r.top() },
+                (*i, q.chain().to_vec(), q.index() + after as usize),
+            ))
+        }
+        RowKind::Path(i, sp, pi) => {
+            let mut c = sp.as_slice().to_vec();
+            c.push(*pi as u8);
+            Some((r.bottom(), (*i, c, 0)))
+        }
+        RowKind::Effects(i) => Some((r.bottom(), (*i, vec![], 0))),
+        _ => None,
+    }
 }
 
 /// the fold triangle (painted: the UI fonts have no ▾ / ▸)

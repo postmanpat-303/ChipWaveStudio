@@ -62,6 +62,10 @@ pub(crate) struct DevUi {
     /// the panel was opened by selecting a track header or an instrument
     /// (a clip click then shows the clip, as the Instrument tab does)
     pub(crate) by_select: bool,
+    /// a device row dropped in the tree (handled after the frame's ops)
+    pub(crate) tree_drop: Option<super::chains::TreeDrop>,
+    /// the Add Device window is open for this chain
+    pub(crate) add: Option<super::chains::AddAt>,
 }
 
 impl Default for DevUi {
@@ -83,6 +87,8 @@ impl Default for DevUi {
             vertical: false,
             no_auto: false,
             by_select: false,
+            tree_drop: None,
+            add: None,
         }
     }
 }
@@ -944,6 +950,7 @@ impl App {
                 }
             }
             FxKind::Plugin => self.devices_plugin_face(ui, owner, d, g),
+            FxKind::Split => split_graph(&p, g, d),
         }
     }
 
@@ -1381,6 +1388,44 @@ fn reverb_graph(p: &egui::Painter, r: Rect, d: &Device) {
 }
 
 /// an accent curve (Ember: acc-hot over a bloom)
+/// a Split: the sound fanning out into its paths and back together
+fn split_graph(p: &egui::Painter, r: Rect, d: &Device) {
+    let t = th();
+    devcards::well(p, r);
+    let n = d.paths.len().max(1);
+    let (a, b) = (
+        Pos2::new(r.left() + 14.0, r.center().y),
+        Pos2::new(r.right() - 14.0, r.center().y),
+    );
+    for (k, path) in d.paths.iter().enumerate() {
+        let y = r.top() + r.height() * (k as f32 + 0.5) / n as f32;
+        let col = if path.on {
+            t.accent
+        } else {
+            t.ink2.gamma_multiply(0.5)
+        };
+        let l = Pos2::new(r.left() + r.width() * 0.3, y);
+        let rr = Pos2::new(r.right() - r.width() * 0.3, y);
+        p.line_segment([a, l], Stroke::new(1.5, col));
+        p.line_segment([l, rr], Stroke::new(1.5, col));
+        p.line_segment([rr, b], Stroke::new(1.5, col));
+        p.text(
+            Pos2::new(r.center().x, y - 2.0),
+            egui::Align2::CENTER_BOTTOM,
+            format!(
+                "{} · {} device{}",
+                super::fxview::path_letter(k),
+                path.devices.len(),
+                if path.devices.len() == 1 { "" } else { "s" }
+            ),
+            FontId::proportional(10.5),
+            t.ink,
+        );
+    }
+    p.circle_filled(a, 3.0, t.ink);
+    p.circle_filled(b, 3.0, t.ink);
+}
+
 fn acc_line(p: &egui::Painter, pts: Vec<Pos2>, w: f32) {
     let t = th();
     if t.ember {
