@@ -367,6 +367,18 @@ impl App {
         }
     }
 
+    /// a track header or an instrument was selected: Nested Device Chains
+    /// with it (D2), or the Instrument tab when Settings says so
+    pub(super) fn show_selection_panel(&mut self) {
+        if self.extra.select_chains && matches!(self.view, View::Timeline | View::Pattern) {
+            self.set_lower(4);
+            // opened by the selection: a clip click shows the clip (3.2)
+            self.dev.by_select = true;
+        } else {
+            self.show_instrument_editor();
+        }
+    }
+
     /// 0 arranger, 1 instrument, 2 automation, 3 piano roll, 4 devices
     pub(super) fn set_lower(&mut self, m: u8) {
         // the Order list is a Tracker view: hidden, the piano roll stands in
@@ -379,6 +391,7 @@ impl App {
         self.extra.full_height = false;
         self.extra.lower_inst = m == 1;
         self.extra.lower_dev = m == 4;
+        self.dev.by_select = false;
         self.extra.lower_chosen = true;
         self.pr.open = m == 3;
         self.pr.focus = m == 3;
@@ -571,7 +584,7 @@ impl App {
         }
         // a track with no instrument: "Choose an instrument" over the editor
         // (the track pie's Add list; 3.3)
-        let body = if self.extra.lower_inst && !self.extra.lower_dev && self.chooser_wanted() {
+        let body = if (self.extra.lower_inst || self.extra.lower_dev) && self.chooser_wanted() {
             let h = if body.width() < 1200.0 { 52.0 } else { 30.0 };
             let strip = Rect::from_min_size(body.min, egui::vec2(body.width(), h));
             ui.scope_builder(
@@ -579,7 +592,8 @@ impl App {
                 |ui| self.instrument_chooser(ui),
             );
             Rect::from_min_max(Pos2::new(body.left(), strip.bottom() + 2.0), body.max)
-        } else if self.extra.lower_inst && !self.extra.lower_dev && !self.shared_with().is_empty() {
+        } else if (self.extra.lower_inst || self.extra.lower_dev) && !self.shared_with().is_empty()
+        {
             // the instrument is shared: say so, offer a copy for this track (3.5)
             let strip = Rect::from_min_size(body.min, egui::vec2(body.width(), 26.0));
             ui.scope_builder(
@@ -837,8 +851,8 @@ impl App {
                 ),
                 (
                     4,
-                    "Devices",
-                    "the selected track's instrument and effects, left to right (Ctrl+7)",
+                    "Nested Device Chains",
+                    "the selected instrument, its layers and its effect chains, with the selected device's controls beside them (Ctrl+7)",
                 ),
             ];
             let tracker = self.tracker_on() || self.view == View::Pattern;

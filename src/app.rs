@@ -24,6 +24,9 @@ mod blocklen;
 mod browser_tests;
 mod browserpanel;
 mod browserview;
+mod chains;
+#[cfg(test)]
+mod chains_tests;
 mod chordlane;
 mod chordview;
 mod cliparr;

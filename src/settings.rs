@@ -202,6 +202,26 @@ pub struct Extra {
     /// Clip Arranger launch quantise: 0 one bar, 1 half a bar, 2 a beat, 3 off
     #[serde(default)]
     pub launch_q: u8,
+    /// selecting a track header or an instrument opens Nested Device
+    /// Chains (docs/racks/PLAN.md D2); off: the Instrument tab, as in 0.2.6
+    #[serde(default = "yes")]
+    pub select_chains: bool,
+    /// Nested Device Chains: the tree column's width in points
+    #[serde(default = "tree_w")]
+    pub chains_tree_w: f32,
+    /// ... folded to a slim strip of names
+    #[serde(default)]
+    pub chains_tree_folded: bool,
+    /// ... shows the 0.2.4 card row instead of the tree (D1: Cards)
+    #[serde(default)]
+    pub chains_cards: bool,
+    /// tree rows the user closed ("i3" instrument 3, "s3.1" a Split, ...)
+    #[serde(default)]
+    pub chains_closed: Vec<String>,
+}
+
+fn tree_w() -> f32 {
+    370.0
 }
 
 fn pattern_vol() -> f32 {
@@ -273,6 +293,11 @@ impl Default for Extra {
             count_in: true,
             rec_quantise: false,
             launch_q: 0,
+            select_chains: true,
+            chains_tree_w: tree_w(),
+            chains_tree_folded: false,
+            chains_cards: false,
+            chains_closed: vec![],
         }
     }
 }

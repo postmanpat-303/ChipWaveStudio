@@ -390,6 +390,36 @@ pub struct Device {
     /// `FxKind::Grid`: the patch (its AudioIn module carries the input)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grid: Option<Box<crate::grid::GridP>>,
+    /// `FxKind::Split`: its parallel paths (Nested Device Chains); empty
+    /// for every other kind, and then not written
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<FxPath>,
+}
+
+/// one parallel path of a Split: its own chain, level, pan and on / off
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FxPath {
+    #[serde(default)]
+    pub devices: Vec<Device>,
+    #[serde(default = "yes")]
+    pub on: bool,
+    /// level in dB (-60..+6; 0 = unchanged)
+    #[serde(default)]
+    pub level_db: f32,
+    /// -1 left .. +1 right
+    #[serde(default)]
+    pub pan: f32,
+}
+
+impl Default for FxPath {
+    fn default() -> Self {
+        Self {
+            devices: vec![],
+            on: true,
+            level_db: 0.0,
+            pan: 0.0,
+        }
+    }
 }
 
 fn is_zero(v: &u32) -> bool {
@@ -411,6 +441,7 @@ impl Device {
             plugin: None,
             uid: 0,
             grid: (kind == FxKind::Grid).then(|| Box::new(crate::grid::fx_default())),
+            paths: vec![],
         }
     }
     /// a plugin effect device for `p` (a fresh uid)
@@ -469,6 +500,102 @@ impl Device {
     pub fn param_index(kind: FxKind, key: &str) -> Option<usize> {
         params(kind).iter().position(|p| p.key == key)
     }
+}
+
+/// Where a device sits in an instrument's chain (Nested Device Chains,
+/// docs/racks/PLAN.md): `[i]` is device `i` of the chain, `[i, p, j]` is
+/// device `j` of path `p` of the Split at `i`, and so on (at most two
+/// Splits deep). Copy, so the UI can keep it as a selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub struct DevPath {
+    n: u8,
+    s: [u8; 5],
+}
+
+impl DevPath {
+    /// device `i` of the instrument's own chain
+    pub fn top(i: usize) -> Self {
+        let mut s = [0; 5];
+        s[0] = i.min(255) as u8;
+        Self { n: 1, s }
+    }
+    /// from a raw index list (None when it is too long or even)
+    #[allow(dead_code)]
+    pub fn from_slice(v: &[u8]) -> Option<Self> {
+        if v.is_empty() || v.len() > 5 || v.len().is_multiple_of(2) {
+            return None;
+        }
+        let mut s = [0; 5];
+        s[..v.len()].copy_from_slice(v);
+        Some(Self {
+            n: v.len() as u8,
+            s,
+        })
+    }
+    /// device `j` of path `p` of the Split this path points at
+    #[allow(dead_code)]
+    pub fn child(self, p: usize, j: usize) -> Option<Self> {
+        let n = self.n as usize;
+        if n + 2 > 5 {
+            return None;
+        }
+        let mut s = self.s;
+        s[n] = p.min(255) as u8;
+        s[n + 1] = j.min(255) as u8;
+        Some(Self { n: self.n + 2, s })
+    }
+    pub fn as_slice(&self) -> &[u8] {
+        &self.s[..self.n as usize]
+    }
+    /// the device's index in its own chain
+    pub fn index(&self) -> usize {
+        self.s[self.n as usize - 1] as usize
+    }
+    /// the chain it is in: `[]` the instrument's, `[i, p]` path p of Split i
+    pub fn chain(&self) -> &[u8] {
+        &self.s[..self.n as usize - 1]
+    }
+    /// the same chain, index `j`
+    #[allow(dead_code)]
+    pub fn with_index(self, j: usize) -> Self {
+        let mut s = self.s;
+        s[self.n as usize - 1] = j.min(255) as u8;
+        Self { n: self.n, s }
+    }
+    /// how many Splits it sits inside (0 = the instrument's own chain)
+    pub fn depth(&self) -> usize {
+        self.n as usize / 2
+    }
+}
+
+/// the chain at `prefix` (`[]`, `[i, p]`, `[i, p, j, q]`)
+pub fn chain_at<'a>(c: &'a [Device], prefix: &[u8]) -> Option<&'a [Device]> {
+    match prefix {
+        [] => Some(c),
+        [i, p, rest @ ..] => {
+            let d = c.get(*i as usize)?;
+            chain_at(&d.paths.get(*p as usize)?.devices, rest)
+        }
+        _ => None,
+    }
+}
+
+/// the chain at `prefix`, mutable
+#[allow(dead_code)]
+pub fn chain_at_mut<'a>(c: &'a mut Vec<Device>, prefix: &[u8]) -> Option<&'a mut Vec<Device>> {
+    match prefix {
+        [] => Some(c),
+        [i, p, rest @ ..] => {
+            let d = c.get_mut(*i as usize)?;
+            chain_at_mut(&mut d.paths.get_mut(*p as usize)?.devices, rest)
+        }
+        _ => None,
+    }
+}
+
+/// the device at `at`
+pub fn dev_at<'a>(c: &'a [Device], at: &DevPath) -> Option<&'a Device> {
+    chain_at(c, at.chain())?.get(at.index())
 }
 
 /// a fresh non-zero device uid (time + counter; unique within a session and
@@ -2273,6 +2400,7 @@ mod tests {
             plugin: None,
             uid: 0,
             grid: None,
+            paths: vec![],
         };
         d.fix();
         assert_eq!(d.params.len(), 7);

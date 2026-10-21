@@ -1063,7 +1063,11 @@ impl App {
             } else if self.dev.inst.contains(p) {
                 DropAt::Device(0)
             } else {
-                DropAt::Device(super::devices::insert_index(&self.dev.cards, p.x))
+                DropAt::Device(super::devices::drop_index(
+                    self.dev.vertical,
+                    &self.dev.cards,
+                    p,
+                ))
             });
         }
         if !self.br.central.contains(p) {

@@ -199,7 +199,7 @@ impl App {
                             self.instr = slot;
                             // the lower panel follows (3.6): its editor
                             if self.extra.follow_select && self.view == View::Timeline {
-                                self.show_instrument_editor();
+                                self.show_selection_panel();
                             }
                         }
                         if r.double_clicked() {
@@ -254,7 +254,7 @@ impl App {
                             // in View › FX)
                             let tl_song = self.with(|s| s.song.timeline.is_some());
                             let (lab, tip) = if tl_song {
-                                ("Show effects (Devices)", "this instrument's effect chain in the lower panel, under the timeline")
+                                ("Show effects (Nested Device Chains)", "this instrument's effect chain in the lower panel, under the timeline")
                             } else {
                                 ("Open in FX view", "this instrument's effect chain in the FX view")
                             };

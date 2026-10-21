@@ -532,6 +532,24 @@ impl App {
                     changed = true;
                 }
                 ui.end_row();
+                ui.label("");
+                if ui
+                    .add_enabled(
+                        self.extra.follow_select,
+                        egui::Checkbox::new(
+                            &mut self.extra.select_chains,
+                            "Selecting a track or instrument opens Nested Device Chains",
+                        ),
+                    )
+                    .on_hover_text(
+                        "its instrument, layers and effects with the selected item's controls; \
+                         off: the Instrument tab (the instrument's editor only)",
+                    )
+                    .changed()
+                {
+                    changed = true;
+                }
+                ui.end_row();
                 ui.label("New songs");
                 if ui
                     .checkbox(&mut self.extra.new_in_timeline, "Open on the Timeline view")

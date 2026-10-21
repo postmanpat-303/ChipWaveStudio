@@ -542,7 +542,7 @@ impl App {
                     );
                     let resp = resp.on_hover_text(match tb {
                         Tab::Instruments => "instruments: blank synths, generator presets, your .cwi library, this song's instruments",
-                        Tab::Effects => "effects: ChipWave's built-ins, Grid FX patches and your effect plugins; double-click adds to the selected track, or drag into Devices or onto a track",
+                        Tab::Effects => "effects: ChipWave's built-ins, Grid FX patches and your effect plugins; double-click adds to the selected track, or drag into Nested Device Chains or onto a track",
                         Tab::Plugins => "CLAP and VST3 plugins from the plugin scan (instruments and effects)",
                         Tab::Samples => "WAV, FLAC, MP3 and Ogg files in your locations",
                         Tab::Songs => "demo songs and .cwt songs in your locations (MOD/MED: import planned)",
@@ -846,11 +846,11 @@ impl App {
             })
             .response
             .on_hover_text(
-                "double-click an effect to add it to the end of this chain; drag it into the Devices row to put it in between, or onto any track",
+                "double-click an effect to add it to the end of this chain; drag it into Nested Device Chains to put it in between, or onto any track",
             );
             if !self.devices_visible()
                 && ui
-                    .small_button("Show Devices  Ctrl+7")
+                    .small_button("Show device chains  Ctrl+7")
                     .on_hover_text("the chain in the lower panel")
                     .clicked()
             {
@@ -1618,6 +1618,17 @@ impl App {
                         t.accent,
                     );
                 }
+            }
+            Some(DropAt::Device(i)) if self.dev.vertical => {
+                let y = match self.dev.cards.get(*i) {
+                    Some(r) => r.top(),
+                    None => self
+                        .dev
+                        .cards
+                        .last()
+                        .map_or(self.dev.inst.bottom() + super::chains::ROW, |r| r.bottom()),
+                };
+                super::devices::paint_marker_h(&p, y, self.dev.row.x_range().shrink(8.0));
             }
             Some(DropAt::Device(i)) => {
                 let x = super::devices::marker_x(self.dev.inst, &self.dev.cards, *i);
