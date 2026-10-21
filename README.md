@@ -29,8 +29,8 @@
 ```
 
 <p align="center">
-  <img src="docs/screenshots/pattern-playing.gif" alt="ChipWave 0.2.3.19 playing the Lumen Drift demo: the Tracker above, the Trance Kick open in the lower-panel instrument editor" width="800">
-  <br><sub>Real capture of ChipWave 0.2.3.19 playing the built-in demo song “Lumen Drift”, with the instrument editor in the lower panel.</sub>
+  <img src="docs/screenshots/timeline-oceans-11.png" alt="ChipWave Studio 0.2.7.0 in the Slate theme playing the Oceans 11 demo: the Timeline on top with eleven tracks of named, coloured clips under Intro, Verse, Chorus, Bridge, Breakdown and Outro markers, the Clip Arranger and Master meters on the left, and the Lead track's chorus melody in the piano roll below" width="800">
+  <br><sub>Real capture of ChipWave Studio 0.2.7.0 playing the built-in demo “Oceans 11” (music by Martin Galway): the Timeline on top, the piano roll below.</sub>
 </p>
 
 <p align="center">
