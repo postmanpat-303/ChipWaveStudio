@@ -1,4 +1,4 @@
-# The Browser (Unreleased)
+# The Browser
 
 The Browser is a long panel docked on the **right** of the window. It lists everything ChipWave can load, with search, tags and filters, and it is the quickest way to get a sound into a song: **double-click** an item, or **drag** it onto a track, an instrument slot or the FX chain.
 
