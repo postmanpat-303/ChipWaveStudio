@@ -2,6 +2,10 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## Unreleased
+
+- **New demo song "Moonlit Cartridge"** (File › Demo songs): a melodic chiptune in G minor, 125 BPM, about 3:27, made only from Chip FX instruments, one Drum Kit and the built-in effects (gentle ducking, ping-pong echo, reverb, filter sweeps). It opens on the Timeline with one named clip per section. Generator: `scripts/make_moonlit_cartridge.py`. Notes: [research/moonlit-cartridge.md](research/moonlit-cartridge.md).
+
 ## 0.2.6.0: One workflow
 
 Released 2026-10-21. Highlights (details below):

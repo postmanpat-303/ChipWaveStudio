@@ -189,7 +189,7 @@ Known limits: the launcher holds note clips only, there's no recording into slot
 | 🔊 **Samples** | import WAV (button or drag and drop), sample view with loop points and preview, chop / slice into instruments or notes |
 | 💾 **Files** | `.cwt` songs (a ZIP of TOML + WAV you can inspect), autosave, backups and crash recovery |
 | 📼 **Export** | WAV and MP3 with ID3 tags; whole song, the current block or the Order list selection |
-| 🎵 **Demo songs** | File > Demo songs: “Lumen Drift” (140 BPM uplifting trance), “Hollow Ritual” (147 BPM dark psytrance) and “Velvet Mirrorball” (104 BPM disco with Voice choir, phaser strings and filter sweeps), all original |
+| 🎵 **Demo songs** | File > Demo songs: “Lumen Drift” (140 BPM uplifting trance), “Hollow Ritual” (147 BPM dark psytrance) “Velvet Mirrorball” (104 BPM disco with Voice choir, phaser strings and filter sweeps), “Chrome Throat” (145 BPM psy with Voice chants) and “Moonlit Cartridge” (125 BPM melodic chiptune made only with Chip FX, effects and a Drum Kit) |
 | ⬆️ **Update check** | Help > Check for updates…, and an optional quiet check at startup |
 | 🖥️ **Scaling** | UI scale in 25 % steps (Ctrl+= / Ctrl+-, up to what fits the window), remembers window size and position |
 
