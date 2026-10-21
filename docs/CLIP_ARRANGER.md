@@ -61,6 +61,32 @@ track's instrument. Every drop is one undo step (Ctrl+Z also removes a track it 
 
 Browser **Drum Patterns** dragged onto the Timeline use the same preview and question.
 
+### Launcher clips
+
+The scenes above come **from the arrangement** (the status line says so). **Capture** (at the right of
+the status line) turns them into the launcher's **own clips**: one scene row per scene, each slot a clip
+of its own that is **linked** to the arrangement's (it shares the notes, so editing them changes both;
+position, length and name are each clip's own). From then on the grid shows the launcher:
+- **▶ on a slot** plays that clip on its track, looping, from the next boundary (the Launch setting);
+  the other tracks play on, so clips from different scenes mix. From a stop only that track plays.
+- **▶ on a scene** plays its clips, each looping on its track; tracks with no clip in that row stop.
+  Click it again while it waits to take it back. **■** stops a track, **Stop all** everything.
+- **Double-click an empty slot** for a new one-bar clip there; it opens in the piano roll and plays the
+  track's instrument. Double-click a clip to edit it; a click selects it for the roll.
+- **Drag a clip onto the Timeline**: the same preview and question as above, a linked copy (Alt:
+  independent).
+- **Right-click a clip**: *Duplicate (variation)* (an independent copy in the next free row of the
+  track) or *Delete*. Right-click a scene: *Duplicate scene* (independent copies) or *Delete scene*.
+  **+ Scene** adds an empty row.
+- A **×N** badge on a slot (and after a clip's name on the Timeline) counts the clips sharing its notes;
+  the piano roll shows **Linked ×N**, and clicking it makes the clip unique (one undo step).
+
+Launcher clips are saved with the song (`[[launcher]]` and `[[scenes]]` in `timeline.toml`, reader
+version 6); songs without them save exactly as before. They never play in the arrangement, the render
+or an export. Limits for now: launcher clips are note clips (Drum Kit patterns included); Capture is
+offered for songs whose scenes are note clips; recording straight into a slot and the generators
+writing into a launcher clip come later.
+
 ## Master
 
 Under the grid: **Volume** (the mixer's Master fader), the limiter's **Drive** and **Ceiling**, a
@@ -76,11 +102,14 @@ and a level graph of the last few seconds. The same settings as Mixer › Master
 - Real-time safe: a click queues a small `Cue` (plain data) for the engine under the same lock as every
   other engine call; the render thread applies it on the boundary row inside the row step, with no extra
   locks or allocation (`src/engine/launch.rs`, tested with an allocation counter).
-- Nothing is saved in the song: the panel reads the song's blocks and the timeline's tracks. Songs open,
+- Launched launcher clips play per track from their own loop clock (counted from the launch), so they
+  never jump when the arrangement loops; other tracks keep the arrangement. Songs without launches take
+  exactly the old engine path (render tests compare sample for sample).
+- Until you Capture, nothing is saved in the song: the panel reads the song's blocks and the timeline's tracks. Songs open,
   save and play exactly as before (a test renders with and without the launcher and compares). The
   on / off switch and the Launch setting are app settings.
 
 ## Not yet (phase 2, see [ROADMAP.md](ROADMAP.md))
 
-Independent per-track slots (track 1 plays block 3 while track 2 plays block 5) and recording a session
-into the timeline.
+For Tracker-block scenes: independent per-track slots (launcher clips do this for note clips). Recording
+into a launcher slot, and recording a session into the timeline.

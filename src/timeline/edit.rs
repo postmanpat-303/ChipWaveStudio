@@ -256,15 +256,21 @@ pub fn make_unique(song: &mut Song, id: u32) -> Option<usize> {
 /// Make unique for a note clip: it gets its own copy of the note data.
 /// Returns the new data index.
 pub fn make_unique_notes(tl: &mut Timeline, id: u32) -> Option<usize> {
-    let i = find(tl, id)?;
-    let ClipKind::Notes { data } = tl.clips[i].kind else {
-        return None;
-    };
-    let mut d = (**tl.notes.get(data as usize)?).clone();
+    let data = tl.any_clip(id)?.notes()?;
+    let mut d = (**tl.notes.get(data)?).clone();
     d.name = format!("{} copy", d.name);
     tl.notes.push(Shared::new(d));
     let nd = tl.notes.len() - 1;
-    tl.clips[i].kind = ClipKind::Notes { data: nd as u32 };
+    let kind = ClipKind::Notes { data: nd as u32 };
+    match find(tl, id) {
+        Some(i) => tl.clips[i].kind = kind,
+        // a launcher clip
+        None => {
+            if let Some(l) = tl.launcher.iter_mut().find(|l| l.clip.id == id) {
+                l.clip.kind = kind;
+            }
+        }
+    }
     Some(nd)
 }
 

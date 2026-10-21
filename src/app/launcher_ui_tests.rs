@@ -182,3 +182,29 @@ fn a_launcher_clip_drags_onto_the_timeline_as_a_linked_copy() {
     });
     assert_eq!(n, 3);
 }
+
+/// The piano roll names linked clips and makes one unique
+#[test]
+fn the_piano_roll_shows_linked_clips_and_makes_a_launcher_clip_unique() {
+    let (mut h, a) = notes_song();
+    let r = super::ui_tests::exact(&h, "Capture");
+    click_at(&mut h, r.center());
+    frames(&mut h, 3);
+    let lid = launcher(&h)[0].clip.id;
+    let (_, whole) = slot(&h, 0, 0);
+    double_click(&mut h, whole.center());
+    frames(&mut h, 4);
+    assert_eq!(h.state().pr.launch, Some(lid));
+    let r = super::ui_tests::exact(&h, "Linked ×2");
+    click_at(&mut h, r.center());
+    frames(&mut h, 3);
+    let mine = launcher(&h)[0].clip.notes();
+    let arr = super::unified_tests::clip(&h, a).notes();
+    assert_ne!(mine, arr, "its own notes now");
+    assert!(h.query_by_label("Linked ×2").is_none());
+    assert!(h.state().status.starts_with("Made unique"));
+    // one undo step brings the link back
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(launcher(&h)[0].clip.notes(), arr);
+}

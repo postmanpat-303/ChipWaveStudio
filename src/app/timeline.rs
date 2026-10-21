@@ -1402,6 +1402,11 @@ impl App {
                     if r.width() > 26.0 {
                         let vis_l = r.left().max(lanes.left()) + 4.0;
                         let mut name = d.name.clone();
+                        // linked (D4): how many clips share these notes
+                        let (na, nb) = tl::linked(&c.tl, data as usize);
+                        if na + nb > 1 {
+                            name.push_str(&format!(" ×{}", na + nb));
+                        }
                         if clip.muted {
                             name.push_str(" · muted");
                         }

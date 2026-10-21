@@ -1162,6 +1162,7 @@ impl App {
             .flatten();
         let mut tool_edit: Option<RNote> = None;
         let mut use_instr_clip: Option<u32> = None;
+        let mut make_unique: Option<u32> = None;
         ui.scope_builder(egui::UiBuilder::new().max_rect(tool.shrink2(egui::vec2(6.0, 1.0))), |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
@@ -1184,6 +1185,23 @@ impl App {
                     }
                 };
                 pr_chip(ui, chip_col, &label).on_hover_text(tip);
+                // linked clips (D4): the count and Make unique
+                if let Target::Notes { data, clip } = target {
+                    let owner = clip.or(self.pr.launch);
+                    let (a, b) = self.with(|s| s.song.timeline.as_deref().map_or((0, 0), |t| tl::linked(t, data)));
+                    if a + b > 1 {
+                        let tip = format!(
+                            "Linked: {} clips ({a} in the arrangement, {b} in the launcher) share these notes, so an \
+                             edit here changes all of them · click: Make unique (this clip gets its own copy)",
+                            a + b
+                        );
+                        if pr_btn(ui, &format!("Linked ×{}", a + b), false, owner.is_some(), &tip).clicked() {
+                            if let Some(id) = owner {
+                                make_unique = Some(id);
+                            }
+                        }
+                    }
+                }
                 if pr_btn(ui, "ALL", false, true, "select every note (Ctrl+A)").clicked() {
                     self.pr.sel = notes.iter().map(|n| n.id).collect();
                     self.pr.focus = true;
@@ -1392,6 +1410,20 @@ impl App {
             self.tl_apply(super::timeline::TlOp::UseTrackInstr);
             self.tlv.sel = sel;
             self.tlv.sels = sels;
+        }
+        if let Some(id) = make_unique {
+            let ok = self.with(|s| {
+                s.song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|t| tl::make_unique_notes(t, id))
+                    .is_some()
+            });
+            if ok {
+                self.pr.sel.clear();
+                self.dirty = true;
+                self.status = "Made unique: this clip has its own notes now (edits no longer change the others)".into();
+            }
         }
         if let (Some(e), Some(n)) = (tool_edit, sel_note) {
             self.pr_set_note(target, n, e);
