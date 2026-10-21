@@ -28,6 +28,10 @@ pub enum FxKind {
     /// a CLAP or VST3 effect plugin (`Device::plugin`); not in `ALL` (its menu lists
     /// the scanned effects instead). Runs in `crate::plugin::fxrack`.
     Plugin,
+    /// Nested Device Chains: the sound goes down 2-4 parallel paths
+    /// (`Device::paths`, each its own chain with level, pan and on / off)
+    /// and is added back together. Not in `ALL`: Add Device offers it.
+    Split,
 }
 
 impl FxKind {
@@ -64,6 +68,7 @@ impl FxKind {
             FxKind::Grid => "Grid FX",
             FxKind::Eq => "EQ",
             FxKind::Plugin => "Plugin effect",
+            FxKind::Split => "Split",
         }
     }
     /// one-line description (Browser › Effects)
@@ -84,6 +89,7 @@ impl FxKind {
             FxKind::Grid => "your own modular effect patch",
             FxKind::Eq => "4-band EQ · shelves and two peaks",
             FxKind::Plugin => "a CLAP or VST3 effect",
+            FxKind::Split => "parallel paths · 2-4 chains mixed back together",
         }
     }
     /// muted strip tint per device type
@@ -99,6 +105,7 @@ impl FxKind {
             FxKind::Plugin => 0x4E7A66,     // plugins: green-grey
             FxKind::Grid => 0x8A6A4E,       // the Grid's amber
             FxKind::Eq => 0x4E7A86,         // EQ: teal
+            FxKind::Split => 0x7A7A5E,      // containers: olive
         }
     }
 }
@@ -319,6 +326,8 @@ pub fn params(k: FxKind) -> &'static [ParamInfo] {
         FxKind::Eq => &EQ,
         // plugin parameters come from the instance (ids, not indices)
         FxKind::Plugin => &[],
+        // a Split's settings are per path (`FxPath`)
+        FxKind::Split => &[],
     }
 }
 
@@ -326,6 +335,14 @@ pub const MAX_PARAMS: usize = 10;
 
 /// devices per insert chain
 pub const MAX_DEVICES: usize = 16;
+
+/// paths of a Split (D6: 2-4; one is allowed in files, as the plain sound)
+pub const MAX_PATHS: usize = 4;
+/// Splits inside Splits: one Split may sit inside another, no deeper
+pub const MAX_SPLIT_DEPTH: usize = 2;
+/// a new Split's path level: two empty paths at -6 dB add up to the
+/// unchanged sound (0.5 + 0.5)
+pub const NEW_PATH_DB: f32 = -6.020_6;
 
 impl ParamInfo {
     pub fn to_real(&self, n: f32) -> f32 {
@@ -411,6 +428,19 @@ pub struct FxPath {
     pub pan: f32,
 }
 
+impl FxPath {
+    /// (left, right) gain: the level, then a balance pan (centre = exactly
+    /// the level on both sides); 0 when off
+    pub fn gains(&self) -> [f32; 2] {
+        if !self.on {
+            return [0.0, 0.0];
+        }
+        let g = 10f32.powf(self.level_db / 20.0);
+        let p = self.pan.clamp(-1.0, 1.0);
+        [g * (1.0 - p).min(1.0), g * (1.0 + p).min(1.0)]
+    }
+}
+
 impl Default for FxPath {
     fn default() -> Self {
         Self {
@@ -473,6 +503,95 @@ impl Device {
         } else {
             self.grid = None;
         }
+        self.fix_paths(1);
+    }
+
+    /// a Split's paths after loading: 1-4 paths, levels and pans in range,
+    /// no plugin effects and no Splits deeper than allowed (those are
+    /// bypassed, never dropped); other kinds have none
+    fn fix_paths(&mut self, depth: usize) {
+        if self.kind != FxKind::Split {
+            self.paths.clear();
+            return;
+        }
+        if self.paths.is_empty() {
+            self.paths.push(FxPath::default());
+        }
+        self.paths.truncate(MAX_PATHS);
+        for p in &mut self.paths {
+            p.level_db = if p.level_db.is_finite() {
+                p.level_db.clamp(-60.0, 6.0)
+            } else {
+                0.0
+            };
+            p.pan = if p.pan.is_finite() {
+                p.pan.clamp(-1.0, 1.0)
+            } else {
+                0.0
+            };
+            p.devices.truncate(MAX_DEVICES);
+            for d in &mut p.devices {
+                let deep = d.kind == FxKind::Split && depth >= MAX_SPLIT_DEPTH;
+                if d.kind == FxKind::Plugin || deep {
+                    d.enabled = false;
+                }
+                let info = params(d.kind);
+                let mut v: Vec<f32> = info.iter().map(|i| i.to_norm(i.def)).collect();
+                for (x, s) in v.iter_mut().zip(&d.params) {
+                    *x = s.clamp(0.0, 1.0);
+                }
+                d.params = v;
+                if d.kind == FxKind::Grid {
+                    d.grid
+                        .get_or_insert_with(|| Box::new(crate::grid::fx_default()))
+                        .fix();
+                } else {
+                    d.grid = None;
+                }
+                if deep {
+                    // kept with its settings, but not run (no deeper nesting)
+                    d.paths.truncate(MAX_PATHS);
+                } else {
+                    d.fix_paths(depth + 1);
+                }
+            }
+        }
+    }
+
+    /// a new Split: two paths at -6 dB (the sound unchanged until devices
+    /// go in)
+    pub fn split() -> Self {
+        let mut d = Device::new(FxKind::Split);
+        d.paths = (0..2)
+            .map(|_| FxPath {
+                level_db: NEW_PATH_DB,
+                ..Default::default()
+            })
+            .collect();
+        d
+    }
+
+    /// the deepest Split nesting at and under this device (0 = none)
+    pub fn split_depth(&self) -> usize {
+        if self.kind != FxKind::Split {
+            return 0;
+        }
+        1 + self
+            .paths
+            .iter()
+            .flat_map(|p| &p.devices)
+            .map(|d| d.split_depth())
+            .max()
+            .unwrap_or(0)
+    }
+    /// a plugin effect at or under this device
+    pub fn has_plugin(&self) -> bool {
+        self.kind == FxKind::Plugin
+            || self
+                .paths
+                .iter()
+                .flat_map(|p| &p.devices)
+                .any(|d| d.has_plugin())
     }
     #[allow(dead_code)]
     pub fn real(&self, i: usize) -> f32 {
@@ -520,7 +639,6 @@ impl DevPath {
         Self { n: 1, s }
     }
     /// from a raw index list (None when it is too long or even)
-    #[allow(dead_code)]
     pub fn from_slice(v: &[u8]) -> Option<Self> {
         if v.is_empty() || v.len() > 5 || v.len().is_multiple_of(2) {
             return None;
@@ -533,7 +651,6 @@ impl DevPath {
         })
     }
     /// device `j` of path `p` of the Split this path points at
-    #[allow(dead_code)]
     pub fn child(self, p: usize, j: usize) -> Option<Self> {
         let n = self.n as usize;
         if n + 2 > 5 {
@@ -555,13 +672,6 @@ impl DevPath {
     pub fn chain(&self) -> &[u8] {
         &self.s[..self.n as usize - 1]
     }
-    /// the same chain, index `j`
-    #[allow(dead_code)]
-    pub fn with_index(self, j: usize) -> Self {
-        let mut s = self.s;
-        s[self.n as usize - 1] = j.min(255) as u8;
-        Self { n: self.n, s }
-    }
     /// how many Splits it sits inside (0 = the instrument's own chain)
     pub fn depth(&self) -> usize {
         self.n as usize / 2
@@ -581,7 +691,6 @@ pub fn chain_at<'a>(c: &'a [Device], prefix: &[u8]) -> Option<&'a [Device]> {
 }
 
 /// the chain at `prefix`, mutable
-#[allow(dead_code)]
 pub fn chain_at_mut<'a>(c: &'a mut Vec<Device>, prefix: &[u8]) -> Option<&'a mut Vec<Device>> {
     match prefix {
         [] => Some(c),
@@ -617,7 +726,7 @@ pub fn new_uid() -> u32 {
 pub fn presets(k: FxKind) -> &'static [(&'static str, &'static [(&'static str, f32)])] {
     match k {
         // Grid FX: its patches are in the patch editor (crate::grid::fx_presets)
-        FxKind::Plugin | FxKind::Grid => &[],
+        FxKind::Plugin | FxKind::Grid | FxKind::Split => &[],
         FxKind::Delay => &[
             (
                 "1/8 dotted ping-pong",
@@ -1369,6 +1478,8 @@ enum Dsp {
     /// the device's patch (a copy: structure changes rebuild the chain,
     /// knob values are copied in place) and its state
     Grid(Box<(crate::grid::GridP, crate::grid::GridState)>),
+    /// a Split: one chain of states per path
+    Split(Box<SplitDsp>),
 }
 
 /// Cache of pure per-parameter maths (`f(x)` with `sr` fixed per state),
@@ -1402,6 +1513,89 @@ impl Memo {
         self.set |= 1 << slot;
         v
     }
+}
+
+/// a Split's paths (built with the device, never in the audio callback)
+pub struct SplitDsp {
+    paths: Vec<PathDsp>,
+    /// gain smoothing per sample (5 ms)
+    k: f32,
+}
+
+struct PathDsp {
+    states: Vec<FxState>,
+    g: [f32; 2],
+    tg: [f32; 2],
+}
+
+impl SplitDsp {
+    fn new(d: &Device, sr: f32) -> Self {
+        Self {
+            paths: d
+                .paths
+                .iter()
+                .map(|p| {
+                    let tg = p.gains();
+                    PathDsp {
+                        states: p.devices.iter().map(|x| FxState::new(x, sr)).collect(),
+                        g: tg,
+                        tg,
+                    }
+                })
+                .collect(),
+            k: 1.0 - (-1.0 / (0.005 * sr)).exp(),
+        }
+    }
+    fn set_targets(&mut self, d: &Device) {
+        for (pd, p) in self.paths.iter_mut().zip(&d.paths) {
+            pd.tg = p.gains();
+            for (st, x) in pd.states.iter_mut().zip(&p.devices) {
+                st.set_targets_plain(x);
+            }
+        }
+    }
+    fn reset(&mut self, d: &Device) {
+        for (pd, p) in self.paths.iter_mut().zip(&d.paths) {
+            pd.tg = p.gains();
+            pd.g = pd.tg;
+            for (st, x) in pd.states.iter_mut().zip(&p.devices) {
+                if st.kind == x.kind {
+                    st.reset(x);
+                }
+            }
+        }
+    }
+    /// every path on the same input, added back together (one path at
+    /// 0 dB, centre, is bit for bit its own chain)
+    fn run(&mut self, l: f32, r: f32, ctx: &Ctx) -> (f32, f32) {
+        let (mut ol, mut or) = (0.0, 0.0);
+        let k = self.k;
+        for pd in &mut self.paths {
+            for c in 0..2 {
+                if pd.g[c] != pd.tg[c] {
+                    pd.g[c] += (pd.tg[c] - pd.g[c]) * k;
+                    if (pd.g[c] - pd.tg[c]).abs() < 1e-6 {
+                        pd.g[c] = pd.tg[c];
+                    }
+                }
+            }
+            if pd.g == [0.0, 0.0] && pd.tg == [0.0, 0.0] {
+                continue;
+            }
+            let (mut a, mut b) = (l, r);
+            for st in &mut pd.states {
+                (a, b) = st.process(a, b, ctx);
+            }
+            ol += a * pd.g[0];
+            or += b * pd.g[1];
+        }
+        (ol, or)
+    }
+}
+
+/// no automation override (nested devices, D8)
+fn no_over(_: usize) -> Option<f32> {
+    None
 }
 
 /// realtime state for one device instance
@@ -1497,6 +1691,7 @@ impl FxState {
                     .unwrap_or_else(crate::grid::fx_default),
                 Default::default(),
             ))),
+            FxKind::Split => Dsp::Split(Box::new(SplitDsp::new(d, sr))),
         };
         let mut s = Self {
             kind: d.kind,
@@ -1579,6 +1774,7 @@ impl FxState {
             Dsp::Phaser(ph) => *ph = Default::default(),
             Dsp::FreqShift(f) => *f = Default::default(),
             Dsp::Grid(b) => b.1 = Default::default(),
+            Dsp::Split(sp) => sp.reset(d),
             Dsp::Eq { c, z, last, n } => {
                 *c = [Biquad::FLAT; 4];
                 *z = [[[0.0; 2]; 2]; 4];
@@ -1608,6 +1804,15 @@ impl FxState {
             }
             b.0.level = g.level;
         }
+        // a Split's paths: their gains and their devices' own values
+        if let Dsp::Split(sp) = &mut self.dsp {
+            sp.set_targets(d);
+        }
+    }
+
+    /// `set_targets` without automation (devices inside a Split, D8)
+    pub fn set_targets_plain(&mut self, d: &Device) {
+        self.set_targets(d, no_over);
     }
 
     /// a compressor's current gain reduction in dB (0 when idle or not a
@@ -1668,6 +1873,7 @@ impl FxState {
         let memo = &mut self.memo;
         match &mut self.dsp {
             Dsp::Plugin => (l, r),
+            Dsp::Split(sp) => sp.run(l, r, ctx),
             Dsp::Eq { c, z, last, n } => {
                 if *n == 0 {
                     *n = 16;
@@ -1933,9 +2139,30 @@ const SPARE_CHAINS: usize = 6;
 fn dev_sig(d: &Device) -> (FxKind, u64) {
     let fp = match (&d.kind, &d.grid) {
         (FxKind::Grid, Some(g)) => g.fingerprint(),
+        _ if d.kind == FxKind::Split => split_fp(d),
         _ => 0,
     };
     (d.kind, fp)
+}
+
+/// a Split's structure: its paths and the kinds (and patches) in them
+fn split_fp(d: &Device) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut mix = |v: u64| {
+        h ^= v;
+        h = h.wrapping_mul(0x100_0000_01b3);
+    };
+    mix(d.paths.len() as u64);
+    for p in &d.paths {
+        mix(0xA5 ^ p.devices.len() as u64);
+        for x in &p.devices {
+            let (k, fp) = dev_sig(x);
+            mix(k as u64);
+            mix(fp);
+            mix(x.uid as u64);
+        }
+    }
+    h
 }
 
 fn same_sig(sig: &[(FxKind, u64)], devs: &[Device]) -> bool {

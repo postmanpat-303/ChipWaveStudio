@@ -40,7 +40,7 @@ pub(crate) fn key_params(d: &Device) -> Vec<usize> {
         K::Phaser => &["depth", "feedback", "mix"],
         K::FreqShift => &["coarse", "feedback", "mix"],
         K::Grid => &["m1", "m2", "m3", "m4"],
-        K::Plugin => &[],
+        K::Plugin | K::Split => &[],
     };
     let info = fx::params(d.kind);
     keys.iter()

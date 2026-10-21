@@ -351,6 +351,7 @@ fn older_songs_round_trip_unchanged() {
     for f in ["chipwave-0.2.3.5-song.cwt", "chipwave-0.2.3.6-song.cwt"] {
         let s = fileio::load_cwt(&dir.join(f)).expect(f);
         assert!(!fileio::needs_reader_6(&s), "{f}");
+        assert!(!fileio::needs_reader_7(&s), "{f}");
         let mut t = s.clone();
         tl::enter_timeline_mode(&mut t);
         assert!(!fileio::needs_reader_6(&t), "{f} in timeline mode");

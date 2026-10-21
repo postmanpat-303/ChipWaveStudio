@@ -2764,6 +2764,8 @@ pub(crate) mod alloc_count {
 }
 
 #[cfg(test)]
+pub(crate) mod racks_tests;
+#[cfg(test)]
 mod tests {
     use super::*;
 
