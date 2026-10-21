@@ -41,6 +41,7 @@ mod plugin;
 mod poly;
 mod presets;
 mod prompt;
+mod racks;
 mod recovery;
 #[cfg(test)]
 mod render_hashes;
