@@ -3245,6 +3245,10 @@ impl App {
                 // a header: the timeline's clip selection keeps only that
                 // track's clips (Shift / Ctrl: keeps them all)
                 if self.tl_select_track(i, keep) {
+                    if self.extra.follow_select && !keep {
+                        // its instrument's editor (or the chooser) below
+                        self.set_lower(1);
+                    }
                     self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
                 } else {
                     self.status =
@@ -3255,6 +3259,28 @@ impl App {
             HeadOp::Pick(i) => {
                 // (a selection, not an edit: the song stays saved)
                 self.tl_select_track(i, true);
+                // a clip clicked while the instrument editor shows: the
+                // clip's editor instead (3.2)
+                if self.extra.follow_select && self.extra.lower_inst && self.tlv.sel.is_some() {
+                    let kind = self.tlv.sel.and_then(|id| {
+                        let c = self.tlv.cache.as_ref()?;
+                        c.tl.clips
+                            .iter()
+                            .find(|x| x.id == id)
+                            .map(|x| x.audio().is_some())
+                    });
+                    // (a Drum Kit track's clips are edited in the kit's
+                    // step grid, which is the instrument editor: it stays)
+                    let kit = self.with(|s| {
+                        s.song
+                            .instruments
+                            .get((self.instr as usize).wrapping_sub(1))
+                            .is_some_and(super::drumpat::is_kit)
+                    });
+                    if kind == Some(false) && !kit {
+                        self.set_lower(3);
+                    }
+                }
                 return;
             }
             _ => {}

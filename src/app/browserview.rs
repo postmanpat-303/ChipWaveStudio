@@ -1127,35 +1127,10 @@ impl App {
         })
     }
 
-    /// the instrument track `tr` mostly plays (else the current one)
+    /// the instrument track `tr` plays (`track_instrument`), else the
+    /// current one
     pub(super) fn track_slot(&self, tr: usize) -> u8 {
-        let from_track = self.with(|s| {
-            s.song
-                .timeline
-                .as_deref()
-                .and_then(|t| t.tracks.get(tr))
-                .map(|t| t.instr)
-                .unwrap_or(0)
-        });
-        if from_track > 0 {
-            return from_track;
-        }
-        let mut count = [0usize; 256];
-        self.with(|s| {
-            for p in &s.song.patterns {
-                for r in &p.cells {
-                    if let Some(c) = r.get(tr) {
-                        if c.instr > 0 {
-                            count[c.instr as usize] += 1;
-                        }
-                    }
-                }
-            }
-        });
-        match (1..256).max_by_key(|&i| count[i]) {
-            Some(i) if count[i] > 0 => i as u8,
-            _ => self.instr,
-        }
+        self.track_instrument(tr).unwrap_or(self.instr)
     }
 
     pub(crate) fn br_drop(&mut self, it: &Item, d: DropAt, ctx: &egui::Context) {

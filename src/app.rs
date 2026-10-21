@@ -98,6 +98,8 @@ pub mod showcase;
 mod showcase_tests;
 #[cfg(test)]
 mod stabilise_tests;
+#[cfg(test)]
+mod stage3_tests;
 mod timeline;
 #[cfg(test)]
 mod timeline_m2_tests;

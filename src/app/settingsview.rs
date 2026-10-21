@@ -520,6 +520,18 @@ impl App {
                     changed = true;
                 }
                 ui.end_row();
+                ui.label("Lower panel");
+                if ui
+                    .checkbox(&mut self.extra.follow_select, "Follow the Timeline selection")
+                    .on_hover_text(
+                        "clicking a track header shows its instrument's editor under the Timeline, \
+                         clicking a clip shows the clip (piano roll); off: the lower panel stays as it is",
+                    )
+                    .changed()
+                {
+                    changed = true;
+                }
+                ui.end_row();
                 ui.label("New songs");
                 if ui
                     .checkbox(&mut self.extra.new_in_timeline, "Open on the Timeline view")

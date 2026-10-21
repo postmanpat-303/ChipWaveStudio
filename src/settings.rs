@@ -90,6 +90,11 @@ pub struct Extra {
     /// effect chain (0.2.4)
     #[serde(default)]
     pub lower_dev: bool,
+    /// the lower panel follows what you click on the Timeline: a track
+    /// header shows its instrument's editor, a clip its clip editor
+    /// (docs/unified/PLAN.md 3.2)
+    #[serde(default = "yes")]
+    pub follow_select: bool,
     /// Full-height pattern: the lower panel is hidden
     #[serde(default)]
     pub full_height: bool,
@@ -233,6 +238,7 @@ impl Default for Extra {
             lower_inst: true,
             lower_chosen: false,
             lower_dev: false,
+            follow_select: true,
             full_height: false,
             classic_editor: false,
             cards_closed: vec![],

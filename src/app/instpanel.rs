@@ -538,6 +538,19 @@ impl App {
             );
             return;
         }
+        // a track with no instrument: "Choose an instrument" over the editor
+        // (the track pie's Add list; 3.3)
+        let body = if self.extra.lower_inst && !self.extra.lower_dev && self.chooser_wanted() {
+            let h = if body.width() < 1200.0 { 52.0 } else { 30.0 };
+            let strip = Rect::from_min_size(body.min, egui::vec2(body.width(), h));
+            ui.scope_builder(
+                egui::UiBuilder::new().max_rect(strip.shrink2(egui::vec2(8.0, 3.0))),
+                |ui| self.instrument_chooser(ui),
+            );
+            Rect::from_min_max(Pos2::new(body.left(), strip.bottom() + 2.0), body.max)
+        } else {
+            body
+        };
         ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
             if self.extra.lower_dev {
                 self.devices_view(ui)
@@ -549,6 +562,63 @@ impl App {
                 self.arranger_view(ui)
             }
         });
+    }
+
+    /// the current Timeline track has no instrument (D6: none assigned and
+    /// none played by its clips)
+    pub(super) fn chooser_wanted(&self) -> bool {
+        if self.view != View::Timeline {
+            return false;
+        }
+        let real = self.with(|s| {
+            s.song.timeline.as_deref().is_some_and(|t| {
+                t.tracks.get(self.ch).is_some_and(|k| {
+                    k.kind != crate::timeline::TrackKind::Master
+                        && k.kind != crate::timeline::TrackKind::Audio
+                })
+            })
+        });
+        real && self.track_instrument(self.ch).is_none()
+    }
+
+    /// "Choose an instrument" for the current track: the built-ins and
+    /// Browse… (the same list and actions as the track pie's Add)
+    fn instrument_chooser(&mut self, ui: &mut egui::Ui) {
+        let t = th();
+        let tr = self.ch;
+        let full = self.with(|s| s.song.instruments.len() >= 255);
+        let mut pick = None;
+        let mut browse = false;
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(4.0, 3.0);
+            ui.label(
+                egui::RichText::new(format!("Track {:02} has no instrument · Choose an instrument:", tr + 1))
+                    .strong()
+                    .color(t.ink),
+            );
+            for b in super::trackpie::Builtin::ALL {
+                if ui
+                    .add_enabled(!full, egui::Button::new(b.label()).small())
+                    .on_hover_text(b.tip())
+                    .on_disabled_hover_text("all 255 instrument slots are used")
+                    .clicked()
+                {
+                    pick = Some(b);
+                }
+            }
+            if ui
+                .add(egui::Button::new("Browse…").small())
+                .on_hover_text("the Browser's Instruments (your Favourites first): the one you pick plays this track")
+                .clicked()
+            {
+                browse = true;
+            }
+        });
+        if let Some(b) = pick {
+            self.track_new_instrument(tr, b);
+        } else if browse {
+            self.track_change_instrument(tr);
+        }
     }
 
     /// Arranger | Instrument | Automation, and Full-height pattern
