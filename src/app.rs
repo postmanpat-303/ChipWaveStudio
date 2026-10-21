@@ -77,6 +77,8 @@ mod modview;
 #[cfg(test)]
 mod modview_tests;
 #[cfg(test)]
+mod myracks_tests;
+#[cfg(test)]
 mod narrow_tests;
 #[cfg(test)]
 mod newsong_tests;
@@ -98,6 +100,7 @@ mod prollpan_tests;
 #[cfg(test)]
 mod rack_tests;
 mod rackops;
+mod rackui;
 mod radial;
 #[cfg(test)]
 mod record_tests;
@@ -1448,6 +1451,7 @@ impl eframe::App for App {
         self.plugin_browser(&ctx);
         self.plugin_setup_window(&ctx);
         self.showcase_window(&ctx);
+        self.save_rack_window(&ctx);
         self.browser_drag(&ctx);
         // window close button: ask first when there are unsaved changes
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {

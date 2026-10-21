@@ -66,6 +66,11 @@ pub(crate) struct DevUi {
     pub(crate) tree_drop: Option<super::chains::TreeDrop>,
     /// the Add Device window is open for this chain
     pub(crate) add: Option<super::chains::AddAt>,
+    /// the Save Custom Rack dialog is open
+    pub(crate) save_rack: Option<super::rackui::SaveRack>,
+    /// My Racks should be listed again (a rack was saved or changed)
+    pub(crate) racks_dirty: bool,
+    pub(crate) my_racks: super::rackui::MyRacks,
 }
 
 impl Default for DevUi {
@@ -89,6 +94,9 @@ impl Default for DevUi {
             by_select: false,
             tree_drop: None,
             add: None,
+            save_rack: None,
+            racks_dirty: true,
+            my_racks: Default::default(),
         }
     }
 }

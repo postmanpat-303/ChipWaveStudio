@@ -185,6 +185,18 @@ pub(super) fn icon(p: &egui::Painter, ic: Icon, c: Pos2, s: f32, col: Color32) {
             }
         }
         Icon::Tab(Tab::Files) => super::drumpat::folder_icon(p, c, s, col),
+        Icon::Tab(Tab::Racks) => {
+            // stacked layers
+            for k in 0..3 {
+                let y = (k as f32 - 1.0) * s * 0.24;
+                p.rect_stroke(
+                    Rect::from_center_size(c + v(0.0, y), v(s * 0.78, s * 0.18)),
+                    2,
+                    st,
+                    egui::StrokeKind::Inside,
+                );
+            }
+        }
         Icon::Tab(Tab::Midi) => {
             let r = Rect::from_center_size(c, v(s * 0.8, s * 0.6));
             p.rect_stroke(r, 1, st, egui::StrokeKind::Inside);
@@ -552,6 +564,7 @@ impl App {
                         Tab::Midi => "MIDI files in your locations (import planned)",
                         Tab::Patterns => "Drum Patterns: ready-made grooves by style with their own kit; preview in time with the song, drag onto the timeline",
                         Tab::Files => "your drives and folders: Home, Music, Desktop, Downloads, network drives",
+                        Tab::Racks => "My Racks: the racks you saved (Save Custom Rack… in Nested Device Chains); double-click loads one onto the selected track",
                     });
                     if resp.clicked() && !on {
                         self.br.filter.tab = tb;
@@ -577,9 +590,11 @@ impl App {
             se.request_focus();
         }
         // ---- Drum Patterns / Files: their own body (app/drumpat.rs)
-        if matches!(tab, Tab::Patterns | Tab::Files) {
+        if matches!(tab, Tab::Patterns | Tab::Files | Tab::Racks) {
             if tab == Tab::Patterns {
                 self.patterns_body(ui);
+            } else if tab == Tab::Racks {
+                self.racks_body(ui);
             } else {
                 self.files_body(ui);
             }

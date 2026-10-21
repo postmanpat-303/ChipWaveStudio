@@ -395,6 +395,15 @@ impl App {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(4.0);
                 if ui
+                    .button("Save Custom Rack…")
+                    .on_hover_text(
+                        "this rack (or this instrument as a 1-layer rack) with every setting, into My Racks",
+                    )
+                    .clicked()
+                {
+                    self.open_save_rack(root);
+                }
+                if ui
                     .button("+ Add Device")
                     .on_hover_text(
                         "a ChipWave effect, a Split or a plugin effect: after the selected device, or at the end of the selected chain",

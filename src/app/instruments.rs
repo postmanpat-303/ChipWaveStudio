@@ -402,6 +402,12 @@ impl App {
                                 self.set_lower(4);
                                 ui.close();
                             }
+                            if ui.button("Save Custom Rack…").clicked() {
+                                let idx = slot as usize - 1;
+                                let root = self.with(|s| s.song.rack_of(idx)).unwrap_or(idx);
+                                self.open_save_rack(root);
+                                ui.close();
+                            }
                             if ui.button("Duplicate instrument").clicked() {
                                 self.duplicate_instrument(slot);
                                 ui.close();
