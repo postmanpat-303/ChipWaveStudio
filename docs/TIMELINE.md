@@ -32,6 +32,7 @@ The toolbar shows which mode the song is in:
 | Select | Click a clip. **Ctrl-click** or **Shift-click** adds or removes clips. Drag on empty space for a **box** selection (with Ctrl/Shift it adds). **Ctrl+A** selects every clip, **Esc** clears |
 | Move | Drag a clip (the whole selection moves, across tracks too). Moves snap to the grid by the clip's start. Hold **Shift** for single rows |
 | Copy | **Alt-drag**: copies follow the mouse and the originals stay. **Ctrl+D** duplicates the selection right after itself. Copies are **linked**: they play the same block, so editing the block changes all of them |
+| Overlaps | Moving or duplicating clips never asks: clips you move over are outlined **red** while you drag, and the status line says what plays there (of overlapping Tracker clips the one that starts later; note and audio clips play together). Drops from the Clip Arranger or the Browser show a preview and ask before covering anything (see [CLIP_ARRANGER.md](CLIP_ARRANGER.md#dropping-a-slot)) |
 | Make unique | **Ctrl+Shift+D**: the clip gets its own copy of its block ("Groove copy"), so editing it no longer changes the others |
 | Resize / loop | Drag a clip's **right edge**. Past the end of its block the block repeats (notches show each repeat) |
 | Trim | Drag the **left edge**: hides (or, on a looping clip, reveals) the start, while the content stays where it is |

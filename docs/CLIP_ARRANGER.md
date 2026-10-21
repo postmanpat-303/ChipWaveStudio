@@ -23,8 +23,8 @@ The Tracker view keeps its Instruments list.
   Reduce motion). Clicking a queued scene again takes it back.
 - **Launch** (top right): **1 bar**, **½ bar**, **Beat** or **Off** (the next row). Bars follow the
   timeline's time signature.
-- **Drag a slot onto the timeline:** it lands as an ordinary **Tracker clip** (block + column) on the
-  bar under the mouse, as long as the block. One undo step.
+- **Drag a slot onto the timeline:** it lands as an ordinary **Tracker clip** (block + column) where
+  the preview shows, as long as the block. One undo step. See *Dropping a slot* below.
 - **Double-click a slot** to open that block and column in the Tracker.
 - **‹ ›** page through the scenes when there are more than fit.
 - The Song / Master row isn't launchable.
@@ -40,6 +40,26 @@ clips are all Tracker clips keep the blocks as scenes.
 
 Instruments live in **Browser › Instruments** and in the **Inspector** (I): its Instrument section has
 a picker for the selected track (every note on the track switches, one undo step).
+
+### Dropping a slot
+
+Drag any slot (Tracker blocks or note clips) onto the Timeline. While you hold it there:
+- the target track is tinted and a **ghost clip** shows where it lands and how long it is;
+- a dashed **snap line** runs through the ruler with the bar it lands on and the snap in use (the
+  toolbar's **Snap** setting; hold **Shift** for single rows);
+- a card at the pointer says what will happen: the clip and its length, *→ Track 02 Bass at bar 9*,
+  the instrument that will play it, and whether it is **linked** (the default: a copy that shares its
+  notes or block, so editing one changes both) or, with **Alt** held, an **independent copy**;
+- clips in the way are outlined red and the card says *Overlaps …*.
+
+**Esc** cancels. Letting go over a free place puts it there. Letting go over other clips asks first:
+**Replace** (the clips in the way lose only the part under the new clip), **Place after it** (the
+first free place on that track, with its bar on the button), **Keep both** (note and audio clips play
+together; Tracker clips can't, because one hides the other) or **Cancel**. Dropping on the Song /
+Master row, below the tracks, or a note clip on an audio track makes a **new track** with the source
+track's instrument. Every drop is one undo step (Ctrl+Z also removes a track it added).
+
+Browser **Drum Patterns** dragged onto the Timeline use the same preview and question.
 
 ## Master
 
@@ -62,5 +82,5 @@ and a level graph of the last few seconds. The same settings as Mixer › Master
 
 ## Not yet (phase 2, see [ROADMAP.md](ROADMAP.md))
 
-Independent per-track slots (track 1 plays block 3 while track 2 plays block 5), dragging note-clip slots,
-and recording a session into the timeline.
+Independent per-track slots (track 1 plays block 3 while track 2 plays block 5) and recording a session
+into the timeline.
