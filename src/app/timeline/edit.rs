@@ -31,6 +31,7 @@ impl App {
         let mut t = d.origin.clone();
         let sels = self.tlv.sels.clone();
         let mut moved = false;
+        let mut over = vec![];
         let nch = self.with(|s| s.song.channels);
         let what = self.with(|s| {
             match e {
@@ -68,7 +69,13 @@ impl App {
                     }
                 }
             }
-            let what = describe(&t, e);
+            let mut what = describe(&t, e);
+            if let DragEdit::Move(..) = e {
+                over = tl::covered(&t, &sels);
+                if !over.is_empty() {
+                    what.push_str(&over_note(&t, &over));
+                }
+            }
             s.song.timeline = Some(Box::new(t));
             let Shared { song, engine, .. } = s;
             engine.ensure_plan(song);
@@ -77,6 +84,7 @@ impl App {
         if let Some(d) = self.tlv.drag.as_mut() {
             d.moved |= moved;
         }
+        self.tlv.move_over = over;
         // the unsaved mark comes from the undo commit when the mouse is let
         // go, and only if the drag changed something (a drag that snaps
         // back to where it started is not an edit)
@@ -86,6 +94,7 @@ impl App {
     /// mouse released: an Alt-copy that never moved is taken back; markers
     /// are put in order again
     pub(super) fn timeline_drag_end(&mut self) {
+        self.tlv.move_over.clear();
         let Some(d) = self.tlv.drag.take() else {
             return;
         };
@@ -213,8 +222,13 @@ impl App {
                     let t = song.timeline.as_deref_mut().unwrap();
                     let ids = tl::duplicate(t, &sels);
                     let n = ids.len();
+                    let over = tl::covered(t, &ids);
                     new_sel = Some(ids);
-                    format!("Duplicated {n} clip{} (linked: same blocks · Ctrl+Shift+D makes one unique)", plural(n))
+                    format!(
+                        "Duplicated {n} clip{} (linked: same blocks · Ctrl+Shift+D makes one unique){}",
+                        plural(n),
+                        if over.is_empty() { String::new() } else { over_note(t, &over) }
+                    )
                 }
                 TlOp::Delete => {
                     let t = song.timeline.as_deref_mut().unwrap();
@@ -395,27 +409,14 @@ impl App {
                     }
                 }
                 TlOp::DrumPattern { .. } => String::new(),
-                TlOp::PlaceBlock {
-                    block,
-                    col,
+                TlOp::Place {
+                    src,
                     track,
                     at,
-                } => {
-                    let (b, c, tr) = (block as usize, col as usize, track as usize);
-                    match tl::place_block(song, tr, at, b, c) {
-                        Some(id) => {
-                            new_sel = Some(vec![id]);
-                            let name = song.patterns.get(b).map_or(String::new(), |p| p.name.clone());
-                            let bar = song.timeline.as_deref().map_or(1, |t| t.bar_pos(at).bar);
-                            format!(
-                                "Tracker clip: block {b:02} {name}, column {} on track {:02} at bar {bar}",
-                                c + 1,
-                                tr + 1
-                            )
-                        }
-                        None => "No track there for that clip".into(),
-                    }
-                }
+                    unique,
+                    fit,
+                    grid,
+                } => place_dropped(song, src, track as usize, at, unique, fit, grid, &mut new_sel),
                 TlOp::PlaceAudio => {
                     let (msg, ids) = App::place_ready_audio(song, ready);
                     if !ids.is_empty() {
@@ -738,4 +739,107 @@ pub(crate) fn split_targets(t: &tl::Timeline, sels: &[u32], id: u32, at: Tick) -
     } else {
         vec![id]
     }
+}
+
+/// TlOp::Place: a dropped clip (docs/unified/PLAN.md Stage 4a); the status
+#[allow(clippy::too_many_arguments)]
+fn place_dropped(
+    song: &mut Song,
+    src: super::dropplan::DropSrc,
+    tr: usize,
+    at: Tick,
+    unique: bool,
+    fit: super::dropplan::Fit,
+    grid: Tick,
+    new_sel: &mut Option<Vec<u32>>,
+) -> String {
+    use super::dropplan::{DropSrc, Fit};
+    let len = match src {
+        DropSrc::Block { block, .. } => song
+            .patterns
+            .get(block)
+            .map(|p| tl::rows_to_ticks(p.rows.max(1))),
+        DropSrc::Clip(id) => song
+            .timeline
+            .as_deref()
+            .and_then(|t| t.clips.iter().find(|c| c.id == id))
+            .map(|c| c.len),
+        // placed by `App::drop_pattern` (it adds the kit)
+        DropSrc::Pattern(_) => None,
+    };
+    let Some(len) = len else {
+        return "That clip is gone: nothing placed".into();
+    };
+    let Some(t) = song.timeline.as_deref() else {
+        return String::new();
+    };
+    let at = match fit {
+        Fit::After => tl::free_start(t, tr, at, len, grid),
+        _ => at,
+    };
+    // placed first, then the span cleared around it: the source itself may
+    // be in the way, and the copy takes it whole
+    let id = match src {
+        DropSrc::Block { block, col } => tl::place_block(song, tr, at, block, col).inspect(|&id| {
+            if unique {
+                let _ = tl::make_unique(song, id);
+            }
+        }),
+        DropSrc::Clip(id) => tl::place_copy(song, id, tr, at, unique),
+        DropSrc::Pattern(_) => None,
+    };
+    let Some(id) = id else {
+        return "No track there for that clip".into();
+    };
+    let cleared = match (fit, song.timeline.as_deref_mut()) {
+        (Fit::Replace, Some(t)) => tl::clear_range(t, tr, at, at + len, &[id]),
+        _ => 0,
+    };
+    *new_sel = Some(vec![id]);
+    let bar = song.timeline.as_deref().map_or(1, |t| t.bar_pos(at).bar);
+    let how = if unique {
+        "an independent copy"
+    } else {
+        "linked: editing it changes both · Ctrl+Shift+D makes it unique"
+    };
+    let extra = match fit {
+        Fit::Replace => format!(
+            ", replacing the part of {cleared} clip{} under it",
+            plural(cleared)
+        ),
+        Fit::Layer => ", on top of the clips there (they play together)".into(),
+        _ => String::new(),
+    };
+    format!(
+        "Placed on track {:02} at bar {bar}{extra} ({how}; Ctrl+Z undoes)",
+        tr + 1
+    )
+}
+
+/// " · now over 05 Breakdown and 1 more on track 03: the Tracker clip that
+/// starts later plays (note clips play together)"
+fn over_note(t: &tl::Timeline, over: &[u32]) -> String {
+    let first = over
+        .first()
+        .and_then(|id| t.clips.iter().find(|c| c.id == *id));
+    let Some(c) = first else { return String::new() };
+    let more = if over.len() > 1 {
+        format!(" and {} more", over.len() - 1)
+    } else {
+        String::new()
+    };
+    let blocks = over
+        .iter()
+        .filter_map(|id| t.clips.iter().find(|c| c.id == *id))
+        .any(|c| c.block().is_some());
+    format!(
+        " · now over a clip at bar {}{more} on track {:02}: {}",
+        t.bar_pos(c.start).bar,
+        c.track + 1,
+        if blocks {
+            "of overlapping Tracker clips, the one that starts later plays"
+        } else {
+            "both play"
+        }
+    )
 }

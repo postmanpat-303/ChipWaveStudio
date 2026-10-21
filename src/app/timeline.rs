@@ -164,17 +164,23 @@ pub(crate) enum TlOp {
         track: u8,
         at: Tick,
     },
-    /// a Clip Arranger slot (block, column) as a Tracker clip on `track` at `at`
-    PlaceBlock {
-        block: u16,
-        col: u8,
+    /// a dropped clip (docs/unified/PLAN.md Stage 4a): `src` on `track` at
+    /// `at`, linked or (`unique`) independent; `fit` says what happens to
+    /// clips in the way (`grid`: where Place after it lands)
+    Place {
+        src: super::dropplan::DropSrc,
         track: u8,
         at: Tick,
+        unique: bool,
+        fit: super::dropplan::Fit,
+        grid: Tick,
     },
 }
 
 pub(crate) struct TimelineUi {
     pub(crate) cache: Option<Cache>,
+    /// while clips are moved: the clips they now overlap (outlined red)
+    pub(crate) move_over: Vec<u32>,
     /// pixels per beat (0 = fit on the next frame)
     pub(crate) zoom: f32,
     /// first visible tick (fractional while zooming)
@@ -267,6 +273,7 @@ impl Default for TimelineUi {
             menu_marker: None,
             grid_now: PPQ,
             split_arm: false,
+            move_over: vec![],
             split_at: None,
             time_ruler: false,
             ruler_drag: false,
@@ -3014,6 +3021,20 @@ impl App {
         if let Some(e) = edit {
             self.timeline_drag_edit(e);
         }
+        if !self.tlv.move_over.is_empty() && self.tlv.drag.is_some() {
+            // moved over other clips: no question while dragging, but they
+            // show red (and the status says what plays)
+            let fp = ui.ctx().layer_painter(egui::LayerId::new(
+                egui::Order::Foreground,
+                egui::Id::NULL.with("tl_move_over"),
+            ));
+            let fp = fp.with_clip_rect(lanes);
+            for id in self.tlv.move_over.iter().chain(self.tlv.sels.iter()) {
+                if let Some(r) = self.tlv.clip_rect(*id) {
+                    fp.rect_stroke(r, 3.0, Stroke::new(2.0, t.brick), egui::StrokeKind::Outside);
+                }
+            }
+        }
         if end_drag {
             self.timeline_drag_end();
         }
@@ -3450,6 +3471,19 @@ impl TimelineUi {
     pub(crate) fn tracks_bottom(&self) -> f32 {
         (self.heads.top() + self.layout.total() - self.scroll_y)
             .clamp(self.heads.top(), self.heads.bottom() - 2.0)
+    }
+
+    /// tick under screen x as last drawn (not snapped, at least 0)
+    pub(crate) fn tick_at(&self, x: f32) -> Tick {
+        let t =
+            self.scroll + (x - self.lanes.left()) as f64 * PPQ as f64 / self.zoom.max(0.01) as f64;
+        t.max(0.0) as Tick
+    }
+
+    /// the snap grid in ticks as last drawn (the toolbar's snap setting at
+    /// this zoom)
+    pub(crate) fn snap_grid(&self) -> Tick {
+        self.grid_now.max(1)
     }
 
     /// screen x of tick `t` as last drawn

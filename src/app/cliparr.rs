@@ -15,7 +15,6 @@
 //! Under it sits a small Master panel (volume, limiter drive and ceiling,
 //! level and gain-reduction meters, loudness). Ctrl+8 or View › Clip
 //! Arranger shows the Instruments list there instead.
-use super::timeline::TlOp;
 use super::*;
 use crate::engine::launch::{bit, Cue};
 use crate::timeline::{self as tl, Tick, ROW};
@@ -47,8 +46,8 @@ pub(crate) struct SlotPrev {
 pub(crate) struct CaUi {
     /// first scene shown (the grid pages through the blocks)
     pub(crate) first: usize,
-    /// a slot being dragged to the timeline: (block, column)
-    pub(crate) drag: Option<(usize, usize)>,
+    /// a slot being dragged to the timeline (docs/unified/PLAN.md 4a)
+    pub(crate) drag: Option<super::dropplan::DropSrc>,
     /// the side panel's rect this frame (drawn after the Timeline)
     pub(crate) rect: Rect,
     /// mini previews per [scene][track], for `key`
@@ -66,8 +65,9 @@ pub(crate) struct CaUi {
     pub(crate) stop_rects: Vec<(usize, Rect)>,
     pub(crate) stop_all: Rect,
     pub(crate) master: Rect,
-    /// screenshots: hold the slot drag at this point
+    /// screenshots: hold the slot drag at this point, with these keys
     pub(crate) shot_drag: Option<Pos2>,
+    pub(crate) shot_mods: egui::Modifiers,
     /// master level history for the Master panel's graph (newest last)
     hist: std::collections::VecDeque<f32>,
 }
@@ -88,6 +88,7 @@ impl Default for CaUi {
             stop_all: Rect::NOTHING,
             master: Rect::NOTHING,
             shot_drag: None,
+            shot_mods: egui::Modifiers::NONE,
             hist: Default::default(),
         }
     }
@@ -940,7 +941,8 @@ impl App {
                 let strip_hover = resp.hover_pos().is_some_and(|q| strip.contains(q));
                 let tip = if secs.is_some() {
                     format!(
-                        "{}: track {:02}'s clip. ▶ plays it, looping, from the next {} · double-click opens it",
+                        "{}: track {:02}'s clip. ▶ plays it, looping, from the next {} · drag it onto the \
+                         timeline for a linked copy (Alt: an independent one) · double-click opens it",
                         names[b],
                         tr + 1,
                         self.ca_when()
@@ -962,11 +964,16 @@ impl App {
                         format!("Slot {:02} {b:02}", tr + 1),
                     )
                 });
+                let src = if secs.is_some() {
+                    self.ca_clip(tr, b).map(super::dropplan::DropSrc::Clip)
+                } else {
+                    Some(super::dropplan::DropSrc::Block { block: b, col: tr })
+                };
                 if resp.drag_started()
                     && !resp.drag_started_by(egui::PointerButton::Secondary)
-                    && secs.is_none()
+                    && src.is_some()
                 {
-                    self.ca.drag = Some((b, tr));
+                    self.ca.drag = src;
                 } else if resp.double_clicked() {
                     act = Some((2, tr, b));
                 } else if resp.clicked() {
@@ -1025,7 +1032,7 @@ impl App {
                         );
                     }
                 }
-                if self.ca.drag == Some((b, tr)) {
+                if self.ca.drag.is_some() && self.ca.drag == src {
                     pc.rect_stroke(
                         sr.expand(1.0),
                         5.0,
@@ -1190,94 +1197,38 @@ impl App {
         s
     }
 
-    /// a slot dragged onto the timeline: a Tracker clip on the bar under it
+    /// a slot dragged onto the timeline: the drop preview, then a copy of
+    /// the slot's clip where it says (see dropplan.rs)
     fn ca_drag(&mut self, ctx: &egui::Context) {
-        let Some((b, col)) = self.ca.drag else { return };
-        let (pos, down, released) = match self.ca.shot_drag {
-            Some(q) => (Some(q), true, false),
+        let Some(src) = self.ca.drag else { return };
+        let (pos, down, released, mods, esc) = match self.ca.shot_drag {
+            Some(q) => (Some(q), true, false, self.ca.shot_mods, false),
             None => ctx.input(|i| {
                 (
                     i.pointer.latest_pos(),
                     i.pointer.primary_down(),
                     i.pointer.primary_released(),
+                    i.modifiers,
+                    i.key_pressed(Key::Escape),
                 )
             }),
         };
-        let target = pos
-            .and_then(|q| self.tlv.drop_at(q))
-            .and_then(|(tr, tick)| {
-                let tr = tr.ok()?;
-                let tick = tick?;
-                let at = self.with(|s| {
-                    s.song.timeline.as_deref().map(|t| {
-                        let sig = t.sig_at(tick);
-                        let bar = sig.bar_ticks().max(1);
-                        let from = if tick >= sig.tick { sig.tick } else { 0 };
-                        from + (tick - from).max(0) / bar * bar
-                    })
-                })?;
-                Some((tr, at))
-            });
-        let nch = self.with(|s| s.song.channels);
-        let target = target.filter(|(tr, _)| *tr < nch);
+        if esc {
+            self.ca.drag = None;
+            self.status = "Drag cancelled".into();
+            return;
+        }
+        let plan = pos.and_then(|q| self.drop_plan(q, src, mods.shift));
         if released || !down {
             self.ca.drag = None;
-            if let (Some((tr, at)), true) = (target, released) {
-                self.tl_apply(TlOp::PlaceBlock {
-                    block: b as u16,
-                    col: col as u8,
-                    track: tr as u8,
-                    at,
-                });
+            if released {
+                self.drop_release(src, plan, mods.alt);
             }
             return;
         }
-        let t = th();
-        let layer = egui::LayerId::new(egui::Order::Tooltip, egui::Id::NULL.with("ca_drag"));
-        let p = ctx.layer_painter(layer);
-        let (name, rows) = self.with(|s| {
-            s.song
-                .patterns
-                .get(b)
-                .map_or((String::new(), 64), |x| (x.name.clone(), x.rows))
-        });
-        let hint = match target {
-            Some((tr, at)) => {
-                if let Some((_, row)) = self.tlv.track_rects(tr) {
-                    let x0 = self.tlv.x_of(at);
-                    let x1 = self.tlv.x_of(at + tl::rows_to_ticks(rows.max(1)));
-                    let g = Rect::from_min_max(
-                        Pos2::new(x0.max(self.tlv.lanes.left()), row.top() + 2.0),
-                        Pos2::new(x1.min(self.tlv.lanes.right()), row.bottom() - 2.0),
-                    );
-                    p.rect_filled(row, 0.0, t.accent.gamma_multiply(0.10));
-                    if g.is_positive() {
-                        p.rect_filled(g, 3.0, t.accent.gamma_multiply(0.30));
-                        p.rect_stroke(g, 3.0, Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
-                    }
-                }
-                let bar =
-                    self.with(|s| s.song.timeline.as_deref().map_or(1, |x| x.bar_pos(at).bar));
-                format!("Tracker clip on track {:02}, bar {bar}", tr + 1)
-            }
-            None => "drop it on a track in the timeline".into(),
-        };
-        if let Some(q) = pos {
-            let txt = format!("{b:02} {name} · column {}", col + 1);
-            let g = p.layout_no_wrap(txt, FontId::proportional(12.0), t.ink);
-            let hg = p.layout_no_wrap(
-                hint,
-                FontId::proportional(10.5),
-                if target.is_some() { t.accent } else { t.ink2 },
-            );
-            let w = g.size().x.max(hg.size().x) + 16.0;
-            let r = Rect::from_min_size(q + egui::vec2(14.0, 10.0), egui::vec2(w, 36.0));
-            p.rect_filled(r, 4.0, t.cart_top);
-            p.rect_stroke(r, 4.0, Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
-            p.galley(r.min + egui::vec2(8.0, 4.0), g, t.ink);
-            p.galley(r.min + egui::vec2(8.0, 20.0), hg, t.ink2);
-        }
-        ctx.set_cursor_icon(if target.is_some() {
+        self.drop_paint(ctx, src, plan.as_ref(), pos, mods.alt);
+        let ok = plan.as_ref().is_some_and(|p| p.bad.is_none());
+        ctx.set_cursor_icon(if ok {
             egui::CursorIcon::Grabbing
         } else {
             egui::CursorIcon::NoDrop

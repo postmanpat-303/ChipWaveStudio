@@ -34,6 +34,7 @@ mod devices;
 #[cfg(test)]
 mod devices_tests;
 mod dialogs;
+mod dropplan;
 mod drumkitview;
 mod drumpat;
 #[cfg(test)]
@@ -206,6 +207,8 @@ pub struct App {
     last_heartbeat: std::time::Instant,
     /// crashed sessions found at start (recovery dialog)
     orphans: Vec<crate::recovery::Orphan>,
+    /// a drop over clips waiting for Replace / Place after it / Cancel
+    drop_ask: Option<dropplan::DropAsk>,
     smp: sampleview::SampleEd,
     extra: crate::settings::Extra,
     /// update check state (Help > Check for updates…, startup check)
@@ -592,6 +595,7 @@ impl App {
             load_warnings: Vec::new(),
             last_heartbeat: std::time::Instant::now(),
             orphans,
+            drop_ask: None,
             smp: Default::default(),
             extra: crate::settings::load().extra,
             upd: Default::default(),
@@ -1094,6 +1098,7 @@ impl eframe::App for App {
         self.load_warnings_window(ui.ctx());
         self.too_new_window(ui.ctx());
         self.timeline_prompts(ui.ctx());
+        self.drop_ask_window(ui.ctx());
         self.instr_delete_dialog(ui.ctx());
         self.block_len_dialog(ui.ctx());
         self.chord_window(ui.ctx());

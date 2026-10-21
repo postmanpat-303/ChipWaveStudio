@@ -101,6 +101,8 @@ pub const VIEWS: [&str; 71] = [
     "cliparranger",
     "cliparranger-drag",
     "cliparranger-notes",
+    "drop-preview",
+    "drop-ask",
     "focus-playing",
     "focus-chord",
     "focus-prompt",
@@ -411,7 +413,7 @@ impl App {
                 }
                 self.dirty = false;
             }
-            "cliparranger-notes" => {
+            "cliparranger-notes" | "drop-preview" | "drop-ask" => {
                 // a new song: a take on track 01 at bars 1 and 5, a Drum Kit
                 // pattern on track 02 (launched a few frames later)
                 self.new_song();
@@ -1091,11 +1093,34 @@ impl App {
             self.ca_slot(5, 4);
             self.ca_stop(0);
         }
+        if (view == "drop-preview" || view == "drop-ask") && f == SETUP_AT + 12 {
+            // the Verse slot (track 01, bar 1) dragged onto its own track at
+            // bar 3, over itself: the red preview, then the question
+            use super::dropplan::DropSrc;
+            let at = 2 * 4 * crate::timeline::PPQ;
+            let id = self.with(|s| {
+                s.song
+                    .timeline
+                    .as_deref()
+                    .and_then(|t| t.clips.iter().find(|c| c.track == 0 && c.start == 0))
+                    .map(|c| c.id)
+            });
+            if let (Some(id), Some((_, row))) = (id, self.tlv.track_rects(0)) {
+                let p = Pos2::new(self.tlv.x_of(at) + 30.0, row.center().y);
+                if view == "drop-ask" {
+                    let plan = self.drop_plan(p, DropSrc::Clip(id), false);
+                    self.drop_release(DropSrc::Clip(id), plan, false);
+                } else {
+                    self.ca.drag = Some(DropSrc::Clip(id));
+                    self.ca.shot_drag = Some(p);
+                }
+            }
+        }
         if view == "cliparranger-drag" && f == SETUP_AT + 12 {
             let at = 40 * 4 * crate::timeline::PPQ;
             if let Some((_, row)) = self.tlv.track_rects(4) {
                 let x = self.tlv.x_of(at) + 30.0;
-                self.ca.drag = Some((2, 4));
+                self.ca.drag = Some(super::dropplan::DropSrc::Block { block: 2, col: 4 });
                 self.ca.shot_drag = Some(Pos2::new(x, row.center().y));
             }
         }

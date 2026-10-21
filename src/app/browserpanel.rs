@@ -1498,6 +1498,33 @@ impl App {
             })
         };
         let target = pos.and_then(|p| self.br_drop_at(p));
+        // a drum pattern over the Timeline: the one drop system (preview,
+        // snap, overlap question; docs/unified/PLAN.md Stage 4a)
+        let pat = match it.src {
+            Src::Pattern(i)
+                if self.with(|s| s.song.timeline.is_some())
+                    && matches!(target, Some(DropAt::Track(..) | DropAt::NewTrack(_))) =>
+            {
+                Some(super::dropplan::DropSrc::Pattern(i as u16))
+            }
+            _ => None,
+        };
+        if let Some(src) = pat {
+            let fine = ctx.input(|i| i.modifiers.shift);
+            let plan = pos.and_then(|q| self.drop_plan(q, src, fine));
+            if released || !down {
+                self.br.drag = None;
+                if released {
+                    self.pat_stop();
+                    self.drop_release(src, plan, false);
+                }
+                return;
+            }
+            self.drop_paint(ctx, src, plan.as_ref(), pos, false);
+            ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+            ctx.request_repaint();
+            return;
+        }
         let hint = target.as_ref().and_then(|d| self.br_drop_hint(&it, d));
         if released || !down {
             self.br.drag = None;

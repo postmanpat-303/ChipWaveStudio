@@ -175,6 +175,8 @@ fn slot_play_stop_and_stop_all_follow_the_launch_setting() {
 #[test]
 fn dragging_a_slot_onto_the_timeline_makes_a_tracker_clip_on_the_bar() {
     let mut h = tl_demo();
+    h.state_mut().tlv.snap = super::timeline::Snap::Bar;
+    frames(&mut h, 2);
     let before = h
         .state()
         .with(|s| s.song.timeline.as_ref().unwrap().clips.len());
@@ -189,36 +191,53 @@ fn dragging_a_slot_onto_the_timeline_makes_a_tracker_clip_on_the_bar() {
         Pos2::new(x, row.center().y),
     );
     frames(&mut h, 2);
-    let (n, clip) = h.state().with(|s| {
+    let count = |h: &Harness<'static, App>| {
+        h.state()
+            .with(|s| s.song.timeline.as_ref().unwrap().clips.len())
+    };
+    // track 07 has clips there: nothing is overwritten, it asks first
+    let ask = h.state().drop_ask.clone().expect("the overlap question");
+    assert_eq!(
+        ask.plan.start,
+        30 * bar,
+        "snapped to the bar under the mouse"
+    );
+    assert!(!ask.plan.overlaps.is_empty());
+    assert!(
+        !ask.plan.layer_ok,
+        "Tracker clips hide each other: no Keep both"
+    );
+    assert_eq!(count(&h), before, "nothing placed while it asks");
+    h.get_by_label("Replace").click();
+    frames(&mut h, 2);
+    assert!(h.state().drop_ask.is_none());
+    let rows = h.state().with(|s| s.song.patterns[b].rows);
+    let len = crate::timeline::rows_to_ticks(rows);
+    let id = h.state().tlv.sel.expect("the placed clip is selected");
+    let (clip, under) = h.state().with(|s| {
         let t = s.song.timeline.as_ref().unwrap();
-        let id = t.clips.iter().map(|c| c.id).max().unwrap();
+        let c = t.clips.iter().find(|c| c.id == id).unwrap().clone();
         (
-            t.clips.len(),
-            t.clips.iter().find(|c| c.id == id).unwrap().clone(),
+            c,
+            crate::timeline::overlaps(t, tr, 30 * bar, 30 * bar + len, &[id]),
         )
     });
-    assert_eq!(n, before + 1);
     assert_eq!(clip.track as usize, tr);
     assert_eq!(
         clip.block(),
         Some((b, col)),
         "a Tracker clip: block + column"
     );
-    assert_eq!(clip.start, 30 * bar, "snapped to the bar under the mouse");
-    let rows = h.state().with(|s| s.song.patterns[b].rows);
-    assert_eq!(clip.len, crate::timeline::rows_to_ticks(rows));
+    assert_eq!((clip.start, clip.len), (30 * bar, len));
+    assert!(under.is_empty(), "Replace cleared its span: {under:?}");
     assert!(
-        h.state().status.starts_with("Tracker clip"),
+        h.state().status.starts_with("Placed on track 07 at bar 31"),
         "{}",
         h.state().status
     );
-    // one undo step takes it away
+    // one undo step takes it all back
     key(&mut h, Key::Z, egui::Modifiers::COMMAND);
-    assert_eq!(
-        h.state()
-            .with(|s| s.song.timeline.as_ref().unwrap().clips.len()),
-        before
-    );
+    assert_eq!(count(&h), before);
 }
 
 #[test]
