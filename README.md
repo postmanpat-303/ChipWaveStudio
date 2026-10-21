@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.5.0-00d0ff" alt="Version 0.2.5.0">
+  <img src="https://img.shields.io/badge/version-0.2.6.0-00d0ff" alt="Version 0.2.6.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -20,7 +20,7 @@
 
 ```
  ┌──────────────────────────────────────────────────────────────────────────┐
- │  C H I P W A V E   S T U D I O            v0.2.5.0     BPM 140  SPD 06  │
+ │  C H I P W A V E   S T U D I O            v0.2.6.0     BPM 140  SPD 06  │
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
  │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ OctaMED-inspired  │
  │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ tracker + synth   │
@@ -36,6 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.6.0</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -48,6 +49,29 @@
 > **ChipWave Studio was called ChipWave Tracker until 0.2.3.19.** It was renamed in 0.2.4.0 to tell it apart from an unrelated iOS app called "ChipWave". Same app, same settings, same `.cwt` songs; the old GitHub links redirect here. Website: **[postmanpat-303.github.io/ChipWaveStudio](https://postmanpat-303.github.io/ChipWaveStudio/)**. Details: [docs/RENAME.md](docs/RENAME.md).
 
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
+
+<a id="new"></a>
+## New in 0.2.6.0: one workflow
+
+The Timeline is now the place you work in, with everything else following it (inspired by other DAWs):
+- **Drag a Clip Arranger clip or a Browser pattern onto the Timeline** and see where it lands first: the target track, a ghost clip, the snap line and a card with the track, its instrument and whether it's a linked copy (Alt: independent). Over other clips it asks **Replace / Place after it / Keep both / Cancel**; nothing is overwritten silently.
+- **Launcher clips** in the Clip Arranger: **Capture** the arrangement's scenes, launch one clip per track on the next bar while the others play on, make variations, and drag them back as **linked copies** (shown as **×N**; the piano roll's *Linked ×N* makes one unique).
+- **Click a track, get its instrument; click a clip, get the clip.** One rule decides a track's instrument everywhere; a track without one offers a chooser, and a shared one says so (with *Make a separate copy*).
+- **Pies** on clips, launcher clips and the Drum Kit's step grid; clips get their own **name and colour**; the lower panel says which track, clip and instrument it edits.
+- **ChipWave Instruments** first in the Browser, the Windows **title bar in the theme's colours**, and fixes (plugin effects heard at once, the piano roll playhead in sync).
+
+Known limits: the launcher holds note clips only, there's no recording into slots or generating into a launcher clip yet, the drum pie's Variation is simple, and some Tracker wording remains in block mode. Full list in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/unified-drop-preview.png" alt="Dragging a Clip Arranger clip onto the Timeline: a ghost clip, the snap line at bar 3.2 and a card naming the track, its instrument and the overlap"><br><b>Drop preview</b>: a Clip Arranger clip dragged onto the Timeline, with the snap line, a ghost clip and the card that says what will happen.</td>
+    <td width="50%"><img src="docs/screenshots/unified-drop-question.png" alt="The overlap question: Replace, Place after it, Keep both or Cancel"><br><b>The overlap question</b>: a drop over other clips asks first: Replace, Place after it (bar 9), Keep both or Cancel. One undo step.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/browser-chipwave-instruments.png" alt="The Browser's ChipWave Instruments category: WaveForge, Drum Kit, Synth, Analog, FM-4 and more, with FM-4 on track 3"><br><b>ChipWave Instruments</b>: the built-in instruments first in the Browser, each on a playable preset. Drag one onto a track, or double-click for a new track.</td>
+    <td width="50%"><img src="docs/screenshots/unified-launcher.png" alt="The Clip Arranger with captured launcher clips, linked copies marked ×2, and a scene playing"><br><b>Launcher clips</b>: captured from the arrangement, linked (×2), launched per track or per scene.</td>
+  </tr>
+</table>
 
 ```
  ═══[ 01 ]═══ FEATURES ═════════════════════════════════════════════════════
