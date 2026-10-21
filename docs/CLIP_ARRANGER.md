@@ -63,7 +63,7 @@ Browser **Drum Patterns** dragged onto the Timeline use the same preview and que
 
 ### Launcher clips
 
-**Right-click** a launcher clip for its pie: Play, Stop, Edit notes, Instrument, Duplicate (variation), **Place in arrangement** › at the play marker / after the track's last clip / in the loop region (the same plan as a drag: over other clips it asks Replace / Place after it / Keep both / Cancel), Rename, Colour and Delete. A clip's own name and colour show in its slot; the clip open in the piano roll is outlined. Settings › Clip menus › List keeps the plain menu (Duplicate (variation), Delete).
+**Right-click** a launcher clip for its pie: Play, Stop, Edit notes, Instrument, **Variation** (an independent copy in the next free scene, as Duplicate (variation)), **Place** › at the play marker / after the track's last clip / in the loop region (the same plan as a drag: over other clips it asks Replace / Place after it / Keep both / Cancel), Rename, Colour and Delete. A clip's own name and colour show in its slot; the clip open in the piano roll is outlined. Settings › Clip menus › List keeps the plain menu (Duplicate (variation), Delete).
 
 The scenes above come **from the arrangement** (the status line says so). **Capture** (at the right of
 the status line) turns them into the launcher's **own clips**: one scene row per scene, each slot a clip

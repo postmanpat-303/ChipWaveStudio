@@ -287,7 +287,7 @@ fn scenario_c_chords_two_launcher_versions_place_one() {
         "a chord at bar 1: {at0} notes ({:?})",
         h.state().cl.confirm.is_some()
     );
-    // To launcher, then Duplicate (variation) in the launcher
+    // To launcher, then its pie's Variation in the launcher
     let p = at(&h, 0, BAR / 4);
     right_click(&mut h, p);
     pick(&mut h, "To launcher", None);
@@ -300,7 +300,7 @@ fn scenario_c_chords_two_launcher_versions_place_one() {
     });
     let r = slot(&h, 0, 0).center() + egui::vec2(10.0, 0.0);
     right_click(&mut h, r);
-    pick(&mut h, "Duplicate (variation)", None);
+    pick(&mut h, "Variation", None);
     frames(&mut h, 2);
     let (l2, d2) = h.state().with(|s| {
         let t = s.song.timeline.as_deref().unwrap();
@@ -322,7 +322,7 @@ fn scenario_c_chords_two_launcher_versions_place_one() {
     // place the variation after the arrangement's clip, from its pie
     let r = slot(&h, 0, 1).center() + egui::vec2(10.0, 0.0);
     right_click(&mut h, r);
-    pick(&mut h, "Place in arrangement", Some("After the last clip"));
+    pick(&mut h, "Place", Some("After the last clip"));
     let c = newest(&h);
     assert_eq!(
         (c.track, c.start, c.notes()),

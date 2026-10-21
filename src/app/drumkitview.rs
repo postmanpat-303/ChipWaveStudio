@@ -2359,7 +2359,7 @@ impl App {
                 self.status = "Generate: a new groove from the pattern library, in this kit".into();
                 return;
             }
-            ("Duplicate as variation", _) => {
+            ("Copy pattern", _) => {
                 let c = Cur {
                     id: clip,
                     data,

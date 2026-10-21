@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 75] = [
+pub const VIEWS: [&str; 79] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -105,6 +105,10 @@ pub const VIEWS: [&str; 75] = [
     "drop-preview",
     "drop-ask",
     "cliparranger-launcher",
+    "clip-pie",
+    "launcher-pie",
+    "drum-pie",
+    "chooser",
     "focus-playing",
     "focus-chord",
     "focus-prompt",
@@ -427,7 +431,13 @@ impl App {
                 }
                 self.dirty = false;
             }
-            "cliparranger-notes" | "drop-preview" | "drop-ask" | "cliparranger-launcher" => {
+            "cliparranger-notes"
+            | "drop-preview"
+            | "drop-ask"
+            | "cliparranger-launcher"
+            | "clip-pie"
+            | "launcher-pie"
+            | "drum-pie" => {
                 // a new song: a take on track 01 at bars 1 and 5, a Drum Kit
                 // pattern on track 02 (launched a few frames later)
                 self.new_song();
@@ -478,6 +488,16 @@ impl App {
                     self.pat_place_now(i, 1, 0);
                 }
                 self.ch = 0;
+                self.dirty = false;
+            }
+            "chooser" => {
+                // a new song's track without an instrument: the chooser
+                self.new_song();
+                self.track_insert(0, "Lead");
+                self.view = View::Timeline;
+                self.default_layout();
+                self.tl_select_track(0, false);
+                self.set_lower(1);
                 self.dirty = false;
             }
             "trackpie" | "trackpie-icons" | "trackpie-colour" | "trackpie-add" | "trackauto"
@@ -1102,6 +1122,9 @@ impl App {
         }
         if view == "cliparranger-notes" && f == CAPTURE_AT - 6 {
             self.ca_scene(0);
+        }
+        if matches!(view.as_str(), "clip-pie" | "launcher-pie" | "drum-pie") {
+            self.shot_obj_pie(&view, f);
         }
         if view == "cliparranger-launcher" && f == SETUP_AT + 16 {
             // Capture, a variation of the Verse, then scene 1 plays
@@ -1801,6 +1824,85 @@ impl App {
 
     /// `--view split-preview`: S on the timeline with the pointer over a
     /// clip on track 2 (the amber split line, its label, the clip outlined)
+    /// Stage 5: the pies on the Verse clip, its launcher copy and the
+    /// Drum Kit pattern's step grid
+    fn shot_obj_pie(&mut self, view: &str, f: u32) {
+        use super::objpie::PieFor;
+        let clip_on = |me: &Self, tr: u16| {
+            me.with(|s| {
+                s.song
+                    .timeline
+                    .as_deref()?
+                    .clips
+                    .iter()
+                    .find(|c| c.track == tr && c.start == 0)
+                    .map(|c| (c.id, c.notes()))
+            })
+        };
+        match (view, f) {
+            ("launcher-pie", x) if x == SETUP_AT + 12 => self.ca_capture_now(),
+            ("drum-pie", x) if x == SETUP_AT + 12 => {
+                if let Some((id, _)) = clip_on(self, 1) {
+                    self.tlv.sel = Some(id);
+                    self.tlv.sels = vec![id];
+                    self.ch = 1;
+                    self.instr = self.track_instr(1);
+                    self.set_lower(1);
+                }
+            }
+            ("clip-pie", x) if x == SETUP_AT + 20 => {
+                if let (Some((id, _)), Some((_, row))) = (clip_on(self, 0), self.tlv.track_rects(0))
+                {
+                    self.tlv.sel = Some(id);
+                    self.tlv.sels = vec![id];
+                    let p = Pos2::new(self.tlv.x_of(2 * crate::timeline::PPQ), row.center().y);
+                    self.opie_req = Some((PieFor::Clip(id), p));
+                }
+            }
+            ("launcher-pie", x) if x == SETUP_AT + 24 => {
+                let lid = self.with(|s| {
+                    let t = s.song.timeline.as_deref()?;
+                    crate::timeline::launch_at(t, 0, 0).map(|l| l.clip.id)
+                });
+                let r = self
+                    .ca
+                    .slot_rects
+                    .iter()
+                    .find(|x| x.0 == 0 && x.1 == 0)
+                    .map(|x| x.3);
+                if let (Some(id), Some(r)) = (lid, r) {
+                    self.opie_req = Some((PieFor::Launch(id), r.center()));
+                }
+            }
+            ("drum-pie", x) if x == SETUP_AT + 24 => {
+                let cell = self.dk.cells.iter().find(|c| c.0 == 0 && c.1 == 4).copied();
+                if let (Some((id, Some(data))), Some((p, _, r))) = (clip_on(self, 1), cell) {
+                    self.opie_req = Some((
+                        PieFor::Drum {
+                            clip: id,
+                            data,
+                            track: 1,
+                            pad: p,
+                        },
+                        r.center(),
+                    ));
+                }
+            }
+            // the outer ring of one wedge, as when the mouse is on it
+            (v, x) if x == SETUP_AT + 30 => {
+                let want = match v {
+                    "clip-pie" => "Duplicate",
+                    "launcher-pie" => "Place",
+                    _ => "Fill",
+                };
+                if let Some((pie, _)) = &mut self.opie {
+                    pie.hover = pie.items.iter().position(|x| x.label == want);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn shot_split(&mut self) {
         let Some(c) = self.tlv.cache.as_ref() else {
             return;

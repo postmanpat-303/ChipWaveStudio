@@ -331,7 +331,7 @@ fn a_tall_panel_uses_the_full_layout() {
 }
 
 /// Stage 5: right-click the step grid: the pattern's pie (Fill, Clear,
-/// Duplicate as variation), each one undo step
+/// Copy pattern), each one undo step
 #[test]
 fn the_step_grid_pie_fills_clears_and_duplicates() {
     let (mut h, slot, id) = kit_harness();
@@ -365,9 +365,9 @@ fn the_step_grid_pie_fills_clears_and_duplicates() {
     h.state_mut().undo(false);
     frames(&mut h, 2);
     assert!(!notes(&h, id).is_empty(), "undo brings the fill back");
-    // Duplicate as variation: a new clip of its own
+    // Copy pattern: a new clip of its own
     let n0 = clip_count(&h);
     super::super::objpie_tests::right_click(&mut h, r.center());
-    super::super::objpie_tests::pick(&mut h, "Duplicate as variation", None);
+    super::super::objpie_tests::pick(&mut h, "Copy pattern", None);
     assert_eq!(clip_count(&h), n0 + 1, "{}", h.state().status);
 }

@@ -98,9 +98,9 @@ pub(crate) fn launch_items() -> Vec<RadialItem> {
         RadialItem::new("Stop", None, vec![]),
         RadialItem::new("Edit notes", Some(RIcon::Edit), vec![]),
         RadialItem::new("Instrument", Some(RIcon::Bulb), vec![]),
-        RadialItem::new("Duplicate (variation)", Some(RIcon::Add), vec![]),
+        RadialItem::new("Variation", Some(RIcon::Add), vec![]),
         RadialItem::new(
-            "Place in arrangement",
+            "Place",
             Some(RIcon::Notes),
             vec![
                 "At the play marker".into(),
@@ -130,7 +130,7 @@ pub(crate) fn drum_items() -> Vec<RadialItem> {
             Some(RIcon::Delete),
             vec!["This lane".into(), "All lanes".into()],
         ),
-        RadialItem::new("Duplicate as variation", Some(RIcon::Add), vec![]),
+        RadialItem::new("Copy pattern", Some(RIcon::Add), vec![]),
     ]
 }
 
@@ -319,8 +319,8 @@ impl App {
                 self.tl_select_track(tr, true);
                 self.show_instrument_editor();
             }
-            ("Duplicate (variation)", _) => self.ca_variation(id),
-            ("Place in arrangement", w) => self.launch_place(id, w.unwrap_or("At the play marker")),
+            ("Variation", _) => self.ca_variation(id),
+            ("Place", w) => self.launch_place(id, w.unwrap_or("At the play marker")),
             ("Rename", _) => self.start_clip_rename(id),
             ("Colour", c) => self.set_clip_colour(&[id], c),
             ("Delete", _) => self.ca_delete(id),
@@ -328,7 +328,7 @@ impl App {
         }
     }
 
-    /// Place in arrangement ›: the same plan and question as a drag (D5)
+    /// Place ›: the same plan and question as a drag (D5)
     pub(crate) fn launch_place(&mut self, id: u32, how: &str) {
         let Some((tr, _)) = self.launch_where(id) else {
             return;

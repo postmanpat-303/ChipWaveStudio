@@ -173,7 +173,7 @@ fn a_launcher_clip_pie_places_it_after_the_last_clip() {
     assert_eq!(l.colour, Some(0x6E9A58));
     let n0 = n_clips(&h);
     right_click(&mut h, sr.center() + egui::vec2(10.0, 0.0));
-    pick(&mut h, "Place in arrangement", Some("After the last clip"));
+    pick(&mut h, "Place", Some("After the last clip"));
     assert_eq!(n_clips(&h), n0 + 1, "{}", h.state().status);
     let c = super::unified_tests::newest(&h);
     assert_eq!(
