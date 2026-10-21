@@ -3247,7 +3247,7 @@ impl App {
                 if self.tl_select_track(i, keep) {
                     if self.extra.follow_select && !keep {
                         // its instrument's editor (or the chooser) below
-                        self.set_lower(1);
+                        self.show_instrument_editor();
                     }
                     self.status = format!("Track {:02} selected (pattern cursor channel)", i + 1);
                 } else {

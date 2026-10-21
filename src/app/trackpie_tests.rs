@@ -242,7 +242,13 @@ fn submenu_entries_map_to_real_actions() {
         .iter()
         .all(|i| i.act.is_none()));
     assert_eq!(Seg::Delete.act(), Some(PieAct::Delete));
-    assert_eq!(Seg::SaveCpu.act(), None);
+    assert_eq!(Seg::Edit.act(), Some(PieAct::EditInstrument));
+    let org = sub_items(Seg::Organize, &info);
+    let cpu = org
+        .iter()
+        .find(|i| matches!(&i.kind, ItemKind::Text(t) if t.starts_with("Save CPU")))
+        .expect("Save CPU");
+    assert_eq!(cpu.act, None, "coming soon");
 }
 
 #[test]
@@ -433,13 +439,14 @@ fn right_click_a_header_opens_it_and_drag_release_chooses() {
     press(&mut h, head, egui::PointerButton::Secondary, true);
     frames(&mut h, 2);
     let c = h.state().pie.as_ref().unwrap().centre;
-    let a = seg_angle(4);
+    let dev = SEGS.iter().position(|s| *s == Seg::Devices).unwrap();
+    let a = seg_angle(dev);
     let on = c + egui::vec2(a.cos(), a.sin()) * (R_IN + R_OUT) / 2.0;
     h.input_mut().events.push(egui::Event::PointerMoved(on));
     frames(&mut h, 2);
     assert_eq!(
         h.state().pie.as_ref().unwrap().key,
-        Some(4),
+        Some(dev),
         "hover highlights"
     );
     press(&mut h, on, egui::PointerButton::Secondary, false);
@@ -468,16 +475,21 @@ fn right_click_a_header_opens_it_and_drag_release_chooses() {
 }
 
 #[test]
-fn reduce_motion_closes_at_once_and_save_cpu_is_coming_soon() {
+fn reduce_motion_closes_at_once_and_edit_opens_the_instrument_editor() {
     let mut h = harness_tl();
     h.state_mut().extra.reduce_motion = true;
+    h.state_mut().set_lower(3);
     open(&mut h, 1);
     let ctx = h.ctx.clone();
-    h.state_mut().pie_choose(7, &ctx);
-    assert!(h.state().pie_open(), "Save CPU does nothing yet");
-    assert!(h.state().status.contains("coming soon"));
-    h.state_mut().pie_close(&ctx);
+    let edit = SEGS.iter().position(|s| *s == Seg::Edit).unwrap();
+    h.state_mut().pie_choose(edit, &ctx);
     assert!(h.state().pie.is_none(), "no close animation");
+    frames(&mut h, 2);
+    assert_eq!(h.state().ch, 1);
+    assert!(
+        h.state().extra.lower_inst && !h.state().pr.open,
+        "its instrument's editor"
+    );
 }
 
 #[test]

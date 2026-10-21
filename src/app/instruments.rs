@@ -197,6 +197,10 @@ impl App {
                             .push((slot, r.rect.intersect(ui.clip_rect())));
                         if r.clicked() {
                             self.instr = slot;
+                            // the lower panel follows (3.6): its editor
+                            if self.extra.follow_select && self.view == View::Timeline {
+                                self.show_instrument_editor();
+                            }
                         }
                         if r.double_clicked() {
                             self.start_rename(slot, n.clone());

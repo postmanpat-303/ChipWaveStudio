@@ -1,8 +1,8 @@
 //! The track pie menu (inspired by other DAWs; requested by Del (postmanpat), 19 Oct 2026): right-click
 //! a track header (Timeline track list or tracker channel header) and a
 //! radial menu opens centred on the pointer. The centre disc names the
-//! track; nine segments around it: Rename, Colour, Icon, Add, Devices,
-//! Routing, Organize, Save CPU, Delete. Point to highlight (the segment
+//! track; nine segments around it: Rename, Colour, Icon, Add, Edit,
+//! Devices, Routing, Organize, Delete. Point to highlight (the segment
 //! lightens with an accent arc on the rim), click (or release the right
 //! button after dragging onto one) to choose; Esc, the centre or a click
 //! outside cancels. Colour / Icon / Add / Organize pop out a submenu next to
@@ -40,10 +40,11 @@ pub(crate) enum Seg {
     Colour,
     Icon,
     Add,
+    /// the track's instrument editor in the lower panel (or the chooser)
+    Edit,
     Devices,
     Routing,
     Organize,
-    SaveCpu,
     Delete,
 }
 
@@ -53,10 +54,10 @@ pub(crate) const SEGS: [Seg; 9] = [
     Seg::Colour,
     Seg::Icon,
     Seg::Add,
+    Seg::Edit,
     Seg::Devices,
     Seg::Routing,
     Seg::Organize,
-    Seg::SaveCpu,
     Seg::Delete,
 ];
 
@@ -70,7 +71,7 @@ impl Seg {
             Seg::Devices => "Devices",
             Seg::Routing => "Routing",
             Seg::Organize => "Organize",
-            Seg::SaveCpu => "Save CPU",
+            Seg::Edit => "Edit",
             Seg::Delete => "Delete",
         }
     }
@@ -83,7 +84,7 @@ impl Seg {
             Seg::Devices => Glyph::Rack,
             Seg::Routing => Glyph::Route,
             Seg::Organize => Glyph::Folder,
-            Seg::SaveCpu => Glyph::Snow,
+            Seg::Edit => Glyph::Keys,
             Seg::Delete => Glyph::Trash,
         }
     }
@@ -95,6 +96,7 @@ impl Seg {
     pub(crate) fn act(self) -> Option<PieAct> {
         match self {
             Seg::Rename => Some(PieAct::Rename),
+            Seg::Edit => Some(PieAct::EditInstrument),
             Seg::Devices => Some(PieAct::Devices),
             Seg::Routing => Some(PieAct::Routing),
             Seg::Delete => Some(PieAct::Delete),
@@ -135,6 +137,8 @@ pub(crate) enum PieAct {
     ChangeInstrument,
     /// the Browser's Drum Patterns tab: the next pick goes on this track
     DrumPattern,
+    /// the track's instrument editor (the chooser when it has none)
+    EditInstrument,
     /// a new built-in instrument (its Init / first preset) becomes this
     /// track's instrument
     NewInstrument(Builtin),
@@ -497,6 +501,7 @@ pub(crate) fn sub_items(seg: Seg, i: &TrackInfo) -> Vec<Item> {
                     )
                 });
             }
+            v.push(text("Save CPU (coming soon)", None, SAVE_CPU_TIP));
             v
         }
         _ => vec![],
@@ -868,8 +873,8 @@ fn pal(t: &crate::theme::Theme) -> Pal {
     }
 }
 
-fn seg_enabled(seg: Seg) -> bool {
-    seg != Seg::SaveCpu
+fn seg_enabled(_seg: Seg) -> bool {
+    true
 }
 
 const SAVE_CPU_TIP: &str = "Save CPU (freeze / deactivate a track): coming soon (docs/ROADMAP.md)";
@@ -949,10 +954,6 @@ impl App {
                     p.sub_key = None;
                 }
             }
-            return;
-        }
-        if !seg_enabled(seg) {
-            self.status = SAVE_CPU_TIP.into();
             return;
         }
         if let Some(a) = seg.act() {
@@ -1525,12 +1526,6 @@ impl App {
                 tooltip(&painter, &pl, s, at + egui::vec2(0.0, 6.0), screen);
             }
         }
-        // Save CPU: why it does nothing yet
-        if open && key == Some(7) && sub.is_none() {
-            let a = seg_angle(7);
-            let at = centre + egui::vec2(a.cos(), a.sin()) * (R_OUT + 14.0);
-            tooltip(&painter, &pl, SAVE_CPU_TIP, at, screen);
-        }
         if animating {
             ctx.request_repaint();
         }
@@ -1605,6 +1600,11 @@ impl App {
             }
             PieAct::AddInstrument => self.track_add_with(tr + 1),
             PieAct::ChangeInstrument => self.track_change_instrument(tr),
+            PieAct::EditInstrument => {
+                self.tl_select_track(tr, false);
+                self.ch = tr;
+                self.show_instrument_editor();
+            }
             PieAct::NewInstrument(b) => self.track_new_instrument(tr, b),
             PieAct::DrumPattern => self.track_drum_pattern(tr),
             PieAct::Automation => {

@@ -357,6 +357,16 @@ impl App {
         self.sample_view(ui);
     }
 
+    /// the current instrument's editor in the lower panel: one path for
+    /// a header click, the Instruments list and Inspector › Edit (3.2, 3.6)
+    pub(super) fn show_instrument_editor(&mut self) {
+        if matches!(self.view, View::Timeline | View::Pattern) {
+            self.set_lower(1);
+        } else {
+            self.show_instrument_panel();
+        }
+    }
+
     /// 0 arranger, 1 instrument, 2 automation, 3 piano roll, 4 devices
     pub(super) fn set_lower(&mut self, m: u8) {
         // the Order list is a Tracker view: hidden, the piano roll stands in

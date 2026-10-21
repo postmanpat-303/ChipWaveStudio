@@ -827,7 +827,7 @@ impl App {
         }
         if edit && slot > 0 {
             self.instr = slot;
-            self.show_instrument_panel();
+            self.show_instrument_editor();
         }
         if browse {
             self.open_browser_tab(crate::browser::Tab::Instruments);
