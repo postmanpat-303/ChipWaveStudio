@@ -222,6 +222,107 @@ pub enum InstrumentKind {
     Gen(crate::gen::GenPatch),
     /// CLAP (0.2.3.16) or VST3 (Unreleased) plugin instrument (src/plugin/)
     Plugin(crate::plugin::PluginPatch),
+    /// an instrument rack (docs/racks/PLAN.md): silent itself, every layer
+    /// (an ordinary instrument slot) plays its notes through its own
+    /// effects; the sum goes through the rack's effects
+    Rack(RackP),
+}
+
+/// at most this many layers in a rack
+pub const MAX_LAYERS: usize = 4;
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct RackP {
+    #[serde(default)]
+    pub layers: Vec<Layer>,
+}
+
+fn yes() -> bool {
+    true
+}
+fn key_top() -> u8 {
+    127
+}
+
+/// one layer of a rack: an instrument slot and how it joins the rack
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Layer {
+    /// the layer's instrument slot (0-based, like `Song::instruments`)
+    pub slot: usize,
+    #[serde(default = "yes")]
+    pub on: bool,
+    /// dB, -60..=6 (0 = as the layer instrument sounds)
+    #[serde(default)]
+    pub level_db: f32,
+    /// -1 left ..= 1 right
+    #[serde(default)]
+    pub pan: f32,
+    /// semitones, -48..=48
+    #[serde(default)]
+    pub transpose: i8,
+    /// the keys it plays (MIDI-style note numbers as the song stores them)
+    #[serde(default)]
+    pub key_lo: u8,
+    #[serde(default = "key_top")]
+    pub key_hi: u8,
+}
+
+impl Layer {
+    pub fn new(slot: usize) -> Self {
+        Self {
+            slot,
+            on: true,
+            level_db: 0.0,
+            pan: 0.0,
+            transpose: 0,
+            key_lo: 0,
+            key_hi: 127,
+        }
+    }
+    /// (left, right) gain: level, then a balance pan (centre = the level)
+    pub fn gains(&self) -> (f32, f32) {
+        if !self.on {
+            return (0.0, 0.0);
+        }
+        let g = if self.level_db == 0.0 {
+            1.0
+        } else {
+            10f32.powf(self.level_db / 20.0)
+        };
+        let p = self.pan.clamp(-1.0, 1.0);
+        (g * (1.0 - p).min(1.0), g * (1.0 + p).min(1.0))
+    }
+    /// plays key `k`
+    pub fn takes(&self, k: u8) -> bool {
+        self.on && k >= self.key_lo && k <= self.key_hi
+    }
+}
+
+impl RackP {
+    /// clamp what a file may hold: at most 4 layers, each pointing at a real
+    /// slot that is not a rack (and not `own`), values in range
+    pub fn fix(&mut self, own: usize, kinds: &[bool]) {
+        self.layers
+            .retain(|l| l.slot != own && kinds.get(l.slot).is_some_and(|rack| !rack));
+        self.layers.truncate(MAX_LAYERS);
+        for l in &mut self.layers {
+            l.level_db = if l.level_db.is_finite() {
+                l.level_db.clamp(-60.0, 6.0)
+            } else {
+                0.0
+            };
+            l.pan = if l.pan.is_finite() {
+                l.pan.clamp(-1.0, 1.0)
+            } else {
+                0.0
+            };
+            l.transpose = l.transpose.clamp(-48, 48);
+            l.key_hi = l.key_hi.min(127);
+            if l.key_lo > l.key_hi {
+                std::mem::swap(&mut l.key_lo, &mut l.key_hi);
+            }
+        }
+    }
 }
 
 impl InstrumentKind {
@@ -231,7 +332,9 @@ impl InstrumentKind {
             InstrumentKind::Synth(p) => Some(p),
             InstrumentKind::Voice(v) => Some(&v.base),
             InstrumentKind::Gen(g) => Some(&g.base),
-            InstrumentKind::Sample { .. } | InstrumentKind::Plugin(_) => None,
+            InstrumentKind::Sample { .. } | InstrumentKind::Plugin(_) | InstrumentKind::Rack(_) => {
+                None
+            }
         }
     }
     pub fn patch_mut(&mut self) -> Option<&mut Patch> {
@@ -239,7 +342,9 @@ impl InstrumentKind {
             InstrumentKind::Synth(p) => Some(p),
             InstrumentKind::Voice(v) => Some(&mut v.base),
             InstrumentKind::Gen(g) => Some(&mut g.base),
-            InstrumentKind::Sample { .. } | InstrumentKind::Plugin(_) => None,
+            InstrumentKind::Sample { .. } | InstrumentKind::Plugin(_) | InstrumentKind::Rack(_) => {
+                None
+            }
         }
     }
 }
@@ -594,6 +699,17 @@ impl Song {
         }
         let keep = self.modulation.delete_instrument(idx);
         self.routes_changed(&keep);
+        // racks lose a deleted layer; later slots move down one
+        for i in &mut self.instruments {
+            if let InstrumentKind::Rack(r) = &mut i.kind {
+                r.layers.retain(|l| l.slot != idx);
+                for l in &mut r.layers {
+                    if l.slot > idx {
+                        l.slot -= 1;
+                    }
+                }
+            }
+        }
         used
     }
 
@@ -743,6 +859,38 @@ impl Song {
             }
         }
         self.modulation.remap(map);
+        for i in &mut self.instruments {
+            if let InstrumentKind::Rack(r) = &mut i.kind {
+                for l in &mut r.layers {
+                    if let Some(&n) = map.get(l.slot) {
+                        l.slot = n;
+                    }
+                }
+            }
+        }
+    }
+
+    /// racks as a file may hold them, made safe: at most 4 layers, each a
+    /// real slot that is not a rack itself
+    pub fn fix_racks(&mut self) {
+        let racks: Vec<bool> = self
+            .instruments
+            .iter()
+            .map(|i| matches!(i.kind, InstrumentKind::Rack(_)))
+            .collect();
+        for (k, i) in self.instruments.iter_mut().enumerate() {
+            if let InstrumentKind::Rack(r) = &mut i.kind {
+                r.fix(k, &racks);
+            }
+        }
+    }
+
+    /// the rack (0-based) that has slot `idx` as a layer, if any
+    pub fn rack_of(&self, idx: usize) -> Option<usize> {
+        self.instruments.iter().position(|i| match &i.kind {
+            InstrumentKind::Rack(r) => r.layers.iter().any(|l| l.slot == idx),
+            _ => false,
+        })
     }
 
     /// Swap instrument slot `from` for `to` (1-based) on every note that

@@ -153,6 +153,8 @@ fn voice_raw(
         // plugin instruments render in the rack (Engine::render); the channel
         // voice only keeps the note state
         InstrumentKind::Plugin(_) => ((0.0, 0.0), true),
+        // a rack is silent itself: its layers play (engine/layers.rs)
+        InstrumentKind::Rack(_) => ((0.0, 0.0), true),
         InstrumentKind::Sample {
             data,
             rate,
@@ -225,6 +227,7 @@ impl Chan {
 
 mod audioclips;
 pub mod launch;
+mod layers;
 pub mod metro;
 mod notes;
 pub mod patprev;
@@ -838,6 +841,8 @@ impl Engine {
         self.held = 0;
         self.tl_span = None;
         self.nv.lmask = 0;
+        // rack layer voices exist before the first note (never while playing)
+        self.nv.layers.ensure(song);
         // audio clips still fading from the last play end now
         self.av.release_all();
         self.av.starting = true;
@@ -1410,6 +1415,23 @@ impl Engine {
                 _ => 0.0,
             };
         }
+        // rack layers: a tracker note holds until the next note or note-off
+        // on the track (no tracker pitch effects on layers yet)
+        if !self.nv.layers.banks.is_empty() && (cell.note == NOTE_OFF || (new_note && !gliding)) {
+            let (ci, cn, cv) = (c.instr, c.note, c.vol);
+            self.nv.layers.off_tracker(ch);
+            if new_note
+                && matches!(
+                    song.instruments.get(ci).map(|i| &i.kind),
+                    Some(InstrumentKind::Rack(_))
+                )
+            {
+                self.nv
+                    .layers
+                    .on(song, ch, ci, cn, 0.0, cv, cv, true, f64::INFINITY);
+            }
+        }
+        let c = &mut self.chans[ch];
         // plugin instruments: note on / off events (mono per channel)
         if !self.plugins.is_empty() {
             let (ci, cn, cv) = (c.instr, c.note, c.vol);
@@ -2088,6 +2110,8 @@ impl Engine {
     /// Buffers are only (re)allocated when a chain's structure changes.
     fn refresh_fx(&mut self, song: &Song) {
         let sr = self.sr;
+        self.nv.layers.ensure(song);
+        let has_racks = !self.nv.layers.banks.is_empty();
         let a = &self.auto;
         for (i, ch) in self
             .chains
@@ -2110,6 +2134,10 @@ impl Engine {
                 .unwrap_or(&[]);
             ch.sync(devs, owner, sr);
             resolve_plugins(&mut self.fx_plugins, ch, devs, i, owner, &a.fx);
+            // rack layers: one chain per layer (the layer slot's effects)
+            if has_racks {
+                self.nv.layers.sync(song, i, owner, sr, a);
+            }
             let tfo = c.tfo;
             for (d, (st, dev)) in ch.states.iter_mut().zip(devs).enumerate() {
                 // 40-42 set the mix of this channel's Resonator / Digital / Sub
@@ -2406,6 +2434,7 @@ impl Engine {
             };
             let mut nv_alive = false;
             let mut av_alive = false;
+            let mut lv_alive = false;
             for (i, (c, chain)) in self
                 .chans
                 .iter_mut()
@@ -2455,6 +2484,22 @@ impl Engine {
                         s_r += xr;
                         nv_alive |= v.active;
                     }
+                }
+                // rack layers of this track, each through its own chain
+                if !self.nv.layers.banks.is_empty()
+                    && (self.nv.layers.any || self.nv.layers.banks[i].rack != usize::MAX)
+                {
+                    let (x, xr) = self.nv.layers.render(
+                        i,
+                        song,
+                        sr,
+                        &self.auto,
+                        bpm,
+                        &mut self.fx_plugins,
+                        &mut lv_alive,
+                    );
+                    s += x;
+                    s_r += xr;
                 }
                 // audio clips of this track (before its insert chain)
                 if self.av.any {
@@ -2570,6 +2615,9 @@ impl Engine {
             }
             if self.nv.any {
                 self.nv.any = nv_alive;
+            }
+            if self.nv.layers.any {
+                self.nv.layers.any = lv_alive;
             }
             if self.av.any {
                 self.av.any = av_alive && audio_plan.is_some();
@@ -2763,6 +2811,8 @@ pub(crate) mod alloc_count {
     }
 }
 
+#[cfg(test)]
+mod layer_tests;
 #[cfg(test)]
 pub(crate) mod racks_tests;
 #[cfg(test)]

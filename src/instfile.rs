@@ -158,6 +158,7 @@ pub fn kind_name(k: &InstrumentKind) -> &'static str {
         InstrumentKind::Voice(_) => "voice",
         InstrumentKind::Gen(_) => "generator",
         InstrumentKind::Plugin(_) => "plugin",
+        InstrumentKind::Rack(_) => "rack",
     }
 }
 

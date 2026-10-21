@@ -621,6 +621,7 @@ fn kind_label(k: &InstrumentKind) -> &'static str {
         InstrumentKind::Voice(_) => "Voice",
         InstrumentKind::Gen(g) => engine_name(&g.engine),
         InstrumentKind::Plugin(_) => "Plugin",
+        InstrumentKind::Rack(_) => "Rack",
     }
 }
 

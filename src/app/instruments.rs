@@ -53,6 +53,7 @@ impl App {
                             InstrumentKind::Voice(_) => "  (voice)",
                             InstrumentKind::Gen(_) => "  (gen)",
                             InstrumentKind::Plugin(_) => "  (plugin)",
+                            InstrumentKind::Rack(_) => "  (rack)",
                             InstrumentKind::Synth(_) => "",
                         },
                     )

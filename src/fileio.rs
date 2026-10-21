@@ -432,9 +432,10 @@ pub const READER_VERSION: u32 = 7;
 /// which an older reader would play wrongly or drop. Every other song
 /// keeps writing its old version.
 pub fn needs_reader_7(song: &Song) -> bool {
-    song.instruments
-        .iter()
-        .any(|i| i.fx.iter().any(|d| d.kind == crate::fx::FxKind::Split))
+    song.instruments.iter().any(|i| {
+        matches!(i.kind, InstrumentKind::Rack(_))
+            || i.fx.iter().any(|d| d.kind == crate::fx::FxKind::Split)
+    })
 }
 
 /// Version 6: launcher clips (`Timeline::launcher`), which an older reader
@@ -626,6 +627,8 @@ pub fn load_cwt_warn(path: &Path) -> Result<(Song, Vec<String>), String> {
         timeline: None,
         modulation: Default::default(),
     };
+    // racks: layers point at real, non-rack slots (docs/racks/FORMAT.md)
+    song.fix_racks();
     // drag-to-modulate (docs/MODULATION.md)
     if let Ok(b) = read_entry(&mut z, "modulation.toml") {
         match toml::from_str::<crate::modulation::Modulation>(&String::from_utf8_lossy(&b)) {
