@@ -87,6 +87,8 @@ mod params;
 mod pattern;
 #[cfg(test)]
 mod piano_tests;
+#[cfg(test)]
+mod pianocopy_tests;
 mod pianoview;
 mod pluginview;
 mod plugsetup;
