@@ -757,6 +757,11 @@ pub const DEMOS: &[(&str, &str, &str)] = &[
         "psy / dark trance, F# Phrygian, 145 BPM (voices, liquid-chrome throat, acid)",
         include_str!("../demos/chrome_throat.cwt.toml"),
     ),
+    (
+        "Moonlit Cartridge",
+        "melodic chiptune, G minor, 125 BPM (only Chip FX, the effects and a Drum Kit)",
+        include_str!("../demos/moonlit_cartridge.cwt.toml"),
+    ),
 ];
 
 /// demo `i` of `DEMOS` (falls back to the first)
@@ -1330,6 +1335,46 @@ mod tests {
         // ~3:25: 22 blocks of 64 lines at 104 BPM
         let secs = s.order.len() as f32 * 64.0 * 60.0 / (104.0 * 4.0);
         assert!((180.0..240.0).contains(&secs), "{secs}");
+    }
+    /// the chiptune demo "Moonlit Cartridge": in File > Demo songs, and made only
+    /// from Chip FX instruments, one Drum Kit and built-in effects
+    #[test]
+    fn moonlit_cartridge_demo_loads_from_menu() {
+        use crate::gen::GenEngine;
+        let i = DEMOS
+            .iter()
+            .position(|d| d.0 == "Moonlit Cartridge")
+            .expect("chiptune demo registered in File > Demo songs");
+        let s = demo_song_n(i);
+        assert!(s.title.starts_with("Moonlit Cartridge"));
+        assert_eq!(s.bpm, 125.0);
+        assert_eq!(s.channels, 11);
+        assert!(s.timeline.is_none(), "tracker form: opens in timeline mode");
+        let l = &s.mixer.limiter;
+        assert!(l.enabled && l.ceiling_db <= -1.0 && (l.target_lufs + 14.0).abs() < 0.5);
+        let mut kits = 0;
+        for inst in &s.instruments {
+            let InstrumentKind::Gen(g) = &inst.kind else {
+                panic!("{}: only generators", inst.name)
+            };
+            match &g.engine {
+                GenEngine::ChipFx(x) => assert!(x.level > 0.0, "{}", inst.name),
+                GenEngine::Drums(_) => kits += 1,
+                _ => panic!("{}: only Chip FX and the Drum Kit", inst.name),
+            }
+            for d in &inst.fx {
+                assert_ne!(d.kind, crate::fx::FxKind::Plugin, "built-in effects only");
+            }
+        }
+        assert_eq!(kits, 1, "one Drum Kit");
+        // every block is a named clip with a role; about 3:27 (27 blocks of 4 bars)
+        assert!(s
+            .patterns
+            .iter()
+            .all(|p| p.role.is_some() && !p.name.is_empty()));
+        let secs = s.order.len() as f32 * 64.0 * 60.0 / (125.0 * 4.0);
+        assert!((195.0..215.0).contains(&secs), "{secs}");
+        assert!(s.automation.len() >= 4);
     }
     /// the psy demo "Chrome Throat": in File > Demo songs, every voice, FX device,
     /// automation lane and modulation route loads
