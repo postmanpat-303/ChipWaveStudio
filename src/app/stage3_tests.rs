@@ -53,13 +53,14 @@ fn every_path_agrees_on_the_tracks_instrument() {
     click_at(&mut h, p);
     frames(&mut h, 2);
     assert_eq!((h.state().ch, h.state().instr), (0, 2));
-    // an assigned instrument wins; a deleted one doesn't count
+    // an assigned instrument wins; a deleted one is "missing" (the header
+    // says so), not a guess: typing uses the selected instrument
     h.state()
         .with(|s| s.song.timeline.as_deref_mut().unwrap().tracks[0].instr = 1);
     assert_eq!(h.state().track_instrument(0), Some(1));
     h.state()
         .with(|s| s.song.timeline.as_deref_mut().unwrap().tracks[0].instr = 9);
-    assert_eq!(h.state().track_instrument(0), Some(2));
+    assert_eq!(h.state().track_instrument(0), None);
 }
 
 #[test]

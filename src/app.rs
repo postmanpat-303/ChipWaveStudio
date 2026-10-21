@@ -76,6 +76,9 @@ mod narrow_tests;
 #[cfg(test)]
 mod newsong_tests;
 mod noterec;
+mod objpie;
+#[cfg(test)]
+mod objpie_tests;
 #[cfg(test)]
 mod opentl_tests;
 mod params;
@@ -256,6 +259,12 @@ pub struct App {
     show_info: bool,
     /// action waiting for the Save / Don't save / Cancel answer
     prompt: Option<crate::prompt::Pending>,
+    /// a pie open on a clip, launcher clip or drum pattern (objpie.rs)
+    opie: Option<(radial::Radial, objpie::PieFor)>,
+    /// the clip Rename window
+    clip_rename: Option<objpie::ClipRename>,
+    /// a pie to open at the next `obj_pie_frame`
+    opie_req: Option<(objpie::PieFor, Pos2)>,
     /// user chose "Don't save" (recovery copy may be deleted on exit)
     discarded: bool,
     allow_close: bool,
@@ -627,6 +636,9 @@ impl App {
             rename_view: View::Pattern,
             show_info: false,
             prompt: None,
+            opie: None,
+            clip_rename: None,
+            opie_req: None,
             discarded: false,
             allow_close: false,
             arr_flash: None,
@@ -1105,6 +1117,7 @@ impl eframe::App for App {
         self.too_new_window(ui.ctx());
         self.timeline_prompts(ui.ctx());
         self.drop_ask_window(ui.ctx());
+        self.obj_pie_frame(ui.ctx());
         self.instr_delete_dialog(ui.ctx());
         self.block_len_dialog(ui.ctx());
         self.chord_window(ui.ctx());

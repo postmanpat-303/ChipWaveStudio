@@ -616,7 +616,7 @@ impl App {
 
     /// launcher: double-click opens the clip in the piano roll; an empty
     /// slot gets a new one-bar clip first (it plays the track's instrument)
-    fn ca_open_launch(&mut self, tr: usize, k: usize) {
+    pub(super) fn ca_open_launch(&mut self, tr: usize, k: usize) {
         let id = match self.ca_clip(tr, k) {
             Some(id) => id,
             None => {
@@ -751,7 +751,7 @@ impl App {
         }
     }
 
-    fn ca_variation(&mut self, id: u32) {
+    pub(super) fn ca_variation(&mut self, id: u32) {
         let v = self.with(|s| {
             s.song
                 .timeline
@@ -1218,7 +1218,9 @@ impl App {
         let mut act: Option<(u8, usize, usize)> = None;
         let mut slot_op: Option<(u32, u8)> = None;
         // linked counts of the launcher's clips (the ×N badge, D4)
-        let links: std::collections::HashMap<u32, usize> = if launch {
+        // and their own colour and name (Stage 5)
+        let links: std::collections::HashMap<u32, (usize, Option<u32>, Option<String>)> = if launch
+        {
             self.with(|s| {
                 s.song
                     .timeline
@@ -1229,7 +1231,8 @@ impl App {
                             .filter_map(|l| {
                                 let d = l.clip.notes()?;
                                 let (a, b) = tl::linked(t, d);
-                                Some((l.clip.id, a + b))
+                                let name = l.clip.name.clone().filter(|n| !n.is_empty());
+                                Some((l.clip.id, (a + b, l.clip.colour, name)))
                             })
                             .collect()
                     })
@@ -1336,7 +1339,7 @@ impl App {
                     format!(
                         "{}: track {:02}'s launcher clip. ▶ plays it, looping, from the next {} (the other \
                          tracks play on) · drag it onto the timeline for a linked copy (Alt: an independent \
-                         one) · double-click opens it in the piano roll · right-click: duplicate, delete",
+                         one) · double-click opens it in the piano roll · right-click: play, edit, place, rename, colour…",
                         names[b],
                         tr + 1,
                         self.ca_when()
@@ -1359,7 +1362,13 @@ impl App {
                     )
                 };
                 let resp = resp.on_hover_text(tip);
-                if let Some(id) = lid {
+                if let (Some(id), false, true) =
+                    (lid, self.extra.clip_list_menu, resp.secondary_clicked())
+                {
+                    if let Some(p) = resp.interact_pointer_pos() {
+                        self.opie_req = Some((super::objpie::PieFor::Launch(id), p));
+                    }
+                } else if let (Some(id), true) = (lid, self.extra.clip_list_menu) {
                     resp.context_menu(|ui| {
                         if ui
                             .button("Duplicate (variation)")
@@ -1400,6 +1409,10 @@ impl App {
                     act = Some(if strip_hover { (1, tr, b) } else { (3, tr, b) });
                 }
                 let dim = if row_held { 0.55 } else { 1.0 };
+                let look = lid.and_then(|id| links.get(&id));
+                let col = look.and_then(|x| x.1).map_or(col, |x| {
+                    Color32::from_rgb((x >> 16) as u8, (x >> 8) as u8, x as u8)
+                });
                 let fill = if pl.is_some() {
                     theme::mix(col, Color32::BLACK, 0.15)
                 } else {
@@ -1452,7 +1465,19 @@ impl App {
                         );
                     }
                 }
-                if let Some(n) = lid.and_then(|id| links.get(&id)).filter(|&&n| n > 1) {
+                if let Some(name) = look
+                    .and_then(|x| x.2.as_deref())
+                    .filter(|_| sr.height() >= 22.0)
+                {
+                    pc.text(
+                        Pos2::new(strip.right() + 3.0, sr.bottom() - 2.0),
+                        egui::Align2::LEFT_BOTTOM,
+                        name,
+                        FontId::proportional(10.5),
+                        t.ink,
+                    );
+                }
+                if let Some(n) = look.map(|x| x.0).filter(|&n| n > 1) {
                     let g = pc.layout_no_wrap(format!("×{n}"), FontId::proportional(10.5), t.ink);
                     let br = Rect::from_min_size(
                         Pos2::new(sr.right() - g.size().x - 7.0, sr.top() + 2.0),

@@ -95,6 +95,10 @@ pub struct Extra {
     /// (docs/unified/PLAN.md 3.2)
     #[serde(default = "yes")]
     pub follow_select: bool,
+    /// right-click on a clip, launcher clip or drum step grid opens a list
+    /// menu instead of the pie (Settings › Clip menus)
+    #[serde(default)]
+    pub clip_list_menu: bool,
     /// Full-height pattern: the lower panel is hidden
     #[serde(default)]
     pub full_height: bool,
@@ -239,6 +243,7 @@ impl Default for Extra {
             lower_chosen: false,
             lower_dev: false,
             follow_select: true,
+            clip_list_menu: false,
             full_height: false,
             classic_editor: false,
             cards_closed: vec![],

@@ -582,6 +582,17 @@ impl App {
                     changed |= a.changed() || b.changed();
                 });
                 ui.end_row();
+                ui.label("Clip menus");
+                ui.horizontal(|ui| {
+                    let a = ui
+                        .selectable_value(&mut self.extra.clip_list_menu, false, "Pie")
+                        .on_hover_text("right-click a Timeline clip, a launcher clip or the Drum Kit steps: a round menu");
+                    let b = ui
+                        .selectable_value(&mut self.extra.clip_list_menu, true, "List")
+                        .on_hover_text("right-click opens the plain list menus");
+                    changed |= a.changed() || b.changed();
+                });
+                ui.end_row();
                 ui.label("Row numbers");
                 ui.horizontal(|ui| {
                     let a = ui

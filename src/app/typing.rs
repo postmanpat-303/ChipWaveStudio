@@ -123,8 +123,9 @@ impl App {
                 .as_deref()
                 .and_then(|t| t.tracks.get(tr))
                 .map_or(0, |t| t.instr);
-            if given > 0 && given as usize <= ni {
-                return Some(given);
+            if given > 0 {
+                // assigned, but deleted since: missing, not a guess
+                return (given as usize <= ni).then_some(given);
             }
             let mut count = [0usize; 256];
             for p in &s.song.patterns {

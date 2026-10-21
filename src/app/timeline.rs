@@ -1273,6 +1273,8 @@ impl App {
                 };
                 // solid title bar in the track colour over a softer body
                 // (the musical data keeps the saturation; 0.2.4 polish)
+                // the clip's own colour (5.4), else the track's
+                let col = clip.colour.map_or(col, |x| hex(x & 0xFF_FFFF));
                 let body_c = theme::mix(t.crt_bot, col, if t.ember { 0.46 } else { 0.34 } * k);
                 let head_c = theme::mix(
                     t.crt_bot,
@@ -1410,7 +1412,11 @@ impl App {
                     };
                     if r.width() > 26.0 {
                         let vis_l = r.left().max(lanes.left()) + 4.0;
-                        let mut name = d.name.clone();
+                        let mut name = clip
+                            .name
+                            .clone()
+                            .filter(|n| !n.is_empty())
+                            .unwrap_or_else(|| d.name.clone());
                         // linked (D4): how many clips share these notes
                         let (na, nb) = tl::linked(&c.tl, data as usize);
                         if na + nb > 1 {
@@ -2799,6 +2805,7 @@ impl App {
             }
         }
         // right-click: the clip menu (also offers to switch in tracker mode)
+        let mut pie_open: Option<(u32, Pos2)> = None;
         if !armed && cresp.secondary_clicked() {
             if let Some(p) = cresp.interact_pointer_pos() {
                 let tk = tick_of(p.x).max(0.0) as Tick;
@@ -2810,6 +2817,14 @@ impl App {
                         self.tlv.sel = x;
                         self.tlv.sels = x.into_iter().collect();
                     }
+                }
+                // a note or Tracker clip: its pie (Settings › Clip menus)
+                let pie_clip = id.filter(|&id| {
+                    mode && !self.extra.clip_list_menu
+                        && c.tl.clips.iter().any(|x| x.id == id && x.audio().is_none())
+                });
+                if let Some(id) = pie_clip {
+                    pie_open = Some((id, p));
                 }
             }
         }
@@ -2834,7 +2849,10 @@ impl App {
             .and_then(|id| c.tl.clips.iter().find(|x| x.id == id))
             .filter(|cl| cl.audio().is_some());
         // (no menu while the split preview is on: right-click cancels it)
-        let menu_resp = if armed {
+        if let Some((id, p)) = pie_open {
+            self.opie_req = Some((super::objpie::PieFor::Clip(id), p));
+        }
+        let menu_resp = if armed || pie_open.is_some() || self.opie.is_some() {
             ui.interact(
                 Rect::NOTHING,
                 ui.scope_id().with("tl_no_menu"),
@@ -3279,6 +3297,8 @@ impl App {
                     });
                     if kind == Some(false) && !kit {
                         self.set_lower(3);
+                        // the Timeline keeps the keyboard (Delete, Ctrl+D)
+                        self.pr.focus = false;
                     }
                 }
                 return;

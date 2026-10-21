@@ -144,6 +144,16 @@ impl App {
 
     /// keys for dialogs / the settings screen; true = consumed
     pub(super) fn modal_key(&mut self, key: Key, m: egui::Modifiers, ctx: &egui::Context) -> bool {
+        if self.opie.is_some() {
+            // a pie: Esc closes it, other keys do nothing behind it
+            if key == Key::Escape {
+                self.obj_pie_escape();
+            }
+            return true;
+        }
+        if key == Key::Escape && self.clip_rename.is_some() {
+            return self.obj_pie_escape();
+        }
         if key == Key::Escape && self.ca.drag.is_some() {
             // a slot drag in progress: Esc drops nothing
             self.ca.drag = None;
