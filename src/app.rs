@@ -49,6 +49,8 @@ mod focus_tests;
 mod fxplugview;
 mod fxview;
 mod genview;
+#[cfg(test)]
+mod glyph_tests;
 mod glyphs;
 mod inspector;
 #[cfg(test)]

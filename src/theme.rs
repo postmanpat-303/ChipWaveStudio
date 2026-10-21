@@ -404,13 +404,27 @@ fn fonts(ctx: &egui::Context, ember: bool) {
         v.extend(rest.iter().cloned());
         v
     };
+    // Inter as a fallback everywhere: it has the arrows, ▶ and ✓ that
+    // Barlow and the default fonts lack (no missing-glyph boxes)
+    let inter = |mut v: Vec<String>| {
+        if !v.iter().any(|x| x == "inter") {
+            v.push("inter".into());
+        }
+        v
+    };
+    let mut label = vec!["barlow".to_string(), "inter".to_string()];
+    label.extend(prop.iter().cloned());
+    f.families.insert(FontFamily::Name("label".into()), label);
     f.families
-        .insert(FontFamily::Name("label".into()), with("barlow", &prop));
+        .insert(FontFamily::Name("num".into()), inter(with("geist", &mono)));
     f.families
-        .insert(FontFamily::Name("num".into()), with("geist", &mono));
+        .insert(FontFamily::Monospace, inter(mono.clone()));
     if ember {
         f.families
             .insert(FontFamily::Proportional, with("inter", &prop));
+    } else {
+        f.families
+            .insert(FontFamily::Proportional, inter(prop.clone()));
     }
     ctx.set_fonts(f);
 }
