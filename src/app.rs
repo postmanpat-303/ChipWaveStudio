@@ -94,6 +94,8 @@ mod radial;
 #[cfg(test)]
 mod record_tests;
 mod sampleview;
+#[cfg(test)]
+mod scenario_tests;
 mod settingsview;
 pub mod shot;
 pub mod showcase;
