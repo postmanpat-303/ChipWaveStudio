@@ -3,7 +3,7 @@ use super::*;
 
 /// status line for Ctrl+C / Ctrl+X / Ctrl+V outside the Tracker views
 pub(super) const CLIPBOARD_ELSEWHERE: &str =
-    "Cut, copy and paste work in the Tracker and Order list (on the Timeline: Ctrl+D duplicates, Alt-drag copies)";
+    "Cut, copy and paste work in the piano roll (click into it), the Tracker and the Order list (on the Timeline: Ctrl+D duplicates, Alt-drag copies)";
 
 impl App {
     pub(super) fn handle_keys(&mut self, ctx: &egui::Context) {
@@ -31,6 +31,15 @@ impl App {
         // index nothing)
         let tracker_view = matches!(self.view, View::Pattern | View::Arranger);
         for a in input::clipboard_actions(&events) {
+            // the piano roll has the keyboard (clicked into last): its notes
+            if self.pr_active() {
+                match a {
+                    input::ClipAction::Copy => self.pr_copy(false, ctx),
+                    input::ClipAction::Cut => self.pr_copy(true, ctx),
+                    input::ClipAction::Paste(t) => self.pr_paste(t),
+                }
+                continue;
+            }
             if !tracker_view {
                 self.status = CLIPBOARD_ELSEWHERE.into();
                 continue;
@@ -62,7 +71,11 @@ impl App {
             if input::is_clipboard_key(&ev) {
                 continue;
             }
-            if arr_visible {
+            // Ctrl+D in the piano roll duplicates notes, not Order list clips
+            let roll_dup = self.pr_active()
+                && matches!(&ev, egui::Event::Key { key: Key::D, pressed: true, modifiers: m, .. }
+                    if m.command && !m.shift && !m.alt);
+            if arr_visible && !roll_dup {
                 if let Some(a) = input::arranger_shortcut(&ev, arr_focus) {
                     self.arranger_action(a, ctx);
                     continue;

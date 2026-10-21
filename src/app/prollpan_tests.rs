@@ -43,7 +43,7 @@ fn selected_notes_get_their_own_colour_in_both_themes_and_keep_velocity() {
 
 // ---- block column (tracker-mode) roll, as piano_tests::setup
 
-fn block_roll(ch: usize) -> Harness<'static, App> {
+pub(super) fn block_roll(ch: usize) -> Harness<'static, App> {
     let mut song = fileio::demo_song();
     for r in song.patterns[0].cells.iter_mut() {
         r[ch] = Cell::default();
@@ -66,7 +66,7 @@ fn block_roll(ch: usize) -> Harness<'static, App> {
     h
 }
 
-fn at(h: &Harness<'static, App>, row: usize, key: u8, dx: f32) -> Pos2 {
+pub(super) fn at(h: &Harness<'static, App>, row: usize, key: u8, dx: f32) -> Pos2 {
     let pr = &h.state().pr;
     Pos2::new(
         pr.x_of(tl::rows_to_ticks(row)) + dx,
@@ -74,7 +74,7 @@ fn at(h: &Harness<'static, App>, row: usize, key: u8, dx: f32) -> Pos2 {
     )
 }
 
-fn notes_in(h: &Harness<'static, App>, ch: usize) -> Vec<(usize, u8)> {
+pub(super) fn notes_in(h: &Harness<'static, App>, ch: usize) -> Vec<(usize, u8)> {
     h.state().with(|s| {
         s.song.patterns[0]
             .cells
@@ -247,7 +247,7 @@ fn block_selection_moves_as_a_group_with_one_undo_step() {
 
 // ---- note clip roll (timeline mode)
 
-fn clip_roll(keys: &[(Tick, u8)]) -> (Harness<'static, App>, usize) {
+pub(super) fn clip_roll(keys: &[(Tick, u8)]) -> (Harness<'static, App>, usize) {
     let mut s = Song::clean();
     crate::chanops::insert_channel(&mut s, 0, "Keys");
     let id = tl::new_note_clip(&mut s, 0, 0).unwrap();
@@ -281,7 +281,7 @@ fn clip_roll(keys: &[(Tick, u8)]) -> (Harness<'static, App>, usize) {
     (h, data)
 }
 
-fn clip_notes(h: &Harness<'static, App>, data: usize) -> Vec<(Tick, u8)> {
+pub(super) fn clip_notes(h: &Harness<'static, App>, data: usize) -> Vec<(Tick, u8)> {
     h.state().with(|s| {
         s.song.timeline.as_ref().unwrap().notes[data]
             .notes

@@ -451,6 +451,7 @@ fn the_tracker_tabs_are_hidden_by_default_and_the_tracker_stays_reachable() {
         "DEVICES",
         "TIMELINE + PIANO",
         "Order list",
+        "Automation",
         "Play block",
     ] {
         assert!(!has(&h, gone), "{gone} is hidden");
@@ -463,7 +464,6 @@ fn the_tracker_tabs_are_hidden_by_default_and_the_tracker_stays_reachable() {
         "Piano roll",
         "Devices",
         "Instrument",
-        "Automation",
         "Play",
     ] {
         assert!(has(&h, here), "{here} is shown");
@@ -512,6 +512,55 @@ fn the_tracker_tabs_are_hidden_by_default_and_the_tracker_stays_reachable() {
     h.state_mut().extra.show_tracker = true;
     frames(&mut h, 2);
     assert!(has(&h, "TRACKER") && has(&h, "ORDER") && has(&h, "Order list"));
+    assert!(
+        has(&h, "Automation"),
+        "the Tracker's Automation tab is back"
+    );
+}
+
+/// the lower panel's Automation tab is the Order list with its song lanes (a
+/// Tracker view): hidden with the Tracker, like the Order list tab, and the
+/// piano roll stands in when the panel was left on it (saved settings, a
+/// song lane); the Timeline's automation is the lanes under each track
+#[test]
+fn the_automation_tab_hides_with_the_tracker_and_the_piano_roll_stands_in() {
+    let mut h = focus(Song::clean());
+    h.state_mut().load_demo(0);
+    frames(&mut h, 3);
+    assert_eq!(h.state().view, View::Timeline);
+    assert!(!has(&h, "Automation") && !has(&h, "Order list"));
+    // left on the Automation tab (an old settings file, or a song lane)
+    {
+        let a = h.state_mut();
+        a.extra.lower_inst = false;
+        a.extra.lower_dev = false;
+        a.pr.open = false;
+        a.show_auto = true;
+        a.arr_focus = true;
+    }
+    frames(&mut h, 2);
+    assert!(h.state().pr.open, "the piano roll stands in");
+    assert!(
+        !h.state().arr_focus,
+        "the hidden Order list has no keyboard"
+    );
+    assert!(has(&h, "Piano roll") && !has(&h, "Insert block"));
+    // asking for it (Ctrl+I back, the old tab number) lands on the piano roll
+    h.state_mut().set_lower(1);
+    h.state_mut().set_lower(2);
+    frames(&mut h, 2);
+    assert!(h.state().pr.open && !h.state().extra.lower_inst);
+    // the View menu's "Automation lanes" checkbox is a Tracker one too
+    assert!(!has(&h, "Automation lanes"));
+    // the Tracker on: the tab is back and works as before
+    h.state_mut().extra.show_tracker = true;
+    frames(&mut h, 2);
+    assert!(has(&h, "Automation") && has(&h, "Order list"));
+    h.state_mut().set_lower(2);
+    frames(&mut h, 2);
+    let a = h.state();
+    assert!(!a.pr.open && !a.extra.lower_inst && !a.extra.lower_dev && a.show_auto);
+    assert!(has(&h, "Insert block"), "the Order list draws");
 }
 
 #[test]
