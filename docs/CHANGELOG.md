@@ -4,7 +4,8 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 
 ## Unreleased
 
-- **New demo song "Moonlit Cartridge"** (File › Demo songs): a melodic chiptune in G minor, 125 BPM, about 3:27, made only from Chip FX instruments, one Drum Kit and the built-in effects (gentle ducking, ping-pong echo, reverb, filter sweeps). It opens on the Timeline with one named clip per section. Generator: `scripts/make_moonlit_cartridge.py`. Notes: [research/moonlit-cartridge.md](research/moonlit-cartridge.md).
+- **New demo song "Oceans 11"** (File › Demo songs): music by Martin Galway, the great composer on Commodore 64, arranged by Del (postmanpat) as a melodic chiptune in G minor, 125 BPM, about 3:27, made only from Chip FX instruments, one Drum Kit and the built-in effects (gentle ducking, ping-pong echo, reverb, filter sweeps). It opens on the Timeline with one named clip per section. Generator: `scripts/make_oceans_11.py`. Notes: [research/oceans-11.md](research/oceans-11.md).
+- **Text songs** (`.cwt.toml`) can set `artist`, `album`, `year` and `comment` in `[song]` (shown in Song settings and written to the MP3 tags). Songs without them load as before.
 
 ## 0.2.6.0: One workflow
 

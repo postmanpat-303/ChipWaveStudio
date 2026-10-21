@@ -758,9 +758,9 @@ pub const DEMOS: &[(&str, &str, &str)] = &[
         include_str!("../demos/chrome_throat.cwt.toml"),
     ),
     (
-        "Moonlit Cartridge",
-        "melodic chiptune, G minor, 125 BPM (only Chip FX, the effects and a Drum Kit)",
-        include_str!("../demos/moonlit_cartridge.cwt.toml"),
+        "Oceans 11",
+        "music by Martin Galway (Commodore 64), arranged by Del (postmanpat): melodic chiptune, G minor, 125 BPM (only Chip FX, the effects and a Drum Kit)",
+        include_str!("../demos/oceans_11.cwt.toml"),
     ),
 ];
 
@@ -953,6 +953,20 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
     song.bpm = real(s, "bpm").unwrap_or(145.0);
     song.speed = int(s, "speed", 6) as u32;
     song.channels = channels;
+    // optional song info (artist, album, year, comment: Song settings and the MP3 tags)
+    let text = |k: &str| s.get(k).and_then(|x| x.as_str()).map(String::from);
+    if let Some(v) = text("artist") {
+        song.info.artist = v;
+    }
+    if let Some(v) = text("album") {
+        song.info.album = v;
+    }
+    if let Some(v) = text("year") {
+        song.info.year = v;
+    }
+    if let Some(v) = text("comment") {
+        song.info.comment = v;
+    }
     if let Some(k) = s.get("key").and_then(|x| x.as_str()) {
         song.info.key =
             Some(crate::chords::parse_key(k).ok_or_else(|| format!("unknown key {k:?}"))?);
@@ -1336,17 +1350,27 @@ mod tests {
         let secs = s.order.len() as f32 * 64.0 * 60.0 / (104.0 * 4.0);
         assert!((180.0..240.0).contains(&secs), "{secs}");
     }
-    /// the chiptune demo "Moonlit Cartridge": in File > Demo songs, and made only
+    /// the chiptune demo "Oceans 11": in File > Demo songs, and made only
     /// from Chip FX instruments, one Drum Kit and built-in effects
     #[test]
-    fn moonlit_cartridge_demo_loads_from_menu() {
+    fn oceans_11_demo_loads_from_menu() {
         use crate::gen::GenEngine;
         let i = DEMOS
             .iter()
-            .position(|d| d.0 == "Moonlit Cartridge")
+            .position(|d| d.0 == "Oceans 11")
             .expect("chiptune demo registered in File > Demo songs");
         let s = demo_song_n(i);
-        assert!(s.title.starts_with("Moonlit Cartridge"));
+        assert!(s.title.starts_with("Oceans 11"));
+        // the original composer is credited in the song info (and so in the MP3 tags)
+        assert_eq!(s.info.artist, "Del (postmanpat)");
+        assert!(s
+            .info
+            .comment
+            .starts_with("Original music by Martin Galway"));
+        assert!(DEMOS[i].1.contains("Martin Galway"));
+        assert!(crate::credits::CREDITS
+            .iter()
+            .any(|c| c.name == "Martin Galway"));
         assert_eq!(s.bpm, 125.0);
         assert_eq!(s.channels, 11);
         assert!(s.timeline.is_none(), "tracker form: opens in timeline mode");
