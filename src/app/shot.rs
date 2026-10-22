@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 83] = [
+pub const VIEWS: [&str; 84] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -120,6 +120,7 @@ pub const VIEWS: [&str; 83] = [
     "racks-add-device",
     "racks-save",
     "racks-browser",
+    "knob-mockup",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -1117,6 +1118,9 @@ impl App {
         if f == SETUP_AT {
             self.shot_setup(ctx, &view);
         }
+        if view == "knob-mockup" && f >= SETUP_AT {
+            knob_mockup(ctx);
+        }
         if f == SETUP_AT + 14 {
             if let Ok(m) = std::env::var("CHIPWAVE_SHOT_PR") {
                 self.shot_pr(ctx, &m);
@@ -2052,4 +2056,281 @@ impl App {
                 .collect();
         }
     }
+}
+
+/// `--view knob-mockup`: the knobs today (left) beside the studio knob
+/// (`ember::knob_studio`, right) at the sizes the app uses, painted 1:1 by
+/// the app's own painter over the window. A design board only: the app's
+/// knobs are not swapped.
+fn knob_mockup(ctx: &egui::Context) {
+    use crate::ember::{self, StudioKnob};
+    let t = th();
+    egui::Area::new(egui::Id::unique("knob_mockup"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(Pos2::ZERO)
+        .show(ctx, |ui| {
+            let full = ctx.content_rect();
+            ui.set_min_size(full.size());
+            let p = ui.painter().clone();
+            p.rect_filled(full, 0.0, t.bg_bot);
+            let head = |p: &egui::Painter, pos: Pos2, s: &str| {
+                p.text(
+                    pos,
+                    egui::Align2::LEFT_TOP,
+                    s,
+                    theme::label_font(14.0),
+                    t.ink,
+                );
+            };
+            let note = |p: &egui::Painter, pos: Pos2, s: &str| {
+                p.text(
+                    pos,
+                    egui::Align2::LEFT_TOP,
+                    s,
+                    egui::FontId::proportional(11.5),
+                    t.ink2,
+                );
+            };
+            head(
+                &p,
+                Pos2::new(24.0, 14.0),
+                "KNOB MOCKUP · 1:1 · TODAY (LEFT) AND THE STUDIO KNOB (RIGHT)",
+            );
+            note(
+                &p,
+                Pos2::new(24.0, 34.0),
+                "Painted by ChipWave's own painter at the app's sizes. Not swapped in yet.",
+            );
+            let colw = (full.width() - 72.0) / 2.0;
+            let lx = 24.0;
+            let rx = lx + colw + 24.0;
+            // ---- 1 Master panel: Volume / Drive / Ceiling (rad 27)
+            let y0 = 64.0;
+            for (x, now) in [(lx, true), (rx, false)] {
+                let r = Rect::from_min_size(Pos2::new(x, y0), egui::vec2(colw, 176.0));
+                theme::cartridge(&p, r, t.slate);
+                head(
+                    &p,
+                    r.min + egui::vec2(14.0, 10.0),
+                    if now {
+                        "MASTER · TODAY"
+                    } else {
+                        "MASTER · STUDIO KNOB"
+                    },
+                );
+                let knobs = [
+                    ("Volume", 0.80, "+0.0", "-60", "+6", "+0.0 dB"),
+                    ("Drive", 0.0, "0.0", "0", "+24", "0.0 dB"),
+                    ("Ceiling", 0.92, "-1.0", "-12", "0", "-1.0 dB"),
+                ];
+                for (i, (name, f, rd, lo, hi, val)) in knobs.into_iter().enumerate() {
+                    let c = Pos2::new(r.left() + 90.0 + i as f32 * 120.0, r.top() + 96.0);
+                    if now {
+                        theme::knob_hero(&p, c, 27.0, f, false, rd, f > 0.002, 1.0);
+                        ember::knob_label(&p, Pos2::new(c.x, c.y - 27.0 - 9.0), name, 12.0);
+                    } else {
+                        let mut v = f;
+                        ember::knob_studio_ui(
+                            ui,
+                            c,
+                            27.0,
+                            egui::Id::unique(("mock_master", i)),
+                            &mut v,
+                            f,
+                            StudioKnob {
+                                frac: f,
+                                title: name,
+                                value: val,
+                                min_max: (lo, hi),
+                                dim: 1.0,
+                                ..Default::default()
+                            },
+                        );
+                    }
+                }
+            }
+            // ---- 2 a device card: Supersaw Cutoff / Detune / Attack / Release
+            let y1 = y0 + 192.0;
+            let dev = [
+                ("Cutoff", 0.62, "2.40 kHz", false, "20", "20k"),
+                ("Detune", 0.65, "+18 ct", true, "-50", "+50"),
+                ("Attack", 0.15, "12 ms", false, "0", "2 s"),
+                ("Release", 0.45, "320 ms", false, "0", "4 s"),
+            ];
+            for (x, now) in [(lx, true), (rx, false)] {
+                let r = Rect::from_min_size(Pos2::new(x, y1), egui::vec2(colw, 232.0));
+                theme::cartridge(&p, r, t.slate);
+                head(
+                    &p,
+                    r.min + egui::vec2(14.0, 10.0),
+                    if now {
+                        "DEVICE CARD · SUPERSAW · TODAY (60 x 66 CELLS)"
+                    } else {
+                        "DEVICE CARD · SUPERSAW · STUDIO KNOB"
+                    },
+                );
+                if now {
+                    let mut ch = ui.new_child(
+                        egui::UiBuilder::new()
+                            .max_rect(Rect::from_min_size(
+                                r.min + egui::vec2(14.0, 40.0),
+                                egui::vec2(colw - 28.0, 70.0),
+                            ))
+                            .layout(egui::Layout::left_to_right(egui::Align::Min)),
+                    );
+                    ch.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+                    for (k, (name, f, val, ..)) in dev.into_iter().enumerate() {
+                        let mut v = f;
+                        knob::knob(
+                            &mut ch,
+                            egui::Id::unique(("mock_old", k)),
+                            &mut v,
+                            knob::KnobArgs {
+                                name,
+                                value_text: val.to_string(),
+                                default: 0.5,
+                                steps: 0.0,
+                                enabled: true,
+                                highlight: false,
+                                badge: None,
+                                locked: None,
+                                tip: "",
+                                rings: &[],
+                                live: None,
+                                auto_led: None,
+                            },
+                        );
+                    }
+                    note(
+                        &p,
+                        r.min + egui::vec2(14.0, 124.0),
+                        "Slate today: knurled cap, tick ring, value under the knob.",
+                    );
+                } else {
+                    // the same 60 x 66 cells (rad 14), then a roomier 18 with end labels
+                    for (row, rad, cw, cy) in
+                        [(0, 14.0f32, 60.0f32, 82.0f32), (1, 18.0, 92.0, 178.0)]
+                    {
+                        for (k, (name, f, val, bip, lo, hi)) in dev.into_iter().enumerate() {
+                            let c =
+                                Pos2::new(r.left() + 14.0 + cw / 2.0 + k as f32 * cw, r.top() + cy);
+                            ember::knob_studio(
+                                &p,
+                                c,
+                                rad,
+                                &StudioKnob {
+                                    frac: f,
+                                    bipolar: bip,
+                                    title: name,
+                                    value: val,
+                                    min_max: (lo, hi),
+                                    dim: 1.0,
+                                    ..Default::default()
+                                },
+                            );
+                        }
+                        note(
+                            &p,
+                            Pos2::new(r.left() + 14.0 + 4.0 * cw + 16.0, r.top() + cy - 8.0),
+                            if row == 0 {
+                                "rad 14 in today's 60 x 66 cell"
+                            } else {
+                                "rad 18 with end labels (92 wide)"
+                            },
+                        );
+                    }
+                }
+            }
+            // ---- 3 the scale variant and the other states (studio knob only)
+            let y2 = y1 + 248.0;
+            let r = Rect::from_min_size(
+                Pos2::new(lx, y2),
+                egui::vec2(full.width() - 48.0, full.height() - y2 - 16.0),
+            );
+            theme::cartridge(&p, r, t.slate);
+            head(
+                &p,
+                r.min + egui::vec2(14.0, 10.0),
+                "STUDIO KNOB · SCALE NUMBERS, BIPOLAR, STEPPED, DISABLED",
+            );
+            let cy = r.top() + 118.0;
+            let ms: [(&str, f32); 7] = [
+                ("2", 0.0),
+                ("8", 0.17),
+                ("14", 0.33),
+                ("19", 0.5),
+                ("25", 0.67),
+                ("30", 0.83),
+                ("40ms", 1.0),
+            ];
+            let cases: [(f32, StudioKnob); 5] = [
+                (
+                    30.0,
+                    StudioKnob {
+                        frac: 0.02,
+                        title: "Attack",
+                        value: "2 ms",
+                        scale: &ms,
+                        dim: 1.0,
+                        ..Default::default()
+                    },
+                ),
+                (
+                    24.0,
+                    StudioKnob {
+                        frac: 0.5,
+                        bipolar: true,
+                        title: "Pan",
+                        value: "C",
+                        min_max: ("L", "R"),
+                        dim: 1.0,
+                        ..Default::default()
+                    },
+                ),
+                (
+                    24.0,
+                    StudioKnob {
+                        frac: 0.3,
+                        bipolar: true,
+                        title: "Ratio",
+                        value: "-40",
+                        min_max: ("-100", "+100"),
+                        dim: 1.0,
+                        ..Default::default()
+                    },
+                ),
+                (
+                    22.0,
+                    StudioKnob {
+                        frac: 4.0 / 6.0,
+                        title: "Voices",
+                        value: "5",
+                        min_max: ("1", "7"),
+                        dots: 7,
+                        dim: 1.0,
+                        ..Default::default()
+                    },
+                ),
+                (
+                    22.0,
+                    StudioKnob {
+                        frac: 0.55,
+                        title: "Mix",
+                        value: "55 %",
+                        min_max: ("Raw", "Done"),
+                        dim: 0.45,
+                        ..Default::default()
+                    },
+                ),
+            ];
+            for (i, (rad, k)) in cases.iter().enumerate() {
+                let c = Pos2::new(r.left() + 110.0 + i as f32 * 200.0, cy);
+                ember::knob_studio(&p, c, *rad, k);
+            }
+            note(
+                &p,
+                Pos2::new(r.left() + 14.0, r.bottom() - 22.0),
+                "Mix is shown disabled (dimmed).",
+            );
+        });
 }
