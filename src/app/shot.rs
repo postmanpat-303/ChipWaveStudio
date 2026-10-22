@@ -527,7 +527,7 @@ impl App {
             }
             // the Drum Kit editor: a library pattern dropped on a new track
             // (CHIPWAVE_SHOT_PAT=<name>, default "Full-on Drive"); the
-            // generator's result when CHIPWAVE_SHOT_DK=generate (=added: then Add to track)
+            // generator's result when CHIPWAVE_SHOT_DK=generate (=added: then Add to track; =sound: the Sound tab)
             "timeline-drumkit" => {
                 self.enter_timeline();
                 let name = std::env::var("CHIPWAVE_SHOT_PAT").unwrap_or("Full-on Drive".into());
@@ -537,6 +537,9 @@ impl App {
                 self.dk.inst = (self.instr as usize).saturating_sub(1);
                 self.dk.sel = 3;
                 let dkv = std::env::var("CHIPWAVE_SHOT_DK").unwrap_or_default();
+                if dkv == "sound" {
+                    self.dk.tab = 1;
+                }
                 if dkv == "generate" || dkv == "added" {
                     self.dk.tab = 2;
                     self.dk.gen.result = Some(crate::drumkit::generate(1, 7, 0.7, 1, 0));
