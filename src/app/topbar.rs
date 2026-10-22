@@ -72,6 +72,22 @@ fn tool_button_w(
     icon_col: Color32,
     min_w: f32,
 ) -> egui::Response {
+    tool_button_with(ui, label, on, min_w, |p, ir, v_text| {
+        // light themes: active buttons are filled, so draw the icon in the text colour
+        let ic_col = if on && th().light { v_text } else { icon_col };
+        paint_icon(p, ir, ic, ic_col);
+    })
+}
+
+/// a toolbar button with its icon painted by `icon` (painter, the 18x18
+/// icon rect, the button's text colour)
+fn tool_button_with(
+    ui: &mut egui::Ui,
+    label: &str,
+    on: bool,
+    min_w: f32,
+    icon: impl FnOnce(&egui::Painter, Rect, Color32),
+) -> egui::Response {
     let font = egui::TextStyle::Button.resolve(ui.style());
     let galley = ui
         .painter()
@@ -89,13 +105,7 @@ fn tool_button_w(
         p.rect(r, 5, v.weak_bg_fill, v.bg_stroke, egui::StrokeKind::Inside);
         theme::raise(p, r, 5.0, resp.is_pointer_button_down_on() || on);
         let ir = Rect::from_min_size(r.min + egui::vec2(10.0, 4.0), egui::vec2(18.0, 18.0));
-        // light themes: active buttons are filled, so draw the icon in the text colour
-        let ic_col = if on && th().light {
-            v.text_color()
-        } else {
-            icon_col
-        };
-        paint_icon(p, ir, ic, ic_col);
+        icon(p, ir, v.text_color());
         p.galley(
             Pos2::new(ir.right() + 6.0, r.center().y - galley.size().y / 2.0),
             galley,
@@ -901,18 +911,36 @@ impl App {
                     } else {
                         format!(
                             "Record (R): the armed (or selected) track records what you play on the MIDI keyboard or with Keys → Notes (Ctrl+K), in time{}",
-                            if self.extra.metronome && self.extra.count_in {
-                                ", after a bar's count-in"
-                            } else {
-                                ""
+                            match self.extra.count_in_bars() {
+                                0 => "",
+                                1 => ", after a bar's count-in",
+                                _ => ", after a 2-bar count-in",
                             }
                         )
+                    };
+                    // counting in: Record blinks (twice a second) until the take starts
+                    let counting = self.with(|s| s.engine.count_in_left()).is_some();
+                    let blink_off = counting && {
+                        ui.ctx()
+                            .request_repaint_after(std::time::Duration::from_millis(60));
+                        (ui.input(|i| i.time) * 4.0) as u64 % 2 == 1
+                    };
+                    let tip = if counting {
+                        "Counting in - recording starts after the count-in; click (or R) to cancel".to_string()
+                    } else {
+                        tip
                     };
                     if super::viewbar::transport_button(
                         ui,
                         super::viewbar::Tr::Record,
-                        rec,
-                        if rec { t.brick } else { t.brick.gamma_multiply(0.7) },
+                        rec && !blink_off,
+                        if blink_off {
+                            t.brick.gamma_multiply(0.35)
+                        } else if rec {
+                            t.brick
+                        } else {
+                            t.brick.gamma_multiply(0.7)
+                        },
                         &tip,
                     ) {
                         self.rec_toggle();
@@ -929,25 +957,27 @@ impl App {
                         ui.label(rec_txt)
                             .on_hover_text("recording: R or the Record button stops it");
                     }
-                    let m = self.extra.metronome;
-                    if crate::ember::toggle(ui, m, egui::RichText::new("Click").small(), "Click")
-                        .on_hover_text(format!(
-                            "metronome: {}\n(with it on, Record counts in a bar first; Settings › Recording)",
-                            if m { "on" } else { "off" }
-                        ))
-                        .clicked()
-                    {
-                        self.extra.metronome = !m;
-                        self.save_settings();
-                    }
+                    self.metronome_toggle(ui);
                 }
-                let (pos, _) = self.view_bar_position(playing);
-                ui.label(
-                    egui::RichText::new(pos)
-                        .monospace()
-                        .color(if playing { t.play } else { hdr_text() }),
-                )
-                .on_hover_text("playhead (stopped: the play marker)");
+                let left = self.with(|s| s.engine.count_in_left());
+                if let Some(n) = left {
+                    // the countdown, in the playhead's place: Count-in 4, 3, 2, 1
+                    ui.label(
+                        egui::RichText::new(format!("Count-in {n}"))
+                            .monospace()
+                            .strong()
+                            .color(t.brick),
+                    )
+                    .on_hover_text("beats left before recording starts");
+                } else {
+                    let (pos, _) = self.view_bar_position(playing);
+                    ui.label(
+                        egui::RichText::new(pos)
+                            .monospace()
+                            .color(if playing { t.play } else { hdr_text() }),
+                    )
+                    .on_hover_text("playhead (stopped: the play marker)");
+                }
             });
             let mut tempo_r = None;
             group(ui, "TEMPO", |ui| {
@@ -1380,5 +1410,107 @@ impl App {
         if later {
             self.orphans.clear();
         }
+    }
+}
+
+impl App {
+    /// the toolbar's Metronome toggle: click on every beat while playing;
+    /// right-click (or the arrow beside it) for the record count-in
+    fn metronome_toggle(&mut self, ui: &mut egui::Ui) {
+        let m = self.extra.metronome;
+        // the animated symbol: swings with the transport's beat (the
+        // count-in's own beats while counting in), flashes on the downbeat
+        let (beat, per_bar, count) = self.with(|s| {
+            let e = &s.engine;
+            if let Some(n) = e.count_in_left() {
+                let (b, per) = e.count_in_beat().unwrap_or((0.0, 4));
+                return (Some(b), per, Some(n));
+            }
+            let pos = e.tl_ticks().zip(s.song.timeline.as_deref()).map(|(tk, t)| {
+                let sig = t.sig_at(tk as i64);
+                let bp = t.bar_pos(tk as i64);
+                let bt = sig.beat_ticks().max(1) as f64;
+                let frac = (bp.tick as f64 + tk.fract()) / bt;
+                ((bp.beat - 1) as f64 + frac) as f32
+            });
+            let per = s.song.timeline.as_deref().map_or(4, |t| {
+                t.sig_at(e.tl_ticks().unwrap_or(0.0) as i64).num.max(1) as u32
+            });
+            (pos, per, None)
+        });
+        let look = super::metroicon::MetroLook {
+            on: m,
+            beat,
+            per_bar,
+            count,
+        };
+        if (m && beat.is_some()) || count.is_some() {
+            ui.ctx().request_repaint();
+        }
+        let r = tool_button_with(ui, "Metronome", m, 0.0, |p, ir, _| {
+            super::metroicon::paint_metronome(p, ir, look)
+        })
+        .on_hover_text(format!(
+            "Metronome: click on every beat while playing ({})\nRight-click (or the arrow next to it): count-in before recording",
+            if m { "on" } else { "off" }
+        ));
+        if r.clicked() {
+            self.extra.metronome = !m;
+            self.save_settings();
+        }
+        r.context_menu(|ui| self.count_in_menu(ui));
+        ui.add_space(-ui.spacing().item_spacing.x + 2.0);
+        // the options caret (painted: the small fonts lack a down-arrow glyph)
+        let (cr, mr) = ui.allocate_exact_size(egui::vec2(16.0, 26.0), Sense::click());
+        mr.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Metronome options")
+        });
+        if ui.is_rect_visible(cr) {
+            let v = ui.style().interact(&mr);
+            let p = ui.painter();
+            p.rect(cr, 4, v.weak_bg_fill, v.bg_stroke, egui::StrokeKind::Inside);
+            let c = cr.center();
+            p.add(egui::Shape::convex_polygon(
+                vec![
+                    c + egui::vec2(-4.0, -2.0),
+                    c + egui::vec2(4.0, -2.0),
+                    c + egui::vec2(0.0, 3.0),
+                ],
+                v.text_color(),
+                Stroke::NONE,
+            ));
+        }
+        let mr = mr.on_hover_text("Metronome options: count-in before recording");
+        egui::Popup::menu(&mr).show(|ui| self.count_in_menu(ui));
+        // the record-metro-menu screenshot: the menu open
+        if self
+            .shot
+            .as_ref()
+            .is_some_and(|s| s.view == "record-metro-menu" && s.frame > 10)
+        {
+            let id = egui::Popup::default_response_id(&mr);
+            if !egui::Popup::is_id_open(ui.ctx(), id) {
+                egui::Popup::open_id(ui.ctx(), id);
+            }
+        }
+    }
+
+    /// Count-in before recording: Off / 1 bar / 2 bars
+    pub(super) fn count_in_menu(&mut self, ui: &mut egui::Ui) {
+        ui.label(egui::RichText::new("Count-in before recording").strong());
+        let cur = self.extra.count_in_bars();
+        for (n, name) in [(0u8, "Off"), (1, "1 bar"), (2, "2 bars")] {
+            if ui.radio(cur == n, name).clicked() {
+                self.extra.set_count_in_bars(n);
+                self.save_settings();
+                ui.close();
+            }
+        }
+        ui.separator();
+        ui.label(
+            egui::RichText::new("Clicks during the count-in even with the metronome off")
+                .small()
+                .weak(),
+        );
     }
 }

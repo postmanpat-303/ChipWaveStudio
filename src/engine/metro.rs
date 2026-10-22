@@ -15,6 +15,8 @@ pub struct Metro {
     count_left: u32,
     count_all: u32,
     count_beat: u32,
+    /// count-in beats per bar (the bar's first beat clicks higher)
+    count_bar: u32,
     /// the click sounding now: frames left, phase, pitch
     click_left: u32,
     phase: f32,
@@ -58,11 +60,13 @@ impl Metro {
 }
 
 impl Engine {
-    /// hold playback for `beats` beats of `secs_per_beat` and click them
-    /// (call after `start`); 0 beats: none
-    pub fn count_in(&mut self, beats: u32, secs_per_beat: f32) {
+    /// hold playback for `beats` beats of `secs_per_beat` and click them,
+    /// higher on every `per_bar`th (call after `start`). The clicks sound
+    /// whether or not the metronome is on; 0 beats: none
+    pub fn count_in(&mut self, beats: u32, per_bar: u32, secs_per_beat: f32) {
         let b = (secs_per_beat.max(0.05) * self.sr) as u32;
         self.metro.count_beat = b.max(1);
+        self.metro.count_bar = per_bar.max(1);
         self.metro.count_all = b * beats;
         self.metro.count_left = self.metro.count_all;
     }
@@ -70,6 +74,25 @@ impl Engine {
     /// counting in: playback waits
     pub fn counting_in(&self) -> bool {
         self.playing && self.metro.count_left > 0
+    }
+
+    /// beats of the count-in so far (fractional) and its beats per bar,
+    /// None when not counting in (the Metronome symbol swings with them)
+    pub fn count_in_beat(&self) -> Option<(f32, u32)> {
+        let m = &self.metro;
+        self.counting_in().then(|| {
+            (
+                (m.count_all - m.count_left) as f32 / m.count_beat.max(1) as f32,
+                m.count_bar.max(1),
+            )
+        })
+    }
+
+    /// beats of the count-in still to go (4, 3, 2, 1), None when not
+    /// counting in (the toolbar's countdown)
+    pub fn count_in_left(&self) -> Option<u32> {
+        self.counting_in()
+            .then(|| self.metro.count_left.div_ceil(self.metro.count_beat.max(1)))
     }
 
     /// the count-in part of a callback: clicks only, the song waits.
@@ -85,7 +108,8 @@ impl Engine {
         for f in 0..n {
             let el = m.count_all - m.count_left;
             if el.is_multiple_of(m.count_beat) {
-                m.click(sr, el == 0);
+                let k = el / m.count_beat;
+                m.click(sr, k.is_multiple_of(m.count_bar.max(1)));
             }
             m.count_left -= 1;
             let v = m.sample(sr);

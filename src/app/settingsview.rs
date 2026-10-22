@@ -485,13 +485,28 @@ impl App {
                 ui.label("Recording");
                 ui.horizontal(|ui| {
                     for (v, name, tip) in [
-                        (&mut self.extra.metronome, "Metronome", "a click on every beat while the timeline plays (the toolbar's Click)"),
-                        (&mut self.extra.count_in, "Count-in", "Record from stopped counts in one bar first (with the metronome on)"),
+                        (&mut self.extra.metronome, "Metronome", "a click on every beat while the timeline plays (the toolbar's Metronome)"),
                         (&mut self.extra.rec_quantise, "Quantise on record", "recorded notes start on the piano roll's grid (off: exactly as played)"),
                     ] {
                         if ui.checkbox(v, name).on_hover_text(tip).changed() {
                             changed = true;
                         }
+                    }
+                    let mut bars = self.extra.count_in_bars();
+                    let names = ["Off", "1 bar", "2 bars"];
+                    ui.label("Count-in");
+                    egui::ComboBox::from_id_salt("count_in_bars")
+                        .selected_text(names[bars as usize])
+                        .show_ui(ui, |ui| {
+                            for (i, n) in names.iter().enumerate() {
+                                ui.selectable_value(&mut bars, i as u8, *n);
+                            }
+                        })
+                        .response
+                        .on_hover_text("Record from stopped counts in first, with clicks even when the metronome is off (also: right-click the toolbar's Metronome)");
+                    if bars != self.extra.count_in_bars() {
+                        self.extra.set_count_in_bars(bars);
+                        changed = true;
                     }
                 });
                 ui.end_row();

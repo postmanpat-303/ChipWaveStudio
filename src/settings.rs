@@ -193,9 +193,16 @@ pub struct Extra {
     /// metronome click while the timeline plays (and the record count-in)
     #[serde(default)]
     pub metronome: bool,
-    /// Record from stopped counts in one bar first (with the metronome on)
+    /// older settings: Record from stopped counts in one bar (with the
+    /// metronome on). Kept so old files load and older versions can read
+    /// new ones; `count_in_bars` is the setting now
     #[serde(default = "yes")]
     pub count_in: bool,
+    /// bars Record from stopped counts in, clicking even with the metronome
+    /// off: 0 (off), 1 or 2. None (older files): 1 bar, or off when the old
+    /// `count_in` was off. Read it with [`Extra::count_in_bars`]
+    #[serde(default)]
+    pub count_in_bars: Option<u8>,
     /// recorded note starts snap to the piano roll's grid
     #[serde(default)]
     pub rec_quantise: bool,
@@ -299,6 +306,7 @@ impl Default for Extra {
             show_tracker: false,
             metronome: false,
             count_in: true,
+            count_in_bars: None,
             rec_quantise: false,
             launch_q: 0,
             select_chains: true,
@@ -309,6 +317,22 @@ impl Default for Extra {
             level_hist: 0,
             chains_closed: vec![],
         }
+    }
+}
+
+impl Extra {
+    /// the record count-in in bars: 0 (off), 1 or 2
+    pub fn count_in_bars(&self) -> u8 {
+        self.count_in_bars
+            .unwrap_or(if self.count_in { 1 } else { 0 })
+            .min(2)
+    }
+
+    /// set the record count-in (0 off, 1 or 2 bars); the old flag follows
+    pub fn set_count_in_bars(&mut self, bars: u8) {
+        let b = bars.min(2);
+        self.count_in_bars = Some(b);
+        self.count_in = b > 0;
     }
 }
 
