@@ -154,7 +154,7 @@ impl Tab {
         match self {
             Tab::Instruments => "Instruments",
             Tab::Effects => "Effects",
-            Tab::Plugins => "Plugins",
+            Tab::Plugins => PLUGINS_TAB,
             Tab::Samples => "Samples",
             Tab::Songs => "Songs",
             Tab::Presets => "Presets",
@@ -182,6 +182,9 @@ impl Tab {
         }
     }
 }
+
+/// the scanned-plugins category's label (one place to rename it)
+pub const PLUGINS_TAB: &str = "VST & CLAP";
 
 /// where an item lives (the Location column)
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -265,6 +268,10 @@ pub struct Item {
     /// second line: type, size, length…
     pub detail: String,
     pub src: Src,
+    /// a second class / program of a plugin file (e.g. a 16-out variant
+    /// or a bundled effect): the VST & CLAP list shows only the file's main
+    /// instrument unless "Show all programs" is on or a search is typed
+    pub sub_program: bool,
 }
 
 impl Item {
@@ -385,6 +392,7 @@ fn item(
         tags,
         detail,
         src,
+        sub_program: false,
     }
 }
 
@@ -634,8 +642,22 @@ fn kind_label(k: &InstrumentKind) -> &'static str {
 /// Showcase tag from [`catalogue`] (Surge XT, Dexed, OB-Xf, …).
 pub fn plugin_items(c: &crate::plugin::scan::Cache) -> Vec<Item> {
     let mut v = vec![];
+    let entry = |f: &crate::plugin::scan::Found| {
+        c.entries
+            .iter()
+            .find(|e| e.status == "ok" && e.path == f.path && e.format == f.format)
+    };
     for f in c.instruments().into_iter().chain(c.effects()) {
         let inst = f.desc.is_instrument();
+        let e = entry(&f);
+        let sub = e.is_some_and(|e| e.is_sub_program(&f));
+        // the main row says how many more programs its file holds
+        let more = e.filter(|_| !sub).map_or(0, |e| {
+            e.plugins
+                .iter()
+                .filter(|p| (p.desc.is_instrument() || p.desc.is_effect()) && e.is_sub_program(p))
+                .count()
+        });
         let fmt = if f.format == "vst3" {
             Fmt::Vst3
         } else {
@@ -674,6 +696,11 @@ pub fn plugin_items(c: &crate::plugin::scan::Cache) -> Vec<Item> {
                 format!(" · {}", feats.join(", "))
             }
         );
+        let detail = match more {
+            0 => detail,
+            1 => format!("{detail} · +1 program"),
+            n => format!("{detail} · +{n} programs"),
+        };
         let mut it = item(
             format!("plugin:{}:{}", f.format, f.desc.id),
             f.desc.name.clone(),
@@ -685,6 +712,7 @@ pub fn plugin_items(c: &crate::plugin::scan::Cache) -> Vec<Item> {
             detail,
             Src::Plugin(f.clone()),
         );
+        it.sub_program = sub;
         if let Some(e) = known {
             for t in e.tags {
                 if !it.tags.contains(t) {
@@ -950,6 +978,15 @@ pub struct Filter {
     pub creator: Option<String>,
     pub loc: LocFilter,
     pub sort: Sort,
+    /// VST & CLAP: list every class / program of a plugin file, not only
+    /// its main instrument
+    pub all_programs: bool,
+}
+
+/// hidden as a plugin file's extra program (VST & CLAP tab, no search,
+/// "Show all programs" off)
+pub fn hidden_program(it: &Item, f: &Filter) -> bool {
+    it.sub_program && f.tab == Tab::Plugins && !f.all_programs && f.query.trim().is_empty()
 }
 
 /// every search word must appear in the name, category, creator, detail or tags
@@ -990,6 +1027,7 @@ pub fn filter(
         .filter(|&i| {
             let it = &items[i];
             it.in_tab(f.tab)
+                && !hidden_program(it, f)
                 && matches_query(it, &f.query)
                 && f.tags.iter().all(|t| it.tags.contains(t))
                 && f.category.as_ref().is_none_or(|c| &it.category == c)
@@ -1026,6 +1064,7 @@ pub fn column_values(
     let mut m: BTreeMap<String, usize> = BTreeMap::new();
     for it in items.iter().filter(|it| {
         it.in_tab(f.tab)
+            && !hidden_program(it, f)
             && matches_query(it, &f.query)
             && f.tags.iter().all(|t| it.tags.contains(t))
             && (skip_cat || f.category.as_ref().is_none_or(|c| &it.category == c))

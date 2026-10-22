@@ -559,7 +559,7 @@ impl App {
                     let resp = resp.on_hover_text(match tb {
                         Tab::Instruments => "instruments: blank synths, generator presets, your .cwi library, this song's instruments",
                         Tab::Effects => "effects: ChipWave's built-ins, Grid FX patches and your effect plugins; double-click adds to the selected track, or drag into Nested Device Chains or onto a track",
-                        Tab::Plugins => "CLAP and VST3 plugins from the plugin scan (instruments and effects)",
+                        Tab::Plugins => "VST3 and CLAP plugins from the plugin scan: each plugin file's main instrument, plus effect plugins",
                         Tab::Samples => "WAV, FLAC, MP3 and Ogg files in your locations",
                         Tab::Songs => "demo songs and .cwt songs in your locations (MOD/MED: import planned)",
                         Tab::Presets => "factory presets: load one into the current instrument",
@@ -907,6 +907,23 @@ impl App {
                     ui.spinner();
                 }
             });
+            // a plugin file with several classes / programs lists its main
+            // instrument; the rest on request (a search finds them too)
+            let extra = self
+                .br
+                .items
+                .iter()
+                .filter(|i| i.sub_program && i.tab == Tab::Plugins)
+                .count();
+            if extra > 0 || self.br.filter.all_programs {
+                ui.checkbox(
+                    &mut self.br.filter.all_programs,
+                    egui::RichText::new(format!("Show all programs ({extra} more)")).small(),
+                )
+                .on_hover_text(
+                    "some plugin files hold several programs (multi-out variants, bundled effects or MIDI tools); the list shows each file's main instrument, tick this to list them all. A search always finds them.",
+                );
+            }
         }
         // ---- results header
         let n = self.br.results.len();
