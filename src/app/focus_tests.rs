@@ -468,7 +468,7 @@ fn the_tracker_tabs_are_hidden_by_default_and_the_tracker_stays_reachable() {
     ] {
         assert!(has(&h, here), "{here} is shown");
     }
-    assert_eq!(count(&h, "Stop"), 1, "one transport");
+    assert_eq!(count(&h, "Play"), 1, "one transport (Play / Stop toggle)");
     // View › Tracker stays: a specialised view, as are Ctrl+1 / Ctrl+2
     let views: Vec<View> = h.state().views_shown().iter().map(|v| v.0).collect();
     assert!(views.contains(&View::Pattern) && views.contains(&View::Timeline));

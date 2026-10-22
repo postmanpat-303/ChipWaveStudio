@@ -59,11 +59,27 @@ fn tool_button(
     on: bool,
     icon_col: Color32,
 ) -> egui::Response {
+    tool_button_w(ui, ic, label, on, icon_col, 0.0)
+}
+
+/// [`tool_button`] at least `min_w` wide (a toggle whose label changes
+/// keeps its size)
+fn tool_button_w(
+    ui: &mut egui::Ui,
+    ic: Ic,
+    label: &str,
+    on: bool,
+    icon_col: Color32,
+    min_w: f32,
+) -> egui::Response {
     let font = egui::TextStyle::Button.resolve(ui.style());
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_string(), font, Color32::PLACEHOLDER);
-    let size = egui::vec2(10.0 + 18.0 + 6.0 + galley.size().x + 10.0, 26.0);
+    let size = egui::vec2(
+        (10.0 + 18.0 + 6.0 + galley.size().x + 10.0).max(min_w),
+        26.0,
+    );
     let (r, resp) = ui.allocate_exact_size(size, Sense::click());
     // screen readers (and the UI tests) see its label
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), label));
@@ -833,31 +849,49 @@ impl App {
                         self.seek_to((0, 0));
                     }
                 }
-                let (play_label, play_tip) = if self.tracker_on() {
-                    ("Play song", "play the song from the play marker (Shift+Space; click the ruler to move it)")
+                // one Play / Stop toggle (Space does the same): a play icon
+                // while stopped, a stop icon and accent-lit while playing
+                let play_label = if self.tracker_on() { "Play song" } else { "Play" };
+                let (ic, label, tip) = if playing {
+                    (
+                        Ic::Stop,
+                        "Stop",
+                        "Stop (Space): stop playback. The go-to-start button moves the play marker back to bar 1.",
+                    )
+                } else if self.tracker_on() {
+                    (
+                        Ic::PlaySong,
+                        play_label,
+                        "Play song (Space; Shift+Space in the Tracker): play from the play marker (click the ruler to move it; the go-to-start button moves it back to bar 1). Click again or Space to stop.",
+                    )
                 } else {
-                    ("Play", "play from the play marker (Space; click the ruler to move it)")
+                    (
+                        Ic::Play,
+                        play_label,
+                        "Play (Space): play from the play marker (click the ruler to move it; the go-to-start button moves it back to bar 1). Click again or Space to stop.",
+                    )
                 };
-                if tool_button(ui, Ic::PlaySong, play_label, playing && !loop_on, t.accent)
-                    .on_hover_text(play_tip)
+                // as wide as its widest label, so it does not jump
+                let font = egui::TextStyle::Button.resolve(ui.style());
+                let min_w = [play_label, "Stop"]
+                    .iter()
+                    .map(|l| {
+                        ui.painter()
+                            .layout_no_wrap(l.to_string(), font.clone(), Color32::PLACEHOLDER)
+                            .size()
+                            .x
+                    })
+                    .fold(0.0f32, f32::max)
+                    + 44.0;
+                if tool_button_w(ui, ic, label, playing, t.accent, min_w)
+                    .on_hover_text(tip)
                     .clicked()
                 {
                     if playing {
                         self.with(|s| s.engine.stop());
+                    } else {
+                        self.play(0);
                     }
-                    self.play(0);
-                }
-                if tool_button(
-                    ui,
-                    Ic::Stop,
-                    "Stop",
-                    false,
-                    if playing { t.brick } else { t.ink2 },
-                )
-                .on_hover_text("stop playback (Space while playing)")
-                .clicked()
-                {
-                    self.with(|s| s.engine.stop());
                 }
                 // Record: live into the Timeline, at the time you play
                 if tl_mode {

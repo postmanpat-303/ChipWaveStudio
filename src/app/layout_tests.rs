@@ -43,7 +43,9 @@ fn tracker_controls_show_in_the_tracker_only_and_keys_still_work() {
     let mut h = tl_demo();
     assert!(!has(&h, "Play block"), "no Play block on the Timeline");
     assert!(!has(&h, "Edit mode off") && !has(&h, "Edit mode ON"));
-    assert!(has(&h, "Play song") && has(&h, "Stop"));
+    // one Play / Stop toggle: Play while stopped
+    assert!(has(&h, "Play song") || has(&h, "Play"));
+    assert!(!has(&h, "Stop"), "no separate Stop button while stopped");
     // the octave key still works outside the Tracker
     let o = h.state().octave;
     key(&mut h, Key::F2, egui::Modifiers::NONE);
@@ -92,4 +94,31 @@ fn lower_panel_tabs_piano_devices_instrument_automation_order() {
     .map(x);
     assert!(xs.iter().all(|v| v.is_finite()), "{xs:?}");
     assert!(xs.windows(2).all(|w| w[0] < w[1]), "{xs:?}");
+}
+
+#[test]
+fn play_and_stop_are_one_toggle() {
+    let mut h = tl_demo();
+    let play = if h.state().tracker_on() {
+        "Play song"
+    } else {
+        "Play"
+    };
+    assert!(has(&h, play) && !has(&h, "Stop"));
+    h.get_by_label(play).click();
+    frames(&mut h, 2);
+    assert!(h.state().with(|s| s.engine.playing), "Play plays");
+    assert!(has(&h, "Stop") && !has(&h, play), "it turns into Stop");
+    h.get_by_label("Stop").click();
+    frames(&mut h, 2);
+    assert!(!h.state().with(|s| s.engine.playing), "Stop stops");
+    assert!(has(&h, play), "and back to Play");
+    // Space still toggles
+    key(&mut h, Key::Space, egui::Modifiers::NONE);
+    frames(&mut h, 2);
+    assert!(h.state().with(|s| s.engine.playing), "Space plays");
+    assert!(has(&h, "Stop"));
+    key(&mut h, Key::Space, egui::Modifiers::NONE);
+    frames(&mut h, 2);
+    assert!(!h.state().with(|s| s.engine.playing), "Space stops");
 }
