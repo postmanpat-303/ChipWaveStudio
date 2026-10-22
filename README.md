@@ -306,7 +306,7 @@ On Linux, build it from source (below).
 | `Ctrl+,` | settings |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | UI scale up / down / 100 % |
 | `Ctrl+I` | instrument editor in the lower panel (again: back to the Order list) |
-| `R` (not in the Tracker) | Record: live into the Timeline, from the play marker (again: stop recording). Toolbar ● and **Click** (metronome, count-in) |
+| `R` (not in the Tracker) | Record: live into the Timeline, from the play marker (again: stop recording). Toolbar ● and **Metronome** (its arrow or right-click: count-in) |
 | `Ctrl+K` | **Keys → Notes** on / off (toolbar button; play notes on the computer keyboard; off, those keys are normal shortcuts again): `A S D F G H J K L ;` white keys, `W E T Y U O P` black keys, `Z` / `X` octave, `C` / `V` velocity |
 | `I` (`Alt+I` in the Tracker) | show / hide the Inspector: the selected track or clip ([INSPECTOR.md](docs/INSPECTOR.md)) |
 | `Ctrl+B` | show / hide the Browser (instruments, plugins, samples, songs…; [BROWSER.md](docs/BROWSER.md)) |

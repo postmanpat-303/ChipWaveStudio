@@ -224,7 +224,7 @@ ChipWave starts with the clean song of File › New (no demo; the demos are in F
 
 The **Song / Master** track always sits at the bottom of the track list: the tracks, **+ Add track**, a divider, then Song / Master. Its lanes and Clip Arranger row follow, so rows stay lined up, and new tracks go above it. This is display only; the song file keeps its order.
 
-**Record** (toolbar ●, or **R**) records MIDI or **Keys → Notes** (**Ctrl+K**, play notes on the computer keyboard) live onto the armed or selected track: into the note clip under the playhead, or a new Take clip. Loop recording overdubs, and a take is one undo step. With the toolbar's **Click** (metronome) on, it counts in one bar. See [MIDI.md](MIDI.md#recording).
+**Record** (toolbar ●, or **R**) records MIDI or **Keys → Notes** (**Ctrl+K**, play notes on the computer keyboard) live onto the armed or selected track: into the note clip under the playhead, or a new Take clip. Loop recording overdubs, and a take is one undo step. It counts in one bar first (2 bars or Off: the arrow next to the toolbar's **Metronome**, or right-click it); the count-in clicks even with the metronome off. See [MIDI.md](MIDI.md#recording).
 
 ![A new song on the Timeline view: no tracks, only Song / Master, and the hint to drag an instrument from the Browser or + Add track](screenshots/dark-timeline-new-song.png)
 
