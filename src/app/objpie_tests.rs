@@ -243,3 +243,41 @@ fn a_block_clip_without_the_tracker_says_clip_and_track() {
     );
     assert!(!chip.contains("Block") && !chip.contains(" ch "), "{chip}");
 }
+
+/// Del, 23 Oct: Colour on a linked clip showed only after the next edit (the
+/// Timeline's draw cache did not see clip colours). Now the clip and its
+/// linked copies show it on the next frame, and undo puts it back.
+#[test]
+fn colour_on_a_linked_clip_shows_at_once_on_every_copy_and_undoes() {
+    let (mut h, a) = notes_song();
+    {
+        let s = h.state_mut();
+        s.tlv.sel = Some(a);
+        s.tlv.sels = vec![a];
+        s.tl_apply(super::timeline::TlOp::Duplicate);
+    }
+    frames(&mut h, 2);
+    let b = super::unified_tests::newest(&h).id;
+    assert_ne!(a, b);
+    assert_eq!(clip(&h, a).notes(), clip(&h, b).notes(), "linked");
+    let shown = |h: &Harness<'static, App>, id: u32| {
+        h.state()
+            .tlv
+            .cache
+            .as_ref()
+            .and_then(|c| c.tl.clips.iter().find(|x| x.id == id).map(|x| x.colour))
+            .flatten()
+    };
+    let p = at(&h, 0, BAR / 2);
+    right_click(&mut h, p);
+    pick(&mut h, "Colour", Some("Red"));
+    let red = clip(&h, a).colour;
+    assert!(red.is_some(), "{}", h.state().status);
+    assert_eq!(clip(&h, b).colour, red, "the linked copy too");
+    assert_eq!(shown(&h, a), red, "drawn without another edit");
+    assert_eq!(shown(&h, b), red);
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!((clip(&h, a).colour, clip(&h, b).colour), (None, None));
+    assert_eq!((shown(&h, a), shown(&h, b)), (None, None));
+}

@@ -417,16 +417,25 @@ impl App {
         let col = name
             .and_then(|n| COLOURS.iter().find(|c| c.0 == n))
             .map(|c| c.1);
+        // one undo step; linked copies (the same notes) take the colour too
+        self.snapshot();
         let n = self.with(|s| {
             let Some(t) = s.song.timeline.as_deref_mut() else {
                 return 0;
             };
+            let datas: Vec<usize> = t
+                .clips
+                .iter()
+                .chain(t.launcher.iter().map(|l| &l.clip))
+                .filter(|c| ids.contains(&c.id))
+                .filter_map(|c| c.notes())
+                .collect();
             let mut n = 0;
             for c in t
                 .clips
                 .iter_mut()
                 .chain(t.launcher.iter_mut().map(|l| &mut l.clip))
-                .filter(|c| ids.contains(&c.id))
+                .filter(|c| ids.contains(&c.id) || c.notes().is_some_and(|d| datas.contains(&d)))
             {
                 c.colour = col;
                 n += 1;
