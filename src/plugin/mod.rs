@@ -667,11 +667,28 @@ impl Rack {
         taken
     }
 
-    pub fn insert(&mut self, instr: usize, ch: usize, p: &PluginPatch, inst: Box<dyn Hosted>) {
+    pub fn insert(&mut self, instr: usize, ch: usize, p: &PluginPatch, mut inst: Box<dyn Hosted>) {
         if let Some(old) = self.slot(instr, ch) {
             self.slots.remove(old);
         }
-        // a sibling's current state wins over the song's saved one
+        // a sibling's current state wins over the song's saved one (the
+        // editor may have changed it while this instance was loading)
+        let key = p.key();
+        if let Some(k) = self.primary(instr).filter(|&k| self.slots[k].key == key) {
+            let st = self.slots[k].inst.save_state();
+            let src = &self.slots[k];
+            let params: Vec<(u32, f64)> = match st {
+                Some(_) => vec![],
+                None => src
+                    .inst
+                    .params()
+                    .iter()
+                    .filter(|i| !i.readonly)
+                    .filter_map(|i| src.inst.value(i.id).map(|v| (i.id, v)))
+                    .collect(),
+            };
+            copy_state(st.as_deref(), &params, inst.as_mut());
+        }
         self.slots.push(Slot::new(instr, ch, p, inst));
         self.errors.retain(|e| e.0 != instr);
         self.rebuild();

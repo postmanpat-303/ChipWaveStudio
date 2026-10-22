@@ -243,3 +243,28 @@ fn capture_reloads_only_instances_whose_state_differs() {
     rack.capture(&mut song, 0);
     assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), n1);
 }
+
+#[test]
+fn a_new_instance_starts_from_the_primarys_current_state() {
+    let mut rack = Rack::new();
+    let p = patch(); // the song's saved state: Gain 0.5
+    rack.insert(0, 0, &p, new_inst());
+    // the editor changes Gain while the second channel's instance loads
+    rack.set_param(0, 1, 0.2);
+    assert_eq!(rack.slots[0].inst.value(1), Some(0.2));
+    let late = new_inst();
+    assert_eq!(late.value(1), Some(0.5), "loaded from the stale song state");
+    rack.insert(0, 1, &p, late);
+    let k = rack.slot(0, 1).unwrap();
+    assert_eq!(
+        rack.slots[k].inst.value(1),
+        Some(0.2),
+        "seeded from the primary"
+    );
+    // a different plugin under the same instrument is not seeded
+    let mut other = patch();
+    other.path = "/elsewhere/other.clap".into();
+    rack.insert(0, 2, &other, new_inst());
+    let k = rack.slot(0, 2).unwrap();
+    assert_eq!(rack.slots[k].inst.value(1), Some(0.5));
+}
