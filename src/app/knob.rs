@@ -181,11 +181,6 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     } else {
         t.ink2.gamma_multiply(0.7)
     };
-    let name_col = if t.ember && a.enabled {
-        t.ink2
-    } else {
-        name_col
-    };
     let mut job = egui::text::LayoutJob::simple_singleline(name, small.clone(), name_col);
     job.wrap = egui::text::TextWrapping::truncate_at_width(CELL.x - 2.0);
     job.halign = egui::Align::Center;
@@ -199,7 +194,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     let mut job = egui::text::LayoutJob::simple_singleline(
         a.value_text.clone(),
         mono,
-        if t.ember { t.ink } else { t.value }.gamma_multiply(dim),
+        if t.ember { t.acc_hot } else { t.value }.gamma_multiply(dim),
     );
     job.wrap = egui::text::TextWrapping::truncate_at_width(CELL.x);
     job.halign = egui::Align::Center;
