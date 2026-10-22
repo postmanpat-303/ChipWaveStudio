@@ -150,6 +150,41 @@ impl Tab {
         Tab::Patterns,
         Tab::Files,
     ];
+    /// the Browser's five main categories (always one click away)
+    pub const MAIN: [Tab; 5] = [
+        Tab::Instruments,
+        Tab::Effects,
+        Tab::Plugins,
+        Tab::Samples,
+        Tab::Songs,
+    ];
+    /// the rest, behind the More tile
+    pub const MORE: [Tab; 7] = [
+        Tab::Racks,
+        Tab::Presets,
+        Tab::Grid,
+        Tab::Wavetables,
+        Tab::Midi,
+        Tab::Patterns,
+        Tab::Files,
+    ];
+    /// one line about the category (the More menu, the tiles' tooltips)
+    pub fn blurb(self) -> &'static str {
+        match self {
+            Tab::Instruments => "ChipWave instruments, kits and your library",
+            Tab::Effects => "built-in effects, Grid FX and effect plugins",
+            Tab::Plugins => "your VST3 and CLAP instruments and effects",
+            Tab::Samples => "WAV, FLAC, MP3 and Ogg in your folders",
+            Tab::Songs => "demo songs and your .cwt songs",
+            Tab::Racks => "the racks you saved",
+            Tab::Presets => "factory presets for the current instrument",
+            Tab::Grid => "Grid starter patches",
+            Tab::Wavetables => "built-in and imported wavetables",
+            Tab::Midi => "MIDI files in your folders",
+            Tab::Patterns => "ready-made drum grooves by style",
+            Tab::Files => "your drives and folders",
+        }
+    }
     pub fn name(self) -> &'static str {
         match self {
             Tab::Instruments => "Instruments",

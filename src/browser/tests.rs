@@ -451,3 +451,16 @@ fn plugin_file_lists_its_main_instrument_and_the_rest_on_request() {
     assert!(names(&fx).contains(&"Big Sampler FX".to_string()));
     assert_eq!(Tab::Plugins.name(), PLUGINS_TAB);
 }
+
+/// the Browser's tiles (five main + More) reach every tab exactly once
+#[test]
+fn main_and_more_cover_every_tab_once() {
+    let mut all: Vec<Tab> = Tab::MAIN.iter().chain(Tab::MORE.iter()).copied().collect();
+    assert_eq!(all.len(), Tab::ALL.len());
+    for t in Tab::ALL {
+        assert_eq!(all.iter().filter(|x| **x == t).count(), 1, "{}", t.name());
+        assert!(!t.blurb().is_empty());
+    }
+    all.dedup();
+    assert_eq!(all.len(), Tab::ALL.len());
+}
