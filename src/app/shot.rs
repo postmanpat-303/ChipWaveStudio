@@ -8,7 +8,7 @@ use super::*;
 pub struct Shot {
     pub out: PathBuf,
     pub view: String,
-    frame: u32,
+    pub(super) frame: u32,
     saved: bool,
     /// `--hold <secs>`: keep running (for screen recording) instead of capturing
     pub hold: Option<f32>,
@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 87] = [
+pub const VIEWS: [&str; 92] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -118,12 +118,17 @@ pub const VIEWS: [&str; 87] = [
     "focus-window",
     "record-recording",
     "record-typing",
+    "record-idle",
+    "record-playing",
+    "record-metro-menu",
+    "record-countin",
     "record-master",
     "racks-panel",
     "racks-add-device",
     "racks-save",
     "racks-browser",
     "knob-mockup",
+    "metronome-mockup",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -1155,6 +1160,9 @@ impl App {
         if view == "knob-mockup" && f >= SETUP_AT {
             knob_mockup(ctx);
         }
+        if view == "metronome-mockup" && f >= SETUP_AT {
+            super::metroicon::metronome_mockup(ctx);
+        }
         if f == SETUP_AT + 14 {
             if let Ok(m) = std::env::var("CHIPWAVE_SHOT_PR") {
                 self.shot_pr(ctx, &m);
@@ -1230,7 +1238,8 @@ impl App {
             let mut buf = vec![0.0f32; n * 2];
             self.with(|s| {
                 let Shared { song, engine, .. } = s;
-                if engine.playing {
+                // the count-in shot holds its countdown
+                if engine.playing && view != "record-countin" {
                     engine.render(song, &mut buf);
                 }
             });

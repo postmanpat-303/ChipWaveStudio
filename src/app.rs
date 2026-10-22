@@ -74,6 +74,7 @@ mod launcher_ui_tests;
 #[cfg(test)]
 mod layout_tests;
 mod library;
+mod metroicon;
 mod midiview;
 mod mixer;
 mod mixstrip;
