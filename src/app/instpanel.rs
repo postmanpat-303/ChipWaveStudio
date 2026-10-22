@@ -279,7 +279,8 @@ impl App {
         self.extra.full_height = false;
         self.extra.lower_inst = false;
         self.extra.lower_dev = false;
-        self.extra.lower_h = 0.0;
+        // the user's lower-panel height is kept (start, New, Open); only
+        // Reset to default layout (Ctrl+6) brings back the automatic height
         self.show_auto = false;
         self.arr_focus = false;
         self.pr.open = true;
@@ -300,6 +301,7 @@ impl App {
     /// Ctrl+6 / View > Reset to default layout (saved)
     pub(super) fn reset_layout(&mut self) {
         self.default_layout();
+        self.extra.lower_h = 0.0;
         self.save_settings();
         self.status = "Timeline + piano roll (the default layout; Ctrl+6)".into();
     }
@@ -486,14 +488,11 @@ impl App {
         self.lower_fallback();
         let t = th();
         let nl = self.with(|s| s.song.automation.len());
-        let auto_h = if self.pr.open && !self.extra.lower_inst {
-            // the default layout: the piano roll at about 40 %
-            (inner.height() * 0.40).max(200.0)
-        } else if self.extra.lower_dev {
-            // Devices: the instrument card wants room for its knobs
-            (inner.height() * 0.45).clamp(260.0, 400.0)
-        } else if self.extra.lower_inst || self.pr.open {
-            (inner.height() * 0.45).clamp(200.0, 340.0)
+        // Piano roll, Instrument and Nested Device Chains share one
+        // automatic height (about 40 %), so switching tabs never makes the
+        // panel jump (Del, 22 Oct 2026); a dragged height (lower_h) wins
+        let auto_h = if self.pr.open || self.extra.lower_inst || self.extra.lower_dev {
+            (inner.height() * 0.40).max(260.0)
         } else if self.show_auto && nl > 0 {
             (inner.height() * 0.5).clamp(190.0, 120.0 + nl as f32 * 68.0 + 60.0)
         } else {
