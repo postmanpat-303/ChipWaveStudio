@@ -82,7 +82,7 @@ The lower panel has a **Piano roll** tab (next to Devices and Instrument; with t
 
 **Toolbar and editing (Unreleased, all targets):** one row, left to right:
 - the clip / block **chip** (track colour) and **ALL** (select every note, Ctrl+A);
-- the tools: **Pointer** (key **1**, the default: click empty space draws a note, drag a note moves it, its right edge resizes it), **Select** (**2**: drag a box on empty space; never draws) and **Pencil** (**3**: click draws, dragging paints a run of notes, each the remembered length, at the mouse's pitch);
+- the tools: **Pointer** (key **1**, the default: click empty space draws a note, drag a note moves it, its right edge resizes it, drag on empty space draws a selection box (Shift adds), **Alt+drag** on empty space draws a thin line and selects every note it crosses, short ones too (Shift+Alt adds)), **Select** (**2**: drag a box on empty space, Alt+drag a line; never draws) and **Pencil** (**3**: click draws, dragging paints a run of notes, each the remembered length, at the mouse's pitch);
 - note clips: the **snap** menu (Bar, Beat, 1/8, 1/16, 1/32, 1/16T, **Auto** = follows the zoom, like the Timeline's Auto, off), **Quantize** (Q);
 - **Fit** (F: zoom to the notes); **Scale** turns the song key on or off (its notes are highlighted; the same key as the Chords window) with the **key** and **scale** menus;
 - **Len**: the length the next click draws (also a menu).

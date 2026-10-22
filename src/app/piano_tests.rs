@@ -497,9 +497,12 @@ fn a_single_click_draws_a_note_the_length_of_the_last_one() {
     let p = at(&h, 20, 65, 5.0);
     drag_m(&mut h, p, p + egui::vec2(3.0, 1.0), egui::Modifiers::NONE);
     assert!(lens(&h).contains(&(20 * r, 65, 2 * r)), "{:?}", lens(&h));
-    // dragging while drawing sets the length and is remembered
+    // a new note's right edge dragged sets the length and is remembered
+    // (a drag on empty space box-selects now)
     {
         let p0 = at(&h, 24, 67, 5.0);
+        click_at(&mut h, p0);
+        let p0 = at(&h, 25, 67, 18.0);
         let p1 = at(&h, 27, 67, 1.0);
         drag_m(&mut h, p0, p1, egui::Modifiers::NONE);
     }
@@ -511,7 +514,9 @@ fn a_single_click_draws_a_note_the_length_of_the_last_one() {
     // every step undoes
     let n = note_data(&h).notes.len();
     h.state_mut().do_undo(false);
-    assert_eq!(note_data(&h).notes.len(), n - 1);
+    assert!(lens(&h).contains(&(24 * r, 67, 2 * r)), "the resize undoes");
+    h.state_mut().do_undo(false);
+    assert_eq!(note_data(&h).notes.len(), n - 1, "then the new note");
 }
 
 #[test]
@@ -688,6 +693,148 @@ fn tools_pencil_paints_select_boxes_and_smart_snap() {
     assert_eq!(h.state().pr_grid_now(), r);
     h.state_mut().pr.zoom = 4.0;
     assert_eq!(h.state().pr_grid_now(), PPQ_T);
+}
+
+/// a left-button drag through these points with `m` held
+fn left_path(h: &mut Harness<'static, App>, pts: &[Pos2], m: egui::Modifiers) {
+    let btn = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: m,
+    };
+    with_mods(h, m, egui::Event::PointerMoved(pts[0]));
+    with_mods(h, m, btn(pts[0], true));
+    for w in pts.windows(2) {
+        for k in 1..=6 {
+            with_mods(
+                h,
+                m,
+                egui::Event::PointerMoved(w[0] + (w[1] - w[0]) * (k as f32 / 6.0)),
+            );
+        }
+    }
+    let last = *pts.last().unwrap();
+    with_mods(h, m, btn(last, false));
+    with_mods(h, egui::Modifiers::NONE, egui::Event::PointerMoved(last));
+    frame(h);
+}
+
+/// put notes (start row, key, length in ticks) straight into the clip
+fn put_notes(h: &mut Harness<'static, App>, notes: &[(usize, u8, tl::Tick)]) {
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        let d = t.notes.last_mut().unwrap().make_mut();
+        for &(row, key, len) in notes {
+            d.notes.push(tl::Note {
+                start: tl::rows_to_ticks(row),
+                len,
+                key,
+                vel: tl::roll::vel_u16(1.0),
+                ..Default::default()
+            });
+        }
+    });
+    frame(h);
+}
+
+/// the selected notes as (start row, key), sorted
+fn sel_notes(h: &Harness<'static, App>) -> Vec<(tl::Tick, u8)> {
+    let d = note_data(h);
+    let mut v: Vec<_> = h
+        .state()
+        .pr
+        .sel
+        .iter()
+        .map(|&i| (d.notes[i].start / tl::ROW, d.notes[i].key))
+        .collect();
+    v.sort();
+    v
+}
+
+#[test]
+fn pointer_drag_on_empty_space_box_selects_shift_adds_and_notes_still_move() {
+    let mut h = clip_setup();
+    let r = tl::ROW;
+    assert_eq!(h.state().pr.tool, pianoview::PrTool::Pointer);
+    put_notes(&mut h, &[(0, 60, r), (4, 62, r), (8, 64, r), (12, 66, r)]);
+    // a plain drag from empty space: a box (no new note)
+    {
+        let p0 = at(&h, 3, 65, 2.0);
+        let p1 = at(&h, 10, 61, 2.0);
+        drag_m(&mut h, p0, p1, egui::Modifiers::NONE);
+    }
+    assert_eq!(note_data(&h).notes.len(), 4, "the box draws nothing");
+    assert_eq!(sel_notes(&h), vec![(4, 62), (8, 64)]);
+    // Shift+box adds
+    {
+        let p0 = at(&h, 11, 68, 2.0);
+        let p1 = at(&h, 14, 65, 2.0);
+        drag_m(&mut h, p0, p1, egui::Modifiers::SHIFT);
+    }
+    assert_eq!(sel_notes(&h), vec![(4, 62), (8, 64), (12, 66)]);
+    // a plain box again replaces the selection
+    {
+        let p0 = at(&h, 0, 62, 0.0);
+        let p1 = at(&h, 2, 58, 2.0);
+        drag_m(&mut h, p0, p1, egui::Modifiers::NONE);
+    }
+    assert_eq!(sel_notes(&h), vec![(0, 60)]);
+    // dragging a note still moves it (and only that one: it was selected)
+    {
+        let p0 = at(&h, 0, 60, 5.0);
+        let p1 = at(&h, 2, 61, 5.0);
+        drag_m(&mut h, p0, p1, egui::Modifiers::NONE);
+    }
+    assert!(lens(&h).contains(&(2 * r, 61, r)), "{:?}", lens(&h));
+    assert_eq!(note_data(&h).notes.len(), 4);
+    // a click on empty space still draws a note
+    {
+        let p0 = at(&h, 20, 70, 5.0);
+        click_at(&mut h, p0);
+    }
+    assert_eq!(note_data(&h).notes.len(), 5, "click draws");
+    assert!(lens(&h).iter().any(|x| x.0 == 20 * r && x.1 == 70));
+}
+
+#[test]
+fn alt_drag_draws_a_line_that_selects_the_notes_it_crosses() {
+    let mut h = clip_setup();
+    let r = tl::ROW;
+    // five notes: three on C4 (the last one very short) and two on A#4
+    put_notes(
+        &mut h,
+        &[(0, 60, r), (4, 70, r), (8, 60, r), (12, 70, r), (16, 60, 6)],
+    );
+    let alt = egui::Modifiers::ALT;
+    // a wavy line along C4 that dips below, never up to A#4
+    let path = [
+        at(&h, 0, 58, 5.0),
+        at(&h, 0, 60, 8.0),
+        at(&h, 5, 57, 0.0),
+        at(&h, 8, 60, 10.0),
+        at(&h, 13, 57, 0.0),
+        at(&h, 16, 60, 1.0),
+        at(&h, 18, 57, 0.0),
+    ];
+    left_path(&mut h, &path, alt);
+    assert_eq!(note_data(&h).notes.len(), 5, "the line draws nothing");
+    assert_eq!(
+        sel_notes(&h),
+        vec![(0, 60), (8, 60), (16, 60)],
+        "3 of 5, the short one too"
+    );
+    assert!(h.state().pr.line.is_empty(), "the line goes when let go");
+    // Shift+Alt adds the A#4 at row 4
+    let shift_alt = egui::Modifiers::SHIFT | egui::Modifiers::ALT;
+    let pts = [at(&h, 3, 72, 0.0), at(&h, 5, 68, 0.0)];
+    left_path(&mut h, &pts, shift_alt);
+    assert_eq!(sel_notes(&h), vec![(0, 60), (4, 70), (8, 60), (16, 60)]);
+    // plain Alt replaces
+    let pts = [at(&h, 11, 72, 0.0), at(&h, 14, 68, 0.0)];
+    left_path(&mut h, &pts, alt);
+    assert_eq!(sel_notes(&h), vec![(12, 70)]);
+    assert_eq!(note_data(&h).notes.len(), 5);
 }
 
 #[test]

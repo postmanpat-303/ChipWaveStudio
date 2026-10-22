@@ -58,6 +58,9 @@ enum DragK {
     Resize,
     /// rubber band from this screen point
     Band(Pos2),
+    /// Alt+drag: a freehand line (`PianoUi::line`) selecting the notes it
+    /// crosses
+    Line,
     /// Pencil: painting a run of notes from this start, one per length
     Paint(Tick),
 }
@@ -66,7 +69,8 @@ enum DragK {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(crate) enum PrTool {
     /// smart: click empty space draws a note, drag a note moves it, its
-    /// right edge resizes it
+    /// right edge resizes it; drag on empty space draws a selection box,
+    /// Alt+drag a line that selects the notes it crosses
     #[default]
     Pointer,
     /// drag on empty space draws a selection box
@@ -98,6 +102,9 @@ struct PrDrag {
     moved: bool,
     /// a move last applied as copies (Ctrl held): the originals stay
     copy: bool,
+    /// a Pointer press on empty space: a box once it moves, a click (a
+    /// new note) if it is let go within a few pixels
+    soft: bool,
 }
 
 /// A left press on empty grid held this long without moving turns into a
@@ -198,6 +205,8 @@ pub(crate) struct PianoUi {
     last_vel: f32,
     /// right-drag eraser: the pointer's last position in this swipe
     erase: Option<Pos2>,
+    /// Alt+drag selection line so far (screen points)
+    pub(crate) line: Vec<Pos2>,
     /// this swipe has deleted something (its undo point is set), and how many
     erase_started: bool,
     erased: usize,
@@ -275,6 +284,7 @@ impl Default for PianoUi {
             last_len: ROW,
             last_vel: 1.0,
             erase: None,
+            line: vec![],
             erase_started: false,
             erased: 0,
             smoke: vec![],
@@ -779,7 +789,7 @@ impl App {
                             roll::move_notes(p, col, &rows, drow, dk)
                         };
                     }
-                    DragK::Band(_) | DragK::Paint(_) => return,
+                    DragK::Band(_) | DragK::Line | DragK::Paint(_) => return,
                 }
             }
             (Source::Notes(n), Target::Notes { .. }) => match d.kind {
@@ -843,7 +853,7 @@ impl App {
                         }
                     }
                 }
-                DragK::Band(_) | DragK::Paint(_) => return,
+                DragK::Band(_) | DragK::Line | DragK::Paint(_) => return,
             },
             _ => return,
         }
@@ -1419,8 +1429,8 @@ impl App {
                 ui.add_space(6.0);
                 // tools
                 for (tool, tip) in [
-                    (PrTool::Pointer, "Pointer (1): click empty space to draw a note, drag a note to move it, its right edge to resize"),
-                    (PrTool::Select, "Select (2): drag a box to select notes; Shift adds to the selection"),
+                    (PrTool::Pointer, "Pointer (1): click empty space to draw a note; drag a note to move it, its right edge to resize; drag on empty space to box-select (Shift adds); Alt+drag a line through notes to select them (Shift+Alt adds)"),
+                    (PrTool::Select, "Select (2): drag a box to select notes; Shift adds to the selection; Alt+drag a line through notes to select them"),
                     (PrTool::Pencil, "Pencil (3): click to draw, drag to paint a run of notes at the note length"),
                 ] {
                     if pr_tool_btn(ui, tool, self.pr.tool == tool, tip).clicked() {
@@ -1604,7 +1614,7 @@ impl App {
                         let tip = if n > 1 {
                             format!("{n} notes selected · arrows move, Del deletes")
                         } else {
-                            "click: draw (same length as the last note) · drag a note: move · its right edge: length · right-click or right-drag: erase · Ctrl+click: select more".into()
+                            "click: draw (same length as the last note) · drag a note: move · its right edge: length · drag empty space: box select · Alt+drag: line select · Shift: add · right-click or right-drag: erase".into()
                         };
                         ui.label(egui::RichText::new(tip).small().color(t.ink2));
                     }
@@ -2091,11 +2101,21 @@ impl App {
                 self.pr.press = None;
             }
         }
+        // a Pointer box let go within a few pixels was a click after all
+        let late_click = match &self.pr.drag {
+            Some(d) if resp.drag_stopped() && d.soft && !d.moved => match d.kind {
+                DragK::Band(a) => Some(a),
+                _ => None,
+            },
+            _ => None,
+        };
+        let clicked = resp.clicked() || late_click.is_some();
         if panning {
             // the pan owns this press: no note, no box, no draw
-        } else if resp.drag_started_by(egui::PointerButton::Primary) || resp.clicked() {
+        } else if resp.drag_started_by(egui::PointerButton::Primary) || clicked {
             self.pr.press = None;
-            let pos = press_pos
+            let pos = late_click
+                .or(press_pos)
                 .or(resp.interact_pointer_pos())
                 .unwrap_or(grid_r.center());
             let tk = self.pr.tick_at(pos.x);
@@ -2114,19 +2134,20 @@ impl App {
                 sel: vec![],
                 moved: false,
                 copy: false,
+                soft: false,
             };
             match hit {
                 Some((n, edge)) => {
                     if mods.shift || mods.command {
                         // Shift (or Ctrl) + click toggles it in the selection
                         if let Some(i) = self.pr.sel.iter().position(|&x| x == n.id) {
-                            if resp.clicked() {
+                            if clicked {
                                 self.pr.sel.remove(i);
                             }
                         } else {
                             self.pr.sel.push(n.id);
                         }
-                    } else if resp.clicked() || !self.pr.sel.contains(&n.id) {
+                    } else if clicked || !self.pr.sel.contains(&n.id) {
                         // a plain click selects only this note; dragging a
                         // selected note moves the whole selection
                         self.pr.sel = vec![n.id];
@@ -2147,10 +2168,25 @@ impl App {
                         self.pr.last_vel = n.vel;
                     }
                 }
+                // Alt+drag on empty space (Pointer or Select): a freehand
+                // line selecting every note it crosses (Shift+Alt adds)
+                None if !clicked && mods.alt && self.pr.tool != PrTool::Pencil => {
+                    d.kind = DragK::Line;
+                    self.pr.line = vec![pos];
+                    if !(mods.shift || mods.command) {
+                        self.pr.sel.clear();
+                    }
+                }
                 // Shift (or Ctrl) on empty space: a box that adds to the
-                // selection (never a new note); the Select tool: a new box
-                None if mods.shift || mods.command || self.pr.tool == PrTool::Select => {
+                // selection (never a new note); the Select tool, or a drag
+                // with the Pointer: a new box
+                None if mods.shift
+                    || mods.command
+                    || self.pr.tool == PrTool::Select
+                    || (self.pr.tool == PrTool::Pointer && !clicked) =>
+                {
                     d.kind = DragK::Band(pos);
+                    d.soft = self.pr.tool == PrTool::Pointer && !(mods.shift || mods.command);
                     if !(mods.shift || mods.command) {
                         self.pr.sel.clear();
                     }
@@ -2178,7 +2214,7 @@ impl App {
                 }
                 None => self.pr.sel.clear(),
             }
-            if resp.clicked() {
+            if clicked {
                 self.pr.drag = None;
             } else {
                 self.pr.drag = Some(d);
@@ -2188,7 +2224,26 @@ impl App {
                 let tk = self.pr.tick_at(pos.x);
                 let k = self.pr.key_at(pos.y).clamp(1, 120);
                 match d.kind {
+                    DragK::Line => {
+                        let last = self.pr.line.last().copied().unwrap_or(pos);
+                        if pos.distance(last) >= 1.0 {
+                            for n in swept_notes(&self.pr, &notes, last, pos) {
+                                if !self.pr.sel.contains(&n.id) {
+                                    self.pr.sel.push(n.id);
+                                }
+                            }
+                            self.pr.line.push(pos);
+                        }
+                        self.status = format!(
+                            "Line select: {} note(s) (let go to finish)",
+                            self.pr.sel.len()
+                        );
+                    }
+                    DragK::Band(a) if d.soft && !d.moved && a.distance(pos) <= HOLD_PX => {}
                     DragK::Band(a) => {
+                        if let Some(x) = self.pr.drag.as_mut() {
+                            x.moved = true;
+                        }
                         let band = Rect::from_two_pos(a, pos);
                         ui.painter().rect_stroke(
                             band,
@@ -2277,7 +2332,23 @@ impl App {
                 }
             }
         }
+        // the Alt line, drawn while it is being dragged
+        if self.pr.drag.as_ref().is_some_and(|d| d.kind == DragK::Line) && self.pr.line.len() > 1 {
+            // clipped to the note grid, like the notes
+            let p = ui.painter_at(self.pr.grid_rect);
+            p.add(egui::Shape::line(
+                self.pr.line.clone(),
+                Stroke::new(1.5, t.accent),
+            ));
+            if let Some(&end) = self.pr.line.last() {
+                p.circle_filled(end, 2.5, t.accent);
+            }
+        }
         if resp.drag_stopped() {
+            if self.pr.drag.as_ref().is_some_and(|d| d.kind == DragK::Line) {
+                self.pr.line.clear();
+                self.status = format!("Selected {} note(s)", self.pr.sel.len());
+            }
             // Ctrl decides at the drop: pressed or let go after the last
             // mouse move, the move becomes copies or back
             if let (Some(d), Some(pos)) = (self.pr.drag.clone(), latest) {

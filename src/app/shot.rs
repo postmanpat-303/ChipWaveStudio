@@ -1585,7 +1585,7 @@ impl App {
 }
 
 impl App {
-    /// CHIPWAVE_SHOT_PR=click | erase | select | chords | chord-pie |
+    /// CHIPWAVE_SHOT_PR=click | erase | select | line | chords | chord-pie |
     /// chord-block-pie | chord-generate (view timeline-notes): piano roll
     /// shots with scripted mouse input
     fn shot_pr(&mut self, ctx: &egui::Context, mode: &str) {
@@ -1614,7 +1614,7 @@ impl App {
         let none = egui::Modifiers::NONE;
         let prim = egui::PointerButton::Primary;
         match mode {
-            "click" | "erase" | "select" => {
+            "click" | "erase" | "select" | "line" => {
                 if mode == "click" {
                     // an empty clip: the script draws into it
                     if let Some(super::pianoview::Source::Notes(mut d)) = self.pr_read(t) {
@@ -1727,6 +1727,33 @@ impl App {
                 for k in 1..=10 {
                     f += 1;
                     sc.push((f, mv(a + (b - a) * (k as f32 / 10.0))));
+                }
+            }
+            "line" => {
+                // Pointer tool, an Alt+drag line from empty space through
+                // some of the notes, still held at the capture
+                self.pr.tool = super::pianoview::PrTool::Pointer;
+                let p = |a: &App, bars: f32, key: u8| {
+                    Pos2::new(x(a, (bars * bar as f32) as tl::Tick), key_y(a, key))
+                };
+                let pts = [
+                    p(self, 0.45, 57),
+                    p(self, 0.8, 63),
+                    p(self, 1.35, 73),
+                    p(self, 1.75, 64),
+                    p(self, 2.3, 71),
+                    p(self, 2.6, 66),
+                ];
+                let alt = egui::Modifiers::ALT;
+                let mut f = CAPTURE_AT - 60;
+                sc.push((f, mv(pts[0])));
+                f += 2;
+                sc.push((f, btn(pts[0], prim, true, alt)));
+                for w in pts.windows(2) {
+                    for k in 1..=8 {
+                        f += 1;
+                        sc.push((f, mv(w[0] + (w[1] - w[0]) * (k as f32 / 8.0))));
+                    }
                 }
             }
             _ => {
