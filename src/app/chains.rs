@@ -420,6 +420,7 @@ impl App {
                     .clicked()
                 {
                     self.extra.chains_cards = true;
+                    self.extra.chains_view_chosen = true;
                     self.save_settings();
                 }
                 let fold = if self.extra.chains_tree_folded {

@@ -290,6 +290,7 @@ impl App {
                 .clicked()
             {
                 self.extra.chains_cards = false;
+                self.extra.chains_view_chosen = true;
                 self.save_settings();
             }
             let n_fx = chain.as_ref().map_or(0, |c| c.len());

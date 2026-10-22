@@ -212,9 +212,14 @@ pub struct Extra {
     /// ... folded to a slim strip of names
     #[serde(default)]
     pub chains_tree_folded: bool,
-    /// ... shows the 0.2.4 card row instead of the tree (D1: Cards)
-    #[serde(default)]
+    /// ... shows the card row instead of the tree; Cards is the default
+    /// (Del, 22 Oct 2026; was the tree in 0.2.7.0)
+    #[serde(default = "yes")]
     pub chains_cards: bool,
+    /// the user picked Cards or Tree themselves (kept); without it a saved
+    /// 0.2.7.0 file's chains_cards = false gives way to the Cards default
+    #[serde(default)]
+    pub chains_view_chosen: bool,
     /// tree rows the user closed ("i3" instrument 3, "s3.1" a Split, ...)
     #[serde(default)]
     pub chains_closed: Vec<String>,
@@ -296,7 +301,8 @@ impl Default for Extra {
             select_chains: true,
             chains_tree_w: tree_w(),
             chains_tree_folded: false,
-            chains_cards: false,
+            chains_cards: true,
+            chains_view_chosen: false,
             chains_closed: vec![],
         }
     }
@@ -311,6 +317,14 @@ impl Extra {
     pub fn default_lower_view(&mut self) {
         if !self.lower_chosen {
             self.lower_inst = true;
+        }
+    }
+
+    /// no saved choice of Nested Device Chains view: Cards (0.2.7.0 files
+    /// always wrote chains_cards = false, the old Tree default)
+    pub fn default_chains_view(&mut self) {
+        if !self.chains_view_chosen {
+            self.chains_cards = true;
         }
     }
 }
@@ -378,6 +392,7 @@ pub fn load() -> Settings {
         .and_then(|t| toml::from_str(&t).ok())
         .unwrap_or_default();
     s.extra.default_lower_view();
+    s.extra.default_chains_view();
     Settings {
         zoom: if s.zoom.is_finite() {
             s.zoom.clamp(0.5, 3.0)
@@ -439,6 +454,27 @@ mod tests {
             let mut back: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
             back.extra.default_lower_view();
             assert_eq!(back.extra.lower_inst, inst);
+        }
+    }
+
+    #[test]
+    fn nested_device_chains_open_on_cards_unless_the_user_chose() {
+        assert!(Extra::default().chains_cards && !Extra::default().chains_view_chosen);
+        // 0.2.7.0 settings always wrote chains_cards = false
+        let mut e: Extra = toml::from_str("chains_cards = false").unwrap();
+        e.default_chains_view();
+        assert!(e.chains_cards, "no saved choice: Cards");
+        let mut e: Extra = toml::from_str("").unwrap();
+        e.default_chains_view();
+        assert!(e.chains_cards);
+        // a choice made in this version is kept, both ways
+        for cards in [false, true] {
+            let mut s = Settings::default();
+            s.extra.chains_cards = cards;
+            s.extra.chains_view_chosen = true;
+            let mut back: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
+            back.extra.default_chains_view();
+            assert_eq!(back.extra.chains_cards, cards);
         }
     }
 }
