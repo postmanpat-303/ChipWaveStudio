@@ -660,14 +660,26 @@ pub fn capture_hwnd(_hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
     Err("editor capture is Windows-only for now".into())
 }
 
-/// one-at-a-time queue used by the Browser
+/// one-at-a-time queue used by the Browser. Each plugin file is loaded at
+/// most once per session, for its main class only (scan::main_class); the
+/// other classes of a multi-program file get a card without loading anything.
 #[derive(Default)]
 pub struct Queue {
     pending: Vec<Pending>,
     busy: bool,
     child: Option<std::process::Child>,
     child_key: String,
+    child_path: String,
     started: Option<Instant>,
+    /// plugin files (format + path) a capture child was started for this session
+    loaded: std::collections::HashSet<String>,
+}
+
+/// message on the card of a class that isn't its file's main plugin
+pub const NOT_MAIN: &str = "not the main plugin of its file";
+
+fn file_key(format: &str, path: &str) -> String {
+    format!("{format}|{path}")
 }
 
 #[derive(Clone)]
@@ -680,7 +692,35 @@ struct Pending {
     vendor: String,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Decision {
+    /// not the main class: a card, nothing loaded
+    Card,
+    /// this file is loading, queued or was loaded this session
+    Skip,
+    Capture,
+}
+
 impl Queue {
+    /// only the file's main class is ever captured (`main`: its id from the
+    /// scan, None when unknown), and each file loads once per session
+    fn decide(&self, main: Option<&str>, format: &str, path: &str, id: &str) -> Decision {
+        if main.is_some_and(|m| m != id) {
+            return Decision::Card;
+        }
+        let fk = file_key(format, path);
+        if self.loaded.contains(&fk)
+            || self.child_path == fk
+            || self
+                .pending
+                .iter()
+                .any(|p| file_key(&p.format, &p.path) == fk)
+        {
+            return Decision::Skip;
+        }
+        Decision::Capture
+    }
+
     pub fn enqueue(
         &mut self,
         format: &str,
@@ -697,13 +737,18 @@ impl Queue {
                 return;
             }
         }
-        if self
-            .pending
-            .iter()
-            .any(|p| key(&p.format, &p.id, &p.version) == k)
-            || self.child_key == k
-        {
-            return;
+        match self.decide(
+            super::scan::main_id(path, format).as_deref(),
+            format,
+            path,
+            id,
+        ) {
+            Decision::Card => {
+                write_card(&k, name, vendor, format, Kind::Card, NOT_MAIN);
+                return;
+            }
+            Decision::Skip => return,
+            Decision::Capture => {}
         }
         self.pending.push(Pending {
             format: format.into(),
@@ -728,6 +773,8 @@ impl Queue {
         if let Some(p) = png_path(&k) {
             let _ = std::fs::remove_file(p);
         }
+        // asked for: this file may load once more
+        self.loaded.remove(&file_key(format, path));
         write_meta(
             &k,
             &Meta {
@@ -750,6 +797,7 @@ impl Queue {
                 Ok(Some(_)) => {
                     self.child = None;
                     self.child_key.clear();
+                    self.child_path.clear();
                     self.busy = false;
                     self.started = None;
                     finished = true;
@@ -760,6 +808,7 @@ impl Queue {
                         let _ = child.wait();
                         self.child = None;
                         self.child_key.clear();
+                        self.child_path.clear();
                         self.busy = false;
                         self.started = None;
                         finished = true;
@@ -768,6 +817,7 @@ impl Queue {
                 Err(_) => {
                     self.child = None;
                     self.child_key.clear();
+                    self.child_path.clear();
                     self.busy = false;
                     self.started = None;
                 }
@@ -809,6 +859,8 @@ impl Queue {
                         Ok(c) => {
                             self.child = Some(c);
                             self.child_key = k;
+                            self.child_path = file_key(&p.format, &p.path);
+                            self.loaded.insert(self.child_path.clone());
                             self.busy = true;
                             self.started = Some(Instant::now());
                         }
@@ -861,6 +913,35 @@ mod tests {
         assert_eq!(rgba2.len(), rgba.len());
         let (dw, dh, _) = downscale(800, 600, &vec![0u8; 800 * 600 * 4], 256);
         assert!(dw <= 256 && dh <= 256);
+    }
+
+    #[test]
+    fn a_plugin_file_loads_once_and_only_for_its_main_class() {
+        let mut q = Queue::default();
+        let big = "C:/VST3/Big.vst3";
+        assert_eq!(q.decide(Some("main"), "vst3", big, "16out"), Decision::Card);
+        assert_eq!(
+            q.decide(Some("main"), "vst3", big, "main"),
+            Decision::Capture
+        );
+        q.pending.push(Pending {
+            format: "vst3".into(),
+            path: big.into(),
+            id: "main".into(),
+            version: "1".into(),
+            name: "Big".into(),
+            vendor: String::new(),
+        });
+        // queued: a second class (unknown main) doesn't load the file again
+        assert_eq!(q.decide(None, "vst3", big, "other"), Decision::Skip);
+        q.pending.clear();
+        q.child_path = file_key("vst3", big);
+        assert_eq!(q.decide(None, "vst3", big, "main"), Decision::Skip);
+        q.child_path.clear();
+        q.loaded.insert(file_key("vst3", big));
+        assert_eq!(q.decide(None, "vst3", big, "main"), Decision::Skip);
+        // the same path as a CLAP is another file
+        assert_eq!(q.decide(None, "clap", big, "main"), Decision::Capture);
     }
 
     fn tempfile_dir() -> PathBuf {

@@ -134,6 +134,24 @@ impl Entry {
     }
 }
 
+/// id of the main plugin of the scanned file at `path` (None: not scanned)
+pub fn main_id(path: &str, format: &str) -> Option<String> {
+    let g = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    let find = |c: &Cache| {
+        c.entries
+            .iter()
+            .find(|e| e.status == "ok" && e.path == path && e.format == format)
+            .and_then(|e| e.main().map(|m| m.desc.id.clone()))
+    };
+    match g.as_ref() {
+        Some(c) => find(c),
+        None => {
+            drop(g);
+            find(&cache())
+        }
+    }
+}
+
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
 
 /// `CHIPWAVE_PLUGIN_CACHE` (tests) or <config>/plugin-cache.json
