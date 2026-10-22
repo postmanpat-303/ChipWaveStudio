@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 84] = [
+pub const VIEWS: [&str; 87] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -86,6 +86,9 @@ pub const VIEWS: [&str; 84] = [
     "browser-patterns-drop",
     "browser-files",
     "browser-plugins",
+    "browser-effects",
+    "browser-filter",
+    "browser-more",
     "plugin-setup",
     "showcase",
     "showcase-progress",
@@ -251,6 +254,34 @@ impl App {
                         eprintln!("CHIPWAVE_SHOT_LOAD: no plugin {want}");
                     }
                 }
+            }
+            // Browser direction A: Effects with its "Adds to" line, the
+            // Filter popover open (two filters on), the More menu open
+            "browser-effects" | "browser-filter" | "browser-more" => {
+                self.view = View::Timeline;
+                self.ch = 1;
+                let (tab, pop) = match view {
+                    "browser-effects" => (
+                        crate::browser::Tab::Effects,
+                        super::browserpanel::BrPop::None,
+                    ),
+                    "browser-filter" => (
+                        crate::browser::Tab::Instruments,
+                        super::browserpanel::BrPop::Filter,
+                    ),
+                    _ => (
+                        crate::browser::Tab::Wavetables,
+                        super::browserpanel::BrPop::More,
+                    ),
+                };
+                self.br.filter.tab = tab;
+                if view == "browser-filter" {
+                    self.br.filter.tags = vec!["Bass"];
+                    self.br.filter.creator = Some("ChipWave".into());
+                }
+                self.br_refresh();
+                self.br.sel = self.br_result_items().first().map(|i| i.key.clone());
+                self.br.pop = pop;
             }
             "browser-drop" => {
                 // dragging an instrument below the last track: "New track: …"

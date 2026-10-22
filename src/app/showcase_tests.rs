@@ -44,8 +44,16 @@ impl showcase::Fetch for Offline {
 }
 
 #[test]
-fn plugins_tab_button_opens_the_dialog_with_all_eleven_and_credits() {
+fn browser_menu_item_opens_the_dialog_with_all_eleven_and_credits() {
     let mut h = harness();
+    // it lives only in the Browser's ••• menu
+    assert!(h
+        .query_all_by_label("Get showcase instruments…")
+        .next()
+        .is_none());
+    let c = h.get_by_label("•••").rect().center();
+    click_at(&mut h, c);
+    frames(&mut h, 2);
     let c = h.get_by_label("Get showcase instruments…").rect().center();
     click_at(&mut h, c);
     assert!(h.state().showcase.is_some());

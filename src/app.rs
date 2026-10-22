@@ -24,6 +24,8 @@ mod autolanes_tests;
 mod blocklen;
 #[cfg(test)]
 mod browser_tests;
+#[cfg(test)]
+mod browsera_tests;
 mod browserpanel;
 mod browserview;
 mod chains;

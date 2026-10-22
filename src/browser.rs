@@ -136,6 +136,8 @@ pub enum Tab {
 }
 
 impl Tab {
+    /// every tab (the tiles reach them through MAIN and MORE)
+    #[cfg_attr(not(test), allow(dead_code))]
     pub const ALL: [Tab; 12] = [
         Tab::Instruments,
         Tab::Racks,

@@ -125,6 +125,8 @@ pub(crate) struct BrowserUi {
     pub(crate) thumb_tex: std::collections::HashMap<String, egui::TextureHandle>,
     /// keys we already asked the capture queue for this session
     pub(crate) thumb_asked: std::collections::HashSet<String>,
+    /// the open popover (Filter or More)
+    pub(crate) pop: super::browserpanel::BrPop,
 }
 
 impl Default for BrowserUi {
@@ -164,6 +166,7 @@ impl Default for BrowserUi {
             open_tries: 0,
             thumb_tex: Default::default(),
             thumb_asked: Default::default(),
+            pop: Default::default(),
         }
     }
 }
@@ -1238,6 +1241,9 @@ impl App {
                 } else if let Some(it) = self.br_selected() {
                     self.br_preview(&it);
                 }
+            }
+            Key::Escape if self.br.pop != super::browserpanel::BrPop::None => {
+                self.br.pop = super::browserpanel::BrPop::None;
             }
             Key::Escape => {
                 self.br.focus = false;
