@@ -818,16 +818,7 @@ impl Rack {
                 continue;
             }
             s.key = key.clone();
-            match &st {
-                Some(b) => {
-                    s.inst.load_state(b);
-                }
-                None => {
-                    for &(id, v) in &params {
-                        s.inst.set_param_main(id, v);
-                    }
-                }
-            }
+            copy_state(st.as_deref(), &params, s.inst.as_mut());
         }
         true
     }
@@ -835,6 +826,27 @@ impl Rack {
     pub fn set_sample_rate(&mut self, sr: f32) {
         for s in &mut self.slots {
             s.inst.set_sample_rate(sr);
+        }
+    }
+}
+
+/// Give `dst` a state (or, for plugins without the state extension, these
+/// parameter values). Skipped when `dst` already has it: loading a state
+/// can cut the notes an instance is playing, so a save or autosave must not
+/// reload unchanged instances.
+pub(crate) fn copy_state(st: Option<&[u8]>, params: &[(u32, f64)], dst: &mut dyn Hosted) {
+    match st {
+        Some(b) => {
+            if dst.save_state().as_deref() != Some(b) {
+                dst.load_state(b);
+            }
+        }
+        None => {
+            for &(id, v) in params {
+                if dst.value(id) != Some(v) {
+                    dst.set_param_main(id, v);
+                }
+            }
         }
     }
 }

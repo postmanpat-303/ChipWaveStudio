@@ -144,3 +144,102 @@ fn request_flush_wakes_a_sleeping_instance() {
     assert_eq!(rack.slots[1].inst.value(2), Some(0.6));
     assert_eq!(rack.poll_main().dirty, vec![0]);
 }
+
+/// a real instance that counts `load_state` calls
+struct Counting {
+    inner: Box<dyn Hosted>,
+    loads: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl Hosted for Counting {
+    fn note_on(&mut self, key: u8, vel: f32) {
+        self.inner.note_on(key, vel)
+    }
+    fn note_off(&mut self, key: u8) {
+        self.inner.note_off(key)
+    }
+    fn tuning(&mut self, key: u8, semis: f32) {
+        self.inner.tuning(key, semis)
+    }
+    fn param(&mut self, id: u32, value: f64) {
+        self.inner.param(id, value)
+    }
+    fn panic(&mut self) {
+        self.inner.panic()
+    }
+    fn process(&mut self, n: usize, l: &mut [f32], r: &mut [f32]) {
+        self.inner.process(n, l, r)
+    }
+    fn params(&self) -> Vec<ParamInfo> {
+        self.inner.params()
+    }
+    fn value(&self, id: u32) -> Option<f64> {
+        self.inner.value(id)
+    }
+    fn value_text(&self, id: u32, value: f64) -> Option<String> {
+        self.inner.value_text(id, value)
+    }
+    fn save_state(&mut self) -> Option<Vec<u8>> {
+        self.inner.save_state()
+    }
+    fn load_state(&mut self, data: &[u8]) -> bool {
+        self.loads
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.inner.load_state(data)
+    }
+    fn set_param_main(&mut self, id: u32, value: f64) {
+        self.inner.set_param_main(id, value)
+    }
+    fn has_editor(&self) -> bool {
+        false
+    }
+    fn open_editor(&mut self, _title: &str) -> Result<(), String> {
+        Err("none".into())
+    }
+    fn close_editor(&mut self) {}
+    fn editor_open(&self) -> bool {
+        false
+    }
+    fn poll_main(&mut self) {
+        self.inner.poll_main()
+    }
+    fn take_dirty(&self) -> bool {
+        self.inner.take_dirty()
+    }
+    fn drain_out(&mut self, f: &mut dyn FnMut(OutEv)) {
+        self.inner.drain_out(f)
+    }
+    fn test_handle(&self) -> *const std::ffi::c_void {
+        self.inner.test_handle()
+    }
+    fn set_sample_rate(&mut self, sr: f32) {
+        self.inner.set_sample_rate(sr)
+    }
+}
+
+#[test]
+fn capture_reloads_only_instances_whose_state_differs() {
+    let loads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut rack = Rack::new();
+    let p = patch();
+    rack.insert(0, 0, &p, new_inst());
+    let sib = Counting {
+        inner: new_inst(),
+        loads: loads.clone(),
+    };
+    rack.insert(0, 1, &p, Box::new(sib));
+    let mut song = super::tests::plugin_song();
+    let n0 = loads.load(std::sync::atomic::Ordering::Relaxed);
+    // unchanged: an autosave must not reload (and cut) the playing sibling
+    rack.capture(&mut song, 0);
+    rack.capture(&mut song, 0);
+    assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), n0);
+    // a real change is copied over once
+    rack.slots[0].inst.set_param_main(1, 0.3);
+    rack.capture(&mut song, 0);
+    assert_eq!(rack.slots[1].inst.value(1), Some(0.3));
+    let n1 = loads.load(std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(n1, n0 + 1);
+    rack.capture(&mut song, 0);
+    assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), n1);
+}

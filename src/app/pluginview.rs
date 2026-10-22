@@ -166,15 +166,20 @@ impl App {
 
     /// Copy every plugin's current state into the song (before saving,
     /// exporting or copying an instrument). Not an undo step of its own.
+    /// Copy every plugin's current state into the song (and into the
+    /// other instances of the same instrument / effect). Always asks the
+    /// plugins: many never report their editor edits (`mark_dirty`), so a
+    /// "nothing changed" flag can't be trusted. Not an undo step; the undo
+    /// history only hears about it when a state really changed.
     pub(super) fn capture_plugins(&mut self) {
-        if !self.plug.state_dirty {
-            return;
-        }
         self.plug.state_dirty = false;
         let shared = self.shared.clone();
         let mut s = audio::lock(&shared);
-        self.hist.boundary(&s.song, std::time::Instant::now());
         let crate::audio::Shared { song, engine, .. } = &mut *s;
+        if engine.plugins.is_empty() && engine.fx_plugins.is_empty() {
+            return;
+        }
+        let before = plugin_patches(song);
         let instrs: Vec<usize> = (0..song.instruments.len())
             .filter(|&i| engine.plugins.primary(i).is_some())
             .collect();
@@ -182,7 +187,15 @@ impl App {
             engine.plugins.capture(song, i);
         }
         engine.fx_plugins.capture_all(song);
-        self.hist.absorb(song);
+        let after = plugin_patches(song);
+        if after != before {
+            // commit pending edits as they were, then fold the new plugin
+            // states into the current step
+            put_plugin_patches(song, &before);
+            self.hist.boundary(song, std::time::Instant::now());
+            put_plugin_patches(song, &after);
+            self.hist.absorb(song);
+        }
     }
 
     pub(super) fn start_plugin_scan(&mut self, force: bool) {
@@ -458,6 +471,11 @@ impl App {
             });
             if let Some(Err(e)) = r {
                 self.status = format!("Plugin editor: {e}");
+            }
+            if !open {
+                // closing keeps the editor's edits and syncs the other instances
+                self.plug.state_dirty = true;
+                self.capture_plugins();
             }
         }
         if reload {
@@ -782,6 +800,38 @@ impl App {
                 .monospace()
                 .color(col),
             );
+        }
+    }
+}
+
+/// every plugin patch in the song, in a fixed order: instrument plugins,
+/// then plugin devices in each instrument's chain
+fn plugin_patches(song: &Song) -> Vec<PluginPatch> {
+    let mut v = vec![];
+    for inst in &song.instruments {
+        if let InstrumentKind::Plugin(p) = &inst.kind {
+            v.push(p.clone());
+        }
+        v.extend(inst.fx.iter().filter_map(|d| d.plugin.as_deref().cloned()));
+    }
+    v
+}
+
+/// write back what [`plugin_patches`] returned (same song shape)
+fn put_plugin_patches(song: &mut Song, list: &[PluginPatch]) {
+    let mut it = list.iter();
+    for inst in &mut song.instruments {
+        if let InstrumentKind::Plugin(p) = &mut inst.kind {
+            if let Some(x) = it.next() {
+                p.clone_from(x);
+            }
+        }
+        for d in inst.fx.iter_mut() {
+            if let Some(p) = d.plugin.as_deref_mut() {
+                if let Some(x) = it.next() {
+                    p.clone_from(x);
+                }
+            }
         }
     }
 }
