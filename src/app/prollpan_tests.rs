@@ -153,14 +153,19 @@ fn frames(h: &mut Harness<'static, App>, n: usize) {
 }
 
 #[test]
-fn a_quick_drag_still_draws_and_shift_drag_still_boxes() {
+fn a_quick_drag_boxes_a_click_still_draws_and_shift_drag_still_boxes() {
     let mut h = block_roll(3);
-    // quick drag on empty grid: a note whose length follows the drag
+    // quick drag on empty grid (Pointer): a selection box, no note, no pan
     let (a, b) = (at(&h, 2, 60, 3.0), at(&h, 6, 60, 3.0));
     drag_m(&mut h, a, b, egui::Modifiers::NONE);
-    let n = notes_in(&h, 3);
-    assert_eq!(n, vec![(2, 60)], "drawn");
+    assert!(
+        notes_in(&h, 3).is_empty(),
+        "a drag on empty space draws nothing"
+    );
     assert!(h.state().pr.pan.is_none());
+    // a click still draws
+    click_at(&mut h, a);
+    assert_eq!(notes_in(&h, 3), vec![(2, 60)], "drawn");
     // Shift-drag over it: selected by the box
     h.state_mut().pr.sel.clear();
     let (a, b) = (at(&h, 1, 62, 0.0), at(&h, 4, 58, 0.0));
