@@ -11,7 +11,7 @@
 //! behind the audio mutex, so main-thread and audio-thread calls never run at
 //! the same time. The audio callback marks its thread (`AUDIO_THREAD`) so the
 //! thread-check extension answers correctly.
-use super::{Hosted, ParamInfo, MAX_BLOCK};
+use super::{Hosted, OutEv, ParamInfo, MAX_BLOCK};
 use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::entry::clap_plugin_entry;
 use clap_sys::events::*;
@@ -255,6 +255,9 @@ pub struct HostFlags {
     pub gui_closed: AtomicBool,
     pub resize: AtomicU32,
     pub rescan: AtomicBool,
+    /// params.request_flush: the plugin has edits (from its editor) to hand
+    /// over; an idle instance is flushed by `poll_main`
+    pub flush: AtomicBool,
 }
 
 #[repr(C)]
@@ -318,7 +321,10 @@ unsafe extern "C" fn hp_rescan(h: *const clap_host, _f: clap_param_rescan_flags)
     flags(h).rescan.store(true, Ordering::Release);
 }
 unsafe extern "C" fn hp_clear(_h: *const clap_host, _id: u32, _f: clap_param_clear_flags) {}
-unsafe extern "C" fn hp_flush(_h: *const clap_host) {}
+unsafe extern "C" fn hp_flush(h: *const clap_host) {
+    // [thread-safe]: only raise a flag; ClapInst::poll_main acts on it
+    flags(h).flush.store(true, Ordering::Release);
+}
 static HOST_PARAMS: clap_host_params = clap_host_params {
     rescan: Some(hp_rescan),
     clear: Some(hp_clear),
@@ -400,8 +406,67 @@ unsafe extern "C" fn ev_get(l: *const clap_input_events, i: u32) -> *const clap_
         None => std::ptr::null(),
     }
 }
-unsafe extern "C" fn ev_push(_l: *const clap_output_events, _e: *const clap_event_header) -> bool {
-    true
+/// events the plugin sends back (editor parameter edits, gestures),
+/// collected without allocating (capacity fixed at creation)
+struct OutList {
+    v: Vec<OutEv>,
+}
+
+/// most output events kept between two drains (the rest are dropped)
+const MAX_OUT_EVENTS: usize = 256;
+
+impl OutList {
+    /// add `e`; a value for a parameter that already has one waiting
+    /// replaces it, so a long drag never fills the list
+    fn add(&mut self, e: OutEv) -> bool {
+        if let OutEv::Value(id, v) = e {
+            if let Some(OutEv::Value(_, old)) = self
+                .v
+                .iter_mut()
+                .rev()
+                .take_while(|x| !matches!(x, OutEv::End(i) | OutEv::Begin(i) if *i == id))
+                .find(|x| matches!(x, OutEv::Value(i, _) if *i == id))
+            {
+                *old = v;
+                return true;
+            }
+        }
+        if self.v.len() >= MAX_OUT_EVENTS {
+            return false;
+        }
+        self.v.push(e);
+        true
+    }
+}
+
+unsafe extern "C" fn ev_push(l: *const clap_output_events, e: *const clap_event_header) -> bool {
+    if l.is_null() || e.is_null() || (*l).ctx.is_null() {
+        return false;
+    }
+    let list = &mut *((*l).ctx as *mut OutList);
+    if (*e).space_id != CLAP_CORE_EVENT_SPACE_ID {
+        // not ours: accepted and ignored
+        return true;
+    }
+    match (*e).type_ {
+        CLAP_EVENT_PARAM_VALUE => {
+            let p = &*(e as *const clap_event_param_value);
+            if p.value.is_finite() {
+                return list.add(OutEv::Value(p.param_id, p.value));
+            }
+            true
+        }
+        CLAP_EVENT_PARAM_GESTURE_BEGIN => {
+            let g = &*(e as *const clap_event_param_gesture);
+            list.add(OutEv::Begin(g.param_id))
+        }
+        CLAP_EVENT_PARAM_GESTURE_END => {
+            let g = &*(e as *const clap_event_param_gesture);
+            list.add(OutEv::End(g.param_id))
+        }
+        // notes, MIDI, modulation sent out: nothing listens yet
+        _ => true,
+    }
 }
 
 fn header(size: usize, ty: u16) -> clap_event_header {
@@ -434,6 +499,7 @@ pub struct ClapInst {
     sleeping: bool,
     steady: i64,
     ev: Box<EvList>,
+    out: Box<OutList>,
     in_list: clap_input_events,
     out_list: clap_output_events,
     /// scratch audio: [port][channel][frame]; outputs[0] is the main output
@@ -562,6 +628,10 @@ impl ClapInst {
             v: Vec::with_capacity(MAX_EVENTS),
         });
         let ctx = &mut *ev as *mut EvList as *mut c_void;
+        let mut out = Box::new(OutList {
+            v: Vec::with_capacity(MAX_OUT_EVENTS),
+        });
+        let out_ctx = &mut *out as *mut OutList as *mut c_void;
         let mut me = ClapInst {
             _lib: lib,
             _host: host,
@@ -579,13 +649,14 @@ impl ClapInst {
             sleeping: false,
             steady: 0,
             ev,
+            out,
             in_list: clap_input_events {
                 ctx,
                 size: Some(ev_size),
                 get: Some(ev_get),
             },
             out_list: clap_output_events {
-                ctx: std::ptr::null_mut(),
+                ctx: out_ctx,
                 try_push: Some(ev_push),
             },
             in_data: mk(&ins),
@@ -668,6 +739,34 @@ impl ClapInst {
                 self.active = false;
             }
         }
+    }
+
+    /// params.flush outside processing: hands queued parameter events to
+    /// the plugin and collects its own (editor) events. Only called when the
+    /// audio thread can't run this instance (not processing, or under the
+    /// engine lock); `why` labels the debug log.
+    fn flush_now(&mut self, why: impl FnOnce() -> String) {
+        if self.params.is_null() {
+            return;
+        }
+        unsafe {
+            if let Some(f) = (*self.params).flush {
+                // params.flush is [active ? audio-thread : main-thread]; the
+                // engine lock keeps the real audio thread out meanwhile
+                let _t = super::debug::Timed::new(|| {
+                    format!(
+                        "{}: params.flush ({}) under the audio lock, audio-thread flag {}",
+                        self.desc.name,
+                        why(),
+                        self.active
+                    )
+                });
+                let was = AUDIO_THREAD.with(|a| a.replace(self.active));
+                f(self.plugin, &self.in_list, &self.out_list);
+                AUDIO_THREAD.with(|a| a.set(was));
+            }
+        }
+        self.ev.v.clear();
     }
 
     /// one process call; `loud` = the audio input is not silent (effects:
@@ -1044,16 +1143,7 @@ impl Hosted for ClapInst {
             return;
         }
         self.param(id, value);
-        unsafe {
-            if let Some(f) = (*self.params).flush {
-                // params.flush is [active ? audio-thread : main-thread]; the
-                // engine lock keeps the real audio thread out meanwhile
-                let was = AUDIO_THREAD.with(|a| a.replace(self.active));
-                f(self.plugin, &self.in_list, &self.out_list);
-                AUDIO_THREAD.with(|a| a.set(was));
-            }
-        }
-        self.ev.v.clear();
+        self.flush_now(|| format!("param {id}"));
     }
 
     fn has_editor(&self) -> bool {
@@ -1089,7 +1179,17 @@ impl Hosted for ClapInst {
     }
 
     fn poll_main(&mut self) {
+        if self.flags.flush.swap(false, Ordering::AcqRel) {
+            if self.processing && self.active {
+                // the next process call takes the edits (and reports them);
+                // wake a sleeping plugin so that call really happens
+                self.sleeping = false;
+            } else if !self.params.is_null() {
+                self.flush_now(|| "request_flush".into());
+            }
+        }
         if self.flags.callback.swap(false, Ordering::AcqRel) {
+            let _t = super::debug::Timed::new(|| format!("{}: on_main_thread", self.desc.name));
             unsafe {
                 if let Some(f) = (*self.plugin).on_main_thread {
                     f(self.plugin);
@@ -1114,6 +1214,17 @@ impl Hosted for ClapInst {
 
     fn take_dirty(&self) -> bool {
         self.flags.dirty.swap(false, Ordering::AcqRel)
+    }
+
+    fn drain_out(&mut self, f: &mut dyn FnMut(OutEv)) {
+        for e in self.out.v.drain(..) {
+            f(e);
+        }
+    }
+
+    #[cfg(test)]
+    fn test_handle(&self) -> *const c_void {
+        self.plugin as *const c_void
     }
 
     fn set_sample_rate(&mut self, sr: f32) {

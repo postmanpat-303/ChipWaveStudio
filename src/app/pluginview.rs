@@ -85,15 +85,49 @@ impl App {
             plugin::sync(&self.shared, extra);
             self.default_macros();
         }
-        let dirty = self.with(|s| s.engine.plugins.poll_main());
-        if !dirty.is_empty() {
+        let polled = self.with(|s| s.engine.plugins.poll_main());
+        if !polled.dirty.is_empty() {
             // a plugin changed itself (its editor): the song needs saving;
             // the state is copied into the song before save / export
             self.plug.state_dirty = true;
             self.dirty = true;
         }
+        self.plugin_edits(&polled.events);
+        if !polled.closed.is_empty() {
+            // an editor closed: keep its edits in the song now and give the
+            // other instances its full state (not only parameters)
+            self.plug.state_dirty = true;
+            self.capture_plugins();
+        }
         // editors resize / close through main-thread callbacks
         ctx.request_repaint_after(std::time::Duration::from_millis(50));
+    }
+
+    /// parameter edits made in plugin editors: a knob mapped to a macro
+    /// counts as touching that macro (last-touched / follow-touch lanes)
+    pub(super) fn plugin_edits(&mut self, events: &[(usize, plugin::OutEv)]) {
+        use crate::automation::Target;
+        let mut touched: Vec<Target> = vec![];
+        self.with(|s| {
+            for &(i, e) in events {
+                let (plugin::OutEv::Begin(id) | plugin::OutEv::Value(id, _)) = e else {
+                    continue;
+                };
+                let Some(InstrumentKind::Plugin(p)) = s.song.instruments.get(i).map(|x| &x.kind)
+                else {
+                    continue;
+                };
+                if let Some(k) = (0..8).find(|&k| id != NO_PARAM && p.macro_id(k) == id) {
+                    let t = Target::Macro(i, k);
+                    if !touched.contains(&t) {
+                        touched.push(t);
+                    }
+                }
+            }
+        });
+        for t in touched {
+            self.touch_param(t);
+        }
     }
 
     /// a fresh plugin instrument maps its first 8 parameters to macros 1-8
