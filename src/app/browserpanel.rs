@@ -413,7 +413,13 @@ impl App {
             let n_tab = if tab == Tab::Racks {
                 self.dev.my_racks.list.len()
             } else {
-                self.br.items.iter().filter(|i| i.in_tab(tab)).count()
+                // a file's extra programs count once "Show all programs" is on
+                let all = self.br.filter.all_programs;
+                self.br
+                    .items
+                    .iter()
+                    .filter(|i| i.in_tab(tab) && !(tab == Tab::Plugins && i.sub_program && !all))
+                    .count()
             };
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
