@@ -842,7 +842,7 @@ mod shade_tests {
 
 /// What a knob shows; shared by every rotary control (instrument and device
 /// knobs, generator macros, the mixer's send / pan knobs) so the themes stay
-/// in one place. Slate paints the knurled knob (`ember::knob_small`), the
+/// in one place. Slate paints the studio knob (`ember::knob_studio`), the
 /// classic themes the shaded (Polished) or flat cap with a value arc.
 #[derive(Clone, Copy)]
 pub struct KnobFace {
@@ -875,9 +875,21 @@ pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
     let t = th();
     let v = k.frac.clamp(0.0, 1.0);
     if t.ember {
-        let mut kp = p.clone();
-        kp.multiply_opacity(k.dim.max(0.55));
-        crate::ember::knob_small(&kp, c, rad + 2.5, v, &[]);
+        // the studio knob in the old footprint; stepped knobs get a dot per step
+        let steps = k.steps.round() as usize;
+        crate::ember::knob_studio(
+            p,
+            c,
+            crate::ember::studio_rad(rad + 2.5),
+            &crate::ember::StudioKnob {
+                frac: v,
+                bipolar: (k.from - 0.5).abs() < 0.01,
+                dots: if (1..=16).contains(&steps) { steps + 1 } else { 0 },
+                dim: k.dim.max(0.5),
+                locked: k.locked,
+                ..Default::default()
+            },
+        );
         return;
     }
     let dim = k.dim;

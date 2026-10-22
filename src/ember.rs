@@ -563,6 +563,32 @@ pub struct StudioKnob<'a> {
     pub dots: usize,
     /// 0..1 opacity (disabled knobs)
     pub dim: f32,
+    /// a locked value (Dice / Mutate keep it): the ring lights in ink
+    pub locked: bool,
+}
+
+/// the gap between a studio knob of radius `rad` and its dot ring
+fn studio_gap(rad: f32) -> f32 {
+    if rad < 12.0 {
+        3.0
+    } else {
+        (rad * 0.2).max(4.0)
+    }
+}
+
+/// the dot size of a studio knob of radius `rad`
+fn studio_dot(rad: f32) -> f32 {
+    (rad * 0.06).clamp(1.1, 2.2)
+}
+
+/// the largest studio knob radius whose dot ring stays inside `outer`
+/// (a knob that replaces an older one keeps its footprint)
+pub fn studio_rad(outer: f32) -> f32 {
+    let mut r = outer;
+    while r > 4.0 && r + studio_gap(r) + studio_dot(r) > outer {
+        r -= 0.25;
+    }
+    r
 }
 
 /// The studio knob: a matte dark hardware knob with a ridged edge, one
@@ -591,8 +617,9 @@ pub fn knob_studio(p: &Painter, c: Pos2, rad: f32, k: &StudioKnob) {
     } else {
         9
     };
-    let dr = (rad * 0.06).clamp(1.1, 2.2);
-    let ring = rad + (rad * 0.2).max(4.0);
+    let dr = studio_dot(rad);
+    let ring = rad + studio_gap(rad);
+    let lit_col = if k.locked { t.ink2 } else { orange };
     for i in 0..n {
         let f = i as f32 / (n - 1) as f32;
         let half = 0.5 / (n - 1) as f32;
@@ -604,7 +631,7 @@ pub fn knob_studio(p: &Painter, c: Pos2, rad: f32, k: &StudioKnob) {
         };
         let q = at(c, ring, knob_angle(f));
         if lit {
-            p.circle_filled(q, dr, orange);
+            p.circle_filled(q, dr, lit_col);
         } else {
             p.circle_filled(q, dr, hex(0x101113));
             p.circle_stroke(q, dr, Stroke::new(0.6, Color32::from_white_alpha(10)));
@@ -678,7 +705,7 @@ pub fn knob_studio(p: &Painter, c: Pos2, rad: f32, k: &StudioKnob) {
     let a = knob_angle(frac);
     p.line_segment(
         [at(c, face + rad * 0.04, a), at(c, cap - rad * 0.03, a)],
-        Stroke::new((rad * 0.075).clamp(1.3, 2.4), orange),
+        Stroke::new((rad * 0.075).clamp(1.3, 2.4), lit_col),
     );
     // labels outside: scale numbers, or min / max at the bottom
     let lf = label_font((rad * 0.42).clamp(10.0, 13.0));
@@ -805,103 +832,6 @@ pub fn knob_studio_ui(
         w
     });
     resp
-}
-
-/// pic-2 knob: knurled dark cap, inner face, acc-hot pointer with a slight
-/// glow, a tick ring (nearest tick in acc-hot). `rad` = outer radius of the
-/// tick ring (r 46 of the 100-unit box). `labels` (value, fraction) are
-/// drawn at the tick points (the scale variant).
-pub fn knob_small(p: &Painter, c: Pos2, rad: f32, frac: f32, labels: &[(&str, f32)]) {
-    let t = th();
-    let s = rad / 46.0;
-    let frac = frac.clamp(0.0, 1.0);
-    // tick ring
-    let near = (frac * 10.0).round() as usize;
-    for i in 0..11 {
-        let a = knob_angle(i as f32 / 10.0);
-        let col = if i == near { t.acc_hot } else { INK3 };
-        p.line_segment(
-            [at(c, 39.0 * s, a), at(c, 46.0 * s, a)],
-            Stroke::new((1.6 * s).max(1.0), col),
-        );
-    }
-    // cap
-    p.circle_filled(
-        c + Vec2::new(0.0, 1.8 * s),
-        33.0 * s,
-        Color32::from_black_alpha(120),
-    );
-    disc(p, c, 32.0 * s, false, |k| {
-        stops(
-            &[
-                (0.0, hex(0x5A5F66)),
-                (0.5, hex(0x2C3035)),
-                (1.0, hex(0x16181B)),
-            ],
-            k,
-        )
-    });
-    // knurl
-    let circ = std::f32::consts::TAU * 30.0 * s;
-    let n = ((circ / 2.8) as usize).clamp(16, 60) / 2 * 2;
-    for i in 0..n {
-        let a = i as f32 / n as f32 * std::f32::consts::TAU;
-        let col = if i % 2 == 0 {
-            Color32::from_white_alpha(26)
-        } else {
-            Color32::from_black_alpha(70)
-        };
-        p.line_segment(
-            [at(c, 28.0 * s, a), at(c, 32.0 * s, a)],
-            Stroke::new((1.3 * s).max(0.8), col),
-        );
-    }
-    // face
-    disc(p, c, 25.0 * s, false, |k| {
-        stops(&[(0.0, BG3), (1.0, hex(0x1F2226))], k)
-    });
-    p.circle_stroke(
-        c,
-        25.0 * s,
-        Stroke::new(1.0, Color32::from_black_alpha(100)),
-    );
-    // pointer
-    let a = knob_angle(frac);
-    let (p0, p1) = (at(c, 12.0 * s, a), at(c, 29.0 * s, a));
-    if bloom() {
-        p.line_segment(
-            [p0, p1],
-            Stroke::new((5.0 * s).max(2.5), alpha(t.accent, 0.18)),
-        );
-    }
-    p.line_segment([p0, p1], Stroke::new((2.6 * s).max(1.4), t.acc_hot));
-    // value labels at the tick points (scale variant)
-    if !labels.is_empty() {
-        let best = labels
-            .iter()
-            .enumerate()
-            .min_by(|a, b| {
-                (a.1 .1 - frac)
-                    .abs()
-                    .partial_cmp(&(b.1 .1 - frac).abs())
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|x| x.0);
-        for (i, (txt, k)) in labels.iter().enumerate() {
-            let a = knob_angle(*k);
-            let q = at(c, 58.0 * s, a);
-            let hot = Some(i) == best;
-            glow_text(
-                p,
-                q,
-                Align2::CENTER_CENTER,
-                txt,
-                label_font((15.0 * s).max(8.5)),
-                if hot { t.acc_hot } else { INK3 },
-                hot,
-            );
-        }
-    }
 }
 
 /// the pic-1 fader: dark slot, accent fill below the silver cap, a dB scale
