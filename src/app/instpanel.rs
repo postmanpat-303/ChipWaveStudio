@@ -2000,9 +2000,7 @@ impl App {
                 cx.changed |= super::voiceview::words_ui(ui, v);
             }
             (Custom::KitPiece, InstrumentKind::Gen(g)) => {
-                super::genview::kit_piece_ui(ui, &mut self.gen_ui);
-                ui.horizontal(|ui| {
-                    ui.add_space(14.0);
+                super::genview::kit_piece_ui(ui, &mut self.gen_ui, |ui| {
                     if ui
                         .button("Convert to Drum Kit")
                         .on_hover_text(
@@ -2018,7 +2016,7 @@ impl App {
                     }
                 });
             }
-            (Custom::KitPiece, _) => super::genview::kit_piece_ui(ui, &mut self.gen_ui),
+            (Custom::KitPiece, _) => super::genview::kit_piece_ui(ui, &mut self.gen_ui, |_| {}),
             (Custom::Dice, InstrumentKind::Gen(g)) => {
                 let mut out = super::genview::GenOut::default();
                 super::genview::dice_controls(ui, g, &mut self.gen_ui, sel, &mut out);

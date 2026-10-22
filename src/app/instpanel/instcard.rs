@@ -1314,11 +1314,17 @@ impl App {
                     yy += gh + 6.0;
                 }
             }
+            // too short to stack the custom controls over the knob row: the
+            // knobs go to the right of them instead of on top of them
+            let side = !customs.is_empty() && !knobs.is_empty() && yy + ch + kh > body.bottom();
+            let kw = knobs.len() as f32 * CELL.x;
+            let cright = if side {
+                body.right() - kw - 8.0
+            } else {
+                body.right()
+            };
             if !customs.is_empty() {
-                let cr = Rect::from_min_max(
-                    Pos2::new(body.left(), yy),
-                    Pos2::new(body.right(), yy + ch),
-                );
+                let cr = Rect::from_min_max(Pos2::new(body.left(), yy), Pos2::new(cright, yy + ch));
                 inside(ui, cr, egui::Layout::top_down(egui::Align::Min), |ui| {
                     for c in &customs {
                         self.custom_ui(ui, *c, inst, cx, body.height());
@@ -1326,8 +1332,8 @@ impl App {
                 });
             }
             if !knobs.is_empty() {
-                let kr =
-                    Rect::from_min_max(Pos2::new(body.left(), body.bottom() - CELL.y), body.max);
+                let left = if side { body.right() - kw } else { body.left() };
+                let kr = Rect::from_min_max(Pos2::new(left, body.bottom() - CELL.y), body.max);
                 let pad = ((kr.width() - knobs.len() as f32 * CELL.x) / 2.0).max(0.0);
                 inside(
                     ui,

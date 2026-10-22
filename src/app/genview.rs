@@ -176,7 +176,7 @@ pub(super) fn gen_panel(
         );
     });
     if is_kit {
-        kit_piece_ui(ui, st);
+        kit_piece_ui(ui, st, |_| {});
     }
     let sel = st.sel;
     if is_fx {
@@ -989,8 +989,9 @@ pub(super) fn dice_controls(
     });
 }
 
-/// kit piece buttons (which piece the knobs edit) and the note map
-pub(super) fn kit_piece_ui(ui: &mut egui::Ui, st: &mut GenUi) {
+/// kit piece buttons (which piece the knobs edit) and the note map, with
+/// `extra` (a button, say) to the right of the note map
+pub(super) fn kit_piece_ui(ui: &mut egui::Ui, st: &mut GenUi, extra: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal_wrapped(|ui| {
         ui.add_space(14.0);
         for i in 0..8 {
@@ -1013,6 +1014,7 @@ pub(super) fn kit_piece_ui(ui: &mut egui::Ui, st: &mut GenUi) {
             .small()
             .color(th().ink2),
         );
+        extra(ui);
     });
 }
 
