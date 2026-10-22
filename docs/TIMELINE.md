@@ -101,7 +101,7 @@ The lower panel has a **Piano roll** tab (next to Devices and Instrument; with t
 - **Ctrl+A** selects every note, **Del** / **Backspace** deletes the selection.
 - Each is **one undo step**. In a **linked** clip (*Linked ×N*) the copies are part of the shared notes, so every linked copy gets them (use *Make unique* first to change only this one).
 - Notes that would start past the clip's end are left out (the status line says how many). A Tracker column holds one note at a time: a copy that lands on a note ends it or replaces notes that start inside it, and only the top note of a chord is kept.
-- With the roll not focused, Ctrl+C / X / V keep their Tracker and Order list meaning, and Ctrl+D on the Timeline still duplicates clips. Musical typing (Ctrl+K) is unchanged.
+- With the roll not focused, Ctrl+C / X / V keep their Tracker and Order list meaning, and Ctrl+D on the Timeline still duplicates clips. Keys → Notes (Ctrl+K) is unchanged.
 
 **Navigating (hold to pan):** **press and hold** on empty grid for **¼ s** without moving (6 px), and the cursor becomes a grab hand: drag to scroll time and pitch together; let go and nothing is drawn. A quick click still draws a note, and a quick press-and-drag still draws / boxes / paints as before. **Middle-drag** pans straight away. The pan stops at the start, half a screen past the end and the key range. (Space+drag is not a pan: Space is play / stop.)
 
@@ -224,7 +224,7 @@ ChipWave starts with the clean song of File › New (no demo; the demos are in F
 
 The **Song / Master** track always sits at the bottom of the track list: the tracks, **+ Add track**, a divider, then Song / Master. Its lanes and Clip Arranger row follow, so rows stay lined up, and new tracks go above it. This is display only; the song file keeps its order.
 
-**Record** (toolbar ●, or **R**) records MIDI or musical typing (**Ctrl+K**) live onto the armed or selected track: into the note clip under the playhead, or a new Take clip. Loop recording overdubs, and a take is one undo step. With the toolbar's **Click** (metronome) on, it counts in one bar. See [MIDI.md](MIDI.md#recording).
+**Record** (toolbar ●, or **R**) records MIDI or **Keys → Notes** (**Ctrl+K**, play notes on the computer keyboard) live onto the armed or selected track: into the note clip under the playhead, or a new Take clip. Loop recording overdubs, and a take is one undo step. With the toolbar's **Click** (metronome) on, it counts in one bar. See [MIDI.md](MIDI.md#recording).
 
 ![A new song on the Timeline view: no tracks, only Song / Master, and the hint to drag an instrument from the Browser or + Add track](screenshots/dark-timeline-new-song.png)
 

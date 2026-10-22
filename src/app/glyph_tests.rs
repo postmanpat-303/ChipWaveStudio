@@ -5,7 +5,7 @@ use super::ui_tests::{frame, harness_with};
 use super::*;
 
 /// the UI files whose string literals are checked
-const SOURCES: [(&str, &str); 12] = [
+const SOURCES: [(&str, &str); 15] = [
     ("dropplan.rs", include_str!("dropplan.rs")),
     ("objpie.rs", include_str!("objpie.rs")),
     ("cliparr.rs", include_str!("cliparr.rs")),
@@ -18,6 +18,9 @@ const SOURCES: [(&str, &str); 12] = [
     ("timeline/edit.rs", include_str!("timeline/edit.rs")),
     ("drumkitview.rs", include_str!("drumkitview.rs")),
     ("dialogs.rs", include_str!("dialogs.rs")),
+    ("topbar.rs", include_str!("topbar.rs")),
+    ("typing.rs", include_str!("typing.rs")),
+    ("browserpanel.rs", include_str!("browserpanel.rs")),
 ];
 
 /// the non-ASCII characters inside string literals (comment lines and

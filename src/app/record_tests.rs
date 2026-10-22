@@ -284,10 +284,20 @@ fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
     h.state_mut().tlv.sel = Some(id);
     h.state_mut().tlv.sels = vec![id];
     frames(&mut h, 2);
+    assert_eq!(
+        h.query_all_by_label("Keys → Notes").count(),
+        2,
+        "the toolbar toggle and the piano roll's are called Keys → Notes"
+    );
+    assert_eq!(
+        h.query_all_by_label_contains("Typing").count(),
+        0,
+        "no old Typing label"
+    );
     key(&mut h, Key::K, egui::Modifiers::COMMAND);
     assert!(h.state().typing.on, "Ctrl+K: musical typing on");
     assert!(
-        h.query_by_label_contains("Typing C4").is_some(),
+        h.query_by_label_contains("Keys → Notes · C4").is_some(),
         "the toolbar shows it with its octave"
     );
     // S would split the selected clip: now it is a note

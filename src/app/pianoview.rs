@@ -1464,7 +1464,7 @@ impl App {
                         self.status = format!("Step input {}", if on { "off" } else { "on" });
                     }
                     let on = self.typing.on;
-                    if pr_btn(ui, "Typing", on, true, "musical typing: play notes on the computer keyboard (Ctrl+K)").clicked() {
+                    if pr_btn(ui, "Keys → Notes", on, true, "Keys → Notes (Ctrl+K): play notes on your computer keyboard. Off: those keys are normal shortcuts again.").clicked() {
                         self.typing_toggle();
                     }
                     // "Use track instrument": only while the clip has notes

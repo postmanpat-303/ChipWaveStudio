@@ -866,7 +866,7 @@ impl App {
                         "Recording - click (or R) to stop recording; playback goes on".to_string()
                     } else {
                         format!(
-                            "Record (R): the armed (or selected) track records what you play on the MIDI keyboard or with musical typing (Ctrl+K), in time{}",
+                            "Record (R): the armed (or selected) track records what you play on the MIDI keyboard or with Keys → Notes (Ctrl+K), in time{}",
                             if self.extra.metronome && self.extra.count_in {
                                 ", after a bar's count-in"
                             } else {
@@ -1061,23 +1061,61 @@ impl App {
                             a.advice().map(|s| format!("\n{s}")).unwrap_or_default()
                         ));
                 }
-                // musical typing: lit with its octave and velocity while on
+                // Keys → Notes (musical typing): lit with its octave and
+                // velocity while on, a small keyboard icon just left of it
+                // (laid out right to left, so it is added after the button)
                 let on = self.typing.on;
                 let txt = if on {
-                    format!("Typing {}", self.typing_label())
+                    format!("Keys → Notes · {}", self.typing_label())
                 } else {
-                    "Typing".to_string()
+                    "Keys → Notes".to_string()
                 };
-                if crate::ember::toggle(
+                // lit: the selection's own text colour (ember themes draw
+                // their own lit look; accent on the selection fill was
+                // unreadable in Amiga Workbench)
+                let col = if on {
+                    ui.visuals().selection.stroke.color
+                } else {
+                    hdr_dim()
+                };
+                let resp = crate::ember::toggle(
                     ui,
                     on,
-                    egui::RichText::new(txt.clone())
-                        .small()
-                        .color(if on { t.accent } else { hdr_dim() }),
+                    egui::RichText::new(txt.clone()).small().color(col),
                     &txt,
-                )
+                );
+                let (ir, iresp) =
+                    ui.allocate_exact_size(egui::vec2(14.0, 16.0), egui::Sense::click());
+                // the Browser's MIDI keyboard icon, redrawn finer for 14 px:
+                // four white keys and two black ones
+                {
+                    let p = ui.painter();
+                    let r = egui::Rect::from_center_size(ir.center(), egui::vec2(13.0, 9.0));
+                    p.rect_stroke(r, 1, egui::Stroke::new(1.0, col), egui::StrokeKind::Inside);
+                    let w = r.width() / 4.0;
+                    for k in 1..4 {
+                        let x = (r.left() + w * k as f32).round() + 0.5;
+                        p.line_segment(
+                            [egui::pos2(x, r.top()), egui::pos2(x, r.bottom())],
+                            egui::Stroke::new(1.0, col),
+                        );
+                    }
+                    for k in [1, 3] {
+                        let x = (r.left() + w * k as f32).round() + 0.5;
+                        p.rect_filled(
+                            egui::Rect::from_min_size(
+                                egui::pos2(x - 1.5, r.top()),
+                                egui::vec2(3.0, r.height() * 0.55),
+                            ),
+                            0,
+                            col,
+                        );
+                    }
+                }
+                let resp = resp | iresp;
+                if resp
                     .on_hover_text(
-                        "musical typing (Ctrl+K): play notes on the computer keyboard\nA S D F G H J K L ; white keys, W E T Y U O P black keys\nZ / X octave down / up, C / V velocity down / up\n(while on, those keys play notes instead of their shortcuts)",
+                        "Keys → Notes (Ctrl+K): play notes on your computer keyboard. A S D F G H J K L ; white keys, W E T Y U O P black keys, Z / X octave, C / V velocity. Off: those keys are normal shortcuts again.",
                     )
                     .clicked()
                 {
