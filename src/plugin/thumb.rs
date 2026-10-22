@@ -15,8 +15,9 @@ use std::time::{Duration, Instant};
 
 /// capture child timeout (CHIPWAVE_THUMB_TIMEOUT seconds overrides)
 pub const TIMEOUT: Duration = Duration::from_secs(25);
-/// longest side of a cached thumbnail
-pub const MAX_SIDE: u32 = 256;
+/// longest side of a cached thumbnail (2x the hover preview; plenty for a
+/// preview, small on disk)
+pub const MAX_SIDE: u32 = 320;
 /// row thumbnail size in the Browser
 pub const ROW: f32 = 28.0;
 /// hover / details preview size
@@ -133,6 +134,27 @@ pub fn save_png(path: &Path, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> 
     wtr.write_image_data(rgba).map_err(|e| e.to_string())
 }
 
+/// a captured editor: opaque RGB, best compression (a few tens of KB)
+pub fn save_compact_png(path: &Path, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
+    if let Some(d) = path.parent() {
+        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    let rgb: Vec<u8> = rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|&[r, g, b, _]| [r, g, b])
+        .collect();
+    let f = std::io::BufWriter::new(std::fs::File::create(path).map_err(|e| e.to_string())?);
+    let mut enc = png::Encoder::new(f, w, h);
+    enc.set_color(png::ColorType::Rgb);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.set_compression(png::Compression::High);
+    enc.set_filter(png::Filter::Adaptive);
+    let mut wtr = enc.write_header().map_err(|e| e.to_string())?;
+    wtr.write_image_data(&rgb).map_err(|e| e.to_string())
+}
+
 pub fn load_png(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     let f = std::fs::File::open(path).map_err(|e| e.to_string())?;
     let f = std::io::BufReader::new(f);
@@ -171,7 +193,8 @@ pub fn load_png(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     Ok((info.width, info.height, rgba))
 }
 
-/// downscale so the longest side is at most `max`
+/// downscale so the longest side is at most `max`, averaging each block of
+/// source pixels (thin lines and text stay readable, no aliasing)
 pub fn downscale(w: u32, h: u32, rgba: &[u8], max: u32) -> (u32, u32, Vec<u8>) {
     if w == 0 || h == 0 || rgba.len() < (w * h * 4) as usize {
         return (w, h, rgba.to_vec());
@@ -182,14 +205,31 @@ pub fn downscale(w: u32, h: u32, rgba: &[u8], max: u32) -> (u32, u32, Vec<u8>) {
     }
     let nw = ((w as u64 * max as u64) / long as u64).max(1) as u32;
     let nh = ((h as u64 * max as u64) / long as u64).max(1) as u32;
+    let span = |i: u32, n: u32, src: u32| {
+        let a = (i as u64 * src as u64 / n as u64) as u32;
+        let b = (((i + 1) as u64 * src as u64 / n as u64) as u32).max(a + 1);
+        (a, b.min(src))
+    };
     let mut out = vec![0u8; (nw * nh * 4) as usize];
     for y in 0..nh {
+        let (y0, y1) = span(y, nh, h);
         for x in 0..nw {
-            let sx = (x as u64 * w as u64) / nw as u64;
-            let sy = (y as u64 * h as u64) / nh as u64;
-            let si = ((sy * w as u64 + sx) * 4) as usize;
+            let (x0, x1) = span(x, nw, w);
+            let mut sum = [0u32; 4];
+            for sy in y0..y1 {
+                let row = (sy * w) as usize;
+                for sx in x0..x1 {
+                    let si = (row + sx as usize) * 4;
+                    for (c, v) in sum.iter_mut().zip(&rgba[si..si + 4]) {
+                        *c += *v as u32;
+                    }
+                }
+            }
+            let n = (y1 - y0) * (x1 - x0);
             let di = ((y * nw + x) * 4) as usize;
-            out[di..di + 4].copy_from_slice(&rgba[si..si + 4]);
+            for (o, c) in out[di..di + 4].iter_mut().zip(sum) {
+                *o = ((c + n / 2) / n) as u8;
+            }
         }
     }
     (nw, nh, out)
@@ -463,7 +503,7 @@ pub fn cli_capture(args: &[String]) -> i32 {
             return Err("editor capture was blank".into());
         }
         let (w, h, rgba) = downscale(w, h, &rgba, MAX_SIDE);
-        save_png(Path::new(out), w, h, &rgba)?;
+        save_compact_png(Path::new(out), w, h, &rgba)?;
         write_meta(
             &k,
             &Meta {
@@ -911,8 +951,29 @@ mod tests {
         let (w2, h2, rgba2) = load_png(&p).unwrap();
         assert_eq!((w2, h2), (w, h));
         assert_eq!(rgba2.len(), rgba.len());
-        let (dw, dh, _) = downscale(800, 600, &vec![0u8; 800 * 600 * 4], 256);
-        assert!(dw <= 256 && dh <= 256);
+        let (dw, dh, _) = downscale(800, 600, &vec![0u8; 800 * 600 * 4], MAX_SIDE);
+        assert_eq!((dw, dh), (320, 240));
+        // a big editor: averaged down, saved small and read back
+        let (w, h) = (1200u32, 800u32);
+        let mut big = vec![255u8; (w * h * 4) as usize];
+        for (i, px) in big.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            // 1-px black/white stripes average to greys (3 or 4 columns a pixel), not black or white
+            let v = if i % 2 == 0 { 0 } else { 255 };
+            px[..3].copy_from_slice(&[v, v, v]);
+        }
+        let (sw, sh, small) = downscale(w, h, &big, MAX_SIDE);
+        assert_eq!((sw, sh), (320, 213));
+        assert!(small
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|p| (80..=176).contains(&p[0])));
+        let p2 = dir.join("cap.png");
+        save_compact_png(&p2, sw, sh, &small).unwrap();
+        assert!(std::fs::metadata(&p2).unwrap().len() < 64 * 1024);
+        let (w3, h3, back) = load_png(&p2).unwrap();
+        assert_eq!((w3, h3), (sw, sh));
+        assert_eq!(back, small);
     }
 
     #[test]
