@@ -12,6 +12,7 @@
 //! into the engine under the audio lock; the audio thread only feeds events
 //! and pulls audio (no allocation, no locks).
 pub mod clap;
+pub mod debug;
 pub mod fxrack;
 pub mod gui;
 pub mod scan;
@@ -146,6 +147,7 @@ pub fn instantiate(p: &PluginPatch, sr: f32) -> Result<Box<dyn Hosted>, String> 
             p.name, p.id
         )
     })?;
+    let _t = debug::Timed::new(|| format!("load {} ({}) from {}", p.name, p.id, path.display()));
     let mut inst: Box<dyn Hosted> = match p.format.as_str() {
         "clap" => Box::new(clap::ClapInst::new(&path, &p.id, sr)?),
         "vst3" => Box::new(vst3::Vst3Inst::new(&path, &p.id, sr)?),

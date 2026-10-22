@@ -453,6 +453,7 @@ pub fn cli_capture(args: &[String]) -> i32 {
         let limit = timeout() + Duration::from_secs(2);
         std::thread::spawn(move || {
             std::thread::sleep(limit);
+            crate::plugin::debug::log(|| format!("thumbnail child: {n2} timed out, exiting"));
             write_card(&k2, &n2, &v2, &f2, Kind::Failed, "timed out");
             if let Some(p) = png_path(&k2) {
                 if p != Path::new(&out2) {
@@ -467,11 +468,16 @@ pub fn cli_capture(args: &[String]) -> i32 {
         if !path_buf.exists() {
             return Err(format!("plugin file missing: {path}"));
         }
+        crate::plugin::debug::log(|| {
+            format!("thumbnail child: capturing {name} ({id}) from {path}")
+        });
+        let t = crate::plugin::debug::Timed::new(|| format!("thumbnail child: load {name}"));
         let mut inst: Box<dyn Hosted> = match format.as_str() {
             "clap" => Box::new(clap::ClapInst::new(&path_buf, id, 48_000.0)?),
             "vst3" => Box::new(vst3::Vst3Inst::new(&path_buf, id, 48_000.0)?),
             f => return Err(format!("unknown format {f}")),
         };
+        drop(t);
         if !inst.has_editor() {
             return Err("no editor".into());
         }
@@ -834,7 +840,16 @@ impl Queue {
         let mut finished = false;
         if let Some(child) = &mut self.child {
             match child.try_wait() {
-                Ok(Some(_)) => {
+                Ok(Some(st)) => {
+                    crate::plugin::debug::log(|| {
+                        format!(
+                            "thumbnail: capture of {} finished ({st}) after {:.1}s",
+                            self.child_key,
+                            self.started
+                                .map(|t| t.elapsed().as_secs_f64())
+                                .unwrap_or(0.0)
+                        )
+                    });
                     self.child = None;
                     self.child_key.clear();
                     self.child_path.clear();
@@ -844,6 +859,9 @@ impl Queue {
                 }
                 Ok(None) => {
                     if self.started.is_some_and(|t| t.elapsed() > timeout()) {
+                        crate::plugin::debug::log(|| {
+                            format!("thumbnail: capture of {} timed out, killed", self.child_key)
+                        });
                         let _ = child.kill();
                         let _ = child.wait();
                         self.child = None;
@@ -897,6 +915,14 @@ impl Queue {
                     }
                     match cmd.spawn() {
                         Ok(c) => {
+                            crate::plugin::debug::log(|| {
+                                format!(
+                                    "thumbnail: capture child {} started for {} ({})",
+                                    c.id(),
+                                    p.name,
+                                    p.path
+                                )
+                            });
                             self.child = Some(c);
                             self.child_key = k;
                             self.child_path = file_key(&p.format, &p.path);

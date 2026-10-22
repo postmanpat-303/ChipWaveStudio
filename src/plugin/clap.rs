@@ -1071,6 +1071,7 @@ impl Hosted for ClapInst {
             return Err("this plugin has no editor; use the parameter list".into());
         }
         self.flags.gui_closed.store(false, Ordering::Release);
+        let _t = super::debug::Timed::new(|| format!("{}: open editor", self.desc.name));
         let w = super::gui::open(self.plugin, self.gui, title)?;
         self.gui_win = Some(w);
         Ok(())
@@ -1078,6 +1079,7 @@ impl Hosted for ClapInst {
 
     fn close_editor(&mut self) {
         if let Some(w) = self.gui_win.take() {
+            let _t = super::debug::Timed::new(|| format!("{}: close editor", self.desc.name));
             super::gui::close(self.plugin, self.gui, w);
         }
     }
