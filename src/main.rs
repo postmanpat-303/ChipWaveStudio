@@ -51,6 +51,7 @@ mod sample;
 mod settings;
 mod showcase;
 mod speech;
+mod strings;
 mod synth;
 mod theme;
 mod timeline;

@@ -80,6 +80,7 @@ impl MacroDef {
             "oct" => format!("{x:+.1} oct"),
             "ms" => format!("{x:.1} ms"),
             "v" => format!("{x:+.2}"),
+            "dB" => format!("{x:+.1} dB"),
             _ => format!("{:.0} %", x * 100.0),
         }
     }
