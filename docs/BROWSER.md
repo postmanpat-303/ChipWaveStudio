@@ -15,29 +15,37 @@ Whether it is open and how wide it is are saved in `settings.toml` (`browser_ope
 
 ## Layout
 
-From top to bottom (this is mockup B, `docs/mockups/src/browser_b.html`):
+From top to bottom:
 
-1. **Header:** the BROWSER chip, the tab and how many items it has, and three buttons: **♥** (favourites only), **rescan** (library and locations, in the background) and **•••** (Add folder…, Rescan locations, Find plugins…, Auto-play on select, remove a location).
-2. **Category tabs** (4 per row), each in its format's colour:
+1. **Header:** the BROWSER chip, a spinner with the file count while folders or plugins are being scanned, **•••** and **×**. **•••** holds the panel's housekeeping and nothing else: **Rescan locations**, **Remove a location** (a submenu, the files stay where they are), **Find plugins…**, **Get showcase instruments…**, **Rescan plugins** and the **Plugin thumbnails** switch.
+2. **Category tiles**, two rows of three, each icon in its format's colour (narrow panels drop the icons; long names end in "…" and the tooltip has the full text): **Instruments**, **Effects**, **VST & CLAP**, **Samples**, **Songs** and **More ▾**. **More** opens the other seven categories, each with a one-line description; while one of them is open the More tile shows its name (click it again to switch to another one). The category you were on is remembered.
 
-   | Tab | Shows |
+   | Category | Shows |
    |---|---|
    | **Instruments** | blank Synth and Voice, every generator preset (Drum Synth, kits, Chip FX, Analog, FM-4, Noise, Wave, Grid), your `.cwi` instrument library, `.cwi` files in your locations, and the open song's instruments (Location *This song*) |
-   | **Effects** | ChipWave's built-in effects (EQ, Delay, Reverb, Compressor, Filter …, each with a one-line description), the Grid FX patches and every effect plugin from the scan. **Adds to: …** at the top says which track / instrument a double-click adds to; drag into the lower panel's **Devices** row to insert between two devices ([FX.md › Devices](FX.md#devices-tab-unreleased)) |
-   | **VST & CLAP** | CLAP and VST3 plugins from the plugin scan, instruments and effects (the subtitle says which). A plugin file that holds several instruments or programs is listed once, by its **main instrument** (the one named like the file, else the shortest instrument name); the row says *+N programs*. Searching finds the others, and **Show all programs** (shown on this tab only when a file has extras) lists them all. Effect-only files are listed as before. **Find plugins…** and **Rescan plugins** are on this tab. (Until this version the tab was called *Plugins*.) |
+   | **Effects** | ChipWave's built-in effects (EQ, Delay, Reverb, Compressor, Filter …, each with a one-line description), the Grid FX patches and every effect plugin from the scan. The slim **Adds to: …** line under the search says which track / instrument a double-click adds to; when Nested Device Chains is hidden, clicking it opens it (also **Ctrl+7**), so you can drag an effect between two devices ([FX.md › Devices](FX.md#devices-tab-unreleased)) |
+   | **VST & CLAP** | CLAP and VST3 plugins from the plugin scan, instruments and effects (the subtitle says which). A plugin file that holds several instruments or programs is listed once, by its **main instrument** (the one named like the file, else the shortest instrument name); the row says *+N programs*. Searching finds the others, and **Show all programs** (shown on this category only when a file has extras) lists them all. Effect-only files are listed as before. **Find plugins…**, **Get showcase instruments…** and **Rescan plugins** are in **•••**. (Until this version the category was called *Plugins*.) |
    | **Samples** | WAV, FLAC, MP3 and Ogg files in your locations |
    | **Songs** | the demo songs, `.cwt` / `.cwt.toml` songs in your locations, and MOD / MED files (listed; import is planned) |
-   | **Presets** | the factory presets and built-in patches ([STARTER_SOUNDS.md](STARTER_SOUNDS.md), Voice presets) |
-   | **Grid** | the Grid starter patches: Grid instruments and Grid FX ([GRID.md](GRID.md)) |
-   | **Wavetables** | the Wave generator's 10 built-in tables and wavetable WAVs in your locations (files in a `wavetable` / `tables` folder, or with a `clm ` chunk) |
-   | **MIDI** | `.mid` files in your locations (listed; MIDI file import is planned) |
+   | More › **My Racks** | the racks you saved ([RACKS.md](RACKS.md)) |
+   | More › **Presets** | the factory presets and built-in patches ([STARTER_SOUNDS.md](STARTER_SOUNDS.md), Voice presets) |
+   | More › **Grid** | the Grid starter patches: Grid instruments and Grid FX ([GRID.md](GRID.md)) |
+   | More › **Wavetables** | the Wave generator's 10 built-in tables and wavetable WAVs in your locations (files in a `wavetable` / `tables` folder, or with a `clm ` chunk) |
+   | More › **MIDI** | `.mid` files in your locations (listed; MIDI file import is planned) |
+   | More › **Drum Patterns** | ready-made drum grooves by style (below) |
+   | More › **Files** | your drives and folders (below) |
 
-3. **Search:** every word must match the name, category, creator, details or tags (`bass chip`).
-4. **Tag chips:** Bass, Lead, Pad, Keys, Drums, FX, Chip, Analog, FM, Voice, Warm, Bright, Plucky, Evolving, Showcase. Only the tags the tab has are shown; several chips narrow the list (all must match). Tags come from the names, categories and kinds.
-5. **Category, Creator and Location columns** with counts. Click a value to filter, **All** to clear. Location is *All*, *Library* (built in, your library, plugins), *This song*, *Favourites* and each folder you added.
-6. **Results**, sortable by **Name**, **Type** or **Rating**. Each row has a coloured stripe and an outlined **text tag** for its format (CWI, CLAP, VST3, WAV …), the name, a second line (kind, category, size…), its **stars** and a **heart**.
-7. **Preview bar:** ▶ / ■, "Preview on C-3 · plays through track NN …" and the **Auto** (auto-play) toggle.
-8. **Colour legend:** CWI instrument, VST3 plugin, CLAP plugin, WAV / FLAC / MP3 / OGG sample, CWT song, MOD/MED*, WT wavetable, GRID patch, MIDI* (* = import planned).
+3. **Search and Filter:** the search box ("Search effects", "Search VST & CLAP" …): every word must match the name, category, creator, details or tags (`bass chip`). Next to it, **Filter** opens a popover (it reads **Filter · n** while n filters are on):
+   - **SHOW:** **♥ Favourites** (with this category's count) and the tag chips: Bass, Lead, Pad, Keys, Drums, FX, Chip, Analog, FM, Voice, Warm, Bright, Plucky, Evolving, Showcase. Only the tags the category has are shown; several chips narrow the list (all must match). Tags come from the names, categories and kinds.
+   - **CATEGORY:** chips with counts (**All** clears it).
+   - **CREATOR** and **LOCATION** drop-downs with counts. Location is *All*, *Library* (built in, your library, plugins), *This song* and each folder you added; **+ Add folder…** under it adds one.
+   - **Clear all** turns every filter off (the search stays). A click outside the popover or **Esc** closes it.
+
+   Filters that are on show as **pills** under the search (`Bass  ×`, `♥ Favourites  ×` …); click one to remove it. Switching category clears its category, creator and tags; the search, favourites and location stay. My Racks, Drum Patterns and Files have their own search and controls, so they show no Filter button.
+4. **Results:** "n results" and **Sort** (**Name**, **Type** or **Rating**), then the list, which gets the rest of the height. Each row has a coloured stripe and an outlined **text tag** for its format (CWI, CLAP, VST3, WAV …), the name, a second line (kind, category, size…), its **stars** and a **heart**.
+5. **Preview bar:** ▶ / ■, "Preview on C-3 · plays through track NN …", the **Auto** (auto-play on select) switch and **?**: hover it for the colour key (CWI instrument, VST3 plugin, CLAP plugin, WAV / FLAC / MP3 / OGG sample, CWT song, MOD/MED*, WT wavetable, GRID patch, MIDI*; * = import planned).
+
+Each action has one home: favourites and **+ Add folder…** in Filter, rescans, Find plugins, Get showcase instruments and Plugin thumbnails in **•••**, auto-play in the preview bar, the colour key in its **?**.
 
 ## Showcase plugins
 
@@ -65,7 +73,7 @@ Current catalogue (not bundled with ChipWave; install them yourself or with **Ge
 
 ### Get showcase instruments…
 
-Browser › **VST & CLAP** tab › **Get showcase instruments…** (also in the Browser's ••• menu) opens a dialog listing the catalogue above with creator, category, licence, download size and a link to each project's source code. Tick what you want and press **Download & install**:
+Browser › **•••** › **Get showcase instruments…** opens a dialog listing the catalogue above with creator, category, licence, download size and a link to each project's source code. Tick what you want and press **Download & install**:
 
 1. ChipWave downloads each instrument from its **creator's own GitHub release** (URLs, versions, sizes and SHA-256 sums are pinned in `src/showcase/mod.rs`; nothing else is fetched).
 2. The **SHA-256** of every download is checked; a mismatch (or a missing file) stops that item with a clear message and an **Open download page** button. Nothing is installed from a bad download.
@@ -115,7 +123,7 @@ Plugins with no editor, editors that only open in their own floating window (CLA
 
 ## Drum Patterns
 
-The **Drum Patterns** tab (grid icon) holds 67 ready-made grooves in 14 style folders: Psytrance / Dark psy (6), Techno (5), House (5), Trance (4), DnB / Jungle (5), Breakbeat (4), Hip-hop / Lo-fi (6), Trap (4), Disco / Funk (4), Synthwave / 80s (4), Reggaeton / Dembow (4), Amiga / Chip (4), Afro / Latin (5) and Fills (7). Each pattern has a name, a length in bars (1, 2 or 4), a suggested BPM range and a paired kit.
+The **Drum Patterns** category (More › Drum Patterns) holds 67 ready-made grooves in 14 style folders: Psytrance / Dark psy (6), Techno (5), House (5), Trance (4), DnB / Jungle (5), Breakbeat (4), Hip-hop / Lo-fi (6), Trap (4), Disco / Funk (4), Synthwave / 80s (4), Reggaeton / Dembow (4), Amiga / Chip (4), Afro / Latin (5) and Fills (7). Each pattern has a name, a length in bars (1, 2 or 4), a suggested BPM range and a paired kit.
 
 - **Rows:** a step-grid icon that turns into **Play** on hover, the name, a **step thumbnail** of the first bar (hats on top, snares and claps in the middle, the kick at the bottom), the heart, and a **PATTERN** tag. The pattern playing has an accent bar, a **Stop** icon and a progress line under the row.
 - **Navigation:** click a style folder to open it, **Up** or the breadcrumb (`Drum Patterns › Techno`) to go back. Searching looks through every style at once (name, style, kit, BPM). **Favourites** shows only hearted patterns.
@@ -140,7 +148,7 @@ Click the Play icon on a row, select a row while **Auto** is on, or press Space.
 
 ## Files and drives
 
-The **Files** tab is a small file browser:
+The **Files** category (More › Files) is a small file browser:
 
 - **Quick locations:** Home, Music, Desktop, Downloads (OneDrive folders are used when Windows moved them there).
 - **Drives** opens a list of every drive: local, USB / removable, and **mapped network drives** (tagged NET, with their `\\server\share` path). Drives are read in the background with a 2.5 s timeout, so a sleeping NAS never freezes the app; one that doesn't answer shows *not responding*, and a disconnected mapping shows *not connected*.
@@ -154,11 +162,11 @@ Mapped drives (such as Z:) belong to your normal, unelevated Windows sign-in. A 
 
 ## Favourites and ratings
 
-Click the **heart** at the end of a row (or right-click › Add to favourites) and the **stars** (1–5; click the same number again to clear). Both are saved in `settings.toml` (`browser_favs`, `browser_ratings`) under the item's key: a file's path, or a name for built-in items. The heart in the header, the **Favourites · n** chip (first in the tag row, with the count for this tab) and the *Favourites* location show only favourites; **Sort: Rating** puts the best first.
+Click the **heart** at the end of a row (or right-click › Add to favourites) and the **stars** (1–5; click the same number again to clear). Both are saved in `settings.toml` (`browser_favs`, `browser_ratings`) under the item's key: a file's path, or a name for built-in items. **Filter › ♥ Favourites** (with the count for this category) shows only favourites, with a **♥ Favourites ×** pill while it is on; **Sort: Rating** puts the best first.
 
 ## Locations (your folders)
 
-**+ Add folder…** (in the Location column) or **••• › Add folder…** adds a folder. It is scanned **in the background** (the header shows a spinner and the file count; the UI never waits): samples, songs, `.cwi` files, wavetables, MIDI and module files, down to 12 folders deep, skipping hidden folders, symbolic links and plugin bundles, at most 50 000 files per folder. The result is cached in `browser-index.json` next to the settings, so the Browser shows the last scan at once on the next start and rescans quietly. Right-click a location for **Rescan** or **Remove this location** (the files stay where they are). The folder list is `browser_dirs` in `settings.toml`. Category is a file's folder; Creator is "User".
+**Filter › + Add folder…** (under Location) adds a folder. It is scanned **in the background** (the header shows a spinner and the file count; the UI never waits): samples, songs, `.cwi` files, wavetables, MIDI and module files, down to 12 folders deep, skipping hidden folders, symbolic links and plugin bundles, at most 50 000 files per folder. The result is cached in `browser-index.json` next to the settings, so the Browser shows the last scan at once on the next start and rescans quietly. **••• › Rescan locations** scans them all again and **••• › Remove a location** removes one (the files stay where they are). The folder list is `browser_dirs` in `settings.toml`. Category is a file's folder; Creator is "User".
 
 The instrument library folder ([INSTRUMENT_LIBRARY.md](INSTRUMENT_LIBRARY.md)) is read by the same background scan.
 
@@ -206,7 +214,7 @@ Selecting an instrument, preset, `.cwi`, sample or wavetable with **Auto** on pl
 
 ## Keyboard
 
-Click into the Browser and it has the keyboard: **↑ / ↓**, **Home / End** move the selection (and preview with Auto on), **Enter** loads, **Space** previews, **Esc** gives the keyboard back. Ctrl shortcuts work as everywhere else. **Ctrl+B** shows and hides the panel (remappable in Settings › Keys as "Show / hide the Browser").
+Click into the Browser and it has the keyboard: **↑ / ↓**, **Home / End** move the selection (and preview with Auto on), **Enter** loads, **Space** previews, **Esc** closes an open Filter or More popover, else gives the keyboard back. Ctrl shortcuts work as everywhere else. **Ctrl+B** shows and hides the panel (remappable in Settings › Keys as "Show / hide the Browser").
 
 ## Find plugins
 
@@ -216,7 +224,7 @@ On the **first start** (and once for users of earlier versions) ChipWave asks ho
 2. **Choose folders myself:** a folder picker with an add / remove list.
 3. **Skip for now.**
 
-The search runs **in the background** with a live count and the folder it is in, and **Stop** ends it. It then lists every folder it found with its plugin count (untick any you don't want) and **Add N folders** puts them in the plugin folders (**Settings › Plugins**) **and** the Browser's locations, then runs the plugin scan. It is never shown again unless you ask: **Settings › Plugins › Find plugins…** and the **VST & CLAP** tab's **Find plugins…** open it any time. The answer is saved as `plugin_setup_done`. Details on scanning: [PLUGINS.md](PLUGINS.md#finding-plugins).
+The search runs **in the background** with a live count and the folder it is in, and **Stop** ends it. It then lists every folder it found with its plugin count (untick any you don't want) and **Add N folders** puts them in the plugin folders (**Settings › Plugins**) **and** the Browser's locations, then runs the plugin scan. It is never shown again unless you ask: **Settings › Plugins › Find plugins…** and the Browser's **••• › Find plugins…** open it any time. The answer is saved as `plugin_setup_done`. Details on scanning: [PLUGINS.md](PLUGINS.md#finding-plugins).
 
 ## Tracks from the timeline headers
 
