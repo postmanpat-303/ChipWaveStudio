@@ -76,6 +76,12 @@ pub fn open(
         if sup(p, API.as_ptr(), false) {
             return win::open_embedded(p, g, title);
         }
+        #[cfg(windows)]
+        if win::silent() {
+            // thumbnail capture: a plugin-made floating window can't be kept
+            // off-screen and quiet, so it gets a card instead
+            return Err("floating editor (not captured)".into());
+        }
         if sup(p, API.as_ptr(), true) {
             let create = gui.create.ok_or("no editor")?;
             if !create(p, API.as_ptr(), true) {
@@ -151,6 +157,62 @@ pub mod win {
         quiet: bool,
     }
     static WINDOWS: Mutex<Vec<Entry>> = Mutex::new(Vec::new());
+
+    /// thumbnail-capture child: editor windows are created off-screen, never
+    /// activated, kept off the taskbar and out of Alt+Tab
+    static SILENT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+    pub fn set_silent() {
+        SILENT.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn silent() -> bool {
+        SILENT.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// silent window style: a borderless tool window that never takes focus
+    const SILENT_EX: u32 = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+
+    /// a spot just right of every monitor (the window's whole rect is off-screen)
+    fn off_screen() -> (i32, i32) {
+        unsafe {
+            let x = GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            (x + 64, GetSystemMetrics(SM_YVIRTUALSCREEN))
+        }
+    }
+
+    /// show without activating (silent) or normally
+    fn show(hwnd: HWND) {
+        unsafe {
+            ShowWindow(hwnd, if silent() { SW_SHOWNOACTIVATE } else { SW_SHOW });
+        }
+    }
+
+    /// second try for a capture that came back blank off-screen: make the
+    /// window fully transparent and click-through, and put it on the screen
+    /// (some editors only paint where a monitor is). Still never activated,
+    /// still invisible.
+    pub fn transparent_on_screen(hwnd: isize) {
+        unsafe {
+            let h = hwnd as HWND;
+            let ex = GetWindowLongW(h, GWL_EXSTYLE) as u32;
+            SetWindowLongW(
+                h,
+                GWL_EXSTYLE,
+                (ex | WS_EX_LAYERED | WS_EX_TRANSPARENT | SILENT_EX) as i32,
+            );
+            SetLayeredWindowAttributes(h, 0, 0, LWA_ALPHA);
+            SetWindowPos(
+                h,
+                HWND_BOTTOM,
+                GetSystemMetrics(SM_XVIRTUALSCREEN),
+                GetSystemMetrics(SM_YVIRTUALSCREEN),
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            );
+        }
+    }
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -258,7 +320,14 @@ pub mod win {
         resizable: bool,
         owner: Owner,
     ) -> Result<isize, String> {
-        let st = style(resizable);
+        let quiet = silent();
+        let st = if quiet { WS_POPUP } else { style(resizable) };
+        let ex = if quiet { SILENT_EX } else { 0 };
+        let (x, y) = if quiet {
+            off_screen()
+        } else {
+            (CW_USEDEFAULT, CW_USEDEFAULT)
+        };
         let mut r = RECT {
             left: 0,
             top: 0,
@@ -267,14 +336,14 @@ pub mod win {
         };
         let t = wide(title);
         let hwnd = unsafe {
-            AdjustWindowRectEx(&mut r, st, 0, 0);
+            AdjustWindowRectEx(&mut r, st, 0, ex);
             CreateWindowExW(
-                0,
+                ex,
                 class(),
                 t.as_ptr(),
                 st,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
+                x,
+                y,
                 r.right - r.left,
                 r.bottom - r.top,
                 std::ptr::null_mut(),
@@ -358,7 +427,7 @@ pub mod win {
             }
             return Err("the plugin refused the editor window".into());
         }
-        ShowWindow(hwnd, SW_SHOW);
+        show(hwnd);
         if let Some(s) = gui.show {
             s(p);
         }
@@ -376,22 +445,25 @@ pub mod win {
     }
 
     pub fn raise(hwnd: isize) {
-        unsafe {
-            ShowWindow(hwnd as HWND, SW_SHOW);
-            SetForegroundWindow(hwnd as HWND);
+        show(hwnd as HWND);
+        if !silent() {
+            unsafe {
+                SetForegroundWindow(hwnd as HWND);
+            }
         }
     }
 
     pub fn resize(hwnd: isize, w: u32, h: u32) {
         unsafe {
             let st = GetWindowLongW(hwnd as HWND, GWL_STYLE) as u32;
+            let ex = if silent() { SILENT_EX } else { 0 };
             let mut r = RECT {
                 left: 0,
                 top: 0,
                 right: w as i32,
                 bottom: h as i32,
             };
-            AdjustWindowRectEx(&mut r, st, 0, 0);
+            AdjustWindowRectEx(&mut r, st, 0, ex);
             SetWindowPos(
                 hwnd as HWND,
                 std::ptr::null_mut(),
