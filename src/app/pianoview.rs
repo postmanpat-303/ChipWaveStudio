@@ -1129,6 +1129,19 @@ impl App {
     fn pr_ruler_marks(&self, ui: &egui::Ui, fx_r: Rect, grid_t: Tick, t: &crate::theme::Theme) {
         let p = ui.painter_at(fx_r);
         let ppt = self.pr.ppt() as f32;
+        // marks that read on the strip (crt_bot) in every theme: the theme's
+        // ink if it contrasts enough (Amiga's is dark on a dark strip)
+        let lum = |c: Color32| 0.299 * c.r() as f32 + 0.587 * c.g() as f32 + 0.114 * c.b() as f32;
+        let bg = lum(t.crt_bot);
+        let ink = [
+            t.ink2,
+            t.ink,
+            Color32::from_gray(215),
+            Color32::from_gray(25),
+        ]
+        .into_iter()
+        .find(|c| (lum(*c) - bg).abs() >= 100.0)
+        .unwrap_or(t.ink2);
         let (bar_t, beat_t) = (16 * ROW, 4 * ROW);
         let t0 = self.pr.scroll_x.max(0.0) as Tick;
         let t1 = self.pr.tick_at(fx_r.right()).ceil() as Tick + 1;
@@ -1146,14 +1159,12 @@ impl App {
             }
         };
         if grid_t < beat_t {
-            ticks(grid_t, 3.0, t.ink2.gamma_multiply(0.45), &|tk| {
+            ticks(grid_t, 3.0, ink.gamma_multiply(0.45), &|tk| {
                 tk % beat_t == 0
             });
         }
-        ticks(beat_t, 7.0, t.ink2.gamma_multiply(0.75), &|tk| {
-            tk % bar_t == 0
-        });
-        ticks(bar_t, fx_r.height(), t.ink2, &|_| false);
+        ticks(beat_t, 7.0, ink.gamma_multiply(0.75), &|tk| tk % bar_t == 0);
+        ticks(bar_t, fx_r.height(), ink, &|_| false);
         // bar numbers: every bar, or every 2nd/4th... when they would crowd
         let mut every = 1;
         while (every * bar_t) as f32 * ppt < 24.0 && every < 1024 {
@@ -1168,7 +1179,7 @@ impl App {
                     egui::Align2::LEFT_CENTER,
                     format!("{}", b + 1),
                     font.clone(),
-                    t.ink2,
+                    ink,
                 );
             }
             b += 1;
@@ -1183,7 +1194,7 @@ impl App {
                         egui::Align2::LEFT_CENTER,
                         format!("{}.{}", tk / bar_t + 1, tk % bar_t / beat_t + 1),
                         small.clone(),
-                        t.ink2.gamma_multiply(0.8),
+                        ink.gamma_multiply(0.8),
                     );
                 }
                 tk += beat_t;

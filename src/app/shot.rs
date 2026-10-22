@@ -1756,6 +1756,53 @@ impl App {
                     }
                 }
             }
+            "marker" => {
+                // bar 1 copied; a click in the ruler at bar 3 places the
+                // paste marker, then Ctrl+V twice: two copies end to end,
+                // the marker after them
+                self.pr.zoom = 10.0;
+                self.pr.tool = super::pianoview::PrTool::Pointer;
+                if let Some(super::pianoview::Source::Notes(mut d)) = self.pr_read(t) {
+                    d.notes.retain(|n| n.start < bar);
+                    if let Some(k) = d.notes.iter().map(|n| n.key).max() {
+                        // the copied notes in view
+                        self.pr.scroll_y = ((120.0 - k as f32 - 3.0) * self.pr.key_h).max(0.0);
+                    }
+                    self.pr.sel = (0..d.notes.len()).collect();
+                    self.pr_write(t, super::pianoview::Source::Notes(d));
+                }
+                self.pr_copy(false, ctx);
+                let rp = Pos2::new(x(self, 2 * bar) + 3.0, self.pr.grid_rect.top() - 8.0);
+                let cmd = egui::Modifiers::COMMAND;
+                let kv = |down: bool| egui::Event::Key {
+                    key: egui::Key::V,
+                    physical_key: None,
+                    pressed: down,
+                    repeat: false,
+                    modifiers: cmd,
+                };
+                let mut f = CAPTURE_AT - 60;
+                sc.push((f, mv(rp)));
+                f += 2;
+                sc.push((f, btn(rp, prim, true, none)));
+                f += 2;
+                sc.push((f, btn(rp, prim, false, none)));
+                for _ in 0..2 {
+                    f += 6;
+                    sc.push((f, kv(true)));
+                    f += 2;
+                    sc.push((f, kv(false)));
+                }
+                // the mouse off the ruler (no tooltip over the result)
+                f += 4;
+                sc.push((
+                    f,
+                    mv(Pos2::new(
+                        x(self, bar / 2),
+                        self.pr.grid_rect.bottom() - 4.0,
+                    )),
+                ));
+            }
             _ => {
                 // chord shots: a Cinematic progression in E minor on the lane
                 self.with(|s| {
