@@ -24,7 +24,7 @@ From top to bottom (this is mockup B, `docs/mockups/src/browser_b.html`):
    |---|---|
    | **Instruments** | blank Synth and Voice, every generator preset (Drum Synth, kits, Chip FX, Analog, FM-4, Noise, Wave, Grid), your `.cwi` instrument library, `.cwi` files in your locations, and the open song's instruments (Location *This song*) |
    | **Effects** | ChipWave's built-in effects (EQ, Delay, Reverb, Compressor, Filter …, each with a one-line description), the Grid FX patches and every effect plugin from the scan. **Adds to: …** at the top says which track / instrument a double-click adds to; drag into the lower panel's **Devices** row to insert between two devices ([FX.md › Devices](FX.md#devices-tab-unreleased)) |
-   | **Plugins** | CLAP and VST3 plugins from the plugin scan, instruments and effects (the subtitle says which). **Find plugins…** and **Rescan plugins** are on this tab |
+   | **VST & CLAP** | CLAP and VST3 plugins from the plugin scan, instruments and effects (the subtitle says which). A plugin file that holds several instruments or programs is listed once, by its **main instrument** (the one named like the file, else the shortest instrument name); the row says *+N programs*. Searching finds the others, and **Show all programs** (shown on this tab only when a file has extras) lists them all. Effect-only files are listed as before. **Find plugins…** and **Rescan plugins** are on this tab. (Until this version the tab was called *Plugins*.) |
    | **Samples** | WAV, FLAC, MP3 and Ogg files in your locations |
    | **Songs** | the demo songs, `.cwt` / `.cwt.toml` songs in your locations, and MOD / MED files (listed; import is planned) |
    | **Presets** | the factory presets and built-in patches ([STARTER_SOUNDS.md](STARTER_SOUNDS.md), Voice presets) |
@@ -41,7 +41,7 @@ From top to bottom (this is mockup B, `docs/mockups/src/browser_b.html`):
 
 ## Showcase plugins
 
-The Plugins tab enriches a small built-in catalogue of well-known open-source instruments (and Surge XT Effects) once they appear in the plugin scan. Matching is by CLAP/VST3 plugin id when known, otherwise by display name. Matched plugins get:
+The VST & CLAP tab enriches a small built-in catalogue of well-known open-source instruments (and Surge XT Effects) once they appear in the plugin scan. Matching is by CLAP/VST3 plugin id when known, otherwise by display name. Matched plugins get:
 
 - a **category** such as Hybrid, FM, Analog, Pad, Bass, Drums, Sampler or Chip (instead of plain "Instrument")
 - a credited **creator**
@@ -65,7 +65,7 @@ Current catalogue (not bundled with ChipWave; install them yourself or with **Ge
 
 ### Get showcase instruments…
 
-Browser › **Plugins** tab › **Get showcase instruments…** (also in the Browser's ••• menu) opens a dialog listing the catalogue above with creator, category, licence, download size and a link to each project's source code. Tick what you want and press **Download & install**:
+Browser › **VST & CLAP** tab › **Get showcase instruments…** (also in the Browser's ••• menu) opens a dialog listing the catalogue above with creator, category, licence, download size and a link to each project's source code. Tick what you want and press **Download & install**:
 
 1. ChipWave downloads each instrument from its **creator's own GitHub release** (URLs, versions, sizes and SHA-256 sums are pinned in `src/showcase/mod.rs`; nothing else is fetched).
 2. The **SHA-256** of every download is checked; a mismatch (or a missing file) stops that item with a clear message and an **Open download page** button. Nothing is installed from a bad download.
@@ -102,7 +102,7 @@ The mapping lives in `src/browser/catalogue.rs` and is generic: any scanned plug
 
 ## Plugin thumbnails
 
-On the **Plugins** tab each row can show a small screenshot of the plugin's own editor:
+On the **VST & CLAP** tab each row can show a small screenshot of the plugin's own editor:
 
 1. When a plugin first appears, ChipWave draws a tidy **card** (category colour, name, creator, format tag) so the list is never empty.
 2. In the background a crash-guarded child (`chipwave --capture-thumb …`, one plugin at a time, killed after 25 s) opens the editor, briefly, in the top-left corner of the screen, and captures it: `PrintWindow` of the editor window first, then a copy of its area of the screen for OpenGL editors that `PrintWindow` can't see. A blank capture counts as failed. The image is downscaled to 256 px on its long side and cached as a PNG (plus a small `.json` saying captured / card / failed) in `<config>/plugin-thumbs/`, keyed by format + plugin id + version, so an update captures again.
@@ -214,7 +214,7 @@ On the **first start** (and once for users of earlier versions) ChipWave asks ho
 2. **Choose folders myself:** a folder picker with an add / remove list.
 3. **Skip for now.**
 
-The search runs **in the background** with a live count and the folder it is in, and **Stop** ends it. It then lists every folder it found with its plugin count (untick any you don't want) and **Add N folders** puts them in the plugin folders (**Settings › Plugins**) **and** the Browser's locations, then runs the plugin scan. It is never shown again unless you ask: **Settings › Plugins › Find plugins…** and the **Plugins** tab's **Find plugins…** open it any time. The answer is saved as `plugin_setup_done`. Details on scanning: [PLUGINS.md](PLUGINS.md#finding-plugins).
+The search runs **in the background** with a live count and the folder it is in, and **Stop** ends it. It then lists every folder it found with its plugin count (untick any you don't want) and **Add N folders** puts them in the plugin folders (**Settings › Plugins**) **and** the Browser's locations, then runs the plugin scan. It is never shown again unless you ask: **Settings › Plugins › Find plugins…** and the **VST & CLAP** tab's **Find plugins…** open it any time. The answer is saved as `plugin_setup_done`. Details on scanning: [PLUGINS.md](PLUGINS.md#finding-plugins).
 
 ## Tracks from the timeline headers
 

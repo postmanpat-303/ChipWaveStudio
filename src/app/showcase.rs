@@ -300,7 +300,7 @@ impl App {
                         if ui.add_enabled(n > 0 && roots.is_some(), egui::Button::new(lbl)).clicked() {
                             act = Some(1);
                         }
-                        if ui.button("Show in Browser").on_hover_text("the Plugins tab, filtered to Showcase").clicked() {
+                        if ui.button("Show in Browser").on_hover_text("the VST & CLAP tab, filtered to Showcase").clicked() {
                             act = Some(4);
                         }
                         if ui.button("Close").clicked() {
