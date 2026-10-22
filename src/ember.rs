@@ -24,8 +24,6 @@ pub const GRID: Color32 = hex(0x262A2F);
 pub const GRID2: Color32 = hex(0x30353B);
 pub const AMBER: Color32 = hex(0xFFD36A);
 pub const RED: Color32 = hex(0xFF5A3C);
-pub const KNOB_WELL: Color32 = hex(0x1A100D);
-pub const LED_BED: Color32 = hex(0x1E1513);
 /// unselected piano-roll notes
 pub const NOTE: Color32 = hex(0xCBCDD2);
 
@@ -88,12 +86,6 @@ fn stops(s: &[(f32, Color32)], k: f32) -> Color32 {
         }
     }
     s.last().map(|x| x.1).unwrap_or_default()
-}
-
-/// accent ramp of the LED arc: acc-deep › acc › acc-hot
-pub fn ramp(k: f32) -> Color32 {
-    let t = th();
-    stops(&[(0.0, t.acc_deep), (0.55, t.accent), (1.0, t.acc_hot)], k)
 }
 
 // ---------------------------------------------------------------- surfaces
@@ -433,115 +425,6 @@ pub fn db_frac(db: f32) -> f32 {
 }
 
 // ------------------------------------------------------------------ knobs
-
-/// pic-1 knob: bed, segmented LED arc with bloom, silver ring with a
-/// notch, glossy dark well, orange readout (dim when `lit` is false).
-/// `rad` is the outer radius (r 50 of the 100-unit design box).
-pub fn knob_big(
-    p: &Painter,
-    c: Pos2,
-    rad: f32,
-    frac: f32,
-    bipolar: bool,
-    readout: &str,
-    lit: bool,
-) {
-    let t = th();
-    let s = rad / 50.0;
-    let frac = frac.clamp(0.0, 1.0);
-    // 1 bed
-    p.circle_filled(c, 49.3 * s, Color32::from_black_alpha(140));
-    p.circle_stroke(c, 43.3 * s, Stroke::new(10.0 * s, LED_BED));
-    // 2-3 LED arc + bloom
-    let segs = 31;
-    let on = |k: f32| {
-        if bipolar {
-            let (a, b) = if frac < 0.5 { (frac, 0.5) } else { (0.5, frac) };
-            k >= a - 0.017 && k <= b + 0.017
-        } else {
-            k <= frac + 0.017 && frac > 0.004
-        }
-    };
-    let w = (3.3 * s).max(1.2);
-    let seg = |k: f32, width: f32, col: Color32| {
-        let a = knob_angle(k);
-        p.line_segment(
-            [at(c, 39.5 * s, a), at(c, 47.0 * s, a)],
-            Stroke::new(width, col),
-        );
-    };
-    if bloom() {
-        for i in 0..segs {
-            let k = i as f32 / (segs - 1) as f32;
-            if on(k) {
-                let col = ramp(k);
-                seg(k, w + 5.0 * s.max(0.5), alpha(col, 0.10));
-                seg(k, w + 2.5 * s.max(0.5), alpha(col, 0.20));
-            }
-        }
-    }
-    for i in 0..segs {
-        let k = i as f32 / (segs - 1) as f32;
-        seg(k, w, if on(k) { ramp(k) } else { t.led_off });
-    }
-    // 4 silver ring
-    p.circle_filled(
-        c + Vec2::new(0.0, 2.0 * s),
-        35.0 * s,
-        Color32::from_black_alpha(110),
-    );
-    disc(p, c, 34.0 * s, false, |k| {
-        stops(
-            &[
-                (0.0, hex(0xF7F5F2)),
-                (0.35, hex(0xD3CEC9)),
-                (0.75, hex(0x8E8781)),
-                (1.0, hex(0x4C4642)),
-            ],
-            k,
-        )
-    });
-    let a = knob_angle(frac);
-    p.line_segment(
-        [at(c, 25.5 * s, a), at(c, 33.4 * s, a)],
-        Stroke::new((2.4 * s).max(1.2), hex(0x2A2522)),
-    );
-    // 5 glossy well
-    let warm = mix(KNOB_WELL, t.accent, 0.10);
-    disc(p, c, 25.0 * s, false, |k| {
-        stops(&[(0.0, warm), (0.6, KNOB_WELL), (1.0, hex(0x0B0706))], k)
-    });
-    p.circle_stroke(c, 25.0 * s, Stroke::new(1.0, hex(0x0B0706)));
-    p.circle_stroke(c, 24.2 * s, Stroke::new(0.8, alpha(t.accent, 0.32)));
-    // gloss: a faint arc across the top
-    let gl: Vec<Pos2> = (0..=10)
-        .map(|i| at(c, 19.0 * s, (205.0 + 13.0 * i as f32).to_radians()))
-        .collect();
-    p.add(egui::Shape::line(
-        gl,
-        Stroke::new(2.4 * s, Color32::from_white_alpha(16)),
-    ));
-    // 6 readout
-    let n = readout.chars().count();
-    let size = match n {
-        0..=2 => 17.0,
-        3 => 15.0,
-        4 => 12.5,
-        _ => 10.5,
-    } * s;
-    let col = if lit { t.acc_hot } else { INK3 };
-    if size >= 5.0 {
-        glow_text(
-            p,
-            c + Vec2::new(0.0, 0.5),
-            Align2::CENTER_CENTER,
-            readout,
-            num_font(size),
-            col,
-            lit,
-        );
-    }
-}
 
 /// What a studio knob shows besides its position (`knob_studio`).
 #[derive(Clone, Copy, Default)]

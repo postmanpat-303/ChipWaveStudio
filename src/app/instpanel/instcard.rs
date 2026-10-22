@@ -729,10 +729,11 @@ fn big_knob(
 ) -> (egui::Response, bool) {
     let t = th();
     let (cell, _) = ui.allocate_exact_size(egui::vec2(96.0, MACRO_H - 8.0), Sense::hover());
-    let r = if t.ember { 25.0 } else { 21.0 };
+    // Slate: the studio knob, its value in the gap at the bottom of the ring
+    let r = if t.ember { 22.0 } else { 21.0 };
     let c = Pos2::new(
         cell.center().x,
-        cell.top() + if t.ember { 20.0 } else { 18.0 } + r,
+        cell.top() + if t.ember { 42.0 } else { 18.0 + r },
     );
     let krect = Rect::from_center_size(c, egui::vec2(r * 2.0 + 8.0, r * 2.0 + 8.0));
     let resp = ui.interact(
@@ -775,26 +776,29 @@ fn big_knob(
     let p = ui.painter();
     let dim = if enabled { 1.0 } else { 0.4 };
     if t.ember {
-        // pic-1 knob: LED arc, silver ring, glossy well with the readout
-        crate::ember::knob_label(p, Pos2::new(cell.center().x, cell.top() + 6.0), name, 12.5);
+        // the studio knob: title above, the value in the ring's gap
         let bip = (def - 0.5).abs() < 0.01;
+        let value = compact(value);
         crate::theme::knob_hero(
             p,
             c,
-            r + 4.0,
-            *v,
-            bip,
-            &compact(value),
-            enabled && (*v - if bip { 0.5 } else { 0.0 }).abs() > 0.002,
-            if enabled { 1.0 } else { 0.55 },
+            r,
+            &crate::ember::StudioKnob {
+                frac: *v,
+                bipolar: bip,
+                title: name,
+                value: &value,
+                dim: if enabled { 1.0 } else { 0.55 },
+                ..Default::default()
+            },
         );
         if resp.hovered() && enabled {
-            p.circle_stroke(c, r + 5.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.4)));
+            p.circle_stroke(c, r + 7.5, Stroke::new(1.0, t.ink2.gamma_multiply(0.4)));
         }
         let cap =
             super::super::pattern::fit(p, caption, &egui::FontId::proportional(10.0), cell.width());
         p.text(
-            Pos2::new(cell.center().x, c.y + r + 12.0),
+            Pos2::new(cell.center().x, cell.bottom() - 6.0),
             egui::Align2::CENTER_CENTER,
             cap,
             egui::FontId::proportional(10.0),

@@ -1863,6 +1863,7 @@ impl App {
             0.5,
             "Volume",
             &db(*vol),
+            ("-inf", "+6"),
             true,
         )
         .on_hover_text("master volume (the mixer's Master fader)");
@@ -1879,6 +1880,7 @@ impl App {
             crate::master::LimiterSettings::default().gain_db / 24.0,
             "Drive",
             &format!("{:.1}", lim.gain_db),
+            ("0", "24"),
             en,
         )
         .on_hover_text("limiter input gain: drives the mix into the limiter (louder, denser)");
@@ -1894,13 +1896,14 @@ impl App {
             (crate::master::LimiterSettings::default().ceiling_db + 12.0) / 12.0,
             "Ceiling",
             &format!("{:.1}", lim.ceiling_db),
+            ("-12", "0"),
             en,
         )
         .on_hover_text("limiter output ceiling (true peak)");
         if r.dragged() || r.double_clicked() {
             lim.ceiling_db = c * 12.0 - 12.0;
         }
-        let below = cy + 36.0 - ui.cursor().top();
+        let below = cy + 54.0 - ui.cursor().top();
         if below > 0.0 {
             ui.add_space(below);
         }

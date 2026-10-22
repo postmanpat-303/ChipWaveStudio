@@ -884,7 +884,11 @@ pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
             &crate::ember::StudioKnob {
                 frac: v,
                 bipolar: (k.from - 0.5).abs() < 0.01,
-                dots: if (1..=16).contains(&steps) { steps + 1 } else { 0 },
+                dots: if (1..=16).contains(&steps) {
+                    steps + 1
+                } else {
+                    0
+                },
                 dim: k.dim.max(0.5),
                 locked: k.locked,
                 ..Default::default()
@@ -952,36 +956,35 @@ pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
     );
 }
 
-/// The large "hero" knob (instrument macros, the Master section). Slate
-/// paints the LED-arc knob with its readout inside (`ember::knob_big`, `rad`
-/// = outer radius); the classic themes the standard knob face, scaled.
-#[allow(clippy::too_many_arguments)]
-pub fn knob_hero(
-    p: &egui::Painter,
-    c: Pos2,
-    rad: f32,
-    frac: f32,
-    bipolar: bool,
-    readout: &str,
-    lit: bool,
-    dim: f32,
-) {
+/// A big knob with its title and value (master knobs, instrument macros).
+/// Slate paints the studio knob (`ember::knob_studio`, `rad` = the knob's
+/// radius, dots and labels outside it); the classic themes the arc knob with
+/// the title above and the value under it.
+pub fn knob_hero(p: &egui::Painter, c: Pos2, rad: f32, k: &crate::ember::StudioKnob) {
     if th().ember {
-        let mut kp = p.clone();
-        kp.multiply_opacity(dim.max(0.5));
-        crate::ember::knob_big(&kp, c, rad, frac, bipolar, readout, lit);
+        crate::ember::knob_studio(p, c, rad, k);
         return;
     }
-    let mut k = KnobFace::new(frac);
-    k.from = if bipolar { 0.5 } else { 0.0 };
-    k.dim = dim;
-    knob_face(p, c, rad * 0.8, k);
+    let mut f = KnobFace::new(k.frac);
+    f.from = if k.bipolar { 0.5 } else { 0.0 };
+    f.dim = k.dim;
+    f.locked = k.locked;
+    knob_face(p, c, rad * 0.8, f);
+    if !k.title.is_empty() {
+        p.text(
+            c - egui::vec2(0.0, rad * 0.8 + 8.0),
+            egui::Align2::CENTER_CENTER,
+            k.title.to_uppercase(),
+            egui::FontId::proportional(11.0),
+            th().ink.gamma_multiply(k.dim),
+        );
+    }
     p.text(
         c + egui::vec2(0.0, rad * 0.8 + 8.0),
         egui::Align2::CENTER_CENTER,
-        readout,
+        k.value,
         egui::FontId::monospace(10.0),
-        th().value.gamma_multiply(dim),
+        th().value.gamma_multiply(k.dim),
     );
 }
 
