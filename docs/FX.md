@@ -54,7 +54,7 @@ row scrolls sideways. How-to text is in the tooltips (hover the **Devices** labe
   | Resonator | ringing decay | Decay, Damp, Mix |
   | Sub | the added octave | Drive, Growl, Mix |
   | Grid FX | the patch's modules + **Edit patch…** | Macro 1–4 (3 on a narrow card) |
-  | Plugin | its thumbnail (Browser › Plugin thumbnails) + **Open** (its own editor) | – |
+  | Plugin | its thumbnail (Browser › VST & CLAP › Plugin thumbnails) + **Open** (its own editor) | – |
 
 - **…** opens a column beside the card with every other parameter (one row each: drag,
   Ctrl-drag fine, double-click default; choices as a menu; right-click a row for automation and
