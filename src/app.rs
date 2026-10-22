@@ -105,6 +105,8 @@ mod plugsetup;
 #[cfg(test)]
 mod prollpan_tests;
 #[cfg(test)]
+mod prruler_tests;
+#[cfg(test)]
 mod rack_sweep_tests;
 #[cfg(test)]
 mod rack_tests;

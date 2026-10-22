@@ -827,11 +827,12 @@ fn alt_drag_draws_a_line_that_selects_the_notes_it_crosses() {
     assert!(h.state().pr.line.is_empty(), "the line goes when let go");
     // Shift+Alt adds the A#4 at row 4
     let shift_alt = egui::Modifiers::SHIFT | egui::Modifiers::ALT;
-    let pts = [at(&h, 3, 72, 0.0), at(&h, 5, 68, 0.0)];
+    // (from key 71: key 72 is in the ruler strip at this scroll)
+    let pts = [at(&h, 3, 71, 0.0), at(&h, 5, 68, 0.0)];
     left_path(&mut h, &pts, shift_alt);
     assert_eq!(sel_notes(&h), vec![(0, 60), (4, 70), (8, 60), (16, 60)]);
     // plain Alt replaces
-    let pts = [at(&h, 11, 72, 0.0), at(&h, 14, 68, 0.0)];
+    let pts = [at(&h, 11, 71, 0.0), at(&h, 14, 68, 0.0)];
     left_path(&mut h, &pts, alt);
     assert_eq!(sel_notes(&h), vec![(12, 70)]);
     assert_eq!(note_data(&h).notes.len(), 5);
