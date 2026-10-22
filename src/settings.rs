@@ -220,6 +220,9 @@ pub struct Extra {
     /// 0.2.7.0 file's chains_cards = false gives way to the Cards default
     #[serde(default)]
     pub chains_view_chosen: bool,
+    /// the Master panel's LEVEL history: 0 scrolling, 1 paused, 2 hidden
+    #[serde(default)]
+    pub level_hist: u8,
     /// tree rows the user closed ("i3" instrument 3, "s3.1" a Split, ...)
     #[serde(default)]
     pub chains_closed: Vec<String>,
@@ -303,6 +306,7 @@ impl Default for Extra {
             chains_tree_folded: false,
             chains_cards: true,
             chains_view_chosen: false,
+            level_hist: 0,
             chains_closed: vec![],
         }
     }
