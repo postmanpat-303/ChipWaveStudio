@@ -2058,10 +2058,9 @@ impl App {
     }
 }
 
-/// `--view knob-mockup`: the knobs today (left) beside the studio knob
-/// (`ember::knob_studio`, right) at the sizes the app uses, painted 1:1 by
-/// the app's own painter over the window. A design board only: the app's
-/// knobs are not swapped.
+/// `--view knob-mockup`: the knobs as the app wires them (left) beside the
+/// studio knob (`ember::knob_studio`, right) at its design sizes, painted 1:1
+/// by the app's own painter over the window. A design reference board.
 fn knob_mockup(ctx: &egui::Context) {
     use crate::ember::{self, StudioKnob};
     let t = th();
@@ -2094,12 +2093,12 @@ fn knob_mockup(ctx: &egui::Context) {
             head(
                 &p,
                 Pos2::new(24.0, 14.0),
-                "KNOB MOCKUP · 1:1 · TODAY (LEFT) AND THE STUDIO KNOB (RIGHT)",
+                "KNOB BOARD · 1:1 · IN THE APP (LEFT) AND THE STUDIO KNOB SIZES (RIGHT)",
             );
             note(
                 &p,
                 Pos2::new(24.0, 34.0),
-                "Painted by ChipWave's own painter at the app's sizes. Not swapped in yet.",
+                "Painted by ChipWave's own painter at the app's sizes.",
             );
             let colw = (full.width() - 72.0) / 2.0;
             let lx = 24.0;
@@ -2113,9 +2112,9 @@ fn knob_mockup(ctx: &egui::Context) {
                     &p,
                     r.min + egui::vec2(14.0, 10.0),
                     if now {
-                        "MASTER · TODAY"
+                        "MASTER · IN THE APP"
                     } else {
-                        "MASTER · STUDIO KNOB"
+                        "MASTER · STUDIO KNOB 27"
                     },
                 );
                 let knobs = [
@@ -2126,8 +2125,19 @@ fn knob_mockup(ctx: &egui::Context) {
                 for (i, (name, f, rd, lo, hi, val)) in knobs.into_iter().enumerate() {
                     let c = Pos2::new(r.left() + 90.0 + i as f32 * 120.0, r.top() + 96.0);
                     if now {
-                        theme::knob_hero(&p, c, 27.0, f, false, rd, f > 0.002, 1.0);
-                        ember::knob_label(&p, Pos2::new(c.x, c.y - 27.0 - 9.0), name, 12.0);
+                        theme::knob_hero(
+                            &p,
+                            c,
+                            21.0,
+                            &StudioKnob {
+                                frac: f,
+                                title: name,
+                                value: rd,
+                                min_max: (lo, hi),
+                                dim: 1.0,
+                                ..Default::default()
+                            },
+                        );
                     } else {
                         let mut v = f;
                         ember::knob_studio_ui(
@@ -2164,7 +2174,7 @@ fn knob_mockup(ctx: &egui::Context) {
                     &p,
                     r.min + egui::vec2(14.0, 10.0),
                     if now {
-                        "DEVICE CARD · SUPERSAW · TODAY (60 x 66 CELLS)"
+                        "DEVICE CARD · SUPERSAW · IN THE APP (60 x 66 CELLS)"
                     } else {
                         "DEVICE CARD · SUPERSAW · STUDIO KNOB"
                     },
@@ -2204,7 +2214,7 @@ fn knob_mockup(ctx: &egui::Context) {
                     note(
                         &p,
                         r.min + egui::vec2(14.0, 124.0),
-                        "Slate today: knurled cap, tick ring, value under the knob.",
+                        "Slate: the studio knob in the 60 x 66 cell, the value in orange under it.",
                     );
                 } else {
                     // the same 60 x 66 cells (rad 14), then a roomier 18 with end labels
@@ -2233,7 +2243,7 @@ fn knob_mockup(ctx: &egui::Context) {
                             &p,
                             Pos2::new(r.left() + 14.0 + 4.0 * cw + 16.0, r.top() + cy - 8.0),
                             if row == 0 {
-                                "rad 14 in today's 60 x 66 cell"
+                                "rad 14 in the 60 x 66 cell"
                             } else {
                                 "rad 18 with end labels (92 wide)"
                             },
