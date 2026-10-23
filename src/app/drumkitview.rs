@@ -529,7 +529,7 @@ impl App {
     }
 
     /// write note data `data`; the gesture is one undo step (undo_commit)
-    fn dk_write(&mut self, data: usize, d: tl::NoteClipData) {
+    pub(crate) fn dk_write(&mut self, data: usize, d: tl::NoteClipData) {
         self.with(|s| {
             if let Some(t) = s.song.timeline.as_deref_mut() {
                 let new_len = d.len;

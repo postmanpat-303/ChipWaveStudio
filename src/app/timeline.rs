@@ -794,6 +794,22 @@ impl App {
             } else {
                 "This tracker-mode song's order list, shown as clips per track."
             });
+            // show / hide the Clip Arranger on the left (more room)
+            let shown = !self.extra.side_hidden;
+            if ui
+                .add(egui::Button::selectable(
+                    shown,
+                    egui::RichText::new("Arranger").size(11.0),
+                ))
+                .on_hover_text(if shown {
+                    "hide the Clip Arranger on the left: more room for the tracks (Ctrl+Shift+8)"
+                } else {
+                    "show the Clip Arranger on the left of the Timeline (Ctrl+Shift+8)"
+                })
+                .clicked()
+            {
+                self.toggle_side_panel();
+            }
             // timeline mode needs no label: Song › Back to tracker
             // mode… turns it back
             if !mode {
@@ -952,7 +968,7 @@ impl App {
             self.tlv.scroll = 0.0;
         }
         let lane_h = self.tlv.th();
-        let lay = autolanes::Layout::build(&self.tlv.cache.as_ref().unwrap().tl, mode, lane_h);
+        let mut lay = autolanes::Layout::build(&self.tlv.cache.as_ref().unwrap().tl, mode, lane_h);
         let total_h = lay.total();
         let max_sy = (total_h - lanes.height()).max(0.0);
         // ---- wheel: tracks / Shift: time / Ctrl: zoom at the mouse / Alt: track height
@@ -1015,8 +1031,11 @@ impl App {
                 self.tlv.reveal = None;
                 let h = self.tlv.layout.clip_h.max(1.0);
                 let sy = self.tlv.scroll_y;
-                if top < sy || top + h > sy + lanes.height() {
-                    self.tlv.scroll_y = top - (lanes.height() - h) / 2.0;
+                // the docked Song / Master footer covers the bottom of the view
+                let is_m = self.tlv.layout.master == Some(tr) && self.tlv.layout.docked;
+                let view = lanes.height() - self.tlv.layout.dock_h(lanes.height());
+                if !is_m && (top < sy || top + h > sy + view) {
+                    self.tlv.scroll_y = top - (view - h) / 2.0;
                 }
                 let at = at as f64;
                 let s = self.tlv.scroll;
@@ -1030,6 +1049,15 @@ impl App {
         self.tlv.scroll_y = self.tlv.scroll_y.clamp(0.0, max_sy);
         let scroll = self.tlv.scroll;
         let sy = self.tlv.scroll_y;
+        // Song / Master docked as a footer: always in view, the mixer tracks
+        // scroll above it (display only)
+        lay.dock(sy, lanes.height());
+        // screen y where the footer (and the band above it) starts: the
+        // mixer tracks are clipped there
+        let dock_y = lay
+            .master
+            .filter(|_| lay.docked)
+            .map(|m| lanes.top() + lay.top[m] - sy - 6.0);
         let x_of = |tk: f64| lanes.left() + ((tk - scroll) * ppt) as f32;
         let tick_of = |x: f32| scroll + (x - lanes.left()) as f64 / ppt;
         let v0 = scroll.floor() as Tick;
@@ -1132,6 +1160,7 @@ impl App {
                 );
             }
         }
+        let grid_dock = dock_y.map(|_| grid.clone());
         lp.add(egui::Shape::mesh(grid));
         // loop region: a band on the ruler, a tint over the lanes
         if let Some((a, b)) = c.tl.loop_range {
@@ -1572,6 +1601,24 @@ impl App {
                 colr,
             );
         }
+        // ---- the docked Song / Master footer: covers the mixer tracks that
+        // scroll under it, then its own lane
+        if let (Some(dy), Some(m)) = (dock_y, lay.master) {
+            let band = Rect::from_min_max(Pos2::new(lanes.left(), dy.max(lanes.top())), lanes.max);
+            lp.rect_filled(band, 0, t.crt_bot);
+            if let Some(g) = grid_dock {
+                lp.with_clip_rect(band).add(egui::Shape::mesh(g));
+            }
+            let lr = lane_rect(m);
+            if m == cur_tr {
+                lp.rect_filled(lr, 0, t.sel.gamma_multiply(0.12));
+            }
+            lp.hline(
+                lr.x_range(),
+                lr.bottom() - 0.5,
+                Stroke::new(1.0, t.crt_grid),
+            );
+        }
         // ---- markers: each one a section band up to the next (0.2.4 polish)
         let mp = ui.painter_at(marks);
         let song_end = if mode { c.end } else { c.map.end() };
@@ -1749,6 +1796,8 @@ impl App {
         let mut head_ops: Vec<HeadOp> = vec![];
         let mut rename_at: Option<Rect> = None;
         let mut pie_at: Option<(usize, Pos2)> = None;
+        // right-click on the empty area (no track there): the Add pie
+        let mut add_pie_at: Option<(Pos2, bool)> = None;
         let mut hd = self.tlv.head_drag;
         // the subtitle: the instrument the track mostly plays, else the one
         // it was given (Browser drop, Add track with instrument)
@@ -1785,15 +1834,25 @@ impl App {
                 c.instr[tr].clone()
             }
         };
+        let ui_clip = ui.clip_rect();
         for tr in first_tr..last_tr {
             let y = heads.top() + lay.top[tr] - sy;
             let hr = Rect::from_min_max(
                 Pos2::new(heads.left(), y + 1.0),
                 Pos2::new(heads.right(), y + lane_h - 1.0),
             );
-            if hr.bottom() < heads.top() || hr.top() > heads.bottom() {
+            // mixer tracks scroll under the docked Song / Master footer
+            let clip = match dock_y {
+                Some(dy) if Some(tr) != lay.master => {
+                    Rect::from_min_max(heads.min, Pos2::new(heads.right(), dy.min(heads.bottom())))
+                }
+                _ => heads,
+            };
+            if hr.bottom() < clip.top() || hr.top() > clip.bottom() {
                 continue;
             }
+            ui.set_clip_rect(ui_clip.intersect(clip.expand2(egui::vec2(8.0, 0.0))));
+            let hp = hp.with_clip_rect(clip);
             let colr = track_colour_in(&c.tl, tr);
             let cur = cur_tr == tr;
             hp.rect_filled(
@@ -2135,6 +2194,7 @@ impl App {
                 }
             });
         }
+        ui.set_clip_rect(ui_clip);
         // ---- header drag: the insertion line
         if let (Some(from), Some(p)) = (hd, ui.ctx().input(|i| i.pointer.latest_pos())) {
             let ins = insert_index(&lay, p.y - heads.top() + sy);
@@ -2162,10 +2222,9 @@ impl App {
         }
         // ---- "+ Add track" below the last mixer track, in the gap above
         // Song / Master (which sits at the bottom, after a divider)
+        let mut add_btn = Rect::NOTHING;
         {
-            let gap_top = lay
-                .master
-                .map_or(lay.total(), |m| lay.top[m] - autolanes::MASTER_GAP);
+            let gap_top = lay.body_end;
             if let Some(m) = lay.master {
                 let dy = heads.top() + lay.top[m] - sy - 4.0;
                 if dy > heads.top() && dy < heads.bottom() && t.ember {
@@ -2186,7 +2245,7 @@ impl App {
                 }
             }
             let y = heads.top() + gap_top - sy + 4.0;
-            if y + 20.0 < heads.bottom() {
+            if y + 20.0 < dock_y.unwrap_or(heads.bottom()) {
                 let br =
                     Rect::from_min_size(Pos2::new(heads.left() + 6.0, y), egui::vec2(110.0, 20.0));
                 // after the last mixer track (the Song / Master track stays last)
@@ -2200,6 +2259,7 @@ impl App {
                     br,
                     egui::Button::new(egui::RichText::new("+ Add track").size(11.5)).small(),
                 );
+                add_btn = r.rect;
                 let r = if full {
                     r.on_hover_text("all 32 tracks are used (the channel limit)")
                 } else {
@@ -2210,9 +2270,29 @@ impl App {
                 }
             }
         }
+        // ---- right-click on the track list's empty space (below the last
+        // track, above the docked Song / Master): the Add pie
+        if pie_at.is_none()
+            && self.pie.is_none()
+            && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Secondary))
+        {
+            if let Some(p) = ui.input(|i| i.pointer.interact_pos()) {
+                let free = Rect::from_min_max(
+                    heads.min,
+                    Pos2::new(heads.right(), dock_y.unwrap_or(heads.bottom())),
+                );
+                if free.contains(p)
+                    && ui.ctx().layer_id_at(p) == Some(ui.layer_id())
+                    && !add_btn.contains(p)
+                    && lay.part_at(p.y - heads.top() + sy).is_none()
+                {
+                    add_pie_at = Some((p, true));
+                }
+            }
+        }
         // ---- a clean new song: no tracks yet
         if self.with(|s| s.song.channels) == 0 {
-            let y = (heads.top() + lay.total() - sy + 40.0).min(lanes.bottom() - 30.0);
+            let y = (heads.top() + lay.body_end.max(0.0) - sy + 40.0).min(lanes.bottom() - 30.0);
             let p = ui.painter_at(lanes);
             p.text(
                 Pos2::new(lanes.left() + 24.0, y),
@@ -2423,14 +2503,29 @@ impl App {
                 at: live.head.unwrap_or(cue_tick as f64),
                 mode,
             };
-            if let Some(ref song) = song_for_lanes {
+            // the mixer tracks' lanes clipped above the docked footer
+            let parts = match (dock_y, lay.master) {
+                (Some(dy), Some(m)) => vec![
+                    (
+                        first_tr..m.max(first_tr),
+                        Rect::from_min_max(full.min, Pos2::new(full.right(), dy)),
+                    ),
+                    (m..m + 1, full),
+                ],
+                _ => vec![(first_tr..last_tr, full)],
+            };
+            for (range, clip) in parts {
+                let Some(ref song) = song_for_lanes else {
+                    break;
+                };
+                ui.set_clip_rect(ui_clip.intersect(clip));
                 autolanes::lanes_ui(
                     ui,
                     song,
                     c,
                     &lay,
                     &geo,
-                    first_tr..last_tr,
+                    range,
                     self.tlv.auto_drag.as_ref(),
                     self.tlv.auto_menu.as_ref(),
                     self.tlv.lane_menu.as_ref().map(|m| &m.1),
@@ -2442,6 +2537,7 @@ impl App {
                     &mut auto_ops,
                 );
             }
+            ui.set_clip_rect(ui_clip);
         }
         // which part of a clip is under p: 0 body, 1 left edge, 2 right
         // edge, 3 fade-in handle, 4 fade-out handle (audio clips)
@@ -2816,6 +2912,14 @@ impl App {
                 let tk = tick_of(p.x).max(0.0) as Tick;
                 self.tlv.menu_at = Some((tr_of(p.y).max(0.0) as usize, tk));
                 let id = clip_at(c, &lay, p, lanes, sy, tick_of(p.x)).map(|i| c.tl.clips[i].id);
+                // no track under the pointer (below the last one): the Add pie
+                if mode
+                    && id.is_none()
+                    && self.pie.is_none()
+                    && lay.part_at(p.y - lanes.top() + sy).is_none()
+                {
+                    add_pie_at = Some((p, false));
+                }
                 if id.is_none_or(|id| !self.tlv.sels.contains(&id)) {
                     {
                         let x: Option<u32> = id;
@@ -2857,15 +2961,16 @@ impl App {
         if let Some((id, p)) = pie_open {
             self.opie_req = Some((super::objpie::PieFor::Clip(id), p));
         }
-        let menu_resp = if armed || pie_open.is_some() || self.opie.is_some() {
-            ui.interact(
-                Rect::NOTHING,
-                ui.scope_id().with("tl_no_menu"),
-                Sense::hover(),
-            )
-        } else {
-            cresp.clone()
-        };
+        let menu_resp =
+            if armed || pie_open.is_some() || add_pie_at.is_some() || self.opie.is_some() {
+                ui.interact(
+                    Rect::NOTHING,
+                    ui.scope_id().with("tl_no_menu"),
+                    Sense::hover(),
+                )
+            } else {
+                cresp.clone()
+            };
         menu_resp.context_menu(|ui| {
             let snap_at = menu_at.map_or(0, |m| tl::snap(m.1, ROW));
             if !mode {
@@ -3155,6 +3260,9 @@ impl App {
         if let Some((tr, p)) = pie_at {
             let ctx = ui.ctx().clone();
             self.open_track_pie(tr, p, true, &ctx);
+        } else if let Some((p, press)) = add_pie_at {
+            let ctx = ui.ctx().clone();
+            self.open_add_pie(p, press, &ctx);
         }
         if let Some(tgt) = seek {
             self.seek_to(tgt);
@@ -3495,7 +3603,11 @@ enum HeadOp {
 
 /// the gap (0..=tracks) nearest content y, for the reorder insertion line
 fn insert_index(lay: &autolanes::Layout, y: f32) -> usize {
-    let n = lay.tracks();
+    // docked: the footer is no drop slot (a move lands above it)
+    let n = match lay.master {
+        Some(m) if lay.docked => m,
+        _ => lay.tracks(),
+    };
     (0..n)
         .filter(|&k| {
             let mid = (lay.top[k] + lay.top[k + 1].min(lay.top[k] + lay.clip_h)) / 2.0;
@@ -3626,8 +3738,12 @@ impl TimelineUi {
 
     /// screen y just below the last track (clamped to the view)
     pub(crate) fn tracks_bottom(&self) -> f32 {
-        (self.heads.top() + self.layout.total() - self.scroll_y)
-            .clamp(self.heads.top(), self.heads.bottom() - 2.0)
+        let end = if self.layout.docked {
+            self.layout.body_end.max(0.0)
+        } else {
+            self.layout.total()
+        };
+        (self.heads.top() + end - self.scroll_y).clamp(self.heads.top(), self.heads.bottom() - 2.0)
     }
 
     /// tick under screen x as last drawn (not snapped, at least 0)

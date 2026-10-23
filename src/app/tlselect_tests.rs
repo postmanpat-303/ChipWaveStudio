@@ -169,8 +169,9 @@ fn the_song_master_header_is_selectable_and_keeps_the_instrument_track() {
             })
         })
         .expect("a Song / Master track");
-    // scrolled into view (it sits after the eight channel tracks)
-    h.state_mut().tlv.reveal = Some((m, 0));
+    // Song / Master is docked at the bottom (always in view); track 8
+    // scrolled into view above it
+    h.state_mut().tlv.reveal = Some((m - 1, 0));
     frames(&mut h, 3);
     let (_, row) = h.state().tlv.track_rects(m - 1).unwrap();
     let p = Pos2::new(row.right() - 20.0, row.top() + 10.0);

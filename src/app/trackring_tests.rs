@@ -70,22 +70,31 @@ fn the_rings_hold_the_approved_entries() {
     assert_eq!(
         labels(&ring_slots(Level::Add, &i)),
         [
-            "Instrument track…",
-            "Drum pattern",
-            "Audio track",
-            "FX track",
-            "Empty track above",
-            "Empty track below",
-            "Duplicate",
-            "Automation lane",
             "Instrument",
+            "Drum pattern",
+            "Automation lane",
+            "Browse…",
+            "New pattern",
+            "Mute",
+            "Solo",
+            "Duplicate",
+            "Open in Rack",
         ]
     );
     let add = ring_slots(Level::Add, &i);
+    assert_eq!(add[0].go, Some(Go::Open(Level::Instrument)));
     assert_eq!(add[1].go, Some(Go::Open(Level::DrumInstr)));
-    assert_eq!(add[3].go, None, "FX track: coming soon");
-    assert_eq!(add[7].go, Some(Go::Open(Level::Automation)));
-    assert_eq!(add[8].go, Some(Go::Open(Level::Instrument)));
+    assert_eq!(add[2].go, Some(Go::Open(Level::Automation)));
+    assert_eq!(add[3].go, Some(Go::Act(PieAct::ChangeInstrument)));
+    assert_eq!(add[4].go, Some(Go::Act(PieAct::NewPattern)));
+    assert_eq!(add[5].go, Some(Go::Act(PieAct::Mute)));
+    assert_eq!(add[8].go, Some(Go::Act(PieAct::Devices)));
+    let muted = TrackInfo {
+        mute: true,
+        ..info()
+    };
+    let m = ring_slots(Level::Add, &muted);
+    assert!(m[5].on && !m[6].on, "Mute lit when muted");
     assert!(
         add.iter().all(|s| !s.tip.is_empty()),
         "every slot has a hint"
@@ -116,8 +125,9 @@ fn the_rings_hold_the_approved_entries() {
     );
     assert_eq!(drum[0].go, Some(Go::Back));
     assert_eq!(drum[1].go, Some(Go::Open(Level::Kits)));
-    assert_eq!(drum[4].go, Some(Go::Act(PieAct::DrumTrack(Builtin::Noise))));
-    assert_eq!(drum[12].go, Some(Go::Act(PieAct::DrumBrowse)));
+    // the track pie's rings act on THAT track: nothing makes a new one
+    assert_eq!(drum[4].go, Some(Go::Act(PieAct::DrumHere(Builtin::Noise))));
+    assert_eq!(drum[12].go, Some(Go::Act(PieAct::ChangeInstrument)));
     let kits = ring_slots(Level::Kits, &i);
     assert_eq!(
         labels(&kits),
@@ -138,7 +148,60 @@ fn the_rings_hold_the_approved_entries() {
             "{k} is a real kit"
         );
     }
+    assert_eq!(kits[1].go, Some(Go::Act(PieAct::DrumKitHere("909 Kit"))));
+    assert_eq!(kits[7].go, Some(Go::Act(PieAct::MoreKitsHere)));
+    for l in [Level::Add, Level::Instrument, Level::DrumInstr, Level::Kits] {
+        for s in ring_slots(l, &i) {
+            assert!(
+                !matches!(
+                    s.go,
+                    Some(Go::Act(
+                        PieAct::DrumTrack(_)
+                            | PieAct::DrumKitTrack(_)
+                            | PieAct::DrumBrowse
+                            | PieAct::MoreKits
+                            | PieAct::NewTrackWith(_)
+                            | PieAct::AddAudio
+                            | PieAct::AddEmpty(_)
+                            | PieAct::AddInstrument
+                    ))
+                ),
+                "track pie {l:?} {} makes no new track",
+                s.label
+            );
+        }
+    }
+    // the empty-area pie: new tracks
+    let new = TrackInfo {
+        new: true,
+        ..info()
+    };
+    let add = ring_slots(Level::Add, &new);
+    assert_eq!(
+        labels(&add),
+        [
+            "Instrument track",
+            "Drum pattern",
+            "Audio track",
+            "Empty track",
+            "Browse…",
+            "FX track",
+        ]
+    );
+    assert_eq!(add[0].go, Some(Go::Open(Level::Instrument)));
+    assert_eq!(add[5].go, None, "FX track: coming soon");
+    let drum = ring_slots(Level::DrumInstr, &new);
+    assert_eq!(drum[4].go, Some(Go::Act(PieAct::DrumTrack(Builtin::Noise))));
+    assert_eq!(drum[12].go, Some(Go::Act(PieAct::DrumBrowse)));
+    let kits = ring_slots(Level::Kits, &new);
+    assert_eq!(kits[1].go, Some(Go::Act(PieAct::DrumKitTrack("909 Kit"))));
     assert_eq!(kits[7].go, Some(Go::Act(PieAct::MoreKits)));
+    let ins = ring_slots(Level::Instrument, &new);
+    assert_eq!(
+        ins[1].go,
+        Some(Go::Act(PieAct::NewTrackWith(Builtin::ALL[0])))
+    );
+    assert_eq!(ins.last().unwrap().go, Some(Go::Act(PieAct::AddInstrument)));
     let ins = ring_slots(Level::Instrument, &i);
     let all: Vec<&str> = Builtin::ALL.iter().map(|b| b.label()).collect();
     assert_eq!(labels(&ins[1..ins.len() - 1]), all);
@@ -151,13 +214,12 @@ fn the_rings_hold_the_approved_entries() {
         full: true,
         ..info()
     };
-    for l in [Level::Add, Level::DrumInstr, Level::Kits] {
+    assert_eq!(ring_slots(Level::Add, &full)[7].go, None, "no Duplicate");
+    let full = TrackInfo { new: true, ..full };
+    for l in [Level::Add, Level::Instrument, Level::DrumInstr, Level::Kits] {
         for s in ring_slots(l, &full) {
             assert!(
-                matches!(
-                    s.go,
-                    None | Some(Go::Back) | Some(Go::Open(Level::Instrument | Level::Automation))
-                ),
+                matches!(s.go, None | Some(Go::Back) | Some(Go::Open(_))),
                 "{l:?} {}",
                 s.label
             );
@@ -171,12 +233,18 @@ fn the_rings_hold_the_approved_entries() {
     let add = ring_slots(Level::Add, &tracker);
     assert_eq!(add[1].go, None);
     assert!(add[1].tip.contains("timeline mode"));
-    assert_eq!(add[7].go, None);
+    assert_eq!(add[2].go, None);
+    assert_eq!(add[4].go, None);
     // the 255 instrument slots used
     let ifull = TrackInfo {
         instr_full: true,
         ..info()
     };
+    let k = ring_slots(Level::Kits, &ifull);
+    assert!(k[1..k.len() - 1]
+        .iter()
+        .all(|s| s.go.is_none() && s.tip.contains("255")));
+    let ifull = TrackInfo { new: true, ..ifull };
     assert!(ring_slots(Level::Kits, &ifull)[1..]
         .iter()
         .all(|s| s.go.is_none() && s.tip.contains("255")));
@@ -256,10 +324,13 @@ fn rings_go_in_and_back() {
         .pie
         .as_ref()
         .is_some_and(|p| p.ring.is_none() && p.key == Some(add_seg()) && p.closing.is_none()));
-    // a disabled slot only says why
-    open(&mut h, 0);
-    h.state_mut().pie_choose(add_seg(), &ctx);
-    for _ in 0..2 {
+    // a disabled slot only says why (the empty-area pie's FX track)
+    h.state_mut().pie = None;
+    h.state_mut()
+        .open_add_pie(Pos2::new(600.0, 400.0), false, &ctx);
+    frames(&mut h, 2);
+    assert_eq!(level(&h), Some(Level::Add));
+    for _ in 0..4 {
         rkey(&mut h, Key::ArrowRight);
     }
     rkey(&mut h, Key::Enter);
@@ -269,6 +340,10 @@ fn rings_go_in_and_back() {
         h.state().status
     );
     assert_eq!(level(&h), Some(Level::Add));
+    // Backspace at its first ring closes the empty-area pie
+    rkey(&mut h, Key::Backspace);
+    frames(&mut h, 3);
+    assert!(h.state().pie.as_ref().is_none_or(|p| p.closing.is_some()));
 }
 
 fn track_clips(h: &Harness<'static, App>, tr: usize) -> Vec<(u32, i64, i64, usize)> {
@@ -298,18 +373,12 @@ fn counts(h: &Harness<'static, App>) -> (usize, usize, usize) {
     })
 }
 
-/// Drum pattern › Drum Kit › Psy Kit by the pointer: a new track below
-/// with the kit and an EMPTY 1-bar pattern at the play marker's bar, open
-/// in the step sequencer; one undo takes it all away
+/// Drum pattern › Drum Kit › Psy Kit by the pointer on track 01: THAT
+/// track plays the kit and its pattern opens in the step sequencer, no new
+/// track; one undo takes it all away
 #[test]
-fn a_kit_from_the_rings_makes_an_empty_pattern_track_one_undo() {
+fn a_kit_from_the_track_pie_goes_on_that_track_one_undo() {
     let mut h = harness_tl();
-    let (bar, cue) = h.state().with(|s| {
-        let t = s.song.timeline.as_deref().unwrap();
-        let bar = t.sig_at(0).bar_ticks();
-        (bar, bar * 2 + bar / 3)
-    });
-    h.state_mut().tlv.cue = cue;
     h.state_mut().undo_reset();
     let before = counts(&h);
     open(&mut h, 0);
@@ -333,36 +402,94 @@ fn a_kit_from_the_rings_makes_an_empty_pattern_track_one_undo() {
     frames(&mut h, 4);
     assert!(h.state().pie.is_none(), "a pick closes the pie");
     let after = counts(&h);
-    assert_eq!(after.0, before.0 + 1, "one new track");
+    assert_eq!(after.0, before.0, "NO new track");
     assert_eq!(after.1, before.1 + 1, "one new instrument");
-    assert_eq!(after.2, before.2 + 1, "one new clip");
     let (slot, kit) = h.state().with(|s| {
-        let slot = s.song.timeline.as_deref().unwrap().tracks[1].instr;
+        let slot = s.song.timeline.as_deref().unwrap().tracks[0].instr;
         let i = &s.song.instruments[slot as usize - 1];
         (
             slot,
             crate::drumkit::kit_of(i).is_some() && i.name.contains("Psy"),
         )
     });
-    assert!(kit, "track 02 plays the Psy kit (slot {slot})");
-    let clips = track_clips(&h, 1);
-    assert_eq!(clips.len(), 1);
-    let (id, start, len, notes) = clips[0];
-    assert_eq!(
-        (start, len, notes),
-        (bar * 2, bar, 0),
-        "empty, 1 bar, at bar 3"
-    );
-    assert_eq!(h.state().dk.clip, Some(id), "in the step sequencer");
-    assert!(h.state().extra.lower_inst);
-    assert!(
-        h.state().status.contains("empty 1-bar pattern"),
-        "{}",
-        h.state().status
-    );
+    assert!(kit, "track 01 plays the Psy kit (slot {slot})");
+    assert_eq!(h.state().tl_cur_track(), 0, "track 01 active");
+    let clips = track_clips(&h, 0);
+    assert!(!clips.is_empty());
+    let open = h.state().dk.clip.expect("in the step sequencer");
+    assert!(clips.iter().any(|c| c.0 == open), "a pattern on track 01");
     h.state_mut().undo(false);
     frames(&mut h, 2);
     assert_eq!(counts(&h), before, "one undo");
+}
+
+/// a kit on a track with no pattern: an empty 1-bar pattern at the play
+/// marker gets the kit's starter groove; still no new track
+#[test]
+fn a_kit_on_an_empty_track_writes_a_starter_groove() {
+    let mut h = harness_tl();
+    let (bar, cue) = h.state().with(|s| {
+        let t = s.song.timeline.as_deref().unwrap();
+        let bar = t.sig_at(0).bar_ticks();
+        (bar, bar * 2 + bar / 3)
+    });
+    assert!(h.state_mut().track_add(1));
+    frames(&mut h, 2);
+    h.state_mut().tlv.cue = cue;
+    h.state_mut().undo_reset();
+    let before = counts(&h);
+    let ctx = h.ctx.clone();
+    h.state_mut()
+        .pie_apply(1, PieAct::DrumKitHere("909 Kit"), &ctx);
+    frames(&mut h, 2);
+    let after = counts(&h);
+    assert_eq!(after.0, before.0, "NO new track");
+    assert_eq!(after.2, before.2 + 1, "one new clip");
+    let clips = track_clips(&h, 1);
+    assert_eq!(clips.len(), 1);
+    let (id, start, len, notes) = clips[0];
+    assert_eq!((start, len), (bar * 2, bar), "1 bar at bar 3");
+    assert!(notes > 0, "a starter groove");
+    assert_eq!(h.state().dk.clip, Some(id), "in the step sequencer");
+    assert_eq!(h.state().tl_cur_track(), 1);
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(counts(&h), before, "one undo");
+}
+
+/// the empty-area pie: Drum pattern › Drum Kit › 909 adds ONE track at
+/// the end with the kit and an empty 1-bar pattern; Empty track adds one
+#[test]
+fn the_empty_area_pie_adds_tracks_at_the_end() {
+    let mut h = harness_tl();
+    h.state_mut().undo_reset();
+    let before = counts(&h);
+    h.state_mut().pie_apply_new(PieAct::DrumKitTrack("909 Kit"));
+    frames(&mut h, 2);
+    let after = counts(&h);
+    assert_eq!(after.0, before.0 + 1, "one new track");
+    let last = after.0 - 1;
+    let clips = track_clips(&h, last);
+    assert_eq!(clips.len(), 1);
+    assert_eq!(clips[0].3, 0, "empty");
+    assert_eq!(h.state().tl_cur_track(), last, "the new track active");
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(counts(&h), before, "one undo");
+    h.state_mut().pie_apply_new(PieAct::AddEmpty(false));
+    frames(&mut h, 2);
+    assert_eq!(counts(&h).0, before.0 + 1);
+    assert_eq!(h.state().tl_cur_track(), before.0);
+    // the pie opens on its ring with no track segments
+    let ctx = h.ctx.clone();
+    h.state_mut()
+        .open_add_pie(Pos2::new(600.0, 400.0), false, &ctx);
+    frames(&mut h, 2);
+    assert!(h.state().pie.as_ref().is_some_and(|p| p.empty));
+    assert_eq!(
+        labels(&h.state().ring_now().unwrap().3)[0],
+        "Instrument track"
+    );
 }
 
 /// Drum pattern › Noise: the same, open in the piano roll

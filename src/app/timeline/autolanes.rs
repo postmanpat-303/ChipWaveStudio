@@ -184,6 +184,11 @@ pub(crate) struct Layout {
     pub(crate) open: Vec<bool>,
     /// the Song / Master track's index (the gap is above it)
     pub(crate) master: Option<usize>,
+    /// content y where the mixer tracks end (before the gap)
+    pub(crate) body_end: f32,
+    /// Song / Master is docked: a fixed footer at the bottom of the view
+    /// (its `top` follows the scroll; mixer tracks scroll under it)
+    pub(crate) docked: bool,
 }
 
 /// the targets of track `tr`'s lanes: its own, then clip-only ones
@@ -226,18 +231,55 @@ impl Layout {
             open.push(o);
         }
         top.push(y);
+        let body_end = master.map_or(y, |m| top[m] - MASTER_GAP);
         Layout {
             top,
             clip_h,
             lanes,
             open,
             master,
+            body_end,
+            docked: false,
         }
+    }
+    /// the Song / Master row's height (clip row and any open lanes)
+    pub(crate) fn master_h(&self) -> f32 {
+        self.master.map_or(0.0, |m| self.top[m + 1] - self.top[m])
+    }
+    /// would Master dock in a view `view_h` tall (it needs room to spare)
+    pub(crate) fn can_dock(&self, view_h: f32) -> bool {
+        self.master.is_some() && self.master_h() <= view_h * 0.6
+    }
+    /// height the docked footer takes from the scrolling tracks (with the gap)
+    pub(crate) fn dock_h(&self, view_h: f32) -> f32 {
+        if self.can_dock(view_h) {
+            self.master_h() + MASTER_GAP
+        } else {
+            0.0
+        }
+    }
+    /// dock Song / Master at the bottom of a view `view_h` tall scrolled to
+    /// `sy` (display only: the song keeps Master last)
+    pub(crate) fn dock(&mut self, sy: f32, view_h: f32) {
+        let Some(m) = self.master.filter(|_| self.can_dock(view_h)) else {
+            return;
+        };
+        let h = self.master_h();
+        let y = sy + view_h - h;
+        self.top[m] = y;
+        self.top[m + 1] = y + h;
+        self.docked = true;
     }
     /// content y is in the gap above the Master track
     pub(crate) fn in_gap(&self, y: f32) -> bool {
-        self.master
-            .is_some_and(|m| y >= self.top[m] - MASTER_GAP && y < self.top[m])
+        self.master.is_some_and(|m| {
+            let g0 = if self.docked {
+                self.body_end
+            } else {
+                self.top[m] - MASTER_GAP
+            };
+            y >= g0 && y < self.top[m]
+        })
     }
     pub(crate) fn total(&self) -> f32 {
         self.top.last().copied().unwrap_or(0.0)
@@ -250,6 +292,13 @@ impl Layout {
         let n = self.tracks();
         if n == 0 {
             return 0;
+        }
+        if let Some(m) = self.master.filter(|_| self.docked) {
+            // the mixer tracks scroll under the docked footer
+            if y >= self.top[m] {
+                return m;
+            }
+            return self.top[..m].partition_point(|&t| t <= y).saturating_sub(1);
         }
         self.top[..n].partition_point(|&t| t <= y).saturating_sub(1)
     }

@@ -515,3 +515,83 @@ fn recovering_a_copy_opens_it_unsaved_and_not_clean_after_undo() {
     key(&mut h, Key::Z, egui::Modifiers::COMMAND);
     assert!(h.state().dirty, "a recovered song is on disk nowhere");
 }
+
+/// `<tmp>/<name>/recovery`: a config folder of its own
+fn recovery_root(name: &str) -> std::path::PathBuf {
+    let base = std::env::temp_dir().join(format!("cw-exit-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = base.join("recovery");
+    std::fs::create_dir_all(&root).unwrap();
+    root
+}
+
+/// The recovery dialog came up on every start: an exit with unsaved changes
+/// kept a recovery copy (and "Later" kept offering it). A clean exit, even
+/// with unsaved work, now leaves nothing; only a crash does.
+#[test]
+fn a_clean_exit_leaves_no_recovery_copy_and_a_crash_does() {
+    use crate::recovery::{find_orphans, Session};
+    use eframe::App as _;
+    // clean exit with unsaved changes (Don't save / no prompt answered)
+    let root = recovery_root("clean");
+    let mut h = harness_with(fileio::demo_song());
+    let s = Session::start(&root, "Untitled", None).unwrap();
+    Session::autosave_blocking(&s.dir, &fileio::demo_song()).unwrap();
+    h.state_mut().session = Some(s);
+    h.state_mut().dirty = true;
+    frames(&mut h, 2);
+    h.state_mut().on_exit(None);
+    assert!(find_orphans(&root, None).is_empty());
+    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+
+    // a crash / killed process: the folder stays, its heartbeat goes stale
+    let root = recovery_root("crash");
+    let mut h = harness_with(fileio::demo_song());
+    let s = Session::start(&root, "Untitled", None).unwrap();
+    Session::autosave_blocking(&s.dir, &fileio::demo_song()).unwrap();
+    let dir = s.dir.clone();
+    h.state_mut().session = Some(s);
+    h.state_mut().dirty = true;
+    frames(&mut h, 2);
+    drop(h); // no on_exit
+    std::fs::write(dir.join("heartbeat"), "1").unwrap();
+    let o = find_orphans(&root, None);
+    assert_eq!(o.len(), 1, "a crash is offered for recovery");
+    assert_eq!(o[0].source, "autosave");
+
+    // "Later", then a clean exit: archived, not offered on the next start
+    let mut h = harness_with(fileio::demo_song());
+    h.state_mut().orphans = o;
+    frames(&mut h, 3);
+    press(&mut h, "Later");
+    assert!(h.state().orphans.is_empty() && dir.exists());
+    h.state_mut().on_exit(None);
+    assert!(!dir.exists());
+    assert!(find_orphans(&root, None).is_empty());
+    let arc = root.parent().unwrap().join("recovery-archive");
+    assert!(arc
+        .join(dir.file_name().unwrap())
+        .join("autosave.cwt")
+        .exists());
+    let _ = std::fs::remove_dir_all(root.parent().unwrap());
+}
+
+/// Leftovers of older versions' clean exits (heartbeat 0, no crash) are not
+/// offered; a crash snapshot (crash.txt) still is.
+#[test]
+fn old_clean_exit_leftovers_are_not_offered() {
+    use crate::recovery::{emergency, find_orphans, Session};
+    let root = recovery_root("old");
+    // as 0.2.9.0 left it after an exit with unsaved changes
+    let old = root.join("1700000000-1");
+    std::fs::create_dir_all(&old).unwrap();
+    Session::autosave_blocking(&old, &fileio::demo_song()).unwrap();
+    std::fs::write(old.join("heartbeat"), "0").unwrap();
+    let c = Session::start(&root, "Crashed", None).unwrap();
+    emergency(&c.dir, Some(&fileio::demo_song()), "test panic");
+    let o = find_orphans(&root, None);
+    assert_eq!(o.len(), 1);
+    assert!(o[0].crashed && o[0].dir == c.dir);
+    assert!(!old.exists());
+    let _ = std::fs::remove_dir_all(root.parent().unwrap());
+}

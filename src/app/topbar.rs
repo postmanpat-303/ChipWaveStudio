@@ -1351,7 +1351,10 @@ impl App {
                 ui.add_space(6.0);
                 if ui
                     .button("Later")
-                    .on_hover_text("keep the copies and ask again next start")
+                    .on_hover_text(
+                        "decide later: until ChipWave closes normally (then the copies \
+                         move to the recovery-archive folder and are not offered again)",
+                    )
                     .clicked()
                 {
                     later = true;
@@ -1408,7 +1411,8 @@ impl App {
             }
         }
         if later {
-            self.orphans.clear();
+            let dirs = self.orphans.drain(..).map(|o| o.dir);
+            self.orphans_later.extend(dirs);
         }
     }
 }

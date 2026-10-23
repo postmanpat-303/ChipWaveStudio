@@ -299,8 +299,8 @@ pub struct App {
     clip_rename: Option<objpie::ClipRename>,
     /// a pie to open at the next `obj_pie_frame`
     opie_req: Option<(objpie::PieFor, Pos2)>,
-    /// user chose "Don't save" (recovery copy may be deleted on exit)
-    discarded: bool,
+    /// recovery copies put off with "Later" (archived on a clean exit)
+    orphans_later: Vec<PathBuf>,
     allow_close: bool,
     /// clip to highlight briefly after duplicate/insert, with start time
     arr_flash: Option<(Vec<usize>, f64)>,
@@ -673,7 +673,7 @@ impl App {
             opie: None,
             clip_rename: None,
             opie_req: None,
-            discarded: false,
+            orphans_later: Vec::new(),
             allow_close: false,
             arr_flash: None,
             arr_multi: Default::default(),
@@ -1066,18 +1066,7 @@ impl eframe::App for App {
             let r = rx.recv().unwrap_or_else(|_| Err("save thread died".into()));
             self.finish_save(path, r);
         }
-        // clean exit: the recovery folder of this session is not needed
-        if let Some(s) = &self.session {
-            s.wait_idle(std::time::Duration::from_secs(10));
-            if crate::prompt::may_delete_recovery(self.dirty, self.discarded) {
-                s.close();
-            } else {
-                // unsaved work and no explicit discard: keep a fresh recovery copy
-                let song = self.with(|s| s.song.clone());
-                let _ = crate::recovery::Session::autosave_blocking(&s.dir, &song);
-                std::fs::write(s.dir.join("heartbeat"), "0").ok();
-            }
-        }
+        self.clean_exit();
     }
 
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
@@ -1357,29 +1346,33 @@ impl eframe::App for App {
         if !ca_on {
             self.ca.drag = None;
         }
-        egui::Panel::left("side")
-            .exact_size(330.0)
-            .resizable(false)
-            .frame(egui::Frame::NONE.inner_margin(egui::Margin {
-                left: 8,
-                right: 4,
-                top: 6,
-                bottom: 6,
-            }))
-            .show(ui, |ui| {
-                // the Clip Arranger fades in over the Instruments list; it
-                // is drawn after the Timeline (rows line up with its tracks)
-                self.ca.rect = ui.max_rect();
-                if ca_fade < 1.0 {
-                    if ca_fade > 0.0 {
-                        ui.multiply_opacity(1.0 - ca_fade);
+        if self.side_hidden() {
+            self.ca.rect = Rect::NOTHING;
+        } else {
+            egui::Panel::left("side")
+                .exact_size(330.0)
+                .resizable(false)
+                .frame(egui::Frame::NONE.inner_margin(egui::Margin {
+                    left: 8,
+                    right: 4,
+                    top: 6,
+                    bottom: 6,
+                }))
+                .show(ui, |ui| {
+                    // the Clip Arranger fades in over the Instruments list; it
+                    // is drawn after the Timeline (rows line up with its tracks)
+                    self.ca.rect = ui.max_rect();
+                    if ca_fade < 1.0 {
+                        if ca_fade > 0.0 {
+                            ui.multiply_opacity(1.0 - ca_fade);
+                        }
+                        theme::cartridge(ui.painter(), ui.max_rect(), th().slate);
+                        egui::ScrollArea::vertical()
+                            .id_salt("side_scroll")
+                            .show(ui, |ui| self.side_panel(ui));
                     }
-                    theme::cartridge(ui.painter(), ui.max_rect(), th().slate);
-                    egui::ScrollArea::vertical()
-                        .id_salt("side_scroll")
-                        .show(ui, |ui| self.side_panel(ui));
-                }
-            });
+                });
+        }
         if self.extra.browser_open {
             self.browser_side(ui);
         } else {

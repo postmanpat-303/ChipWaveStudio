@@ -2,8 +2,11 @@
 //! Layout: <config>/recovery/<session-id>/{session.toml, heartbeat, autosave.cwt,
 //! autosave.1.cwt, autosave.2.cwt, panic.cwt, crash.txt}, and a copy of every
 //! crash report in <config>/crashes/crash-<unix time>.txt. A clean exit removes
-//! the session folder; a folder left behind (stale heartbeat) is offered for
-//! recovery on the next start.
+//! the session folder (unsaved changes the user did not keep are gone); only a
+//! folder left behind by a crash or a killed process (stale heartbeat) is
+//! offered for recovery on the next start. Copies the user put off ("Later")
+//! move to <config>/recovery-archive on the next clean exit (newest 10 kept)
+//! so they are not offered on every start.
 use crate::model::Song;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -222,6 +225,13 @@ pub fn find_orphans(root: &Path, own: Option<&Path>) -> Vec<Orphan> {
         if now().saturating_sub(hb) < STALE.as_secs() {
             continue; // another instance is running
         }
+        let crashed = dir.join("crash.txt").exists();
+        if hb == 0 && !crashed {
+            // left by a clean exit of 0.2.9.0 and older (they kept unsaved
+            // changes on exit, marked with heartbeat 0): not a crash
+            let _ = std::fs::remove_dir_all(&dir);
+            continue;
+        }
         let info: SessionInfo = std::fs::read_to_string(dir.join("session.toml"))
             .ok()
             .and_then(|t| toml::from_str(&t).ok())
@@ -235,7 +245,6 @@ pub fn find_orphans(root: &Path, own: Option<&Path>) -> Vec<Orphan> {
             .iter()
             .filter_map(|(p, s)| mtime(p).map(|t| (p.clone(), *s, t)))
             .max_by_key(|x| x.2);
-        let crashed = dir.join("crash.txt").exists();
         match best {
             Some((file, source, modified)) => out.push(Orphan {
                 dir,
@@ -257,6 +266,46 @@ pub fn find_orphans(root: &Path, own: Option<&Path>) -> Vec<Orphan> {
 
 pub fn discard(o: &Orphan) {
     let _ = std::fs::remove_dir_all(&o.dir);
+}
+
+/// How many put-off recovery copies `<config>/recovery-archive` keeps.
+const ARCHIVE_KEEP: usize = 10;
+
+/// A clean exit after "Later": move the session folder `dir` (in
+/// `<config>/recovery`) to `<config>/recovery-archive`, keeping the newest
+/// [`ARCHIVE_KEEP`]; it is not offered again.
+pub fn archive(dir: &Path) {
+    let (Some(name), Some(base)) = (dir.file_name(), dir.parent().and_then(|r| r.parent())) else {
+        return;
+    };
+    if !dir.is_dir() {
+        return;
+    }
+    let arc = base.join("recovery-archive");
+    let _ = std::fs::create_dir_all(&arc);
+    if std::fs::rename(dir, arc.join(name)).is_err() {
+        return; // never delete a copy that could not be kept
+    }
+    let mut old: Vec<PathBuf> = std::fs::read_dir(&arc)
+        .map(|r| {
+            r.flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect()
+        })
+        .unwrap_or_default();
+    // session ids start with the unix time: oldest first
+    old.sort_by_key(|p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.split('-').next())
+            .and_then(|t| t.parse::<u64>().ok())
+            .unwrap_or(0)
+    });
+    let n = old.len().saturating_sub(ARCHIVE_KEEP);
+    for p in &old[..n] {
+        let _ = std::fs::remove_dir_all(p);
+    }
 }
 
 #[cfg(test)]
@@ -392,5 +441,22 @@ mod tests {
         keep_crash_log(&root.join("crashes"), "y");
         assert_eq!(std::fs::read_dir(root.join("crashes")).unwrap().count(), 20);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_archive_keeps_the_newest_ten() {
+        let base = tmp_root("arc");
+        let root = base.join("recovery");
+        for t in 0..12u64 {
+            let d = root.join(format!("{}-1", 1000 + t));
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("autosave.cwt"), "x").unwrap();
+            archive(&d);
+            assert!(!d.exists());
+        }
+        let arc = base.join("recovery-archive");
+        assert_eq!(std::fs::read_dir(&arc).unwrap().count(), 10);
+        assert!(!arc.join("1000-1").exists() && arc.join("1011-1").exists());
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

@@ -157,6 +157,22 @@ pub(crate) enum PieAct {
     /// a new built-in instrument (its Init / first preset) becomes this
     /// track's instrument
     NewInstrument(Builtin),
+    /// the track pie's Drum pattern › <instrument> on THIS track: it plays
+    /// a new one and its pattern opens (`track_set_pattern_instrument`)
+    DrumHere(Builtin),
+    /// ... › Drum Kit › <kit> on THIS track (an empty pattern gets the
+    /// kit's starter groove)
+    DrumKitHere(&'static str),
+    /// ... › Drum Kit › More kits…: the Browser on Drum Kits, the pick
+    /// plays THIS track
+    MoreKitsHere,
+    /// an empty 1-bar pattern on this track at the play marker
+    NewPattern,
+    /// mute / solo this track (as its M / S buttons)
+    Mute,
+    Solo,
+    /// the empty-area pie: a new track at the end playing a new built-in
+    NewTrackWith(Builtin),
 }
 
 /// the built-in instruments the pie's Add › puts straight on a track
@@ -327,6 +343,11 @@ pub(crate) struct TrackInfo {
     /// its automation lanes: (label, on)
     pub(crate) lanes: Vec<(String, bool)>,
     pub(crate) lanes_shown: bool,
+    pub(crate) mute: bool,
+    pub(crate) solo: bool,
+    /// the empty-area pie (right-click below the tracks): every choice
+    /// makes a NEW track at the end; the track pie never does (but Duplicate)
+    pub(crate) new: bool,
 }
 
 pub(crate) fn sub_title(seg: Seg) -> &'static str {
@@ -731,6 +752,9 @@ pub(crate) struct Pie {
     pub(crate) moved_at: f64,
     /// Add's rings around the pie (`trackring.rs`)
     pub(crate) ring: Option<super::trackring::Ring>,
+    /// opened on the empty area below the tracks: only the New track ring
+    /// (no segments); `track` is the new track's index (the end)
+    pub(crate) empty: bool,
 }
 
 /// colours of the pie in the current theme
@@ -816,8 +840,49 @@ impl App {
             aim_from: None,
             moved_at: ctx.input(|i| i.time),
             ring: None,
+            empty: false,
         });
         ctx.request_repaint();
+    }
+
+    /// right-click on the empty area below the tracks (or an empty lane):
+    /// the New track ring (Instrument track ›, Drum pattern ›, Audio, Empty,
+    /// Browse…) at `at`; every choice adds a track at the end
+    pub(crate) fn open_add_pie(&mut self, at: Pos2, press: bool, ctx: &egui::Context) {
+        let n = self.with(|s| s.song.channels);
+        let screen = ctx.content_rect();
+        let now = ctx.input(|i| i.time);
+        self.track_rename = None;
+        let slots = super::trackring::ring_slots(
+            super::trackring::Level::Add,
+            &self.ring_info_for(n, true),
+        );
+        self.pie = Some(Pie {
+            track: n,
+            name: "New track".into(),
+            centre: clamp_centre(at, screen),
+            t0: now,
+            closing: None,
+            key: None,
+            sub: None,
+            sub_key: None,
+            press: press.then_some(at),
+            frozen: None,
+            last_ptr: None,
+            aim_from: None,
+            moved_at: now,
+            ring: Some(super::trackring::Ring::root_n(now, slots.len(), 0)),
+            empty: true,
+        });
+        ctx.request_repaint();
+    }
+
+    /// `pie_info` with the pie's mode (`new`: the empty-area pie)
+    pub(crate) fn ring_info_for(&self, tr: usize, new: bool) -> TrackInfo {
+        TrackInfo {
+            new,
+            ..self.pie_info(tr)
+        }
     }
 
     pub(crate) fn pie_info(&self, tr: usize) -> TrackInfo {
@@ -829,6 +894,7 @@ impl App {
         let lanes_shown = self.track_lanes_shown(tr);
         self.with(|s| {
             let t = s.song.timeline.as_deref().and_then(|t| t.tracks.get(tr));
+            let mx = s.song.mixer.channels.get(tr);
             TrackInfo {
                 index: tr,
                 tracks: s.song.channels,
@@ -840,6 +906,9 @@ impl App {
                 instr_full: s.song.instruments.len() >= 255,
                 lanes,
                 lanes_shown,
+                mute: mx.is_some_and(|m| m.mute),
+                solo: mx.is_some_and(|m| m.solo),
+                new: false,
             }
         })
     }
@@ -1006,8 +1075,9 @@ impl App {
         }
         let Some(p) = &self.pie else { return };
         let tr = p.track;
+        let empty = p.empty;
         let info = self.pie_info(tr);
-        if tr >= info.tracks {
+        if tr >= info.tracks && !empty {
             self.pie = None;
             return;
         }
@@ -1186,7 +1256,8 @@ impl App {
         let ring = ring();
         for (i, seg) in SEGS.iter().enumerate() {
             let k = seg_progress(elapsed, i, reduce) * fade;
-            if k <= 0.001 {
+            // the empty-area pie: only its ring around the centre
+            if k <= 0.001 || empty {
                 continue;
             }
             let lit = key == Some(i) && open;
@@ -1301,7 +1372,7 @@ impl App {
             painter.text(
                 centre - egui::vec2(0.0, 9.0 * sc),
                 egui::Align2::CENTER_CENTER,
-                "TRACK",
+                if empty { "ADD" } else { "TRACK" },
                 FontId::proportional(10.0 * sc.max(0.8)),
                 pl.disc_ink2.gamma_multiply(k0),
             );
@@ -1492,6 +1563,72 @@ fn tooltip(p: &egui::Painter, pl: &Pal, text: &str, at: Pos2, screen: Rect) {
 
 impl App {
     /// do a pie action on track `tr` (each one undo step)
+    /// a new audio track at `at`
+    pub(crate) fn track_add_audio(&mut self, at: usize) {
+        if self.track_add(at) {
+            let at = self.ch;
+            let name = format!("Audio {}", at + 1);
+            self.with(|s| {
+                if let Some(x) = s.song.channel_names.get_mut(at) {
+                    *x = name.clone();
+                }
+                if let Some(t) = s
+                    .song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|t| t.tracks.get_mut(at))
+                {
+                    t.kind = crate::timeline::TrackKind::Audio;
+                    t.name = name.clone();
+                }
+            });
+            self.status = format!("Added audio track {:02}: drop audio files on it", at + 1);
+        }
+    }
+
+    /// Drum pattern › Browse… / More kits…: the Browser's pick makes a new
+    /// track at `at` with an empty 1-bar pattern at the play marker
+    fn pie_drum_browse(&mut self, at: usize, kits: bool) {
+        if self.with(|s| s.song.channels) >= MAX_CHANNELS {
+            self.status = "All 32 tracks are used (the channel limit)".into();
+            return;
+        }
+        self.open_browser_tab(crate::browser::Tab::Instruments);
+        if kits {
+            self.br.filter.category = Some("Drum Kit".into());
+            self.status = "Pick a Drum Kit: it goes on a new track with an empty 1-bar pattern at the play marker".into();
+        } else {
+            self.status = "Pick an instrument: it goes on a new track with an empty 1-bar pattern at the play marker".into();
+        }
+        self.br.new_track_at = Some(at);
+        self.br.new_track_pattern = true;
+    }
+
+    /// a choice in the empty-area pie: a NEW track at the end
+    pub(crate) fn pie_apply_new(&mut self, a: PieAct) {
+        let n = self.with(|s| s.song.channels);
+        match a {
+            PieAct::NewTrackWith(b) => self.track_new_with_instrument(n, b),
+            PieAct::DrumTrack(b) => {
+                // below the last track (`tr + 1`, clamped: 0 in an empty song)
+                self.track_new_pattern_track(n.saturating_sub(1), b, None);
+            }
+            PieAct::DrumKitTrack(k) => {
+                self.track_new_pattern_track(n.saturating_sub(1), Builtin::DrumKit, Some(k));
+            }
+            PieAct::DrumBrowse | PieAct::MoreKits => self.pie_drum_browse(n, a == PieAct::MoreKits),
+            PieAct::AddInstrument => self.track_add_with(n),
+            PieAct::AddAudio => self.track_add_audio(n),
+            PieAct::AddEmpty(_) => {
+                let added = self.track_add(n);
+                if added {
+                    self.status = format!("Added track {:02}", n + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn pie_apply(&mut self, tr: usize, a: PieAct, ctx: &egui::Context) {
         let n = self.with(|s| s.song.channels);
         if tr >= n {
@@ -1549,6 +1686,52 @@ impl App {
                 self.show_instrument_editor();
             }
             PieAct::NewInstrument(b) => self.track_new_instrument(tr, b),
+            PieAct::DrumHere(b) => {
+                self.track_set_pattern_instrument(tr, b, None);
+            }
+            PieAct::DrumKitHere(k) => {
+                self.track_set_pattern_instrument(tr, Builtin::DrumKit, Some(k));
+            }
+            PieAct::MoreKitsHere => {
+                self.open_browser_tab(crate::browser::Tab::Instruments);
+                self.br.filter.category = Some("Drum Kit".into());
+                self.br.track_target = Some((tr, crate::browser::Tab::Instruments));
+                self.status = format!(
+                    "Pick a Drum Kit in the Browser (double-click or Enter): it plays track {:02}",
+                    tr + 1
+                );
+            }
+            PieAct::NewPattern => {
+                self.snapshot();
+                self.undo_hold += 1;
+                let r = self.track_add_empty_pattern(tr);
+                self.undo_hold -= 1;
+                self.status = match r {
+                    Some((_, bar)) => {
+                        format!("Track {:02}: an empty 1-bar pattern at bar {bar}", tr + 1)
+                    }
+                    None => "Can't add a pattern there".into(),
+                };
+            }
+            PieAct::Mute | PieAct::Solo => {
+                let on = self.with(|s| {
+                    let m = s.song.mixer.channels.get_mut(tr)?;
+                    let f = if a == PieAct::Mute {
+                        &mut m.mute
+                    } else {
+                        &mut m.solo
+                    };
+                    *f = !*f;
+                    Some(*f)
+                });
+                if let Some(on) = on {
+                    self.dirty = true;
+                    let w = if a == PieAct::Mute { "muted" } else { "soloed" };
+                    self.status =
+                        format!("Track {:02} {}{w}", tr + 1, if on { "" } else { "not " });
+                }
+            }
+            PieAct::NewTrackWith(b) => self.track_new_with_instrument(tr + 1, b),
             PieAct::DrumTrack(b) => {
                 self.track_new_pattern_track(tr, b, None);
             }
@@ -1556,20 +1739,7 @@ impl App {
                 self.track_new_pattern_track(tr, Builtin::DrumKit, Some(k));
             }
             PieAct::DrumBrowse | PieAct::MoreKits => {
-                if n >= MAX_CHANNELS {
-                    self.status = "All 32 tracks are used (the channel limit)".into();
-                    return;
-                }
-                if a == PieAct::MoreKits {
-                    self.open_browser_tab(crate::browser::Tab::Instruments);
-                    self.br.filter.category = Some("Drum Kit".into());
-                    self.status = "Pick a Drum Kit: it goes on a new track below with an empty 1-bar pattern at the play marker".into();
-                } else {
-                    self.open_browser_tab(crate::browser::Tab::Instruments);
-                    self.status = "Pick an instrument: it goes on a new track below with an empty 1-bar pattern at the play marker".into();
-                }
-                self.br.new_track_at = Some(tr + 1);
-                self.br.new_track_pattern = true;
+                self.pie_drum_browse(tr + 1, a == PieAct::MoreKits)
             }
             PieAct::AutoToggle => {
                 self.auto_op(super::timeline::autolanes::AutoOp::Toggle(tr));
@@ -1596,28 +1766,7 @@ impl App {
                     self.status = format!("Added track {:02}", at + 1);
                 }
             }
-            PieAct::AddAudio => {
-                let at = tr + 1;
-                if self.track_add(at) {
-                    let name = format!("Audio {}", at + 1);
-                    self.with(|s| {
-                        if let Some(x) = s.song.channel_names.get_mut(at) {
-                            *x = name.clone();
-                        }
-                        if let Some(t) = s
-                            .song
-                            .timeline
-                            .as_deref_mut()
-                            .and_then(|t| t.tracks.get_mut(at))
-                        {
-                            t.kind = crate::timeline::TrackKind::Audio;
-                            t.name = name.clone();
-                        }
-                    });
-                    self.status =
-                        format!("Added audio track {:02}: drop audio files on it", at + 1);
-                }
-            }
+            PieAct::AddAudio => self.track_add_audio(tr + 1),
             PieAct::Duplicate => {
                 if n >= MAX_CHANNELS {
                     self.status = "All 32 tracks are used (the channel limit)".into();
