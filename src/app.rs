@@ -74,6 +74,8 @@ mod launcher_ui_tests;
 #[cfg(test)]
 mod layout_tests;
 mod lcd;
+#[cfg(test)]
+mod lcd_tests;
 mod library;
 mod metroicon;
 mod midiview;
