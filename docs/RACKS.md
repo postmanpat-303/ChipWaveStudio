@@ -15,9 +15,13 @@ Notes side.
 
 - Click a track or an instrument and the **Rack** opens under the Timeline:
   one row, the instrument first, then its effects in order, then a **+** drop
-  zone. A row wider than the panel scrolls sideways.
+  zone (with no effects yet, a **Drag an effect here** box filling the rest
+  of the row). A row wider than the panel scrolls sideways. A track with no
+  instrument shows a **Drag an instrument here** box; a built-in added from
+  the track pie's **Add instrument** appears here as its compact card.
 - Every card has a **side tab**: ⏻ bypass, ✕ remove and ‹ collapse (a
-  collapsed card is a slim name strip). The instrument's tab only collapses;
+  collapsed card is a slim name strip; a double-click on the tab, off its
+  buttons, collapses or expands it too). The instrument's tab only collapses;
   it is swapped, not removed (right-click › **Replace instrument…**).
   Right-click a card for the rest: Presets ›, Open advanced editor, Make
   rack and Save rack… on the instrument; Duplicate, Move left / right,

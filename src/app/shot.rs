@@ -451,6 +451,18 @@ impl App {
                             .insert((6, super::devcards::open_key(&chain, n)));
                     }
                 }
+                // CHIPWAVE_SHOT_COLLAPSE=N: device N folded to a strip (what
+                // a double-click on its side tab does)
+                if let Some(n) = std::env::var("CHIPWAVE_SHOT_COLLAPSE")
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                {
+                    self.with(|s| {
+                        if let Some(d) = s.song.instruments[ii].fx.get_mut(n) {
+                            d.collapsed = true;
+                        }
+                    });
+                }
                 self.set_lower(4);
                 self.extra.lower_h = 430.0;
                 self.dev.inst_folded = std::env::var_os("CHIPWAVE_SHOT_FOLD").is_some();
