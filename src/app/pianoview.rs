@@ -1726,7 +1726,7 @@ impl App {
                     if pr_btn(ui, "Chords", on, true, "show the chord lane above the notes").clicked() {
                         self.cl.hidden = on;
                     }
-                    if pr_btn(ui, "Generate", false, true, "Generate chord progression… (styles, key, length, colour)").clicked() {
+                    if pr_btn(ui, "Generate", false, true, "Generators: chord progression… (styles, key, length, colour; Melody is its second tab)").clicked() {
                         let at = self.cl.sel.and_then(|i| self.cl_marks(target).get(i).map(|m| m.start)).unwrap_or(0);
                         self.cl_open_gen_at(at);
                     }

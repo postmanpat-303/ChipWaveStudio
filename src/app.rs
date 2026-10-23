@@ -55,6 +55,7 @@ mod focus;
 mod focus_tests;
 mod fxplugview;
 mod fxview;
+mod genpanel;
 mod genview;
 #[cfg(test)]
 mod glyph_tests;

@@ -219,7 +219,7 @@ fn chord_lane_survives_invalid_and_stale_states() {
     frames(&mut h, 3);
     h.state_mut().cl_open_gen_at(0);
     frames(&mut h, 2);
-    if let Some(n) = h.query_by_label("Apply") {
+    if let Some(n) = h.query_by_label("Write to timeline") {
         n.click();
     }
     frames(&mut h, 2);
@@ -885,7 +885,8 @@ fn write_notes_from_the_chord_pie_never_doubles() {
     assert_eq!(counts[0], counts[1], "no duplicates");
 }
 
-/// the Generate dialog names its target clip / bars and the scope
+/// the Generators panel's WRITE card names its target clip / bars and
+/// what the write does to the notes there (per mode)
 #[test]
 fn generate_dialog_shows_target_and_scope() {
     let mut h = clip_setup();
@@ -893,16 +894,34 @@ fn generate_dialog_shows_target_and_scope() {
     h.state_mut().cl.gen.write = true;
     frames(&mut h, 3);
     assert!(h.query_by_label_contains("track 03, bars 2–").is_some());
+    assert!(h.query_by_label_contains("Track 03 · ").is_some());
+    let end = crate::chordgen::generate(&h.state().cl.gen.opts)
+        .marks
+        .iter()
+        .map(|m| m.end())
+        .max()
+        .unwrap();
+    let last = (end - 1) / chordlane::BAR + 1;
     assert!(h
-        .query_by_label_contains("replaces the notes inside each chord's span only")
+        .query_by_label_contains(&format!("replaces notes in bars 2–{last} on track 03"))
         .is_some());
-    h.get_by_label("Add on top (keep the notes already there)")
-        .click();
+    h.get_by_label("Notes on top").click();
     frames(&mut h, 2);
-    assert!(h.state().cl.gen.on_top);
+    assert!(h.state().cl.gen.on_top && h.state().cl.gen.write);
     assert!(h
-        .query_by_label_contains("notes added on top of the clip's notes")
+        .query_by_label_contains("adds notes on top in bars 2–")
         .is_some());
+    h.get_by_label("Markers only").click();
+    frames(&mut h, 2);
+    assert!(!h.state().cl.gen.write);
+    assert!(h
+        .query_by_label_contains("writes chord markers only in bars 2–")
+        .is_some());
+    h.get_by_label("Replace notes").click();
+    frames(&mut h, 2);
+    assert!(h.state().cl.gen.write && !h.state().cl.gen.on_top);
+    assert!(h.query_by_label("Write to timeline").is_some());
+    assert!(h.query_by_label("one Ctrl+Z takes it back").is_some());
 }
 
 // ------------------------------------------------- step 5: piano-key audition
@@ -1348,8 +1367,11 @@ fn generate_dialog_fuzz_on_a_new_clip() {
         " + ",
         "Another one",
         "Preview",
-        "Apply",
-        "Cancel",
+        "Write to timeline",
+        "Close",
+        "Markers only",
+        "Replace notes",
+        "Notes on top",
     ];
     fixed.extend([
         "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B",
@@ -1416,7 +1438,7 @@ fn generate_dialog_fuzz_on_a_new_clip() {
                         "play".into()
                     }
                     5..=7 => format!("style {}", STYLES[rnd(STYLES.len())].name),
-                    8 if rnd(2) == 0 => "btn Apply".into(),
+                    8 if rnd(2) == 0 => "btn Write to timeline".into(),
                     8 => "btn Generate".into(),
                     _ => format!("btn {}", fixed[rnd(fixed.len())]),
                 }
@@ -1507,7 +1529,7 @@ fn every_chord_pie_entry_on_a_new_clips_chord() {
                         h.get_by_label(st.name).click();
                         frames(&mut h, 2);
                     }
-                    h.get_by_label("Apply").click();
+                    h.get_by_label("Write to timeline").click();
                     frames(&mut h, 2);
                 }
                 h.state_mut().cl.edit = None;
@@ -1752,4 +1774,182 @@ fn add_a_built_in_instrument_from_the_track_pie() {
         )
     });
     assert_eq!(after, before);
+}
+
+// ------------------------------------------- Generators panel (mockup B)
+
+fn clip_on(h: &Harness<'static, App>, track: usize) -> Option<tl::NoteClipData> {
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref()?;
+        let c = t
+            .clips
+            .iter()
+            .find(|c| c.track as usize == track && c.notes().is_some())?;
+        let tl::ClipKind::Notes { data } = c.kind else {
+            return None;
+        };
+        Some((*t.notes[data as usize]).clone())
+    })
+}
+
+/// the panel: GENERATORS + the Chords / Melody pills; the Melody tab's
+/// controls and Advanced fold; the Chords tab's Write is one undo step
+#[test]
+fn generators_panel_tabs_and_chords_write() {
+    let mut h = clip_setup();
+    let t = h.state().pr.target.unwrap();
+    h.state_mut().cl_open_gen_at(0);
+    frames(&mut h, 3);
+    assert!(h.query_by_label("GENERATORS").is_some());
+    assert!(h.query_by_label("Another one").is_some());
+    assert!(
+        h.query_by_label("Lock rhythm").is_none(),
+        "Chords tab first"
+    );
+    h.query_all_by_label("Melody")
+        .next()
+        .expect("the Melody pill")
+        .click();
+    frames(&mut h, 3);
+    assert_eq!(h.state().cl.gen.tab, genpanel::GenTab::Melody);
+    for l in [
+        "Dice",
+        "Another one",
+        "Preview",
+        "Lock rhythm",
+        "Lock notes",
+        "Write to timeline",
+    ] {
+        assert!(h.query_by_label(l).is_some(), "{l}");
+    }
+    assert!(
+        h.query_by_label("End on tonic").is_none(),
+        "Advanced is folded"
+    );
+    h.get_by_label("Advanced...").click();
+    frames(&mut h, 2);
+    assert!(h.state().cl.gen.mel.adv, "the fold opens");
+    assert!(h.query_by_label("End on tonic").is_some());
+    assert!(h
+        .query_by_label_contains("adds a new track “Melody” below track 03")
+        .is_some());
+    // Preview queues the melody
+    h.get_by_label("Preview").click();
+    frames(&mut h, 1);
+    assert!(h.state().cl.t0.is_some() || !h.state().cl.preview.is_empty());
+    h.state_mut().cl.preview.clear();
+    // back to Chords: Write = markers + notes, one Ctrl+Z
+    h.state_mut().cl.gen.tab = genpanel::GenTab::Chords;
+    h.state_mut().cl.gen.write = true;
+    frames(&mut h, 2);
+    h.get_by_label("Write to timeline").click();
+    frames(&mut h, 2);
+    assert!(!h.state().cl.gen.open);
+    assert!(!h.state().cl_marks(t).is_empty());
+    assert!(!note_data(&h).notes.is_empty());
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert!(h.state().cl_marks(t).is_empty());
+    assert!(note_data(&h).notes.is_empty(), "one undo step");
+}
+
+/// Melody's default Write: a new "Melody" track with a lead synth under
+/// the clip's track holding exactly the melody shown; one undo removes it
+#[test]
+fn melody_write_adds_a_melody_track_in_one_undo() {
+    let mut h = clip_setup();
+    let (ch0, ins0) = h
+        .state()
+        .with(|s| (s.song.channels, s.song.instruments.len()));
+    h.state_mut().gen_open_melody(0);
+    frames(&mut h, 3);
+    let shown = h.state().cl.gen.mel.last.clone();
+    assert!(!shown.is_empty());
+    assert!(h.state().cl.gen.mel.new_track);
+    h.get_by_label("Write to timeline").click();
+    frames(&mut h, 3);
+    assert!(!h.state().cl.gen.open);
+    let (ch1, ins1, name, iname) = h.state().with(|s| {
+        (
+            s.song.channels,
+            s.song.instruments.len(),
+            s.song.channel_names.get(3).cloned().unwrap_or_default(),
+            s.song
+                .instruments
+                .last()
+                .map(|i| i.name.clone())
+                .unwrap_or_default(),
+        )
+    });
+    assert_eq!(ch1, ch0 + 1, "{}", h.state().status);
+    assert_eq!(ins1, ins0 + 1);
+    assert_eq!(name, "Melody");
+    assert_eq!(iname, "WaveForge Saw Lead");
+    let d = clip_on(&h, 3).expect("the melody clip on track 04");
+    let got: Vec<(tl::Tick, u8)> = d.notes.iter().map(|n| (n.start, n.key)).collect();
+    let want: Vec<(tl::Tick, u8)> = shown.iter().map(|n| (n.start, n.key)).collect();
+    assert_eq!(got, want);
+    assert!(d.notes.iter().all(|n| n.instr as usize == ins1));
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    let (ch2, ins2) = h
+        .state()
+        .with(|s| (s.song.channels, s.song.instruments.len()));
+    assert_eq!((ch2, ins2), (ch0, ins0), "one undo takes it all back");
+}
+
+/// Melody into this track over the clip's chord lane: in scale, inside
+/// the chords' bars; writing it again (replace or on top) adds no doubles
+#[test]
+fn melody_into_this_track_follows_the_lane_and_never_doubles() {
+    let mut h = clip_setup();
+    let t = h.state().pr.target.unwrap();
+    let am = crate::chordgen::ChordMark {
+        root: 9,
+        q: crate::chordgen::Quality::Min,
+        ..cmaj(chordlane::BAR)
+    };
+    h.state()
+        .with(|s| s.song.info.key = Some(crate::chords::Key::new(0, crate::chords::Scale::Major)));
+    h.state_mut().cl_write(t, vec![cmaj(0), am], vec![], true);
+    h.state_mut().undo_reset();
+    frames(&mut h, 2);
+    let mut counts = vec![];
+    for top in [false, false, true] {
+        h.state_mut().gen_open_melody(0);
+        h.state_mut().cl.gen.mel.new_track = false;
+        h.state_mut().cl.gen.mel.on_top = top;
+        frames(&mut h, 3);
+        let shown = h.state().cl.gen.mel.last.clone();
+        assert!(!shown.is_empty());
+        assert!(shown
+            .iter()
+            .all(|n| n.start >= 0 && n.start < 2 * chordlane::BAR));
+        assert!(shown
+            .iter()
+            .all(|n| [0u8, 2, 4, 5, 7, 9, 11].contains(&crate::chords::pc_of(n.key))));
+        assert!(h
+            .query_all_by_label_contains("on track 03")
+            .next()
+            .is_some());
+        h.get_by_label("Write to timeline").click();
+        frames(&mut h, 2);
+        assert!(
+            h.state().cl.confirm.is_none(),
+            "nothing to ask: {}",
+            h.state().status
+        );
+        counts.push(note_data(&h).notes.len());
+    }
+    assert!(counts[0] > 0);
+    assert_eq!(counts, vec![counts[0]; 3], "no doubles");
+    assert_eq!(h.state().cl_marks(t).len(), 2, "markers untouched");
+    for _ in 0..3 {
+        h.state_mut().undo(false);
+    }
+    frames(&mut h, 2);
+    assert!(
+        note_data(&h).notes.is_empty(),
+        "each write was one undo step"
+    );
 }
