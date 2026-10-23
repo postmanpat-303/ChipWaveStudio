@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.7.0-00d0ff" alt="Version 0.2.7.0">
+  <img src="https://img.shields.io/badge/version-0.2.8.0-00d0ff" alt="Version 0.2.8.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -20,7 +20,7 @@
 
 ```
  ┌──────────────────────────────────────────────────────────────────────────┐
- │  C H I P W A V E   S T U D I O            v0.2.7.0     BPM 140  SPD 06  │
+ │  C H I P W A V E   S T U D I O            v0.2.8.0     BPM 140  SPD 06  │
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
  │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ free music studio │
  │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ sequencer + synth │
@@ -29,14 +29,14 @@
 ```
 
 <p align="center">
-  <img src="docs/screenshots/timeline-oceans-11.png" alt="ChipWave Studio 0.2.7.0 in the Slate theme playing the Oceans 11 demo: the Timeline on top with eleven tracks of named, coloured clips under Intro, Verse, Chorus, Bridge, Breakdown and Outro markers, the Clip Arranger and Master meters on the left, and the Lead track's chorus melody in the piano roll below" width="800">
-  <br><sub>Real capture of ChipWave Studio 0.2.7.0 playing the built-in demo “Oceans 11” (music by Martin Galway): the Timeline on top, the piano roll below.</sub>
+  <img src="docs/screenshots/timeline-oceans-11.png" alt="ChipWave Studio in the Slate theme playing the Oceans 11 demo: the Timeline on top with eleven tracks of named, coloured clips under Intro, Verse, Chorus, Bridge, Breakdown and Outro markers, the Clip Arranger and Master meters on the left, and the Lead track's chorus melody in the piano roll below" width="800">
+  <br><sub>Real capture of ChipWave Studio playing the built-in demo “Oceans 11” (music by Martin Galway): the Timeline on top, the piano roll below.</sub>
 </p>
 
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.7.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.8.0</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -44,14 +44,38 @@
   <a href="https://github.com/postmanpat-303/BigWaveRadio"><b>BigWave Radio</b></a> (sister project)
 </p>
 
-**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Stack sounds into **racks** with Nested Device Chains, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and for those who love the classic way there is an optional OctaMED-style **Tracker** view. Up to 32 tracks per song. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
+**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **StringWave**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Stack sounds into **racks** with Nested Device Chains, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and for those who love the classic way there is an optional OctaMED-style **Tracker** view. Up to 32 tracks per song. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
 
 > **ChipWave Studio was called ChipWave Tracker until 0.2.3.19.** It was renamed in 0.2.4.0 to tell it apart from an unrelated iOS app called "ChipWave". Same app, same settings, same `.cwt` songs; the old GitHub links redirect here. Website: **[postmanpat-303.github.io/ChipWaveStudio](https://postmanpat-303.github.io/ChipWaveStudio/)**. Details: [docs/RENAME.md](docs/RENAME.md).
 
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.7.0: racks and Nested Device Chains
+## New in 0.2.8.0: StringWave, the violet look and pie-ring Add
+
+- **StringWave**, a new built-in string-ensemble instrument: three layers, undertones (sub and drone), a filter with its own envelope, two LFOs, chorus, echo and a big reverb, with eight presets from *Velvet Ensemble* to *Slow Swell Orchestra*. The mod wheel, expression and sustain pedal work out of the box. Find it in **Track pie › Add › Instrument** or **Browser › ChipWave Instruments**.
+- **A violet look for ChipWave's own instruments**: every built-in instrument panel, its card in Nested Device Chains and its row in the Browser share one violet tint, so you can tell a ChipWave instrument from a plugin at a glance.
+- **Track pie › Add opens rings**: *Drum pattern › Drum Kit › 909 Kit* (or an instrument) makes a new track below with an empty 1-bar pattern, ready to fill. One Ctrl+Z takes it all back.
+- **Drum Kit**: *Kits…* and *Dice kit* now load the kit's name, sounds and pad names, and an empty pattern gets the kit's starter groove.
+- **Piano roll ruler**: click the ruler to set a paste marker (Ctrl+V pastes there and carries on after it), the play marker follows the Timeline, and bar, beat and grid ticks.
+- **CLAP plugins**: knob moves in a plugin's own window are heard on every track that plays it, and its sound is always saved.
+- **Polish since 0.2.7.0**: studio knobs, a lower panel that keeps its height, a calmer Master level history, Nested Device Chains opens on Cards, silent plugin previews, **VST & CLAP** in a simpler Browser, **Keys → Notes**, a Play / Stop toggle, a metronome with count-in, box and Alt-line select in the piano roll, clip colours that show at once, and many visual fixes.
+
+Songs that use StringWave need 0.2.8.0 to open; every other song plays exactly as before. Known limits and details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/stringwave-layers.png" alt="StringWave's Layers page in the violet built-in look: three layers with Octave, Detune, Tone, Level and Pan, Undertones, the Amp envelope and Perform"><br><b>StringWave</b>: three layers, undertones and a swelling amp envelope on the Layers page; Filter &amp; Mod and FX &amp; Master are one click away.</td>
+    <td width="50%"><img src="docs/screenshots/stringwave-full.png" alt="StringWave's full view: every section of the instrument on one page"><br><b>Full view</b>: every StringWave section on one page.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/instskin-waveforge.png" alt="WaveForge in the violet built-in look: macros, Sound, Filter and Envelope cards"><br><b>The violet look</b>: ChipWave's own instruments share one tint, here WaveForge; plugins stay neutral.</td>
+    <td width="50%"><img src="docs/screenshots/addring-kit.png" alt="The track pie's Add rings: Drum pattern › Drum Kit › with 909, Psy, Techno, Acoustic-ish, Trap and Lo-fi kits round the pie"><br><b>Add rings</b>: Drum pattern › Drum Kit › a kit makes a new drum track with a 1-bar pattern at the play marker.</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.7.0: racks and Nested Device Chains</b></summary>
+
 
 Build your own instruments right under the Timeline:
 - **Nested Device Chains:** click a track and its instrument opens under the Timeline (Ctrl+7) as a tree of the instrument, its layers and every effect in order, with the selected item's controls beside it. **+ Add Device**, drag to reorder or move a device to another chain (Ctrl: copy), Bypass, Duplicate and Remove, all undoable.
@@ -73,6 +97,8 @@ Known limits: plugin instruments can't be layers and plugin effects on a layer p
     <td width="50%"><img src="docs/screenshots/racks-browser.png" alt="Browser › My Racks with three saved racks, search, Load onto track 06, Preview and Add as new instrument"><br><b>My Racks</b>: your saved racks in the Browser, searchable, loaded onto the selected track in one undo step.</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.6.0: one workflow</b></summary>
 
@@ -207,8 +233,8 @@ Known limits: the launcher holds note clips only, there's no recording into slot
 | 🎼 **Chords & scale lock** | song key (pick or detect), chord pads, progressions written as chords, arps or bass, scale lock for typing and MIDI |
 | 📚 **Instrument library** | `.cwi` instrument files, a library folder with categories, factory sounds, audition, rename / reorder / swap instruments |
 | 🎛️ **Effects column** | `01`/`02` slide, `08` note decay, `09` speed, `0C` volume, `0D` volume slide, `0F` tempo; Voice `30`–`37` (`33`/`34` stutter any instrument); filter and acid `38`–`3D` (cutoff, resonance, cutoff slides, 303 glide, accent); `3E` speak word; `3F`–`42` Voice Transform and chrome devices; `43xy` generator macros. Full table: [TRACKER.md](docs/TRACKER.md#5-effect-commands) |
-| 🔌 **Plugin instruments** | CLAP instruments such as Surge XT: crash-guarded scanner, browser, native editor (Windows), parameter list, 8 macros for `43xy` and automation, state saved in the song, offline render. VST3 is listed but not hosted yet. [PLUGINS.md](docs/PLUGINS.md) |
-| 🎲 **Generators** | macro-knob instruments: Drum Synth and kits, Drum Kit (32 pads, step sequencer, groove generator), Chip FX (sfxr), Analog (Moog-style), FM-4, Noise, Wave, Grid, WaveForge (polyphonic, two oscillators with unison); Dice, Mutate, locks, 16-roll history, Bake to sample; presets for each |
+| 🔌 **Plugin instruments** | CLAP instruments such as Surge XT: crash-guarded scanner, browser, native editor (Windows), parameter list, 8 macros for `43xy` and automation, state saved in the song, offline render. VST3 instruments and effects are hosted the same way (0.2.4.1). [PLUGINS.md](docs/PLUGINS.md) |
+| 🎲 **Generators** | macro-knob instruments: Drum Synth and kits, Drum Kit (32 pads, step sequencer, groove generator), Chip FX (sfxr), Analog (Moog-style), FM-4, Noise, Wave, Grid, WaveForge (polyphonic, two oscillators with unison), StringWave (string ensemble); Dice, Mutate, locks, 16-roll history, Bake to sample; presets for each |
 | 🧩 **Racks & device chains** | Nested Device Chains under the Timeline (Ctrl+7): a tree of the instrument, its layers and effects; + Add Device, drag to reorder or move (Ctrl: copy), bypass; **Split** into 2–4 parallel paths; **racks** of up to 4 layers (level, pan, transpose, key range, own effects); Save Custom Rack and **Browser › My Racks** ([RACKS.md](docs/RACKS.md)) |
 | 🗣️ **Voice** | synthetic vowels, babble, stutter, spoken words, Throat (vocal tract) mode and the Transform (metal, digital, sub) |
 | 🧱 **Master limiter** | lookahead true-peak limiter on the master and in every export (ceiling −1 dBTP by default, gain, release, bypass), with a loudness meter: momentary, short-term and integrated LUFS plus true peak, and a loudness-target hint |
@@ -392,6 +418,8 @@ Created by **Del (postmanpat)**. To keep the software going I need Coffee :)
 
 ChipWave stands on the shoulders of open source and published research. With thanks to:
 
+- **StringWave** by **Del (postmanpat)** (MIT): the StringWave string-ensemble instrument, ported in from its author's own synth; the MIT notice is in `THIRD_PARTY_LICENSES.txt`.
+- **Martin Galway**, the great composer on the Commodore 64: the demo song "Oceans 11" is a ChipWave arrangement of his music (arranged by Del (postmanpat)).
 - **Emilie Gillet / Mutable Instruments**: the Voice (glitch) instrument's design is inspired by the [Plaits speech engine](https://github.com/pichenettes/eurorack/tree/master/plaits/dsp/speech) (“naive speech synth”, MIT). No code is copied; the MIT notice is in `THIRD_PARTY_LICENSES.txt`.
 - **The Csound community**: vowel formant values from the [Csound manual's formant table](https://csound.com/docs/manual/MiscFormants.html) ([Csound](https://github.com/csound/csound), LGPL-2.1).
 - **G. E. Peterson & H. L. Barney** (1952), [“Control methods used in a study of the vowels”](https://doi.org/10.1121/1.1906875): the ER and AE vowels.
