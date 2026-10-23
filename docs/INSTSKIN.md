@@ -14,7 +14,7 @@ Code: [`src/theme/instskin.rs`](../src/theme/instskin.rs).
 | | skinned | neutral |
 |---|---|---|
 | instruments | every ChipWave generator (WaveForge, Synth, Analog, FM-4, Wavetable, Grid, Noise, Drum Synth, Chip FX, Voice), the Drum Kit, Sample instruments | Racks (a container; their layers are skinned on their own), CLAP / VST3 instruments |
-| places | the Instrument tab (simple card, Advanced, the Drum Kit editor, the sample editor), the instrument card in Devices / Nested Device Chains, Browser › Instruments › ChipWave Instruments rows | effect cards, the mixer, the timeline, everything else |
+| places | the Instrument tab (simple card, Advanced, the Drum Kit editor, the sample editor), the instrument card in the Rack and the chain editor, Browser › Instruments › ChipWave Instruments rows | effect cards, the mixer, the timeline, everything else |
 
 The skin paints:
 
@@ -83,8 +83,10 @@ tint for text), `wash`, `edge`, `bright` (curves on dark wells). Inside a
 skinned scope an effect or plugin part can opt out with
 `SkinScope::enter(None)`.
 
-The Instrument tab (`instpanel::instrument_view`) and the Devices instrument
-card (`devices::devices_inst_card`) already enter the scope for any built-in
+The full Instrument editor (`instpanel::instrument_view`, reached from the
+Rack card's **Advanced ›**), the Rack's instrument card
+(`rackview`, with the curated face from `instcard::face_knobs`) and the chain
+editor's instrument card (`devices::devices_inst_card`) already enter the scope for any built-in
 `InstrumentKind`, so a new instrument whose editor paints inside them is
 skinned with no extra code.
 
