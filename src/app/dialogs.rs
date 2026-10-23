@@ -29,6 +29,26 @@ fn ext(f: Format) -> &'static str {
 }
 
 impl App {
+    /// Every normal exit (window X, Alt+F4, File > Quit, after Save or
+    /// Don't save): this session's recovery folder goes, unsaved changes the
+    /// user did not keep are gone, and copies put off with "Later" move to
+    /// the recovery archive. Only a crash or a killed process leaves a copy
+    /// for the recovery dialog.
+    pub(super) fn clean_exit(&mut self) {
+        if let Some(s) = &self.session {
+            s.wait_idle(std::time::Duration::from_secs(10));
+            s.close();
+        }
+        let later: Vec<_> = self
+            .orphans_later
+            .drain(..)
+            .chain(self.orphans.drain(..).map(|o| o.dir))
+            .collect();
+        for d in later {
+            crate::recovery::archive(&d);
+        }
+    }
+
     pub(super) fn apply_theme(&self, ctx: &egui::Context) {
         theme::set_polished(!self.extra.flat_ui);
         theme::apply(ctx, theme::with_accent(self.theme, &self.extra.accent));
@@ -73,7 +93,6 @@ impl App {
         match prompt::resolve(c, saved) {
             prompt::Outcome::Run { discarded } => {
                 if discarded {
-                    self.discarded = true;
                     self.dirty = false;
                 }
                 self.run_pending(p, ctx);

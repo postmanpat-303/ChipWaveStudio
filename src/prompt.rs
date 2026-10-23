@@ -54,11 +54,6 @@ pub fn resolve(c: Choice, saved: bool) -> Outcome {
     }
 }
 
-/// Clean exit: the recovery copy may go only when nothing unsaved is lost.
-pub fn may_delete_recovery(dirty: bool, discarded: bool) -> bool {
-    !dirty || discarded
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,8 +72,5 @@ mod tests {
             resolve(Choice::DontSave, false),
             Outcome::Run { discarded: true }
         );
-        assert!(may_delete_recovery(false, false));
-        assert!(may_delete_recovery(true, true));
-        assert!(!may_delete_recovery(true, false));
     }
 }
