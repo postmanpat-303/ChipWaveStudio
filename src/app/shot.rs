@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 96] = [
+pub const VIEWS: [&str; 102] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -132,6 +132,12 @@ pub const VIEWS: [&str; 96] = [
     "instskin-chains",
     "instskin-browser",
     "instskin-plugins",
+    "stringwave-layers",
+    "stringwave-filtermod",
+    "stringwave-fx",
+    "stringwave-full",
+    "stringwave-pie",
+    "stringwave-panelpie",
     "metronome-mockup",
 ];
 const SETUP_AT: u32 = 4;
@@ -155,6 +161,10 @@ impl App {
     fn shot_setup(&mut self, ctx: &egui::Context, view: &str) {
         if view.starts_with("focus-") || view.starts_with("record-") {
             self.shot_focus(view);
+            return;
+        }
+        if view.starts_with("stringwave-") {
+            self.shot_stringwave(view);
             return;
         }
         // "Drop 2" (block 08) of the Lumen Drift demo, looping
@@ -2502,4 +2512,41 @@ fn knob_mockup(ctx: &egui::Context) {
                 "Mix is shown disabled (dimmed).",
             );
         });
+}
+
+impl App {
+    /// StringWave's panel on a new track instrument in the Timeline at
+    /// the automatic lower-panel height (a laptop's view):
+    /// stringwave-layers / -filtermod / -fx (the sub-tabs), -full (the full
+    /// view), -pie (a layer level's knob pie), -panelpie (the empty panel's
+    /// pie); CHIPWAVE_SHOT_SWTEXT=125|150|200 for the text size
+    fn shot_stringwave(&mut self, view: &str) {
+        self.psetup = None;
+        self.enter_timeline();
+        self.default_layout();
+        self.track_new_instrument(self.ch, super::trackpie::Builtin::StringWave);
+        self.ip.advanced = false;
+        self.set_lower(1);
+        self.extra.lower_h = 0.0;
+        self.extra.browser_open = false;
+        self.ip.sw.tab = match view {
+            "stringwave-filtermod" => 1,
+            "stringwave-fx" => 2,
+            _ => 0,
+        };
+        self.ip.sw.full = view == "stringwave-full";
+        self.extra.sw_text = std::env::var("CHIPWAVE_SHOT_SWTEXT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        self.ip.sw.pie_req = match view {
+            "stringwave-pie" => Some(Some(format!(
+                "sw.{}",
+                crate::strings::LAYER[1] + crate::strings::L_LVL
+            ))),
+            "stringwave-panelpie" => Some(None),
+            _ => None,
+        };
+        self.dirty = false;
+    }
 }

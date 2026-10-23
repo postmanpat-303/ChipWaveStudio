@@ -9,6 +9,7 @@ use super::*;
 pub(super) mod gridcanvas;
 pub(super) mod instcard;
 pub(super) mod polyview;
+pub(super) mod stringsview;
 
 /// lower-panel switch bar height
 const BAR_H: f32 = 26.0;
@@ -49,6 +50,8 @@ pub(super) struct InstUi {
     grid: gridcanvas::GridUi,
     /// the poly synth editor (section shown, Revert snapshot)
     pub poly: polyview::PolyUi,
+    /// StringWave's panel (sub-tab, full view, pie)
+    pub sw: stringsview::SwUi,
     /// the Grid FX patch window: (instrument, device) and its canvas state
     pub grid_fx: Option<(usize, usize)>,
     pub grid_fx_ui: gridcanvas::GridUi,
@@ -490,6 +493,18 @@ impl App {
     /// the pattern editor over the lower panel, with the splitter between
     pub(super) fn pattern_and_lower(&mut self, ui: &mut egui::Ui, inner: Rect) {
         self.lower_fallback();
+        // StringWave's full view: its panel gets the whole area
+        if self.ip.sw.full && self.extra.lower_inst && !self.ip.advanced {
+            // (not drawn yet: a screenshot or a fresh start; the view itself
+            // turns full off for another instrument)
+            if self.ip.sw.shown_at == 0 || self.sw_panel_shown(ui.ctx()) {
+                ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                    self.instrument_view(ui)
+                });
+                return;
+            }
+            self.ip.sw.full = false;
+        }
         let t = th();
         let nl = self.with(|s| s.song.automation.len());
         // Piano roll, Instrument and Nested Device Chains share one
@@ -972,10 +987,15 @@ impl App {
                 if matches!(g.engine, crate::gen::GenEngine::Poly(_)) {
                     self.ip.tab = Tab::Synth;
                 }
-                // StringWave's placeholder panel: Layers on Main
+                // StringWave: its own panel (Advanced › opens on Main)
                 if matches!(g.engine, crate::gen::GenEngine::Strings(_)) {
                     self.ip.tab = Tab::Main;
                 }
+            }
+            self.ip.sw.pie = None;
+            if !matches!(&inst.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Strings(_)))
+            {
+                self.ip.sw.full = false;
             }
         }
         if self.ip.ab.as_ref().is_some_and(|a| a.inst != idx) {
@@ -1085,6 +1105,12 @@ impl App {
                 });
             });
             self.drumkit_view(ui, idx);
+            self.finish_edit(idx, inst, &orig, &orig_modm, cx);
+            return;
+        }
+        let strings = matches!(&inst.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Strings(_)));
+        if !self.ip.advanced && strings {
+            self.strings_panel(ui, &layout, &mut inst, &mut cx, n);
             self.finish_edit(idx, inst, &orig, &orig_modm, cx);
             return;
         }

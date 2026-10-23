@@ -944,7 +944,7 @@ pub(crate) fn compact(v: &str) -> String {
 }
 
 /// a section frame: rounded panel and an uppercase title; returns the rect
-fn frame(ui: &egui::Ui, r: Rect, title: &str) {
+pub(super) fn frame(ui: &egui::Ui, r: Rect, title: &str) {
     let t = th();
     let p = ui.painter();
     if t.ember {
@@ -1437,7 +1437,7 @@ impl App {
     }
 
     /// "Preset: name ▾": the presets of this type, then Save / Library
-    fn preset_dropdown(&mut self, ui: &mut egui::Ui, inst: &Instrument, cx: &mut Cx) {
+    pub(super) fn preset_dropdown(&mut self, ui: &mut egui::Ui, inst: &Instrument, cx: &mut Cx) {
         let cur = self.current_preset(cx.idx, inst);
         let label = format!("Preset: {}", cur.as_deref().unwrap_or("custom"));
         let list = preset_list(inst);

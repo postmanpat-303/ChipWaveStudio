@@ -41,7 +41,7 @@ impl MidiUi {
 }
 
 /// human name of a learn target
-fn target_text(t: &str) -> String {
+pub(super) fn target_text(t: &str) -> String {
     match Target::parse(t) {
         Some(
             x @ (Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) | Target::Level(i)),

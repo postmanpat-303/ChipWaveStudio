@@ -5,12 +5,16 @@ use super::ui_tests::{frame, harness_with};
 use super::*;
 
 /// the UI files whose string literals are checked
-const SOURCES: [(&str, &str); 15] = [
+const SOURCES: [(&str, &str); 16] = [
     ("dropplan.rs", include_str!("dropplan.rs")),
     ("objpie.rs", include_str!("objpie.rs")),
     ("cliparr.rs", include_str!("cliparr.rs")),
     ("radial.rs", include_str!("radial.rs")),
     ("instpanel.rs", include_str!("instpanel.rs")),
+    (
+        "instpanel/stringsview.rs",
+        include_str!("instpanel/stringsview.rs"),
+    ),
     ("trackpie.rs", include_str!("trackpie.rs")),
     ("inspector.rs", include_str!("inspector.rs")),
     ("pianoview.rs", include_str!("pianoview.rs")),

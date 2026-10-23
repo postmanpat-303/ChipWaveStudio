@@ -129,6 +129,8 @@ mod split_tests;
 mod stabilise_tests;
 #[cfg(test)]
 mod stage3_tests;
+#[cfg(test)]
+mod stringsview_tests;
 mod timeline;
 #[cfg(test)]
 mod timeline_m2_tests;

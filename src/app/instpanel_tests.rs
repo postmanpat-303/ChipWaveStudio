@@ -768,10 +768,10 @@ fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
     assert!(labelled_rect(&h, Role::Slider, "Cutoff").is_some());
 }
 
-/// StringWave's placeholder panel on a 1366x768 laptop: it opens on Main
-/// (the simple card), every tab draws its knobs and they fit the height
+/// StringWave on a 1366x768 laptop: it opens on its own panel (Layers),
+/// and Advanced › shows every tab's knobs, fitting the height
 #[test]
-fn stringwave_placeholder_panel_fits_a_laptop() {
+fn stringwave_panel_and_advanced_fit_a_laptop() {
     let inst = Instrument {
         name: "Strings".into(),
         volume: 0.8,
@@ -786,13 +786,17 @@ fn stringwave_placeholder_panel_fits_a_laptop() {
     h.set_size(egui::vec2(1366.0, 768.0));
     h.state_mut().show_instrument_panel();
     frames(&mut h, 3);
-    assert_eq!(h.state().ip.tab, Tab::Main, "opens on the layers");
-    // the simple card: the eight macro knobs plus layers and envelope
-    for k in ["Cutoff macro", "Master macro", "Sub", "Voices"] {
-        let r = labelled_rect(&h, Role::Slider, k).unwrap_or_else(|| panic!("simple: {k}"));
+    assert_eq!(
+        h.state().ip.tab,
+        Tab::Main,
+        "Advanced › opens on the layers"
+    );
+    // the panel's Layers sub-tab: the layers and the amp envelope
+    for k in ["Layer 1 Level", "Layer 3 Pan", "Sub", "Voices"] {
+        let r = labelled_rect(&h, Role::Slider, k).unwrap_or_else(|| panic!("panel: {k}"));
         assert!(
             r.right() <= 1366.5 && r.bottom() <= 768.5,
-            "simple: {k} {r:?}"
+            "panel: {k} {r:?}"
         );
     }
     h.state_mut().ip.advanced = true;
