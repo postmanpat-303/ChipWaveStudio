@@ -835,7 +835,7 @@ fn big_knob(
     if enabled && (*v - from).abs() > 0.002 {
         p.add(egui::Shape::line(
             arc(from.min(*v), from.max(*v), r + 5.0),
-            Stroke::new(3.0, t.accent),
+            Stroke::new(3.0, crate::theme::skin_or(t.accent)),
         ));
     }
     p.circle_stroke(
@@ -844,7 +844,7 @@ fn big_knob(
         Stroke::new(
             1.2,
             if resp.hovered() && enabled {
-                t.accent
+                crate::theme::skin_or(t.accent)
             } else {
                 t.ink2.gamma_multiply(0.6 * dim)
             },
@@ -929,6 +929,9 @@ fn frame(ui: &egui::Ui, r: Rect, title: &str) {
         Stroke::new(1.0, t.ink2.gamma_multiply(0.35)),
         egui::StrokeKind::Inside,
     );
+    if let Some(s) = crate::theme::active_skin() {
+        s.panel(p, r, 6.0);
+    }
     p.text(
         Pos2::new(r.left() + 10.0, r.top() + SEC_HEAD * 0.5),
         egui::Align2::LEFT_CENTER,

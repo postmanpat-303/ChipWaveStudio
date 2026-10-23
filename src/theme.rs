@@ -2,6 +2,9 @@
 //! (docs/DESIGN_LANGUAGE.md).
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke};
 
+mod instskin;
+pub use instskin::{active as active_skin, instskin, is_builtin, skin_or, InstSkin, SkinScope};
+
 pub const fn hex(c: u32) -> Color32 {
     Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
 }
@@ -945,7 +948,7 @@ pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
         }
     }
     arc(0.0, 1.0, t.ink2.gamma_multiply(0.35), 3.0);
-    let col = if k.locked { t.ink2 } else { t.accent };
+    let col = if k.locked { t.ink2 } else { skin_or(t.accent) };
     let (lo, hi) = if v < k.from { (v, k.from) } else { (k.from, v) };
     if hi > lo {
         arc(lo, hi, col.gamma_multiply(dim), 3.0);
