@@ -17,8 +17,9 @@
 //! 4. **End on tonic**: the last note is the key's tonic.
 //!
 //! Ideas from the Computoser paper (Bozhanov), the Euclidean rhythm paper
-//! (Toussaint) and the pattern libraries total-serialism and isobar; no
-//! code was copied (credits.rs, Research).
+//! (Toussaint) and the pattern libraries total-serialism and isobar, and
+//! the lock / mutate-a-loop and quantiser ideas in Emilie Gillet's
+//! eurorack firmware; no code was copied (credits.rs, Research).
 use crate::chordgen::{ChordMark, Rng};
 use crate::chords::{pc_of, Key};
 use crate::timeline::{Tick, PPQ};

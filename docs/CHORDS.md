@@ -54,19 +54,32 @@ Note clips show a **chord lane** between the piano roll's toolbar and the notes 
 - **Settings › Chord menus › List** uses ordinary list menus instead of the pies (the list also has **Detect chords from the notes**: one chord per bar from the clip's notes).
 - The radial menu is a reusable widget (`src/app/radial.rs`).
 
-### Generate chord progression
+### Generators panel (Chords and Melody)
 
-![Generate chord progression](screenshots/pianoroll-chord-generate.png)
+![Generators panel](screenshots/pianoroll-chord-generate.png)
 
-**Generate** in the toolbar (or **More…** / **Generate** in a pie) opens the dialog:
+**Generate** in the toolbar, **More…** / **Generate** in a pie, or **Chords…** in the track pie opens the **GENERATORS** panel on the **Chords** tab; **Melody…** in the track pie opens it on the **Melody** tab. The panel has the generator on the left and a fixed **WRITE** card on the right that always says what will happen: the target track, bars from–to, the write mode and a plain line such as *replaces notes in bars 2–9 on track 03*. **Write to timeline** does it, and one **Ctrl+Z** takes it back. Below about 980 pixels wide the card moves under the generator; on a short screen the panel scrolls.
+
+**Chords tab**
 - **Style:** Cinematic, Ambient, Indie Pop, Emo, Pop, Lo-fi / Neo Soul, Synthwave, EDM / Trance, Dark / Horror, Folk / Country, Blues, Heroic / Game, Dark psy, House, Jazz, Rock and Classical, each with a one-line description. Every style has a table of common progressions (for example Pop I–V–vi–IV and vi–IV–I–V, Rock I–bVII–IV, the 12-bar blues, Jazz ii–V–I and I–vi–ii–V, Trance vi–IV–I–V and i–VI–III–VII, Dark psy i–bII and i–bII–i–bVII, House i–iv and ii9–V9, Synthwave i–bVI–bIII–bVII, Lo-fi IVmaj7–iii7–vi7 and ii9–V13–Imaj9, the Andalusian i–bVII–bVI–V and the canon I–V–vi–iii–IV–I–IV–V). These are generic, centuries-old or genre-standard progressions.
 - **Key:** C … B, and **Any / Major / Minor** (which of the style's progressions may be picked).
-- **Length** 4 / 8 / 16 / 32 bars (the progression repeats), **Chord speed** Slower / Style / Faster, **Starts at bar** with − / +.
+- **Length** 4 / 8 / 16 / 32 bars (the progression repeats), **Chord speed** Slower / Style / Faster.
 - **Colour** turns plain chords into 7ths, 9ths, add9 and sus chords; **Variation** swaps in related chords (relative minor / major, sus, 7ths), never the first one. **Walking bass (inversions)** picks slash basses so the bass moves to the nearest chord tone.
-- The result shows the key and the numerals (*E minor  i - bIII - bVII - iv*) and coloured blocks with names. **Another one** rolls a new one (seeded, so the same settings give the same result), **Preview** plays it on the track's instrument.
-- **Also write the notes on <instrument>** with a voicing (Full, Triads, Shell, Bass only, Pad, Light, Open, Power) and an octave writes voice-led notes too (each chord moves to the nearest inversion of the next). **Apply** replaces the chords it covers and is one undo step; a clip shorter than the progression grows to fit. With no song key yet, Apply sets it.
-- **Target** names where Apply writes (*“Bass” on track 03, bars 1–4*) and what it does to the notes there. By default the chord notes **replace** the notes that start inside each chord's span, and only there: the rest of the clip is kept, and applying the same progression twice gives the same notes, never doubled ones. **Add on top (keep the notes already there)** keeps every note instead (still never doubling an identical note). If replacing would delete more than 8 notes, or any note outside the new chords' pitch range (a melody or a bass line), a **Replace notes?** box says how many and where, with **Replace (delete n)**, **Add on top** and **Cancel**. The chord pie's **Write notes** works the same way.
+- The result shows the key and the numerals (*E minor  i - bIII - bVII - iv*) and a large strip of coloured blocks with names. **Another one** rolls a new one (seeded, so the same settings give the same result), **Preview** plays it on the track's instrument.
+- WRITE card: **Bars** from (with − / +) to, and **Markers only** (the chord lane only), **Replace notes** or **Notes on top**, with a voicing (Full, Triads, Shell, Bass only, Pad, Light, Open, Power) and an octave. Notes are voice-led (each chord moves to the nearest inversion of the next). Writing replaces the chords it covers and is one undo step; a clip shorter than the progression grows to fit. With no song key yet, writing sets it.
+- **Replace notes** replaces the notes that start inside each chord's span, and only there: the rest of the clip is kept, and writing the same progression twice gives the same notes, never doubled ones. **Notes on top** keeps every note (still never doubling an identical note). If replacing would delete more than 8 notes, or any note outside the new chords' pitch range (a melody or a bass line), a **Replace notes?** box says how many and where, with **Replace (delete n)**, **Add on top** and **Cancel**. The chord pie's **Write notes** works the same way.
 - Written notes carry the track's instrument (the one in its header), so they sound like that track.
+
+### Melody generator
+
+Requested by Del (postmanpat). The **Melody** tab writes a tune over a chord progression. It follows the progression on the **Chords** tab (even before it is written), or the clip's chord lane (**Over: Clip's chord lane**; picked by default when the panel is opened from the track pie and the clip has chords). The key is the song key, or a guess from the chords.
+
+- **Dice** picks a new seed, **Another one** the next seed, **Seed** shows it (the same settings and seed always give the same notes). **Preview** plays it.
+- **Rhythm** (Quarters, Eighths, Syncopated, Sixteenths, Long, Euclid), **Density**, **Range** (semitones), **Octave**, **Contour** (Arch, Rise, Fall, Wave, Walk) and **Motif** (Off, AABA, ABAB, call and response: the first phrase comes back moved to fit the chord).
+- **Lock rhythm** keeps the rhythm and changes the notes on the next roll; **Lock notes** keeps the notes and changes the rhythm.
+- **Advanced…:** Euclid pulses / steps / rotate (shown as *x..x..x.*), **Leap** (how often the line jumps; a leap is followed by a step back), **Chord-tone bias** (at 100 % every strong beat is a chord tone), **Variation** (how much a motif repeat may change; at 0 it is an exact transposition), rests, note length and **End on tonic**.
+- Every note is in the key's scale; notes between chord tones move by step.
+- WRITE card: by default **New “Melody” track** adds a track called *Melody* below the current one with the WaveForge Saw Lead instrument and the melody in a new clip (nothing is replaced). Or pick the current track, with **Replace notes** (replaces the notes inside the melody's bars; asks first if that deletes more than 8) or **Notes on top**. Writing twice never doubles notes, and each write is one undo step.
 
 ## Scale lock
 
@@ -76,4 +89,5 @@ Note clips show a **chord lane** between the piano roll's toolbar and the notes 
 
 - C. L. Krumhansl & E. J. Kessler (1982), "Tracing the dynamic changes in perceived tonal organization in a spatial representation of musical keys", *Psychological Review* 89(4), 334–368, https://doi.org/10.1037/0033-295X.89.4.334: the key profiles.
 - C. L. Krumhansl (1990), *Cognitive Foundations of Musical Pitch*, Oxford University Press: the Krumhansl–Schmuckler algorithm.
+- Melody generator: the Computoser paper by Bozhidar Bozhanov (2014, https://arxiv.org/abs/1412.3079; rules from the paper, no code); G. T. Toussaint (2005), "The Euclidean Algorithm Generates Traditional Musical Rhythms", and E. Bjorklund's algorithm (idea only); total-serialism by Timo Hoogland (MIT, ideas only); isobar by Daniel Jones (MIT, ideas only); the scale quantiser and lock / mutate-the-loop ideas in Emilie Gillet's eurorack firmware (MIT, ideas only). No code was copied.
 - The pad-and-progression workflow is inspired by **Scaler** by Plugin Boutique. No code, data or artwork from Scaler is used; scales, chord names and the presets are standard music theory.
