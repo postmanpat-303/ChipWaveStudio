@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 92] = [
+pub const VIEWS: [&str; 94] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -99,7 +99,9 @@ pub const VIEWS: [&str; 92] = [
     "trackpie",
     "trackpie-icons",
     "trackpie-colour",
-    "trackpie-add",
+    "trackpie-addring-1",
+    "trackpie-addring-2",
+    "trackpie-addring-3",
     "trackauto",
     "split-preview",
     "cliparranger",
@@ -544,8 +546,8 @@ impl App {
                 self.set_lower(1);
                 self.dirty = false;
             }
-            "trackpie" | "trackpie-icons" | "trackpie-colour" | "trackpie-add" | "trackauto"
-            | "split-preview" => {
+            "trackpie" | "trackpie-icons" | "trackpie-colour" | "trackpie-addring-1"
+            | "trackpie-addring-2" | "trackpie-addring-3" | "trackauto" | "split-preview" => {
                 // the default layout on the timeline-mode demo; the pie
                 // opens a few frames later (shot_pie)
                 self.enter_timeline();
@@ -1889,6 +1891,7 @@ impl App {
             .ok()
             .and_then(|v| v.parse::<f64>().ok());
         let now = ctx.input(|i| i.time);
+        let info = self.pie_info(tr);
         if let Some(p) = &mut self.pie {
             p.key = key;
             p.frozen = frozen;
@@ -1896,23 +1899,19 @@ impl App {
                 p.sub = Some((2, now));
                 p.sub_key = Some(6);
             }
-            if view == "trackpie-add" {
-                p.key = Some(3);
-                p.sub = Some((3, now));
-            }
-        }
-        if view == "trackpie-add" {
-            let info = self.pie_info(tr);
-            let at = super::trackpie::sub_items(super::trackpie::SEGS[3], &info)
-                .iter()
-                .position(|i| {
-                    i.act
-                        == Some(super::trackpie::PieAct::NewInstrument(
-                            super::trackpie::Builtin::WaveForge,
-                        ))
-                });
-            if let Some(p) = &mut self.pie {
-                p.sub_key = at;
+            // the Add rings: level 1, Drum pattern › and its Drum Kit ›
+            if let Some(lv) = view.strip_prefix("trackpie-addring-") {
+                use super::trackring::{ring_slots, Level};
+                p.open_ring(now);
+                let n = |l| ring_slots(l, &info).len();
+                if let Some(r) = &mut p.ring {
+                    if lv != "1" {
+                        r.enter(Level::DrumInstr, 1, n(Level::Add), n(Level::DrumInstr), now);
+                    }
+                    if lv == "3" {
+                        r.enter(Level::Kits, 1, n(Level::DrumInstr), n(Level::Kits), now);
+                    }
+                }
             }
         }
         if view == "trackauto" {

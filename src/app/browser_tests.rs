@@ -526,20 +526,19 @@ fn tool_rows(h: &mut Harness<'static, App>) -> Vec<(String, Pos2)> {
 
 #[test]
 fn chipwave_instruments_lead_the_instruments_tab_with_the_pies_add_list() {
-    use super::trackpie::{sub_items, Builtin, ItemKind, Seg, TrackInfo, ADD_INSTR_ITEMS};
+    use super::trackpie::{Builtin, TrackInfo};
+    use super::trackring::{ring_slots, Level};
     let mut h = tl_harness();
-    // the pie's Add entries (without Browse…)
+    // the pie's Add › Instrument › ring (without Back and Browse…)
     let info = TrackInfo {
         tracks: 4,
         timeline: true,
         ..Default::default()
     };
-    let pie: Vec<String> = sub_items(Seg::Add, &info)[..ADD_INSTR_ITEMS - 1]
+    let ring = ring_slots(Level::Instrument, &info);
+    let pie: Vec<String> = ring[1..ring.len() - 1]
         .iter()
-        .map(|i| match &i.kind {
-            ItemKind::Text(s) => s.clone(),
-            _ => String::new(),
-        })
+        .map(|s| s.label.clone())
         .collect();
     let all: Vec<&str> = Builtin::ALL.iter().map(|b| b.label()).collect();
     assert_eq!(pie, all);

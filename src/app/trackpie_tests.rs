@@ -213,29 +213,8 @@ fn submenu_entries_map_to_real_actions() {
     let org = sub_items(Seg::Organize, &info);
     assert_eq!(org[0].act, None, "the first track can't move up");
     assert_eq!(org[1].act, Some(PieAct::Move(MoveTo::Down)));
-    let add = sub_items(Seg::Add, &info);
-    let acts: Vec<_> = add.iter().map(|i| i.act).collect();
-    assert!(acts.contains(&Some(PieAct::AddInstrument)));
-    assert!(acts.contains(&Some(PieAct::AddAudio)));
-    assert!(acts.contains(&Some(PieAct::Duplicate)));
-    assert!(acts.contains(&None), "FX track: coming soon");
-    assert!(
-        acts.contains(&Some(PieAct::Automation)),
-        "Automation lane ›"
-    );
-    assert!(acts.contains(&Some(PieAct::ChangeInstrument)));
-    assert!(acts.contains(&Some(PieAct::DrumPattern)));
-    // all 32 tracks used: only what adds no track stays on
-    info.full = true;
-    assert!(sub_items(Seg::Add, &info).iter().all(|i| matches!(
-        i.act,
-        None | Some(
-            PieAct::Automation
-                | PieAct::ChangeInstrument
-                | PieAct::DrumPattern
-                | PieAct::NewInstrument(_)
-        )
-    )));
+    assert!(sub_items(Seg::Add, &info).is_empty(), "Add opens rings");
+    assert!(Seg::Add.has_ring() && !Seg::Add.has_sub());
     info.timeline = false;
     assert!(sub_items(Seg::Icon, &info).iter().all(|i| i.act.is_none()));
     assert!(sub_items(Seg::Colour, &info)

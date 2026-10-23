@@ -611,8 +611,15 @@ fn add_automation_lane_from_the_track_pie() {
     let mut h = pie_harness(Pos2::new(600.0, 400.0));
     // the entry is in Add › and acts in timeline mode
     let add = SEGS.iter().position(|s| *s == Seg::Add).unwrap();
-    let items = sub_items(SEGS[add], &h.state().pie_info(tr));
-    assert!(items.iter().any(|i| i.act == Some(PieAct::Automation)));
+    let _ = add;
+    let info = h.state().pie_info(tr);
+    use super::trackring::{ring_slots, Go, Level};
+    assert!(ring_slots(Level::Add, &info)
+        .iter()
+        .any(|s| s.go == Some(Go::Open(Level::Automation))));
+    assert!(ring_slots(Level::Automation, &info)
+        .iter()
+        .any(|s| s.go == Some(Go::Act(PieAct::Automation))));
     let before = track_auto(&h, tr);
     let ctx = h.ctx.clone();
     h.state_mut().pie_apply(tr, PieAct::Automation, &ctx);
@@ -1131,12 +1138,11 @@ fn br_item(f: impl Fn(&crate::browser::Item) -> bool) -> crate::browser::Item {
 fn change_instrument_from_the_track_pie() {
     let mut h = pie_harness(Pos2::new(600.0, 400.0));
     let tr = 1;
-    let add = SEGS.iter().position(|s| *s == Seg::Add).unwrap();
-    let items = sub_items(SEGS[add], &h.state().pie_info(tr));
+    use super::trackring::{ring_slots, Go, Level};
+    let items = ring_slots(Level::Instrument, &h.state().pie_info(tr));
     assert!(items
         .iter()
-        .any(|i| i.act == Some(PieAct::ChangeInstrument)));
-    assert!(items.iter().any(|i| i.act == Some(PieAct::DrumPattern)));
+        .any(|i| i.go == Some(Go::Act(PieAct::ChangeInstrument))));
     h.state_mut().extra.browser_favs = vec!["something".into()];
     let ctx = h.ctx.clone();
     h.state_mut().pie_apply(tr, PieAct::ChangeInstrument, &ctx);
@@ -1183,37 +1189,6 @@ fn change_instrument_from_the_track_pie() {
     h.state_mut()
         .open_browser_tab(crate::browser::Tab::Instruments);
     assert!(h.state().br.track_target.is_none());
-}
-
-/// Add › Drum pattern… opens the Drum Patterns tab; the pick lands on
-/// that track (not a new one)
-#[test]
-fn drum_pattern_from_the_track_pie_goes_on_that_track() {
-    let mut h = pie_harness(Pos2::new(600.0, 400.0));
-    let tr = 0;
-    let ctx = h.ctx.clone();
-    h.state_mut().pie_apply(tr, PieAct::DrumPattern, &ctx);
-    frames(&mut h, 2);
-    assert_eq!(h.state().br.filter.tab, crate::browser::Tab::Patterns);
-    let n = h.state().with(|s| s.song.channels);
-    let clips = |h: &Harness<'static, App>| {
-        h.state().with(|s| {
-            s.song
-                .timeline
-                .as_deref()
-                .unwrap()
-                .clips
-                .iter()
-                .filter(|c| c.track as usize == tr)
-                .count()
-        })
-    };
-    let before = clips(&h);
-    let it = br_item(|i| matches!(i.src, crate::browser::Src::Pattern(_)));
-    h.state_mut().br_load(&it, &ctx);
-    frames(&mut h, 3);
-    assert_eq!(h.state().with(|s| s.song.channels), n, "no new track");
-    assert!(clips(&h) > before, "a pattern clip on track {tr}");
 }
 
 // ------------------------------------------- Del's crash path (20 Oct, evening)
@@ -1658,7 +1633,8 @@ fn scale_slider_applies_on_release_only() {
 /// track, one undo step; they are disabled when the 255 slots are used
 #[test]
 fn add_a_built_in_instrument_from_the_track_pie() {
-    use super::trackpie::{Builtin, ADD_INSTR_ITEMS};
+    use super::trackpie::Builtin;
+    use super::trackring::{ring_slots, Go, Level};
     // every built-in has something to start from
     for b in Builtin::ALL {
         let (name, kind) = b.make().unwrap_or_else(|| panic!("{b:?}"));
@@ -1679,41 +1655,44 @@ fn add_a_built_in_instrument_from_the_track_pie() {
         timeline: true,
         ..Default::default()
     };
-    let items = sub_items(Seg::Add, &info);
-    let label = |i: &super::trackpie::Item| match &i.kind {
-        super::trackpie::ItemKind::Text(s) => s.clone(),
-        _ => String::new(),
-    };
-    assert_eq!(label(&items[0]), crate::poly::POLY_DISPLAY_NAME);
-    assert_eq!(label(&items[1]), "Drum Kit");
-    assert_eq!(label(&items[ADD_INSTR_ITEMS - 1]), "Browse…");
+    let items = ring_slots(Level::Instrument, &info);
+    let last = items.len() - 1;
+    assert_eq!(items[0].label, "Back");
+    assert_eq!(items[1].label, crate::poly::POLY_DISPLAY_NAME);
+    assert_eq!(items[2].label, "Drum Kit");
+    assert_eq!(items[last].label, "Browse…");
+    assert_eq!(items[last].go, Some(Go::Act(PieAct::ChangeInstrument)));
     assert_eq!(
-        items[ADD_INSTR_ITEMS - 1].act,
-        Some(PieAct::ChangeInstrument)
-    );
-    assert_eq!(
-        items[0].act,
-        Some(PieAct::NewInstrument(Builtin::WaveForge))
+        items[1].go,
+        Some(Go::Act(PieAct::NewInstrument(Builtin::WaveForge)))
     );
     info.instr_full = true;
-    let items = sub_items(Seg::Add, &info);
-    assert!(items[..ADD_INSTR_ITEMS - 1]
+    let items = ring_slots(Level::Instrument, &info);
+    assert!(items[1..last]
         .iter()
-        .all(|i| i.act.is_none() && i.tip.contains("255")));
-    // with the pointer: Add › Drum Kit on track 01 of the demo
+        .all(|i| i.go.is_none() && i.tip.contains("255")));
+    // with the pointer: Add › Instrument › Drum Kit on track 01 of the demo
     let mut h = pie_harness(Pos2::new(600.0, 400.0));
     h.state_mut().extra.reduce_motion = true;
     h.state_mut().undo_reset();
     let add = SEGS.iter().position(|s| *s == Seg::Add).unwrap();
     let centre = h.state().pie.as_ref().unwrap().centre;
-    let (_, _, rects) = onto(&mut h, add);
-    frames(&mut h, 40);
-    assert_eq!(open_sub(&h), Some(add));
-    let target = rects[1].center();
-    let from = centre + egui::vec2(seg_angle(add).cos(), seg_angle(add).sin()) * 110.0;
-    for k in 1..=10 {
-        mv(&mut h, from + (target - from) * (k as f32 / 10.0));
+    for r in [60.0, 90.0, 110.0] {
+        mv(
+            &mut h,
+            centre + egui::vec2(seg_angle(add).cos(), seg_angle(add).sin()) * r,
+        );
+        frames(&mut h, 3);
     }
+    let ring = |h: &Harness<'static, App>| h.state().ring_now().map(|r| r.1);
+    assert_eq!(ring(&h), Some(Level::Add), "Add opens its ring");
+    let p = super::trackring_tests::ring_pos(&h, 8);
+    mv(&mut h, p);
+    click_at(&mut h, p);
+    frames(&mut h, 3);
+    assert_eq!(ring(&h), Some(Level::Instrument));
+    let target = super::trackring_tests::ring_pos(&h, 2);
+    mv(&mut h, target);
     let before = h.state().with(|s| {
         (
             s.song.instruments.len(),
