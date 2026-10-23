@@ -1934,6 +1934,160 @@ fn melody_write_adds_a_melody_track_in_one_undo() {
     assert_eq!((ch2, ins2), (ch0, ins0), "one undo takes it all back");
 }
 
+/// Bass's default Write: a new "Bass" track under the clip's track with a
+/// copy of the track's instrument holding exactly the line shown, in the
+/// bass register on the chords' roots; one undo removes it
+#[test]
+fn bass_write_adds_a_bass_track_in_one_undo() {
+    let mut h = clip_setup();
+    let (ch0, ins0) = h
+        .state()
+        .with(|s| (s.song.channels, s.song.instruments.len()));
+    let ins_heard = h.state().track_instr(2) as usize;
+    h.state_mut().gen_open_bass(0);
+    frames(&mut h, 3);
+    assert_eq!(h.state().cl.gen.tab, genpanel::GenTab::Bass);
+    let shown = h.state().cl.gen.bass.last.clone();
+    assert!(!shown.is_empty());
+    assert!(shown.iter().all(|n| n.key < 60), "a bass register");
+    assert!(h.state().cl.gen.bass.new_track);
+    h.get_by_label("Write to timeline").click();
+    frames(&mut h, 3);
+    assert!(!h.state().cl.gen.open);
+    let (ch1, ins1, name, iname) = h.state().with(|s| {
+        (
+            s.song.channels,
+            s.song.instruments.len(),
+            s.song.channel_names.get(3).cloned().unwrap_or_default(),
+            s.song
+                .instruments
+                .last()
+                .map(|i| i.name.clone())
+                .unwrap_or_default(),
+        )
+    });
+    assert_eq!(ch1, ch0 + 1, "{}", h.state().status);
+    assert_eq!(ins1, ins0 + 1);
+    assert_eq!(name, "Bass");
+    let src = h
+        .state()
+        .with(|s| s.song.instruments[ins_heard - 1].clone());
+    assert_eq!(iname, src.name, "a copy of the track's instrument");
+    let copy = h
+        .state()
+        .with(|s| s.song.instruments.last().unwrap().clone());
+    assert_eq!(copy, src, "the same sound and parameters");
+    let d = clip_on(&h, 3).expect("the bass clip on track 04");
+    let got: Vec<(tl::Tick, u8)> = d.notes.iter().map(|n| (n.start, n.key)).collect();
+    let want: Vec<(tl::Tick, u8)> = shown.iter().map(|n| (n.start, n.key)).collect();
+    assert_eq!(got, want);
+    assert!(d.notes.iter().all(|n| n.instr as usize == ins1));
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    let (ch2, ins2) = h
+        .state()
+        .with(|s| (s.song.channels, s.song.instruments.len()));
+    assert_eq!((ch2, ins2), (ch0, ins0), "one undo takes it all back");
+}
+
+/// a clip on a drum-kit track: the new Bass track gets a bass synth, never
+/// a copy of the kit
+#[test]
+fn bass_write_over_a_drum_kit_gets_a_bass_synth() {
+    let mut h = clip_setup();
+    let slot = h.state().track_instr(2) as usize;
+    let kit = crate::drumpat::kit_instrument("909 Kit").expect("a kit");
+    h.state().with(|s| s.song.instruments[slot - 1] = kit);
+    h.state_mut().gen_open_bass(0);
+    h.state_mut().cl.gen.bass.opts.style = crate::bassgen::BassStyle::Acid;
+    frames(&mut h, 3);
+    h.get_by_label("Write to timeline").click();
+    frames(&mut h, 3);
+    let (name, inst) = h.state().with(|s| {
+        (
+            s.song.channel_names.get(3).cloned().unwrap_or_default(),
+            s.song.instruments.last().unwrap().clone(),
+        )
+    });
+    assert_eq!(name, "Bass", "{}", h.state().status);
+    assert!(!super::trackpie::is_drum_kind(&inst.kind), "not a drum kit");
+    assert_eq!(inst.name, "Acid Squelch", "the Acid style's bass synth");
+}
+
+/// the GENERATORS grip moves the panel (remembered, kept on screen);
+/// a double-click puts it back at the top
+#[test]
+fn generators_panel_moves_by_its_grip() {
+    let mut h = clip_setup();
+    h.state_mut().gen_open_bass(0);
+    frames(&mut h, 3);
+    assert_eq!(h.state().extra.gen_pos, None, "top-centre at first");
+    let g0 = h.get_by_label("GENERATORS").rect();
+    let p = g0.center();
+    let q = p + egui::vec2(-120.0, 90.0);
+    h.input_mut().events.push(egui::Event::PointerMoved(p));
+    frame(&mut h);
+    h.input_mut().events.push(egui::Event::PointerButton {
+        pos: p,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Default::default(),
+    });
+    frame(&mut h);
+    for k in 1..=6 {
+        let at = p + (q - p) * (k as f32 / 6.0);
+        h.input_mut().events.push(egui::Event::PointerMoved(at));
+        frame(&mut h);
+    }
+    h.input_mut().events.push(egui::Event::PointerButton {
+        pos: q,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Default::default(),
+    });
+    frames(&mut h, 3);
+    let pos = h.state().extra.gen_pos.expect("the dragged spot is kept");
+    let g1 = h.get_by_label("GENERATORS").rect();
+    let moved = g1.center() - g0.center();
+    assert!(
+        (moved.y - 90.0).abs() < 12.0,
+        "followed the pointer down: {moved:?} {pos:?}"
+    );
+    assert!(moved.x < -20.0, "and left: {moved:?}");
+    // far off screen: clamped back so the header and Write stay reachable
+    h.state_mut().extra.gen_pos = Some([5000.0, 5000.0]);
+    frames(&mut h, 3);
+    let scr = h.ctx.content_rect();
+    let g2 = h.get_by_label("GENERATORS").rect();
+    assert!(
+        scr.contains_rect(g2),
+        "the grip on screen: {g2:?} in {scr:?}"
+    );
+    let wr = h.get_by_label("Write to timeline").rect();
+    assert!(wr.right() <= scr.right() + 1.0, "Write on screen: {wr:?}");
+    // a double-click puts it back at the top
+    let c = g2.center();
+    h.input_mut().events.push(egui::Event::PointerMoved(c));
+    frame(&mut h);
+    // (both clicks in one frame: frame by frame was too slow for egui)
+    for pressed in [true, false, true, false] {
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos: c,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        });
+    }
+    frame(&mut h);
+    frames(&mut h, 2);
+    assert_eq!(h.state().extra.gen_pos, None, "{}", h.state().status);
+    let g3 = h.get_by_label("GENERATORS").rect();
+    assert!(
+        (g3.center() - g0.center()).length() < 2.0,
+        "back at the top"
+    );
+}
+
 /// Melody into this track over the clip's chord lane: in scale, inside
 /// the chords' bars; writing it again (replace or on top) adds no doubles
 #[test]

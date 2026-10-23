@@ -1732,8 +1732,8 @@ impl App {
 
 impl App {
     /// CHIPWAVE_SHOT_PR=click | erase | select | line | chords | chord-pie |
-    /// chord-block-pie | chord-generate | melody-generate[-adv] (view
-    /// timeline-notes): piano roll
+    /// chord-block-pie | chord-generate | melody-generate[-adv] |
+    /// bass-generate[-adv|-moved] (view timeline-notes): piano roll
     /// shots with scripted mouse input
     fn shot_pr(&mut self, ctx: &egui::Context, mode: &str) {
         use super::chordlane::PieOn;
@@ -2010,6 +2010,16 @@ impl App {
                         self.gen_open_melody(0);
                         self.cl.gen.opts = o;
                         self.cl.gen.mel.adv = mode.ends_with("-adv");
+                    }
+                    "bass-generate" | "bass-generate-adv" | "bass-generate-moved" => {
+                        self.gen_open_bass(0);
+                        self.cl.gen.opts = o;
+                        self.cl.gen.bass.opts.style = crate::bassgen::BassStyle::Syncopated;
+                        self.cl.gen.bass.adv = mode.ends_with("-adv");
+                        if mode.ends_with("-moved") {
+                            // as if dragged by its grip (down and left)
+                            self.extra.gen_pos = Some([40.0, 150.0]);
+                        }
                     }
                     _ => {}
                 }

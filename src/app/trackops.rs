@@ -503,6 +503,16 @@ impl App {
         }
     }
 
+    /// the track pie's Bass…: as [`Self::track_chords`], on the
+    /// Generators panel's Bass tab
+    pub(crate) fn track_bass(&mut self, tr: usize) {
+        if self.track_gen(tr) {
+            let at = self.cl.gen.opts.start_bar as i64 * super::chordlane::BAR;
+            self.gen_open_bass(at);
+            self.status = format!("Track {:02}: the bass generator", tr + 1);
+        }
+    }
+
     /// open the track's first pattern (a new one if it has none) with the
     /// Generators panel on its Chords tab; false: no pattern
     fn track_gen(&mut self, tr: usize) -> bool {

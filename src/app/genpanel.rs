@@ -1,17 +1,20 @@
 //! The Generators panel (Generators mockup B, picked by Del (postmanpat)):
-//! a wide panel with a GENERATORS header and pill tabs (Chords | Melody,
-//! room for more), the generator on the left and a fixed WRITE card on the
+//! a wide panel with a GENERATORS header and pill tabs (Chords | Melody |
+//! Bass), the generator on the left and a fixed WRITE card on the
 //! right: the target track, the bars, what the write does to the notes
 //! already there, and one highlighted "Write to timeline" (one Ctrl+Z).
-//! Narrow windows stack the card under the generator.
+//! Narrow windows stack the card under the generator. Dragging the
+//! GENERATORS grip moves the panel (kept on screen and remembered in the
+//! settings); double-clicking it puts it back at the top.
 //!
 //! Chords is the chord generator (`crate::chordgen`, written through the
 //! chord lane's `cl_insert` / "Replace notes?" confirm); Melody is
 //! `crate::melodygen` over the Chords tab's progression or the clip's
-//! chord lane.
+//! chord lane; Bass is `crate::bassgen` over the same chords.
 use super::chordlane::{mark_colour, BAR, CONFIRM_OVER};
 use super::pianoview::Target;
 use super::*;
+use crate::bassgen::{self as bg, BassOpts, BassStyle};
 use crate::chordgen::{self as cg, ChordMark, Mode, Voicing};
 use crate::chords::{Key, Scale};
 use crate::melodygen::{self as mg, Contour, Locks, MNote, MelOpts, Motif, Rhythm};
@@ -24,14 +27,16 @@ pub(crate) enum GenTab {
     #[default]
     Chords,
     Melody,
+    Bass,
 }
 
 impl GenTab {
-    pub(crate) const ALL: [GenTab; 2] = [GenTab::Chords, GenTab::Melody];
+    pub(crate) const ALL: [GenTab; 3] = [GenTab::Chords, GenTab::Melody, GenTab::Bass];
     pub(crate) fn name(self) -> &'static str {
         match self {
             GenTab::Chords => "Chords",
             GenTab::Melody => "Melody",
+            GenTab::Bass => "Bass",
         }
     }
 }
@@ -46,8 +51,14 @@ pub(crate) enum MelFrom {
 }
 
 /// the Melody tab
-pub(crate) struct MelDlg {
-    pub(crate) opts: MelOpts,
+pub(crate) type MelDlg = NotesDlg<MelOpts>;
+/// the Bass tab
+pub(crate) type BassDlg = NotesDlg<BassOpts>;
+
+/// a note generator's tab (Melody, Bass): its settings, the locks, the
+/// result shown and where Write puts it
+pub(crate) struct NotesDlg<O> {
+    pub(crate) opts: O,
     /// the Advanced fold is open
     pub(crate) adv: bool,
     pub(crate) lock_rhythm: bool,
@@ -59,16 +70,16 @@ pub(crate) struct MelDlg {
     /// None: the clip's chord lane when it has chords and the Chords tab
     /// wasn't shown since the panel opened, else the Chords tab
     pub(crate) from: Option<MelFrom>,
-    /// write to a new "Melody" track (the default) or the open clip
+    /// write to a new "Melody" / "Bass" track (the default) or the open clip
     pub(crate) new_track: bool,
     /// writing to the open clip: on top of its notes (else replace)
     pub(crate) on_top: bool,
 }
 
-impl Default for MelDlg {
+impl<O: Default> Default for NotesDlg<O> {
     fn default() -> Self {
         Self {
-            opts: MelOpts::default(),
+            opts: O::default(),
             adv: false,
             lock_rhythm: false,
             lock_notes: false,
@@ -80,6 +91,55 @@ impl Default for MelDlg {
             on_top: false,
         }
     }
+}
+
+impl<O> NotesDlg<O> {
+    fn locks(&self) -> Locks<'_> {
+        Locks {
+            rhythm: self.lock_rhythm.then_some(self.locked_rhythm.as_slice()),
+            pitches: self.lock_notes.then_some(self.locked_keys.as_slice()),
+        }
+    }
+}
+
+/// Seed, Lock rhythm and Lock notes (taking the shown result when a lock
+/// is ticked)
+fn seed_locks<O>(ui: &mut egui::Ui, m: &mut NotesDlg<O>, seed: impl FnOnce(&mut O) -> &mut u64) {
+    ui.horizontal_wrapped(|ui| {
+        cap(ui, "Seed");
+        ui.add(egui::DragValue::new(seed(&mut m.opts)).range(0..=99_999));
+        ui.add_space(8.0);
+        let was = (m.lock_rhythm, m.lock_notes);
+        ui.checkbox(&mut m.lock_rhythm, "Lock rhythm")
+            .on_hover_text("keep these note times while you change the rest");
+        ui.checkbox(&mut m.lock_notes, "Lock notes")
+            .on_hover_text("keep these pitches (in order) while the rhythm changes");
+        if m.lock_rhythm && !was.0 {
+            m.locked_rhythm = m.last.iter().map(|n| (n.start, n.len)).collect();
+        }
+        if m.lock_notes && !was.1 {
+            m.locked_keys = m.last.iter().map(|n| n.key).collect();
+        }
+    });
+}
+
+/// the Bass tab's fallback sound (a track with no instrument or a drum
+/// kit): an analog bass preset, the squelchy one for Acid
+fn bass_preset(acid: bool) -> Option<(String, InstrumentKind)> {
+    let all = crate::gen::presets();
+    let want = if acid {
+        "Acid Squelch"
+    } else {
+        "Fat Moog Bass"
+    };
+    all.iter()
+        .find(|(n, _, _)| *n == want)
+        .or_else(|| all.iter().find(|(n, _, _)| n.contains("Bass")))
+        .cloned()
+        .map(|(n, _, mut p)| {
+            p.base.name = n.into();
+            (n.to_string(), InstrumentKind::Gen(p))
+        })
 }
 
 /// a button in the theme's accent with readable ink on every theme
@@ -108,9 +168,10 @@ fn accent_ink() -> Color32 {
 /// the Melody tab's pad's width (beside the controls)
 const PAD_W: f32 = 200.0;
 
-/// the Melody tab's pad: a big Preview with Dice and Another one under it
-/// (`tall`), or the three in a row; a rounded square tinted with the accent
-fn melody_pad(ui: &mut egui::Ui, m: &mut MelDlg, acts: &mut Acts, tall: bool) {
+/// the Melody / Bass tab's pad: a big Preview with Dice and Another one
+/// under it (`tall`), or the three in a row; a rounded square tinted with
+/// the accent
+fn melody_pad(ui: &mut egui::Ui, seed: &mut u64, acts: &mut Acts, tall: bool) {
     let th = th();
     egui::Frame::new()
         .fill(th.accent.gamma_multiply(0.14))
@@ -154,7 +215,7 @@ fn melody_pad(ui: &mut egui::Ui, m: &mut MelDlg, acts: &mut Acts, tall: bool) {
             let big = |t: &str| {
                 egui::Button::new(egui::RichText::new(t).strong().size(15.0)).corner_radius(10.0)
             };
-            let dice = |ui: &mut egui::Ui, m: &mut MelDlg| {
+            let dice = |ui: &mut egui::Ui, seed: &mut u64| {
                 if ui
                     .add_sized([half, 40.0], big("Dice"))
                     .on_hover_text("a random seed")
@@ -164,14 +225,14 @@ fn melody_pad(ui: &mut egui::Ui, m: &mut MelDlg, acts: &mut Acts, tall: bool) {
                         ^ std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .map_or(7, |d| d.as_nanos() as u64);
-                    m.opts.seed = r % 100_000;
+                    *seed = r % 100_000;
                 }
                 if ui
                     .add_sized([half, 40.0], big("Another one"))
                     .on_hover_text("the next seed")
                     .clicked()
                 {
-                    m.opts.seed = m.opts.seed.wrapping_add(1) % 100_000;
+                    *seed = seed.wrapping_add(1) % 100_000;
                 }
             };
             if tall {
@@ -179,7 +240,7 @@ fn melody_pad(ui: &mut egui::Ui, m: &mut MelDlg, acts: &mut Acts, tall: bool) {
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
                     row(ui);
-                    ui.horizontal(|ui| dice(ui, m));
+                    ui.horizontal(|ui| dice(ui, seed));
                 });
             } else {
                 ui.horizontal(|ui| {
@@ -187,7 +248,7 @@ fn melody_pad(ui: &mut egui::Ui, m: &mut MelDlg, acts: &mut Acts, tall: bool) {
                     row(ui);
                     ui.vertical(|ui| {
                         ui.add_space((ph - 40.0) / 2.0);
-                        ui.horizontal(|ui| dice(ui, m));
+                        ui.horizontal(|ui| dice(ui, seed));
                     });
                 });
             }
@@ -318,6 +379,55 @@ struct Acts {
     write: bool,
 }
 
+/// the panel's top-left kept on screen: all of its width, and its header
+/// plus a useful part of the body (the body scrolls in what is left)
+fn gen_clamp(scr: egui::Rect, w: f32, p: egui::Pos2) -> egui::Pos2 {
+    // the window frame's margins either side of the content width
+    let max_x = (scr.right() - w - 16.0).max(scr.left());
+    let max_y = (scr.bottom() - 260.0).max(scr.top());
+    egui::pos2(p.x.clamp(scr.left(), max_x), p.y.clamp(scr.top(), max_y))
+}
+
+/// the header's GENERATORS title as a grip: drag it to move the panel,
+/// double-click to put it back at the top
+fn gen_grip(ui: &mut egui::Ui) -> egui::Response {
+    let th = th();
+    let font = egui::FontId::proportional(13.0);
+    let text = "GENERATORS";
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.into(), font.clone(), th.ink2);
+    let size = egui::vec2(18.0 + galley.size().x + 6.0, 26.0);
+    let (r, resp) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, text));
+    let hot = resp.hovered() || resp.dragged();
+    let p = ui.painter();
+    if hot {
+        p.rect_filled(r, 4.0, well());
+    }
+    // six dots: the grip
+    let ink = if hot { th.accent } else { th.ink2 };
+    for row in 0..3 {
+        for col in 0..2 {
+            let c = egui::pos2(
+                r.left() + 6.0 + col as f32 * 5.0,
+                r.center().y - 5.0 + row as f32 * 5.0,
+            );
+            p.circle_filled(c, 1.4, ink);
+        }
+    }
+    // the title, bold-looking (drawn twice, a hair apart)
+    let at = egui::pos2(r.left() + 18.0, r.center().y - galley.size().y / 2.0);
+    p.galley(at, galley.clone(), th.ink2);
+    p.galley(at + egui::vec2(0.6, 0.0), galley, th.ink2);
+    let resp = if resp.dragged() {
+        resp.on_hover_cursor(egui::CursorIcon::Grabbing)
+    } else {
+        resp.on_hover_cursor(egui::CursorIcon::Grab)
+    };
+    resp.on_hover_text("drag to move the panel · double-click to put it back at the top")
+}
+
 /// the open clip's track / instrument
 struct Dest {
     track: Option<usize>,
@@ -331,6 +441,14 @@ impl App {
         self.cl.gen.tab = GenTab::Melody;
         self.cl.gen.chords_seen = false;
         self.cl.gen.mel.from = None;
+    }
+
+    /// open the panel on the Bass tab (track pie "Bass…")
+    pub(crate) fn gen_open_bass(&mut self, at: Tick) {
+        self.cl_open_gen_at(at);
+        self.cl.gen.tab = GenTab::Bass;
+        self.cl.gen.chords_seen = false;
+        self.cl.gen.bass.from = None;
     }
 
     fn gen_dest(&self, t: Target) -> Dest {
@@ -369,120 +487,153 @@ impl App {
             self.cl.gen.chords_seen = true;
         }
         // the melody (every frame: it is cheap and follows the chords)
-        let mel = (self.cl.gen.tab == GenTab::Melody).then(|| self.gen_melody(t, &res));
+        let tab = self.cl.gen.tab;
+        let mel = match tab {
+            GenTab::Chords => None,
+            GenTab::Melody => Some(self.gen_melody(t, &res)),
+            GenTab::Bass => Some(self.gen_bass(t, &res)),
+        };
         let mut acts = Acts::default();
-        egui::Window::new("Generators")
+        // dragged somewhere (the GENERATORS grip): that spot, kept on
+        // screen; else top-centre
+        let pos = self
+            .extra
+            .gen_pos
+            .map(|[x, y]| gen_clamp(scr, w, egui::pos2(x, y)));
+        let top_y = pos.map_or(scr.top() + top, |p| p.y);
+        let mut drag = egui::Vec2::ZERO;
+        let (mut drag_end, mut reset) = (false, false);
+        let win = egui::Window::new("Generators")
             .id(egui::Id::unique("gen_panel"))
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
             .min_width(w)
             .max_width(w)
-            .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, top))
             // over the whole window (the roll's bottom panel included)
-            .constrain_to(scr)
-            .show(ctx, |ui| {
-                ui.set_width(w);
-                ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
-                // the header: GENERATORS, the pill tabs, the hint, Close
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("GENERATORS")
-                            .strong()
-                            .size(13.0)
-                            .color(th.ink2),
-                    );
-                    ui.add_space(12.0);
-                    egui::Frame::new()
-                        .fill(well())
-                        .corner_radius(14.0)
-                        .inner_margin(3.0)
-                        .show(ui, |ui| {
-                            ui.spacing_mut().item_spacing.x = 2.0;
-                            for tab in GenTab::ALL {
-                                let on = self.cl.gen.tab == tab;
-                                let b = egui::Button::new(
-                                    egui::RichText::new(tab.name()).strong().color(if on {
-                                        accent_ink()
-                                    } else {
-                                        th.ink2
-                                    }),
-                                )
-                                .fill(if on { th.accent } else { Color32::TRANSPARENT })
-                                .corner_radius(12.0);
-                                if ui.add_sized([104.0, 26.0], b).clicked() && !on {
-                                    acts.tab = Some(tab);
-                                }
-                            }
-                        });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .add_sized([64.0, 24.0], egui::Button::new("Close"))
-                            .on_hover_text("close the generators (nothing is written)")
-                            .clicked()
-                        {
-                            acts.close = true;
-                        }
-                        if !stacked {
-                            cap(
-                                ui,
-                                match self.cl.gen.tab {
-                                    GenTab::Chords => "a chord progression for the timeline",
-                                    GenTab::Melody => "a tune over your chords",
-                                },
-                            );
-                        }
-                    });
-                });
-                ui.separator();
-                let card_w = if stacked {
-                    w
-                } else {
-                    (w * 0.32).clamp(300.0, 380.0)
-                };
-                let left_w = if stacked { w } else { w - card_w - 18.0 };
-                // an auto-sized window offers last frame's height, so ask
-                // for the full screen height whenever the content is taller
-                let body_h = (scr.height() - top - 100.0).max(200.0);
-                egui::ScrollArea::vertical()
-                    .max_height(body_h)
-                    .min_scrolled_height(body_h)
-                    .auto_shrink([false, true])
+            .constrain_to(scr);
+        let win = match pos {
+            Some(p) => win.fixed_pos(p),
+            None => win.anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, top)),
+        };
+        win.show(ctx, |ui| {
+            ui.set_width(w);
+            ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+            // the header: GENERATORS, the pill tabs, the hint, Close
+            ui.horizontal(|ui| {
+                let g = gen_grip(ui);
+                if g.dragged() {
+                    drag += g.drag_delta();
+                }
+                drag_end |= g.drag_stopped();
+                reset |= g.double_clicked();
+                ui.add_space(8.0);
+                egui::Frame::new()
+                    .fill(well())
+                    .corner_radius(14.0)
+                    .inner_margin(3.0)
                     .show(ui, |ui| {
-                        let left = |app: &mut App, ui: &mut egui::Ui, acts: &mut Acts| match &mel {
-                            None => app.gen_chords_left(ui, &res, left_w, acts),
-                            Some(m) => app.gen_melody_left(ui, m, left_w, acts),
-                        };
-                        if stacked {
-                            ui.vertical(|ui| left(self, ui, &mut acts));
-                            ui.add_space(6.0);
-                        } else {
-                            ui.horizontal_top(|ui| {
-                                ui.vertical(|ui| {
-                                    ui.set_width(left_w);
-                                    left(self, ui, &mut acts);
-                                });
-                                ui.add_space(6.0);
-                                ui.vertical(|ui| {
-                                    ui.set_width(card_w);
-                                    match &mel {
-                                        None => self
-                                            .gen_chords_card(ui, t, &res, &dest, card_w, &mut acts),
-                                        Some(m) => {
-                                            self.gen_melody_card(ui, m, &dest, card_w, &mut acts)
-                                        }
-                                    }
-                                });
-                            });
-                        }
-                        if stacked {
-                            match &mel {
-                                None => self.gen_chords_card(ui, t, &res, &dest, card_w, &mut acts),
-                                Some(m) => self.gen_melody_card(ui, m, &dest, card_w, &mut acts),
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        for tab in GenTab::ALL {
+                            let on = self.cl.gen.tab == tab;
+                            let b = egui::Button::new(
+                                egui::RichText::new(tab.name()).strong().color(if on {
+                                    accent_ink()
+                                } else {
+                                    th.ink2
+                                }),
+                            )
+                            .fill(if on { th.accent } else { Color32::TRANSPARENT })
+                            .corner_radius(12.0);
+                            if ui.add_sized([104.0, 26.0], b).clicked() && !on {
+                                acts.tab = Some(tab);
                             }
                         }
                     });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .add_sized([64.0, 24.0], egui::Button::new("Close"))
+                        .on_hover_text("close the generators (nothing is written)")
+                        .clicked()
+                    {
+                        acts.close = true;
+                    }
+                    if !stacked {
+                        cap(
+                            ui,
+                            match self.cl.gen.tab {
+                                GenTab::Chords => "a chord progression for the timeline",
+                                GenTab::Melody => "a tune over your chords",
+                                GenTab::Bass => "a bass line under your chords",
+                            },
+                        );
+                    }
+                });
             });
+            ui.separator();
+            let card_w = if stacked {
+                w
+            } else {
+                (w * 0.32).clamp(300.0, 380.0)
+            };
+            let left_w = if stacked { w } else { w - card_w - 18.0 };
+            // an auto-sized window offers last frame's height, so ask
+            // for the full screen height whenever the content is taller
+            let body_h = (scr.bottom() - top_y - 100.0).max(140.0);
+            egui::ScrollArea::vertical()
+                .max_height(body_h)
+                .min_scrolled_height(body_h)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    let left = |app: &mut App, ui: &mut egui::Ui, acts: &mut Acts| match &mel {
+                        None => app.gen_chords_left(ui, &res, left_w, acts),
+                        Some(m) if tab == GenTab::Bass => app.gen_bass_left(ui, m, left_w, acts),
+                        Some(m) => app.gen_melody_left(ui, m, left_w, acts),
+                    };
+                    if stacked {
+                        ui.vertical(|ui| left(self, ui, &mut acts));
+                        ui.add_space(6.0);
+                    } else {
+                        ui.horizontal_top(|ui| {
+                            ui.vertical(|ui| {
+                                ui.set_width(left_w);
+                                left(self, ui, &mut acts);
+                            });
+                            ui.add_space(6.0);
+                            ui.vertical(|ui| {
+                                ui.set_width(card_w);
+                                match &mel {
+                                    None => {
+                                        self.gen_chords_card(ui, t, &res, &dest, card_w, &mut acts)
+                                    }
+                                    Some(m) => {
+                                        self.gen_melody_card(ui, m, &dest, card_w, &mut acts)
+                                    }
+                                }
+                            });
+                        });
+                    }
+                    if stacked {
+                        match &mel {
+                            None => self.gen_chords_card(ui, t, &res, &dest, card_w, &mut acts),
+                            Some(m) => self.gen_melody_card(ui, m, &dest, card_w, &mut acts),
+                        }
+                    }
+                });
+        });
+        if drag != egui::Vec2::ZERO {
+            // from where the panel is now (top-centre until first dragged)
+            let from = pos.unwrap_or(egui::pos2(scr.center().x - w / 2.0, top_y));
+            let p = gen_clamp(scr, w, from + drag);
+            self.extra.gen_pos = Some([p.x, p.y]);
+        }
+        if reset {
+            self.extra.gen_pos = None;
+            self.status = "Generators panel back at the top".into();
+        }
+        if drag_end || reset {
+            self.save_settings();
+        }
         if let Some(tab) = acts.tab {
             self.cl.gen.tab = tab;
         }
@@ -798,18 +949,22 @@ impl App {
 
     // ------------------------------------------------------------ melody
 
-    /// the melody's chords, key and span, and the melody itself
-    fn gen_melody(&mut self, t: Target, res: &cg::GenResult) -> MelView {
+    /// the chords a Melody / Bass goes over (`pref`: the tab's Over
+    /// choice): the key, the marks, where they came from and whether the
+    /// clip has chords of its own
+    fn gen_source(
+        &self,
+        t: Target,
+        res: &cg::GenResult,
+        pref: Option<MelFrom>,
+    ) -> (Key, Vec<ChordMark>, MelFrom, bool) {
         let clip_marks = self.cl_marks(t);
         let g = &self.cl.gen;
-        let from = g
-            .mel
-            .from
-            .unwrap_or(if clip_marks.is_empty() || g.chords_seen {
-                MelFrom::Chords
-            } else {
-                MelFrom::Clip
-            });
+        let from = pref.unwrap_or(if clip_marks.is_empty() || g.chords_seen {
+            MelFrom::Chords
+        } else {
+            MelFrom::Clip
+        });
         let from = if clip_marks.is_empty() {
             MelFrom::Chords
         } else {
@@ -823,13 +978,15 @@ impl App {
                 clip_marks.clone(),
             ),
         };
+        (key, marks, from, !clip_marks.is_empty())
+    }
+
+    /// the melody's chords, key and span, and the melody itself
+    fn gen_melody(&mut self, t: Target, res: &cg::GenResult) -> MelView {
+        let (key, marks, from, clip_has_chords) = self.gen_source(t, res, self.cl.gen.mel.from);
         let (start, end) = span_of(&marks);
         let m = &mut self.cl.gen.mel;
-        let locks = Locks {
-            rhythm: m.lock_rhythm.then_some(m.locked_rhythm.as_slice()),
-            pitches: m.lock_notes.then_some(m.locked_keys.as_slice()),
-        };
-        let notes = mg::generate(key, &marks, start, end, &m.opts, locks);
+        let notes = mg::generate(key, &marks, start, end, &m.opts, m.locks());
         m.last = notes.clone();
         MelView {
             key,
@@ -838,30 +995,211 @@ impl App {
             end,
             notes,
             from,
-            clip_has_chords: !clip_marks.is_empty(),
+            clip_has_chords,
         }
     }
 
-    fn gen_melody_left(&mut self, ui: &mut egui::Ui, mv: &MelView, w: f32, acts: &mut Acts) {
-        let th = th();
+    /// the bass line over the same chords as the Melody tab
+    fn gen_bass(&mut self, t: Target, res: &cg::GenResult) -> MelView {
+        let (key, marks, from, clip_has_chords) = self.gen_source(t, res, self.cl.gen.bass.from);
+        let (start, end) = span_of(&marks);
+        let b = &mut self.cl.gen.bass;
+        let notes = bg::generate(key, &marks, start, end, &b.opts, b.locks());
+        b.last = notes.clone();
+        MelView {
+            key,
+            marks,
+            start,
+            end,
+            notes,
+            from,
+            clip_has_chords,
+        }
+    }
+
+    /// the Over row (Chords tab / Clip's chord lane) for Melody and Bass
+    fn gen_over_row(&mut self, ui: &mut egui::Ui, mv: &MelView) {
         ui.horizontal_wrapped(|ui| {
             ui.label(egui::RichText::new(key_name(mv.key)).strong().size(15.0));
             ui.add_space(8.0);
             cap(ui, "Over");
             let on = usize::from(mv.from == MelFrom::Clip);
-            ui.add_enabled_ui(true, |ui| {
-                let hit = seg(ui, &["Chords tab", "Clip's chord lane"], on, 120.0);
-                match hit {
-                    Some(0) => self.cl.gen.mel.from = Some(MelFrom::Chords),
-                    Some(1) if mv.clip_has_chords => self.cl.gen.mel.from = Some(MelFrom::Clip),
-                    Some(1) => {
-                        self.status =
-                            "This clip has no chords yet (the Chords tab writes them)".into()
-                    }
-                    _ => {}
+            let hit = seg(ui, &["Chords tab", "Clip's chord lane"], on, 120.0);
+            let g = &mut self.cl.gen;
+            let from = if g.tab == GenTab::Bass {
+                &mut g.bass.from
+            } else {
+                &mut g.mel.from
+            };
+            match hit {
+                Some(0) => *from = Some(MelFrom::Chords),
+                Some(1) if mv.clip_has_chords => *from = Some(MelFrom::Clip),
+                Some(1) => {
+                    self.status = "This clip has no chords yet (the Chords tab writes them)".into()
+                }
+                _ => {}
+            }
+        });
+    }
+
+    fn gen_bass_left(&mut self, ui: &mut egui::Ui, mv: &MelView, w: f32, acts: &mut Acts) {
+        let th = th();
+        self.gen_over_row(ui, mv);
+        melody_view(ui, mv, w, 140.0);
+        strip(ui, mv.key, &mv.marks, w, 22.0);
+        let m = &mut self.cl.gen.bass;
+        let side = w >= 620.0;
+        let cw = if side { w - PAD_W - 34.0 } else { w };
+        let controls = |ui: &mut egui::Ui, m: &mut BassDlg| {
+            seed_locks(ui, m, |o| &mut o.seed);
+            ui.horizontal_wrapped(|ui| {
+                cap(ui, "Style");
+                let names: Vec<&str> = BassStyle::ALL.iter().map(|s| s.name()).collect();
+                let on = BassStyle::ALL
+                    .iter()
+                    .position(|&s| s == m.opts.style)
+                    .unwrap_or(0);
+                let bw = ((cw - 60.0) / 6.0 - 2.0).clamp(60.0, 96.0);
+                if let Some(i) = seg(ui, &names, on, bw) {
+                    m.opts.style = BassStyle::ALL[i];
                 }
             });
-        });
+            ui.label(egui::RichText::new(m.opts.style.hint()).color(th.ink2));
+            ui.horizontal_wrapped(|ui| {
+                let sw = ((cw - 380.0) / 2.0).clamp(70.0, 150.0);
+                ui.add_enabled_ui(m.opts.style != BassStyle::Euclid, |ui| {
+                    cap(ui, "Density");
+                    pct(
+                        ui,
+                        &mut m.opts.density,
+                        "",
+                        sw,
+                        "how many notes (strong beats first)",
+                    );
+                });
+                ui.add_space(12.0);
+                cap(ui, "Range");
+                ui.spacing_mut().slider_width = sw;
+                ui.add(
+                    egui::Slider::new(&mut m.opts.range, 12..=36)
+                        .trailing_fill(true)
+                        .suffix(" st"),
+                )
+                .on_hover_text("from the lowest to the highest note, in semitones");
+                ui.add_space(12.0);
+                cap(ui, "Octave");
+                ui.add(egui::DragValue::new(&mut m.opts.octave).range(0..=5))
+                    .on_hover_text("the lowest note's octave (2: the bass register)");
+            });
+        };
+        if side {
+            ui.horizontal_top(|ui| {
+                melody_pad(ui, &mut m.opts.seed, acts, true);
+                ui.add_space(12.0);
+                ui.vertical(|ui| {
+                    ui.set_width(cw);
+                    controls(ui, m);
+                });
+            });
+        } else {
+            melody_pad(ui, &mut m.opts.seed, acts, false);
+            controls(ui, m);
+        }
+        let rr = ui
+            .add(egui::Button::new("Advanced...").selected(m.adv))
+            .on_hover_text("Euclid steps, approach notes, fifths, accents, ties, note length");
+        if rr.clicked() {
+            m.adv = !m.adv;
+        }
+        if m.adv {
+            egui::Frame::new()
+                .stroke(egui::Stroke::new(1.0, th.line2))
+                .corner_radius(4.0)
+                .inner_margin(8.0)
+                .show(ui, |ui| {
+                    ui.set_width(w - 18.0);
+                    ui.horizontal_wrapped(|ui| {
+                        cap(ui, "Euclid");
+                        ui.add(
+                            egui::DragValue::new(&mut m.opts.steps)
+                                .range(1..=16)
+                                .prefix("steps "),
+                        );
+                        m.opts.pulses = m.opts.pulses.min(m.opts.steps);
+                        ui.add(
+                            egui::DragValue::new(&mut m.opts.pulses)
+                                .range(0..=m.opts.steps)
+                                .prefix("pulses "),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut m.opts.rotate)
+                                .range(0..=15)
+                                .prefix("rotate "),
+                        );
+                        ui.label(
+                            egui::RichText::new(mg::euclid_str(&mg::euclid(
+                                m.opts.pulses,
+                                m.opts.steps,
+                                m.opts.rotate,
+                            )))
+                            .monospace()
+                            .color(th.ink2),
+                        )
+                        .on_hover_text("one bar (Style: Euclid)");
+                    });
+                    let sw = ((w - 330.0) / 3.0).clamp(70.0, 130.0);
+                    ui.horizontal_wrapped(|ui| {
+                        cap(ui, "Approach");
+                        pct(
+                            ui,
+                            &mut m.opts.approach,
+                            "",
+                            sw,
+                            "the chance the note before a chord change leads into the next root",
+                        );
+                        ui.add_space(10.0);
+                        cap(ui, "Fifths/octaves");
+                        pct(
+                            ui,
+                            &mut m.opts.fifths,
+                            "",
+                            sw,
+                            "the chance a step plays the fifth or the octave instead of the root",
+                        );
+                        let mut l = m.opts.legato;
+                        ui.add_space(10.0);
+                        cap(ui, "Note length");
+                        pct(ui, &mut l, "", sw, "a note's share of the gap to the next");
+                        m.opts.legato = l.max(0.1);
+                    });
+                    ui.add_enabled_ui(m.opts.style == BassStyle::Acid, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            cap(ui, "Accent");
+                            pct(
+                                ui,
+                                &mut m.opts.accent,
+                                "",
+                                sw,
+                                "Acid: the chance a note is accented (played louder)",
+                            );
+                            ui.add_space(10.0);
+                            cap(ui, "Tie");
+                            pct(
+                                ui,
+                                &mut m.opts.tie,
+                                "",
+                                sw,
+                                "Acid: the chance a note is held into the next step",
+                            );
+                        });
+                    });
+                });
+        }
+    }
+
+    fn gen_melody_left(&mut self, ui: &mut egui::Ui, mv: &MelView, w: f32, acts: &mut Acts) {
+        let th = th();
+        self.gen_over_row(ui, mv);
         melody_view(ui, mv, w, 140.0);
         strip(ui, mv.key, &mv.marks, w, 22.0);
         let m = &mut self.cl.gen.mel;
@@ -872,22 +1210,7 @@ impl App {
         // the pad, the gap and the item spacing either side of it
         let cw = if side { w - PAD_W - 34.0 } else { w };
         let controls = |ui: &mut egui::Ui, m: &mut MelDlg| {
-            ui.horizontal_wrapped(|ui| {
-                cap(ui, "Seed");
-                ui.add(egui::DragValue::new(&mut m.opts.seed).range(0..=99_999));
-                ui.add_space(8.0);
-                let was = (m.lock_rhythm, m.lock_notes);
-                ui.checkbox(&mut m.lock_rhythm, "Lock rhythm")
-                    .on_hover_text("keep these note times while you change the rest");
-                ui.checkbox(&mut m.lock_notes, "Lock notes")
-                    .on_hover_text("keep these pitches (in order) while the rhythm changes");
-                if m.lock_rhythm && !was.0 {
-                    m.locked_rhythm = m.last.iter().map(|n| (n.start, n.len)).collect();
-                }
-                if m.lock_notes && !was.1 {
-                    m.locked_keys = m.last.iter().map(|n| n.key).collect();
-                }
-            });
+            seed_locks(ui, m, |o| &mut o.seed);
             egui::Grid::new("gen_mel_main")
                 .num_columns(2)
                 .spacing(egui::vec2(8.0, 6.0))
@@ -954,7 +1277,7 @@ impl App {
         };
         if side {
             ui.horizontal_top(|ui| {
-                melody_pad(ui, m, acts, true);
+                melody_pad(ui, &mut m.opts.seed, acts, true);
                 ui.add_space(12.0);
                 ui.vertical(|ui| {
                     ui.set_width(cw);
@@ -962,7 +1285,7 @@ impl App {
                 });
             });
         } else {
-            melody_pad(ui, m, acts, false);
+            melody_pad(ui, &mut m.opts.seed, acts, false);
             controls(ui, m);
         }
         let rr = ui
@@ -1054,6 +1377,7 @@ impl App {
         }
     }
 
+    /// the Melody / Bass WRITE card (the open tab's settings)
     fn gen_melody_card(
         &mut self,
         ui: &mut egui::Ui,
@@ -1067,8 +1391,14 @@ impl App {
         let tr = dest
             .track
             .map_or("this clip".to_string(), |k| format!("track {:02}", k + 1));
+        let g = &mut self.cl.gen;
+        let part = g.tab.name();
+        let (new_track, on_top, seed) = if g.tab == GenTab::Bass {
+            (&mut g.bass.new_track, &mut g.bass.on_top, g.bass.opts.seed)
+        } else {
+            (&mut g.mel.new_track, &mut g.mel.on_top, g.mel.opts.seed)
+        };
         card(ui, w, |ui| {
-            let m = &mut self.cl.gen.mel;
             card_title(ui);
             cap(ui, "Target");
             let this = match dest.track {
@@ -1077,24 +1407,28 @@ impl App {
             };
             let can_new = dest.track.is_some();
             if !can_new {
-                m.new_track = false;
+                *new_track = false;
             }
             ui.horizontal(|ui| {
                 ui.add_enabled_ui(can_new, |ui| {
                     if ui
-                        .add(egui::Button::new("New “Melody” track").selected(m.new_track))
-                        .on_hover_text("a new track below, with a copy of this track's instrument (the sound Preview plays)")
+                        .add(egui::Button::new(format!("New “{part}” track")).selected(*new_track))
+                        .on_hover_text(if part == "Bass" {
+                            "a new track below, with a copy of this track's instrument (a bass synth if it has none or plays a drum kit)"
+                        } else {
+                            "a new track below, with a copy of this track's instrument (the sound Preview plays)"
+                        })
                         .clicked()
                     {
-                        m.new_track = true;
+                        *new_track = true;
                     }
                 });
                 if ui
-                    .add(egui::Button::new(this.as_str()).selected(!m.new_track))
+                    .add(egui::Button::new(this.as_str()).selected(!*new_track))
                     .on_hover_text("into the open clip")
                     .clicked()
                 {
-                    m.new_track = false;
+                    *new_track = false;
                 }
             });
             ui.horizontal(|ui| {
@@ -1102,30 +1436,30 @@ impl App {
                 ui.label(egui::RichText::new(&bars).strong());
                 cap(ui, "(follows the chords)");
             });
-            if !m.new_track {
+            if !*new_track {
                 cap(ui, "Write");
                 let sw = ((w - 40.0) / 2.0).clamp(80.0, 140.0);
                 if let Some(i) = seg(
                     ui,
                     &["Replace notes", "Notes on top"],
-                    usize::from(m.on_top),
+                    usize::from(*on_top),
                     sw,
                 ) {
-                    m.on_top = i == 1;
+                    *on_top = i == 1;
                 }
             }
             ui.label(
-                egui::RichText::new(format!("{} notes · seed {}", mv.notes.len(), m.opts.seed))
+                egui::RichText::new(format!("{} notes · seed {}", mv.notes.len(), seed))
                     .color(th.ink2),
             );
             ui.add_space(2.0);
             warn(
                 ui,
-                &if m.new_track {
+                &if *new_track {
                     format!(
-                        "adds a new track “Melody” below {tr} with {bars} (nothing is replaced)"
+                        "adds a new track “{part}” below {tr} with {bars} (nothing is replaced)"
                     )
-                } else if m.on_top {
+                } else if *on_top {
                     format!("adds notes on top in {bars} on {tr} (keeps the notes there)")
                 } else {
                     format!(
@@ -1177,13 +1511,20 @@ impl App {
             .collect()
     }
 
-    /// Melody's Write: a new "Melody" track or the open clip (one undo)
+    /// Melody's / Bass's Write: a new "Melody" / "Bass" track or the open
+    /// clip (one undo)
     fn gen_write_melody(&mut self, t: Target, mv: &MelView) {
         if mv.notes.is_empty() {
             return;
         }
         let n = mv.notes.len();
-        let new_track = self.cl.gen.mel.new_track;
+        let g = &self.cl.gen;
+        let (new_track, on_top) = if g.tab == GenTab::Bass {
+            (g.bass.new_track, g.bass.on_top)
+        } else {
+            (g.mel.new_track, g.mel.on_top)
+        };
+        let what = g.tab.name().to_lowercase();
         if new_track && self.gen_melody_track(t, mv) {
             return;
         }
@@ -1196,19 +1537,18 @@ impl App {
             ..Default::default()
         }];
         let notes = Self::mel_notes(&mv.notes, 0);
-        let on_top = self.cl.gen.mel.on_top;
         self.cl_put_notes_ex(
             t,
             marks,
             notes,
             &span,
-            format!("melody of {n} note(s) written"),
+            format!("{what} of {n} note(s) written"),
             on_top,
         );
     }
 
-    /// a new track "Melody" below the clip's track with a copy of the
-    /// track's instrument (what Preview played) and a
+    /// a new track "Melody" / "Bass" below the clip's track with a copy of
+    /// the track's instrument (what Preview played) and a
     /// note clip where the source clip is; false: not possible (the caller
     /// writes into the clip instead)
     fn gen_melody_track(&mut self, t: Target, mv: &MelView) -> bool {
@@ -1218,6 +1558,9 @@ impl App {
         else {
             return false;
         };
+        let bass = self.cl.gen.tab == GenTab::Bass;
+        let part = self.cl.gen.tab.name();
+        let what = part.to_lowercase();
         let Some((tr, start, offset, len)) = self.with(|s| {
             let c = s
                 .song
@@ -1231,17 +1574,18 @@ impl App {
             return false;
         };
         if self.with(|s| s.song.channels) >= MAX_CHANNELS {
-            self.status = "All 32 tracks are used: the melody goes into this clip".into();
+            self.status = format!("All 32 tracks are used: the {what} goes into this clip");
             return false;
         }
         if self.with(|s| s.song.instruments.len() >= 255) {
             self.status =
-                "All 255 instrument slots are used: the melody goes into this clip".into();
+                format!("All 255 instrument slots are used: the {what} goes into this clip");
             return false;
         }
         // the sound Preview played: a copy of the clip's track instrument
         // (its patch, parameters and effects), so the written melody sounds
-        // the same; a lead synth only when the track has none (or a kit)
+        // the same; a lead synth (Bass: a bass synth) only when the track
+        // has none or plays a drum kit
         let heard = (!self.track_needs_instrument(tr))
             .then(|| self.track_instr(tr))
             .and_then(|slot| {
@@ -1249,14 +1593,28 @@ impl App {
                     s.song
                         .instruments
                         .get((slot as usize).wrapping_sub(1))
-                        .filter(|i| crate::drumkit::kit_of(i).is_none())
+                        // a drum kit is no bass or lead (Bass: any drum
+                        // engine, as the track pie tells drums apart)
+                        .filter(|i| {
+                            if bass {
+                                !super::trackpie::is_drum_kind(&i.kind)
+                            } else {
+                                crate::drumkit::kit_of(i).is_none()
+                            }
+                        })
                         .cloned()
                 })
             });
         let inst = match heard {
             Some(i) => i,
             None => {
-                let Some((name, kind)) = super::trackpie::Builtin::WaveForge.make() else {
+                let made = if bass {
+                    bass_preset(self.cl.gen.bass.opts.style == BassStyle::Acid)
+                        .or_else(|| super::trackpie::Builtin::Analog.make())
+                } else {
+                    super::trackpie::Builtin::WaveForge.make()
+                };
+                let Some((name, kind)) = made else {
                     return false;
                 };
                 Instrument {
@@ -1271,7 +1629,7 @@ impl App {
         let at = tr + 1;
         self.snapshot();
         self.undo_hold += 1;
-        let slot = if self.track_insert(at, "Melody") {
+        let slot = if self.track_insert(at, part) {
             self.with(|s| {
                 let k = s.song.add_instrument(inst)?;
                 crate::chanops::assign_track_instrument(&mut s.song, at, k as u8 + 1);
@@ -1290,12 +1648,12 @@ impl App {
                 let c = tlm.clips.iter_mut().find(|c| c.id == id)?;
                 c.offset = offset;
                 c.len = len.max(mv.end - offset).max(BAR);
-                c.name = Some("Melody".into());
+                c.name = Some(part.into());
                 let tl::ClipKind::Notes { data } = c.kind else {
                     return None;
                 };
                 let d = tlm.notes[data as usize].make_mut();
-                d.name = "Melody".into();
+                d.name = part.into();
                 d.len = data_len;
                 d.notes = notes;
                 let crate::audio::Shared { song, engine, .. } = s;
@@ -1307,12 +1665,12 @@ impl App {
         self.dirty = true;
         crate::plugin::sync(&self.shared, None);
         let Some(id) = id else {
-            self.status = "Couldn't add the Melody track".into();
+            self.status = format!("Couldn't add the {part} track");
             return true;
         };
         self.track_open_pattern(at, id);
         self.status = format!(
-            "New track {:02} “Melody”: {} note(s) in {} (Ctrl+Z undoes it all)",
+            "New track {:02} “{part}”: {} note(s) in {} (Ctrl+Z undoes it all)",
             at + 1,
             mv.notes.len(),
             bars_text(mv.start, mv.end)

@@ -216,6 +216,7 @@ fn the_track_pie_follows_what_the_track_plays() {
             "New pattern",
             "Chords…",
             "Melody…",
+            "Bass…",
             "Automation lane",
             "Browse…",
             "Mute",
@@ -228,6 +229,7 @@ fn the_track_pie_follows_what_the_track_plays() {
     assert_eq!(add[2].go, Some(Go::Act(PieAct::NewPattern)));
     assert_eq!(add[3].go, Some(Go::Act(PieAct::Chords)));
     assert_eq!(add[4].go, Some(Go::Act(PieAct::Melody)));
+    assert_eq!(add[5].go, Some(Go::Act(PieAct::Bass)));
     assert!(
         !labels(&add)
             .iter()
@@ -396,6 +398,7 @@ fn the_rings_hold_the_approved_entries() {
                     | "New pattern"
                     | "Chords…"
                     | "Melody…"
+                    | "Bass…"
                     | "Automation lane"
             ) {
                 assert_eq!(s.go, None, "{c:?} {}", s.label);
@@ -523,6 +526,15 @@ fn the_app_gives_each_track_its_context() {
     use egui_kittest::kittest::Queryable;
     assert!(h.query_by_label("Write to timeline").is_some());
     assert!(h.query_by_label("Lock rhythm").is_some());
+    // Bass… on it: the Generators panel on Bass
+    h.state_mut().cl.gen.open = false;
+    h.state_mut().pie_apply(0, PieAct::Bass, &ctx);
+    frames(&mut h, 2);
+    assert!(h.state().cl.gen.open, "the generators");
+    assert_eq!(h.state().cl.gen.tab, super::genpanel::GenTab::Bass);
+    assert!(h.query_by_label("Write to timeline").is_some());
+    assert!(h.query_by_label("Octave pump").is_some());
+    assert!(h.query_by_label("New “Bass” track").is_some());
     // Dice kit on the drum track: the kit changes, one undo takes it back
     h.state_mut().cl.gen.open = false;
     h.state_mut().undo_reset();

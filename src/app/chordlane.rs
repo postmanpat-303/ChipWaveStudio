@@ -54,6 +54,8 @@ pub(crate) struct GenDlg {
     /// follows its progression rather than the clip's chord lane)
     pub(crate) chords_seen: bool,
     pub(crate) mel: super::genpanel::MelDlg,
+    /// the Bass tab
+    pub(crate) bass: super::genpanel::BassDlg,
 }
 
 /// a chord-note write waiting for an OK: it would delete more than
@@ -133,6 +135,7 @@ impl Default for GenDlg {
             tab: Default::default(),
             chords_seen: false,
             mel: Default::default(),
+            bass: Default::default(),
         }
     }
 }

@@ -189,7 +189,7 @@ fn chord_at(key: Key, marks: &[ChordMark], t: Tick) -> (u8, u8, Vec<u8>) {
 fn fifth_of(root: u8, pcs: &[u8]) -> u8 {
     pcs.iter()
         .copied()
-        .find(|&p| matches!((p + 12 - root) % 12, 7 | 6 | 8))
+        .find(|&p| matches!((p + 12 - root) % 12, 6..=8))
         .unwrap_or((root + 7) % 12)
 }
 
@@ -226,7 +226,7 @@ fn pattern(o: &BassOpts, rng: &mut Rng) -> (u8, Vec<Step>) {
         tie: false,
     };
     // a root, sometimes the fifth or the octave (never on beat 1)
-    let mut colour = |rng: &mut Rng, at: u8| {
+    let colour = |rng: &mut Rng, at: u8| {
         if at == 0 || rng.f() >= fif {
             Role::Root
         } else if rng.f() < 0.6 {
