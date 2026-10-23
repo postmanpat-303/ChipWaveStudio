@@ -29,6 +29,10 @@ pub fn fixture_named(name: &str) -> PathBuf {
     let dir = lib.parent().unwrap().parent().unwrap().join("clap");
     std::fs::create_dir_all(&dir).unwrap();
     let dst = dir.join(name);
+    // tests run in parallel threads: install one copy at a time, or a
+    // thread could rename (and load) a copy another thread is still writing
+    static INSTALL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
     let fresh = std::fs::metadata(&dst)
         .and_then(|m| m.modified())
         .ok()
