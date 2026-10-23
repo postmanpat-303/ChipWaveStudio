@@ -972,6 +972,10 @@ impl App {
                 if matches!(g.engine, crate::gen::GenEngine::Poly(_)) {
                     self.ip.tab = Tab::Synth;
                 }
+                // StringWave's placeholder panel: Layers on Main
+                if matches!(g.engine, crate::gen::GenEngine::Strings(_)) {
+                    self.ip.tab = Tab::Main;
+                }
             }
         }
         if self.ip.ab.as_ref().is_some_and(|a| a.inst != idx) {

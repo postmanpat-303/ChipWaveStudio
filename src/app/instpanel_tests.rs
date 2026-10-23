@@ -767,3 +767,54 @@ fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
     frames(&mut h, 2);
     assert!(labelled_rect(&h, Role::Slider, "Cutoff").is_some());
 }
+
+/// StringWave's placeholder panel on a 1366x768 laptop: it opens on Main
+/// (the simple card), every tab draws its knobs and they fit the height
+#[test]
+fn stringwave_placeholder_panel_fits_a_laptop() {
+    let inst = Instrument {
+        name: "Strings".into(),
+        volume: 0.8,
+        transpose: 0,
+        fx: vec![],
+        kind: InstrumentKind::Gen(crate::gen::GenPatch {
+            engine: crate::gen::GenEngine::Strings(Default::default()),
+            ..Default::default()
+        }),
+    };
+    let mut h = with_inst(inst);
+    h.set_size(egui::vec2(1366.0, 768.0));
+    h.state_mut().show_instrument_panel();
+    frames(&mut h, 3);
+    assert_eq!(h.state().ip.tab, Tab::Main, "opens on the layers");
+    // the simple card: the eight macro knobs plus layers and envelope
+    for k in ["Cutoff macro", "Master macro", "Sub", "Voices"] {
+        let r = labelled_rect(&h, Role::Slider, k).unwrap_or_else(|| panic!("simple: {k}"));
+        assert!(
+            r.right() <= 1366.5 && r.bottom() <= 768.5,
+            "simple: {k} {r:?}"
+        );
+    }
+    h.state_mut().ip.advanced = true;
+    for tab in [Tab::Main, Tab::Modulation, Tab::Fx] {
+        h.state_mut().ip.tab = tab;
+        frames(&mut h, 3);
+        let knobs: Vec<Rect> = h
+            .query_all_by(|n| n.role() == Role::Slider)
+            .map(|n| n.rect())
+            .collect();
+        assert!(knobs.len() >= 6, "{tab:?}: {} knobs", knobs.len());
+        // the cards scroll sideways (as every instrument's do); in height
+        // they fit the laptop's default lower panel
+        for r in &knobs {
+            assert!(
+                r.top() >= 0.0 && r.bottom() <= 768.5,
+                "{tab:?}: a knob below the window {r:?}"
+            );
+        }
+        assert!(
+            knobs.iter().any(|r| r.right() <= 1366.0),
+            "{tab:?}: knobs in view"
+        );
+    }
+}

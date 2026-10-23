@@ -494,6 +494,38 @@ const POLY: Spec = Spec {
         ),
     ],
 };
+/// StringWave (placeholder until the built-in look): its eight macro knobs
+/// (cutoff ... master), then the three layers and the amp envelope
+const SW: Spec = Spec {
+    macros: Macros::Params(&[
+        "sw.0", "sw.1", "sw.2", "sw.3", "sw.4", "sw.5", "sw.6", "sw.7",
+    ]),
+    secs: &[
+        s(
+            "Layers",
+            None,
+            &["sw.wave0"],
+            &[
+                ("sw.11", None),
+                ("sw.16", None),
+                ("sw.21", None),
+                ("sw.23", None),
+            ],
+        ),
+        s(
+            "Envelope",
+            Some("Amp envelope"),
+            &[],
+            &[
+                ("sw.3", None),
+                ("sw.31", None),
+                ("sw.32", None),
+                ("sw.4", None),
+                ("sw.50", None),
+            ],
+        ),
+    ],
+};
 const SAMPLE: Spec = Spec {
     macros: Macros::None,
     secs: &[Sec {
@@ -528,6 +560,7 @@ pub(crate) fn spec(tag: &str) -> &'static Spec {
         "Noise" => &NOISE,
         "Grid" => &GRID,
         crate::poly::POLY_DISPLAY_NAME => &POLY,
+        crate::strings::STRINGS_DISPLAY_NAME => &SW,
         "Sample" => &SAMPLE,
         _ => &PLUGIN,
     }
@@ -575,7 +608,7 @@ pub(crate) fn macros(l: &Layout, sp: &Spec) -> Vec<MacroRt> {
 
 /// the engine macro keys are &'static in the spec already; find it there
 fn leak_key(k: &str) -> &'static str {
-    for sp in [&DRUM, &CHIPFX, &FM, &GRID, &POLY] {
+    for sp in [&DRUM, &CHIPFX, &FM, &GRID, &POLY, &SW] {
         if let Macros::Params(ks) = &sp.macros {
             if let Some(s) = ks.iter().find(|x| **x == k) {
                 return s;
