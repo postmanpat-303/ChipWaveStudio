@@ -520,7 +520,11 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
     }
     let opts = eframe::NativeOptions {
         viewport: vb
-            .with_title("ChipWave Studio")
+            .with_title(if option_env!("CW_BUILD").is_some() {
+                format!("ChipWave Studio {}", crate::version_label())
+            } else {
+                "ChipWave Studio".to_string()
+            })
             .with_min_inner_size([800.0, 500.0])
             .with_drag_and_drop(true)
             .with_icon(std::sync::Arc::new(

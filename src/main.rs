@@ -4,6 +4,31 @@
 /// Display version (Cargo: 0.2.9+fix.0 -> "0.2.9.0"; the updater compares it part by part).
 pub const VERSION: &str = "0.2.9.0";
 
+/// The version as shown (About, window title): a test build (the pack
+/// scripts set CW_BUILD, e.g. "combo2 8bdf40c") reads
+/// "0.2.9.0 · test build (combo2 8bdf40c)"; a release build just "0.2.9.0".
+pub fn version_label() -> String {
+    version_label_for(option_env!("CW_BUILD"))
+}
+
+fn version_label_for(build: Option<&str>) -> String {
+    match build.map(str::trim) {
+        Some(b) if !b.is_empty() => format!("{VERSION} · test build ({b})"),
+        _ => VERSION.to_string(),
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn a_test_build_says_so_next_to_the_version() {
+    assert_eq!(version_label_for(None), VERSION);
+    assert_eq!(version_label_for(Some(" ")), VERSION);
+    assert_eq!(
+        version_label_for(Some("combo2 8bdf40c")),
+        format!("{VERSION} · test build (combo2 8bdf40c)")
+    );
+}
+
 mod advedit;
 mod app;
 mod arrange;
