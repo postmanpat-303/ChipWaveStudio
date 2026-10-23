@@ -72,6 +72,7 @@ impl App {
             return;
         }
         self.br.new_track_at = Some(at);
+        self.br.new_track_pattern = false;
         self.open_browser_tab(crate::browser::Tab::Instruments);
         self.status = format!(
             "Pick an instrument in the Browser (double-click or Enter) for the new track {:02}",
@@ -150,21 +151,6 @@ impl App {
         self.undo_hold -= 1;
     }
 
-    /// the pie's Drum pattern…: the Browser's Drum Patterns tab; the next
-    /// pick goes on track `tr` at the play marker
-    pub(super) fn track_drum_pattern(&mut self, tr: usize) {
-        if self.with(|s| s.song.timeline.is_none()) {
-            self.status = "Drum patterns go on the Timeline (timeline mode)".into();
-            return;
-        }
-        self.open_browser_tab(crate::browser::Tab::Patterns);
-        self.br.track_target = Some((tr, crate::browser::Tab::Patterns));
-        self.status = format!(
-            "Pick a drum pattern for track {:02} in the Browser (double-click or Enter, or drag it)",
-            tr + 1
-        );
-    }
-
     /// the pie's Add › Drum pattern › <instrument> (`kit` None) or › Drum
     /// Kit › <kit>: a new track below `tr` playing a new instrument, with an
     /// EMPTY 1-bar pattern at the play marker's bar, open in the step
@@ -213,7 +199,11 @@ impl App {
                 crate::chanops::assign_track_instrument(&mut s.song, at, k as u8 + 1);
                 true
             });
-        let id = if ok { self.track_add_empty_pattern(at) } else { None };
+        let id = if ok {
+            self.track_add_empty_pattern(at)
+        } else {
+            None
+        };
         self.undo_hold -= 1;
         let Some((id, bar)) = id else {
             if ok {
