@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 92] = [
+pub const VIEWS: [&str; 96] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -128,6 +128,10 @@ pub const VIEWS: [&str; 92] = [
     "racks-save",
     "racks-browser",
     "knob-mockup",
+    "instskin-waveforge",
+    "instskin-chains",
+    "instskin-browser",
+    "instskin-plugins",
     "metronome-mockup",
 ];
 const SETUP_AT: u32 = 4;
@@ -356,7 +360,13 @@ impl App {
                     self.extra.full_height = true;
                 }
             }
-            "devices" | "devices-drop" | "timeline-instrument" => {
+            "devices"
+            | "devices-drop"
+            | "timeline-instrument"
+            | "instskin-waveforge"
+            | "instskin-chains"
+            | "instskin-browser"
+            | "instskin-plugins" => {
                 // the Devices tab on the Supersaw Pad: EQ, its filter and
                 // chorus, a compressor and a reverb; Browser › Effects open
                 self.enter_timeline();
@@ -367,6 +377,16 @@ impl App {
                     self.ch = c;
                 }
                 self.dev.follow_ch = self.ch;
+                // the built-in skin (docs/INSTSKIN.md): a WaveForge on the
+                // pad's track
+                let wf = view.starts_with("instskin");
+                let ii = if wf {
+                    self.track_new_instrument(self.ch, super::trackpie::Builtin::WaveForge);
+                    self.ip.advanced = false;
+                    (self.instr as usize).saturating_sub(1)
+                } else {
+                    6
+                };
                 self.with(|s| {
                     use crate::fx::{Device, FxKind};
                     let mut eq = Device::new(FxKind::Eq);
@@ -385,11 +405,11 @@ impl App {
                     let mut comp = Device::new(FxKind::Compressor);
                     super::fxview::apply_preset(&mut comp, 0);
                     let rev = Device::new(FxKind::Reverb);
-                    s.song.insert_device(6, 0, eq);
-                    let n = s.song.instruments.get(6).map_or(0, |i| i.fx.len());
-                    s.song.insert_device(6, n, comp);
-                    s.song.insert_device(6, n + 1, rev);
-                    s.song.insert_device(6, n + 2, Device::new(FxKind::Delay));
+                    s.song.insert_device(ii, 0, eq);
+                    let n = s.song.instruments.get(ii).map_or(0, |i| i.fx.len());
+                    s.song.insert_device(ii, n, comp);
+                    s.song.insert_device(ii, n + 1, rev);
+                    s.song.insert_device(ii, n + 2, Device::new(FxKind::Delay));
                 });
                 // CHIPWAVE_SHOT_MORE=N: device N with its "…" open
                 if let Some(n) = std::env::var("CHIPWAVE_SHOT_MORE")
@@ -409,10 +429,31 @@ impl App {
                 self.extra.browser_open = std::env::var_os("CHIPWAVE_SHOT_NO_BROWSER").is_none();
                 self.br.filter.tab = crate::browser::Tab::Effects;
                 self.br_refresh();
-                if view == "timeline-instrument" {
+                if view == "instskin-chains" {
+                    self.extra.chains_cards = true;
+                    self.extra.browser_open = false;
+                }
+                if matches!(
+                    view,
+                    "timeline-instrument"
+                        | "instskin-waveforge"
+                        | "instskin-browser"
+                        | "instskin-plugins"
+                ) {
                     // the Instrument tab (simple card) on the same pad
                     self.set_lower(1);
-                    self.extra.browser_open = false;
+                    self.extra.browser_open =
+                        view.ends_with("-browser") || view.ends_with("-plugins");
+                    if self.extra.browser_open {
+                        // Browser › Instruments (ChipWave Instruments first)
+                        // or › VST3 & CLAP (neutral badges)
+                        self.br.filter.tab = if view == "instskin-plugins" {
+                            crate::browser::Tab::Plugins
+                        } else {
+                            crate::browser::Tab::Instruments
+                        };
+                        self.br_refresh();
+                    }
                 }
                 if view == "devices-drop" {
                     let it = self.br.items.iter().find(|i| i.key == "fx:Delay").cloned();

@@ -2,8 +2,8 @@
 //! (docs/DESIGN_LANGUAGE.md).
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke};
 
-mod instskin;
-pub use instskin::{active as active_skin, instskin, is_builtin, skin_or, InstSkin, SkinScope};
+pub mod instskin;
+pub use instskin::{active as active_skin, instskin, is_builtin, skin_or, SkinScope};
 
 pub const fn hex(c: u32) -> Color32 {
     Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
