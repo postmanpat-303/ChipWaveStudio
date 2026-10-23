@@ -18,7 +18,7 @@ compact instrument list.
 - **Summary** under the list: number, name, type, volume, transpose, the number of FX devices and
   the number of blocks that use the instrument.
 - `Ctrl+I`, the lower panel's **Instrument** tab or the Inspector's **Edit** opens the editor
-  (the old **Edit in lower panel** box under the list is gone, Unreleased). F3 was not free
+  (the old **Edit in lower panel** box under the list is gone, 0.2.5.0). F3 was not free
   (F1–F8 set the octave), so the shortcut is `Ctrl+I`.
 - **Classic editor:** **View › Classic sidebar instrument editor** brings back the pre-0.2.3.19
   slider editor under the list. It is saved in settings.
@@ -30,7 +30,7 @@ compact instrument list.
   - **Automation:** the Order list with its automation lanes. This is the same as the Order list's
     Automation checkbox.
   - **Instrument:** this editor.
-  - **Default (Unreleased):** the panel opens on **Instrument** for new users and whenever no
+  - **Default (0.2.4.1):** the panel opens on **Instrument** for new users and whenever no
     choice has been saved; once you pick a view (the switch, `Ctrl+I`, the sidebar button) it is
     remembered and used on the next start. Settings from 0.2.3.19 / 0.2.4.0 count as "no choice"
     (they always saved the Order list), so the first start after updating opens on Instrument.
@@ -49,7 +49,7 @@ compact instrument list.
 - **View › Dock lower panel under pattern** (formerly "Dock Order list under pattern") turns the
   docked panel off altogether.
 
-## 2a. The simple card (Unreleased)
+## 2a. The simple card (0.2.5.0)
 
 The **Instrument** tab opens on a simple card. **Advanced ›** shows the full editor described
 below, and **‹ Simple** in its header comes back. Searching (`Ctrl+F`) and the Devices card's
@@ -149,7 +149,7 @@ Generator knobs that are also `43xy` macros carry a small **M1–M8** badge.
 | Double-click | reset to the default |
 | Hover or drag | show the value; the value is always written under the knob |
 | Right-click | Reset to default, **Add automation lane**, **MIDI learn** / Forget, **Modulate with ›** / Remove routing (on automatable parameters) |
-| Drop a modulator chip | route it to this knob (Unreleased, [MODULATION.md](MODULATION.md)); the ring's end dot sets the depth |
+| Drop a modulator chip | route it to this knob (0.2.4.1, [MODULATION.md](MODULATION.md)); the ring's end dot sets the depth |
 | `Alt`-drag | the selected modulator's depth on this knob (the value stays) |
 | The padlock (generators) | lock the knob so Dice and Mutate leave it alone |
 
@@ -158,7 +158,7 @@ dropdowns (with a **lock** on generators) or checkboxes.
 
 Every drag is one undo step, the same as before.
 
-**Modulators (Unreleased):** a strip of modulator chips sits between the tabs and the cards
+**Modulators (0.2.4.1):** a strip of modulator chips sits between the tabs and the cards
 (**+ Modulator** adds one). The **Modulation** tab starts with the **Modulators** card (settings
 of the selected modulator) and the **Routings** card (every routing with its depth, × to remove,
 Lane for a depth lane). Synth-patch knobs without a target (pulse width, detune, ADSR, glide,

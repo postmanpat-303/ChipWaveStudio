@@ -7,8 +7,9 @@
 | [Analog](#analog-02314) | 0.2.3.14 | Generator (analog) | Fat Moog Bass, Psy Rolling Bass, Warm Lead, Brass, Dark Pad, Acid Squelch |
 | [FM-4](#fm-4-02314) | 0.2.3.14 | Generator (FM-4) | E-Piano, Metallic Bell, Psy Zap Bass, Growl, Dark Pluck |
 | [Noise](#noise-02314) | 0.2.3.14 | Generator (noise) | White Riser, Downlifter, Impact, Wind, Vinyl Crackle |
-| [Wave](#wave-wavetable-unreleased) (wavetable) | Unreleased | Generator (wavetable) | Wave Supersaw, Wave Vowel Bass, Wave Glass Keys, Wave Evolving Pad, Wave Chip Pluck, Wave Growl |
-| [Grid](GRID.md) (modular) | Unreleased | Generator (grid) | Grid Saw Bass, Grid Wavetable Pad, Grid FM Bell, Grid Karplus Pluck, Grid S&H Lead, Grid Chip Gate |
+| [Wave](#wave-wavetable-0241) (wavetable) | 0.2.4.1 | Generator (wavetable) | Wave Supersaw, Wave Vowel Bass, Wave Glass Keys, Wave Evolving Pad, Wave Chip Pluck, Wave Growl |
+| [Grid](GRID.md) (modular) | 0.2.4.1 | Generator (grid) | Grid Saw Bass, Grid Wavetable Pad, Grid FM Bell, Grid Karplus Pluck, Grid S&H Lead, Grid Chip Gate |
+| StringWave (string ensemble, see [CHANGELOG 0.2.8.0](CHANGELOG.md#0280-stringwave-the-violet-look-and-pie-ring-add)) | 0.2.8.0 | Generator (StringWave), Track pie › Add › Instrument › | StringWave Velvet Ensemble, Bowed Cathedral, Harp Shimmer, Undertow Drone, Hollow Body Pad, Echo Strings, Slow Swell Orchestra, Init |
 
 58 presets in all; every one is also in the instrument library under "generator".
 
@@ -183,7 +184,7 @@ The Noise generator makes risers, downlifters, impacts and textures.
 
 Presets: White Riser, Downlifter, Impact, Wind, Vinyl Crackle.
 
-## Wave (wavetable, Unreleased)
+## Wave (wavetable, 0.2.4.1)
 
 ![Wave generator](screenshots/dark-generators-wave.png)
 
@@ -244,7 +245,7 @@ top harmonic sits between a quarter and half the sample rate (12–24 kHz at
 48 kHz), and below about 47 Hz the 512-harmonic limit sets it lower (≈ 10 kHz
 at 20 Hz). Older versions can't open songs that use Wave.
 
-## Grid (modular, Unreleased)
+## Grid (modular, 0.2.4.1)
 
 **New… > Generator (grid)**: a modular patch, inspired by other DAWs (oscillators,
 wavetables, noise, filters, envelopes, LFOs, math, logic, delay …) on a node
@@ -364,7 +365,7 @@ the shortest decay (macro 2 = Punch, macro 4 = Decay).
 
 ## Automation lanes on generator knobs
 
-Every generator knob is an automation target (Unreleased, after 0.2.4.0):
+Every generator knob is an automation target (0.2.4.1):
 the Drum Synth macros, each Kit piece's macros, all Chip FX parameters, and
 every Analog, FM-4 and Noise knob (Moog-style presets are Analog patches).
 Dice-rolled patches are ordinary knob values, so they automate the same way.
@@ -395,7 +396,7 @@ Dice-rolled patches are ordinary knob values, so they automate the same way.
 ## Filter commands 38–3B on generators
 
 `38xx`/`39xx` (cutoff / resonance) and `3Axx`/`3Bxx` (cutoff slides) also work
-on generator instruments (Unreleased):
+on generator instruments (0.2.4.1):
 
 - **Analog** with the instrument Filter off: they move the Moog ladder's own
   **Cutoff** and **Res** knobs. `3A`/`3B` slide from the knob's value (or the
@@ -426,7 +427,7 @@ on generator instruments (Unreleased):
   versions before 0.2.3.12, and songs with Chip FX don't open before
   0.2.3.13.
 - Analog, FM-4 and Noise don't open in versions before 0.2.3.14. Wave and
-  Grid (Unreleased) don't open in 0.2.4.0 or older.
+  Grid (0.2.4.1) don't open in 0.2.4.0 or older.
 - A channel plays one note, so the Analog generator is mono per channel.
   Chords use several channels (chord spread).
 - FM-4 isn't oversampled, so very high ratios with a high Bright alias.

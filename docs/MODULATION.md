@@ -1,4 +1,4 @@
-# Drag-to-modulate (Unreleased)
+# Drag-to-modulate (0.2.4.1)
 
 Drag-to-modulate, inspired by other DAWs: an instrument owns **modulators** (LFOs, envelopes and other
 sources), and you **drag one onto any knob** to make it move that parameter. Each connection

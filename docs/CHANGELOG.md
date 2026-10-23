@@ -330,7 +330,7 @@ Released 2026-10-20. Highlights (details in the sections below):
 ### Piano roll chord lane, chord pies and Generate chord progression
 - **Chord lane** above the notes of a note clip: double-click adds, drag draws / moves / resizes, click plays on the track's instrument, slash chords (*Gsus2/E*) and roman numerals. Saved with the clip (songs without chords save as before).
 - **Chord pie** (round menu) on right-click: empty lane = styles with their progressions in an outer ring (hover previews, click inserts); a chord = Play, Transpose, Chord type, Suggestions, Write notes (8 voicings), Generate, Select, Delete, Edit. **Settings › Chord menus › List** for ordinary menus (with *Detect chords from the notes*). Reusable radial widget.
-- **Generate chord progression** dialog: 17 styles with common progressions, key + Any/Major/Minor, length, chord speed, start bar, Colour and Variation, walking bass, Another one, Preview, optional voice-led notes. One undo step. Guide: [CHORDS.md › Chord lane](CHORDS.md#chord-lane-in-the-piano-roll-unreleased).
+- **Generate chord progression** dialog: 17 styles with common progressions, key + Any/Major/Minor, length, chord speed, start bar, Colour and Variation, walking bass, Another one, Preview, optional voice-led notes. One undo step. Guide: [CHORDS.md › Chord lane](CHORDS.md#chord-lane-in-the-piano-roll-0241).
 
 ### Piano roll: single-click entry, eraser, tools and a tidy toolbar
 - **One click draws a note** the length of the last note drawn, resized or clicked (grid step at first); drag while drawing sets the length and is remembered. A long or wobbly click no longer shortens it. **Len** in the toolbar shows (and sets) it.
@@ -391,7 +391,7 @@ Released 2026-10-20. Highlights (details in the sections below):
   - Inspired by the modular environments of other DAWs (idea only, no code or assets; credited). Our own canvas, no new dependency.
   - Limits: 32 modules / 128 cables per patch, 2 delays (≈85 ms) and 4 ladders per voice; mode menus aren't automatable; Grid FX exposes only its macros and Mix; no containers, sample player, sequencer or envelope follower modules, canvas zoom or separate patch files yet; older versions can't open Grid songs.
 
-- **Wave, a wavetable synth generator:** **New… › Generator (wavetable)**. Guide: [GENERATORS.md › Wave](GENERATORS.md#wave-wavetable-unreleased).
+- **Wave, a wavetable synth generator:** **New… › Generator (wavetable)**. Guide: [GENERATORS.md › Wave](GENERATORS.md#wave-wavetable-0241).
   - **Two wavetable oscillators** with **position scanning** (smooth crossfades between frames), Semi/Fine and level each; **unison** up to 8 voices per oscillator with **Detune** and stereo **Spread**; a **sub** sine and **noise**.
   - **Band-limited:** every frame is stored as 10 FFT mipmaps (512 → 1 harmonics) and each note plays the richest one below Nyquist, so high notes don't alias (tested at 3.1 kHz: alias images below −74 dBFS).
   - ChipWave's **ladder filter** (LP/BP/HP, 12/24 dB, clean or vintage) with key tracking, drive and its own envelope, which can also sweep the table positions (**Env>Pos**); an amp envelope, glide and legato. 38xx–3Bxx move its cutoff and resonance.
@@ -403,7 +403,7 @@ Released 2026-10-20. Highlights (details in the sections below):
   - Design inspired by Vital by Matt Tytel and Surge XT's wavetable oscillator (ideas only; credited in About › Credits and THIRD_PARTY_LICENSES).
   - Limits: no warp modes or spectral morphing yet, no table drawing or sample-to-table conversion, modulators are per instrument (not per voice), octave mipmaps (see the guide), older versions can't open songs that use Wave.
 
-- **VST3 hosting:** VST3 instruments and effects next to CLAP. Guide: [PLUGINS.md › VST3](PLUGINS.md#vst3-unreleased).
+- **VST3 hosting:** VST3 instruments and effects next to CLAP. Guide: [PLUGINS.md › VST3](PLUGINS.md#vst3-0241).
   - **Same everything as CLAP:** the scan (crash-guarded child process, cache), the **Add plugin instrument** browser and the **Plugin effect ›** menus (marked VST3), the parameter list, 8 macros and 43xy, automation lanes, drag-to-modulate, plugin delay compensation, state saved in the song, missing-plugin placeholders, offline render and `--self-test`.
   - **Editor:** the plugin's own VST3 editor is embedded in a ChipWave window on Windows, resizable both ways. Linux and macOS use the parameter list for now.
   - **Portable songs:** plugins are saved by their VST3 class id in the SDK's text form, which is the same on every OS. Text songs take `patch = "vst3:<class id>"`. Songs without VST3 plugins open and render exactly as before.
@@ -444,7 +444,7 @@ Released 2026-10-20. Highlights (details in the sections below):
   - **MIDI:** live recording into a note clip on the cursor track while the timeline plays (time stamped, latency compensated), and **Capture played MIDI here** for the phrase you just played.
   - Songs without note clips play exactly as before (tested). Limits: no tracker conversion of note clips, no MIDI file import, no CLAP note ids or expressions yet, and plugin notes are tick-quantised.
   - Tests: cell round trips; UI tests for drawing, dragging, the velocity lane, keys, chords, quantise, recording and Capture; engine tests for chords, stealing, sample timing, seeks, loops and chance, and bit-exact block timelines. `--self-test` plays a note-clip chord.
-- **Plugin effects (CLAP FX):** any installed CLAP audio effect can go into an instrument's FX chain. Guide: [FX.md › Plugin effects](FX.md#plugin-effects-clap-unreleased).
+- **Plugin effects (CLAP FX):** any installed CLAP audio effect can go into an instrument's FX chain. Guide: [FX.md › Plugin effects](FX.md#plugin-effects-clap-0241).
   - Every add-effect menu (FX view **+ Device**, the FX tab's **+ Add effect**, right-click an instrument › **Add effect**) has a **Plugin effect ›** list from the plugin scan, with **Scan for plugins**.
   - The device panel shows the plugin's status and latency, **Editor…** (its own window), **Reload** and every parameter as a slider. Bypass, reorder, duplicate and remove work like built-in devices.
   - **Automation:** right-click a parameter › **Add automation lane**, or **+ Lane** › *instrument* › FX › parameter. Lanes also play in exports.

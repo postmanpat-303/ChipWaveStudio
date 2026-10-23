@@ -333,7 +333,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 
 - MED (MMD0–MMD3) and MOD loading, more OctaMED effect commands, optional “Paula” mode
 - More filter models (Sallen-Key, diode), wavetables, a full mod matrix, render-to-sample for synth and Voice instruments (generators already Bake), oversampled FM
-- MIDI output and clock sync (CLAP instruments work since 0.2.3.16; plugin effects and VST3 hosting are built, unreleased)
+- MIDI output and clock sync (CLAP instruments work since 0.2.3.16; plugin effects and VST3 hosting since 0.2.4.1)
 - Stem export and LUFS-target normalisation; MOD/XM export
 - Polyphony within one channel (today chords use several channels)
 - See [OCTAMED_SPEC.md](docs/OCTAMED_SPEC.md), [SOUND_DESIGN.md](docs/SOUND_DESIGN.md) and [MIDI_VST.md](docs/MIDI_VST.md) for the plans.

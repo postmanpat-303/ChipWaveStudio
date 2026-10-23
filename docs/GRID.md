@@ -1,4 +1,4 @@
-# The Grid (Unreleased)
+# The Grid (0.2.4.1)
 
 ![Grid canvas](screenshots/dark-generators-grid.png)
 

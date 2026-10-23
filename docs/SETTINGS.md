@@ -35,13 +35,13 @@ Host/API (PipeWire, ALSA or JACK on Linux; WASAPI or ASIO on Windows; CoreAudio 
 Enabled inputs and outputs, MIDI thru, clock send/receive and song position, the MIDI learn mapping list (edit/delete), and velocity curve. **Advanced:** per-port channel filters, MPE (later).
 
 ### 2.3 Look
-Theme, UI scale (auto from the OS or 75–300 %), pattern font and size, row highlight spacing, hex/decimal rows, colour-blind palette, high contrast, reduce motion (turns off the wave band animation). **Reduce motion is in (Unreleased, `reduce_motion`, default off; Settings › Look › Motion):** the track pie menu then appears and closes at once instead of animating. See [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
+Theme, UI scale (auto from the OS or 75–300 %), pattern font and size, row highlight spacing, hex/decimal rows, colour-blind palette, high contrast, reduce motion (turns off the wave band animation). **Reduce motion is in (0.2.5.0, `reduce_motion`, default off; Settings › Look › Motion):** the track pie menu then appears and closes at once instead of animating. See [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
 
 ### 2.4 Keys
 Keymap preset (ChipWave / FT2 / ProTracker / OpenMPT / OctaMED), "press a key" rebinding, conflict list, piano layout (physical-key based), and an import/export `keymap.toml` ([TRACKER.md §9](TRACKER.md)).
 
 ### 2.5 Plugins
-Scan folders, scan timeout, parallel scanners, rescan / retry failed, and a link to the full plugin manager. **Find plugins…** (Unreleased) opens the plugin search from the first start again: standard folders, an optional whole-drive search, or folders you pick ([BROWSER.md › Find plugins](BROWSER.md#find-plugins)). Its answer is `plugin_setup_done` (once true, it isn't offered at startup again).
+Scan folders, scan timeout, parallel scanners, rescan / retry failed, and a link to the full plugin manager. **Find plugins…** (0.2.4.1) opens the plugin search from the first start again: standard folders, an optional whole-drive search, or folders you pick ([BROWSER.md › Find plugins](BROWSER.md#find-plugins)). Its answer is `plugin_setup_done` (once true, it isn't offered at startup again).
 
 ### 2.6 Files and Safety
 Default song folder, autosave interval, number of backups and backup location, journal, persistent undo, recovery folder and cleanup age, and the recent files list (clear, pin). All of these are explained in [SAFETY.md](SAFETY.md).
@@ -52,21 +52,21 @@ Default song folder, autosave interval, number of backups and backup location, j
 These are set from the View menu and the lower panel, and saved in `settings.toml`:
 - the lower panel's height (`lower_h`, 0 = automatic)
 - whether it shows the instrument editor (`lower_inst`), and whether you chose that view
-  yourself (`lower_chosen`). With no choice saved it opens on the instrument editor (Unreleased;
+  yourself (`lower_chosen`). With no choice saved it opens on the instrument editor (0.2.4.1;
   before, it opened on the Order list)
 - Full-height view (`full_height`)
 - the classic sidebar instrument editor (`classic_editor`)
 - the collapsed instrument-editor cards (`cards_closed`, as "Type/Card")
-- whether File › New opens on the Timeline view, in timeline mode (`new_in_timeline`, default on; **Settings › New songs**, Unreleased; off = a tracker-mode song on the Tracker, four empty channels; either way no instruments). See [TIMELINE.md](TIMELINE.md#new-songs)
+- whether File › New opens on the Timeline view, in timeline mode (`new_in_timeline`, default on; **Settings › New songs**, 0.2.4.1; off = a tracker-mode song on the Tracker, four empty channels; either way no instruments). See [TIMELINE.md](TIMELINE.md#new-songs)
 - whether opened tracker-mode songs and demos switch to timeline mode on load (`open_in_timeline`, default on; **Settings › Opening songs › Open tracker songs in timeline mode**, 0.2.4.1; lossless and bit-identical, not an edit; off = they stay in tracker mode and the first timeline edit asks). See [TIMELINE.md](TIMELINE.md)
-- whether the Tracker is shown (`show_tracker`, default **off**; **Settings › Tracker › Show Tracker (experimental)**, Unreleased). Off: no TRACKER / ORDER tabs, tracker-mode toggles or Tracker-only menu items (View › Tracker, Ctrl+1 and Ctrl+2 still open the Tracker), and every song opens in timeline mode (bit-identical). The New songs / Opening songs settings above show only when it is on, and with it off they act as "timeline"
-- the piano roll chord lane's right-click menus (`chord_list_menu`, default off = the round pie; on = list menus; **Settings › Chord menus**, Unreleased)
-- what double-clicking a clip on the Timeline opens (`dblclick_roll`, default on = the piano roll; **Settings › Double-click a clip**, Unreleased; off = the Tracker; Alt+double-click does the other one). See [TIMELINE.md](TIMELINE.md#finding-your-way-around)
+- whether the Tracker is shown (`show_tracker`, default **off**; **Settings › Tracker › Show Tracker (experimental)**, 0.2.5.0). Off: no TRACKER / ORDER tabs, tracker-mode toggles or Tracker-only menu items (View › Tracker, Ctrl+1 and Ctrl+2 still open the Tracker), and every song opens in timeline mode (bit-identical). The New songs / Opening songs settings above show only when it is on, and with it off they act as "timeline"
+- the piano roll chord lane's right-click menus (`chord_list_menu`, default off = the round pie; on = list menus; **Settings › Chord menus**, 0.2.4.1)
+- what double-clicking a clip on the Timeline opens (`dblclick_roll`, default on = the piano roll; **Settings › Double-click a clip**, 0.2.4.1; off = the Tracker; Alt+double-click does the other one). See [TIMELINE.md](TIMELINE.md#finding-your-way-around)
 - what right-clicking a clip opens (`clip_list_menu`, default off = the pie; **Settings › Clip menus**, 0.2.6.0; List = the plain list menus). See [TIMELINE.md](TIMELINE.md#editing-clips)
 - whether the lower panel follows the Timeline selection (`follow_select`, default on; **Settings › Lower panel**, 0.2.6.0)
 
-- **Inspector and view tab bar** (Unreleased, [INSPECTOR.md](INSPECTOR.md)): `inspector_open` (default off; **I**, Alt+I in the Tracker) and `view_bar` (default on; View › View tab bar).
-- **The Browser** (Unreleased, [BROWSER.md](BROWSER.md)): whether it is shown (`browser_open`, default on; **Ctrl+B** or the toolbar's **Browser** button), its width (`browser_w`, default 340), your locations (`browser_dirs`), favourites (`browser_favs`, item keys), ratings (`browser_ratings`, key = 1–5) **Auto** (auto-play on select, in the preview bar; `browser_autoplay`, default on), **Plugin thumbnails** (`browser_thumbs`, default on), Drum Patterns preview volume (`pattern_vol`) and the Files tab's last folder (`files_dir`). The folder scan is cached in `browser-index.json` next to `settings.toml`.
+- **Inspector and view tab bar** (0.2.4.1, [INSPECTOR.md](INSPECTOR.md)): `inspector_open` (default off; **I**, Alt+I in the Tracker) and `view_bar` (default on; View › View tab bar).
+- **The Browser** (0.2.4.1, [BROWSER.md](BROWSER.md)): whether it is shown (`browser_open`, default on; **Ctrl+B** or the toolbar's **Browser** button), its width (`browser_w`, default 340), your locations (`browser_dirs`), favourites (`browser_favs`, item keys), ratings (`browser_ratings`, key = 1–5) **Auto** (auto-play on select, in the preview bar; `browser_autoplay`, default on), **Plugin thumbnails** (`browser_thumbs`, default on), Drum Patterns preview volume (`pattern_vol`) and the Files tab's last folder (`files_dir`). The folder scan is cached in `browser-index.json` next to `settings.toml`.
 
 Older settings files get the defaults.
 
