@@ -1409,7 +1409,7 @@ impl App {
                 let strip_hover = resp.hover_pos().is_some_and(|q| strip.contains(q));
                 let tip = if launch {
                     format!(
-                        "{}: track {:02}'s launcher clip. ▶ plays it, looping, from the next {} (the other \
+                        "{}: track {:02}'s launcher clip. ▶ plays it, looping, from the next {} (■ while playing: click stops it there) (the other \
                          tracks play on) · drag it onto the timeline for a linked copy (Alt: an independent \
                          one) · double-click opens it in the piano roll · right-click: play, edit, place, rename, colour…",
                         names[b],
@@ -1418,7 +1418,7 @@ impl App {
                     )
                 } else if secs.is_some() {
                     format!(
-                        "{}: track {:02}'s clip. ▶ plays it, looping, from the next {} · drag it onto the \
+                        "{}: track {:02}'s clip. ▶ plays it, looping, from the next {} (■ while playing: click stops it there) · drag it onto the \
                          timeline for a linked copy (Alt: an independent one) · double-click opens it",
                         names[b],
                         tr + 1,
@@ -1426,7 +1426,7 @@ impl App {
                     )
                 } else {
                     format!(
-                        "{}: track {:02}'s column of block {b:02}. ▶ plays it from the next {} · drag it onto the \
+                        "{}: track {:02}'s column of block {b:02}. ▶ plays it from the next {} (■ while playing: click stops it there) · drag it onto the \
                          timeline for a {} · double-click opens it in the Tracker",
                         names[b],
                         tr + 1,
@@ -1479,7 +1479,15 @@ impl App {
                 } else if resp.double_clicked() {
                     act = Some((2, tr, b));
                 } else if resp.clicked() {
-                    act = Some(if strip_hover { (1, tr, b) } else { (3, tr, b) });
+                    // ▶ toggles: playing here (and no stop queued yet) =
+                    // stop the track at the next launch boundary (■)
+                    act = Some(if !strip_hover {
+                        (3, tr, b)
+                    } else if pl.is_some() && !row_held && !row_off_q {
+                        (4, tr, b)
+                    } else {
+                        (1, tr, b)
+                    });
                 }
                 let dim = if row_held { 0.55 } else { 1.0 };
                 let look = lid.and_then(|id| links.get(&id));
@@ -1502,16 +1510,26 @@ impl App {
                     },
                     theme::mix(col, Color32::BLACK, if strip_hover { 0.25 } else { 0.45 }),
                 );
-                play_tri(
-                    &pc,
-                    strip.center(),
-                    4.0,
-                    if pl.is_some() {
-                        t.accent
-                    } else {
-                        Color32::from_white_alpha(220)
-                    },
-                );
+                if pl.is_some() && !row_held {
+                    // playing: ■ (click stops it); a queued stop shows dimmed
+                    let q = if row_off_q { 0.45 } else { 1.0 };
+                    pc.rect_filled(
+                        Rect::from_center_size(strip.center(), egui::vec2(7.0, 7.0)),
+                        1.0,
+                        t.accent.gamma_multiply(q),
+                    );
+                } else {
+                    play_tri(
+                        &pc,
+                        strip.center(),
+                        4.0,
+                        if pl.is_some() {
+                            t.accent
+                        } else {
+                            Color32::from_white_alpha(220)
+                        },
+                    );
+                }
                 // mini preview: the column's notes
                 if let Some(sp) = self.ca.prev.get(b).and_then(|v| v.get(tr)) {
                     let pv = Rect::from_min_max(

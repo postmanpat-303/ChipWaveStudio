@@ -590,3 +590,39 @@ fn the_master_stays_reachable_with_the_arranger_hidden() {
         assert_eq!(has(&h, "Master meter"), lcd, "lcd {lcd}: shown again");
     }
 }
+
+/// a playing slot's ▶ is a ■: clicking it again stops the track at the
+/// next launch boundary (the launch quantise), not at once
+#[test]
+fn a_playing_slots_play_button_toggles_to_stop_on_the_launch_boundary() {
+    let mut h = tl_demo();
+    h.state_mut().extra.launch_q = 2; // a beat
+    frames(&mut h, 2);
+    let b = 3;
+    let (strip, _) = slot(&h, 1, b);
+    click_at(&mut h, strip.center());
+    play_rows(&mut h, 4);
+    frames(&mut h, 2);
+    let (scene, held) = h.state().with(|s| (s.engine.scene(), s.engine.held()));
+    assert_eq!(scene, Some(b));
+    assert_eq!(held & bit(1), 0, "track 02 plays");
+    // click again: a quantised stop, queued for the next beat
+    let (strip, _) = slot(&h, 1, b);
+    click_at(&mut h, strip.center());
+    let q = h.state().with(|s| s.engine.cue()).expect("a queued stop");
+    assert_ne!(q.off & bit(1), 0);
+    assert_eq!((q.on & bit(1), q.every), (0, 4));
+    assert_eq!(h.state().with(|s| s.engine.held()) & bit(1), 0, "not yet");
+    play_rows(&mut h, 4);
+    frames(&mut h, 2);
+    assert_ne!(h.state().with(|s| s.engine.held()) & bit(1), 0, "stopped");
+    // and ▶ once more launches it again
+    let (strip, _) = slot(&h, 1, b);
+    click_at(&mut h, strip.center());
+    play_rows(&mut h, 4);
+    assert_eq!(
+        h.state().with(|s| s.engine.held()) & bit(1),
+        0,
+        "plays again"
+    );
+}
