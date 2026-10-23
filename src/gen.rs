@@ -694,12 +694,15 @@ impl GenPatch {
             GenEngine::Poly(x) => x.dice(seed),
             GenEngine::Kit(k) => {
                 for (i, d) in k.pieces.iter_mut().enumerate() {
-                    roll(d, seed.wrapping_add(i as u32 * 0x9E37_79B9));
+                    roll(d, seed.wrapping_add((i as u32).wrapping_mul(0x9E37_79B9)));
                 }
             }
             GenEngine::Drums(k) => {
                 for (i, p) in k.pads.iter_mut().enumerate() {
-                    roll(&mut p.drum, seed.wrapping_add(i as u32 * 0x9E37_79B9));
+                    roll(
+                        &mut p.drum,
+                        seed.wrapping_add((i as u32).wrapping_mul(0x9E37_79B9)),
+                    );
                 }
             }
         }
