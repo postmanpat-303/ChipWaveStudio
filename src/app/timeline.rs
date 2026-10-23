@@ -1780,6 +1780,8 @@ impl App {
         let mut head_ops: Vec<HeadOp> = vec![];
         let mut rename_at: Option<Rect> = None;
         let mut pie_at: Option<(usize, Pos2)> = None;
+        // right-click on the empty area (no track there): the Add pie
+        let mut add_pie_at: Option<(Pos2, bool)> = None;
         let mut hd = self.tlv.head_drag;
         // the subtitle: the instrument the track mostly plays, else the one
         // it was given (Browser drop, Add track with instrument)
@@ -2204,6 +2206,7 @@ impl App {
         }
         // ---- "+ Add track" below the last mixer track, in the gap above
         // Song / Master (which sits at the bottom, after a divider)
+        let mut add_btn = Rect::NOTHING;
         {
             let gap_top = lay.body_end;
             if let Some(m) = lay.master {
@@ -2240,6 +2243,7 @@ impl App {
                     br,
                     egui::Button::new(egui::RichText::new("+ Add track").size(11.5)).small(),
                 );
+                add_btn = r.rect;
                 let r = if full {
                     r.on_hover_text("all 32 tracks are used (the channel limit)")
                 } else {
@@ -2247,6 +2251,26 @@ impl App {
                 };
                 if r.clicked() {
                     head_ops.push(HeadOp::Add(n));
+                }
+            }
+        }
+        // ---- right-click on the track list's empty space (below the last
+        // track, above the docked Song / Master): the Add pie
+        if pie_at.is_none()
+            && self.pie.is_none()
+            && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Secondary))
+        {
+            if let Some(p) = ui.input(|i| i.pointer.interact_pos()) {
+                let free = Rect::from_min_max(
+                    heads.min,
+                    Pos2::new(heads.right(), dock_y.unwrap_or(heads.bottom())),
+                );
+                if free.contains(p)
+                    && ui.ctx().layer_id_at(p) == Some(ui.layer_id())
+                    && !add_btn.contains(p)
+                    && lay.part_at(p.y - heads.top() + sy).is_none()
+                {
+                    add_pie_at = Some((p, true));
                 }
             }
         }
@@ -2872,6 +2896,14 @@ impl App {
                 let tk = tick_of(p.x).max(0.0) as Tick;
                 self.tlv.menu_at = Some((tr_of(p.y).max(0.0) as usize, tk));
                 let id = clip_at(c, &lay, p, lanes, sy, tick_of(p.x)).map(|i| c.tl.clips[i].id);
+                // no track under the pointer (below the last one): the Add pie
+                if mode
+                    && id.is_none()
+                    && self.pie.is_none()
+                    && lay.part_at(p.y - lanes.top() + sy).is_none()
+                {
+                    add_pie_at = Some((p, false));
+                }
                 if id.is_none_or(|id| !self.tlv.sels.contains(&id)) {
                     {
                         let x: Option<u32> = id;
@@ -2913,15 +2945,16 @@ impl App {
         if let Some((id, p)) = pie_open {
             self.opie_req = Some((super::objpie::PieFor::Clip(id), p));
         }
-        let menu_resp = if armed || pie_open.is_some() || self.opie.is_some() {
-            ui.interact(
-                Rect::NOTHING,
-                ui.scope_id().with("tl_no_menu"),
-                Sense::hover(),
-            )
-        } else {
-            cresp.clone()
-        };
+        let menu_resp =
+            if armed || pie_open.is_some() || add_pie_at.is_some() || self.opie.is_some() {
+                ui.interact(
+                    Rect::NOTHING,
+                    ui.scope_id().with("tl_no_menu"),
+                    Sense::hover(),
+                )
+            } else {
+                cresp.clone()
+            };
         menu_resp.context_menu(|ui| {
             let snap_at = menu_at.map_or(0, |m| tl::snap(m.1, ROW));
             if !mode {
@@ -3211,6 +3244,9 @@ impl App {
         if let Some((tr, p)) = pie_at {
             let ctx = ui.ctx().clone();
             self.open_track_pie(tr, p, true, &ctx);
+        } else if let Some((p, press)) = add_pie_at {
+            let ctx = ui.ctx().clone();
+            self.open_add_pie(p, press, &ctx);
         }
         if let Some(tgt) = seek {
             self.seek_to(tgt);
