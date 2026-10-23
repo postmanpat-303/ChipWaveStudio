@@ -331,3 +331,141 @@ fn clip_selection_moves_as_a_group_and_clamps_at_the_top_key() {
         vec![(6 * r, 111), (6 * r, 115), (10 * r, 118)]
     );
 }
+
+// ---- Shift+arrows move the selection (Del, 23 Oct 2026)
+
+#[test]
+fn shift_arrows_move_the_selection_a_semitone_or_a_grid_step() {
+    let r = tl::ROW;
+    let sh = egui::Modifiers::SHIFT;
+    let (mut h, data) = clip_roll(&[(4 * r, 60), (4 * r, 64), (8 * r, 67)]);
+    key(&mut h, Key::A, egui::Modifiers::COMMAND);
+    key(&mut h, Key::ArrowUp, sh);
+    assert_eq!(
+        clip_notes(&h, data),
+        vec![(4 * r, 61), (4 * r, 65), (8 * r, 68)],
+        "Shift+Up: a semitone, not an octave"
+    );
+    key(&mut h, Key::ArrowRight, sh);
+    key(&mut h, Key::ArrowRight, sh);
+    assert_eq!(
+        clip_notes(&h, data),
+        vec![(6 * r, 61), (6 * r, 65), (10 * r, 68)],
+        "Shift+Right: one grid step (1/16) each"
+    );
+    key(&mut h, Key::ArrowLeft, sh);
+    key(&mut h, Key::ArrowDown, sh);
+    assert_eq!(
+        clip_notes(&h, data),
+        vec![(5 * r, 60), (5 * r, 64), (9 * r, 67)]
+    );
+    assert_eq!(h.state().pr.sel.len(), 3, "the notes stay selected");
+    // one undo step per press
+    h.state_mut().do_undo(false);
+    frame(&mut h);
+    assert_eq!(
+        clip_notes(&h, data),
+        vec![(5 * r, 61), (5 * r, 65), (9 * r, 68)]
+    );
+    key(&mut h, Key::A, egui::Modifiers::COMMAND);
+    // the octave moved to Ctrl+Up / Down; plain arrows still move too
+    key(&mut h, Key::ArrowUp, egui::Modifiers::COMMAND);
+    assert_eq!(clip_notes(&h, data)[0], (5 * r, 73));
+    key(&mut h, Key::ArrowDown, egui::Modifiers::COMMAND);
+    key(&mut h, Key::ArrowDown, egui::Modifiers::NONE);
+    assert_eq!(clip_notes(&h, data)[0], (5 * r, 60));
+    // a coarser snap: one Beat
+    h.state_mut().pr.grid = tl::PPQ;
+    key(&mut h, Key::ArrowRight, sh);
+    assert_eq!(clip_notes(&h, data)[0], (5 * r + tl::PPQ, 60));
+    // snap off: the step is Auto's (1/16 at this zoom), not one tick
+    h.state_mut().pr.grid = 1;
+    key(&mut h, Key::ArrowLeft, sh);
+    assert_eq!(clip_notes(&h, data)[0], (4 * r + tl::PPQ, 60));
+}
+
+#[test]
+fn shift_arrows_block_the_whole_move_at_the_edges() {
+    let r = tl::ROW;
+    let sh = egui::Modifiers::SHIFT;
+    let (mut h, data) = clip_roll(&[(0, 60), (2 * r, 120)]);
+    key(&mut h, Key::A, egui::Modifiers::COMMAND);
+    let before = clip_notes(&h, data);
+    key(&mut h, Key::ArrowLeft, sh);
+    assert_eq!(
+        clip_notes(&h, data),
+        before,
+        "nothing before the clip start"
+    );
+    assert!(h.state().status.contains("outside the clip"), "says why");
+    key(&mut h, Key::ArrowUp, sh);
+    assert_eq!(clip_notes(&h, data), before, "the top note is B-9");
+    assert!(h.state().status.contains("key range"));
+    key(&mut h, Key::ArrowUp, egui::Modifiers::COMMAND);
+    assert_eq!(clip_notes(&h, data), before);
+    // the blocked presses left no undo steps: the first undo is a no-op
+    // (no edits yet), the notes are as they were
+    h.state_mut().do_undo(false);
+    frame(&mut h);
+    assert_eq!(clip_notes(&h, data), before);
+    key(&mut h, Key::A, egui::Modifiers::COMMAND);
+    // the other way works, as a group
+    key(&mut h, Key::ArrowDown, sh);
+    key(&mut h, Key::ArrowRight, sh);
+    assert_eq!(clip_notes(&h, data), vec![(r, 59), (3 * r, 119)]);
+    assert_eq!(h.state().pr.sel.len(), 2);
+}
+
+#[test]
+fn shift_arrows_only_while_the_roll_has_the_keyboard() {
+    let (mut h, data) = clip_roll(&[(0, 60)]);
+    key(&mut h, Key::A, egui::Modifiers::COMMAND);
+    h.state_mut().pr.focus = false;
+    key(&mut h, Key::ArrowUp, egui::Modifiers::SHIFT);
+    key(&mut h, Key::ArrowRight, egui::Modifiers::SHIFT);
+    assert_eq!(clip_notes(&h, data), vec![(0, 60)]);
+}
+
+#[test]
+fn shift_arrows_move_block_column_notes_and_stop_at_the_last_row() {
+    let sh = egui::Modifiers::SHIFT;
+    let mut h = block_roll(3);
+    let last = h.state().with(|s| s.song.patterns[0].rows) - 1;
+    h.state().with(|s| {
+        let p = &mut s.song.patterns[0];
+        p.cells[0][3] = Cell {
+            note: 49,
+            instr: 1,
+            ..Default::default()
+        };
+        p.cells[4][3] = Cell {
+            note: 53,
+            instr: 1,
+            ..Default::default()
+        };
+    });
+    h.state_mut().undo_reset();
+    h.state_mut().pr.focus = true;
+    frame(&mut h);
+    key(&mut h, Key::A, egui::Modifiers::COMMAND);
+    key(&mut h, Key::ArrowRight, sh);
+    key(&mut h, Key::ArrowUp, sh);
+    assert_eq!(notes_in(&h, 3), vec![(1, 50), (5, 54)]);
+    assert_eq!(h.state().pr.sel, vec![1, 5]);
+    // move the later note to the last row: the group can't go further
+    h.state().with(|s| {
+        let p = &mut s.song.patterns[0];
+        p.cells[5][3] = Cell::default();
+        p.cells[last][3] = Cell {
+            note: 54,
+            instr: 1,
+            ..Default::default()
+        };
+    });
+    h.state_mut().pr.sel = vec![1, last];
+    frame(&mut h);
+    key(&mut h, Key::ArrowRight, sh);
+    assert_eq!(notes_in(&h, 3), vec![(1, 50), (last, 54)], "blocked");
+    key(&mut h, Key::ArrowLeft, sh);
+    assert_eq!(notes_in(&h, 3), vec![(0, 50), (last - 1, 54)]);
+}
