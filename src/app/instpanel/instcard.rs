@@ -494,8 +494,9 @@ const POLY: Spec = Spec {
         ),
     ],
 };
-/// StringWave (placeholder until the built-in look): its eight macro knobs
-/// (cutoff ... master), then the three layers and the amp envelope
+/// StringWave in the Devices tab's instrument card (its own panel is
+/// `stringsview.rs`): the eight macro knobs (cutoff ... master), the three
+/// layer levels ("L1 Level" ...) and the rest of the amp envelope
 const SW: Spec = Spec {
     macros: Macros::Params(&[
         "sw.0", "sw.1", "sw.2", "sw.3", "sw.4", "sw.5", "sw.6", "sw.7",
@@ -517,10 +518,9 @@ const SW: Spec = Spec {
             Some("Amp envelope"),
             &[],
             &[
-                ("sw.3", None),
                 ("sw.31", None),
                 ("sw.32", None),
-                ("sw.4", None),
+                ("sw.33", None),
                 ("sw.50", None),
             ],
         ),

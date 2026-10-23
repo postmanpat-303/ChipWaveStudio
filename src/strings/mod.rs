@@ -149,6 +149,15 @@ const LAYER_DEFS: [MacroDef; 5] = [
     ),
 ];
 
+/// a layer knob named after its layer ("Layer 2 Level"), so automation
+/// lanes, MIDI learn and search tell the three layers apart
+const fn lay(name: &'static str, k: usize) -> MacroDef {
+    MacroDef {
+        name,
+        ..LAYER_DEFS[k]
+    }
+}
+
 /// The knobs (real ranges; `p` holds them 0..1).
 pub static STRINGS: [MacroDef; SN] = [
     m(
@@ -215,21 +224,21 @@ pub static STRINGS: [MacroDef; SN] = [
         (0.85, 0.85),
         "output level (the limiter keeps peaks near -4 dBFS)",
     ),
-    LAYER_DEFS[0],
-    LAYER_DEFS[1],
-    LAYER_DEFS[2],
-    LAYER_DEFS[3],
-    LAYER_DEFS[4],
-    LAYER_DEFS[0],
-    LAYER_DEFS[1],
-    LAYER_DEFS[2],
-    LAYER_DEFS[3],
-    LAYER_DEFS[4],
-    LAYER_DEFS[0],
-    LAYER_DEFS[1],
-    LAYER_DEFS[2],
-    LAYER_DEFS[3],
-    LAYER_DEFS[4],
+    lay("Layer 1 Octave", 0),
+    lay("Layer 1 Detune", 1),
+    lay("Layer 1 Tone", 2),
+    lay("Layer 1 Level", 3),
+    lay("Layer 1 Pan", 4),
+    lay("Layer 2 Octave", 0),
+    lay("Layer 2 Detune", 1),
+    lay("Layer 2 Tone", 2),
+    lay("Layer 2 Level", 3),
+    lay("Layer 2 Pan", 4),
+    lay("Layer 3 Octave", 0),
+    lay("Layer 3 Detune", 1),
+    lay("Layer 3 Tone", 2),
+    lay("Layer 3 Level", 3),
+    lay("Layer 3 Pan", 4),
     m(
         "Sub",
         0.0,

@@ -427,6 +427,7 @@ impl App {
                             ui.make_persistent_id(("gfx_knob", di, s)),
                             v,
                             super::knob::KnobArgs {
+                                caption: None,
                                 name: def.name,
                                 value_text: text,
                                 default: dflt,

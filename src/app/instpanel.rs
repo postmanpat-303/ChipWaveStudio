@@ -1721,6 +1721,21 @@ impl App {
     }
 
     fn knob_ui(&mut self, ui: &mut egui::Ui, p: &Param, inst: &mut Instrument, cx: &mut Cx) {
+        if let Some((resp, def)) = self.knob_core(ui, p, inst, cx, None) {
+            self.param_menu(&resp, p, inst, cx, Some(def));
+        }
+    }
+
+    /// a parameter's knob (drag, double-click, modulation drops, the Dice
+    /// lock) without its right-click menu: (response, default)
+    fn knob_core(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &Param,
+        inst: &mut Instrument,
+        cx: &mut Cx,
+        caption: Option<&str>,
+    ) -> Option<(egui::Response, f32)> {
         let Ctl::Knob {
             lo,
             hi,
@@ -1729,7 +1744,7 @@ impl App {
             def,
         } = p.ctl
         else {
-            return;
+            return None;
         };
         let real = (p.get)(inst);
         let mut n = params::to_norm(real, lo, hi, log);
@@ -1761,6 +1776,7 @@ impl App {
             egui::Id::unique(("ipk", cx.idx, &p.key)),
             &mut n,
             KnobArgs {
+                caption: Some(caption.unwrap_or(p.caption())),
                 name: &p.name,
                 value_text: p.text(real),
                 default: params::to_norm(def, lo, hi, log),
@@ -1795,7 +1811,7 @@ impl App {
                 cx.changed = true;
             }
         }
-        self.param_menu(&out.resp, p, inst, cx, Some(def));
+        Some((out.resp, def))
     }
 
     /// a knob as a modulation target: drop a modulator chip on it, drag a
@@ -1918,7 +1934,7 @@ impl App {
             ui.horizontal(|ui| {
                 ui.add_enabled_ui(on, |ui| match &p.ctl {
                     Ctl::Choice(opts) => {
-                        let mut lbl = egui::RichText::new(&p.name).small();
+                        let mut lbl = egui::RichText::new(p.caption()).small();
                         if hl {
                             lbl = lbl.color(t.fx).strong();
                         }
@@ -1961,7 +1977,7 @@ impl App {
                     }
                     Ctl::Toggle => {
                         let mut b = v > 0.5;
-                        let mut txt = egui::RichText::new(&p.name);
+                        let mut txt = egui::RichText::new(p.caption());
                         if hl {
                             txt = txt.color(t.fx).strong();
                         }
@@ -2250,6 +2266,7 @@ impl App {
                         egui::Id::unique(("ipm", i, k)),
                         &mut n,
                         KnobArgs {
+                            caption: None,
                             name: &label,
                             value_text: txt,
                             default: def,

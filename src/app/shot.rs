@@ -2354,6 +2354,7 @@ fn knob_mockup(ctx: &egui::Context) {
                             egui::Id::unique(("mock_old", k)),
                             &mut v,
                             knob::KnobArgs {
+                                caption: None,
                                 name,
                                 value_text: val.to_string(),
                                 default: 0.5,

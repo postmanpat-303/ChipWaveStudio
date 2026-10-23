@@ -29,7 +29,10 @@ pub(super) struct KnobOut {
 }
 
 pub(super) struct KnobArgs<'a> {
+    /// the full name (tooltip, screen readers)
     pub name: &'a str,
+    /// a shorter text under the knob (else the name)
+    pub caption: Option<&'a str>,
     pub value_text: String,
     /// 0..1 position of the default (double-click)
     pub default: f32,
@@ -171,10 +174,11 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
             egui::FontId::monospace(10.0),
         )
     };
+    let cap = a.caption.unwrap_or(a.name);
     let name = if t.ember {
-        a.name.to_uppercase()
+        cap.to_uppercase()
     } else {
-        a.name.to_string()
+        cap.to_string()
     };
     let name_col = if a.enabled {
         t.ink

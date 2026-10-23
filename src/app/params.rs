@@ -123,9 +123,17 @@ pub(crate) struct Param {
     pub enabled: Option<Pred>,
     /// small tag on the knob ("M1" = 43xy macro 1)
     pub badge: Option<String>,
+    /// a shorter caption for the knob or checkbox where its card already
+    /// says the rest ("On" in Layer 1); the name stays the full one
+    /// (search, lanes, MIDI learn, menus)
+    pub short: Option<String>,
 }
 
 impl Param {
+    /// what the knob or checkbox shows under or beside it
+    pub fn caption(&self) -> &str {
+        self.short.as_deref().unwrap_or(&self.name)
+    }
     pub fn is_on(&self, i: &Instrument) -> bool {
         self.enabled.as_ref().is_none_or(|f| f(i))
     }
@@ -501,6 +509,7 @@ impl B {
             lock: None,
             enabled: None,
             badge: None,
+            short: None,
         });
         self.l.params.last_mut().unwrap()
     }
@@ -585,6 +594,10 @@ impl Param {
     }
     fn target(&mut self, t: Target) -> &mut Self {
         self.target = Some(t);
+        self
+    }
+    fn short(&mut self, s: &str) -> &mut Self {
+        self.short = Some(s.into());
         self
     }
     fn when(&mut self, f: impl Fn(&Instrument) -> bool + 'static) -> &mut Self {
@@ -2207,7 +2220,12 @@ fn stringwave(b: &mut B) {
         if let Ctl::Knob { def, .. } = &mut p.ctl {
             *def = StringsP::default().p[i];
         }
-        p.badge = None;
+        // the layer knobs are named "Layer 2 Level"; their caption says
+        // "L2 Level" (the panel's own rows just "Level")
+        if let Some(rest) = p.name.strip_prefix("Layer ") {
+            let short = format!("L{rest}");
+            p.short = Some(short);
+        }
     };
     let dests: Vec<String> = Dest::ALL.iter().map(|d| d.name().to_string()).collect();
     for l in 0..3usize {
@@ -2215,18 +2233,20 @@ fn stringwave(b: &mut B) {
         sw_toggle(
             b,
             &format!("sw.on{l}"),
-            "On",
+            &format!("Layer {} on", l + 1),
             move |x| x.layer_on[l],
             move |x, v| x.layer_on[l] = v,
-        );
+        )
+        .short("On");
         sw_choice(
             b,
             &format!("sw.wave{l}"),
-            "Wave",
+            &format!("Layer {} wave", l + 1),
             Wave::ALL.iter().map(|w| w.name().to_string()).collect(),
             move |x| x.wave[l] as usize,
             move |x, v| x.wave[l] = Wave::ALL[v],
         )
+        .short("Wave")
         .tip("Ensemble: detuned saw section; Plucked: bright attack that dies down; Bowed: slow bow with rosin noise; Body: hollow wooden resonance");
         for j in [L_OCT, L_DET, L_TONE, L_LVL, L_PAN] {
             k(b, LAYER[l] + j);
@@ -2234,20 +2254,29 @@ fn stringwave(b: &mut B) {
         sw_toggle(
             b,
             &format!("sw.mute{l}"),
-            "Mute",
+            &format!("Layer {} mute", l + 1),
             move |x| x.layer_mute[l],
             move |x, v| x.layer_mute[l] = v,
-        );
+        )
+        .short("Mute");
         sw_toggle(
             b,
             &format!("sw.solo{l}"),
-            "Solo",
+            &format!("Layer {} solo", l + 1),
             move |x| x.layer_solo[l],
             move |x, v| x.layer_solo[l] = v,
-        );
+        )
+        .short("Solo");
     }
     b.card(Tab::Main, "Undertones");
-    sw_toggle(b, "sw.und", "On", |x| x.und_on, |x, v| x.und_on = v);
+    sw_toggle(
+        b,
+        "sw.und",
+        "Undertones on",
+        |x| x.und_on,
+        |x, v| x.und_on = v,
+    )
+    .short("On");
     sw_choice(
         b,
         "sw.suboct",
@@ -2262,17 +2291,19 @@ fn stringwave(b: &mut B) {
     sw_toggle(
         b,
         "sw.undmute",
-        "Mute",
+        "Undertones mute",
         |x| x.und_mute,
         |x, v| x.und_mute = v,
-    );
+    )
+    .short("Mute");
     sw_toggle(
         b,
         "sw.undsolo",
-        "Solo",
+        "Undertones solo",
         |x| x.und_solo,
         |x, v| x.und_solo = v,
-    );
+    )
+    .short("Solo");
     b.card(Tab::Main, "Amp envelope").viz = Some(Box::new(|i| {
         let x = sw(i);
         Viz::Adsr(x.get(AMP_A), x.get(AMP_D), x.get(AMP_S), x.get(AMP_R))
@@ -2288,18 +2319,20 @@ fn stringwave(b: &mut B) {
     sw_toggle(
         b,
         "sw.filter",
-        "On",
+        "Filter on",
         |x| x.filter_on,
         |x, v| x.filter_on = v,
-    );
+    )
+    .short("On");
     sw_choice(
         b,
         "sw.slope",
-        "Slope",
+        "Filter slope",
         vec!["12 dB".into(), "24 dB".into()],
         |x| x.f24 as usize,
         |x, v| x.f24 = v == 1,
-    );
+    )
+    .short("Slope");
     for i in [CUTOFF, RESO, F_KEY] {
         k(b, i);
     }
@@ -2315,57 +2348,68 @@ fn stringwave(b: &mut B) {
         sw_toggle(
             b,
             &format!("sw.lfo{n}"),
-            "On",
+            &format!("LFO {} on", n + 1),
             move |x| x.lfo_on[n],
             move |x, v| x.lfo_on[n] = v,
-        );
+        )
+        .short("On");
         sw_choice(
             b,
             &format!("sw.lfow{n}"),
-            "Shape",
+            &format!("LFO {} shape", n + 1),
             LfoWave::ALL.iter().map(|w| w.name().to_string()).collect(),
             move |x| x.lfo_wave[n] as usize,
             move |x, v| x.lfo_wave[n] = LfoWave::ALL[v],
-        );
+        )
+        .short("Shape");
         k(b, LFO[n]);
         k(b, LFO[n] + 1);
         sw_choice(
             b,
             &format!("sw.lfod{n}"),
-            "Target",
+            &format!("LFO {} target", n + 1),
             dests.clone(),
             move |x| x.lfo_dest[n] as usize,
             move |x, v| x.lfo_dest[n] = Dest::ALL[v],
-        );
+        )
+        .short("Target");
     }
     b.card(Tab::Modulation, "Mod envelope");
-    sw_toggle(b, "sw.me", "On", |x| x.me_on, |x, v| x.me_on = v);
+    sw_toggle(
+        b,
+        "sw.me",
+        "Mod envelope on",
+        |x| x.me_on,
+        |x, v| x.me_on = v,
+    )
+    .short("On");
     for i in [ME_A, ME_D, ME_AMT] {
         k(b, i);
     }
     sw_choice(
         b,
         "sw.med",
-        "Target",
+        "Mod envelope target",
         dests,
         |x| x.me_dest as usize,
         |x, v| x.me_dest = Dest::ALL[v],
-    );
+    )
+    .short("Target");
     b.card(Tab::Modulation, "Mod wheel");
     k(b, WHEEL);
 
     b.card(Tab::Fx, "Chorus");
-    sw_toggle(b, "sw.cho", "On", |x| x.cho_on, |x, v| x.cho_on = v);
+    sw_toggle(b, "sw.cho", "Chorus on", |x| x.cho_on, |x, v| x.cho_on = v).short("On");
     for i in [CHO_RATE, CHO_DEPTH, CHO_MIX] {
         k(b, i);
     }
     b.card(Tab::Fx, "Echo");
-    sw_toggle(b, "sw.echo", "On", |x| x.echo_on, |x, v| x.echo_on = v);
+    sw_toggle(b, "sw.echo", "Echo on", |x| x.echo_on, |x, v| x.echo_on = v).short("On");
     for i in [ECHO_TIME, ECHO_FB, ECHO_TONE, ECHO_MIX] {
         k(b, i);
     }
     b.card(Tab::Fx, "Reverb");
-    sw_toggle(b, "sw.rev", "On", |x| x.rev_on, |x, v| x.rev_on = v);
+    sw_toggle(b, "sw.rev", "Reverb on", |x| x.rev_on, |x, v| x.rev_on = v).short("On");
     for i in [REV_SIZE, REV_DAMP, REV_MIX] {
         k(b, i);
     }
