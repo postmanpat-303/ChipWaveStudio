@@ -542,7 +542,7 @@ impl App {
                 }
                 if ui
                     .add(
-                        egui::Button::selectable(self.devices_visible(), "Nested Device Chains in lower panel")
+                        egui::Button::selectable(self.devices_visible(), "Rack in lower panel")
                             .shortcut_text("Ctrl+7"),
                     )
                     .on_hover_text("the selected track's instrument and effect chain, left to right")

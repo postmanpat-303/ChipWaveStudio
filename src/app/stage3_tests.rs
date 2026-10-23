@@ -74,7 +74,7 @@ fn a_header_shows_the_instrument_and_a_clip_shows_the_clip() {
     frames(&mut h, 2);
     assert!(
         h.state().extra.lower_dev && !h.state().pr.open,
-        "Nested Device Chains with the instrument (racks D2)"
+        "the Rack with the instrument (racks D2)"
     );
     // a clip click: the piano roll on that clip
     let r = h.state().tlv.clip_rect(id).expect("clip drawn");

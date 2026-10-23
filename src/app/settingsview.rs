@@ -553,7 +553,7 @@ impl App {
                         self.extra.follow_select,
                         egui::Checkbox::new(
                             &mut self.extra.select_chains,
-                            "Selecting a track or instrument opens Nested Device Chains",
+                            "Selecting a track or instrument opens the Rack",
                         ),
                     )
                     .on_hover_text(

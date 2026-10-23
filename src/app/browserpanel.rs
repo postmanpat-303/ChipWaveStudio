@@ -534,7 +534,7 @@ impl App {
                 })
                 .inner;
             let r = r.on_hover_text(if shown {
-                "double-click an effect to add it to the end of this chain; drag it into Nested Device Chains to put it in between, or onto any track"
+                "double-click an effect to add it to the end of this chain; drag it into the Rack to put it in between, or onto any track"
             } else {
                 "double-click an effect to add it to the end of this chain, or drag it onto any track; click here to show the chain (Ctrl+7)"
             });
@@ -1282,7 +1282,7 @@ fn tile_name(tb: Tab) -> &'static str {
 fn tab_tip(tb: Tab) -> &'static str {
     match tb {
         Tab::Instruments => "instruments: blank synths, generator presets, your .cwi library, this song's instruments",
-        Tab::Effects => "effects: ChipWave's built-ins, Grid FX patches and your effect plugins; double-click adds to the selected track, or drag into Nested Device Chains or onto a track",
+        Tab::Effects => "effects: ChipWave's built-ins, Grid FX patches and your effect plugins; double-click adds to the selected track, or drag into the Rack or onto a track",
         Tab::Plugins => "VST3 and CLAP plugins from the plugin scan: each plugin file's main instrument, plus effect plugins",
         Tab::Samples => "WAV, FLAC, MP3 and Ogg files in your locations",
         Tab::Songs => "demo songs and .cwt songs in your locations (MOD/MED: import planned)",
@@ -1292,7 +1292,7 @@ fn tab_tip(tb: Tab) -> &'static str {
         Tab::Midi => "MIDI files in your locations (import planned)",
         Tab::Patterns => "Drum Patterns: ready-made grooves by style with their own kit; preview in time with the song, drag onto the timeline",
         Tab::Files => "your drives and folders: Home, Music, Desktop, Downloads, network drives",
-        Tab::Racks => "My Racks: the racks you saved (Save Custom Rack… in Nested Device Chains); double-click loads one onto the selected track",
+        Tab::Racks => "My Racks: the racks you saved (Save rack… under the Rack); double-click loads one onto the selected track",
     }
 }
 

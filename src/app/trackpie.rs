@@ -1639,10 +1639,7 @@ impl App {
             PieAct::Devices => {
                 self.ch = tr;
                 self.vtab_select(super::viewbar::VTab::Devices);
-                self.status = format!(
-                    "Nested Device Chains: track {:02}'s instrument and effects",
-                    tr + 1
-                );
+                self.status = format!("Rack: track {:02}'s instrument and effects", tr + 1);
             }
             PieAct::Routing => {
                 self.ch = tr;
