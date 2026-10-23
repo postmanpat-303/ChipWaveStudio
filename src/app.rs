@@ -1357,29 +1357,33 @@ impl eframe::App for App {
         if !ca_on {
             self.ca.drag = None;
         }
-        egui::Panel::left("side")
-            .exact_size(330.0)
-            .resizable(false)
-            .frame(egui::Frame::NONE.inner_margin(egui::Margin {
-                left: 8,
-                right: 4,
-                top: 6,
-                bottom: 6,
-            }))
-            .show(ui, |ui| {
-                // the Clip Arranger fades in over the Instruments list; it
-                // is drawn after the Timeline (rows line up with its tracks)
-                self.ca.rect = ui.max_rect();
-                if ca_fade < 1.0 {
-                    if ca_fade > 0.0 {
-                        ui.multiply_opacity(1.0 - ca_fade);
+        if self.side_hidden() {
+            self.ca.rect = Rect::NOTHING;
+        } else {
+            egui::Panel::left("side")
+                .exact_size(330.0)
+                .resizable(false)
+                .frame(egui::Frame::NONE.inner_margin(egui::Margin {
+                    left: 8,
+                    right: 4,
+                    top: 6,
+                    bottom: 6,
+                }))
+                .show(ui, |ui| {
+                    // the Clip Arranger fades in over the Instruments list; it
+                    // is drawn after the Timeline (rows line up with its tracks)
+                    self.ca.rect = ui.max_rect();
+                    if ca_fade < 1.0 {
+                        if ca_fade > 0.0 {
+                            ui.multiply_opacity(1.0 - ca_fade);
+                        }
+                        theme::cartridge(ui.painter(), ui.max_rect(), th().slate);
+                        egui::ScrollArea::vertical()
+                            .id_salt("side_scroll")
+                            .show(ui, |ui| self.side_panel(ui));
                     }
-                    theme::cartridge(ui.painter(), ui.max_rect(), th().slate);
-                    egui::ScrollArea::vertical()
-                        .id_salt("side_scroll")
-                        .show(ui, |ui| self.side_panel(ui));
-                }
-            });
+                });
+        }
         if self.extra.browser_open {
             self.browser_side(ui);
         } else {

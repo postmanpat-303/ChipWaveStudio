@@ -794,6 +794,22 @@ impl App {
             } else {
                 "This tracker-mode song's order list, shown as clips per track."
             });
+            // show / hide the Clip Arranger on the left (more room)
+            let shown = !self.extra.side_hidden;
+            if ui
+                .add(egui::Button::selectable(
+                    shown,
+                    egui::RichText::new("Arranger").size(11.0),
+                ))
+                .on_hover_text(if shown {
+                    "hide the Clip Arranger on the left: more room for the tracks (Ctrl+Shift+8)"
+                } else {
+                    "show the Clip Arranger on the left of the Timeline (Ctrl+Shift+8)"
+                })
+                .clicked()
+            {
+                self.toggle_side_panel();
+            }
             // timeline mode needs no label: Song › Back to tracker
             // mode… turns it back
             if !mode {

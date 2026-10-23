@@ -187,6 +187,10 @@ pub struct Extra {
     /// (Ctrl+8, View menu; docs/CLIP_ARRANGER.md)
     #[serde(default = "yes")]
     pub clip_arranger: bool,
+    /// the Timeline's left panel (Clip Arranger / Instruments list) hidden
+    /// for room: the Timeline's "Arranger" button and Ctrl+Shift+8
+    #[serde(default)]
+    pub side_hidden: bool,
     /// Settings › Show Tracker (experimental), off by default (Del, 20 Oct
     /// 2026: focus on the Timeline and the piano roll). Off: the TRACKER /
     /// ORDER tabs and the tracker-mode menu items are hidden (View › Tracker
@@ -308,6 +312,7 @@ impl Default for Extra {
             adv_edit_open: false,
             adv_edit_float: false,
             clip_arranger: true,
+            side_hidden: false,
             show_tracker: false,
             metronome: false,
             count_in: true,

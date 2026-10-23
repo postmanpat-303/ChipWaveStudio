@@ -507,3 +507,46 @@ fn right_click_the_level_history_pauses_or_hides_it_and_brings_it_back() {
     assert_eq!(h.state().extra.level_hist, 0);
     assert!(h.state().ca.level_rect.height() > 36.0);
 }
+
+/// the Timeline's Arranger button hides the left panel for room (the lanes
+/// get wider), it is remembered in the settings, Ctrl+Shift+8 / Ctrl+8
+/// bring it back; the Tracker keeps its Instruments list
+#[test]
+fn the_arranger_button_hides_and_shows_the_left_panel() {
+    let mut h = tl_demo();
+    assert!(!h.state().extra.side_hidden);
+    let w0 = h.state().tlv.lanes.width();
+    h.get_by_label("Arranger").click();
+    frames(&mut h, 4);
+    assert!(h.state().extra.side_hidden, "remembered in the settings");
+    assert!(!h.state().ca_active());
+    assert!(!has(&h, "Clip Arranger") && !has(&h, "Instruments"));
+    assert!(
+        h.state().tlv.lanes.width() > w0 + 250.0,
+        "the lanes get the room"
+    );
+    // old settings files have no field: shown
+    let x: crate::settings::Extra = serde_json::from_str("{}").unwrap();
+    assert!(!x.side_hidden && x.clip_arranger);
+    // the Tracker keeps its Instruments list
+    h.state_mut().view = View::Pattern;
+    frames(&mut h, 4);
+    assert!(has(&h, "Instruments"));
+    h.state_mut().view = View::Timeline;
+    frames(&mut h, 4);
+    key(
+        &mut h,
+        Key::Num8,
+        egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+    );
+    frames(&mut h, 4);
+    assert!(h.state().ca_active() && has(&h, "Clip Arranger"));
+    h.get_by_label("Arranger").click();
+    frames(&mut h, 4);
+    key(&mut h, Key::Num8, egui::Modifiers::COMMAND);
+    frames(&mut h, 4);
+    assert!(
+        h.state().ca_active(),
+        "Ctrl+8 brings the Clip Arranger back"
+    );
+}

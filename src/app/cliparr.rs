@@ -358,12 +358,39 @@ impl App {
     /// the Clip Arranger takes the left panel now
     pub(crate) fn ca_active(&self) -> bool {
         self.extra.clip_arranger
+            && !self.side_hidden()
             && self.view == View::Timeline
             && self.with(|s| s.song.timeline.is_some())
     }
 
+    /// the left panel is hidden on the Timeline (more room for the tracks)
+    pub(crate) fn side_hidden(&self) -> bool {
+        self.extra.side_hidden && self.view == View::Timeline
+    }
+
+    /// the Timeline's "Arranger" button / Ctrl+Shift+8: show or hide the
+    /// Clip Arranger panel on the left (remembered)
+    pub(crate) fn toggle_side_panel(&mut self) {
+        self.extra.side_hidden = !self.extra.side_hidden;
+        if !self.extra.side_hidden {
+            self.extra.clip_arranger = true;
+        }
+        self.save_settings();
+        self.status = if self.extra.side_hidden {
+            "Clip Arranger hidden: more room for the Timeline (the Arranger button or Ctrl+Shift+8 shows it)"
+        } else {
+            "Clip Arranger shown on the left of the Timeline (the Arranger button or Ctrl+Shift+8 hides it)"
+        }
+        .into();
+    }
+
     /// Ctrl+8 / View › Clip Arranger
     pub(crate) fn toggle_clip_arranger(&mut self) {
+        if self.extra.side_hidden {
+            // a hidden panel comes back first
+            self.extra.side_hidden = false;
+            self.extra.clip_arranger = false;
+        }
         self.extra.clip_arranger = !self.extra.clip_arranger;
         self.save_settings();
         self.status = if self.extra.clip_arranger {
