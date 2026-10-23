@@ -544,16 +544,8 @@ impl FxRack {
                 continue;
             }
             s.key = k.clone();
-            match &st {
-                Some(b) => {
-                    s.inst.load_state(b);
-                }
-                None => {
-                    for &(id, v) in &params {
-                        s.inst.set_param_main(id, v);
-                    }
-                }
-            }
+            // unchanged instances are left alone (no cut tails on autosave)
+            super::copy_state(st.as_deref(), &params, s.inst.as_mut());
         }
         true
     }

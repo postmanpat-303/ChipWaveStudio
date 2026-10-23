@@ -16,6 +16,16 @@ const API: &std::ffi::CStr = CLAP_WINDOW_API_X11;
 #[cfg(target_os = "macos")]
 const API: &std::ffi::CStr = CLAP_WINDOW_API_COCOA;
 
+/// CLAP `gui.set_scale` factor for a monitor DPI (96 = 100 %); unknown
+/// (0) means 100 %, odd values are kept within 50-400 %
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn scale_from_dpi(dpi: u32) -> f64 {
+    if dpi == 0 {
+        return 1.0;
+    }
+    (dpi as f64 / 96.0).clamp(0.5, 4.0)
+}
+
 /// can this plugin show an editor here (embedded on Windows, else floating)?
 pub fn supported(p: *const clap_plugin, g: *const clap_plugin_gui) -> bool {
     unsafe {
@@ -218,6 +228,66 @@ pub mod win {
         s.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
+    /// DPI of the monitor `hwnd` is on: GetDpiForWindow (Windows 10 1607+,
+    /// looked up at run time; the app is per-monitor DPI aware), else the
+    /// system DPI
+    pub fn dpi_of(hwnd: HWND) -> u32 {
+        type GetDpi = unsafe extern "system" fn(HWND) -> u32;
+        static GET: std::sync::OnceLock<Option<GetDpi>> = std::sync::OnceLock::new();
+        let get = GET.get_or_init(|| unsafe {
+            use windows_sys::Win32::System::LibraryLoader::GetProcAddress;
+            let user32 = GetModuleHandleW(wide("user32.dll").as_ptr());
+            if user32.is_null() {
+                return None;
+            }
+            GetProcAddress(user32, c"GetDpiForWindow".as_ptr() as *const u8)
+                .map(|f| std::mem::transmute::<unsafe extern "system" fn() -> isize, GetDpi>(f))
+        });
+        if let Some(f) = get {
+            if !hwnd.is_null() {
+                let d = unsafe { f(hwnd) };
+                if d > 0 {
+                    return d;
+                }
+            }
+        }
+        unsafe {
+            use windows_sys::Win32::Graphics::Gdi::{GetDC, GetDeviceCaps, ReleaseDC, LOGPIXELSX};
+            let dc = GetDC(std::ptr::null_mut());
+            if dc.is_null() {
+                return 96;
+            }
+            let d = GetDeviceCaps(dc, LOGPIXELSX as i32);
+            ReleaseDC(std::ptr::null_mut(), dc);
+            if d > 0 {
+                d as u32
+            } else {
+                96
+            }
+        }
+    }
+
+    /// tell the editor its DPI scale; false when the plugin has no
+    /// set_scale or refuses it (it then follows the DPI itself, and asks
+    /// for a new size through request_resize)
+    unsafe fn apply_scale(p: *const clap_plugin, g: *const clap_plugin_gui, dpi: u32) -> bool {
+        let sc = super::scale_from_dpi(dpi);
+        let ok = (*g).set_scale.map(|s| s(p, sc)).unwrap_or(false);
+        if !ok {
+            crate::plugin::debug::log(|| {
+                format!("editor refused set_scale({sc:.2}) at {dpi} dpi; it scales itself")
+            });
+        }
+        ok
+    }
+
+    /// the editor's size now (after a scale change)
+    unsafe fn editor_size(p: *const clap_plugin, g: *const clap_plugin_gui) -> Option<(u32, u32)> {
+        let (mut w, mut h) = (0u32, 0u32);
+        let gs = (*g).get_size?;
+        (gs(p, &mut w, &mut h) && w > 0 && h > 0).then_some((w, h))
+    }
+
     unsafe extern "system" fn proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
         match msg {
             WM_CLOSE => {
@@ -253,6 +323,24 @@ pub mod win {
                     }
                 }
                 DefWindowProcW(h, msg, wp, lp)
+            }
+            WM_DPICHANGED => {
+                // moved to a monitor with another scale: rescale the editor
+                // and fit the window to its new size
+                let dpi = ((wp >> 16) & 0xFFFF) as u32;
+                let found = WINDOWS
+                    .lock()
+                    .ok()
+                    .and_then(|v| v.iter().find(|e| e.hwnd == h as isize).map(|e| e.owner));
+                if let Some(Owner::Clap { p, g }) = found {
+                    let (p, g) = (p as *const clap_plugin, g as *const clap_plugin_gui);
+                    if apply_scale(p, g, dpi) {
+                        if let Some((w, hh)) = editor_size(p, g) {
+                            resize_quiet(h as isize, w, hh);
+                        }
+                    }
+                }
+                0
             }
             _ => DefWindowProcW(h, msg, wp, lp),
         }
@@ -387,16 +475,20 @@ pub mod win {
     ) -> Result<Window, String> {
         let gui = &*g;
         let make = gui.create.ok_or("no editor")?;
+        let t = crate::plugin::debug::Timed::new(|| format!("{title}: gui.create (embedded)"));
         if !make(p, API.as_ptr(), false) {
             return Err("the plugin could not create its editor".into());
         }
-        if let Some(s) = gui.set_scale {
-            s(p, 1.0);
-        }
-        let (mut w, mut h) = (800u32, 500u32);
-        if let Some(gs) = gui.get_size {
-            gs(p, &mut w, &mut h);
-        }
+        drop(t);
+        // scale for the monitor ChipWave is on (thumbnails: always 100 %);
+        // checked again once the window exists
+        let mut dpi = if silent() {
+            96
+        } else {
+            dpi_of(GetForegroundWindow())
+        };
+        apply_scale(p, g, dpi);
+        let (w, h) = editor_size(p, g).unwrap_or((800, 500));
         let resizable = gui.can_resize.map(|c| c(p)).unwrap_or(false);
         let hwnd = match create(
             title,
@@ -420,14 +512,30 @@ pub mod win {
             api: API.as_ptr(),
             specific: clap_window_handle { win32: hwnd },
         };
-        if !gui.set_parent.map(|s| s(p, &win)).unwrap_or(false) {
+        let t = crate::plugin::debug::Timed::new(|| format!("{title}: gui.set_parent"));
+        let parented = gui.set_parent.map(|s| s(p, &win)).unwrap_or(false);
+        drop(t);
+        if !parented {
             destroy(hwnd as isize);
             if let Some(d) = gui.destroy {
                 d(p);
             }
             return Err("the plugin refused the editor window".into());
         }
+        if !silent() {
+            let real = dpi_of(hwnd);
+            if real != dpi {
+                dpi = real;
+                if apply_scale(p, g, dpi) {
+                    if let Some((w, h)) = editor_size(p, g) {
+                        resize_quiet(hwnd as isize, w, h);
+                    }
+                }
+            }
+        }
+        crate::plugin::debug::log(|| format!("{title}: editor at {dpi} dpi"));
         show(hwnd);
+        let _t = crate::plugin::debug::Timed::new(|| format!("{title}: gui.show"));
         if let Some(s) = gui.show {
             s(p);
         }
@@ -488,5 +596,21 @@ pub mod win {
     /// most recently created editor HWND (for thumbnail capture)
     pub fn last_hwnd() -> Option<isize> {
         WINDOWS.lock().ok()?.last().map(|e| e.hwnd)
+    }
+}
+
+#[cfg(test)]
+mod scale_tests {
+    use super::scale_from_dpi;
+
+    #[test]
+    fn dpi_maps_to_the_clap_scale() {
+        assert_eq!(scale_from_dpi(96), 1.0);
+        assert_eq!(scale_from_dpi(120), 1.25);
+        assert_eq!(scale_from_dpi(144), 1.5);
+        assert_eq!(scale_from_dpi(192), 2.0);
+        assert_eq!(scale_from_dpi(0), 1.0, "unknown DPI: 100 %");
+        assert_eq!(scale_from_dpi(10), 0.5);
+        assert_eq!(scale_from_dpi(2000), 4.0);
     }
 }

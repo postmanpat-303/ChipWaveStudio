@@ -12,6 +12,7 @@
 //! into the engine under the audio lock; the audio thread only feeds events
 //! and pulls audio (no allocation, no locks).
 pub mod clap;
+pub mod debug;
 pub mod fxrack;
 pub mod gui;
 pub mod scan;
@@ -99,6 +100,17 @@ pub struct ParamInfo {
     pub readonly: bool,
 }
 
+/// A parameter event a plugin sent to the host (its editor moved a knob).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum OutEv {
+    /// parameter `id` is now `value` (plain units)
+    Value(u32, f64),
+    /// the user grabbed parameter `id` in the editor
+    Begin(u32),
+    /// ... and let go of it
+    End(u32),
+}
+
 /// A running plugin instance (CLAP or VST3). Audio-thread methods: note_on,
 /// note_off, tuning, param, process. Everything else: UI / main thread.
 pub trait Hosted: Send {
@@ -135,6 +147,17 @@ pub trait Hosted: Send {
     fn poll_main(&mut self);
     /// the plugin changed its own state (editor edits) since the last call
     fn take_dirty(&self) -> bool;
+    /// hand over the parameter events the plugin sent since the last call
+    /// (audio thread after `process`, or main thread after a flush); no
+    /// allocation
+    fn drain_out(&mut self, f: &mut dyn FnMut(OutEv)) {
+        let _ = f;
+    }
+    /// tests: the raw `clap_plugin` pointer (null for other formats)
+    #[cfg(test)]
+    fn test_handle(&self) -> *const std::ffi::c_void {
+        std::ptr::null()
+    }
     fn set_sample_rate(&mut self, sr: f32);
 }
 
@@ -146,6 +169,7 @@ pub fn instantiate(p: &PluginPatch, sr: f32) -> Result<Box<dyn Hosted>, String> 
             p.name, p.id
         )
     })?;
+    let _t = debug::Timed::new(|| format!("load {} ({}) from {}", p.name, p.id, path.display()));
     let mut inst: Box<dyn Hosted> = match p.format.as_str() {
         "clap" => Box::new(clap::ClapInst::new(&path, &p.id, sr)?),
         "vst3" => Box::new(vst3::Vst3Inst::new(&path, &p.id, sr)?),
@@ -183,6 +207,10 @@ pub struct Slot {
     tune: f32,
     macros: [Macro; 8],
     sent: [f32; 8],
+    /// the instrument's first instance (state, editor, parameter list)
+    primary: bool,
+    /// read-only (output) parameters: their changes don't dirty the song
+    readonly: Vec<u32>,
 }
 
 impl Slot {
@@ -218,6 +246,8 @@ impl Slot {
             tune: 0.0,
             macros: std::array::from_fn(m),
             sent: [-1.0; 8],
+            primary: false,
+            readonly: infos.iter().filter(|i| i.readonly).map(|i| i.id).collect(),
         }
     }
 }
@@ -233,6 +263,27 @@ pub struct Rack {
     pub errors: Vec<(usize, String, String)>,
     /// live MIDI keys routed to plugins: (key, slot, sent note)
     live: [(u16, u16, u8); 64],
+    /// scratch for forwarding a primary's editor edits (fixed capacity)
+    fwd: Vec<OutEv>,
+    /// editor edits of primaries waiting for the UI: (instrument, event);
+    /// fixed capacity, values for the same parameter are merged
+    notices: Vec<(usize, OutEv)>,
+    /// `notices` overflowed: the UI still marks those instruments dirty
+    notices_lost: bool,
+}
+
+/// editor edits kept for the UI between two frames
+const MAX_NOTICES: usize = 256;
+
+/// What the UI learns from one [`Rack::poll_main`].
+#[derive(Default, Debug)]
+pub struct Polled {
+    /// instruments whose plugin state changed (save it into the song)
+    pub dirty: Vec<usize>,
+    /// parameter events from the editors of primaries, oldest first
+    pub events: Vec<(usize, OutEv)>,
+    /// instruments whose editor was closed since the last poll
+    pub closed: Vec<usize>,
 }
 
 impl Default for Rack {
@@ -250,6 +301,9 @@ impl Rack {
             by_ch_n: [0; MAX_CHANNELS],
             errors: vec![],
             live: [(0, u16::MAX, 0); 64],
+            fwd: Vec::with_capacity(MAX_NOTICES),
+            notices: Vec::with_capacity(MAX_NOTICES),
+            notices_lost: false,
         }
     }
 
@@ -260,6 +314,13 @@ impl Rack {
     fn rebuild(&mut self) {
         self.idx.iter_mut().for_each(|x| *x = 0);
         self.by_ch_n = [0; MAX_CHANNELS];
+        let mut seen: Vec<usize> = vec![];
+        for s in self.slots.iter_mut() {
+            s.primary = !seen.contains(&s.instr);
+            if s.primary {
+                seen.push(s.instr);
+            }
+        }
         for (i, s) in self.slots.iter().enumerate() {
             if s.instr < MAX_INSTR && s.ch < MAX_CHANNELS {
                 self.idx[s.instr * MAX_CHANNELS + s.ch] = i as u16 + 1;
@@ -425,6 +486,79 @@ impl Rack {
         s.inst.process(n, &mut s.l, &mut s.r);
         s.pos = 0;
         s.len = n;
+        self.forward_out(si, false);
+    }
+
+    /// Pass the editor edits slot `si` reported on: a primary's go to the
+    /// other instances of its instrument (so the instances actually playing
+    /// follow the editor) and to the UI. Other instances have no editor
+    /// open; their events are dropped (no echo loops). Audio thread
+    /// (`main` = false: queued for the next process) or main thread.
+    fn forward_out(&mut self, si: usize, main: bool) {
+        let mut fwd = std::mem::take(&mut self.fwd);
+        fwd.clear();
+        self.slots[si].inst.drain_out(&mut |e| {
+            if fwd.len() < fwd.capacity() {
+                fwd.push(e);
+            }
+        });
+        if fwd.is_empty() || !self.slots[si].primary {
+            self.fwd = fwd;
+            return;
+        }
+        let instr = self.slots[si].instr;
+        for e in &fwd {
+            let OutEv::Value(id, v) = *e else { continue };
+            for (k, s) in self.slots.iter_mut().enumerate() {
+                if k != si && s.instr == instr {
+                    if main {
+                        s.inst.set_param_main(id, v);
+                    } else {
+                        s.inst.param(id, v);
+                    }
+                }
+            }
+        }
+        for &e in &fwd {
+            if let OutEv::Value(id, _) = e {
+                if self.slots[si].readonly.contains(&id) {
+                    continue;
+                }
+            }
+            self.notice(instr, e);
+        }
+        self.fwd = fwd;
+    }
+
+    /// keep an editor edit for the UI (merging repeated values and
+    /// back-to-back gestures on one parameter)
+    fn notice(&mut self, instr: usize, e: OutEv) {
+        if let OutEv::Begin(id) = e {
+            let last = self.notices.iter().rposition(|(i, x)| {
+                *i == instr
+                    && matches!(x, OutEv::Value(p, _) | OutEv::Begin(p) | OutEv::End(p) if *p == id)
+            });
+            if let Some(k) = last.filter(|&k| self.notices[k].1 == OutEv::End(id)) {
+                // End then Begin again: one longer gesture
+                self.notices.remove(k);
+                return;
+            }
+        }
+        if let OutEv::Value(id, v) = e {
+            let last = self.notices.iter_mut().rev().find(|(i, x)| {
+                *i == instr
+                    && matches!(x, OutEv::Value(p, _) | OutEv::Begin(p) | OutEv::End(p) if *p == id)
+            });
+            if let Some((_, OutEv::Value(_, old))) = last {
+                *old = v;
+                return;
+            }
+        }
+        if self.notices.len() < self.notices.capacity() {
+            self.notices.push((instr, e));
+        } else {
+            self.notices_lost = true;
+        }
     }
 
     /// next output sample of a slot (call `chunk` first when `needs_chunk`)
@@ -533,11 +667,28 @@ impl Rack {
         taken
     }
 
-    pub fn insert(&mut self, instr: usize, ch: usize, p: &PluginPatch, inst: Box<dyn Hosted>) {
+    pub fn insert(&mut self, instr: usize, ch: usize, p: &PluginPatch, mut inst: Box<dyn Hosted>) {
         if let Some(old) = self.slot(instr, ch) {
             self.slots.remove(old);
         }
-        // a sibling's current state wins over the song's saved one
+        // a sibling's current state wins over the song's saved one (the
+        // editor may have changed it while this instance was loading)
+        let key = p.key();
+        if let Some(k) = self.primary(instr).filter(|&k| self.slots[k].key == key) {
+            let st = self.slots[k].inst.save_state();
+            let src = &self.slots[k];
+            let params: Vec<(u32, f64)> = match st {
+                Some(_) => vec![],
+                None => src
+                    .inst
+                    .params()
+                    .iter()
+                    .filter(|i| !i.readonly)
+                    .filter_map(|i| src.inst.value(i.id).map(|v| (i.id, v)))
+                    .collect(),
+            };
+            copy_state(st.as_deref(), &params, inst.as_mut());
+        }
         self.slots.push(Slot::new(instr, ch, p, inst));
         self.errors.retain(|e| e.0 != instr);
         self.rebuild();
@@ -570,6 +721,13 @@ impl Rack {
             .into_iter()
             .filter_map(|(i, key, m)| f(i).map(|n| (n, key, m)))
             .collect();
+        self.notices.retain_mut(|(i, _)| match f(*i) {
+            Some(n) => {
+                *i = n;
+                true
+            }
+            None => false,
+        });
         self.rebuild();
         gone
     }
@@ -608,17 +766,39 @@ impl Rack {
         }
     }
 
-    /// main-thread housekeeping for every instance; returns instruments whose
-    /// plugin changed its own state (to be saved into the song)
-    pub fn poll_main(&mut self) -> Vec<usize> {
-        let mut dirty = vec![];
-        for s in &mut self.slots {
-            s.inst.poll_main();
-            if s.inst.take_dirty() && !dirty.contains(&s.instr) {
-                dirty.push(s.instr);
+    /// main-thread housekeeping for every instance: plugin callbacks, the
+    /// editor edits reported since the last poll (forwarded to the sibling
+    /// instances), closed editors, and which instruments changed their state
+    pub fn poll_main(&mut self) -> Polled {
+        let mut out = Polled::default();
+        for si in 0..self.slots.len() {
+            let was_open = self.slots[si].inst.editor_open();
+            self.slots[si].inst.poll_main();
+            // events from a main-thread flush (request_flush while idle)
+            self.forward_out(si, true);
+            let s = &self.slots[si];
+            if was_open && !s.inst.editor_open() && !out.closed.contains(&s.instr) {
+                out.closed.push(s.instr);
+            }
+            if s.inst.take_dirty() && !out.dirty.contains(&s.instr) {
+                out.dirty.push(s.instr);
             }
         }
-        dirty
+        out.events = std::mem::replace(&mut self.notices, Vec::with_capacity(MAX_NOTICES));
+        if std::mem::take(&mut self.notices_lost) {
+            // too many to list: every instrument with an open editor changed
+            for s in self.slots.iter().filter(|s| s.primary) {
+                if !out.dirty.contains(&s.instr) {
+                    out.dirty.push(s.instr);
+                }
+            }
+        }
+        for &(i, e) in &out.events {
+            if matches!(e, OutEv::Value(..) | OutEv::End(_)) && !out.dirty.contains(&i) {
+                out.dirty.push(i);
+            }
+        }
+        out
     }
 
     /// Save the primary instance's state of `instr` into the song and copy
@@ -655,16 +835,7 @@ impl Rack {
                 continue;
             }
             s.key = key.clone();
-            match &st {
-                Some(b) => {
-                    s.inst.load_state(b);
-                }
-                None => {
-                    for &(id, v) in &params {
-                        s.inst.set_param_main(id, v);
-                    }
-                }
-            }
+            copy_state(st.as_deref(), &params, s.inst.as_mut());
         }
         true
     }
@@ -672,6 +843,27 @@ impl Rack {
     pub fn set_sample_rate(&mut self, sr: f32) {
         for s in &mut self.slots {
             s.inst.set_sample_rate(sr);
+        }
+    }
+}
+
+/// Give `dst` a state (or, for plugins without the state extension, these
+/// parameter values). Skipped when `dst` already has it: loading a state
+/// can cut the notes an instance is playing, so a save or autosave must not
+/// reload unchanged instances.
+pub(crate) fn copy_state(st: Option<&[u8]>, params: &[(u32, f64)], dst: &mut dyn Hosted) {
+    match st {
+        Some(b) => {
+            if dst.save_state().as_deref() != Some(b) {
+                dst.load_state(b);
+            }
+        }
+        None => {
+            for &(id, v) in params {
+                if dst.value(id) != Some(v) {
+                    dst.set_param_main(id, v);
+                }
+            }
         }
     }
 }
@@ -795,6 +987,8 @@ pub fn set_macro_norm(s: &mut crate::audio::Shared, instr: usize, k: usize, n: f
 
 #[cfg(test)]
 mod fxtests;
+#[cfg(test)]
+pub mod hosttests;
 #[cfg(test)]
 pub mod tests;
 #[cfg(test)]
