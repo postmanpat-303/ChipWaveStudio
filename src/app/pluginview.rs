@@ -175,8 +175,6 @@ impl App {
         });
     }
 
-    /// Copy every plugin's current state into the song (before saving,
-    /// exporting or copying an instrument). Not an undo step of its own.
     /// Copy every plugin's current state into the song (and into the
     /// other instances of the same instrument / effect). Always asks the
     /// plugins: many never report their editor edits (`mark_dirty`), so a
