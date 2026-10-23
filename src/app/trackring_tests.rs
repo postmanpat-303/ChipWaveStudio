@@ -282,7 +282,7 @@ fn track_clips(h: &Harness<'static, App>, tr: usize) -> Vec<(u32, i64, i64, usiz
                     crate::timeline::ClipKind::Notes { data } => t.notes[data as usize].notes.len(),
                     _ => 99,
                 };
-                (c.id, c.start as i64, c.len as i64, n)
+                (c.id, c.start, c.len, n)
             })
             .collect()
     })
@@ -307,7 +307,7 @@ fn a_kit_from_the_rings_makes_an_empty_pattern_track_one_undo() {
     let (bar, cue) = h.state().with(|s| {
         let t = s.song.timeline.as_deref().unwrap();
         let bar = t.sig_at(0).bar_ticks();
-        (bar as i64, bar * 2 + bar / 3)
+        (bar, bar * 2 + bar / 3)
     });
     h.state_mut().tlv.cue = cue;
     h.state_mut().undo_reset();
