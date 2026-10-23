@@ -225,6 +225,159 @@ impl App {
         true
     }
 
+    /// the track pie's Add › Drum pattern › <instrument> (`kit` None) or ›
+    /// Drum Kit › <kit> on track `tr` ITSELF (never a new track): a new
+    /// instrument plays it, its pattern (the selected or first note clip on
+    /// the track, else a new 1-bar one at the play marker) opens in the step
+    /// sequencer or the piano roll, and an empty pattern gets the kit's
+    /// starter groove (as Kits… does). One undo step.
+    pub(crate) fn track_set_pattern_instrument(
+        &mut self,
+        tr: usize,
+        b: super::trackpie::Builtin,
+        kit: Option<&str>,
+    ) -> bool {
+        if self.with(|s| s.song.timeline.is_none()) {
+            self.status = "Drum patterns go on the Timeline (timeline mode)".into();
+            return false;
+        }
+        if tr >= self.with(|s| s.song.channels) {
+            return false;
+        }
+        if self.with(|s| s.song.instruments.len() >= 255) {
+            self.status = "All 255 instrument slots are used".into();
+            return false;
+        }
+        let inst = match kit {
+            Some(k) => crate::drumpat::drumkit_instrument(k),
+            None => b.make().map(|(name, kind)| Instrument {
+                name,
+                volume: 0.8,
+                transpose: 0,
+                fx: vec![],
+                kind,
+            }),
+        };
+        let Some(inst) = inst else {
+            self.status = format!("No {} preset to start from", kit.unwrap_or(b.label()));
+            return false;
+        };
+        let name = inst.name.clone();
+        let sel = self.tlv.sel;
+        self.snapshot();
+        self.undo_hold += 1;
+        // the instrument plays the track; a default name follows it
+        let (slot, clip) = self.with(|s| {
+            let Some(k) = s.song.add_instrument(inst) else {
+                return (None, None);
+            };
+            let slot = k as u8 + 1;
+            crate::chanops::assign_track_instrument(&mut s.song, tr, slot);
+            if let Some(n) = s.song.channel_names.get_mut(tr) {
+                let t = n.trim();
+                if t.is_empty() || t.starts_with("Track ") {
+                    *n = name.chars().take(24).collect();
+                }
+            }
+            // its pattern: the selected note clip on the track, else the first
+            let t = s.song.timeline.as_deref();
+            let notes_on = |c: &crate::timeline::Clip| {
+                c.track as usize == tr && matches!(c.kind, crate::timeline::ClipKind::Notes { .. })
+            };
+            let clip = t.and_then(|t| {
+                sel.and_then(|id| t.clips.iter().find(|c| c.id == id && notes_on(c)))
+                    .or_else(|| t.clips.iter().find(|c| notes_on(c)))
+                    .map(|c| c.id)
+            });
+            (Some(slot), clip)
+        });
+        let Some(slot) = slot else {
+            self.undo_hold -= 1;
+            self.status = "All 255 instrument slots are used".into();
+            return false;
+        };
+        self.instr = slot;
+        let id = match clip {
+            Some(id) => {
+                self.track_open_pattern(tr, id);
+                Some(id)
+            }
+            None => self.track_add_empty_pattern(tr).map(|(id, _)| id),
+        };
+        // an empty pattern gets the kit's starter groove
+        let mut groove = None;
+        if let (Some(id), Some(k)) = (id, kit) {
+            let data = self.with(|s| {
+                let t = s.song.timeline.as_deref()?;
+                let c = t.clips.iter().find(|c| c.id == id)?;
+                match c.kind {
+                    crate::timeline::ClipKind::Notes { data } => {
+                        let d = t.notes.get(data as usize)?;
+                        Some((data as usize, (**d).clone()))
+                    }
+                    _ => None,
+                }
+            });
+            if let Some((data, mut d)) = data {
+                if let Some(g) =
+                    super::drumkitview::starter_groove(k).filter(|_| d.notes.is_empty())
+                {
+                    d.notes = g.notes(0);
+                    d.len = g.len();
+                    d.name = g.name.to_string();
+                    d.drum = Some(crate::drumkit::DrumMeta { swing: g.swing });
+                    groove = Some((g.name, d.notes.len()));
+                    self.dk_write(data, d);
+                } else if d.drum.is_none() {
+                    d.drum = Some(crate::drumkit::DrumMeta::default());
+                    self.dk_write(data, d);
+                }
+            }
+        }
+        self.undo_hold -= 1;
+        self.with(|s| {
+            let crate::audio::Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
+        });
+        self.dirty = true;
+        crate::plugin::sync(&self.shared, None);
+        self.status = match groove {
+            Some((g, hits)) => format!(
+                "Track {:02} now plays {slot:02X} {name}, with its starter groove {g} ({hits} hits)",
+                tr + 1
+            ),
+            None => format!("Track {:02} now plays {slot:02X} {name}", tr + 1),
+        };
+        true
+    }
+
+    /// select track `tr` and its note clip `id`, open in the step sequencer
+    /// (a Drum Kit) or the piano roll
+    pub(crate) fn track_open_pattern(&mut self, tr: usize, id: u32) {
+        let slot = self.track_slot(tr);
+        let kit = self.with(|s| {
+            s.song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .is_some_and(|i| crate::drumkit::kit_of(i).is_some())
+        });
+        self.tl_select_track(tr, false);
+        self.ch = tr;
+        if slot > 0 {
+            self.instr = slot;
+        }
+        self.tlv.sel = Some(id);
+        self.tlv.sels = vec![id];
+        if kit {
+            self.dk.inst = slot as usize - 1;
+            self.dk.clip = Some(id);
+            self.dk.page = 0;
+            self.show_instrument_editor();
+        } else {
+            self.timeline_open_roll();
+        }
+    }
+
     /// an empty 1-bar note clip on track `at` at the play marker's bar
     /// (no snapshot; callers take one), opened in the step sequencer when
     /// the track plays a Drum Kit, else the piano roll: (clip id, bar)
@@ -259,24 +412,10 @@ impl App {
             engine.ensure_plan(song);
             Some((id, pos.bar, kit))
         });
-        let (id, bar, kit) = res?;
+        let (id, bar, _) = res?;
         self.dirty = true;
         crate::plugin::sync(&self.shared, None);
-        self.tl_select_track(at, false);
-        self.ch = at;
-        if slot > 0 {
-            self.instr = slot;
-        }
-        self.tlv.sel = Some(id);
-        self.tlv.sels = vec![id];
-        if kit {
-            self.dk.inst = slot as usize - 1;
-            self.dk.clip = Some(id);
-            self.dk.page = 0;
-            self.show_instrument_editor();
-        } else {
-            self.timeline_open_roll();
-        }
+        self.track_open_pattern(at, id);
         Some((id, bar))
     }
 }

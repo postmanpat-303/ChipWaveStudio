@@ -1691,7 +1691,7 @@ fn add_a_built_in_instrument_from_the_track_pie() {
     }
     let ring = |h: &Harness<'static, App>| h.state().ring_now().map(|r| r.1);
     assert_eq!(ring(&h), Some(Level::Add), "Add opens its ring");
-    let p = super::trackring_tests::ring_pos(&h, 8);
+    let p = super::trackring_tests::ring_pos(&h, 0);
     mv(&mut h, p);
     click_at(&mut h, p);
     frames(&mut h, 3);
