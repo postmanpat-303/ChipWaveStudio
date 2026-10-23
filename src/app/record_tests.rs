@@ -378,6 +378,14 @@ fn old_count_in_settings_carry_over_as_bars() {
 #[test]
 fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
     let mut h = new_song(1);
+    // the track plays an instrument (an empty track is silent)
+    h.state().with(|s| {
+        let mut one = crate::fileio::demo_song().instruments[0].clone();
+        one.name = "Init".into();
+        one.kind = InstrumentKind::Synth(Default::default());
+        s.song.instruments = vec![one];
+        s.song.timeline.as_deref_mut().unwrap().tracks[0].instr = 1;
+    });
     let id = h
         .state()
         .with(|s| tl::new_note_clip(&mut s.song, 0, 16 * PPQ).unwrap());
