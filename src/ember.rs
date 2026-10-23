@@ -136,6 +136,9 @@ pub fn bevel(p: &Painter, r: Rect, rad: f32) {
 /// a section card inside a panel (instrument sections, Devices cards)
 pub fn card(p: &Painter, r: Rect) {
     panel(p, r, 6);
+    if let Some(s) = crate::theme::active_skin() {
+        s.panel(p, r, 6.0);
+    }
     screws(p, r);
 }
 
@@ -488,7 +491,8 @@ pub fn knob_studio(p: &Painter, c: Pos2, rad: f32, k: &StudioKnob) {
     }
     let p = &kp;
     let frac = k.frac.clamp(0.0, 1.0);
-    let orange = t.acc_hot;
+    let orange = crate::theme::skin_or(t.acc_hot);
+    let readout = crate::theme::active_skin().map_or(orange, |s| s.text);
     let small = rad < 18.0;
     // dot ring
     let n = if k.dots > 1 {
@@ -669,7 +673,7 @@ pub fn knob_studio(p: &Painter, c: Pos2, rad: f32, k: &StudioKnob) {
             Align2::CENTER_TOP,
             k.value,
             num_font(if small { 10.5 } else { 11.5 }),
-            orange,
+            readout,
         );
     }
 }

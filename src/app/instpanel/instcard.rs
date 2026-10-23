@@ -728,7 +728,8 @@ fn big_knob(
     enabled: bool,
 ) -> (egui::Response, bool) {
     let t = th();
-    let (cell, _) = ui.allocate_exact_size(egui::vec2(96.0, MACRO_H - 8.0), Sense::hover());
+    let cw = ui.available_width().min(96.0);
+    let (cell, _) = ui.allocate_exact_size(egui::vec2(cw, MACRO_H - 8.0), Sense::hover());
     // Slate: the studio knob, its value in the gap at the bottom of the ring
     let r = if t.ember { 22.0 } else { 21.0 };
     let c = Pos2::new(
@@ -835,7 +836,7 @@ fn big_knob(
     if enabled && (*v - from).abs() > 0.002 {
         p.add(egui::Shape::line(
             arc(from.min(*v), from.max(*v), r + 5.0),
-            Stroke::new(3.0, t.accent),
+            Stroke::new(3.0, crate::theme::skin_or(t.accent)),
         ));
     }
     p.circle_stroke(
@@ -844,7 +845,7 @@ fn big_knob(
         Stroke::new(
             1.2,
             if resp.hovered() && enabled {
-                t.accent
+                crate::theme::skin_or(t.accent)
             } else {
                 t.ink2.gamma_multiply(0.6 * dim)
             },
@@ -929,6 +930,9 @@ fn frame(ui: &egui::Ui, r: Rect, title: &str) {
         Stroke::new(1.0, t.ink2.gamma_multiply(0.35)),
         egui::StrokeKind::Inside,
     );
+    if let Some(s) = crate::theme::active_skin() {
+        s.panel(p, r, 6.0);
+    }
     p.text(
         Pos2::new(r.left() + 10.0, r.top() + SEC_HEAD * 0.5),
         egui::Align2::LEFT_CENTER,
@@ -1129,10 +1133,14 @@ impl App {
                 }
             } else {
                 let w = body.width() / ms.len() as f32;
+                // a narrow card (the Browser open at 1366 px) gives each
+                // macro less than 96 px: the cells shrink so their captions
+                // fit instead of running into the next one
+                let cw = (w - 4.0).clamp(48.0, 96.0);
                 for (k, m) in ms.iter().enumerate() {
                     let cr = Rect::from_min_size(
-                        Pos2::new(body.left() + w * k as f32 + (w - 96.0) * 0.5, body.top()),
-                        egui::vec2(96.0, body.height()),
+                        Pos2::new(body.left() + w * k as f32 + (w - cw) * 0.5, body.top()),
+                        egui::vec2(cw, body.height()),
                     );
                     let cur = macro_text(l, inst, m);
                     let (mut v, text, def) = cur.clone().unwrap_or((0.0, "–".into(), 0.0));

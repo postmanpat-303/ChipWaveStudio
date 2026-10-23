@@ -296,7 +296,15 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
 
 /// draw a card picture into `r`
 pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
-    let t = th();
+    let mut t = th();
+    if let Some(s) = crate::theme::active_skin() {
+        // a built-in instrument's picture: curves and marks in the tint
+        t.acc_hot = s.bright;
+        t.accent = s.tint;
+        t.instr = s.bright;
+        t.note = s.bright;
+        t.fx = s.bright;
+    }
     if t.ember {
         crate::ember::well(p, r, 4);
     } else {

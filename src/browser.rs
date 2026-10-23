@@ -84,12 +84,14 @@ impl Fmt {
             Fmt::Fx => "effect",
         }
     }
-    /// badge colour (0xRRGGBB), the same in every theme (dark text on it)
+    /// badge colour (0xRRGGBB), the same in every theme (dark text on it).
+    /// Third-party plugin formats are neutral greys: violet means a
+    /// ChipWave built-in instrument (docs/INSTSKIN.md)
     pub fn colour(self) -> u32 {
         match self {
             Fmt::Cwi => 0x5CC07A,
-            Fmt::Vst3 => 0xA98BE0,
-            Fmt::Clap => 0xE07BB5,
+            Fmt::Vst3 => 0x9AA1AB,
+            Fmt::Clap => 0xB8BDC4,
             Fmt::Wav => 0x4FB8C9,
             Fmt::Flac => 0x4F9FD9,
             Fmt::Mp3 => 0x62C9B2,

@@ -663,7 +663,13 @@ impl App {
                 } else if k % 2 == 1 {
                     p.rect_filled(r, 0, well(&t, 0.6));
                 }
-                let c = rgb(it.fmt.colour());
+                let skin = crate::theme::instskin()
+                    .filter(|_| matches!(it.src, Src::Tool(_)));
+                let c = skin.map_or(rgb(it.fmt.colour()), |s| s.tint);
+                if let Some(s) = skin {
+                    // a built-in instrument row: the skin's wash
+                    p.rect_filled(r, 0, s.wash);
+                }
                 p.rect_filled(
                     Rect::from_min_size(r.min, egui::vec2(4.0, r.height())),
                     0,
