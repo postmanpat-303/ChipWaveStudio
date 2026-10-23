@@ -168,6 +168,8 @@ pub(super) fn gen_panel(
                 "GENERATOR · GRID"
             } else if matches!(g.engine, GenEngine::Poly(_)) {
                 concat!("GENERATOR · ", crate::poly_name!())
+            } else if matches!(g.engine, GenEngine::Strings(_)) {
+                concat!("GENERATOR · ", crate::strings_name!())
             } else {
                 "GENERATOR · DRUM SYNTH"
             })
@@ -176,7 +178,7 @@ pub(super) fn gen_panel(
         );
     });
     if is_kit {
-        kit_piece_ui(ui, st);
+        kit_piece_ui(ui, st, |_| {});
     }
     let sel = st.sel;
     if is_fx {
@@ -839,6 +841,11 @@ impl App {
                 "polyphonic subtractive synth: 2 oscillators with unison, sync and sub, 6 blend modes, 7 filter modes, drive, shaper, mono / legato glide",
                 5,
             ),
+            (
+                concat!("Generator (", crate::strings_name!(), ")"),
+                "string ensemble: 3 layers, sub and drone, filter with its own envelope, 2 LFOs, chorus, echo, hall and a limiter",
+                6,
+            ),
         ] {
             ui.menu_button(menu, |ui| {
                 ui.label(egui::RichText::new(tip).small().color(th().ink2));
@@ -849,7 +856,8 @@ impl App {
                         2 => matches!(p.engine, GenEngine::Noise(_)),
                         3 => matches!(p.engine, GenEngine::Wave(_)),
                         4 => matches!(p.engine, GenEngine::Grid(_)),
-                        _ => matches!(p.engine, GenEngine::Poly(_)),
+                        5 => matches!(p.engine, GenEngine::Poly(_)),
+                        _ => matches!(p.engine, GenEngine::Strings(_)),
                     };
                     if !ok {
                         continue;
@@ -989,8 +997,9 @@ pub(super) fn dice_controls(
     });
 }
 
-/// kit piece buttons (which piece the knobs edit) and the note map
-pub(super) fn kit_piece_ui(ui: &mut egui::Ui, st: &mut GenUi) {
+/// kit piece buttons (which piece the knobs edit) and the note map, with
+/// `extra` (a button, say) to the right of the note map
+pub(super) fn kit_piece_ui(ui: &mut egui::Ui, st: &mut GenUi, extra: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal_wrapped(|ui| {
         ui.add_space(14.0);
         for i in 0..8 {
@@ -1013,6 +1022,7 @@ pub(super) fn kit_piece_ui(ui: &mut egui::Ui, st: &mut GenUi) {
             .small()
             .color(th().ink2),
         );
+        extra(ui);
     });
 }
 

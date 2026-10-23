@@ -1,6 +1,6 @@
 # Inspector and view tab bar
 
-*Unreleased (after 0.2.4.0).* Two pieces of the "inspired" layout Del picked
+*Since 0.2.4.1.* Two pieces of the "inspired" layout Del picked
 from his reference screenshots (mockups E and F in `/workspace/shots`):
 a collapsible **Inspector** on the left and a **view tab bar** along the
 bottom. Neither adds new sound features: every control is bound to a setting
@@ -51,7 +51,7 @@ when you let go.
 
 ## View tab bar
 
-A slim bar above the status line (Unreleased: views only; the transport
+A slim bar above the status line (0.2.5.0: views only; the transport
 is in the toolbar):
 
 - **Tabs:** **TIMELINE** · **MIX** · **FX** · **SAMPLE**, and with

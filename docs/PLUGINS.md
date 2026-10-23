@@ -1,6 +1,6 @@
-# Plugin instruments (0.2.3.16) and VST3 (Unreleased)
+# Plugin instruments (0.2.3.16) and VST3 (0.2.4.1)
 
-ChipWave 0.2.3.16 can play **CLAP** instrument plugins (Surge XT and so on) as ordinary instruments. **VST3** instruments and effects work the same way since the Unreleased build (see [VST3](#vst3-unreleased)). They take notes from the pattern, velocity, glide and slides, run through the instrument's FX chain and the mixer, and are saved inside the song. This page covers what works today. The longer-term design (MIDI output, LV2) is in [MIDI_VST.md](MIDI_VST.md) and [PLUGIN_MANAGER.md](PLUGIN_MANAGER.md).
+ChipWave 0.2.3.16 can play **CLAP** instrument plugins (Surge XT and so on) as ordinary instruments. **VST3** instruments and effects work the same way since the 0.2.4.1 build (see [VST3](#vst3-0241)). They take notes from the pattern, velocity, glide and slides, run through the instrument's FX chain and the mixer, and are saved inside the song. This page covers what works today. The longer-term design (MIDI output, LV2) is in [MIDI_VST.md](MIDI_VST.md) and [PLUGIN_MANAGER.md](PLUGIN_MANAGER.md).
 
 ![Surge XT as an instrument: the plugin card and its eight macro knobs in the lower-panel editor (0.2.3.19)](screenshots/plugin-clap.png)
 
@@ -11,7 +11,7 @@ ChipWave 0.2.3.16 can play **CLAP** instrument plugins (Surge XT and so on) as o
 | Format | Status | Notes |
 |---|---|---|
 | **CLAP** | **Hosted**: scan, play, parameters, macros, automation, state, native editor (embedded on Windows, floating where the plugin offers one), offline render | Open standard by the free-audio project (MIT). On macOS a `.clap` is a bundle folder; ChipWave loads `Contents/MacOS/<binary>` |
-| **VST3** | **Hosted (Unreleased)**: instruments and effects, the same scan, menus, parameters, macros, automation, modulation, state, missing-plugin handling and offline render as CLAP; embedded editor on Windows | VST 3 SDK by Steinberg, MIT since 3.8.0. A `.vst3` is a bundle folder (`Contents/x86_64-win/<name>.vst3`, `Contents/x86_64-linux/<name>.so`, `Contents/MacOS/<name>`) or, for old Windows plugins, a single file. See [VST3](#vst3-unreleased) |
+| **VST3** | **Hosted (0.2.4.1)**: instruments and effects, the same scan, menus, parameters, macros, automation, modulation, state, missing-plugin handling and offline render as CLAP; embedded editor on Windows | VST 3 SDK by Steinberg, MIT since 3.8.0. A `.vst3` is a bundle folder (`Contents/x86_64-win/<name>.vst3`, `Contents/x86_64-linux/<name>.so`, `Contents/MacOS/<name>`) or, for old Windows plugins, a single file. See [VST3](#vst3-0241) |
 | VST2 | Not supported | The SDK is discontinued and not covered by the VST3 MIT licence |
 | LV2 | Not planned yet | |
 
@@ -28,13 +28,13 @@ ChipWave scans these folders recursively, plus any folders you add in **Settings
 | Linux | `~/.clap`, `/usr/lib/clap`, `/usr/local/lib/clap` (and `~/.vst3`, `/usr/lib/vst3`, `/usr/local/lib/vst3`) |
 | all | every folder in `CLAP_PATH` and `VST3_PATH` |
 
-**Find plugins… (Unreleased).** On the first start (and once for users of earlier versions) ChipWave asks how to find your plugins: **scan automatically** (the standard folders above, and optionally a deeper search of the whole drive for folders that contain `.vst3` / `.clap`), **choose folders yourself** with a folder picker, or **skip for now**. The search runs in the background with progress and a Stop button, lists the folders it found with their plugin counts, and adds the ones you keep to your plugin folders and to the Browser's locations, then runs the scan below. Open it again from **Settings › Plugins › Find plugins…** or the Browser's **Plugins** tab. Details: [BROWSER.md › Find plugins](BROWSER.md#find-plugins). The deep search skips system, hidden, cache and trash folders and never enters plugin bundles; it stops after 14 levels or 2 million folders.
+**Find plugins… (0.2.4.1).** On the first start (and once for users of earlier versions) ChipWave asks how to find your plugins: **scan automatically** (the standard folders above, and optionally a deeper search of the whole drive for folders that contain `.vst3` / `.clap`), **choose folders yourself** with a folder picker, or **skip for now**. The search runs in the background with progress and a Stop button, lists the folders it found with their plugin counts, and adds the ones you keep to your plugin folders and to the Browser's locations, then runs the scan below. Open it again from **Settings › Plugins › Find plugins…** or the Browser's **••• › Find plugins…**. Details: [BROWSER.md › Find plugins](BROWSER.md#find-plugins). The deep search skips system, hidden, cache and trash folders and never enters plugin bundles; it stops after 14 levels or 2 million folders.
 
 **Crash guard.** Each plugin is checked in a separate ChipWave process (`chipwave --scan-plugin <file>`), so a plugin that crashes, throws or hangs can't take ChipWave down. The checker loads the plugin, reads its name, vendor, id and features, creates an instance at 48 kHz, activates it and renders a test note. After 20 seconds it is killed and the plugin is marked "timed out". On Windows the checker suppresses crash dialogs. Results are cached in `plugin-cache.json` next to the settings file, keyed by file size and date, so later scans only re-check files that changed. **Rescan** checks new and changed files; **Full rescan** checks everything again. (The VST3 build bumped the cache version, so the first scan after updating checks every file once.)
 
 The browser shows crashed, timed-out and unsupported files under "skipped" with the reason.
 
-## VST3 (Unreleased)
+## VST3 (0.2.4.1)
 
 VST3 plugins go through the same code paths as CLAP ones: one `Hosted` interface in `src/plugin/`, implemented by `clap.rs` and `vst3.rs`. Everything above it (instrument slots, FX chains, 43xy macros, automation lanes, drag-to-modulate, state in the song, missing-plugin placeholders, offline render, the self-test) doesn't care which format a plugin is.
 
@@ -136,8 +136,8 @@ WAV/MP3 export and `--render` create their own plugin instances at the export sa
 
 ## Limitations in 0.2.3.16
 
-- VST3 (Unreleased): no editor on Linux or macOS yet; no VST3 program lists / preset browser, note expressions other than tuning, MIDI CC through `IMidiMapping`, sidechain or extra buses; the macOS module entry is written but untested (no Mac to try it on).
-- Plugin *effects* in the FX chain came later (Unreleased): see [FX.md › Plugin effects](FX.md#plugin-effects-clap-unreleased).
+- VST3 (0.2.4.1): no editor on Linux or macOS yet; no VST3 program lists / preset browser, note expressions other than tuning, MIDI CC through `IMidiMapping`, sidechain or extra buses; the macOS module entry is written but untested (no Mac to try it on).
+- Plugin *effects* in the FX chain came later (0.2.4.1): see [FX.md › Plugin effects](FX.md#plugin-effects-clap-0241).
 - No embedded editors on macOS or Linux yet (floating ones work).
 - Plugin state changes made in the plugin's editor are not undo steps.
 - Note expressions other than tuning (pressure, brightness …) and polyphonic modulation aren't sent yet.

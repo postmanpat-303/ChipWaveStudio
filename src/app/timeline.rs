@@ -381,10 +381,13 @@ fn fingerprint(song: &Song) -> u64 {
         }
         for c in &t.clips {
             put(c.id as u64);
+            // the colour is drawn from the cache: a new one must rebuild it
+            put(c.colour.map_or(u64::MAX, |x| x as u64));
         }
         // the launcher's rows (its clips are in the plan key)
         for l in &t.launcher {
             put(l.scene as u64 | (l.clip.id as u64) << 16);
+            put(l.clip.colour.map_or(u64::MAX, |x| x as u64));
         }
         for sc in &t.scenes {
             for b in sc.name.bytes() {

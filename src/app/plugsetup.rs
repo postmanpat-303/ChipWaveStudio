@@ -210,7 +210,7 @@ impl App {
                     ui.group(|ui| {
                         ui.set_width(ui.available_width());
                         ui.label(egui::RichText::new("3  Skip for now").strong());
-                        ui.label(egui::RichText::new("later: Settings › Plugins › Find plugins…, or the Browser's Plugins tab").small().color(t.ink2));
+                        ui.label(egui::RichText::new("later: Settings › Plugins › Find plugins…, or the Browser's VST & CLAP tab").small().color(t.ink2));
                         if ui.button("Skip").clicked() {
                             act = Some(3);
                         }

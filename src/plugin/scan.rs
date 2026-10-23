@@ -80,6 +80,78 @@ impl Cache {
     }
 }
 
+/// letters and digits only, lower case ("Surge XT" == "surge-xt")
+fn norm(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// The bundle's main plugin among the classes one file holds: an
+/// instrument first, then the class named like the bundle (exact, then a
+/// name that contains it or is contained in it), then the shortest name
+/// ("Kontakt 8" before "Kontakt 8 16out"), then file order. MIDI-only and
+/// utility classes come last. `None` for an empty list.
+pub fn main_class(path: &str, plugins: &[Found]) -> Option<usize> {
+    let stem = Path::new(path)
+        .file_stem()
+        .map(|s| norm(&s.to_string_lossy()))
+        .unwrap_or_default();
+    (0..plugins.len()).min_by_key(|&i| {
+        let d = &plugins[i].desc;
+        let n = norm(&d.name);
+        let kind = if d.is_instrument() {
+            0
+        } else if d.is_effect() {
+            1
+        } else {
+            2
+        };
+        let named = if !stem.is_empty() && n == stem {
+            0
+        } else if !stem.is_empty() && !n.is_empty() && (n.contains(&stem) || stem.contains(&n)) {
+            1
+        } else {
+            2
+        };
+        (kind, named, n.len(), i)
+    })
+}
+
+impl Entry {
+    /// this file's main plugin (see [`main_class`])
+    pub fn main(&self) -> Option<&Found> {
+        main_class(&self.path, &self.plugins).map(|i| &self.plugins[i])
+    }
+    /// classes listed only with "Show all programs": every class but the
+    /// main one, when the file holds an instrument (a file of effects only
+    /// keeps them all)
+    pub fn is_sub_program(&self, f: &Found) -> bool {
+        self.plugins.len() > 1
+            && self.plugins.iter().any(|p| p.desc.is_instrument())
+            && self.main().is_some_and(|m| m.desc.id != f.desc.id)
+    }
+}
+
+/// id of the main plugin of the scanned file at `path` (None: not scanned)
+pub fn main_id(path: &str, format: &str) -> Option<String> {
+    let g = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    let find = |c: &Cache| {
+        c.entries
+            .iter()
+            .find(|e| e.status == "ok" && e.path == path && e.format == format)
+            .and_then(|e| e.main().map(|m| m.desc.id.clone()))
+    };
+    match g.as_ref() {
+        Some(c) => find(c),
+        None => {
+            drop(g);
+            find(&cache())
+        }
+    }
+}
+
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
 
 /// `CHIPWAVE_PLUGIN_CACHE` (tests) or <config>/plugin-cache.json

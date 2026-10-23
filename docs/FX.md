@@ -16,12 +16,12 @@ the DSP never allocates in the audio thread: buffers are built once when a chain
 | Bitcrusher | 0.1.8 | bit depth and sample-rate reduction |
 | Compressor | 0.1.8 | feed-forward peak compressor |
 | Metal resonator, Digital distortion, Sub bass | 0.2.3.11 | the Voice Transform stages as devices ([VOICE.md](VOICE.md)) |
-| **Phaser** | Unreleased | 4–12 all-pass stages swept by an LFO |
-| **Frequency shifter** | Unreleased | Bode-style single-sideband shift, ±2000 Hz |
-| **Plugin effect** | Unreleased | any installed CLAP or VST3 effect, see [Plugin effects](#plugin-effects-clap-unreleased) |
-| **EQ** | Unreleased | 4 bands: low shelf, two peaks (with Q), high shelf, ±18 dB (RBJ Audio EQ Cookbook biquads); flat = bit-exact pass-through |
+| **Phaser** | 0.2.4.1 | 4–12 all-pass stages swept by an LFO |
+| **Frequency shifter** | 0.2.4.1 | Bode-style single-sideband shift, ±2000 Hz |
+| **Plugin effect** | 0.2.4.1 | any installed CLAP or VST3 effect, see [Plugin effects](#plugin-effects-clap-0241) |
+| **EQ** | 0.2.4.1 | 4 bands: low shelf, two peaks (with Q), high shelf, ±18 dB (RBJ Audio EQ Cookbook biquads); flat = bit-exact pass-through |
 
-## Devices tab (Unreleased)
+## Devices tab (0.2.4.1)
 
 The lower panel's **Devices** tab (next to Piano roll; **DEVICES** in the view tab bar, **Ctrl+7**)
 shows the selected track's chain left to right, the way Del (postmanpat) picked from a reference
@@ -54,7 +54,7 @@ row scrolls sideways. How-to text is in the tooltips (hover the **Devices** labe
   | Resonator | ringing decay | Decay, Damp, Mix |
   | Sub | the added octave | Drive, Growl, Mix |
   | Grid FX | the patch's modules + **Edit patch…** | Macro 1–4 (3 on a narrow card) |
-  | Plugin | its thumbnail (Browser › Plugin thumbnails) + **Open** (its own editor) | – |
+  | Plugin | its thumbnail (Browser › VST & CLAP › Plugin thumbnails) + **Open** (its own editor) | – |
 
 - **…** opens a column beside the card with every other parameter (one row each: drag,
   Ctrl-drag fine, double-click default; choices as a menu; right-click a row for automation and
@@ -74,9 +74,9 @@ row scrolls sideways. How-to text is in the tooltips (hover the **Devices** labe
   locks. Automation lanes (`instrument.N.fx.D.*`) and modulation routes follow their device when
   devices move.
 
-## Plugin effects (CLAP, Unreleased)
+## Plugin effects (CLAP, 0.2.4.1)
 
-Any CLAP or VST3 (Unreleased, [PLUGINS.md › VST3](PLUGINS.md#vst3-unreleased)) **audio effect** installed on the computer can sit in an instrument's FX chain, next to
+Any CLAP or VST3 (0.2.4.1, [PLUGINS.md › VST3](PLUGINS.md#vst3-0241)) **audio effect** installed on the computer can sit in an instrument's FX chain, next to
 the built-in devices.
 
 - **Adding one:** every add-effect menu has a **Plugin effect ›** submenu: **+ Device** in the FX
@@ -108,7 +108,7 @@ the built-in devices.
 - The audio thread never allocates: instances are created and dropped on the UI thread, and the
   plugin's parameter events use pre-allocated queues (tested).
 
-**Limits (Unreleased):** only instrument chains have devices; the return buses (fixed Delay /
+**Limits (0.2.4.1):** only instrument chains have devices; the return buses (fixed Delay /
 Reverb) and the master (limiter) don't have FX chains yet, so plugins can't go there. Plugin
 *instruments* aren't latency-compensated. Live playing (the jam chain) isn't compensated either.
 Plugin effect parameters can't be MIDI-learned yet, and `.cwt.toml` text songs can't describe plugin
@@ -122,7 +122,7 @@ gain, polarity flip and a 32-sample reported latency) in the automatic tests, an
 Effects 1.3.4** (GPL-3, built from source, not bundled) on Linux (self-test with
 `CHIPWAVE_SELFTEST_PLUGIN_FX=<file.clap>`, screenshot). Nothing is bundled with ChipWave.
 
-## Phaser (Unreleased)
+## Phaser (0.2.4.1)
 
 A real phaser: a cascade of first-order **all-pass** filters whose corner frequency is swept by an
 LFO, mixed with the dry signal. Where the cascade's phase reaches 180°, 540°, … the wet and dry
@@ -154,7 +154,7 @@ Unit tests check those notch positions for 4/6/8/12 stages (gain under −30 dB 
 stereo phase offsets the right channel. An engine test sweeps the Mix with an automation lane
 and checks that rendering doesn't allocate.
 
-## Frequency shifter (Unreleased)
+## Frequency shifter (0.2.4.1)
 
 Unlike a pitch shifter, a frequency shifter moves **every partial by the same number of Hz**, so
 harmonic sounds turn inharmonic and metallic: a 100 Hz bass with partials at 100, 200, 300 Hz

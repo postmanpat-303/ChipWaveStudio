@@ -1,4 +1,4 @@
-//! Browser panel painting and input (layout of mockup B, docs/BROWSER.md)
+//! Browser panel painting and input (direction A, docs/BROWSER.md)
 use super::browserview::{Act, DropAt};
 use super::*;
 use crate::browser::{self as br, Fmt, Item, LocFilter, Sort, Src, Tab};
@@ -402,7 +402,7 @@ impl App {
         self.br_refresh();
         let mut ops: Vec<Op> = vec![];
         let tab = self.br.filter.tab;
-        // ---- header: chip, tab · count, favourites / rescan / menu
+        // ---- header: the BROWSER chip, a scan in progress, ••• and ×
         ui.horizontal(|ui| {
             let g = egui::RichText::new("BROWSER")
                 .strong()
@@ -410,11 +410,6 @@ impl App {
                 .color(Color32::from_rgb(0x1a, 0x1c, 0x1f))
                 .background_color(rgb(Fmt::Cwi.colour()));
             ui.label(g);
-            let n_tab = if tab == Tab::Racks {
-                self.dev.my_racks.list.len()
-            } else {
-                self.br.items.iter().filter(|i| i.in_tab(tab)).count()
-            };
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
                     .small_button("×")
@@ -423,178 +418,95 @@ impl App {
                 {
                     ops.push(Op::Close);
                 }
-                ui.menu_button("•••", |ui| {
-                    if ui.button("Add folder…").clicked() {
-                        ops.push(Op::AddFolder);
-                        ui.close();
-                    }
-                    if ui.button("Rescan locations").clicked() {
-                        ops.push(Op::Rescan);
-                        ui.close();
-                    }
-                    if ui.button("Find plugins…").clicked() {
-                        ops.push(Op::FindPlugins);
-                        ui.close();
-                    }
-                    if ui.button("Get showcase instruments…").clicked() {
-                        ops.push(Op::GetShowcase);
-                        ui.close();
-                    }
-                    ui.separator();
-                    ui.checkbox(&mut self.extra.browser_autoplay, "Auto-play on select");
-                    ui.checkbox(&mut self.extra.browser_thumbs, "Plugin thumbnails")
-                        .on_hover_text(
-                            "show a small screenshot of each plugin's editor (or a generated card)",
-                        );
-                    let dirs = self.extra.browser_dirs.clone();
-                    if !dirs.is_empty() {
-                        ui.separator();
-                        ui.label(egui::RichText::new("Remove a location").small());
-                        for d in dirs {
-                            if ui.button(format!("× {d}")).clicked() {
-                                ops.push(Op::RemoveFolder(d));
-                                ui.close();
-                            }
-                        }
-                    }
-                });
-                let scanning = self.br.scan_count();
-                let r = icon_button(
-                    ui,
-                    Icon::Rescan,
-                    false,
-                    scanning.is_none(),
-                    "rescan the library and the locations (background)",
-                );
-                if r.clicked() {
-                    ops.push(Op::Rescan);
-                }
-                let fav = self.br.filter.loc == LocFilter::Favourites;
-                if icon_button(ui, Icon::Heart, fav, true, "favourites only").clicked() {
-                    self.br.filter.loc = if fav {
-                        LocFilter::All
-                    } else {
-                        LocFilter::Favourites
-                    };
-                }
-                if let Some(n) = scanning {
+                ui.menu_button("•••", |ui| self.br_menu(ui, &mut ops))
+                    .response
+                    .on_hover_text("rescan, remove a location, find plugins, thumbnails");
+                let busy = self
+                    .br
+                    .scan_count()
+                    .map(|n| format!("{n} files"))
+                    .or_else(|| {
+                        self.plug
+                            .scan
+                            .is_some()
+                            .then(|| "scanning plugins".to_string())
+                    });
+                if let Some(s) = busy {
                     ui.spinner();
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(format!("{n} files"))
-                                .small()
-                                .color(t.ink2),
-                        )
-                        .truncate(),
-                    );
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(s).small().color(t.ink2))
+                                .truncate(),
+                        );
+                    });
                 }
-                // the tab and its count take what the buttons leave (narrow
-                // panels: truncated with "…", never wider than the panel)
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(format!("{} · {n_tab}", tab.name()))
-                                .small()
-                                .color(t.ink2),
-                        )
-                        .truncate(),
-                    );
-                });
             });
         });
-        // ---- category tabs: 4 per row, 3 when the panel is narrow (the
-        // strip wraps into more rows instead of widening the panel)
-        let per_row = if ui.available_width() < 270.0 { 3 } else { 4 };
-        let tw = ((ui.available_width() - 3.0 * (per_row - 1) as f32) / per_row as f32).floor();
-        for row in Tab::ALL.chunks(per_row) {
+        // ---- categories: two rows of three short tiles, the sixth is More
+        // (it takes the name of the category picked from it)
+        let tw = ((ui.available_width() - 6.0) / 3.0).floor();
+        let mut more_r = Rect::NOTHING;
+        for row in 0..2 {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 3.0;
-                for &tb in row {
-                    let (r, resp) = ui.allocate_exact_size(egui::vec2(tw, 40.0), Sense::click());
-                    let on = tb == tab;
-                    let c = rgb(tb.fmt().colour());
-                    let p = ui.painter();
-                    p.rect_filled(
-                        r,
-                        5,
-                        if on {
-                            well(&t, 1.6)
-                        } else if resp.hovered() {
-                            well(&t, 1.3)
-                        } else {
-                            well(&t, 1.0)
-                        },
-                    );
-                    if theme::polished() {
-                        let bg = if on {
-                            well(&t, 1.6)
-                        } else if resp.hovered() {
-                            well(&t, 1.3)
-                        } else {
-                            well(&t, 1.0)
-                        };
-                        let mut m = egui::Mesh::default();
-                        theme::round_mesh(&mut m, r, [5.0; 4], theme::tone(bg, 0.07), theme::tone(bg, -0.10));
-                        p.add(egui::Shape::mesh(m));
-                        theme::raise(p, r, 5.0, on);
-                        if on {
-                            theme::glow(p, r, 5, c.gamma_multiply(0.6));
+                for col in 0..3 {
+                    let k = row * 3 + col;
+                    let (r, resp) = ui.allocate_exact_size(egui::vec2(tw, 28.0), Sense::click());
+                    if let Some(&tb) = Tab::MAIN.get(k) {
+                        if self.br_tile(ui, r, resp, Some(tb)).clicked() {
+                            self.br_set_tab(tb);
+                            self.br.pop = BrPop::None;
                         }
-                    }
-                    if on {
-                        p.rect_filled(
-                            Rect::from_min_max(Pos2::new(r.left() + 4.0, r.bottom() - 2.0), Pos2::new(r.right() - 4.0, r.bottom())),
-                            1,
-                            c,
-                        );
-                    }
-                    icon(p, Icon::Tab(tb), Pos2::new(r.center().x, r.top() + 14.0), 16.0, c);
-                    p.with_clip_rect(r.shrink2(egui::vec2(2.0, 0.0))).text(
-                        Pos2::new(r.center().x, r.bottom() - 10.0),
-                        egui::Align2::CENTER_CENTER,
-                        if tb == Tab::Patterns { "Patterns" } else { tb.name() },
-                        FontId::proportional(11.0),
-                        if on { t.ink } else { t.ink2 },
-                    );
-                    let resp = resp.on_hover_text(match tb {
-                        Tab::Instruments => "instruments: blank synths, generator presets, your .cwi library, this song's instruments",
-                        Tab::Effects => "effects: ChipWave's built-ins, Grid FX patches and your effect plugins; double-click adds to the selected track, or drag into Nested Device Chains or onto a track",
-                        Tab::Plugins => "CLAP and VST3 plugins from the plugin scan (instruments and effects)",
-                        Tab::Samples => "WAV, FLAC, MP3 and Ogg files in your locations",
-                        Tab::Songs => "demo songs and .cwt songs in your locations (MOD/MED: import planned)",
-                        Tab::Presets => "factory presets: load one into the current instrument",
-                        Tab::Grid => "Grid starter patches (instruments and FX)",
-                        Tab::Wavetables => "built-in wavetables and imported wavetable WAVs",
-                        Tab::Midi => "MIDI files in your locations (import planned)",
-                        Tab::Patterns => "Drum Patterns: ready-made grooves by style with their own kit; preview in time with the song, drag onto the timeline",
-                        Tab::Files => "your drives and folders: Home, Music, Desktop, Downloads, network drives",
-                        Tab::Racks => "My Racks: the racks you saved (Save Custom Rack… in Nested Device Chains); double-click loads one onto the selected track",
-                    });
-                    if resp.clicked() && !on {
-                        self.br.filter.tab = tb;
-                        self.br.filter.category = None;
-                        self.br.filter.creator = None;
-                        self.br.filter.tags.clear();
+                    } else {
+                        more_r = r;
+                        if self.br_tile(ui, r, resp, None).clicked() {
+                            self.br.pop = if self.br.pop == BrPop::More {
+                                BrPop::None
+                            } else {
+                                BrPop::More
+                            };
+                        }
                     }
                 }
             });
         }
-        // ---- search
-        ui.add_space(2.0);
-        let se = ui.add(
-            egui::TextEdit::singleline(&mut self.br.filter.query)
-                .id_salt("br_search")
-                .hint_text(format!(
-                    "Search {} · name, tag, creator",
-                    tab.name().to_lowercase()
-                ))
-                .desired_width(f32::INFINITY),
-        );
-        if std::mem::take(&mut self.br.search_focus) {
-            se.request_focus();
+        // ---- search + Filter (the tabs with their own body: search only)
+        ui.add_space(3.0);
+        let own = matches!(tab, Tab::Patterns | Tab::Files | Tab::Racks);
+        let mut filter_r = Rect::NOTHING;
+        ui.horizontal(|ui| {
+            let fw = 88.0;
+            let sw = if own {
+                ui.available_width()
+            } else {
+                ui.available_width() - fw - ui.spacing().item_spacing.x
+            };
+            let what = match tab {
+                Tab::Plugins | Tab::Midi => tab.name().to_string(),
+                _ => tab.name().to_lowercase(),
+            };
+            let se = ui.add(
+                egui::TextEdit::singleline(&mut self.br.filter.query)
+                    .id_salt("br_search")
+                    .hint_text(format!("Search {what}"))
+                    .desired_width(sw),
+            );
+            if std::mem::take(&mut self.br.search_focus) {
+                se.request_focus();
+            }
+            if !own {
+                filter_r = self.br_filter_button(ui, fw);
+            }
+        });
+        // ---- the open popover (drawn on top of everything below)
+        match self.br.pop {
+            BrPop::More => self.br_more_pop(&ctx, more_r),
+            BrPop::Filter if !own => self.br_filter_pop(&ctx, filter_r, full, &mut ops),
+            BrPop::Filter => self.br.pop = BrPop::None,
+            BrPop::None => {}
         }
-        // ---- Drum Patterns / Files: their own body (app/drumpat.rs)
-        if matches!(tab, Tab::Patterns | Tab::Files | Tab::Racks) {
+        // ---- Drum Patterns / Files / My Racks: their own body
+        if own {
             if tab == Tab::Patterns {
                 self.patterns_body(ui);
             } else if tab == Tab::Racks {
@@ -605,328 +517,56 @@ impl App {
             self.br_apply_ops(ops, &ctx);
             return;
         }
-        // ---- tag chips (the ones this tab has)
-        let present: Vec<&'static str> = br::TAG_NAMES
-            .iter()
-            .copied()
-            .filter(|tg| {
-                self.br
-                    .items
-                    .iter()
-                    .any(|i| i.in_tab(tab) && i.tags.contains(tg))
-            })
-            .collect();
-        let n_fav = self
-            .br
-            .items
-            .iter()
-            .filter(|i| i.in_tab(tab) && self.extra.browser_favs.contains(&i.key))
-            .count();
-        {
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = egui::vec2(3.0, 3.0);
-                // Favourites first: the same filter as the heart button
-                let on = self.br.filter.loc == LocFilter::Favourites;
-                let gold = Color32::from_rgb(0xE0, 0xC4, 0x6C);
-                let txt = egui::RichText::new(format!("Favourites · {n_fav}"))
-                    .size(11.0)
-                    .color(if on {
-                        t.ink
-                    } else if t.light {
-                        t.ink2
-                    } else {
-                        gold.gamma_multiply(0.9)
-                    });
-                let b = egui::Button::new(txt)
-                    .corner_radius(9)
-                    .fill(if on { t.sel } else { well(&t, 1.0) })
-                    .stroke(egui::Stroke::new(1.0, if on { t.accent } else { t.border }))
-                    .small();
-                if ui
-                    .add(b)
-                    .on_hover_text("show only your favourites (the heart on a row adds one)")
-                    .clicked()
-                {
-                    self.br.filter.loc = if on {
-                        LocFilter::All
-                    } else {
-                        LocFilter::Favourites
-                    };
-                }
-                for tg in present {
-                    let on = self.br.filter.tags.contains(&tg);
-                    let txt =
-                        egui::RichText::new(tg)
-                            .size(11.0)
-                            .color(if on { t.ink } else { t.ink2 });
-                    let b = egui::Button::new(txt)
-                        .corner_radius(9)
-                        .fill(if on { t.sel } else { well(&t, 1.0) })
-                        .stroke(egui::Stroke::new(1.0, if on { t.accent } else { t.border }))
-                        .small();
-                    if ui.add(b).clicked() {
-                        if on {
-                            self.br.filter.tags.retain(|x| *x != tg);
-                        } else {
-                            self.br.filter.tags.push(tg);
-                        }
-                    }
-                }
-            });
-        }
-        // ---- Category / Creator / Location
-        let favs = self.extra.browser_favs.clone();
-        let cats = br::column_values(
-            &self.br.items,
-            &self.br.filter,
-            &favs,
-            |i| &i.category,
-            true,
-            false,
-        );
-        let crs = br::column_values(
-            &self.br.items,
-            &self.br.filter,
-            &favs,
-            |i| &i.creator,
-            false,
-            true,
-        );
-        let locs = self.br_loc_values();
-        let colw = ((ui.available_width() - 8.0) / 3.0).floor();
-        let col_h = 112.0;
-        let cols_r = Rect::from_min_size(ui.cursor().min, egui::vec2(colw * 3.0 + 8.0, col_h));
-        ui.allocate_rect(cols_r, Sense::hover());
-        let col_rect = |k: usize| {
-            Rect::from_min_size(
-                Pos2::new(cols_r.left() + k as f32 * (colw + 4.0), cols_r.top()),
-                egui::vec2(colw, col_h),
-            )
-        };
-        {
-            let total = |v: &[(String, usize)]| v.iter().map(|x| x.1).sum::<usize>();
-            let col = |ui: &mut egui::Ui,
-                       k: usize,
-                       title: &str,
-                       vals: &[(String, usize)],
-                       cur: Option<String>,
-                       id: &str|
-             -> Option<Option<String>> {
-                let mut pick = None;
-                ui.scope_builder(egui::UiBuilder::new().max_rect(col_rect(k)), |ui| {
-                    ui.set_width(colw);
-                    let r = ui.max_rect();
-                    ui.painter().rect_filled(
-                        Rect::from_min_size(r.min, egui::vec2(colw, col_h)),
-                        3,
-                        well(&t, 0.8),
-                    );
-                    ui.label(
-                        egui::RichText::new(title.to_uppercase())
-                            .size(10.0)
-                            .color(t.ink2),
-                    );
-                    egui::ScrollArea::vertical()
-                        .id_salt(id)
-                        .max_height(col_h - 18.0)
-                        .auto_shrink([false, true])
-                        .show(ui, |ui| {
-                            let row =
-                                |ui: &mut egui::Ui, label: &str, n: usize, on: bool| -> bool {
-                                    let (rr, resp) = ui.allocate_exact_size(
-                                        egui::vec2(colw - 8.0, 17.0),
-                                        Sense::click(),
-                                    );
-                                    let p = ui.painter();
-                                    if on {
-                                        p.rect_filled(rr, 2, t.sel);
-                                    } else if resp.hovered() {
-                                        p.rect_filled(rr, 2, well(&t, 1.4));
-                                    }
-                                    // the label stops before the count (narrow columns)
-                                    let cw = p
-                                        .layout_no_wrap(
-                                            n.to_string(),
-                                            FontId::proportional(10.0),
-                                            t.ink2,
-                                        )
-                                        .size()
-                                        .x;
-                                    let lp = p.with_clip_rect(Rect::from_min_max(
-                                        rr.min + egui::vec2(2.0, 0.0),
-                                        Pos2::new(rr.right() - cw - 6.0, rr.bottom()),
-                                    ));
-                                    lp.text(
-                                        Pos2::new(rr.left() + 4.0, rr.center().y),
-                                        egui::Align2::LEFT_CENTER,
-                                        label,
-                                        FontId::proportional(11.5),
-                                        if on { t.ink } else { t.ink.gamma_multiply(0.9) },
-                                    );
-                                    p.text(
-                                        Pos2::new(rr.right() - 3.0, rr.center().y),
-                                        egui::Align2::RIGHT_CENTER,
-                                        n.to_string(),
-                                        FontId::proportional(10.0),
-                                        t.ink2,
-                                    );
-                                    resp.clicked()
-                                };
-                            if row(ui, "All", total(vals), cur.is_none()) {
-                                pick = Some(None);
-                            }
-                            for (v, n) in vals {
-                                let label = if v.is_empty() { "—" } else { v.as_str() };
-                                if row(ui, label, *n, cur.as_deref() == Some(v.as_str())) {
-                                    pick = Some(Some(v.clone()));
-                                }
-                            }
-                        });
-                });
-                pick
-            };
-            if let Some(p) = col(
-                ui,
-                0,
-                "Category",
-                &cats,
-                self.br.filter.category.clone(),
-                "br_cat",
-            ) {
-                self.br.filter.category = p;
-            }
-            if let Some(p) = col(
-                ui,
-                1,
-                "Creator",
-                &crs,
-                self.br.filter.creator.clone(),
-                "br_creator",
-            ) {
-                self.br.filter.creator = p;
-            }
-            // locations: All, Library, This song, Favourites, each folder
-            ui.scope_builder(egui::UiBuilder::new().max_rect(col_rect(2)), |ui| {
-                ui.set_width(colw);
-                let r = ui.max_rect();
-                ui.painter().rect_filled(Rect::from_min_size(r.min, egui::vec2(colw, col_h)), 3, well(&t, 0.8));
-                ui.label(egui::RichText::new("LOCATION").size(10.0).color(t.ink2));
-                egui::ScrollArea::vertical().id_salt("br_loc").max_height(col_h - 18.0).auto_shrink([false, true]).show(ui, |ui| {
-                    for (lf, label, n) in &locs {
-                        let on = &self.br.filter.loc == lf;
-                        let (rr, resp) = ui.allocate_exact_size(egui::vec2(colw - 8.0, 17.0), Sense::click());
-                        let p = ui.painter();
-                        if on {
-                            p.rect_filled(rr, 2, t.sel);
-                        } else if resp.hovered() {
-                            p.rect_filled(rr, 2, well(&t, 1.4));
-                        }
-                        let cw = p.layout_no_wrap(n.to_string(), FontId::proportional(10.0), t.ink2).size().x;
-                        let lp = p.with_clip_rect(Rect::from_min_max(rr.min + egui::vec2(2.0, 0.0), Pos2::new(rr.right() - cw - 6.0, rr.bottom())));
-                        lp.text(Pos2::new(rr.left() + 4.0, rr.center().y), egui::Align2::LEFT_CENTER, label, FontId::proportional(11.5), t.ink);
-                        p.text(Pos2::new(rr.right() - 3.0, rr.center().y), egui::Align2::RIGHT_CENTER, n.to_string(), FontId::proportional(10.0), t.ink2);
-                        let resp = if let LocFilter::Folder(d) = lf { resp.on_hover_text(d.as_str()) } else { resp };
-                        if resp.clicked() {
-                            self.br.filter.loc = lf.clone();
-                        }
-                        if let LocFilter::Folder(d) = lf {
-                            resp.context_menu(|ui| {
-                                if ui.button("Rescan").clicked() {
-                                    ops.push(Op::Rescan);
-                                    ui.close();
-                                }
-                                if ui.button("Remove this location").clicked() {
-                                    ops.push(Op::RemoveFolder(d.clone()));
-                                    ui.close();
-                                }
-                            });
-                        }
-                    }
-                    if ui.small_button("+ Add folder…").on_hover_text("add a folder of samples, songs, instruments… (scanned in the background)").clicked() {
-                        ops.push(Op::AddFolder);
-                    }
-                });
-            });
-        }
-        // ---- the Effects tab: where a double-click adds (like the reference)
+        // ---- the filters that are on, as removable pills
+        self.br_pills(ui);
+        // ---- the Effects tab: where a double-click adds, one slim line
         if tab == Tab::Effects {
             let to = self.devices_target_label();
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Adds to:").small().color(t.ink2));
-                ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(format!("{to}  (or drag onto a track)"))
-                            .small()
-                            .strong()
-                            .color(t.accent),
+            let shown = self.devices_visible();
+            let r = ui
+                .horizontal(|ui| {
+                    ui.label(egui::RichText::new("Adds to").small().color(t.ink2));
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(to).small().strong().color(t.accent))
+                            .truncate()
+                            .sense(Sense::click()),
                     )
-                    .truncate(),
-                );
-            })
-            .response
-            .on_hover_text(
-                "double-click an effect to add it to the end of this chain; drag it into Nested Device Chains to put it in between, or onto any track",
-            );
-            if !self.devices_visible()
-                && ui
-                    .small_button("Show device chains  Ctrl+7")
-                    .on_hover_text("the chain in the lower panel")
-                    .clicked()
-            {
+                })
+                .inner;
+            let r = r.on_hover_text(if shown {
+                "double-click an effect to add it to the end of this chain; drag it into Nested Device Chains to put it in between, or onto any track"
+            } else {
+                "double-click an effect to add it to the end of this chain, or drag it onto any track; click here to show the chain (Ctrl+7)"
+            });
+            if r.clicked() && !shown {
                 self.vtab_select(super::viewbar::VTab::Devices);
             }
         }
-        // ---- the Plugins tab: find / rescan
+        // ---- VST & CLAP: a plugin file with several classes / programs
+        // lists its main instrument; the rest on request (a search finds them)
         if tab == Tab::Plugins {
-            // wrap onto a second line when narrow
-            ui.horizontal_wrapped(|ui| {
-                if ui
-                    .button("Find plugins…")
-                    .on_hover_text("search your drive for VST3 and CLAP plugin folders")
-                    .clicked()
-                {
-                    ops.push(Op::FindPlugins);
-                }
-                if ui
-                    .button("Get showcase instruments…")
-                    .on_hover_text("download 8 free, open-source instruments from their creators")
-                    .clicked()
-                {
-                    ops.push(Op::GetShowcase);
-                }
-                if ui
-                    .add_enabled(
-                        self.plug.scan.is_none(),
-                        egui::Button::new("Rescan plugins"),
-                    )
-                    .clicked()
-                {
-                    ops.push(Op::PluginRescan);
-                }
-                if self.plug.scan.is_some() {
-                    ui.spinner();
-                }
-            });
+            let extra = self
+                .br
+                .items
+                .iter()
+                .filter(|i| i.sub_program && i.tab == Tab::Plugins)
+                .count();
+            if extra > 0 || self.br.filter.all_programs {
+                ui.checkbox(
+                    &mut self.br.filter.all_programs,
+                    egui::RichText::new(format!("Show all programs ({extra} more)")).small(),
+                )
+                .on_hover_text(
+                    "some plugin files hold several programs (multi-out variants, bundled effects or MIDI tools); the list shows each file's main instrument, tick this to list them all. A search always finds them.",
+                );
+            }
         }
         // ---- results header
         let n = self.br.results.len();
         ui.horizontal(|ui| {
-            let mut what = vec![];
-            what.extend(self.br.filter.tags.iter().map(|s| s.to_string()));
-            if let Some(c) = &self.br.filter.category {
-                what.push(c.clone());
-            }
-            let extra = if what.is_empty() {
-                String::new()
-            } else {
-                format!(" · {}", what.join(" + "))
-            };
-            let label = egui::RichText::new(format!(
-                "{n} result{}{extra}",
-                if n == 1 { "" } else { "s" }
-            ))
-            .small()
-            .color(t.ink2);
+            let label = egui::RichText::new(format!("{n} result{}", if n == 1 { "" } else { "s" }))
+                .small()
+                .color(t.ink2);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 egui::ComboBox::from_id_salt("br_sort")
                     .selected_text(match self.br.filter.sort {
@@ -946,8 +586,8 @@ impl App {
             });
         });
         // ---- results (virtualised rows)
-        let legend_rows = Fmt::ALL.len().div_ceil(3);
-        let bottom_h = 30.0 + 18.0 + legend_rows as f32 * 15.0 + 10.0;
+        // the preview bar (32 px) at the bottom; the list takes the rest
+        let bottom_h = 34.0;
         let list_h = (ui.available_height() - bottom_h).max(60.0);
         let thumbs =
             self.extra.browser_thumbs && matches!(self.br.filter.tab, Tab::Plugins | Tab::Effects);
@@ -1023,7 +663,13 @@ impl App {
                 } else if k % 2 == 1 {
                     p.rect_filled(r, 0, well(&t, 0.6));
                 }
-                let c = rgb(it.fmt.colour());
+                let skin = crate::theme::instskin()
+                    .filter(|_| matches!(it.src, Src::Tool(_)));
+                let c = skin.map_or(rgb(it.fmt.colour()), |s| s.tint);
+                if let Some(s) = skin {
+                    // a built-in instrument row: the skin's wash
+                    p.rect_filled(r, 0, s.wash);
+                }
                 p.rect_filled(
                     Rect::from_min_size(r.min, egui::vec2(4.0, r.height())),
                     0,
@@ -1311,100 +957,15 @@ impl App {
         if n == 0 {
             let msg = match tab {
                 Tab::Samples | Tab::Midi | Tab::Songs if self.extra.browser_dirs.is_empty() => {
-                    "Nothing here yet: add a folder (Location column + Add folder…, or the ••• menu)"
+                    "Nothing here yet: add a folder (Filter › Location › + Add folder…)"
                 }
-                Tab::Plugins => "No plugins found yet: Find plugins… searches your drive, or Get showcase instruments…",
+                Tab::Plugins => "No plugins found yet: ••• › Find plugins… searches your drive, or ••• › Get showcase instruments…",
                 _ => "No matches: clear the search or a filter",
             };
             ui.add(egui::Label::new(egui::RichText::new(msg).small().color(t.ink2)).wrap());
         }
-        // ---- preview bar
-        let bar_top = self.br.rect.bottom() - bottom_h;
-        let bar = Rect::from_min_max(
-            Pos2::new(self.br.rect.left(), bar_top),
-            Pos2::new(self.br.rect.right() - 3.0, bar_top + 30.0),
-        );
-        ui.painter().rect_filled(bar, 0, well(&t, 0.9));
-        let selected = self.br_selected();
-        let playing = self.br.preview_active();
-        ui.scope_builder(
-            egui::UiBuilder::new().max_rect(bar.shrink2(egui::vec2(6.0, 4.0))),
-            |ui| {
-                ui.horizontal_centered(|ui| {
-                    let can = selected.as_ref().is_some_and(|i| i.previewable());
-                    let b = icon_button(
-                        ui,
-                        if playing { Icon::Stop } else { Icon::Play },
-                        playing,
-                        can || playing,
-                        "preview the selected item (Space while the Browser has the keyboard)",
-                    );
-                    if b.clicked() {
-                        if playing {
-                            ops.push(Op::StopPreview);
-                        } else if let Some(i) = &selected {
-                            ops.push(Op::Preview(i.clone()));
-                        }
-                    }
-                    let tname =
-                        self.with(|s| s.song.channel_names.get(ch).cloned().unwrap_or_default());
-                    let text =
-                        format!("Preview on C-3 · plays through track {:02} {tname}", ch + 1);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.checkbox(
-                            &mut self.extra.browser_autoplay,
-                            egui::RichText::new("Auto").size(11.0),
-                        )
-                        .on_hover_text("auto-play: preview each item when it's selected");
-                        // the label gets what is left, truncated with "…"
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            ui.add(
-                                egui::Label::new(
-                                    egui::RichText::new(&text).size(11.0).color(t.ink),
-                                )
-                                .truncate(),
-                            )
-                            .on_hover_text(&text);
-                        });
-                    });
-                });
-            },
-        );
-        // ---- legend
-        let lg = Rect::from_min_max(
-            Pos2::new(self.br.rect.left(), bar.bottom()),
-            Pos2::new(self.br.rect.right() - 3.0, self.br.rect.bottom()),
-        );
-        let p = ui.painter();
-        p.rect_filled(lg, 0, well(&t, 0.7));
-        p.text(
-            Pos2::new(lg.left() + 8.0, lg.top() + 10.0),
-            egui::Align2::LEFT_CENTER,
-            "COLOUR = FORMAT  ·  * import planned",
-            FontId::proportional(9.5),
-            t.ink2,
-        );
-        let cw = (lg.width() - 16.0) / 3.0;
-        for (k, f) in Fmt::ALL.iter().enumerate() {
-            let x = lg.left() + 8.0 + (k % 3) as f32 * cw;
-            let y = lg.top() + 24.0 + (k / 3) as f32 * 15.0;
-            p.rect_filled(
-                Rect::from_center_size(Pos2::new(x + 4.0, y), egui::vec2(9.0, 9.0)),
-                2,
-                rgb(f.colour()),
-            );
-            let lp = p.with_clip_rect(Rect::from_min_max(
-                Pos2::new(x, y - 8.0),
-                Pos2::new(x + cw - 2.0, y + 8.0),
-            ));
-            lp.text(
-                Pos2::new(x + 12.0, y),
-                egui::Align2::LEFT_CENTER,
-                format!("{} {}", f.badge(), f.what()),
-                FontId::proportional(10.0),
-                t.ink2,
-            );
-        }
+        // ---- preview bar (the colour key is its "?")
+        self.br_preview_bar(ui, ch, &mut ops);
         self.br_apply_ops(ops, &ctx);
     }
 
@@ -1472,7 +1033,10 @@ impl App {
                         self.status = format!("Refreshing thumbnail for {}…", f.desc.name);
                     }
                 }
-                Op::Close => self.toggle_browser(),
+                Op::Close => {
+                    self.br.pop = BrPop::None;
+                    self.toggle_browser();
+                }
             }
         }
     }
@@ -1691,5 +1255,784 @@ impl App {
             egui::CursorIcon::NoDrop
         });
         ctx.request_repaint();
+    }
+}
+
+// ------------------------------------------------------------ the top (A)
+
+/// the Browser's open popover: the Filter or the More menu (one at a time;
+/// a click outside or Esc closes it)
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(crate) enum BrPop {
+    #[default]
+    None,
+    Filter,
+    More,
+}
+
+/// a category's name on its tile (short where the tile is small)
+fn tile_name(tb: Tab) -> &'static str {
+    match tb {
+        Tab::Patterns => "Patterns",
+        tb => tb.name(),
+    }
+}
+
+/// the tiles' tooltips
+fn tab_tip(tb: Tab) -> &'static str {
+    match tb {
+        Tab::Instruments => "instruments: blank synths, generator presets, your .cwi library, this song's instruments",
+        Tab::Effects => "effects: ChipWave's built-ins, Grid FX patches and your effect plugins; double-click adds to the selected track, or drag into Nested Device Chains or onto a track",
+        Tab::Plugins => "VST3 and CLAP plugins from the plugin scan: each plugin file's main instrument, plus effect plugins",
+        Tab::Samples => "WAV, FLAC, MP3 and Ogg files in your locations",
+        Tab::Songs => "demo songs and .cwt songs in your locations (MOD/MED: import planned)",
+        Tab::Presets => "factory presets: load one into the current instrument",
+        Tab::Grid => "Grid starter patches (instruments and FX)",
+        Tab::Wavetables => "built-in wavetables and imported wavetable WAVs",
+        Tab::Midi => "MIDI files in your locations (import planned)",
+        Tab::Patterns => "Drum Patterns: ready-made grooves by style with their own kit; preview in time with the song, drag onto the timeline",
+        Tab::Files => "your drives and folders: Home, Music, Desktop, Downloads, network drives",
+        Tab::Racks => "My Racks: the racks you saved (Save Custom Rack… in Nested Device Chains); double-click loads one onto the selected track",
+    }
+}
+
+/// a rounded chip (tags, categories, the active-filter pills)
+fn chip(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
+    let t = th();
+    let b = egui::Button::new(egui::RichText::new(text).size(11.5).color(if on {
+        t.ink
+    } else {
+        t.ink2
+    }))
+    .corner_radius(9)
+    .fill(if on { t.sel } else { well(&t, 1.0) })
+    .stroke(egui::Stroke::new(1.0, if on { t.accent } else { t.border }));
+    ui.add(b)
+}
+
+/// a small caps section heading
+fn heading(ui: &mut egui::Ui, s: &str) {
+    ui.label(egui::RichText::new(s).size(10.0).strong().color(th().ink2));
+}
+
+/// a tile's background (the polished look: bevel and glow), with the
+/// category colour underlined when it is the open one
+fn tile_bg(p: &egui::Painter, r: Rect, on: bool, hot: bool, c: Color32) {
+    let t = th();
+    let bg = if on {
+        well(&t, 1.6)
+    } else if hot {
+        well(&t, 1.3)
+    } else {
+        well(&t, 1.0)
+    };
+    p.rect_filled(r, 5, bg);
+    if theme::polished() {
+        let mut m = egui::Mesh::default();
+        theme::round_mesh(
+            &mut m,
+            r,
+            [5.0; 4],
+            theme::tone(bg, 0.07),
+            theme::tone(bg, -0.10),
+        );
+        p.add(egui::Shape::mesh(m));
+        theme::raise(p, r, 5.0, on);
+        if on {
+            theme::glow(p, r, 5, c.gamma_multiply(0.6));
+        }
+    }
+    if on {
+        p.rect_filled(
+            Rect::from_min_max(
+                Pos2::new(r.left() + 4.0, r.bottom() - 2.0),
+                Pos2::new(r.right() - 4.0, r.bottom()),
+            ),
+            1,
+            c,
+        );
+    }
+}
+
+/// one line of text at `pos` (left-centre), ending in "…" past `max_w`
+fn text_trunc(p: &egui::Painter, pos: Pos2, s: &str, size: f32, col: Color32, max_w: f32) {
+    let mut job =
+        egui::text::LayoutJob::simple_singleline(s.into(), FontId::proportional(size), col);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(max_w.max(8.0));
+    let g = p.layout_job(job);
+    let h = g.size().y;
+    p.galley(pos - egui::vec2(0.0, h / 2.0), g, col);
+}
+
+/// a small "v" chevron
+fn chevron(p: &egui::Painter, c: Pos2, col: Color32) {
+    p.add(egui::Shape::line(
+        vec![
+            c + egui::vec2(-3.5, -1.8),
+            c + egui::vec2(0.0, 1.8),
+            c + egui::vec2(3.5, -1.8),
+        ],
+        egui::Stroke::new(1.5, col),
+    ));
+}
+
+impl App {
+    /// switch category: its own category / creator / tags start cleared
+    /// (search, favourites and location stay)
+    pub(super) fn br_set_tab(&mut self, tb: Tab) {
+        if self.br.filter.tab != tb {
+            self.br.filter.tab = tb;
+            self.br.filter.category = None;
+            self.br.filter.creator = None;
+            self.br.filter.tags.clear();
+            self.br_refresh();
+        }
+    }
+
+    /// the ••• menu: the panel's housekeeping (each action lives only here)
+    fn br_menu(&mut self, ui: &mut egui::Ui, ops: &mut Vec<Op>) {
+        if ui
+            .add_enabled(
+                self.br.scan_count().is_none(),
+                egui::Button::new("Rescan locations"),
+            )
+            .on_hover_text("rescan the library and your folders (in the background)")
+            .clicked()
+        {
+            ops.push(Op::Rescan);
+            ui.close();
+        }
+        let dirs = self.extra.browser_dirs.clone();
+        if !dirs.is_empty() {
+            ui.menu_button("Remove a location", |ui| {
+                for d in dirs {
+                    if ui.button(format!("× {d}")).clicked() {
+                        ops.push(Op::RemoveFolder(d));
+                        ui.close();
+                    }
+                }
+            });
+        }
+        ui.separator();
+        if ui
+            .button("Find plugins…")
+            .on_hover_text("search your drive for VST3 and CLAP plugin folders")
+            .clicked()
+        {
+            ops.push(Op::FindPlugins);
+            ui.close();
+        }
+        if ui
+            .button("Get showcase instruments…")
+            .on_hover_text("download free, open-source instruments from their creators")
+            .clicked()
+        {
+            ops.push(Op::GetShowcase);
+            ui.close();
+        }
+        if ui
+            .add_enabled(
+                self.plug.scan.is_none(),
+                egui::Button::new("Rescan plugins"),
+            )
+            .on_hover_text("scan your plugin folders again (in the background)")
+            .clicked()
+        {
+            ops.push(Op::PluginRescan);
+            ui.close();
+        }
+        ui.separator();
+        ui.checkbox(&mut self.extra.browser_thumbs, "Plugin thumbnails")
+            .on_hover_text("show a small screenshot of each plugin's editor (or a generated card)");
+    }
+
+    /// one category tile (`main` = None: the More tile)
+    fn br_tile(
+        &self,
+        ui: &egui::Ui,
+        r: Rect,
+        resp: egui::Response,
+        main: Option<Tab>,
+    ) -> egui::Response {
+        let t = th();
+        let cur = self.br.filter.tab;
+        let more = main.is_none();
+        let (tb, on) = match main {
+            Some(tb) => (Some(tb), tb == cur),
+            None => {
+                let m = Tab::MORE.contains(&cur);
+                (m.then_some(cur), m)
+            }
+        };
+        let c = tb.map(|x| rgb(x.fmt().colour())).unwrap_or(t.ink2);
+        let p = ui.painter();
+        tile_bg(p, r, on, resp.hovered(), c);
+        // narrow panels: the label without the icon
+        let mut x = r.left() + 7.0;
+        if r.width() >= 92.0 {
+            let ic = Pos2::new(r.left() + 15.0, r.center().y);
+            match tb {
+                Some(tb) => icon(p, Icon::Tab(tb), ic, 14.0, c),
+                None => {
+                    for dx in [-4.0, 0.0, 4.0] {
+                        p.circle_filled(ic + egui::vec2(dx, 0.0), 1.6, t.ink2);
+                    }
+                }
+            }
+            x = r.left() + 27.0;
+        }
+        let label = tb.map(tile_name).unwrap_or("More");
+        let right = if more {
+            r.right() - 16.0
+        } else {
+            r.right() - 4.0
+        };
+        text_trunc(
+            p,
+            Pos2::new(x, r.center().y),
+            label,
+            12.0,
+            if on { t.ink } else { t.ink2 },
+            right - x,
+        );
+        if more {
+            chevron(p, Pos2::new(r.right() - 9.0, r.center().y), t.ink2);
+        }
+        let tip = match (main, tb) {
+            (Some(tb), _) => tab_tip(tb).to_string(),
+            (None, Some(tb)) => format!("{}\n\nClick for the other categories", tab_tip(tb)),
+            (None, None) => {
+                "My Racks, Presets, Grid, Wavetables, MIDI, Drum Patterns, Files".to_string()
+            }
+        };
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::accesskit::Role::Button, true, label));
+        resp.on_hover_text(tip)
+    }
+
+    /// the Filter button: "Filter", or "Filter · n" when n filters are on
+    fn br_filter_button(&mut self, ui: &mut egui::Ui, w: f32) -> Rect {
+        let t = th();
+        let n = self.br_filter_count();
+        let open = self.br.pop == BrPop::Filter;
+        let (r, resp) = ui.allocate_exact_size(egui::vec2(w, 22.0), Sense::click());
+        let p = ui.painter();
+        p.rect_filled(r, 4, if open { t.sel } else { well(&t, 1.0) });
+        p.rect_stroke(
+            r,
+            4,
+            egui::Stroke::new(1.0, if open || n > 0 { t.accent } else { t.border }),
+            egui::StrokeKind::Inside,
+        );
+        // a funnel
+        let c = Pos2::new(r.left() + 11.0, r.center().y);
+        p.add(egui::Shape::convex_polygon(
+            vec![
+                c + egui::vec2(-5.0, -4.5),
+                c + egui::vec2(5.0, -4.5),
+                c + egui::vec2(1.2, 0.5),
+                c + egui::vec2(-1.2, 0.5),
+            ],
+            t.ink2,
+            egui::Stroke::NONE,
+        ));
+        p.rect_filled(
+            Rect::from_min_max(c + egui::vec2(-1.2, 0.0), c + egui::vec2(1.2, 5.0)),
+            0,
+            t.ink2,
+        );
+        let label = if n > 0 {
+            format!("Filter · {n}")
+        } else {
+            "Filter".into()
+        };
+        text_trunc(
+            p,
+            Pos2::new(r.left() + 20.0, r.center().y),
+            &label,
+            12.0,
+            t.ink,
+            w - 36.0,
+        );
+        chevron(p, Pos2::new(r.right() - 9.0, r.center().y), t.ink2);
+        resp.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::accesskit::Role::Button, true, label.clone())
+        });
+        if resp
+            .on_hover_text("favourites, tags, category, creator and location")
+            .clicked()
+        {
+            self.br.pop = if open { BrPop::None } else { BrPop::Filter };
+        }
+        r
+    }
+
+    /// how many filters are on (the Filter button's count)
+    pub(super) fn br_filter_count(&self) -> usize {
+        let f = &self.br.filter;
+        f.tags.len()
+            + f.category.is_some() as usize
+            + f.creator.is_some() as usize
+            + (f.loc != LocFilter::All) as usize
+    }
+
+    /// the filters that are on, as pills under the search; × removes one
+    fn br_pills(&mut self, ui: &mut egui::Ui) {
+        let f = &self.br.filter;
+        // 0 location (favourites or a place), 1 category, 2 creator, 3 tag
+        let mut pills: Vec<(u8, String)> = vec![];
+        match &f.loc {
+            LocFilter::All => {}
+            LocFilter::Favourites => pills.push((0, "♥ Favourites".into())),
+            lf => {
+                let name = self
+                    .br_loc_values()
+                    .into_iter()
+                    .find(|l| &l.0 == lf)
+                    .map(|l| l.1)
+                    .unwrap_or_else(|| "Location".into());
+                pills.push((0, name));
+            }
+        }
+        if let Some(c) = &f.category {
+            pills.push((
+                1,
+                if c.is_empty() {
+                    "—".into()
+                } else {
+                    c.clone()
+                },
+            ));
+        }
+        if let Some(c) = &f.creator {
+            pills.push((
+                2,
+                if c.is_empty() {
+                    "—".into()
+                } else {
+                    c.clone()
+                },
+            ));
+        }
+        for tg in &f.tags {
+            pills.push((3, tg.to_string()));
+        }
+        if pills.is_empty() {
+            return;
+        }
+        let mut drop = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(4.0, 3.0);
+            for (k, s) in &pills {
+                if chip(ui, &format!("{s}  ×"), true)
+                    .on_hover_text("remove this filter")
+                    .clicked()
+                {
+                    drop = Some((*k, s.clone()));
+                }
+            }
+        });
+        if let Some((k, s)) = drop {
+            let f = &mut self.br.filter;
+            match k {
+                0 => f.loc = LocFilter::All,
+                1 => f.category = None,
+                2 => f.creator = None,
+                _ => f.tags.retain(|x| *x != s),
+            }
+            self.br_refresh();
+        }
+    }
+
+    /// close `self.br.pop` on a press outside `area` and `trigger` (not
+    /// while one of its own drop-downs is open)
+    fn br_pop_outside(&mut self, ctx: &egui::Context, area: Rect, trigger: Rect) {
+        if !ctx.input(|i| i.pointer.any_pressed()) || egui::Popup::is_any_open(ctx) {
+            return;
+        }
+        if let Some(p) = ctx.input(|i| i.pointer.interact_pos()) {
+            if !area.contains(p) && !trigger.contains(p) {
+                self.br.pop = BrPop::None;
+            }
+        }
+    }
+
+    /// the Filter popover: favourites, tags, category, creator, location
+    fn br_filter_pop(&mut self, ctx: &egui::Context, at: Rect, full: Rect, ops: &mut Vec<Op>) {
+        let tab = self.br.filter.tab;
+        let present: Vec<&'static str> = br::TAG_NAMES
+            .iter()
+            .copied()
+            .filter(|tg| {
+                self.br
+                    .items
+                    .iter()
+                    .any(|i| i.in_tab(tab) && i.tags.contains(tg))
+            })
+            .collect();
+        let favs = self.extra.browser_favs.clone();
+        let n_fav = self
+            .br
+            .items
+            .iter()
+            .filter(|i| i.in_tab(tab) && favs.contains(&i.key))
+            .count();
+        let cats = br::column_values(
+            &self.br.items,
+            &self.br.filter,
+            &favs,
+            |i| &i.category,
+            true,
+            false,
+        );
+        let crs = br::column_values(
+            &self.br.items,
+            &self.br.filter,
+            &favs,
+            |i| &i.creator,
+            false,
+            true,
+        );
+        // Favourites is the chip above, not a place
+        let locs: Vec<_> = self
+            .br_loc_values()
+            .into_iter()
+            .filter(|l| l.0 != LocFilter::Favourites)
+            .collect();
+        let w = full.width() - 12.0;
+        let pos = Pos2::new(full.left() + 5.0, at.bottom() + 3.0);
+        let max_h = (full.bottom() - 40.0 - pos.y).max(120.0);
+        let mut changed = false;
+        let area = egui::Area::new(egui::Id::unique("br_filter_pop"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(pos)
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.set_width(w - 14.0);
+                    egui::ScrollArea::vertical()
+                        .id_salt("br_filter_pop_scroll")
+                        .max_height(max_h)
+                        .show(ui, |ui| {
+                            ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
+                            ui.horizontal(|ui| {
+                                heading(ui, "SHOW");
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui
+                                            .small_button("Clear all")
+                                            .on_hover_text("every filter off (the search stays)")
+                                            .clicked()
+                                        {
+                                            let f = &mut self.br.filter;
+                                            f.tags.clear();
+                                            f.category = None;
+                                            f.creator = None;
+                                            f.loc = LocFilter::All;
+                                            changed = true;
+                                        }
+                                    },
+                                );
+                            });
+                            ui.horizontal_wrapped(|ui| {
+                                let fav = self.br.filter.loc == LocFilter::Favourites;
+                                if chip(ui, &format!("♥ Favourites  {n_fav}"), fav)
+                                    .on_hover_text(
+                                        "show only your favourites (the heart on a row adds one)",
+                                    )
+                                    .clicked()
+                                {
+                                    self.br.filter.loc = if fav {
+                                        LocFilter::All
+                                    } else {
+                                        LocFilter::Favourites
+                                    };
+                                    changed = true;
+                                }
+                                for tg in &present {
+                                    let on = self.br.filter.tags.contains(tg);
+                                    if chip(ui, tg, on).clicked() {
+                                        if on {
+                                            self.br.filter.tags.retain(|x| x != tg);
+                                        } else {
+                                            self.br.filter.tags.push(tg);
+                                        }
+                                        changed = true;
+                                    }
+                                }
+                            });
+                            ui.add_space(2.0);
+                            heading(ui, "CATEGORY");
+                            ui.horizontal_wrapped(|ui| {
+                                let all: usize = cats.iter().map(|c| c.1).sum();
+                                if chip(
+                                    ui,
+                                    &format!("All  {all}"),
+                                    self.br.filter.category.is_none(),
+                                )
+                                .clicked()
+                                {
+                                    self.br.filter.category = None;
+                                    changed = true;
+                                }
+                                for (c, n) in &cats {
+                                    let on = self.br.filter.category.as_deref() == Some(c.as_str());
+                                    let name = if c.is_empty() { "—" } else { c.as_str() };
+                                    if chip(ui, &format!("{name}  {n}"), on).clicked() {
+                                        self.br.filter.category =
+                                            if on { None } else { Some(c.clone()) };
+                                        changed = true;
+                                    }
+                                }
+                            });
+                            ui.add_space(2.0);
+                            let cw = (w - 110.0).max(80.0);
+                            egui::Grid::new("br_filter_pop_grid")
+                                .num_columns(2)
+                                .spacing(egui::vec2(8.0, 6.0))
+                                .show(ui, |ui| {
+                                    heading(ui, "CREATOR");
+                                    let cur = self.br.filter.creator.clone();
+                                    egui::ComboBox::from_id_salt("br_creator")
+                                        .selected_text(
+                                            cur.clone().unwrap_or_else(|| "Anyone".into()),
+                                        )
+                                        .width(cw)
+                                        .truncate()
+                                        .show_ui(ui, |ui| {
+                                            if ui.selectable_label(cur.is_none(), "Anyone").clicked()
+                                            {
+                                                self.br.filter.creator = None;
+                                                changed = true;
+                                            }
+                                            for (c, n) in &crs {
+                                                let name =
+                                                    if c.is_empty() { "—" } else { c.as_str() };
+                                                if ui
+                                                    .selectable_label(
+                                                        cur.as_deref() == Some(c.as_str()),
+                                                        format!("{name}  ({n})"),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    self.br.filter.creator = Some(c.clone());
+                                                    changed = true;
+                                                }
+                                            }
+                                        });
+                                    ui.end_row();
+                                    heading(ui, "LOCATION");
+                                    let cur = locs
+                                        .iter()
+                                        .find(|l| l.0 == self.br.filter.loc)
+                                        .map(|l| l.1.clone())
+                                        .unwrap_or_else(|| "All".into());
+                                    egui::ComboBox::from_id_salt("br_loc")
+                                        .selected_text(cur)
+                                        .width(cw)
+                                        .truncate()
+                                        .show_ui(ui, |ui| {
+                                            for (lf, name, n) in &locs {
+                                                let r = ui.selectable_label(
+                                                    &self.br.filter.loc == lf,
+                                                    format!("{name}  ({n})"),
+                                                );
+                                                let r = if let LocFilter::Folder(d) = lf {
+                                                    r.on_hover_text(d.as_str())
+                                                } else {
+                                                    r
+                                                };
+                                                if r.clicked() {
+                                                    self.br.filter.loc = lf.clone();
+                                                    changed = true;
+                                                }
+                                            }
+                                        });
+                                    ui.end_row();
+                                    ui.label("");
+                                    if ui
+                                        .small_button("+ Add folder…")
+                                        .on_hover_text(
+                                            "add a folder of samples, songs, instruments… (scanned in the background); ••• removes one",
+                                        )
+                                        .clicked()
+                                    {
+                                        ops.push(Op::AddFolder);
+                                    }
+                                    ui.end_row();
+                                });
+                        });
+                });
+            });
+        if changed {
+            self.br_refresh();
+        }
+        self.br_pop_outside(ctx, area.response.rect, at);
+    }
+
+    /// the More menu: the other seven categories, a line about each
+    fn br_more_pop(&mut self, ctx: &egui::Context, at: Rect) {
+        let t = th();
+        let w = 232.0;
+        let pos = Pos2::new((at.right() - w).min(at.left()), at.bottom() + 3.0);
+        let mut pick = None;
+        let area = egui::Area::new(egui::Id::unique("br_more_pop"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(pos)
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.set_width(w - 14.0);
+                    for tb in Tab::MORE {
+                        let (r, resp) =
+                            ui.allocate_exact_size(egui::vec2(w - 14.0, 34.0), Sense::click());
+                        let p = ui.painter();
+                        if tb == self.br.filter.tab {
+                            p.rect_filled(r, 3, t.sel);
+                        } else if resp.hovered() {
+                            p.rect_filled(r, 3, well(&t, 1.4));
+                        }
+                        let c = rgb(tb.fmt().colour());
+                        icon(
+                            p,
+                            Icon::Tab(tb),
+                            Pos2::new(r.left() + 13.0, r.center().y),
+                            14.0,
+                            c,
+                        );
+                        text_trunc(
+                            p,
+                            Pos2::new(r.left() + 28.0, r.top() + 11.0),
+                            tb.name(),
+                            12.5,
+                            t.ink,
+                            r.width() - 32.0,
+                        );
+                        text_trunc(
+                            p,
+                            Pos2::new(r.left() + 28.0, r.top() + 25.0),
+                            tb.blurb(),
+                            10.5,
+                            t.ink2,
+                            r.width() - 32.0,
+                        );
+                        resp.widget_info(|| {
+                            egui::WidgetInfo::labeled(
+                                egui::accesskit::Role::Button,
+                                true,
+                                tb.name(),
+                            )
+                        });
+                        if resp.on_hover_text(tab_tip(tb)).clicked() {
+                            pick = Some(tb);
+                        }
+                    }
+                });
+            });
+        if let Some(tb) = pick {
+            self.br_set_tab(tb);
+            self.br.pop = BrPop::None;
+            self.br.focus = true;
+        } else {
+            self.br_pop_outside(ctx, area.response.rect, at);
+        }
+    }
+
+    /// the preview bar along the bottom: play / stop, where it plays, Auto,
+    /// and "?" with the colour key
+    fn br_preview_bar(&mut self, ui: &mut egui::Ui, ch: usize, ops: &mut Vec<Op>) {
+        let t = th();
+        let full = self.br.rect;
+        let bar = Rect::from_min_max(
+            Pos2::new(full.left(), full.bottom() - 32.0),
+            Pos2::new(full.right() - 3.0, full.bottom()),
+        );
+        ui.painter().rect_filled(bar, 0, well(&t, 0.9));
+        ui.painter()
+            .hline(bar.x_range(), bar.top(), egui::Stroke::new(1.0, t.border));
+        let selected = self.br_selected();
+        let playing = self.br.preview_active();
+        let tname = self.with(|s| s.song.channel_names.get(ch).cloned().unwrap_or_default());
+        let text = format!("Preview on C-3 · plays through track {:02} {tname}", ch + 1);
+        ui.scope_builder(
+            egui::UiBuilder::new().max_rect(bar.shrink2(egui::vec2(6.0, 4.0))),
+            |ui| {
+                ui.horizontal_centered(|ui| {
+                    let can = selected.as_ref().is_some_and(|i| i.previewable());
+                    let b = icon_button(
+                        ui,
+                        if playing { Icon::Stop } else { Icon::Play },
+                        playing,
+                        can || playing,
+                        "preview the selected item (Space while the Browser has the keyboard)",
+                    );
+                    if b.clicked() {
+                        if playing {
+                            ops.push(Op::StopPreview);
+                        } else if let Some(i) = &selected {
+                            ops.push(Op::Preview(i.clone()));
+                        }
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // the colour key, on hover
+                        let (r, resp) =
+                            ui.allocate_exact_size(egui::vec2(18.0, 18.0), Sense::hover());
+                        let hot = resp.hovered();
+                        ui.painter().circle_stroke(
+                            r.center(),
+                            8.0,
+                            egui::Stroke::new(1.0, if hot { t.ink } else { t.ink2 }),
+                        );
+                        ui.painter().text(
+                            r.center(),
+                            egui::Align2::CENTER_CENTER,
+                            "?",
+                            FontId::proportional(11.0),
+                            if hot { t.ink } else { t.ink2 },
+                        );
+                        resp.widget_info(|| {
+                            egui::WidgetInfo::labeled(
+                                egui::accesskit::Role::Button,
+                                true,
+                                "Colour key",
+                            )
+                        });
+                        resp.on_hover_ui(|ui| {
+                            ui.label(egui::RichText::new("Colour = format").strong());
+                            egui::Grid::new("br_colour_key")
+                                .num_columns(4)
+                                .spacing(egui::vec2(6.0, 4.0))
+                                .show(ui, |ui| {
+                                    for (k, f) in Fmt::ALL.iter().enumerate() {
+                                        let (r, _) = ui.allocate_exact_size(
+                                            egui::vec2(34.0, 14.0),
+                                            Sense::hover(),
+                                        );
+                                        badge(ui.painter(), r, *f);
+                                        ui.label(f.what());
+                                        if k % 2 == 1 {
+                                            ui.end_row();
+                                        }
+                                    }
+                                });
+                            ui.label(egui::RichText::new("* import planned").small());
+                        });
+                        ui.checkbox(
+                            &mut self.extra.browser_autoplay,
+                            egui::RichText::new("Auto").size(11.0),
+                        )
+                        .on_hover_text("auto-play: preview each item when it's selected");
+                        // the label gets what is left, truncated with "…"
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(&text).size(11.0).color(t.ink),
+                                )
+                                .truncate(),
+                            )
+                            .on_hover_text(&text);
+                        });
+                    });
+                });
+            },
+        );
     }
 }

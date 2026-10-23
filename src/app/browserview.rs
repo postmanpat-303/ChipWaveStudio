@@ -101,6 +101,9 @@ pub(crate) struct BrowserUi {
     pub(crate) load: Option<LoadJob>,
     /// "Add track with instrument…": the next load makes a track here
     pub(crate) new_track_at: Option<usize>,
+    /// ... and gets an empty 1-bar pattern at the play marker (the track
+    /// pie's Drum pattern › Browse… / Drum Kit › More kits…)
+    pub(crate) new_track_pattern: bool,
     /// the track pie's Change instrument… / Drum pattern…: the next load
     /// from this tab goes to this track
     pub(crate) track_target: Option<(usize, Tab)>,
@@ -125,6 +128,8 @@ pub(crate) struct BrowserUi {
     pub(crate) thumb_tex: std::collections::HashMap<String, egui::TextureHandle>,
     /// keys we already asked the capture queue for this session
     pub(crate) thumb_asked: std::collections::HashSet<String>,
+    /// the open popover (Filter or More)
+    pub(crate) pop: super::browserpanel::BrPop,
 }
 
 impl Default for BrowserUi {
@@ -151,6 +156,7 @@ impl Default for BrowserUi {
             preview_until: None,
             load: None,
             new_track_at: None,
+            new_track_pattern: false,
             track_target: None,
             drag: None,
             scroll_sel: false,
@@ -164,6 +170,7 @@ impl Default for BrowserUi {
             open_tries: 0,
             thumb_tex: Default::default(),
             thumb_asked: Default::default(),
+            pop: Default::default(),
         }
     }
 }
@@ -704,6 +711,11 @@ impl App {
     pub(crate) fn br_load(&mut self, it: &Item, ctx: &egui::Context) {
         self.br_stop_preview();
         if let Some(at) = self.br.new_track_at.take() {
+            let pattern = std::mem::take(&mut self.br.new_track_pattern);
+            if is_instrumentish(it) && pattern {
+                self.br_load_pattern_track(it, at);
+                return;
+            }
             if is_instrumentish(it) {
                 self.br_load_new_track(it, at);
                 return;
@@ -799,6 +811,29 @@ impl App {
             self.br.open_after = open;
             self.br.open_tries = 30;
         }
+    }
+
+    /// a new track at `at` with `it` and an empty 1-bar pattern at the
+    /// play marker, open in the step sequencer / piano roll: one undo step
+    /// (a load that finishes on a worker makes the track only)
+    fn br_load_pattern_track(&mut self, it: &Item, at: usize) {
+        self.snapshot();
+        self.undo_hold += 1;
+        self.br_load_new_track(it, at);
+        let made = self.br.load.is_none()
+            && self.with(|s| s.song.channels) > at
+            && self.track_slot(at) > 0;
+        if made {
+            if let Some((_, bar)) = self.track_add_empty_pattern(at) {
+                self.br.open_after = OpenAfter::None;
+                self.status = format!(
+                    "New track {:02} {}: an empty 1-bar pattern at bar {bar} (Ctrl+Z undoes it all)",
+                    at + 1,
+                    it.name
+                );
+            }
+        }
+        self.undo_hold -= 1;
     }
 
     fn br_open_kind(&self, it: &Item) -> OpenAfter {
@@ -1238,6 +1273,9 @@ impl App {
                 } else if let Some(it) = self.br_selected() {
                     self.br_preview(&it);
                 }
+            }
+            Key::Escape if self.br.pop != super::browserpanel::BrPop::None => {
+                self.br.pop = super::browserpanel::BrPop::None;
             }
             Key::Escape => {
                 self.br.focus = false;

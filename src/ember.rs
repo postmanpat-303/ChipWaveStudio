@@ -24,8 +24,6 @@ pub const GRID: Color32 = hex(0x262A2F);
 pub const GRID2: Color32 = hex(0x30353B);
 pub const AMBER: Color32 = hex(0xFFD36A);
 pub const RED: Color32 = hex(0xFF5A3C);
-pub const KNOB_WELL: Color32 = hex(0x1A100D);
-pub const LED_BED: Color32 = hex(0x1E1513);
 /// unselected piano-roll notes
 pub const NOTE: Color32 = hex(0xCBCDD2);
 
@@ -90,12 +88,6 @@ fn stops(s: &[(f32, Color32)], k: f32) -> Color32 {
     s.last().map(|x| x.1).unwrap_or_default()
 }
 
-/// accent ramp of the LED arc: acc-deep › acc › acc-hot
-pub fn ramp(k: f32) -> Color32 {
-    let t = th();
-    stops(&[(0.0, t.acc_deep), (0.55, t.accent), (1.0, t.acc_hot)], k)
-}
-
 // ---------------------------------------------------------------- surfaces
 
 /// pic-2 bevelled panel: bg2 › bg1, 1 px edge, inner top highlight and
@@ -144,6 +136,9 @@ pub fn bevel(p: &Painter, r: Rect, rad: f32) {
 /// a section card inside a panel (instrument sections, Devices cards)
 pub fn card(p: &Painter, r: Rect) {
     panel(p, r, 6);
+    if let Some(s) = crate::theme::active_skin() {
+        s.panel(p, r, 6.0);
+    }
     screws(p, r);
 }
 
@@ -434,186 +429,176 @@ pub fn db_frac(db: f32) -> f32 {
 
 // ------------------------------------------------------------------ knobs
 
-/// pic-1 knob: bed, segmented LED arc with bloom, silver ring with a
-/// notch, glossy dark well, orange readout (dim when `lit` is false).
-/// `rad` is the outer radius (r 50 of the 100-unit design box).
-pub fn knob_big(
-    p: &Painter,
-    c: Pos2,
-    rad: f32,
-    frac: f32,
-    bipolar: bool,
-    readout: &str,
-    lit: bool,
-) {
-    let t = th();
-    let s = rad / 50.0;
-    let frac = frac.clamp(0.0, 1.0);
-    // 1 bed
-    p.circle_filled(c, 49.3 * s, Color32::from_black_alpha(140));
-    p.circle_stroke(c, 43.3 * s, Stroke::new(10.0 * s, LED_BED));
-    // 2-3 LED arc + bloom
-    let segs = 31;
-    let on = |k: f32| {
-        if bipolar {
-            let (a, b) = if frac < 0.5 { (frac, 0.5) } else { (0.5, frac) };
-            k >= a - 0.017 && k <= b + 0.017
-        } else {
-            k <= frac + 0.017 && frac > 0.004
-        }
-    };
-    let w = (3.3 * s).max(1.2);
-    let seg = |k: f32, width: f32, col: Color32| {
-        let a = knob_angle(k);
-        p.line_segment(
-            [at(c, 39.5 * s, a), at(c, 47.0 * s, a)],
-            Stroke::new(width, col),
-        );
-    };
-    if bloom() {
-        for i in 0..segs {
-            let k = i as f32 / (segs - 1) as f32;
-            if on(k) {
-                let col = ramp(k);
-                seg(k, w + 5.0 * s.max(0.5), alpha(col, 0.10));
-                seg(k, w + 2.5 * s.max(0.5), alpha(col, 0.20));
-            }
-        }
-    }
-    for i in 0..segs {
-        let k = i as f32 / (segs - 1) as f32;
-        seg(k, w, if on(k) { ramp(k) } else { t.led_off });
-    }
-    // 4 silver ring
-    p.circle_filled(
-        c + Vec2::new(0.0, 2.0 * s),
-        35.0 * s,
-        Color32::from_black_alpha(110),
-    );
-    disc(p, c, 34.0 * s, false, |k| {
-        stops(
-            &[
-                (0.0, hex(0xF7F5F2)),
-                (0.35, hex(0xD3CEC9)),
-                (0.75, hex(0x8E8781)),
-                (1.0, hex(0x4C4642)),
-            ],
-            k,
-        )
-    });
-    let a = knob_angle(frac);
-    p.line_segment(
-        [at(c, 25.5 * s, a), at(c, 33.4 * s, a)],
-        Stroke::new((2.4 * s).max(1.2), hex(0x2A2522)),
-    );
-    // 5 glossy well
-    let warm = mix(KNOB_WELL, t.accent, 0.10);
-    disc(p, c, 25.0 * s, false, |k| {
-        stops(&[(0.0, warm), (0.6, KNOB_WELL), (1.0, hex(0x0B0706))], k)
-    });
-    p.circle_stroke(c, 25.0 * s, Stroke::new(1.0, hex(0x0B0706)));
-    p.circle_stroke(c, 24.2 * s, Stroke::new(0.8, alpha(t.accent, 0.32)));
-    // gloss: a faint arc across the top
-    let gl: Vec<Pos2> = (0..=10)
-        .map(|i| at(c, 19.0 * s, (205.0 + 13.0 * i as f32).to_radians()))
-        .collect();
-    p.add(egui::Shape::line(
-        gl,
-        Stroke::new(2.4 * s, Color32::from_white_alpha(16)),
-    ));
-    // 6 readout
-    let n = readout.chars().count();
-    let size = match n {
-        0..=2 => 17.0,
-        3 => 15.0,
-        4 => 12.5,
-        _ => 10.5,
-    } * s;
-    let col = if lit { t.acc_hot } else { INK3 };
-    if size >= 5.0 {
-        glow_text(
-            p,
-            c + Vec2::new(0.0, 0.5),
-            Align2::CENTER_CENTER,
-            readout,
-            num_font(size),
-            col,
-            lit,
-        );
+/// What a studio knob shows besides its position (`knob_studio`).
+#[derive(Clone, Copy, Default)]
+pub struct StudioKnob<'a> {
+    /// 0..1 position
+    pub frac: f32,
+    /// the dot ring lights from the centre (pan, detune...)
+    pub bipolar: bool,
+    /// drawn in caps above the knob ("" = none)
+    pub title: &'a str,
+    /// drawn in orange under the knob ("" = none)
+    pub value: &'a str,
+    /// scale numbers around the knob at (text, 0..1 position); the one
+    /// nearest the value is orange. Empty: `min_max` instead.
+    pub scale: &'a [(&'a str, f32)],
+    /// end labels at the bottom left and right ("" = none)
+    pub min_max: (&'a str, &'a str),
+    /// dots in the ring (0 = by size)
+    pub dots: usize,
+    /// 0..1 opacity (disabled knobs)
+    pub dim: f32,
+    /// a locked value (Dice / Mutate keep it): the ring lights in ink
+    pub locked: bool,
+}
+
+/// the gap between a studio knob of radius `rad` and its dot ring
+fn studio_gap(rad: f32) -> f32 {
+    if rad < 12.0 {
+        3.0
+    } else {
+        (rad * 0.2).max(4.0)
     }
 }
 
-/// pic-2 knob: knurled dark cap, inner face, acc-hot pointer with a slight
-/// glow, a tick ring (nearest tick in acc-hot). `rad` = outer radius of the
-/// tick ring (r 46 of the 100-unit box). `labels` (value, fraction) are
-/// drawn at the tick points (the scale variant).
-pub fn knob_small(p: &Painter, c: Pos2, rad: f32, frac: f32, labels: &[(&str, f32)]) {
+/// the dot size of a studio knob of radius `rad`
+fn studio_dot(rad: f32) -> f32 {
+    (rad * 0.06).clamp(1.1, 2.2)
+}
+
+/// the largest studio knob radius whose dot ring stays inside `outer`
+/// (a knob that replaces an older one keeps its footprint)
+pub fn studio_rad(outer: f32) -> f32 {
+    let mut r = outer;
+    while r > 4.0 && r + studio_gap(r) + studio_dot(r) > outer {
+        r -= 0.25;
+    }
+    r
+}
+
+/// The studio knob: a matte dark hardware knob with a ridged edge, one
+/// thin orange pointer, a ring of small dots lit orange up to the value,
+/// scale numbers (or min / max) outside, the title in caps above and the
+/// value in orange below. `rad` is the knob's outer radius; the dots sit
+/// at 1.2 x and the labels at about 1.55 x it. Readable from `rad` 11 up:
+/// under 18 the scale and end labels are left out.
+pub fn knob_studio(p: &Painter, c: Pos2, rad: f32, k: &StudioKnob) {
     let t = th();
-    let s = rad / 46.0;
-    let frac = frac.clamp(0.0, 1.0);
-    // tick ring
-    let near = (frac * 10.0).round() as usize;
-    for i in 0..11 {
-        let a = knob_angle(i as f32 / 10.0);
-        let col = if i == near { t.acc_hot } else { INK3 };
-        p.line_segment(
-            [at(c, 39.0 * s, a), at(c, 46.0 * s, a)],
-            Stroke::new((1.6 * s).max(1.0), col),
-        );
+    let mut kp = p.clone();
+    if k.dim < 1.0 {
+        kp.multiply_opacity(k.dim.clamp(0.3, 1.0));
     }
-    // cap
-    p.circle_filled(
-        c + Vec2::new(0.0, 1.8 * s),
-        33.0 * s,
-        Color32::from_black_alpha(120),
-    );
-    disc(p, c, 32.0 * s, false, |k| {
-        stops(
-            &[
-                (0.0, hex(0x5A5F66)),
-                (0.5, hex(0x2C3035)),
-                (1.0, hex(0x16181B)),
-            ],
-            k,
-        )
-    });
-    // knurl
-    let circ = std::f32::consts::TAU * 30.0 * s;
-    let n = ((circ / 2.8) as usize).clamp(16, 60) / 2 * 2;
+    let p = &kp;
+    let frac = k.frac.clamp(0.0, 1.0);
+    let orange = crate::theme::skin_or(t.acc_hot);
+    let readout = crate::theme::active_skin().map_or(orange, |s| s.text);
+    let small = rad < 18.0;
+    // dot ring
+    let n = if k.dots > 1 {
+        k.dots
+    } else if rad >= 24.0 {
+        15
+    } else if rad >= 16.0 {
+        11
+    } else {
+        9
+    };
+    let dr = studio_dot(rad);
+    let ring = rad + studio_gap(rad);
+    let lit_col = if k.locked { t.ink2 } else { orange };
     for i in 0..n {
-        let a = i as f32 / n as f32 * std::f32::consts::TAU;
-        let col = if i % 2 == 0 {
-            Color32::from_white_alpha(26)
+        let f = i as f32 / (n - 1) as f32;
+        let half = 0.5 / (n - 1) as f32;
+        let lit = if k.bipolar {
+            let (a, b) = if frac < 0.5 { (frac, 0.5) } else { (0.5, frac) };
+            f >= a - half && f <= b + half
         } else {
-            Color32::from_black_alpha(70)
+            frac > 0.004 && f <= frac + half
         };
-        p.line_segment(
-            [at(c, 28.0 * s, a), at(c, 32.0 * s, a)],
-            Stroke::new((1.3 * s).max(0.8), col),
-        );
+        let q = at(c, ring, knob_angle(f));
+        if lit {
+            p.circle_filled(q, dr, lit_col);
+        } else {
+            p.circle_filled(q, dr, hex(0x101113));
+            p.circle_stroke(q, dr, Stroke::new(0.6, Color32::from_white_alpha(10)));
+        }
     }
-    // face
-    disc(p, c, 25.0 * s, false, |k| {
-        stops(&[(0.0, BG3), (1.0, hex(0x1F2226))], k)
+    // drop shadow and bezel: a matte ring, lit a touch from above
+    p.circle_filled(
+        c + Vec2::new(0.0, rad * 0.06 + 0.5),
+        rad + 0.5,
+        Color32::from_black_alpha(130),
+    );
+    disc(p, c, rad, false, |y| {
+        stops(&[(0.0, hex(0x2C2E31)), (1.0, hex(0x151618))], y)
     });
     p.circle_stroke(
         c,
-        25.0 * s,
-        Stroke::new(1.0, Color32::from_black_alpha(100)),
+        rad - 0.5,
+        Stroke::new(1.0, Color32::from_black_alpha(150)),
     );
-    // pointer
-    let a = knob_angle(frac);
-    let (p0, p1) = (at(c, 12.0 * s, a), at(c, 29.0 * s, a));
-    if bloom() {
-        p.line_segment(
-            [p0, p1],
-            Stroke::new((5.0 * s).max(2.5), alpha(t.accent, 0.18)),
-        );
+    // the cap: a ridged (gently scalloped) edge, matte, lit from above
+    let cap = rad * 0.84;
+    let lobes = if small { 8 } else { 10 };
+    let amp = if small { 0.025 } else { 0.035 };
+    let seg = ((cap * 2.4) as usize).clamp(40, 160);
+    let edge = |i: usize| {
+        let a = i as f32 / seg as f32 * std::f32::consts::TAU;
+        let r = cap * (1.0 - amp + amp * (a * lobes as f32).cos());
+        at(c, r, a)
+    };
+    let shade = |q: Pos2, r: f32| {
+        let y = ((q.y - (c.y - r)) / (2.0 * r)).clamp(0.0, 1.0);
+        stops(
+            &[
+                (0.0, hex(0x3B3D41)),
+                (0.45, hex(0x26282B)),
+                (1.0, hex(0x121315)),
+            ],
+            y,
+        )
+    };
+    let mut m = egui::Mesh::default();
+    m.colored_vertex(c, shade(c, cap));
+    for i in 0..seg {
+        let q = edge(i);
+        m.colored_vertex(q, shade(q, cap));
     }
-    p.line_segment([p0, p1], Stroke::new((2.6 * s).max(1.4), t.acc_hot));
-    // value labels at the tick points (scale variant)
-    if !labels.is_empty() {
-        let best = labels
+    for i in 0..seg as u32 {
+        m.add_triangle(0, 1 + i, 1 + (i + 1) % seg as u32);
+    }
+    p.add(egui::Shape::mesh(m));
+    let outline: Vec<Pos2> = (0..seg).map(edge).collect();
+    p.add(egui::Shape::closed_line(
+        outline,
+        Stroke::new(1.0, Color32::from_black_alpha(170)),
+    ));
+    // a soft rim light along the top of the cap
+    let rim: Vec<Pos2> = (0..=16)
+        .map(|i| at(c, cap - 1.2, (215.0 + 110.0 * i as f32 / 16.0).to_radians()))
+        .collect();
+    p.add(egui::Shape::line(
+        rim,
+        Stroke::new(1.0, Color32::from_white_alpha(22)),
+    ));
+    // the face: a shallow dish, darker at the top
+    let face = rad * 0.58;
+    disc(p, c, face, false, |y| {
+        stops(&[(0.0, hex(0x17181A)), (1.0, hex(0x2A2C2F))], y)
+    });
+    p.circle_stroke(c, face, Stroke::new(1.0, Color32::from_black_alpha(120)));
+    // the pointer: one thin orange line across the cap's rim
+    let a = knob_angle(frac);
+    p.line_segment(
+        [at(c, face + rad * 0.04, a), at(c, cap - rad * 0.03, a)],
+        Stroke::new((rad * 0.075).clamp(1.3, 2.4), lit_col),
+    );
+    // labels outside: scale numbers, or min / max at the bottom
+    let lf = label_font((rad * 0.42).clamp(10.0, 13.0));
+    if !small && !k.scale.is_empty() {
+        let best = k
+            .scale
             .iter()
             .enumerate()
             .min_by(|a, b| {
@@ -623,21 +608,117 @@ pub fn knob_small(p: &Painter, c: Pos2, rad: f32, frac: f32, labels: &[(&str, f3
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|x| x.0);
-        for (i, (txt, k)) in labels.iter().enumerate() {
-            let a = knob_angle(*k);
-            let q = at(c, 58.0 * s, a);
-            let hot = Some(i) == best;
-            glow_text(
-                p,
-                q,
-                Align2::CENTER_CENTER,
-                txt,
-                label_font((15.0 * s).max(8.5)),
-                if hot { t.acc_hot } else { INK3 },
-                hot,
+        for (i, (txt, f)) in k.scale.iter().enumerate() {
+            let q = at(c, ring + 9.0, knob_angle(*f));
+            let col = if Some(i) == best { orange } else { t.ink2 };
+            let al = match q.x - c.x {
+                d if d < -rad * 0.3 => Align2::RIGHT_CENTER,
+                d if d > rad * 0.3 => Align2::LEFT_CENTER,
+                _ => Align2::CENTER_CENTER,
+            };
+            p.text(
+                q + Vec2::new((q.x - c.x).signum() * -3.0, 0.0),
+                al,
+                *txt,
+                lf.clone(),
+                col,
             );
         }
     }
+    // min / max under the two ends of the dot ring
+    let ends = !small && k.scale.is_empty() && (k.min_max.0, k.min_max.1) != ("", "");
+    let ends_y = c.y + ring * 0.71 + dr + 2.0;
+    if ends {
+        let (lo, hi) = k.min_max;
+        let dx = ring * 0.71;
+        p.text(
+            Pos2::new(c.x - dx, ends_y),
+            Align2::CENTER_TOP,
+            lo,
+            lf.clone(),
+            t.ink2,
+        );
+        p.text(
+            Pos2::new(c.x + dx, ends_y),
+            Align2::CENTER_TOP,
+            hi,
+            lf.clone(),
+            t.ink2,
+        );
+    }
+    // title above, value below in orange
+    let top = if !small && !k.scale.is_empty() {
+        ring + 16.0
+    } else {
+        ring + 2.0
+    };
+    if !k.title.is_empty() {
+        p.text(
+            Pos2::new(c.x, c.y - top),
+            Align2::CENTER_BOTTOM,
+            k.title.to_uppercase(),
+            label_font(if small { 11.0 } else { 12.5 }),
+            t.ink,
+        );
+    }
+    if !k.value.is_empty() {
+        // between the ends of the ring, or under the min / max labels
+        let y = if ends {
+            ends_y + lf.size + 2.0
+        } else {
+            c.y + ring - dr
+        };
+        p.text(
+            Pos2::new(c.x, y),
+            Align2::CENTER_TOP,
+            k.value,
+            num_font(if small { 10.5 } else { 11.5 }),
+            readout,
+        );
+    }
+}
+
+/// A studio knob you can turn: drag up / right to raise it (Ctrl or Shift
+/// for fine steps), double-click for `def`. `norm` is 0..1.
+pub fn knob_studio_ui(
+    ui: &mut egui::Ui,
+    c: Pos2,
+    rad: f32,
+    id: egui::Id,
+    norm: &mut f32,
+    def: f32,
+    look: StudioKnob,
+) -> egui::Response {
+    let hit = egui::Rect::from_center_size(c, Vec2::splat(rad * 2.0 + 8.0));
+    let resp = ui.interact(hit, id, egui::Sense::click_and_drag());
+    if resp.dragged() {
+        let fine = if ui.input(|i| i.modifiers.ctrl || i.modifiers.shift) {
+            0.1
+        } else {
+            1.0
+        };
+        let d = resp.drag_delta();
+        *norm = (*norm + (d.x - d.y) * 0.004 * fine).clamp(0.0, 1.0);
+    }
+    if resp.double_clicked() {
+        *norm = def;
+    }
+    knob_studio(
+        ui.painter(),
+        c,
+        rad,
+        &StudioKnob {
+            frac: *norm,
+            ..look
+        },
+    );
+    let (name, x) = (look.title.to_string(), *norm);
+    resp.widget_info(|| {
+        let mut w = egui::WidgetInfo::labeled(egui::Role::Slider, true, &name);
+        w.value = Some(x as f64);
+        w
+    });
+    resp
 }
 
 /// the pic-1 fader: dark slot, accent fill below the silver cap, a dB scale
@@ -850,7 +931,14 @@ pub fn paint_button(
 pub fn led_item(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     let t = th();
     let font = label_font(12.5);
-    let col = if on { t.acc_hot } else { INK3 };
+    // the lit label: the hot accent on dark cards; light themes (Amiga's
+    // lavender skinned cards) need a dark ink, the skin's text if any
+    let lit = if t.light {
+        crate::theme::instskin::active().map_or(t.ink, |s| s.text)
+    } else {
+        t.acc_hot
+    };
+    let col = if on { lit } else { INK3 };
     let g = ui.painter().layout_no_wrap(text.to_string(), font, col);
     let (r, resp) = ui.allocate_exact_size(
         Vec2::new(g.size().x + 12.0, g.size().y.max(16.0)),

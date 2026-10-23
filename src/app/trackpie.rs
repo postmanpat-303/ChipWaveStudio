@@ -30,7 +30,7 @@ pub(crate) const R_IN: f32 = 56.0;
 /// room kept between the pie (with its rim arc) and the window edge
 pub(crate) const MARGIN: f32 = 10.0;
 /// a right-button drag longer than this, released on a segment, chooses it
-const DRAG_CHOOSE_PX: f32 = 12.0;
+pub(crate) const DRAG_CHOOSE_PX: f32 = 12.0;
 const STEPS: usize = 14;
 const GAP: f32 = 0.012;
 
@@ -90,7 +90,11 @@ impl Seg {
     }
     /// opens a submenu instead of acting
     pub(crate) fn has_sub(self) -> bool {
-        matches!(self, Seg::Colour | Seg::Icon | Seg::Add | Seg::Organize)
+        matches!(self, Seg::Colour | Seg::Icon | Seg::Organize)
+    }
+    /// opens the Add rings around the pie (`trackring.rs`)
+    pub(crate) fn has_ring(self) -> bool {
+        self == Seg::Add
     }
     /// the action of a segment without a submenu
     pub(crate) fn act(self) -> Option<PieAct> {
@@ -135,8 +139,19 @@ pub(crate) enum PieAct {
     /// the Browser's Instruments (Favourites first when there are any):
     /// the next pick replaces this track's instrument
     ChangeInstrument,
-    /// the Browser's Drum Patterns tab: the next pick goes on this track
-    DrumPattern,
+    /// Add › Drum pattern › <instrument>: a new track below with it and an
+    /// empty 1-bar pattern at the play marker (`track_new_pattern_track`)
+    DrumTrack(Builtin),
+    /// ... › Drum Kit › <kit>: the same with that Drum Kit
+    DrumKitTrack(&'static str),
+    /// ... › Browse…: the Browser's Instruments; the pick makes that track
+    DrumBrowse,
+    /// ... › Drum Kit › More kits…: the Browser on Drum Kits, the same
+    MoreKits,
+    /// Add › Automation lane › Show / Hide lanes
+    AutoToggle,
+    /// Add › Automation lane › lane `k` (`track_lanes`) on / off
+    AutoLane(u8),
     /// the track's instrument editor (the chooser when it has none)
     EditInstrument,
     /// a new built-in instrument (its Init / first preset) becomes this
@@ -149,6 +164,7 @@ pub(crate) enum PieAct {
 pub(crate) enum Builtin {
     WaveForge,
     DrumKit,
+    StringWave,
     Synth,
     Analog,
     Fm4,
@@ -161,9 +177,10 @@ pub(crate) enum Builtin {
 }
 
 impl Builtin {
-    pub(crate) const ALL: [Builtin; 11] = [
+    pub(crate) const ALL: [Builtin; 12] = [
         Builtin::WaveForge,
         Builtin::DrumKit,
+        Builtin::StringWave,
         Builtin::Synth,
         Builtin::Analog,
         Builtin::Fm4,
@@ -178,6 +195,7 @@ impl Builtin {
         match self {
             Builtin::WaveForge => crate::poly::POLY_DISPLAY_NAME,
             Builtin::DrumKit => "Drum Kit",
+            Builtin::StringWave => crate::strings::STRINGS_DISPLAY_NAME,
             Builtin::Synth => "Synth",
             Builtin::Analog => "Analog",
             Builtin::Fm4 => "FM-4",
@@ -193,6 +211,10 @@ impl Builtin {
         match self {
             Builtin::WaveForge => "WaveForge polyphonic synth · starts on Saw Lead",
             Builtin::DrumKit => "Drum Kit: 16 pads and a step sequencer · starts on Psy Kit",
+            Builtin::StringWave => concat!(
+                crate::strings_name!(),
+                ": a lush string ensemble · starts on Velvet Ensemble"
+            ),
             Builtin::Synth => "the classic ChipWave synth · starts on Supersaw lead",
             Builtin::Analog => "Analog: 3 oscillators into a ladder filter · starts on Warm Lead",
             Builtin::Fm4 => "FM-4: four-operator FM · starts on E-Piano",
@@ -207,7 +229,7 @@ impl Builtin {
     /// the browser row's glyph (`glyphs::glyph_for`)
     pub(crate) fn glyph_tag(self) -> &'static str {
         match self {
-            Builtin::WaveForge | Builtin::Synth | Builtin::Fm4 => "Synth",
+            Builtin::WaveForge | Builtin::Synth | Builtin::Fm4 | Builtin::StringWave => "Synth",
             Builtin::DrumKit | Builtin::DrumSynth => "Drum",
             Builtin::Analog => "Analog",
             Builtin::Wavetable => "Wave",
@@ -246,6 +268,10 @@ impl Builtin {
                 }
                 None => ("Synth".into(), InstrumentKind::Synth(Default::default())),
             }),
+            Builtin::StringWave => gen(
+                |e| matches!(e, G::Strings(_)),
+                concat!(crate::strings_name!(), " Velvet Ensemble"),
+            ),
             Builtin::Analog => gen(|e| matches!(e, G::Analog(_)), "Warm Lead"),
             Builtin::Fm4 => gen(|e| matches!(e, G::Fm(_)), "E-Piano"),
             Builtin::Wavetable => gen(|e| matches!(e, G::Wave(_)), "Wave Supersaw"),
@@ -298,13 +324,15 @@ pub(crate) struct TrackInfo {
     pub(crate) full: bool,
     /// all 255 instrument slots are used
     pub(crate) instr_full: bool,
+    /// its automation lanes: (label, on)
+    pub(crate) lanes: Vec<(String, bool)>,
+    pub(crate) lanes_shown: bool,
 }
 
 pub(crate) fn sub_title(seg: Seg) -> &'static str {
     match seg {
         Seg::Colour => "TRACK COLOUR",
         Seg::Icon => "TRACK ICON",
-        Seg::Add => "ADD · INSTRUMENT FOR THIS TRACK",
         Seg::Organize => "ORGANIZE",
         _ => "",
     }
@@ -320,7 +348,6 @@ pub(crate) fn sub_items(seg: Seg, i: &TrackInfo) -> Vec<Item> {
         header: false,
     };
     let need_tl = "needs timeline mode (Timeline › Switch to timeline mode)";
-    let full = "all 32 tracks are used (the channel limit)";
     match seg {
         Seg::Colour => {
             let mut v = vec![Item {
@@ -366,99 +393,6 @@ pub(crate) fn sub_items(seg: Seg, i: &TrackInfo) -> Vec<Item> {
                     header: false,
                 });
             }
-            v
-        }
-        Seg::Add => {
-            let ok = |a: PieAct| (!i.full).then_some(a);
-            // first: an instrument for this track (two per row)
-            let mut v: Vec<Item> = Builtin::ALL
-                .iter()
-                .map(|&b| {
-                    text(
-                        b.label(),
-                        (!i.instr_full).then_some(PieAct::NewInstrument(b)),
-                        if i.instr_full {
-                            "all 255 instrument slots are used"
-                        } else {
-                            b.tip()
-                        },
-                    )
-                })
-                .collect();
-            v.push(text(
-                "Browse…",
-                Some(PieAct::ChangeInstrument),
-                "the Browser's Instruments (your Favourites first): the one you pick plays this track",
-            ));
-            // then: tracks
-            v.extend([
-                text(
-                    "Instrument track…",
-                    ok(PieAct::AddInstrument),
-                    if i.full {
-                        full
-                    } else {
-                        "pick an instrument in the Browser for a new track below"
-                    },
-                ),
-                text(
-                    "Drum pattern…",
-                    i.timeline.then_some(PieAct::DrumPattern),
-                    if i.timeline {
-                        "the Browser's Drum Patterns: the one you pick goes on this track at the play marker"
-                    } else {
-                        need_tl
-                    },
-                ),
-                text(
-                    "Audio track",
-                    if i.timeline {
-                        ok(PieAct::AddAudio)
-                    } else {
-                        None
-                    },
-                    if i.full {
-                        full
-                    } else if i.timeline {
-                        "a new track for audio clips below"
-                    } else {
-                        need_tl
-                    },
-                ),
-                text(
-                    "FX track",
-                    None,
-                    "FX (bus) tracks: coming soon (docs/ROADMAP.md)",
-                ),
-                text(
-                    "Empty track above",
-                    ok(PieAct::AddEmpty(true)),
-                    if i.full { full } else { "" },
-                ),
-                text(
-                    "Empty track below",
-                    ok(PieAct::AddEmpty(false)),
-                    if i.full { full } else { "" },
-                ),
-                text(
-                    "Duplicate",
-                    ok(PieAct::Duplicate),
-                    if i.full {
-                        full
-                    } else {
-                        "a copy below: notes, clips, mixer strip, lanes"
-                    },
-                ),
-                text(
-                    "Automation lane ›",
-                    i.timeline.then_some(PieAct::Automation),
-                    if i.timeline {
-                        "automate a parameter on this track, or show / hide its lanes"
-                    } else {
-                        need_tl
-                    },
-                ),
-            ]);
             v
         }
         Seg::Organize => {
@@ -513,15 +447,11 @@ pub(crate) fn sub_grid(seg: Seg) -> (usize, Vec2) {
     match seg {
         Seg::Icon => (4, egui::vec2(44.0, 34.0)),
         Seg::Colour => (6, egui::vec2(28.0, 28.0)),
-        Seg::Add => (2, egui::vec2(150.0, 26.0)),
         _ => (1, egui::vec2(184.0, 26.0)),
     }
 }
 
 const SUB_PAD: f32 = 10.0;
-/// Add ›: the instrument entries (built-ins and Browse…) before the track ones
-pub(crate) const ADD_INSTR_ITEMS: usize = Builtin::ALL.len() + 1;
-const GROUP_GAP: f32 = 22.0;
 const SUB_HEAD: f32 = 26.0;
 
 /// the submenu's size and its items' rects relative to its top-left
@@ -533,8 +463,7 @@ pub(crate) fn sub_layout(seg: Seg, items: &[Item]) -> (Vec2, Vec<Rect>) {
     let w = SUB_PAD * 2.0 + cols as f32 * cell.x + (cols - 1) as f32 * gap;
     let w = w.max(200.0);
     let top = SUB_PAD + SUB_HEAD;
-    let group = if seg == Seg::Add { GROUP_GAP } else { 0.0 };
-    let h = top + rows as f32 * cell.y + (rows - 1) as f32 * gap + SUB_PAD + group;
+    let h = top + rows as f32 * cell.y + (rows - 1) as f32 * gap + SUB_PAD;
     let mut rects = vec![Rect::NOTHING; items.len()];
     let mut n = 0;
     for (k, it) in items.iter().enumerate() {
@@ -545,12 +474,6 @@ pub(crate) fn sub_layout(seg: Seg, items: &[Item]) -> (Vec2, Vec<Rect>) {
             );
         } else {
             let (c, r) = (n % cols, n / cols);
-            // Add ›: a gap between the instruments and the track entries
-            let group = if seg == Seg::Add && n >= ADD_INSTR_ITEMS {
-                GROUP_GAP
-            } else {
-                0.0
-            };
             let x0 = if cols == 1 {
                 SUB_PAD
             } else {
@@ -559,7 +482,7 @@ pub(crate) fn sub_layout(seg: Seg, items: &[Item]) -> (Vec2, Vec<Rect>) {
             rects[k] = Rect::from_min_size(
                 Pos2::new(
                     x0 + c as f32 * (cell.x + gap),
-                    top + r as f32 * (cell.y + gap) + group,
+                    top + r as f32 * (cell.y + gap),
                 ),
                 if cols == 1 {
                     egui::vec2(w - 2.0 * SUB_PAD, cell.y)
@@ -729,21 +652,10 @@ pub(crate) fn seg_angle(i: usize) -> f32 {
     -std::f32::consts::FRAC_PI_2 + i as f32 * std::f32::consts::TAU / SEGS.len() as f32
 }
 
-/// the pie's centre for a click at `p`: moved in so the whole pie (with its
-/// rim arc and `MARGIN`) is inside `screen`
+/// the pie's centre for a click at `p`: moved in so the whole pie and its
+/// Add rings (with their rim arc and `MARGIN`) are inside `screen`
 pub(crate) fn clamp_centre(p: Pos2, screen: Rect) -> Pos2 {
-    let r = R_OUT + MARGIN;
-    let c = |v: f32, lo: f32, hi: f32| {
-        if hi < lo {
-            (lo + hi) / 2.0
-        } else {
-            v.clamp(lo, hi)
-        }
-    };
-    Pos2::new(
-        c(p.x, screen.left() + r, screen.right() - r),
-        c(p.y, screen.top() + r, screen.bottom() - r),
-    )
+    super::radial::clamp_disc(p, screen, super::trackring::R_FIT)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -810,33 +722,35 @@ pub(crate) struct Pie {
     /// screenshots: draw as if this long after opening
     pub(crate) frozen: Option<f64>,
     /// pointer position last frame (hover follows the mouse only when it moves)
-    last_ptr: Option<Pos2>,
+    pub(crate) last_ptr: Option<Pos2>,
     /// where the pointer last was on the open submenu's segment or panel
     /// (the tip of the way to the panel, `in_aim`)
     aim_from: Option<Pos2>,
     /// input time the pointer last moved (resting on another segment on
     /// the way to the panel switches to it after `AIM_SETTLE_S`)
-    moved_at: f64,
+    pub(crate) moved_at: f64,
+    /// Add's rings around the pie (`trackring.rs`)
+    pub(crate) ring: Option<super::trackring::Ring>,
 }
 
 /// colours of the pie in the current theme
-struct Pal {
-    ring: Color32,
-    ring_out: Color32,
-    edge: Color32,
-    hover: Color32,
-    disc: Color32,
-    disc_ink: Color32,
-    disc_ink2: Color32,
-    ink: Color32,
-    ink2: Color32,
-    icon_bg: Color32,
-    accent: Color32,
-    danger: Color32,
-    panel: Color32,
+pub(crate) struct Pal {
+    pub(crate) ring: Color32,
+    pub(crate) ring_out: Color32,
+    pub(crate) edge: Color32,
+    pub(crate) hover: Color32,
+    pub(crate) disc: Color32,
+    pub(crate) disc_ink: Color32,
+    pub(crate) disc_ink2: Color32,
+    pub(crate) ink: Color32,
+    pub(crate) ink2: Color32,
+    pub(crate) icon_bg: Color32,
+    pub(crate) accent: Color32,
+    pub(crate) danger: Color32,
+    pub(crate) panel: Color32,
 }
 
-fn pal(t: &crate::theme::Theme) -> Pal {
+pub(crate) fn pal(t: &crate::theme::Theme) -> Pal {
     if t.light {
         // Amiga Workbench: light grey ring, navy disc, the orange accent
         Pal {
@@ -901,11 +815,18 @@ impl App {
             last_ptr: None,
             aim_from: None,
             moved_at: ctx.input(|i| i.time),
+            ring: None,
         });
         ctx.request_repaint();
     }
 
     pub(crate) fn pie_info(&self, tr: usize) -> TrackInfo {
+        let lanes = self
+            .track_lanes(tr)
+            .into_iter()
+            .map(|(_, l, on)| (l, on))
+            .collect();
+        let lanes_shown = self.track_lanes_shown(tr);
         self.with(|s| {
             let t = s.song.timeline.as_deref().and_then(|t| t.tracks.get(tr));
             TrackInfo {
@@ -917,6 +838,8 @@ impl App {
                 speed: t.map_or(0, |t| t.speed),
                 full: s.song.channels >= MAX_CHANNELS,
                 instr_full: s.song.instruments.len() >= 255,
+                lanes,
+                lanes_shown,
             }
         })
     }
@@ -946,6 +869,12 @@ impl App {
             return;
         };
         let now = ctx.input(|i| i.time);
+        if seg.has_ring() {
+            if let Some(p) = &mut self.pie {
+                p.open_ring(now);
+            }
+            return;
+        }
         if seg.has_sub() {
             if let Some(p) = &mut self.pie {
                 p.key = Some(i);
@@ -995,6 +924,11 @@ impl App {
             let Some(p) = &mut self.pie else { return };
             if p.closing.is_some() {
                 return;
+            }
+            if p.ring.is_some() {
+                self.ring_key(key, ctx);
+                ctx.request_repaint();
+                continue;
             }
             let tr = p.track;
             if let Some((si, _)) = p.sub {
@@ -1131,82 +1065,101 @@ impl App {
                 .show(ctx, |ui| {
                     ui.allocate_rect(screen, Sense::click_and_drag());
                 });
-            let p = self.pie.as_mut().unwrap();
-            let ptr_moved = moved || (ptr.is_some() && p.last_ptr != ptr && p.last_ptr.is_some());
-            p.last_ptr = ptr;
-            if ptr_moved {
-                p.moved_at = now;
-            }
-            let open_si = p.sub.map(|s| s.0);
-            // on the open submenu's own segment or its panel: the way to the
-            // panel starts here
-            if in_sub || (over_seg.is_some() && over_seg == open_si) {
-                p.aim_from = ptr;
-            }
-            // another segment, but the pointer is on its way to the open
-            // panel: keep the panel (until it rests there a moment)
-            let aiming = |p: &Pie| match (over_seg, open_si, &sub_geo, p.aim_from, ptr) {
-                (Some(k), Some(si), Some((_, _, r, _)), Some(from), Some(q)) if k != si => {
-                    in_aim(from, *r, q)
+            if self.pie.as_ref().is_some_and(|p| p.ring.is_some()) {
+                self.ring_input(
+                    ctx,
+                    super::trackring::RingInput {
+                        ptr,
+                        moved,
+                        primary_rel,
+                        primary_press,
+                        sec_rel,
+                        sec_press,
+                        now,
+                    },
+                );
+            } else {
+                let p = self.pie.as_mut().unwrap();
+                let ptr_moved =
+                    moved || (ptr.is_some() && p.last_ptr != ptr && p.last_ptr.is_some());
+                p.last_ptr = ptr;
+                if ptr_moved {
+                    p.moved_at = now;
                 }
-                _ => false,
-            };
-            let rested = now - p.moved_at >= AIM_SETTLE_S;
-            let hold = aiming(p) && !rested;
-            if hold && !ptr_moved {
-                // check again once it may have rested
-                ctx.request_repaint_after(std::time::Duration::from_secs_f64(AIM_SETTLE_S));
-            }
-            if (ptr_moved || (rested && aiming(p))) && !hold {
-                if let Some(k) = over_seg {
-                    p.key = Some(k);
-                    // pointing at a submenu segment pops its submenu out
-                    if SEGS[k].has_sub() {
-                        if p.sub.map(|s| s.0) != Some(k) {
-                            p.sub = Some((k, now));
+                let open_si = p.sub.map(|s| s.0);
+                // on the open submenu's own segment or its panel: the way to the
+                // panel starts here
+                if in_sub || (over_seg.is_some() && over_seg == open_si) {
+                    p.aim_from = ptr;
+                }
+                // another segment, but the pointer is on its way to the open
+                // panel: keep the panel (until it rests there a moment)
+                let aiming = |p: &Pie| match (over_seg, open_si, &sub_geo, p.aim_from, ptr) {
+                    (Some(k), Some(si), Some((_, _, r, _)), Some(from), Some(q)) if k != si => {
+                        in_aim(from, *r, q)
+                    }
+                    _ => false,
+                };
+                let rested = now - p.moved_at >= AIM_SETTLE_S;
+                let hold = aiming(p) && !rested;
+                if hold && !ptr_moved {
+                    // check again once it may have rested
+                    ctx.request_repaint_after(std::time::Duration::from_secs_f64(AIM_SETTLE_S));
+                }
+                if (ptr_moved || (rested && aiming(p))) && !hold {
+                    if let Some(k) = over_seg {
+                        p.key = Some(k);
+                        // pointing at a submenu segment pops its submenu out
+                        if SEGS[k].has_sub() {
+                            if p.sub.map(|s| s.0) != Some(k) {
+                                p.sub = Some((k, now));
+                                p.sub_key = None;
+                                p.aim_from = ptr;
+                            }
+                        } else if SEGS[k].has_ring() {
+                            p.open_ring(now);
+                            p.aim_from = None;
+                        } else if p.sub.is_some() {
+                            p.sub = None;
                             p.sub_key = None;
-                            p.aim_from = ptr;
-                        }
-                    } else if p.sub.is_some() {
-                        p.sub = None;
-                        p.sub_key = None;
-                        p.aim_from = None;
-                    }
-                }
-            }
-            if ptr_moved && in_sub {
-                p.sub_key = over_item;
-            }
-            let press = p.press;
-            // right button held from the opening press: release chooses
-            if sec_rel {
-                if let Some(at) = press {
-                    let far = ptr.is_some_and(|q| (q - at).length() > DRAG_CHOOSE_PX);
-                    self.pie.as_mut().unwrap().press = None;
-                    if far {
-                        if let Some(k) = over_item {
-                            self.pie_choose_item(k, ctx);
-                        } else if let Some(k) = over_seg {
-                            self.pie_choose(k, ctx);
+                            p.aim_from = None;
                         }
                     }
                 }
-            } else if primary_rel {
-                if let Some(k) = over_item {
-                    self.pie_choose_item(k, ctx);
-                } else if let Some(k) = over_seg {
-                    self.pie_choose(k, ctx);
-                } else if on_centre {
+                if ptr_moved && in_sub {
+                    p.sub_key = over_item;
+                }
+                let press = p.press;
+                // right button held from the opening press: release chooses
+                if sec_rel {
+                    if let Some(at) = press {
+                        let far = ptr.is_some_and(|q| (q - at).length() > DRAG_CHOOSE_PX);
+                        self.pie.as_mut().unwrap().press = None;
+                        if far {
+                            if let Some(k) = over_item {
+                                self.pie_choose_item(k, ctx);
+                            } else if let Some(k) = over_seg {
+                                self.pie_choose(k, ctx);
+                            }
+                        }
+                    }
+                } else if primary_rel {
+                    if let Some(k) = over_item {
+                        self.pie_choose_item(k, ctx);
+                    } else if let Some(k) = over_seg {
+                        self.pie_choose(k, ctx);
+                    } else if on_centre {
+                        self.pie_close(ctx);
+                    }
+                }
+                if (primary_press || (sec_press && press.is_none()))
+                    && !in_sub
+                    && over_seg.is_none()
+                    && !on_centre
+                {
+                    // a click outside cancels
                     self.pie_close(ctx);
                 }
-            }
-            if (primary_press || (sec_press && press.is_none()))
-                && !in_sub
-                && over_seg.is_none()
-                && !on_centre
-            {
-                // a click outside cancels
-                self.pie_close(ctx);
             }
         }
         // ---- draw
@@ -1313,7 +1266,7 @@ impl App {
                 seg.glyph(),
                 ink.gamma_multiply(alpha),
             );
-            let label = if seg.has_sub() {
+            let label = if seg.has_sub() || seg.has_ring() {
                 format!("{} ›", seg.label())
             } else {
                 seg.label().to_string()
@@ -1396,19 +1349,6 @@ impl App {
                 FontId::proportional(11.0 * sc),
                 pl.ink2.gamma_multiply(ks),
             );
-            // Add ›: the track entries under their own caption
-            if SEGS[si] == Seg::Add {
-                if let Some(q) = rects.get(ADD_INSTR_ITEMS) {
-                    let y = r.min.y + q.top() - GROUP_GAP / 2.0 - 2.0;
-                    painter.text(
-                        tf(Pos2::new(r.min.x + SUB_PAD + 2.0, y)),
-                        egui::Align2::LEFT_CENTER,
-                        "TRACKS",
-                        FontId::proportional(11.0 * sc),
-                        pl.ink2.gamma_multiply(ks),
-                    );
-                }
-            }
             let mut tip: Option<(&'static str, Pos2)> = None;
             for (k, it) in items.iter().enumerate() {
                 let q = rects[k].translate(r.min.to_vec2());
@@ -1526,6 +1466,9 @@ impl App {
                 tooltip(&painter, &pl, s, at + egui::vec2(0.0, 6.0), screen);
             }
         }
+        if self.ring_draw(ctx, &painter, fade, now, screen) {
+            animating = true;
+        }
         if animating {
             ctx.request_repaint();
         }
@@ -1606,7 +1549,41 @@ impl App {
                 self.show_instrument_editor();
             }
             PieAct::NewInstrument(b) => self.track_new_instrument(tr, b),
-            PieAct::DrumPattern => self.track_drum_pattern(tr),
+            PieAct::DrumTrack(b) => {
+                self.track_new_pattern_track(tr, b, None);
+            }
+            PieAct::DrumKitTrack(k) => {
+                self.track_new_pattern_track(tr, Builtin::DrumKit, Some(k));
+            }
+            PieAct::DrumBrowse | PieAct::MoreKits => {
+                if n >= MAX_CHANNELS {
+                    self.status = "All 32 tracks are used (the channel limit)".into();
+                    return;
+                }
+                if a == PieAct::MoreKits {
+                    self.open_browser_tab(crate::browser::Tab::Instruments);
+                    self.br.filter.category = Some("Drum Kit".into());
+                    self.status = "Pick a Drum Kit: it goes on a new track below with an empty 1-bar pattern at the play marker".into();
+                } else {
+                    self.open_browser_tab(crate::browser::Tab::Instruments);
+                    self.status = "Pick an instrument: it goes on a new track below with an empty 1-bar pattern at the play marker".into();
+                }
+                self.br.new_track_at = Some(tr + 1);
+                self.br.new_track_pattern = true;
+            }
+            PieAct::AutoToggle => {
+                self.auto_op(super::timeline::autolanes::AutoOp::Toggle(tr));
+            }
+            PieAct::AutoLane(k) => {
+                if let Some((tg, l, on)) = self.track_lanes(tr).into_iter().nth(k as usize) {
+                    self.auto_op(super::timeline::autolanes::AutoOp::Enable(tr, tg, !on));
+                    self.status = format!(
+                        "Track {:02} lane {l} {}",
+                        tr + 1,
+                        if on { "off (kept, not played)" } else { "on" }
+                    );
+                }
+            }
             PieAct::Automation => {
                 let at = self.pie.as_ref().map_or(Pos2::new(200.0, 200.0), |p| {
                     p.centre + egui::vec2(R_OUT + 12.0, -R_OUT)

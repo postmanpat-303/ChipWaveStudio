@@ -72,6 +72,7 @@ impl App {
             return;
         }
         self.br.new_track_at = Some(at);
+        self.br.new_track_pattern = false;
         self.open_browser_tab(crate::browser::Tab::Instruments);
         self.status = format!(
             "Pick an instrument in the Browser (double-click or Enter) for the new track {:02}",
@@ -150,18 +151,130 @@ impl App {
         self.undo_hold -= 1;
     }
 
-    /// the pie's Drum pattern…: the Browser's Drum Patterns tab; the next
-    /// pick goes on track `tr` at the play marker
-    pub(super) fn track_drum_pattern(&mut self, tr: usize) {
+    /// the pie's Add › Drum pattern › <instrument> (`kit` None) or › Drum
+    /// Kit › <kit>: a new track below `tr` playing a new instrument, with an
+    /// EMPTY 1-bar pattern at the play marker's bar, open in the step
+    /// sequencer (a Drum Kit) or the piano roll. One undo step.
+    pub(crate) fn track_new_pattern_track(
+        &mut self,
+        tr: usize,
+        b: super::trackpie::Builtin,
+        kit: Option<&str>,
+    ) -> bool {
         if self.with(|s| s.song.timeline.is_none()) {
             self.status = "Drum patterns go on the Timeline (timeline mode)".into();
-            return;
+            return false;
         }
-        self.open_browser_tab(crate::browser::Tab::Patterns);
-        self.br.track_target = Some((tr, crate::browser::Tab::Patterns));
+        if self.with(|s| s.song.channels) >= MAX_CHANNELS {
+            self.status = "All 32 tracks are used (the channel limit)".into();
+            return false;
+        }
+        if self.with(|s| s.song.instruments.len() >= 255) {
+            self.status = "All 255 instrument slots are used".into();
+            return false;
+        }
+        let inst = match kit {
+            Some(k) => crate::drumpat::drumkit_instrument(k),
+            None => b.make().map(|(name, kind)| Instrument {
+                name,
+                volume: 0.8,
+                transpose: 0,
+                fx: vec![],
+                kind,
+            }),
+        };
+        let Some(inst) = inst else {
+            self.status = format!("No {} preset to start from", kit.unwrap_or(b.label()));
+            return false;
+        };
+        let name = inst.name.clone();
+        let at = (tr + 1).min(self.with(|s| s.song.channels));
+        self.snapshot();
+        self.undo_hold += 1;
+        let ok = self.track_insert(at, &name)
+            && self.with(|s| {
+                let Some(k) = s.song.add_instrument(inst) else {
+                    return false;
+                };
+                crate::chanops::assign_track_instrument(&mut s.song, at, k as u8 + 1);
+                true
+            });
+        let id = if ok {
+            self.track_add_empty_pattern(at)
+        } else {
+            None
+        };
+        self.undo_hold -= 1;
+        let Some((id, bar)) = id else {
+            if ok {
+                self.status = "Can't add a pattern there".into();
+            }
+            return false;
+        };
         self.status = format!(
-            "Pick a drum pattern for track {:02} in the Browser (double-click or Enter, or drag it)",
-            tr + 1
+            "New track {:02} {name}: an empty 1-bar pattern at bar {bar}{} (Ctrl+Z undoes it all)",
+            at + 1,
+            if self.dk.clip == Some(id) {
+                ", in the step sequencer: click the steps"
+            } else {
+                ", in the piano roll"
+            }
         );
+        true
+    }
+
+    /// an empty 1-bar note clip on track `at` at the play marker's bar
+    /// (no snapshot; callers take one), opened in the step sequencer when
+    /// the track plays a Drum Kit, else the piano roll: (clip id, bar)
+    pub(crate) fn track_add_empty_pattern(&mut self, at: usize) -> Option<(u32, i64)> {
+        let cue = self.tlv.cue;
+        let slot = self.track_slot(at);
+        let res = self.with(|s| {
+            let song = &mut s.song;
+            let kit = song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .is_some_and(|i| crate::drumkit::kit_of(i).is_some());
+            let t = song.timeline.as_deref()?;
+            let sig = t.sig_at(cue);
+            let bar = sig.bar_ticks().max(1);
+            let from = if cue >= sig.tick { sig.tick } else { 0 };
+            let start = from + (cue - from).max(0) / bar * bar;
+            let id = crate::timeline::new_note_clip(song, at, start)?;
+            let t = song.timeline.as_deref_mut()?;
+            let k = t.clips.iter().position(|c| c.id == id)?;
+            if let crate::timeline::ClipKind::Notes { data } = t.clips[k].kind {
+                let d = t.notes[data as usize].make_mut();
+                d.name = "Pattern".into();
+                d.len = bar;
+                if kit {
+                    d.drum = Some(crate::drumkit::DrumMeta::default());
+                }
+            }
+            t.clips[k].len = bar;
+            let pos = t.bar_pos(start);
+            let crate::audio::Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
+            Some((id, pos.bar, kit))
+        });
+        let (id, bar, kit) = res?;
+        self.dirty = true;
+        crate::plugin::sync(&self.shared, None);
+        self.tl_select_track(at, false);
+        self.ch = at;
+        if slot > 0 {
+            self.instr = slot;
+        }
+        self.tlv.sel = Some(id);
+        self.tlv.sels = vec![id];
+        if kit {
+            self.dk.inst = slot as usize - 1;
+            self.dk.clip = Some(id);
+            self.dk.page = 0;
+            self.show_instrument_editor();
+        } else {
+            self.timeline_open_roll();
+        }
+        Some((id, bar))
     }
 }

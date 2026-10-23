@@ -34,6 +34,9 @@ const SLOT_MIN_W: f32 = 58.0;
 const STOP_W: f32 = 24.0;
 /// level history columns in the Master panel
 const HIST: usize = 120;
+/// seconds of playing per history column: 120 columns show the last 30 s,
+/// so the graph drifts calmly instead of racing by a column per frame
+pub(crate) const HIST_STEP: f32 = 0.25;
 
 #[derive(Default)]
 pub(crate) struct SlotPrev {
@@ -74,7 +77,35 @@ pub(crate) struct CaUi {
     pub(crate) shot_drag: Option<Pos2>,
     pub(crate) shot_mods: egui::Modifiers,
     /// master level history for the Master panel's graph (newest last)
-    hist: std::collections::VecDeque<f32>,
+    pub(crate) hist: std::collections::VecDeque<f32>,
+    /// playing time gathered into the next history column, and its loudest peak
+    hist_t: f32,
+    hist_pk: f32,
+    /// where the LEVEL history (or its hidden strip) was drawn
+    pub(crate) level_rect: Rect,
+}
+
+impl CaUi {
+    /// Gathers `dt` seconds of playing at level `pk` into the LEVEL history:
+    /// one column per HIST_STEP holding that stretch's loudest peak, so no
+    /// peak is lost; a column only falls part of the way towards a quieter
+    /// stretch (fast rise, slow fall), which keeps the graph calm.
+    pub(crate) fn hist_step(&mut self, dt: f32, pk: f32) {
+        self.hist_t += dt.clamp(0.0, 0.25);
+        self.hist_pk = self.hist_pk.max(pk);
+        while self.hist_t >= HIST_STEP {
+            self.hist_t -= HIST_STEP;
+            let pk = std::mem::take(&mut self.hist_pk);
+            let v = match self.hist.back() {
+                Some(&last) if pk < last => last + (pk - last) * 0.5,
+                _ => pk,
+            };
+            self.hist.push_back(v);
+            while self.hist.len() > HIST {
+                self.hist.pop_front();
+            }
+        }
+    }
 }
 
 impl Default for CaUi {
@@ -97,6 +128,9 @@ impl Default for CaUi {
             shot_drag: None,
             shot_mods: egui::Modifiers::NONE,
             hist: Default::default(),
+            hist_t: 0.0,
+            hist_pk: 0.0,
+            level_rect: Rect::NOTHING,
         }
     }
 }
@@ -1829,6 +1863,7 @@ impl App {
             0.5,
             "Volume",
             &db(*vol),
+            ("-inf", "+6"),
             true,
         )
         .on_hover_text("master volume (the mixer's Master fader)");
@@ -1845,6 +1880,7 @@ impl App {
             crate::master::LimiterSettings::default().gain_db / 24.0,
             "Drive",
             &format!("{:.1}", lim.gain_db),
+            ("0", "24"),
             en,
         )
         .on_hover_text("limiter input gain: drives the mix into the limiter (louder, denser)");
@@ -1860,13 +1896,14 @@ impl App {
             (crate::master::LimiterSettings::default().ceiling_db + 12.0) / 12.0,
             "Ceiling",
             &format!("{:.1}", lim.ceiling_db),
+            ("-12", "0"),
             en,
         )
         .on_hover_text("limiter output ceiling (true peak)");
         if r.dragged() || r.double_clicked() {
             lim.ceiling_db = c * 12.0 - 12.0;
         }
-        let below = cy + 36.0 - ui.cursor().top();
+        let below = cy + 54.0 - ui.cursor().top();
         if below > 0.0 {
             ui.add_space(below);
         }
@@ -1910,13 +1947,9 @@ impl App {
             .size(11.0)
             .color(t.ink2),
         );
-        // the level over the last few seconds: glowing bars in a well
-        let room = ui.available_height() - 4.0;
-        if room > 36.0 {
-            let (gr, _) = ui.allocate_exact_size(
-                egui::vec2(ui.available_width(), room.min(150.0)),
-                Sense::hover(),
-            );
+        // the level over the last 30 s: glowing bars in a well
+        // (right-click: keep scrolling, pause or hide)
+        if let Some(gr) = self.level_graph(ui) {
             let pp = ui.painter();
             crate::ember::well(pp, gr, 4);
             for db in [-6.0f32, -18.0, -30.0] {
@@ -1974,6 +2007,63 @@ impl App {
                 t.ink2,
             );
         }
+    }
+
+    /// Room for the Master panel's LEVEL history, with its right-click menu
+    /// (Scrolling / Paused / Hidden). None when there is no room or it is
+    /// hidden; hidden leaves a slim strip that brings it back.
+    fn level_graph(&mut self, ui: &mut egui::Ui) -> Option<Rect> {
+        let t = th();
+        let room = ui.available_height() - 4.0;
+        let hidden = self.extra.level_hist == 2;
+        if room <= if hidden { 18.0 } else { 36.0 } {
+            return None;
+        }
+        let h = if hidden { 18.0 } else { room.min(150.0) };
+        let (gr, resp) =
+            ui.allocate_exact_size(egui::vec2(ui.available_width(), h), Sense::click());
+        self.ca.level_rect = gr;
+        if hidden {
+            ui.painter().text(
+                gr.left_center() + egui::vec2(6.0, 0.0),
+                egui::Align2::LEFT_CENTER,
+                "Level history hidden · right-click to show",
+                FontId::proportional(11.0),
+                t.ink2,
+            );
+        } else if self.extra.level_hist == 1 {
+            ui.painter().text(
+                gr.right_top() + egui::vec2(-6.0, 4.0),
+                egui::Align2::RIGHT_TOP,
+                "PAUSED",
+                theme::label_font(10.5),
+                t.ink2,
+            );
+        }
+        let mut pick = None;
+        let resp = resp.on_hover_text("Level over the last 30 s · right-click to pause or hide");
+        resp.context_menu(|ui| {
+            let cur = self.extra.level_hist;
+            for (v, txt) in [(0u8, "Scrolling"), (1, "Paused"), (2, "Hidden")] {
+                if ui.radio(cur == v, txt).clicked() {
+                    pick = Some(v);
+                    ui.close();
+                }
+            }
+            ui.separator();
+            if ui.button("Clear history").clicked() {
+                pick = Some(cur);
+                self.ca.hist.clear();
+                ui.close();
+            }
+        });
+        if let Some(v) = pick {
+            if v != self.extra.level_hist {
+                self.extra.level_hist = v;
+                self.save_settings();
+            }
+        }
+        (!hidden).then_some(gr)
     }
 
     /// Master: volume, limiter drive / ceiling, meters, loudness
@@ -2041,6 +2131,7 @@ impl App {
                         ui.make_persistent_id("ca_master_vol"),
                         &mut v,
                         knob::KnobArgs {
+                            caption: None,
                             name: "Volume",
                             value_text: db(vol),
                             default: 0.5,
@@ -2064,6 +2155,7 @@ impl App {
                         ui.make_persistent_id("ca_master_drive"),
                         &mut g,
                         knob::KnobArgs {
+                            caption: None,
                             name: "Drive",
                             value_text: format!("+{:.1} dB", lim.gain_db),
                             default: crate::master::LimiterSettings::default().gain_db / 24.0,
@@ -2087,6 +2179,7 @@ impl App {
                         ui.make_persistent_id("ca_master_ceiling"),
                         &mut c,
                         knob::KnobArgs {
+                            caption: None,
                             name: "Ceiling",
                             value_text: format!("{:.1} dBTP", lim.ceiling_db),
                             default: (crate::master::LimiterSettings::default().ceiling_db + 12.0) / 12.0,
@@ -2167,11 +2260,9 @@ impl App {
                     .size(11.0)
                     .color(t.ink2),
                 );
-                // the level over the last few seconds (one column per frame
-                // while playing), filling the room left
-                let room = ui.available_height() - 4.0;
-                if room > 36.0 {
-                    let (gr, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), room.min(150.0)), Sense::hover());
+                // the level over the last 30 s (one column per quarter
+                // second of playing), filling the room left
+                if let Some(gr) = self.level_graph(ui) {
                     let pp = ui.painter();
                     pp.rect_filled(gr, 4.0, Color32::from_black_alpha(if t.light { 25 } else { 60 }));
                     for db in [-6.0f32, -18.0, -30.0] {
@@ -2204,11 +2295,9 @@ impl App {
         );
         }
         let playing = self.with(|s| s.engine.playing);
-        if playing {
-            self.ca.hist.push_back(peaks[0].max(peaks[1]));
-            while self.ca.hist.len() > HIST {
-                self.ca.hist.pop_front();
-            }
+        if playing && self.extra.level_hist != 1 {
+            let dt = ui.input(|i| i.stable_dt);
+            self.ca.hist_step(dt, peaks[0].max(peaks[1]));
         }
         if vol != vol0 || lim != lim0 {
             self.with(|s| {

@@ -1,5 +1,6 @@
-//! Musical typing: the computer keyboard as a little MIDI keyboard (Ctrl+K,
-//! the toolbar's Typing button or the piano roll's). Off by default. While
+//! Musical typing ("Keys → Notes" in the UI): the computer keyboard as a
+//! little MIDI keyboard (Ctrl+K, the toolbar's Keys → Notes button or the
+//! piano roll's). Off by default. While
 //! on, A S D F G H J K L ; are the white keys from C, W E T Y U O P the
 //! black ones, Z / X an octave down / up and C / V velocity down / up -
 //! those keys play notes instead of their shortcuts. A typed note plays the
@@ -72,11 +73,11 @@ impl App {
         }
         self.status = if self.typing.on {
             format!(
-                "Musical typing on ({}): A-; white keys, W E T Y U O P black, Z/X octave, C/V velocity - Ctrl+K: off",
+                "Keys → Notes on ({}): A-; white keys, W E T Y U O P black, Z/X octave, C/V velocity - Ctrl+K: off",
                 self.typing_label()
             )
         } else {
-            "Musical typing off".into()
+            "Keys → Notes off".into()
         };
     }
 

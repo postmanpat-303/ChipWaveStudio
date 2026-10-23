@@ -29,7 +29,10 @@ pub(super) struct KnobOut {
 }
 
 pub(super) struct KnobArgs<'a> {
+    /// the full name (tooltip, screen readers)
     pub name: &'a str,
+    /// a shorter text under the knob (else the name)
+    pub caption: Option<&'a str>,
     pub value_text: String,
     /// 0..1 position of the default (double-click)
     pub default: f32,
@@ -171,20 +174,16 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
             egui::FontId::monospace(10.0),
         )
     };
+    let cap = a.caption.unwrap_or(a.name);
     let name = if t.ember {
-        a.name.to_uppercase()
+        cap.to_uppercase()
     } else {
-        a.name.to_string()
+        cap.to_string()
     };
     let name_col = if a.enabled {
         t.ink
     } else {
         t.ink2.gamma_multiply(0.7)
-    };
-    let name_col = if t.ember && a.enabled {
-        t.ink2
-    } else {
-        name_col
     };
     let mut job = egui::text::LayoutJob::simple_singleline(name, small.clone(), name_col);
     job.wrap = egui::text::TextWrapping::truncate_at_width(CELL.x - 2.0);
@@ -199,7 +198,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     let mut job = egui::text::LayoutJob::simple_singleline(
         a.value_text.clone(),
         mono,
-        if t.ember { t.ink } else { t.value }.gamma_multiply(dim),
+        if t.ember { t.acc_hot } else { t.value }.gamma_multiply(dim),
     );
     job.wrap = egui::text::TextWrapping::truncate_at_width(CELL.x);
     job.halign = egui::Align::Center;
@@ -210,9 +209,16 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         kc.y + RAD + 16.0
     };
     p.galley(Pos2::new(cell.center().x, val_y), g, t.value);
+    // Slate's caption runs along the top: the badge and the lock sit under
+    // it, beside the knob (long captions like FEEDBACK stay clear)
+    let corner_y = if t.ember {
+        kc.y - RAD - 1.0
+    } else {
+        cell.top() + 1.0
+    };
     if let Some(b) = a.badge {
         p.text(
-            Pos2::new(cell.left() + 2.0, cell.top() + 2.0),
+            Pos2::new(cell.left() + 0.5, corner_y),
             egui::Align2::LEFT_TOP,
             b,
             egui::FontId::monospace(8.5),
@@ -223,7 +229,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     let mut lock_clicked = false;
     if let Some(l) = a.locked {
         let lr = Rect::from_min_size(
-            Pos2::new(cell.right() - 13.0, cell.top() + 1.0),
+            Pos2::new(cell.right() - 13.0, corner_y),
             egui::vec2(12.0, 13.0),
         );
         let lresp = ui
@@ -301,7 +307,15 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
 
 /// draw a card picture into `r`
 pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
-    let t = th();
+    let mut t = th();
+    if let Some(s) = crate::theme::active_skin() {
+        // a built-in instrument's picture: curves and marks in the tint
+        t.acc_hot = s.bright;
+        t.accent = s.tint;
+        t.instr = s.bright;
+        t.note = s.bright;
+        t.fx = s.bright;
+    }
     if t.ember {
         crate::ember::well(p, r, 4);
     } else {
@@ -395,13 +409,25 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
             } else {
                 format!("{cut:.0}")
             };
-            p.text(
-                Pos2::new(cx + 3.0, inner.top()),
-                egui::Align2::LEFT_TOP,
-                txt,
-                egui::FontId::monospace(9.0),
-                mark,
-            );
+            // the cutoff readout on the stop-band side (low-pass: right of
+            // the line, high-pass: left), clear of the resonance peak, on a
+            // plate so the curve never runs through it; flipped when it
+            // would leave the picture
+            let g = p.layout_no_wrap(txt, egui::FontId::monospace(9.0), mark);
+            let (w, gap) = (g.size().x, 6.0);
+            let right = *mode != 1;
+            let fits_r = cx + gap + w <= inner.right();
+            let fits_l = cx - gap - w >= inner.left();
+            let lx = if (right && fits_r) || (!fits_l && !right && fits_r) {
+                cx + gap
+            } else if fits_l {
+                cx - gap - w
+            } else {
+                (cx + gap).min(inner.right() - w)
+            };
+            let tr = Rect::from_min_size(Pos2::new(lx, inner.top()), g.size());
+            p.rect_filled(tr.expand(1.0), 2.0, t.crt_bot.gamma_multiply(0.8));
+            p.galley(tr.min, g, mark);
         }
         Viz::Wave(w) => {
             let n = w.len().max(2) - 1;

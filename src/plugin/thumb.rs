@@ -1,8 +1,9 @@
 //! Plugin editor thumbnails for the Browser (docs/BROWSER.md).
 //!
-//! On demand a crash-guarded child (`chipwave --capture-thumb …`) opens the
-//! plugin's editor off-screen, captures its HWND (Windows / Wine), downscales
-//! and writes a PNG under `<config>/plugin-thumbs/`. Failures and plugins
+//! On demand a crash-guarded child (`chipwave --capture-thumb …`, low
+//! priority, no console) opens the plugin's editor silently: off-screen, never
+//! activated, not on the taskbar. It captures that HWND (Windows / Wine) with
+//! `PrintWindow`, downscales and writes a PNG under `<config>/plugin-thumbs/`. Failures and plugins
 //! with no editor get a tidy generated card. The main process loads those
 //! PNGs lazily and shows them in the Plugins list.
 use super::{clap, vst3, Hosted};
@@ -14,8 +15,9 @@ use std::time::{Duration, Instant};
 
 /// capture child timeout (CHIPWAVE_THUMB_TIMEOUT seconds overrides)
 pub const TIMEOUT: Duration = Duration::from_secs(25);
-/// longest side of a cached thumbnail
-pub const MAX_SIDE: u32 = 256;
+/// longest side of a cached thumbnail (2x the hover preview; plenty for a
+/// preview, small on disk)
+pub const MAX_SIDE: u32 = 320;
 /// row thumbnail size in the Browser
 pub const ROW: f32 = 28.0;
 /// hover / details preview size
@@ -132,6 +134,27 @@ pub fn save_png(path: &Path, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> 
     wtr.write_image_data(rgba).map_err(|e| e.to_string())
 }
 
+/// a captured editor: opaque RGB, best compression (a few tens of KB)
+pub fn save_compact_png(path: &Path, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
+    if let Some(d) = path.parent() {
+        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    let rgb: Vec<u8> = rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|&[r, g, b, _]| [r, g, b])
+        .collect();
+    let f = std::io::BufWriter::new(std::fs::File::create(path).map_err(|e| e.to_string())?);
+    let mut enc = png::Encoder::new(f, w, h);
+    enc.set_color(png::ColorType::Rgb);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.set_compression(png::Compression::High);
+    enc.set_filter(png::Filter::Adaptive);
+    let mut wtr = enc.write_header().map_err(|e| e.to_string())?;
+    wtr.write_image_data(&rgb).map_err(|e| e.to_string())
+}
+
 pub fn load_png(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     let f = std::fs::File::open(path).map_err(|e| e.to_string())?;
     let f = std::io::BufReader::new(f);
@@ -170,7 +193,8 @@ pub fn load_png(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     Ok((info.width, info.height, rgba))
 }
 
-/// downscale so the longest side is at most `max`
+/// downscale so the longest side is at most `max`, averaging each block of
+/// source pixels (thin lines and text stay readable, no aliasing)
 pub fn downscale(w: u32, h: u32, rgba: &[u8], max: u32) -> (u32, u32, Vec<u8>) {
     if w == 0 || h == 0 || rgba.len() < (w * h * 4) as usize {
         return (w, h, rgba.to_vec());
@@ -181,14 +205,31 @@ pub fn downscale(w: u32, h: u32, rgba: &[u8], max: u32) -> (u32, u32, Vec<u8>) {
     }
     let nw = ((w as u64 * max as u64) / long as u64).max(1) as u32;
     let nh = ((h as u64 * max as u64) / long as u64).max(1) as u32;
+    let span = |i: u32, n: u32, src: u32| {
+        let a = (i as u64 * src as u64 / n as u64) as u32;
+        let b = (((i + 1) as u64 * src as u64 / n as u64) as u32).max(a + 1);
+        (a, b.min(src))
+    };
     let mut out = vec![0u8; (nw * nh * 4) as usize];
     for y in 0..nh {
+        let (y0, y1) = span(y, nh, h);
         for x in 0..nw {
-            let sx = (x as u64 * w as u64) / nw as u64;
-            let sy = (y as u64 * h as u64) / nh as u64;
-            let si = ((sy * w as u64 + sx) * 4) as usize;
+            let (x0, x1) = span(x, nw, w);
+            let mut sum = [0u32; 4];
+            for sy in y0..y1 {
+                let row = (sy * w) as usize;
+                for sx in x0..x1 {
+                    let si = (row + sx as usize) * 4;
+                    for (c, v) in sum.iter_mut().zip(&rgba[si..si + 4]) {
+                        *c += *v as u32;
+                    }
+                }
+            }
+            let n = (y1 - y0) * (x1 - x0);
             let di = ((y * nw + x) * 4) as usize;
-            out[di..di + 4].copy_from_slice(&rgba[si..si + 4]);
+            for (o, c) in out[di..di + 4].iter_mut().zip(sum) {
+                *o = ((c + n / 2) / n) as u8;
+            }
         }
     }
     (nw, nh, out)
@@ -395,6 +436,8 @@ pub fn cli_capture(args: &[String]) -> i32 {
     unsafe {
         use windows_sys::Win32::System::Diagnostics::Debug::*;
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+        // editor windows off-screen, no focus, no taskbar button
+        super::gui::win::set_silent();
     }
 
     let deadline = Instant::now() + timeout();
@@ -410,6 +453,7 @@ pub fn cli_capture(args: &[String]) -> i32 {
         let limit = timeout() + Duration::from_secs(2);
         std::thread::spawn(move || {
             std::thread::sleep(limit);
+            crate::plugin::debug::log(|| format!("thumbnail child: {n2} timed out, exiting"));
             write_card(&k2, &n2, &v2, &f2, Kind::Failed, "timed out");
             if let Some(p) = png_path(&k2) {
                 if p != Path::new(&out2) {
@@ -424,44 +468,48 @@ pub fn cli_capture(args: &[String]) -> i32 {
         if !path_buf.exists() {
             return Err(format!("plugin file missing: {path}"));
         }
+        crate::plugin::debug::log(|| {
+            format!("thumbnail child: capturing {name} ({id}) from {path}")
+        });
+        let t = crate::plugin::debug::Timed::new(|| format!("thumbnail child: load {name}"));
         let mut inst: Box<dyn Hosted> = match format.as_str() {
             "clap" => Box::new(clap::ClapInst::new(&path_buf, id, 48_000.0)?),
             "vst3" => Box::new(vst3::Vst3Inst::new(&path_buf, id, 48_000.0)?),
             f => return Err(format!("unknown format {f}")),
         };
+        drop(t);
         if !inst.has_editor() {
             return Err("no editor".into());
         }
         inst.open_editor(&format!("{name} – ChipWave thumb"))?;
-        // let the plugin paint (on-screen: BitBlt of off-screen HWNDs is black under Wine)
-        let mut pumps = 0;
-        while Instant::now() < deadline && pumps < 60 {
-            inst.poll_main();
-            pump_messages();
-            std::thread::sleep(Duration::from_millis(50));
-            pumps += 1;
-        }
+        // let the plugin paint (the window is off-screen and never shown to the user)
+        let settle = |inst: &mut Box<dyn Hosted>, n: u32| {
+            for _ in 0..n {
+                if Instant::now() >= deadline {
+                    break;
+                }
+                inst.poll_main();
+                pump_messages();
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        };
+        settle(&mut inst, 60);
         let hwnd = editor_hwnd(&*inst).ok_or("no editor window to capture")?;
-        inst.poll_main();
-        pump_messages();
-        std::thread::sleep(Duration::from_millis(150));
-        place_top_left(hwnd);
-        for _ in 0..10 {
-            inst.poll_main();
-            pump_messages();
-            std::thread::sleep(Duration::from_millis(50));
-        }
         let (mut w, mut h, mut rgba) = capture_hwnd(hwnd)?;
         if is_mostly_blank(&rgba) {
-            // OpenGL / layered editors: copy the window's area of the screen
-            let (sw, sh, s) = capture_screen_area(hwnd)?;
-            (w, h, rgba) = (sw, sh, s);
+            // some editors only paint where a monitor is: move the window on
+            // screen fully transparent and click-through (still invisible,
+            // still never activated) and try once more
+            transparent_on_screen(hwnd);
+            settle(&mut inst, 20);
+            (w, h, rgba) = capture_hwnd(hwnd)?;
         }
         if is_mostly_blank(&rgba) {
+            // never fall back to copying the screen: that needs a visible window
             return Err("editor capture was blank".into());
         }
         let (w, h, rgba) = downscale(w, h, &rgba, MAX_SIDE);
-        save_png(Path::new(out), w, h, &rgba)?;
+        save_compact_png(Path::new(out), w, h, &rgba)?;
         write_meta(
             &k,
             &Meta {
@@ -543,8 +591,35 @@ fn editor_hwnd(_inst: &dyn Hosted) -> Option<isize> {
     }
 }
 
+/// capture an editor window's client area without it being on screen:
+/// `PrintWindow` with full content (DirectX / OpenGL editors under DWM), then
+/// plain `PrintWindow`, then a copy of the window's own DC. The first result
+/// that isn't blank wins.
 #[cfg(windows)]
 pub fn capture_hwnd(hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
+    /// PW_CLIENTONLY | PW_RENDERFULLCONTENT
+    const FULL: u32 = 1 | 2;
+    /// PW_CLIENTONLY
+    const CLIENT: u32 = 1;
+    let mut last = Err("no capture".to_string());
+    for how in [Grab::Print(FULL), Grab::Print(CLIENT), Grab::Blt] {
+        last = grab(hwnd, how);
+        if last.as_ref().is_ok_and(|(_, _, px)| !is_mostly_blank(px)) {
+            break;
+        }
+    }
+    last
+}
+
+#[cfg(windows)]
+#[derive(Clone, Copy)]
+enum Grab {
+    Print(u32),
+    Blt,
+}
+
+#[cfg(windows)]
+fn grab(hwnd: isize, how: Grab) -> Result<(u32, u32, Vec<u8>), String> {
     use windows_sys::Win32::Foundation::*;
     use windows_sys::Win32::Graphics::Gdi::*;
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
@@ -567,11 +642,10 @@ pub fn capture_hwnd(hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
         let mem = CreateCompatibleDC(hdc);
         let bmp = CreateCompatibleBitmap(hdc, w as i32, h as i32);
         let old = SelectObject(mem, bmp as _);
-        // PrintWindow (user32) — better for off-screen / layered UIs
-        let ok_pw = print_window(hwnd, mem);
-        if ok_pw == 0 {
-            BitBlt(mem, 0, 0, w as i32, h as i32, hdc, 0, 0, SRCCOPY);
-        }
+        let drawn = match how {
+            Grab::Print(flags) => print_window(hwnd, mem, flags) != 0,
+            Grab::Blt => BitBlt(mem, 0, 0, w as i32, h as i32, hdc, 0, 0, SRCCOPY) != 0,
+        };
         let mut bmi: BITMAPINFO = std::mem::zeroed();
         bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
         bmi.bmiHeader.biWidth = w as i32;
@@ -593,6 +667,9 @@ pub fn capture_hwnd(hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
         DeleteObject(bmp as _);
         DeleteDC(mem);
         ReleaseDC(hwnd as HWND, hdc);
+        if !drawn {
+            return Err("window capture failed".into());
+        }
         if got == 0 {
             return Err("GetDIBits failed".into());
         }
@@ -606,8 +683,7 @@ pub fn capture_hwnd(hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
 }
 
 #[cfg(windows)]
-fn print_window(hwnd: isize, hdc: windows_sys::Win32::Graphics::Gdi::HDC) -> i32 {
-    // linked via user32; flag 2 = PW_RENDERFULLCONTENT when available
+fn print_window(hwnd: isize, hdc: windows_sys::Win32::Graphics::Gdi::HDC, flags: u32) -> i32 {
     #[link(name = "user32")]
     unsafe extern "system" {
         fn PrintWindow(
@@ -616,83 +692,13 @@ fn print_window(hwnd: isize, hdc: windows_sys::Win32::Graphics::Gdi::HDC) -> i32
             nflags: u32,
         ) -> windows_sys::core::BOOL;
     }
-    unsafe { PrintWindow(hwnd as _, hdc, 2) }
+    unsafe { PrintWindow(hwnd as _, hdc, flags) }
 }
 
-/// put the editor on-screen, top-left and topmost (so nothing covers it)
-fn place_top_left(_hwnd: isize) {
+/// second capture try, still invisible (see gui::win::transparent_on_screen)
+fn transparent_on_screen(_hwnd: isize) {
     #[cfg(windows)]
-    unsafe {
-        use windows_sys::Win32::UI::WindowsAndMessaging::*;
-        SetWindowPos(
-            _hwnd as _,
-            HWND_TOPMOST,
-            0,
-            0,
-            0,
-            0,
-            SWP_NOSIZE | SWP_SHOWWINDOW,
-        );
-    }
-}
-
-#[cfg(windows)]
-fn capture_screen_area(hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
-    use windows_sys::Win32::Foundation::*;
-    use windows_sys::Win32::Graphics::Gdi::*;
-    use windows_sys::Win32::UI::WindowsAndMessaging::*;
-    unsafe {
-        let mut rc: RECT = std::mem::zeroed();
-        if GetClientRect(hwnd as HWND, &mut rc) == 0 {
-            return Err("GetClientRect failed".into());
-        }
-        let mut pt = POINT { x: 0, y: 0 };
-        ClientToScreen(hwnd as HWND, &mut pt);
-        let w = (rc.right - rc.left).max(1);
-        let h = (rc.bottom - rc.top).max(1);
-        let sdc = GetDC(std::ptr::null_mut());
-        if sdc.is_null() {
-            return Err("GetDC(screen) failed".into());
-        }
-        let mem = CreateCompatibleDC(sdc);
-        let bmp = CreateCompatibleBitmap(sdc, w, h);
-        let old = SelectObject(mem, bmp as _);
-        BitBlt(mem, 0, 0, w, h, sdc, pt.x, pt.y, SRCCOPY);
-        let mut bmi: BITMAPINFO = std::mem::zeroed();
-        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
-        bmi.bmiHeader.biWidth = w;
-        bmi.bmiHeader.biHeight = -h;
-        bmi.bmiHeader.biPlanes = 1;
-        bmi.bmiHeader.biBitCount = 32;
-        bmi.bmiHeader.biCompression = BI_RGB;
-        let mut px = vec![0u8; (w * h * 4) as usize];
-        let got = GetDIBits(
-            mem,
-            bmp,
-            0,
-            h as u32,
-            px.as_mut_ptr() as *mut _,
-            &mut bmi,
-            DIB_RGB_COLORS,
-        );
-        SelectObject(mem, old);
-        DeleteObject(bmp as _);
-        DeleteDC(mem);
-        ReleaseDC(std::ptr::null_mut(), sdc);
-        if got == 0 {
-            return Err("GetDIBits(screen) failed".into());
-        }
-        for c in px.as_chunks_mut::<4>().0 {
-            c.swap(0, 2);
-            c[3] = 255;
-        }
-        Ok((w as u32, h as u32, px))
-    }
-}
-
-#[cfg(not(windows))]
-fn capture_screen_area(_hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
-    Err("editor capture is Windows-only for now".into())
+    super::gui::win::transparent_on_screen(_hwnd);
 }
 
 #[cfg(not(windows))]
@@ -700,14 +706,26 @@ pub fn capture_hwnd(_hwnd: isize) -> Result<(u32, u32, Vec<u8>), String> {
     Err("editor capture is Windows-only for now".into())
 }
 
-/// one-at-a-time queue used by the Browser
+/// one-at-a-time queue used by the Browser. Each plugin file is loaded at
+/// most once per session, for its main class only (scan::main_class); the
+/// other classes of a multi-program file get a card without loading anything.
 #[derive(Default)]
 pub struct Queue {
     pending: Vec<Pending>,
     busy: bool,
     child: Option<std::process::Child>,
     child_key: String,
+    child_path: String,
     started: Option<Instant>,
+    /// plugin files (format + path) a capture child was started for this session
+    loaded: std::collections::HashSet<String>,
+}
+
+/// message on the card of a class that isn't its file's main plugin
+pub const NOT_MAIN: &str = "not the main plugin of its file";
+
+fn file_key(format: &str, path: &str) -> String {
+    format!("{format}|{path}")
 }
 
 #[derive(Clone)]
@@ -720,7 +738,35 @@ struct Pending {
     vendor: String,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Decision {
+    /// not the main class: a card, nothing loaded
+    Card,
+    /// this file is loading, queued or was loaded this session
+    Skip,
+    Capture,
+}
+
 impl Queue {
+    /// only the file's main class is ever captured (`main`: its id from the
+    /// scan, None when unknown), and each file loads once per session
+    fn decide(&self, main: Option<&str>, format: &str, path: &str, id: &str) -> Decision {
+        if main.is_some_and(|m| m != id) {
+            return Decision::Card;
+        }
+        let fk = file_key(format, path);
+        if self.loaded.contains(&fk)
+            || self.child_path == fk
+            || self
+                .pending
+                .iter()
+                .any(|p| file_key(&p.format, &p.path) == fk)
+        {
+            return Decision::Skip;
+        }
+        Decision::Capture
+    }
+
     pub fn enqueue(
         &mut self,
         format: &str,
@@ -737,13 +783,18 @@ impl Queue {
                 return;
             }
         }
-        if self
-            .pending
-            .iter()
-            .any(|p| key(&p.format, &p.id, &p.version) == k)
-            || self.child_key == k
-        {
-            return;
+        match self.decide(
+            super::scan::main_id(path, format).as_deref(),
+            format,
+            path,
+            id,
+        ) {
+            Decision::Card => {
+                write_card(&k, name, vendor, format, Kind::Card, NOT_MAIN);
+                return;
+            }
+            Decision::Skip => return,
+            Decision::Capture => {}
         }
         self.pending.push(Pending {
             format: format.into(),
@@ -768,6 +819,8 @@ impl Queue {
         if let Some(p) = png_path(&k) {
             let _ = std::fs::remove_file(p);
         }
+        // asked for: this file may load once more
+        self.loaded.remove(&file_key(format, path));
         write_meta(
             &k,
             &Meta {
@@ -787,19 +840,33 @@ impl Queue {
         let mut finished = false;
         if let Some(child) = &mut self.child {
             match child.try_wait() {
-                Ok(Some(_)) => {
+                Ok(Some(st)) => {
+                    crate::plugin::debug::log(|| {
+                        format!(
+                            "thumbnail: capture of {} finished ({st}) after {:.1}s",
+                            self.child_key,
+                            self.started
+                                .map(|t| t.elapsed().as_secs_f64())
+                                .unwrap_or(0.0)
+                        )
+                    });
                     self.child = None;
                     self.child_key.clear();
+                    self.child_path.clear();
                     self.busy = false;
                     self.started = None;
                     finished = true;
                 }
                 Ok(None) => {
                     if self.started.is_some_and(|t| t.elapsed() > timeout()) {
+                        crate::plugin::debug::log(|| {
+                            format!("thumbnail: capture of {} timed out, killed", self.child_key)
+                        });
                         let _ = child.kill();
                         let _ = child.wait();
                         self.child = None;
                         self.child_key.clear();
+                        self.child_path.clear();
                         self.busy = false;
                         self.started = None;
                         finished = true;
@@ -808,6 +875,7 @@ impl Queue {
                 Err(_) => {
                     self.child = None;
                     self.child_key.clear();
+                    self.child_path.clear();
                     self.busy = false;
                     self.started = None;
                 }
@@ -841,12 +909,24 @@ impl Queue {
                     {
                         use std::os::windows::process::CommandExt;
                         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-                        cmd.creation_flags(CREATE_NO_WINDOW);
+                        // background work: never compete with the audio or the UI
+                        const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+                        cmd.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
                     }
                     match cmd.spawn() {
                         Ok(c) => {
+                            crate::plugin::debug::log(|| {
+                                format!(
+                                    "thumbnail: capture child {} started for {} ({})",
+                                    c.id(),
+                                    p.name,
+                                    p.path
+                                )
+                            });
                             self.child = Some(c);
                             self.child_key = k;
+                            self.child_path = file_key(&p.format, &p.path);
+                            self.loaded.insert(self.child_path.clone());
                             self.busy = true;
                             self.started = Some(Instant::now());
                         }
@@ -897,8 +977,58 @@ mod tests {
         let (w2, h2, rgba2) = load_png(&p).unwrap();
         assert_eq!((w2, h2), (w, h));
         assert_eq!(rgba2.len(), rgba.len());
-        let (dw, dh, _) = downscale(800, 600, &vec![0u8; 800 * 600 * 4], 256);
-        assert!(dw <= 256 && dh <= 256);
+        let (dw, dh, _) = downscale(800, 600, &vec![0u8; 800 * 600 * 4], MAX_SIDE);
+        assert_eq!((dw, dh), (320, 240));
+        // a big editor: averaged down, saved small and read back
+        let (w, h) = (1200u32, 800u32);
+        let mut big = vec![255u8; (w * h * 4) as usize];
+        for (i, px) in big.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            // 1-px black/white stripes average to greys (3 or 4 columns a pixel), not black or white
+            let v = if i % 2 == 0 { 0 } else { 255 };
+            px[..3].copy_from_slice(&[v, v, v]);
+        }
+        let (sw, sh, small) = downscale(w, h, &big, MAX_SIDE);
+        assert_eq!((sw, sh), (320, 213));
+        assert!(small
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|p| (80..=176).contains(&p[0])));
+        let p2 = dir.join("cap.png");
+        save_compact_png(&p2, sw, sh, &small).unwrap();
+        assert!(std::fs::metadata(&p2).unwrap().len() < 64 * 1024);
+        let (w3, h3, back) = load_png(&p2).unwrap();
+        assert_eq!((w3, h3), (sw, sh));
+        assert_eq!(back, small);
+    }
+
+    #[test]
+    fn a_plugin_file_loads_once_and_only_for_its_main_class() {
+        let mut q = Queue::default();
+        let big = "C:/VST3/Big.vst3";
+        assert_eq!(q.decide(Some("main"), "vst3", big, "16out"), Decision::Card);
+        assert_eq!(
+            q.decide(Some("main"), "vst3", big, "main"),
+            Decision::Capture
+        );
+        q.pending.push(Pending {
+            format: "vst3".into(),
+            path: big.into(),
+            id: "main".into(),
+            version: "1".into(),
+            name: "Big".into(),
+            vendor: String::new(),
+        });
+        // queued: a second class (unknown main) doesn't load the file again
+        assert_eq!(q.decide(None, "vst3", big, "other"), Decision::Skip);
+        q.pending.clear();
+        q.child_path = file_key("vst3", big);
+        assert_eq!(q.decide(None, "vst3", big, "main"), Decision::Skip);
+        q.child_path.clear();
+        q.loaded.insert(file_key("vst3", big));
+        assert_eq!(q.decide(None, "vst3", big, "main"), Decision::Skip);
+        // the same path as a CLAP is another file
+        assert_eq!(q.decide(None, "clap", big, "main"), Decision::Capture);
     }
 
     fn tempfile_dir() -> PathBuf {

@@ -38,6 +38,15 @@ pub(crate) struct DkUi {
     /// audition key counter (live keys 200..=215)
     akey: u8,
     pub gen: GenSet,
+    /// Kits… / Dice kit, applied after this frame's edits (one undo step)
+    load: Option<KitLoad>,
+}
+
+/// a pending Kits… pick or Dice kit
+#[derive(Clone, Debug)]
+enum KitLoad {
+    Kit(String),
+    Dice(u32),
 }
 
 pub(crate) struct GenSet {
@@ -241,7 +250,6 @@ impl App {
         if compact {
             self.dk_compact(
                 ui,
-                &name,
                 &mut kit,
                 &pats,
                 cur.as_ref(),
@@ -308,6 +316,17 @@ impl App {
                 );
             }
         }
+        if let Some(l) = self.dk.load.take() {
+            // the kit's own edits this frame first, then the load as one step
+            if kit != orig {
+                self.dk_store_kit(idx, &kit);
+            }
+            if let (Some(d), Some(c)) = (edit, cur.as_ref()) {
+                self.dk_write(c.data, d);
+            }
+            self.dk_apply_load(idx, l, cur.as_ref());
+            return;
+        }
         if kit != orig {
             kit.fix();
             self.with(|s| {
@@ -334,7 +353,6 @@ impl App {
     fn dk_compact(
         &mut self,
         ui: &mut egui::Ui,
-        name: &str,
         kit: &mut DrumKitP,
         pats: &[PatRow],
         cur: Option<&Cur>,
@@ -348,7 +366,7 @@ impl App {
         area(ui, tb, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.add_space(4.0);
-                ui.label(egui::RichText::new(name).strong().color(th().ink));
+                // (the instrument header above names the kit)
                 self.dk_btn_kits(ui, kit);
                 self.dk_btn_dice(ui, kit);
                 ui.separator();
@@ -746,41 +764,153 @@ impl App {
         }
     }
 
-    fn dk_btn_dice(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP) {
+    fn dk_btn_dice(&mut self, ui: &mut egui::Ui, _kit: &mut DrumKitP) {
         if crate::ember::button(ui, "Dice kit", false)
-            .on_hover_text("re-roll every pad's unlocked knobs (Undo takes it back)")
+            .on_hover_text(
+                "an empty pattern: a random kit and its starter groove; else re-roll every pad's unlocked knobs (the pattern stays). Undo takes it back",
+            )
             .clicked()
         {
             let seed = (ui.input(|i| i.time) * 1000.0) as u32 | 1;
-            for (i, p) in kit.pads.iter_mut().enumerate() {
-                crate::gen::roll(&mut p.drum, seed.wrapping_add(i as u32 * 0x9E37_79B9));
-            }
+            self.dk.load = Some(KitLoad::Dice(seed));
         }
     }
 
-    fn dk_btn_kits(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP) {
+    fn dk_btn_kits(&mut self, ui: &mut egui::Ui, _kit: &mut DrumKitP) {
         ui.menu_button("Kits…", |ui| {
             ui.label(
                 egui::RichText::new(
-                    "load a kit's sounds into the pads with the same keys (patterns stay)",
+                    "load a kit's sounds into the pads with the same keys; an empty pattern gets the kit's starter groove (notes stay otherwise)",
                 )
                 .small()
                 .color(th().ink2),
             );
-            for (n, tip, p) in dk::presets() {
+            for (n, tip) in dk::presets().into_iter().map(|(n, t, _)| (n, t)) {
                 if ui.button(&n).on_hover_text(tip).clicked() {
-                    if let GenEngine::Drums(k) = p.engine {
-                        for pad in kit.pads.iter_mut() {
-                            if let Some(src) = k.pads.iter().find(|x| x.key == pad.key) {
-                                pad.drum = src.drum;
-                                pad.tune = src.tune;
-                            }
-                        }
-                    }
+                    self.dk.load = Some(KitLoad::Kit(n));
                     ui.close();
                 }
             }
         });
+    }
+
+    /// write `kit` into instrument `idx`
+    fn dk_store_kit(&mut self, idx: usize, kit: &DrumKitP) {
+        let mut kit = kit.clone();
+        kit.fix();
+        self.with(|s| {
+            if let Some(InstrumentKind::Gen(g)) =
+                s.song.instruments.get_mut(idx).map(|i| &mut i.kind)
+            {
+                g.engine = GenEngine::Drums(kit);
+            }
+        });
+        self.dirty = true;
+    }
+
+    /// the notes of note data `data`
+    fn dk_clip_notes(&self, data: usize) -> Option<Vec<Note>> {
+        self.with(|s| {
+            s.song
+                .timeline
+                .as_deref()
+                .and_then(|t| t.notes.get(data))
+                .map(|d| d.notes.clone())
+        })
+    }
+
+    /// Kits… / Dice kit on instrument `idx`, one undo step. A kit pick loads
+    /// its sounds, pad names and name into the pads with the same keys; an
+    /// empty pattern `cur` also gets the kit's starter groove. Dice on an
+    /// empty pattern picks a random kit (and its groove); with notes it
+    /// re-rolls the pads' unlocked knobs and the pattern stays.
+    fn dk_apply_load(&mut self, idx: usize, l: KitLoad, cur: Option<&Cur>) {
+        let Some((iname, mut kit)) = self.with(|s| {
+            let i = s.song.instruments.get(idx)?;
+            Some((i.name.clone(), dk::kit_of(i)?.clone()))
+        }) else {
+            return;
+        };
+        let empty = cur
+            .and_then(|c| self.dk_clip_notes(c.data))
+            .is_some_and(|n| n.is_empty());
+        let pick = match &l {
+            KitLoad::Kit(n) => Some(n.clone()),
+            KitLoad::Dice(seed) if empty => Some(dice_kit(*seed, &iname)),
+            KitLoad::Dice(_) => None,
+        };
+        self.snapshot();
+        self.undo_hold += 1;
+        let slot = idx + 1;
+        let msg = match (pick, l) {
+            (Some(n), l) => {
+                let Some(p) = dk::preset(&n) else {
+                    self.undo_hold -= 1;
+                    self.status = format!("No {n} preset");
+                    return;
+                };
+                let mut got = 0;
+                if let GenEngine::Drums(k) = p.engine {
+                    for pad in kit.pads.iter_mut() {
+                        if let Some(src) = k.pads.iter().find(|x| x.key == pad.key) {
+                            pad.drum = src.drum;
+                            pad.tune = src.tune;
+                            pad.name = src.name.clone();
+                            got += 1;
+                        }
+                    }
+                }
+                self.dk_store_kit(idx, &kit);
+                self.with(|s| {
+                    if let Some(i) = s.song.instruments.get_mut(idx) {
+                        i.name = n.clone();
+                    }
+                });
+                let dice = if matches!(l, KitLoad::Dice(_)) {
+                    "Dice kit: "
+                } else {
+                    ""
+                };
+                match cur.filter(|_| empty).zip(starter_groove(&n)) {
+                    Some((c, g)) => {
+                        let mut d = c.d.clone();
+                        d.notes = g.notes(0);
+                        d.len = g.len();
+                        d.name = g.name.to_string();
+                        d.drum = Some(DrumMeta { swing: g.swing });
+                        let hits = d.notes.len();
+                        self.dk_write(c.data, d);
+                        format!(
+                            "{dice}{slot:02X} is now {n} ({got} pads), with its starter groove {} ({hits} hits)",
+                            g.name
+                        )
+                    }
+                    None if empty || cur.is_none() => {
+                        format!("{dice}{slot:02X} is now {n} ({got} pads)")
+                    }
+                    None => format!(
+                        "{dice}{slot:02X} is now {n} ({got} pads); the pattern's notes stay"
+                    ),
+                }
+            }
+            (None, KitLoad::Dice(seed)) => {
+                for (i, p) in kit.pads.iter_mut().enumerate() {
+                    crate::gen::roll(
+                        &mut p.drum,
+                        seed.wrapping_add((i as u32).wrapping_mul(0x9E37_79B9)),
+                    );
+                }
+                self.dk_store_kit(idx, &kit);
+                format!(
+                    "Dice kit: {} pads of {iname} re-rolled (unlocked knobs); the pattern's notes stay",
+                    kit.pads.len()
+                )
+            }
+            (None, KitLoad::Kit(_)) => unreachable!(),
+        };
+        self.undo_hold -= 1;
+        self.dirty = true;
+        self.status = msg;
     }
 
     fn dk_btn_dup(&mut self, ui: &mut egui::Ui, cur: Option<&Cur>) {
@@ -2305,6 +2435,29 @@ impl App {
             self.with(|s| drop(s.engine.set_pattern_preview(None)));
         }
     }
+}
+
+/// the built-in groove kit `name` starts with: its first 1-bar one, else its first
+pub(crate) fn starter_groove(name: &str) -> Option<&'static crate::drumpat::Pat> {
+    let mine = || {
+        crate::drumpat::PATTERNS
+            .iter()
+            .filter(move |p| p.kit == name)
+    };
+    mine().find(|p| p.bars == 1).or_else(|| mine().next())
+}
+
+/// Dice kit's pick: a kit from `seed`, never `not` (the current one)
+fn dice_kit(seed: u32, not: &str) -> String {
+    let all: Vec<String> = dk::presets()
+        .into_iter()
+        .map(|(n, _, _)| n)
+        .filter(|n| !n.eq_ignore_ascii_case(not))
+        .collect();
+    let h = seed.wrapping_mul(0x9E37_79B9).rotate_left(13);
+    all.get(h as usize % all.len().max(1))
+        .cloned()
+        .unwrap_or_else(|| not.to_string())
 }
 
 #[cfg(test)]

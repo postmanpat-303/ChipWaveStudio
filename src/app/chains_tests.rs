@@ -33,6 +33,8 @@ pub(super) fn chains_on(slot: u8) -> Harness<'static, App> {
     key(&mut h, Key::Num7, egui::Modifiers::COMMAND);
     h.state_mut().instr = slot;
     h.state_mut().dev.follow_ch = h.state().ch;
+    // these tests drive the tree (Cards is the default since 22 Oct 2026)
+    h.state_mut().extra.chains_cards = false;
     frames(&mut h, 3);
     h
 }
@@ -48,8 +50,8 @@ fn the_tab_is_called_nested_device_chains_and_ctrl_7_opens_it() {
     let h = chains_on(7);
     assert!(h.state().devices_visible());
     assert!(
-        !h.state().extra.chains_cards,
-        "the tree is the default (D1)"
+        crate::settings::Extra::default().chains_cards,
+        "Cards is the default (Del, 22 Oct 2026)"
     );
     assert!(has(&h, "Nested Device Chains"), "the lower panel's tab");
     assert!(
@@ -62,7 +64,7 @@ fn the_tab_is_called_nested_device_chains_and_ctrl_7_opens_it() {
 fn old_settings_select_chains_and_remember_the_tree() {
     // a 0.2.6 settings file has none of the new keys
     let e: crate::settings::Extra = toml::from_str("lower_dev = true").unwrap();
-    assert!(e.lower_dev && e.select_chains && !e.chains_cards);
+    assert!(e.lower_dev && e.select_chains && e.chains_cards && !e.chains_view_chosen);
     assert_eq!(e.chains_tree_w, 370.0);
     // the layout round-trips
     let mut s = crate::settings::Settings::default();
@@ -209,6 +211,7 @@ fn fold_tree_and_the_timeline_keeps_three_rows_at_laptop_size() {
     // 1366 x 768 on the Timeline: three track rows stay above the panel
     let mut h = super::unified_tests::tl_demo();
     h.state_mut().instr = 7;
+    h.state_mut().extra.chains_cards = false;
     h.state_mut().set_lower(4);
     super::unified_tests::laptop(&mut h);
     assert!(h.state().devices_visible() && h.state().view == View::Timeline);

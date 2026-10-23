@@ -2508,6 +2508,59 @@ fn plugin_instrument_loads_shows_its_panel_and_saves_its_state() {
 }
 
 #[test]
+fn a_plugin_editor_edit_marks_the_song_dirty_and_touches_its_macro() {
+    let mut h = harness_with(crate::plugin::tests::plugin_song());
+    classic(&mut h);
+    frames(&mut h, 3);
+    h.state_mut().dirty = false;
+    h.state_mut().plug.state_dirty = false;
+    let handle = h
+        .state()
+        .with(|s| s.engine.plugins.slots[0].inst.test_handle());
+    // the editor moves Tone (parameter 2, mapped to macro 2)
+    crate::plugin::hosttests::gui_edit(handle, 2, 0.75);
+    frames(&mut h, 2);
+    assert!(h.state().dirty, "the song is marked dirty");
+    assert!(h.state().plug.state_dirty);
+    assert_eq!(
+        h.state().tlv.last_touch,
+        Some(crate::automation::Target::Macro(0, 1)),
+        "the mapped macro counts as touched"
+    );
+    // saved into the song with the next capture
+    h.state_mut().capture_plugins();
+    let st = h.state().with(|s| match &s.song.instruments[0].kind {
+        InstrumentKind::Plugin(p) => p.state.clone(),
+        _ => String::new(),
+    });
+    let mut p = crate::plugin::tests::patch();
+    p.state = st;
+    let back = crate::plugin::instantiate(&p, 48000.0).unwrap();
+    assert_eq!(back.value(2), Some(0.75));
+}
+
+#[test]
+fn saving_keeps_plugin_edits_the_plugin_never_reported() {
+    let mut h = harness_with(crate::plugin::tests::plugin_song());
+    classic(&mut h);
+    frames(&mut h, 3);
+    // many plugins never call mark_dirty: the host must still ask on save
+    h.state().with(|s| s.engine.plugins.set_param(0, 1, 0.33));
+    h.state_mut().plug.state_dirty = false;
+    let undo_len = h.state().hist.len();
+    h.state_mut().capture_plugins();
+    let st = h.state().with(|s| match &s.song.instruments[0].kind {
+        InstrumentKind::Plugin(p) => p.state.clone(),
+        _ => String::new(),
+    });
+    let mut p = crate::plugin::tests::patch();
+    p.state = st;
+    let back = crate::plugin::instantiate(&p, 48000.0).unwrap();
+    assert_eq!(back.value(1), Some(0.33));
+    assert_eq!(h.state().hist.len(), undo_len, "still not an undo step");
+}
+
+#[test]
 fn new_menu_opens_the_plugin_browser() {
     let mut h = harness();
     h.state_mut().plug.scan_msg = "x".into(); // no automatic scan in tests

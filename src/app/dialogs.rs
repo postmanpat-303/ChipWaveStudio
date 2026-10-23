@@ -151,6 +151,13 @@ impl App {
             }
             return true;
         }
+        if self.ip.sw.pie.is_some() {
+            // StringWave's knob pie: the same
+            if key == Key::Escape {
+                self.ip.sw.pie = None;
+            }
+            return true;
+        }
         if key == Key::Escape && self.clip_rename.is_some() {
             return self.obj_pie_escape();
         }

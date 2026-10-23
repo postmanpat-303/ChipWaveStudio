@@ -371,3 +371,179 @@ fn the_step_grid_pie_fills_clears_and_duplicates() {
     super::super::objpie_tests::pick(&mut h, "Copy pattern", None);
     assert_eq!(clip_count(&h), n0 + 1, "{}", h.state().status);
 }
+
+/// Del's steps (23 Oct): a Drum Kit on a new track (the pie's Add ›
+/// Drum Kit), then a clip drawn by hand on the timeline (no drum metadata),
+/// at a laptop size (the compact layout); returns (harness, slot, clip id)
+fn manual_clip_harness() -> (Harness<'static, App>, u8, u32) {
+    let mut s = crate::fileio::demo_song();
+    let (t, _) = crate::timeline::from_order(&s);
+    s.timeline = Some(Box::new(t));
+    let mut h = harness_with(s);
+    h.set_size(egui::vec2(1366.0, 768.0));
+    frames(&mut h, 2);
+    let n = h.state().with(|s| s.song.channels);
+    h.state_mut()
+        .track_new_with_instrument(n, crate::app::trackpie::Builtin::DrumKit);
+    frames(&mut h, 2);
+    let tr = h.state().ch;
+    let slot = h.state().instr;
+    let id = h
+        .state()
+        .with(|s| tl::new_note_clip(&mut s.song, tr, 0))
+        .unwrap();
+    h.state_mut().tlv.sel = Some(id);
+    h.state_mut().show_instrument_editor();
+    frames(&mut h, 4);
+    assert_eq!(
+        h.state().dk.clip,
+        Some(id),
+        "the editor edits the drawn clip"
+    );
+    assert!(h.state().dk.compact);
+    (h, slot, id)
+}
+
+fn inst_name(h: &Harness<'static, App>, slot: u8) -> String {
+    h.state()
+        .with(|s| s.song.instruments[slot as usize - 1].name.clone())
+}
+
+fn pick_kit(h: &mut Harness<'static, App>, kit: &str) {
+    h.get_by_label("Kits…").click();
+    frames(h, 3);
+    h.get_by_label(kit).click();
+    frames(h, 3);
+}
+
+/// the pads of `kit` carry `name`'s sounds and names, key by key
+fn has_kit(kit: &DrumKitP, name: &str) -> bool {
+    let p = dk::preset(name).unwrap();
+    let GenEngine::Drums(src) = p.engine else {
+        panic!()
+    };
+    kit.pads.iter().all(|pad| {
+        src.pads
+            .iter()
+            .find(|x| x.key == pad.key)
+            .is_none_or(|x| x.drum == pad.drum && x.name == pad.name)
+    })
+}
+
+/// the bug: Kits… on an empty, hand-drawn clip changed the pads' sounds
+/// only (the header kept "Psy Kit", nothing to hear): now the kit's name,
+/// sounds and starter groove land, one undo takes it all back
+#[test]
+fn kits_on_an_empty_manual_clip_loads_the_kit_and_its_groove() {
+    let (mut h, slot, id) = manual_clip_harness();
+    let name0 = inst_name(&h, slot);
+    let kit0 = h.with_kit(slot, |k| k.clone());
+    assert!(notes(&h, id).is_empty());
+    pick_kit(&mut h, "Chip Kit");
+    assert_eq!(inst_name(&h, slot), "Chip Kit", "the header names the kit");
+    assert!(
+        h.with_kit(slot, |k| has_kit(k, "Chip Kit")),
+        "the Chip Kit sounds"
+    );
+    let g = starter_groove("Chip Kit").unwrap();
+    let n = notes(&h, id);
+    assert_eq!(n.len(), g.hits(), "the starter groove {}", g.name);
+    assert!(n.iter().all(|x| x.instr == 0), "on the track's own kit");
+    assert!(
+        h.state().status.contains("Chip Kit"),
+        "{}",
+        h.state().status
+    );
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(inst_name(&h, slot), name0);
+    assert_eq!(
+        h.with_kit(slot, |k| k.clone()),
+        kit0,
+        "one undo: the sounds"
+    );
+    assert!(notes(&h, id).is_empty(), "one undo: the groove");
+}
+
+/// with notes, Kits… swaps the sounds and the name; the notes stay
+#[test]
+fn kits_on_a_manual_clip_with_notes_keeps_the_notes() {
+    let (mut h, slot, id) = manual_clip_harness();
+    let (p, _, r) = *h
+        .state()
+        .dk
+        .cells
+        .iter()
+        .find(|c| c.0 == 0 && c.1 == 0)
+        .expect("cell drawn");
+    let _ = p;
+    click_at(&mut h, r.center());
+    frames(&mut h, 2);
+    let n0 = notes(&h, id);
+    assert_eq!(n0.len(), 1);
+    pick_kit(&mut h, "909 Kit");
+    assert_eq!(inst_name(&h, slot), "909 Kit");
+    assert!(h.with_kit(slot, |k| has_kit(k, "909 Kit")));
+    assert_eq!(notes(&h, id), n0, "the pattern stays");
+    assert!(
+        h.state().status.contains("notes stay"),
+        "{}",
+        h.state().status
+    );
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_ne!(inst_name(&h, slot), "909 Kit");
+    assert_eq!(notes(&h, id), n0);
+}
+
+/// Dice kit on an empty pattern: another kit and its groove, one undo;
+/// with notes it re-rolls the pads and the notes stay
+#[test]
+fn dice_kit_on_a_manual_clip() {
+    let (mut h, slot, id) = manual_clip_harness();
+    let name0 = inst_name(&h, slot);
+    h.get_by_label("Dice kit").click();
+    frames(&mut h, 3);
+    let name1 = inst_name(&h, slot);
+    assert_ne!(name1, name0, "a new kit");
+    assert!(h.with_kit(slot, |k| has_kit(k, &name1)));
+    let g = starter_groove(&name1).unwrap();
+    assert_eq!(notes(&h, id).len(), g.hits(), "{name1}'s groove {}", g.name);
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(inst_name(&h, slot), name0);
+    assert!(notes(&h, id).is_empty(), "one undo");
+    // now with the groove back: Dice re-rolls the pads, notes stay
+    h.state_mut().undo(true);
+    frames(&mut h, 2);
+    let n0 = notes(&h, id);
+    assert!(!n0.is_empty());
+    let kit0 = h.with_kit(slot, |k| k.clone());
+    h.get_by_label("Dice kit").click();
+    frames(&mut h, 3);
+    assert_eq!(notes(&h, id), n0, "the pattern stays");
+    assert_eq!(inst_name(&h, slot), name1, "the same kit");
+    let k1 = h.with_kit(slot, |k| k.clone());
+    assert!(
+        kit0.pads
+            .iter()
+            .zip(&k1.pads)
+            .any(|(a, b)| a.drum != b.drum),
+        "the pads re-rolled"
+    );
+    assert!(
+        h.state().status.contains("re-rolled"),
+        "{}",
+        h.state().status
+    );
+}
+
+/// every Kits… entry has a starter groove of its own
+#[test]
+fn every_kit_has_a_starter_groove() {
+    for (n, _, _) in dk::presets() {
+        let g = starter_groove(&n).unwrap_or_else(|| panic!("{n}"));
+        assert_eq!(g.kit, n);
+        assert!(g.hits() > 0);
+    }
+}

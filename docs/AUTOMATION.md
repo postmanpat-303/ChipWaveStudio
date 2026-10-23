@@ -4,12 +4,12 @@
 
 > **Redesign proposal (Oct 2026):** [research/automation-ux.md](research/automation-ux.md): lanes under each track with a Device > Parameter picker, value scale, Read/Touch/Latch, clip envelopes and a unified Filter card.
 >
-> **Stage 1 (Unreleased):** lane headers show **Device > Parameter** (generated from the target); colour follows the parameter family (cutoff cyan, resonance magenta, volume green, pan amber…); a **value scale** (Hz / dB / %) sits on the left of each timeline lane; points are larger; **double-click** adds a point (a plain click no longer does); the "+ Lane" menu has a **search** box; **Add automation lane** from a knob in timeline mode creates a **track** lane (does not switch the lower panel away from the Instrument editor, and does not duplicate an existing lane).
+> **Stage 1 (0.2.4.1):** lane headers show **Device > Parameter** (generated from the target); colour follows the parameter family (cutoff cyan, resonance magenta, volume green, pan amber…); a **value scale** (Hz / dB / %) sits on the left of each timeline lane; points are larger; **double-click** adds a point (a plain click no longer does); the "+ Lane" menu has a **search** box; **Add automation lane** from a knob in timeline mode creates a **track** lane (does not switch the lower panel away from the Instrument editor, and does not duplicate an existing lane).
 
-> **Stage 2 (Unreleased):** knobs with a lane show a **coloured LED**; right-click › **Show automation** opens the track lane (or adds it); the "+ lane" strip has **last** (follow last-touched) and **show**.
-> **Stage 3 (Unreleased):** song lanes **migrate** onto tracks (and a **Song / Master** track for tempo, master, returns) when entering timeline mode; playback stays bit-exact.
+> **Stage 2 (0.2.4.1):** knobs with a lane show a **coloured LED**; right-click › **Show automation** opens the track lane (or adds it); the "+ lane" strip has **last** (follow last-touched) and **show**.
+> **Stage 3 (0.2.4.1):** song lanes **migrate** onto tracks (and a **Song / Master** track for tempo, master, returns) when entering timeline mode; playback stays bit-exact.
 >
-> **Stages 4–8 (Unreleased):** write modes (Read/Touch/Latch/Write/Off + ● Write); Pointer/Pencil/Line/Shape tools; clip Absolute/Rel+/Rel× (Glue keeps lanes); 38xx diamonds + mod band; unified Filter card labels + A / Cmd 38xx.
+> **Stages 4–8 (0.2.4.1):** write modes (Read/Touch/Latch/Write/Off + ● Write); Pointer/Pencil/Line/Shape tools; clip Absolute/Rel+/Rel× (Glue keeps lanes); 38xx diamonds + mod band; unified Filter card labels + A / Cmd 38xx.
 
 
 Automation lanes sit **under the Order list blocks** ([ORDER_LIST.md](ORDER_LIST.md)), drawn as glowing curves on dark CRT-style lanes: the "visually cool" part. Curve colours are functional (one saturated colour per lane), while block colours stay muted ([DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md)).
@@ -20,11 +20,11 @@ Automation lanes sit **under the Order list blocks** ([ORDER_LIST.md](ORDER_LIST
   - generator knobs: Drum/Kit macros, Chip FX, Analog, FM-4 and Noise (`instrument.N.gen.K`, see [GENERATORS.md](GENERATORS.md#automation-lanes-on-generator-knobs))
   - FX devices
   - mixer faders, pans and sends
-  - CLAP/VST3/LV2 plugin parameters (CLAP effect parameters: `instrument.N.fx.D.p<param id>`, 0–1 over the parameter's range, see [FX.md](FX.md#plugin-effects-clap-unreleased))
+  - CLAP/VST3/LV2 plugin parameters (CLAP effect parameters: `instrument.N.fx.D.p<param id>`, 0–1 over the parameter's range, see [FX.md](FX.md#plugin-effects-clap-0241))
   - tempo
-  - synth-patch knobs without a target of their own (pulse width, detune, ADSR, glide, LFO depths…: `instrument.N.patch.<key>`, Unreleased)
-  - a modulation routing's depth (`mod.K.amount`, −100..+100 %, Unreleased): **Lane** on the Routings card ([MODULATION.md](MODULATION.md))
-- **Modulation** (Unreleased) adds on top of a lane: a modulated parameter moves around the lane's value ([MODULATION.md](MODULATION.md)).
+  - synth-patch knobs without a target of their own (pulse width, detune, ADSR, glide, LFO depths…: `instrument.N.patch.<key>`, 0.2.4.1)
+  - a modulation routing's depth (`mod.K.amount`, −100..+100 %, 0.2.4.1): **Lane** on the Routings card ([MODULATION.md](MODULATION.md))
+- **Modulation** (0.2.4.1) adds on top of a lane: a modulated parameter moves around the lane's value ([MODULATION.md](MODULATION.md)).
 - **Adding a lane:** "＋ Add lane…" (searchable, using the same list as the effect autocomplete in [TRACKER.md §6](TRACKER.md)), right-click a knob → "Automate", or just move a knob while recording.
 - **Lane header:** name, current value in real units, the matching effect command (e.g. `cmd Fcxx`), the curve type, and **R** (read) / **W** (write) toggles. Lanes can be collapsed, reordered, coloured and grouped per channel.
 - **Song or block scope:**
@@ -32,7 +32,7 @@ Automation lanes sit **under the Order list blocks** ([ORDER_LIST.md](ORDER_LIST
   - **Block lanes** belong to a block and repeat wherever that block is played, which is good for per-pattern wobbles.
   - Both are shown, with block lanes drawn inside the block's span.
 
-**Timeline lanes (Unreleased):** in timeline mode a lane can also live under a track or inside a clip, and the innermost one wins (clip, then track, then song). Linear segments can be bent into curves by Alt-dragging them there. See [TIMELINE.md › Automation lanes](TIMELINE.md#automation-lanes).
+**Timeline lanes (0.2.4.1):** in timeline mode a lane can also live under a track or inside a clip, and the innermost one wins (clip, then track, then song). Linear segments can be bent into curves by Alt-dragging them there. See [TIMELINE.md › Automation lanes](TIMELINE.md#automation-lanes).
 
 ## 2. Drawing
 | Tool | Behaviour |

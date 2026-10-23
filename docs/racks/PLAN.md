@@ -150,7 +150,7 @@ One rule throughout: **no control appears before its sound works.** For example,
 
 ## Decisions for you (recommended answer first)
 
-- **D1. One panel, not two.** Today's Devices tab becomes Nested Device Chains, so there is no second device view. **Recommended:** yes, with the tree + detail as the default and the current card row kept as a **Cards** toggle, so nothing that works today goes away.
+- **D1. One panel, not two.** Today's Devices tab becomes Nested Device Chains, so there is no second device view. **Recommended:** yes, with the tree + detail as the default and the current card row kept as a **Cards** toggle, so nothing that works today goes away. *(Update 22 Oct 2026: Del asked for **Cards** as the default view; Tree is one click away and the user's own choice is remembered.)*
 - **D2. What a click on a track or instrument opens.** **Recommended:** Nested Device Chains, with that instrument selected, so its controls show first and the chains sit beside them, as the brief asks. Settings › Follow the Timeline selection gets a choice to keep today's Instrument tab.
 - **D3. Layout.** **Recommended:** tree on the left (about 370 px, foldable, width remembered) and detail on the right (mockups 1–2). On a laptop the tree folds to a slim strip with names.
 - **D4. What a rack is.** **Recommended:** a new rack instrument slot whose layers are ordinary instrument slots, at most 4 layers. *Alternative:* layers stored inside one slot. That is tidier in the Instruments list, but every editor, automation and plugin path would need a second "nested" version. I advise against it.

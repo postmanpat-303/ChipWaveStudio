@@ -347,3 +347,120 @@ fn effects_tab_lists_built_ins_grid_fx_and_effect_plugins() {
     assert!(hits.iter().all(|&i| v[i].is_effect()));
     assert!(!v.iter().any(|i| i.tab == Tab::Effects && i.previewable()));
 }
+
+#[test]
+fn plugin_file_lists_its_main_instrument_and_the_rest_on_request() {
+    use crate::plugin::clap::Desc;
+    use crate::plugin::scan::{main_class, Cache, Entry as ScanEntry, Found};
+    let mk = |path: &str, id: &str, name: &str, feat: &str| Found {
+        path: path.into(),
+        format: "vst3".into(),
+        desc: Desc {
+            id: id.into(),
+            name: name.into(),
+            vendor: "Acme".into(),
+            version: "1".into(),
+            features: vec![feat.into()],
+        },
+    };
+    let entry = |path: &str, plugins: Vec<Found>| ScanEntry {
+        path: path.into(),
+        format: "vst3".into(),
+        mtime: 0,
+        size: 0,
+        status: "ok".into(),
+        message: String::new(),
+        plugins,
+    };
+    let big = "C:/VST3/Big Sampler.vst3";
+    let suite = "C:/VST3/Acme FX Suite.vst3";
+    let cache = Cache {
+        version: 2,
+        entries: vec![
+            entry(
+                big,
+                vec![
+                    mk(big, "a1", "Big Sampler MIDI Tool", "note-effect"),
+                    mk(big, "a2", "Big Sampler 16out", "instrument"),
+                    mk(big, "a3", "Big Sampler", "instrument"),
+                    mk(big, "a4", "Big Sampler FX", "audio-effect"),
+                ],
+            ),
+            entry(
+                suite,
+                vec![
+                    mk(suite, "b1", "Acme Delay", "audio-effect"),
+                    mk(suite, "b2", "Acme Reverb", "audio-effect"),
+                ],
+            ),
+        ],
+    };
+    // the class named like the file wins over the multi-out variant
+    assert_eq!(main_class(big, &cache.entries[0].plugins), Some(2));
+    // no name match: the shorter instrument name, then file order
+    let k = "C:/VST3/Kontakt.vst3";
+    let ks = vec![
+        mk(k, "k2", "Kontakt 8 16out", "instrument"),
+        mk(k, "k1", "Kontakt 8", "instrument"),
+    ];
+    assert_eq!(main_class(k, &ks), Some(1));
+    // an effect-only file picks an effect; empty has none
+    assert_eq!(main_class(suite, &cache.entries[1].plugins), Some(0));
+    assert_eq!(main_class(suite, &[]), None);
+
+    let items = plugin_items(&cache);
+    let sub: Vec<&str> = items
+        .iter()
+        .filter(|i| i.sub_program)
+        .map(|i| i.name.as_str())
+        .collect();
+    assert_eq!(sub.len(), 2, "{sub:?}");
+    assert!(sub.contains(&"Big Sampler 16out") && sub.contains(&"Big Sampler FX"));
+    let main = items.iter().find(|i| i.name == "Big Sampler").unwrap();
+    assert!(
+        !main.sub_program && main.detail.ends_with("+2 programs"),
+        "{}",
+        main.detail
+    );
+    // (the MIDI-only class is neither instrument nor effect: never listed)
+    assert!(items.iter().all(|i| i.name != "Big Sampler MIDI Tool"));
+
+    let mut f = Filter {
+        tab: Tab::Plugins,
+        ..Default::default()
+    };
+    let names = |f: &Filter| -> Vec<String> {
+        filter(&items, f, &[], &BTreeMap::new())
+            .iter()
+            .map(|&i| items[i].name.clone())
+            .collect()
+    };
+    let shown = names(&f);
+    assert_eq!(shown, ["Acme Delay", "Acme Reverb", "Big Sampler"]);
+    // a search finds the hidden programs, and so does "Show all programs"
+    f.query = "16out".into();
+    assert_eq!(names(&f), ["Big Sampler 16out"]);
+    f.query.clear();
+    f.all_programs = true;
+    assert_eq!(names(&f).len(), 5);
+    // the Effects tab still lists every effect plugin
+    let fx = Filter {
+        tab: Tab::Effects,
+        ..Default::default()
+    };
+    assert!(names(&fx).contains(&"Big Sampler FX".to_string()));
+    assert_eq!(Tab::Plugins.name(), PLUGINS_TAB);
+}
+
+/// the Browser's tiles (five main + More) reach every tab exactly once
+#[test]
+fn main_and_more_cover_every_tab_once() {
+    let mut all: Vec<Tab> = Tab::MAIN.iter().chain(Tab::MORE.iter()).copied().collect();
+    assert_eq!(all.len(), Tab::ALL.len());
+    for t in Tab::ALL {
+        assert_eq!(all.iter().filter(|x| **x == t).count(), 1, "{}", t.name());
+        assert!(!t.blurb().is_empty());
+    }
+    all.dedup();
+    assert_eq!(all.len(), Tab::ALL.len());
+}

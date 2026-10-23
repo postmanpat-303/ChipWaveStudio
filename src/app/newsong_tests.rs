@@ -321,3 +321,37 @@ fn startup_without_a_file_is_the_clean_song_not_a_demo() {
     assert!(h.state().status.contains("Browser"), "{}", h.state().status);
     assert_eq!(song(&mut h, |s| (s.channels, s.instruments.len())), (0, 0));
 }
+
+/// Del (22 Oct 2026): the lower panel jumped between heights when going
+/// from the Piano roll to Nested Device Chains; the tabs share one height,
+/// and a dragged height survives File > New (only Ctrl+6 resets it)
+#[test]
+fn lower_panel_tabs_share_one_height_and_a_dragged_height_is_kept() {
+    let mut s = fileio::demo_song();
+    crate::timeline::enter_timeline_mode(&mut s);
+    let mut h = harness_with(s);
+    h.state_mut().default_layout();
+    frames(&mut h, 3);
+    let top = |h: &Harness<'static, App>| h.state().ip.split.expect("splitter").top();
+    let y0 = top(&h);
+    for m in [4u8, 1, 3, 4, 3] {
+        h.state_mut().set_lower(m);
+        frames(&mut h, 2);
+        assert_eq!(top(&h), y0, "automatic height, tab {m}");
+    }
+    h.state_mut().extra.lower_h = 333.0;
+    frames(&mut h, 2);
+    let y1 = top(&h);
+    assert_ne!(y1, y0);
+    for m in [4u8, 3, 1, 4] {
+        h.state_mut().set_lower(m);
+        frames(&mut h, 2);
+        assert_eq!(top(&h), y1, "dragged height, tab {m}");
+    }
+    h.state_mut().new_song();
+    frames(&mut h, 3);
+    assert_eq!(h.state().extra.lower_h, 333.0, "File > New keeps it");
+    assert_eq!(top(&h), y1);
+    h.state_mut().reset_layout();
+    assert_eq!(h.state().extra.lower_h, 0.0, "Ctrl+6 resets it");
+}

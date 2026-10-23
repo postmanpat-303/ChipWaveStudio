@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.8.0" date="2026-10-23">
+      <description><p>StringWave, a new built-in string-ensemble instrument with presets; a violet look for ChipWave's own instruments; track pie Add rings (Drum pattern, instrument, kit); Drum Kit kits with starter grooves; piano roll ruler paste and play markers; CLAP plugin fixes; studio knobs, a steady panel height, Play / Stop toggle, metronome and count-in, Keys to Notes, a simpler Browser and visual fixes.</p></description>
+    </release>
     <release version="0.2.7.0" date="2026-10-21">
       <description><p>Racks and Nested Device Chains: a device tree under the Timeline, Add Device, Split for parallel paths, layered rack instruments, Save Custom Rack and My Racks; piano roll copy and paste; the Automation tab only with the Tracker; new demo song Oceans 11 (music by Martin Galway).</p></description>
     </release>

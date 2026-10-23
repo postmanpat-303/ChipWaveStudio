@@ -58,6 +58,9 @@ enum DragK {
     Resize,
     /// rubber band from this screen point
     Band(Pos2),
+    /// Alt+drag: a freehand line (`PianoUi::line`) selecting the notes it
+    /// crosses
+    Line,
     /// Pencil: painting a run of notes from this start, one per length
     Paint(Tick),
 }
@@ -66,7 +69,8 @@ enum DragK {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(crate) enum PrTool {
     /// smart: click empty space draws a note, drag a note moves it, its
-    /// right edge resizes it
+    /// right edge resizes it; drag on empty space draws a selection box,
+    /// Alt+drag a line that selects the notes it crosses
     #[default]
     Pointer,
     /// drag on empty space draws a selection box
@@ -98,6 +102,9 @@ struct PrDrag {
     moved: bool,
     /// a move last applied as copies (Ctrl held): the originals stay
     copy: bool,
+    /// a Pointer press on empty space: a box once it moves, a click (a
+    /// new note) if it is let go within a few pixels
+    soft: bool,
 }
 
 /// A left press on empty grid held this long without moving turns into a
@@ -198,6 +205,8 @@ pub(crate) struct PianoUi {
     last_vel: f32,
     /// right-drag eraser: the pointer's last position in this swipe
     erase: Option<Pos2>,
+    /// Alt+drag selection line so far (screen points)
+    pub(crate) line: Vec<Pos2>,
     /// this swipe has deleted something (its undo point is set), and how many
     erase_started: bool,
     erased: usize,
@@ -239,6 +248,10 @@ pub(crate) struct PianoUi {
     /// the last paste: (target, the playhead base it used, where the next
     /// Ctrl+V goes), so pasting again lays the copies end to end
     paste_next: Option<(Target, Option<Tick>, Tick)>,
+    /// the paste marker set in the ruler (the bar strip): where Ctrl+V puts
+    /// the first copied note in that target (a source tick); it moves to the
+    /// end of each paste so Ctrl+V again lays copies end to end
+    pub(crate) marker: Option<(Target, Tick)>,
 }
 
 impl PianoUi {
@@ -275,6 +288,7 @@ impl Default for PianoUi {
             last_len: ROW,
             last_vel: 1.0,
             erase: None,
+            line: vec![],
             erase_started: false,
             erased: 0,
             smoke: vec![],
@@ -295,6 +309,7 @@ impl Default for PianoUi {
             clip_from: 0,
             clip_text: String::new(),
             paste_next: None,
+            marker: None,
         }
     }
 }
@@ -779,7 +794,7 @@ impl App {
                             roll::move_notes(p, col, &rows, drow, dk)
                         };
                     }
-                    DragK::Band(_) | DragK::Paint(_) => return,
+                    DragK::Band(_) | DragK::Line | DragK::Paint(_) => return,
                 }
             }
             (Source::Notes(n), Target::Notes { .. }) => match d.kind {
@@ -843,7 +858,7 @@ impl App {
                         }
                     }
                 }
-                DragK::Band(_) | DragK::Paint(_) => return,
+                DragK::Band(_) | DragK::Line | DragK::Paint(_) => return,
             },
             _ => return,
         }
@@ -1089,7 +1104,7 @@ impl App {
             self.pr_delete();
         }
         self.status = format!(
-            "{} {n} note(s) · Ctrl+V pastes them at the playhead (in any clip)",
+            "{} {n} note(s) · Ctrl+V pastes them at the paste marker (click the bar strip) or the playhead",
             if cut { "Cut" } else { "Copied" }
         );
     }
@@ -1106,6 +1121,144 @@ impl App {
             Target::Block { .. } if self.view == View::Pattern => Some(tl::rows_to_ticks(self.row)),
             _ => None,
         }
+    }
+
+    /// the ruler's markings: bar numbers, taller ticks on beats and short
+    /// ones on the grid (each only while 6 px or more apart), and beat
+    /// labels (2.3) once beats are wide enough
+    fn pr_ruler_marks(&self, ui: &egui::Ui, fx_r: Rect, grid_t: Tick, t: &crate::theme::Theme) {
+        let p = ui.painter_at(fx_r);
+        let ppt = self.pr.ppt() as f32;
+        // marks that read on the strip (crt_bot) in every theme: the theme's
+        // ink if it contrasts enough (Amiga's is dark on a dark strip)
+        let lum = |c: Color32| 0.299 * c.r() as f32 + 0.587 * c.g() as f32 + 0.114 * c.b() as f32;
+        let bg = lum(t.crt_bot);
+        let ink = [
+            t.ink2,
+            t.ink,
+            Color32::from_gray(215),
+            Color32::from_gray(25),
+        ]
+        .into_iter()
+        .find(|c| (lum(*c) - bg).abs() >= 100.0)
+        .unwrap_or(t.ink2);
+        let (bar_t, beat_t) = (16 * ROW, 4 * ROW);
+        let t0 = self.pr.scroll_x.max(0.0) as Tick;
+        let t1 = self.pr.tick_at(fx_r.right()).ceil() as Tick + 1;
+        let bot = fx_r.bottom();
+        let ticks = |step: Tick, h: f32, c: Color32, skip: &dyn Fn(Tick) -> bool| {
+            if step <= 0 || step as f32 * ppt < 6.0 {
+                return;
+            }
+            let mut tk = t0.div_euclid(step) * step;
+            while tk <= t1 {
+                if !skip(tk) {
+                    p.vline(self.pr.x_of(tk), (bot - h)..=bot, Stroke::new(1.0, c));
+                }
+                tk += step;
+            }
+        };
+        if grid_t < beat_t {
+            ticks(grid_t, 3.0, ink.gamma_multiply(0.45), &|tk| {
+                tk % beat_t == 0
+            });
+        }
+        ticks(beat_t, 7.0, ink.gamma_multiply(0.75), &|tk| tk % bar_t == 0);
+        ticks(bar_t, fx_r.height(), ink, &|_| false);
+        // bar numbers: every bar, or every 2nd/4th... when they would crowd
+        let mut every = 1;
+        while (every * bar_t) as f32 * ppt < 24.0 && every < 1024 {
+            every *= 2;
+        }
+        let font = FontId::proportional(10.0);
+        let mut b = t0 / bar_t;
+        while b * bar_t <= t1 {
+            if b % every == 0 {
+                p.text(
+                    Pos2::new(self.pr.x_of(b * bar_t) + 3.0, fx_r.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    format!("{}", b + 1),
+                    font.clone(),
+                    ink,
+                );
+            }
+            b += 1;
+        }
+        if beat_t as f32 * ppt >= 40.0 {
+            let small = FontId::proportional(9.0);
+            let mut tk = t0.div_euclid(beat_t) * beat_t;
+            while tk <= t1 {
+                if tk % bar_t != 0 {
+                    p.text(
+                        Pos2::new(self.pr.x_of(tk) + 3.0, fx_r.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        format!("{}.{}", tk / bar_t + 1, tk % bar_t / beat_t + 1),
+                        small.clone(),
+                        ink.gamma_multiply(0.8),
+                    );
+                }
+                tk += beat_t;
+            }
+        }
+    }
+
+    /// the ruler's paste marker, if it was set in this target
+    pub(crate) fn pr_marker(&self, t: Target) -> Option<Tick> {
+        self.pr.marker.filter(|(mt, _)| *mt == t).map(|(_, m)| m)
+    }
+
+    /// the song tick where `t`'s source tick `src` plays: in the clip under
+    /// the play marker if it holds `t`, else the earliest clip that does (a
+    /// looped clip: its first pass). None outside the Timeline.
+    fn pr_song_tick(&self, t: Target, src: Tick) -> Option<Tick> {
+        let c = self.tlv.cache.as_ref()?;
+        let holds = |x: &tl::Clip| match t {
+            Target::Notes { clip: Some(id), .. } => x.id == id,
+            Target::Notes { data, clip: None } => {
+                matches!(x.kind, tl::ClipKind::Notes { data: d } if d as usize == data)
+            }
+            Target::Block { pattern, col } => x.block() == Some((pattern, col)),
+        };
+        let cue = self.tlv.cue;
+        let mut cands: Vec<&tl::Clip> = c.tl.clips.iter().filter(|x| holds(x)).collect();
+        cands.sort_by_key(|x| (!(cue >= x.start && cue < x.end()), x.start));
+        cands.into_iter().find_map(|x| {
+            let d = match x.loop_len {
+                Some(l) if l > 0 => (src - x.offset).rem_euclid(l),
+                _ => src - x.offset,
+            };
+            let at = x.start + d;
+            (d >= 0 && at < x.end()).then_some(at)
+        })
+    }
+
+    /// a press in the ruler: the paste marker goes there (on the roll's
+    /// grid; Alt: no snap, as in the Timeline's ruler) and, in the
+    /// Timeline, the play marker follows. Like the Timeline's ruler this
+    /// also seeks while playing.
+    pub(crate) fn pr_ruler_press(&mut self, t: Target, x: f32, free: bool, len: Tick) {
+        let raw = self.pr.tick_at(x).max(0.0) as Tick;
+        let m = if free {
+            raw
+        } else {
+            roll::snap(raw, self.pr_grid().max(1))
+        }
+        .clamp(0, len.max(0));
+        self.pr.marker = Some((t, m));
+        self.pr.paste_next = None;
+        let seek = self.pr_song_tick(t, m);
+        if let Some(st) = seek {
+            self.timeline_seek(st);
+        }
+        let (bar, beat) = (m / (16 * ROW) + 1, m % (16 * ROW) / (4 * ROW) + 1);
+        self.status = format!(
+            "Paste marker: {bar}.{beat}{} · Ctrl+V pastes the copied notes there",
+            if seek.is_some() {
+                " (the play marker moved too)"
+            } else {
+                ""
+            }
+        );
     }
 
     /// write clipboard notes into `t` with the first at `at` as one undo
@@ -1164,6 +1317,27 @@ impl App {
             self.status = "Nothing to paste (select notes and press Ctrl+C first)".into();
             return;
         }
+        let clip = self.pr.clip.clone();
+        if let Some(m) = self.pr_marker(t) {
+            // the ruler's paste marker: the first note lands on it, and the
+            // marker moves past the block so Ctrl+V again chains
+            match self.pr_paste_clip(t, &clip, m) {
+                Some((0, _)) => {
+                    self.status =
+                        "Nothing pasted: the paste marker is past the end of this clip".into()
+                }
+                Some((n, dropped)) => {
+                    self.pr.marker = Some((t, m + roll::clip_span(&clip, self.pr_grid())));
+                    self.pr.paste_next = None;
+                    self.status = format!(
+                        "Pasted {n} note(s) at the paste marker{} · Ctrl+V again pastes after them",
+                        Self::left_out(dropped)
+                    );
+                }
+                None => {}
+            }
+            return;
+        }
         let base = self.pr_paste_base(t);
         let at = match (base, self.pr.paste_next) {
             // again at the same spot: after the last paste
@@ -1171,7 +1345,6 @@ impl App {
             (Some(b), _) => b,
             (None, _) => self.pr.clip_from,
         };
-        let clip = self.pr.clip.clone();
         match self.pr_paste_clip(t, &clip, at) {
             Some((0, _)) => {
                 self.status = "Nothing pasted: the playhead is past the end of this clip".into()
@@ -1203,6 +1376,11 @@ impl App {
                     "Nothing duplicated: there is no room after the selection in this clip".into()
             }
             Some((n, dropped)) => {
+                // a paste marker in this clip follows the copy, so Ctrl+V
+                // after Ctrl+D carries on from there
+                if self.pr_marker(t).is_some() {
+                    self.pr.marker = Some((t, at + roll::clip_span(&c, self.pr_grid())));
+                }
                 self.status = format!(
                     "Duplicated {n} note(s) after the selection{}",
                     Self::left_out(dropped)
@@ -1419,8 +1597,8 @@ impl App {
                 ui.add_space(6.0);
                 // tools
                 for (tool, tip) in [
-                    (PrTool::Pointer, "Pointer (1): click empty space to draw a note, drag a note to move it, its right edge to resize"),
-                    (PrTool::Select, "Select (2): drag a box to select notes; Shift adds to the selection"),
+                    (PrTool::Pointer, "Pointer (1): click empty space to draw a note; drag a note to move it, its right edge to resize; drag on empty space to box-select (Shift adds); Alt+drag a line through notes to select them (Shift+Alt adds)"),
+                    (PrTool::Select, "Select (2): drag a box to select notes; Shift adds to the selection; Alt+drag a line through notes to select them"),
                     (PrTool::Pencil, "Pencil (3): click to draw, drag to paint a run of notes at the note length"),
                 ] {
                     if pr_tool_btn(ui, tool, self.pr.tool == tool, tip).clicked() {
@@ -1464,7 +1642,7 @@ impl App {
                         self.status = format!("Step input {}", if on { "off" } else { "on" });
                     }
                     let on = self.typing.on;
-                    if pr_btn(ui, "Typing", on, true, "musical typing: play notes on the computer keyboard (Ctrl+K)").clicked() {
+                    if pr_btn(ui, "Keys → Notes", on, true, "Keys → Notes (Ctrl+K): play notes on your computer keyboard. Off: those keys are normal shortcuts again.").clicked() {
                         self.typing_toggle();
                     }
                     // "Use track instrument": only while the clip has notes
@@ -1604,7 +1782,7 @@ impl App {
                         let tip = if n > 1 {
                             format!("{n} notes selected · arrows move, Del deletes")
                         } else {
-                            "click: draw (same length as the last note) · drag a note: move · its right edge: length · right-click or right-drag: erase · Ctrl+click: select more".into()
+                            "click: draw (same length as the last note) · drag a note: move · its right edge: length · drag empty space: box select · Alt+drag: line select · Shift: add · right-click or right-drag: erase · click the bar strip: paste marker".into()
                         };
                         ui.label(egui::RichText::new(tip).small().color(t.ink2));
                     }
@@ -1714,16 +1892,8 @@ impl App {
             };
             p.vline(x, grid_r.y_range(), Stroke::new(w, c));
             p.vline(x, vel_r.y_range(), Stroke::new(0.5, c.gamma_multiply(0.6)));
-            if r % 16 == 0 {
-                p.text(
-                    Pos2::new(x + 3.0, fx_r.center().y),
-                    egui::Align2::LEFT_CENTER,
-                    format!("{}", r / 16 + 1),
-                    FontId::proportional(10.0),
-                    t.ink2,
-                );
-            }
         }
+        self.pr_ruler_marks(ui, fx_r, grid_t, &t);
         // past the end
         let ex = self.pr.x_of(len);
         if ex < grid_r.right() {
@@ -1967,6 +2137,28 @@ impl App {
                 ui.ctx().request_repaint();
             }
         }
+        // the paste marker: a triangle in the ruler and a dashed line (the
+        // playhead is a solid line, so the two never look alike)
+        if let Some(m) = self.pr_marker(target) {
+            let x = self.pr.x_of(m);
+            if grid_r.x_range().contains(x) {
+                ui.painter_at(grid_r).add(egui::Shape::dashed_line(
+                    &[Pos2::new(x, grid_r.top()), Pos2::new(x, grid_r.bottom())],
+                    Stroke::new(1.0, t.accent),
+                    4.0,
+                    3.0,
+                ));
+                ui.painter_at(fx_r).add(egui::Shape::convex_polygon(
+                    vec![
+                        Pos2::new(x - 5.0, fx_r.top() + 2.0),
+                        Pos2::new(x + 5.0, fx_r.top() + 2.0),
+                        Pos2::new(x, fx_r.bottom()),
+                    ],
+                    t.accent,
+                    Stroke::new(1.0, Color32::from_black_alpha(160)),
+                ));
+            }
+        }
         if self.pr.focus {
             p.rect_stroke(
                 full.shrink(1.0),
@@ -2005,6 +2197,39 @@ impl App {
         if lane_h > 0.0 {
             self.chord_lane(ui, lane_r, target, grid_t, len, modal);
         }
+        // ---- input: the ruler (the bar strip) places the paste marker
+        let rresp = ui.interact(
+            fx_r,
+            egui::Id::unique("piano_ruler"),
+            if modal {
+                Sense::hover()
+            } else {
+                Sense::click_and_drag()
+            },
+        );
+        if rresp.clicked() || rresp.drag_started() || rresp.dragged() {
+            if let Some(p) = rresp.interact_pointer_pos() {
+                let alt = ui.input(|i| i.modifiers.alt);
+                let before = self.pr_marker(target);
+                let raw = self.pr.tick_at(p.x).max(0.0) as Tick;
+                let m = if alt {
+                    raw
+                } else {
+                    roll::snap(raw, grid_t.max(1))
+                }
+                .clamp(0, len.max(0));
+                if rresp.clicked() || rresp.drag_started() || before != Some(m) {
+                    self.pr_ruler_press(target, p.x, alt, len);
+                }
+            }
+            self.pr.focus = true;
+        }
+        rresp.on_hover_text(
+            "Click or drag: place the paste marker (on the grid; Alt: no snap). Ctrl+V pastes \
+             the copied notes there and moves it past them, so Ctrl+V again lays copies end to \
+             end. In the Timeline the play marker follows (it seeks while playing too, like the \
+             Timeline's ruler).",
+        );
         // ---- input: grid
         let resp = ui.interact(
             grid_r,
@@ -2091,11 +2316,21 @@ impl App {
                 self.pr.press = None;
             }
         }
+        // a Pointer box let go within a few pixels was a click after all
+        let late_click = match &self.pr.drag {
+            Some(d) if resp.drag_stopped() && d.soft && !d.moved => match d.kind {
+                DragK::Band(a) => Some(a),
+                _ => None,
+            },
+            _ => None,
+        };
+        let clicked = resp.clicked() || late_click.is_some();
         if panning {
             // the pan owns this press: no note, no box, no draw
-        } else if resp.drag_started_by(egui::PointerButton::Primary) || resp.clicked() {
+        } else if resp.drag_started_by(egui::PointerButton::Primary) || clicked {
             self.pr.press = None;
-            let pos = press_pos
+            let pos = late_click
+                .or(press_pos)
                 .or(resp.interact_pointer_pos())
                 .unwrap_or(grid_r.center());
             let tk = self.pr.tick_at(pos.x);
@@ -2114,19 +2349,20 @@ impl App {
                 sel: vec![],
                 moved: false,
                 copy: false,
+                soft: false,
             };
             match hit {
                 Some((n, edge)) => {
                     if mods.shift || mods.command {
                         // Shift (or Ctrl) + click toggles it in the selection
                         if let Some(i) = self.pr.sel.iter().position(|&x| x == n.id) {
-                            if resp.clicked() {
+                            if clicked {
                                 self.pr.sel.remove(i);
                             }
                         } else {
                             self.pr.sel.push(n.id);
                         }
-                    } else if resp.clicked() || !self.pr.sel.contains(&n.id) {
+                    } else if clicked || !self.pr.sel.contains(&n.id) {
                         // a plain click selects only this note; dragging a
                         // selected note moves the whole selection
                         self.pr.sel = vec![n.id];
@@ -2147,10 +2383,25 @@ impl App {
                         self.pr.last_vel = n.vel;
                     }
                 }
+                // Alt+drag on empty space (Pointer or Select): a freehand
+                // line selecting every note it crosses (Shift+Alt adds)
+                None if !clicked && mods.alt && self.pr.tool != PrTool::Pencil => {
+                    d.kind = DragK::Line;
+                    self.pr.line = vec![pos];
+                    if !(mods.shift || mods.command) {
+                        self.pr.sel.clear();
+                    }
+                }
                 // Shift (or Ctrl) on empty space: a box that adds to the
-                // selection (never a new note); the Select tool: a new box
-                None if mods.shift || mods.command || self.pr.tool == PrTool::Select => {
+                // selection (never a new note); the Select tool, or a drag
+                // with the Pointer: a new box
+                None if mods.shift
+                    || mods.command
+                    || self.pr.tool == PrTool::Select
+                    || (self.pr.tool == PrTool::Pointer && !clicked) =>
+                {
                     d.kind = DragK::Band(pos);
+                    d.soft = self.pr.tool == PrTool::Pointer && !(mods.shift || mods.command);
                     if !(mods.shift || mods.command) {
                         self.pr.sel.clear();
                     }
@@ -2178,7 +2429,7 @@ impl App {
                 }
                 None => self.pr.sel.clear(),
             }
-            if resp.clicked() {
+            if clicked {
                 self.pr.drag = None;
             } else {
                 self.pr.drag = Some(d);
@@ -2188,7 +2439,26 @@ impl App {
                 let tk = self.pr.tick_at(pos.x);
                 let k = self.pr.key_at(pos.y).clamp(1, 120);
                 match d.kind {
+                    DragK::Line => {
+                        let last = self.pr.line.last().copied().unwrap_or(pos);
+                        if pos.distance(last) >= 1.0 {
+                            for n in swept_notes(&self.pr, &notes, last, pos) {
+                                if !self.pr.sel.contains(&n.id) {
+                                    self.pr.sel.push(n.id);
+                                }
+                            }
+                            self.pr.line.push(pos);
+                        }
+                        self.status = format!(
+                            "Line select: {} note(s) (let go to finish)",
+                            self.pr.sel.len()
+                        );
+                    }
+                    DragK::Band(a) if d.soft && !d.moved && a.distance(pos) <= HOLD_PX => {}
                     DragK::Band(a) => {
+                        if let Some(x) = self.pr.drag.as_mut() {
+                            x.moved = true;
+                        }
                         let band = Rect::from_two_pos(a, pos);
                         ui.painter().rect_stroke(
                             band,
@@ -2277,7 +2547,23 @@ impl App {
                 }
             }
         }
+        // the Alt line, drawn while it is being dragged
+        if self.pr.drag.as_ref().is_some_and(|d| d.kind == DragK::Line) && self.pr.line.len() > 1 {
+            // clipped to the note grid, like the notes
+            let p = ui.painter_at(self.pr.grid_rect);
+            p.add(egui::Shape::line(
+                self.pr.line.clone(),
+                Stroke::new(1.5, t.accent),
+            ));
+            if let Some(&end) = self.pr.line.last() {
+                p.circle_filled(end, 2.5, t.accent);
+            }
+        }
         if resp.drag_stopped() {
+            if self.pr.drag.as_ref().is_some_and(|d| d.kind == DragK::Line) {
+                self.pr.line.clear();
+                self.status = format!("Selected {} note(s)", self.pr.sel.len());
+            }
             // Ctrl decides at the drop: pressed or let go after the last
             // mouse move, the move becomes copies or back
             if let (Some(d), Some(pos)) = (self.pr.drag.clone(), latest) {

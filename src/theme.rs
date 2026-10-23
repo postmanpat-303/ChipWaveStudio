@@ -2,6 +2,9 @@
 //! (docs/DESIGN_LANGUAGE.md).
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke};
 
+pub mod instskin;
+pub use instskin::{active as active_skin, instskin, is_builtin, skin_or, SkinScope};
+
 pub const fn hex(c: u32) -> Color32 {
     Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
 }
@@ -842,7 +845,7 @@ mod shade_tests {
 
 /// What a knob shows; shared by every rotary control (instrument and device
 /// knobs, generator macros, the mixer's send / pan knobs) so the themes stay
-/// in one place. Slate paints the knurled knob (`ember::knob_small`), the
+/// in one place. Slate paints the studio knob (`ember::knob_studio`), the
 /// classic themes the shaded (Polished) or flat cap with a value arc.
 #[derive(Clone, Copy)]
 pub struct KnobFace {
@@ -875,9 +878,25 @@ pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
     let t = th();
     let v = k.frac.clamp(0.0, 1.0);
     if t.ember {
-        let mut kp = p.clone();
-        kp.multiply_opacity(k.dim.max(0.55));
-        crate::ember::knob_small(&kp, c, rad + 2.5, v, &[]);
+        // the studio knob in the old footprint; stepped knobs get a dot per step
+        let steps = k.steps.round() as usize;
+        crate::ember::knob_studio(
+            p,
+            c,
+            crate::ember::studio_rad(rad + 2.5),
+            &crate::ember::StudioKnob {
+                frac: v,
+                bipolar: (k.from - 0.5).abs() < 0.01,
+                dots: if (1..=16).contains(&steps) {
+                    steps + 1
+                } else {
+                    0
+                },
+                dim: k.dim.max(0.5),
+                locked: k.locked,
+                ..Default::default()
+            },
+        );
         return;
     }
     let dim = k.dim;
@@ -929,7 +948,7 @@ pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
         }
     }
     arc(0.0, 1.0, t.ink2.gamma_multiply(0.35), 3.0);
-    let col = if k.locked { t.ink2 } else { t.accent };
+    let col = if k.locked { t.ink2 } else { skin_or(t.accent) };
     let (lo, hi) = if v < k.from { (v, k.from) } else { (k.from, v) };
     if hi > lo {
         arc(lo, hi, col.gamma_multiply(dim), 3.0);
@@ -940,36 +959,35 @@ pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
     );
 }
 
-/// The large "hero" knob (instrument macros, the Master section). Slate
-/// paints the LED-arc knob with its readout inside (`ember::knob_big`, `rad`
-/// = outer radius); the classic themes the standard knob face, scaled.
-#[allow(clippy::too_many_arguments)]
-pub fn knob_hero(
-    p: &egui::Painter,
-    c: Pos2,
-    rad: f32,
-    frac: f32,
-    bipolar: bool,
-    readout: &str,
-    lit: bool,
-    dim: f32,
-) {
+/// A big knob with its title and value (master knobs, instrument macros).
+/// Slate paints the studio knob (`ember::knob_studio`, `rad` = the knob's
+/// radius, dots and labels outside it); the classic themes the arc knob with
+/// the title above and the value under it.
+pub fn knob_hero(p: &egui::Painter, c: Pos2, rad: f32, k: &crate::ember::StudioKnob) {
     if th().ember {
-        let mut kp = p.clone();
-        kp.multiply_opacity(dim.max(0.5));
-        crate::ember::knob_big(&kp, c, rad, frac, bipolar, readout, lit);
+        crate::ember::knob_studio(p, c, rad, k);
         return;
     }
-    let mut k = KnobFace::new(frac);
-    k.from = if bipolar { 0.5 } else { 0.0 };
-    k.dim = dim;
-    knob_face(p, c, rad * 0.8, k);
+    let mut f = KnobFace::new(k.frac);
+    f.from = if k.bipolar { 0.5 } else { 0.0 };
+    f.dim = k.dim;
+    f.locked = k.locked;
+    knob_face(p, c, rad * 0.8, f);
+    if !k.title.is_empty() {
+        p.text(
+            c - egui::vec2(0.0, rad * 0.8 + 8.0),
+            egui::Align2::CENTER_CENTER,
+            k.title.to_uppercase(),
+            egui::FontId::proportional(11.0),
+            th().ink.gamma_multiply(k.dim),
+        );
+    }
     p.text(
         c + egui::vec2(0.0, rad * 0.8 + 8.0),
         egui::Align2::CENTER_CENTER,
-        readout,
+        k.value,
         egui::FontId::monospace(10.0),
-        th().value.gamma_multiply(dim),
+        th().value.gamma_multiply(k.dim),
     );
 }
 

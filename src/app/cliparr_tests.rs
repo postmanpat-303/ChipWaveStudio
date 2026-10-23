@@ -450,3 +450,60 @@ fn tracker_clip_songs_keep_their_block_scenes() {
     let s = h.state().with(|s| s.song.clone());
     assert!(super::cliparr::sections(&s).is_none());
 }
+
+#[test]
+fn the_level_history_moves_a_column_per_quarter_second_and_keeps_every_peak() {
+    let mut ca = super::cliparr::CaUi::default();
+    // one second at 60 fps: four columns, not sixty
+    for k in 0..60 {
+        ca.hist_step(1.0 / 60.0, if k == 7 { 0.9 } else { 0.1 });
+    }
+    assert_eq!(ca.hist.len(), 4);
+    assert_eq!(ca.hist[0], 0.9, "a one-frame peak still shows");
+    // a quieter stretch falls half way per column (slow fall)
+    assert!((ca.hist[1] - 0.5).abs() < 1e-6, "{:?}", ca.hist);
+    assert!((ca.hist[2] - 0.3).abs() < 1e-6, "{:?}", ca.hist);
+    // louder rises at once
+    for _ in 0..15 {
+        ca.hist_step(1.0 / 60.0, 1.0);
+    }
+    assert_eq!(ca.hist.back().copied(), Some(1.0));
+    // 120 columns hold the last 30 s
+    for _ in 0..(60 * 40) {
+        ca.hist_step(1.0 / 60.0, 0.2);
+    }
+    assert_eq!(ca.hist.len(), 120);
+    assert!((super::cliparr::HIST_STEP * 120.0 - 30.0).abs() < 1e-3);
+}
+
+#[test]
+fn right_click_the_level_history_pauses_or_hides_it_and_brings_it_back() {
+    let mut h = tl_demo();
+    let g = h.state().ca.level_rect;
+    assert!(g.is_positive(), "the LEVEL history has room");
+    super::objpie_tests::right_click(&mut h, g.center());
+    frames(&mut h, 2);
+    h.get_by_label("Paused").click();
+    frames(&mut h, 2);
+    assert_eq!(h.state().extra.level_hist, 1);
+    // paused: playing adds no columns
+    let n = h.state().ca.hist.len();
+    h.state().with(|s| s.engine.playing = true);
+    frames(&mut h, 30);
+    assert_eq!(h.state().ca.hist.len(), n);
+    h.state().with(|s| s.engine.playing = false);
+    // hidden: a slim strip that brings it back
+    super::objpie_tests::right_click(&mut h, g.center());
+    frames(&mut h, 2);
+    h.get_by_label("Hidden").click();
+    frames(&mut h, 2);
+    assert_eq!(h.state().extra.level_hist, 2);
+    let strip = h.state().ca.level_rect;
+    assert!(strip.height() <= 18.5, "{strip:?}");
+    super::objpie_tests::right_click(&mut h, strip.center());
+    frames(&mut h, 2);
+    h.get_by_label("Scrolling").click();
+    frames(&mut h, 2);
+    assert_eq!(h.state().extra.level_hist, 0);
+    assert!(h.state().ca.level_rect.height() > 36.0);
+}

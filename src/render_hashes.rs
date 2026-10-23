@@ -27,6 +27,11 @@ fn render_hashes() {
             crate::fileio::load_cwt(&dir.join(f)).expect(f),
         ));
     }
+    // StringWave (new in file version 8: not in the older lists)
+    songs.push((
+        "stringwave Velvet Ensemble".to_string(),
+        crate::engine::strings_tests::sw_song(),
+    ));
     for (name, s) in songs {
         let a = fingerprint(&s);
         let mut t = s.clone();

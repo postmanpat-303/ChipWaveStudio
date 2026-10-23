@@ -43,6 +43,8 @@ fn render_hashes_gen() {
     let mut all: Vec<(String, crate::gen::GenPatch)> = crate::gen::presets()
         .into_iter()
         .map(|(n, _, g)| (n.to_string(), g))
+        // StringWave plays through its own engine (render_hashes)
+        .filter(|(_, g)| !matches!(g.engine, crate::gen::GenEngine::Strings(_)))
         .collect();
     for (n, _) in crate::drumpat::KIT_NAMES {
         all.push((format!("kit {n}"), crate::drumpat::kit_patch(n).unwrap()));

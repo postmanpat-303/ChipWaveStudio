@@ -494,6 +494,38 @@ const POLY: Spec = Spec {
         ),
     ],
 };
+/// StringWave in the Devices tab's instrument card (its own panel is
+/// `stringsview.rs`): the eight macro knobs (cutoff ... master), the three
+/// layer levels ("L1 Level" ...) and the rest of the amp envelope
+const SW: Spec = Spec {
+    macros: Macros::Params(&[
+        "sw.0", "sw.1", "sw.2", "sw.3", "sw.4", "sw.5", "sw.6", "sw.7",
+    ]),
+    secs: &[
+        s(
+            "Layers",
+            None,
+            &["sw.wave0"],
+            &[
+                ("sw.11", None),
+                ("sw.16", None),
+                ("sw.21", None),
+                ("sw.23", None),
+            ],
+        ),
+        s(
+            "Envelope",
+            Some("Amp envelope"),
+            &[],
+            &[
+                ("sw.31", None),
+                ("sw.32", None),
+                ("sw.33", None),
+                ("sw.50", None),
+            ],
+        ),
+    ],
+};
 const SAMPLE: Spec = Spec {
     macros: Macros::None,
     secs: &[Sec {
@@ -528,6 +560,7 @@ pub(crate) fn spec(tag: &str) -> &'static Spec {
         "Noise" => &NOISE,
         "Grid" => &GRID,
         crate::poly::POLY_DISPLAY_NAME => &POLY,
+        crate::strings::STRINGS_DISPLAY_NAME => &SW,
         "Sample" => &SAMPLE,
         _ => &PLUGIN,
     }
@@ -575,7 +608,7 @@ pub(crate) fn macros(l: &Layout, sp: &Spec) -> Vec<MacroRt> {
 
 /// the engine macro keys are &'static in the spec already; find it there
 fn leak_key(k: &str) -> &'static str {
-    for sp in [&DRUM, &CHIPFX, &FM, &GRID, &POLY] {
+    for sp in [&DRUM, &CHIPFX, &FM, &GRID, &POLY, &SW] {
         if let Macros::Params(ks) = &sp.macros {
             if let Some(s) = ks.iter().find(|x| **x == k) {
                 return s;
@@ -728,11 +761,13 @@ fn big_knob(
     enabled: bool,
 ) -> (egui::Response, bool) {
     let t = th();
-    let (cell, _) = ui.allocate_exact_size(egui::vec2(96.0, MACRO_H - 8.0), Sense::hover());
-    let r = if t.ember { 25.0 } else { 21.0 };
+    let cw = ui.available_width().min(96.0);
+    let (cell, _) = ui.allocate_exact_size(egui::vec2(cw, MACRO_H - 8.0), Sense::hover());
+    // Slate: the studio knob, its value in the gap at the bottom of the ring
+    let r = if t.ember { 22.0 } else { 21.0 };
     let c = Pos2::new(
         cell.center().x,
-        cell.top() + if t.ember { 20.0 } else { 18.0 } + r,
+        cell.top() + if t.ember { 42.0 } else { 18.0 + r },
     );
     let krect = Rect::from_center_size(c, egui::vec2(r * 2.0 + 8.0, r * 2.0 + 8.0));
     let resp = ui.interact(
@@ -775,26 +810,29 @@ fn big_knob(
     let p = ui.painter();
     let dim = if enabled { 1.0 } else { 0.4 };
     if t.ember {
-        // pic-1 knob: LED arc, silver ring, glossy well with the readout
-        crate::ember::knob_label(p, Pos2::new(cell.center().x, cell.top() + 6.0), name, 12.5);
+        // the studio knob: title above, the value in the ring's gap
         let bip = (def - 0.5).abs() < 0.01;
+        let value = compact(value);
         crate::theme::knob_hero(
             p,
             c,
-            r + 4.0,
-            *v,
-            bip,
-            &compact(value),
-            enabled && (*v - if bip { 0.5 } else { 0.0 }).abs() > 0.002,
-            if enabled { 1.0 } else { 0.55 },
+            r,
+            &crate::ember::StudioKnob {
+                frac: *v,
+                bipolar: bip,
+                title: name,
+                value: &value,
+                dim: if enabled { 1.0 } else { 0.55 },
+                ..Default::default()
+            },
         );
         if resp.hovered() && enabled {
-            p.circle_stroke(c, r + 5.0, Stroke::new(1.0, t.ink2.gamma_multiply(0.4)));
+            p.circle_stroke(c, r + 7.5, Stroke::new(1.0, t.ink2.gamma_multiply(0.4)));
         }
         let cap =
             super::super::pattern::fit(p, caption, &egui::FontId::proportional(10.0), cell.width());
         p.text(
-            Pos2::new(cell.center().x, c.y + r + 12.0),
+            Pos2::new(cell.center().x, cell.bottom() - 6.0),
             egui::Align2::CENTER_CENTER,
             cap,
             egui::FontId::proportional(10.0),
@@ -831,7 +869,7 @@ fn big_knob(
     if enabled && (*v - from).abs() > 0.002 {
         p.add(egui::Shape::line(
             arc(from.min(*v), from.max(*v), r + 5.0),
-            Stroke::new(3.0, t.accent),
+            Stroke::new(3.0, crate::theme::skin_or(t.accent)),
         ));
     }
     p.circle_stroke(
@@ -840,7 +878,7 @@ fn big_knob(
         Stroke::new(
             1.2,
             if resp.hovered() && enabled {
-                t.accent
+                crate::theme::skin_or(t.accent)
             } else {
                 t.ink2.gamma_multiply(0.6 * dim)
             },
@@ -906,7 +944,7 @@ pub(crate) fn compact(v: &str) -> String {
 }
 
 /// a section frame: rounded panel and an uppercase title; returns the rect
-fn frame(ui: &egui::Ui, r: Rect, title: &str) {
+pub(super) fn frame(ui: &egui::Ui, r: Rect, title: &str) {
     let t = th();
     let p = ui.painter();
     if t.ember {
@@ -925,6 +963,9 @@ fn frame(ui: &egui::Ui, r: Rect, title: &str) {
         Stroke::new(1.0, t.ink2.gamma_multiply(0.35)),
         egui::StrokeKind::Inside,
     );
+    if let Some(s) = crate::theme::active_skin() {
+        s.panel(p, r, 6.0);
+    }
     p.text(
         Pos2::new(r.left() + 10.0, r.top() + SEC_HEAD * 0.5),
         egui::Align2::LEFT_CENTER,
@@ -1125,10 +1166,14 @@ impl App {
                 }
             } else {
                 let w = body.width() / ms.len() as f32;
+                // a narrow card (the Browser open at 1366 px) gives each
+                // macro less than 96 px: the cells shrink so their captions
+                // fit instead of running into the next one
+                let cw = (w - 4.0).clamp(48.0, 96.0);
                 for (k, m) in ms.iter().enumerate() {
                     let cr = Rect::from_min_size(
-                        Pos2::new(body.left() + w * k as f32 + (w - 96.0) * 0.5, body.top()),
-                        egui::vec2(96.0, body.height()),
+                        Pos2::new(body.left() + w * k as f32 + (w - cw) * 0.5, body.top()),
+                        egui::vec2(cw, body.height()),
                     );
                     let cur = macro_text(l, inst, m);
                     let (mut v, text, def) = cur.clone().unwrap_or((0.0, "–".into(), 0.0));
@@ -1310,11 +1355,17 @@ impl App {
                     yy += gh + 6.0;
                 }
             }
+            // too short to stack the custom controls over the knob row: the
+            // knobs go to the right of them instead of on top of them
+            let side = !customs.is_empty() && !knobs.is_empty() && yy + ch + kh > body.bottom();
+            let kw = knobs.len() as f32 * CELL.x;
+            let cright = if side {
+                body.right() - kw - 8.0
+            } else {
+                body.right()
+            };
             if !customs.is_empty() {
-                let cr = Rect::from_min_max(
-                    Pos2::new(body.left(), yy),
-                    Pos2::new(body.right(), yy + ch),
-                );
+                let cr = Rect::from_min_max(Pos2::new(body.left(), yy), Pos2::new(cright, yy + ch));
                 inside(ui, cr, egui::Layout::top_down(egui::Align::Min), |ui| {
                     for c in &customs {
                         self.custom_ui(ui, *c, inst, cx, body.height());
@@ -1322,8 +1373,8 @@ impl App {
                 });
             }
             if !knobs.is_empty() {
-                let kr =
-                    Rect::from_min_max(Pos2::new(body.left(), body.bottom() - CELL.y), body.max);
+                let left = if side { body.right() - kw } else { body.left() };
+                let kr = Rect::from_min_max(Pos2::new(left, body.bottom() - CELL.y), body.max);
                 let pad = ((kr.width() - knobs.len() as f32 * CELL.x) / 2.0).max(0.0);
                 inside(
                     ui,
@@ -1386,7 +1437,7 @@ impl App {
     }
 
     /// "Preset: name ▾": the presets of this type, then Save / Library
-    fn preset_dropdown(&mut self, ui: &mut egui::Ui, inst: &Instrument, cx: &mut Cx) {
+    pub(super) fn preset_dropdown(&mut self, ui: &mut egui::Ui, inst: &Instrument, cx: &mut Cx) {
         let cur = self.current_preset(cx.idx, inst);
         let label = format!("Preset: {}", cur.as_deref().unwrap_or("custom"));
         let list = preset_list(inst);

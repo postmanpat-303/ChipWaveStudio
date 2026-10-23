@@ -8,7 +8,7 @@ use super::*;
 pub struct Shot {
     pub out: PathBuf,
     pub view: String,
-    frame: u32,
+    pub(super) frame: u32,
     saved: bool,
     /// `--hold <secs>`: keep running (for screen recording) instead of capturing
     pub hold: Option<f32>,
@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 83] = [
+pub const VIEWS: [&str; 105] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -86,6 +86,9 @@ pub const VIEWS: [&str; 83] = [
     "browser-patterns-drop",
     "browser-files",
     "browser-plugins",
+    "browser-effects",
+    "browser-filter",
+    "browser-more",
     "plugin-setup",
     "showcase",
     "showcase-progress",
@@ -96,7 +99,10 @@ pub const VIEWS: [&str; 83] = [
     "trackpie",
     "trackpie-icons",
     "trackpie-colour",
-    "trackpie-add",
+    "trackpie-addring-1",
+    "trackpie-addring-2",
+    "trackpie-addring-3",
+    "trackpie-addring-instr",
     "trackauto",
     "split-preview",
     "cliparranger",
@@ -115,11 +121,27 @@ pub const VIEWS: [&str; 83] = [
     "focus-window",
     "record-recording",
     "record-typing",
+    "record-idle",
+    "record-playing",
+    "record-metro-menu",
+    "record-countin",
     "record-master",
     "racks-panel",
     "racks-add-device",
     "racks-save",
     "racks-browser",
+    "knob-mockup",
+    "instskin-waveforge",
+    "instskin-chains",
+    "instskin-browser",
+    "instskin-plugins",
+    "stringwave-layers",
+    "stringwave-filtermod",
+    "stringwave-fx",
+    "stringwave-full",
+    "stringwave-pie",
+    "stringwave-panelpie",
+    "metronome-mockup",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -142,6 +164,10 @@ impl App {
     fn shot_setup(&mut self, ctx: &egui::Context, view: &str) {
         if view.starts_with("focus-") || view.starts_with("record-") {
             self.shot_focus(view);
+            return;
+        }
+        if view.starts_with("stringwave-") {
+            self.shot_stringwave(view);
             return;
         }
         // "Drop 2" (block 08) of the Lumen Drift demo, looping
@@ -251,6 +277,34 @@ impl App {
                     }
                 }
             }
+            // Browser direction A: Effects with its "Adds to" line, the
+            // Filter popover open (two filters on), the More menu open
+            "browser-effects" | "browser-filter" | "browser-more" => {
+                self.view = View::Timeline;
+                self.ch = 1;
+                let (tab, pop) = match view {
+                    "browser-effects" => (
+                        crate::browser::Tab::Effects,
+                        super::browserpanel::BrPop::None,
+                    ),
+                    "browser-filter" => (
+                        crate::browser::Tab::Instruments,
+                        super::browserpanel::BrPop::Filter,
+                    ),
+                    _ => (
+                        crate::browser::Tab::Wavetables,
+                        super::browserpanel::BrPop::More,
+                    ),
+                };
+                self.br.filter.tab = tab;
+                if view == "browser-filter" {
+                    self.br.filter.tags = vec!["Bass"];
+                    self.br.filter.creator = Some("ChipWave".into());
+                }
+                self.br_refresh();
+                self.br.sel = self.br_result_items().first().map(|i| i.key.clone());
+                self.br.pop = pop;
+            }
             "browser-drop" => {
                 // dragging an instrument below the last track: "New track: …"
                 self.view = View::Timeline;
@@ -319,7 +373,13 @@ impl App {
                     self.extra.full_height = true;
                 }
             }
-            "devices" | "devices-drop" | "timeline-instrument" => {
+            "devices"
+            | "devices-drop"
+            | "timeline-instrument"
+            | "instskin-waveforge"
+            | "instskin-chains"
+            | "instskin-browser"
+            | "instskin-plugins" => {
                 // the Devices tab on the Supersaw Pad: EQ, its filter and
                 // chorus, a compressor and a reverb; Browser › Effects open
                 self.enter_timeline();
@@ -330,6 +390,16 @@ impl App {
                     self.ch = c;
                 }
                 self.dev.follow_ch = self.ch;
+                // the built-in skin (docs/INSTSKIN.md): a WaveForge on the
+                // pad's track
+                let wf = view.starts_with("instskin");
+                let ii = if wf {
+                    self.track_new_instrument(self.ch, super::trackpie::Builtin::WaveForge);
+                    self.ip.advanced = false;
+                    (self.instr as usize).saturating_sub(1)
+                } else {
+                    6
+                };
                 self.with(|s| {
                     use crate::fx::{Device, FxKind};
                     let mut eq = Device::new(FxKind::Eq);
@@ -348,11 +418,11 @@ impl App {
                     let mut comp = Device::new(FxKind::Compressor);
                     super::fxview::apply_preset(&mut comp, 0);
                     let rev = Device::new(FxKind::Reverb);
-                    s.song.insert_device(6, 0, eq);
-                    let n = s.song.instruments.get(6).map_or(0, |i| i.fx.len());
-                    s.song.insert_device(6, n, comp);
-                    s.song.insert_device(6, n + 1, rev);
-                    s.song.insert_device(6, n + 2, Device::new(FxKind::Delay));
+                    s.song.insert_device(ii, 0, eq);
+                    let n = s.song.instruments.get(ii).map_or(0, |i| i.fx.len());
+                    s.song.insert_device(ii, n, comp);
+                    s.song.insert_device(ii, n + 1, rev);
+                    s.song.insert_device(ii, n + 2, Device::new(FxKind::Delay));
                 });
                 // CHIPWAVE_SHOT_MORE=N: device N with its "…" open
                 if let Some(n) = std::env::var("CHIPWAVE_SHOT_MORE")
@@ -372,10 +442,31 @@ impl App {
                 self.extra.browser_open = std::env::var_os("CHIPWAVE_SHOT_NO_BROWSER").is_none();
                 self.br.filter.tab = crate::browser::Tab::Effects;
                 self.br_refresh();
-                if view == "timeline-instrument" {
+                if view == "instskin-chains" {
+                    self.extra.chains_cards = true;
+                    self.extra.browser_open = false;
+                }
+                if matches!(
+                    view,
+                    "timeline-instrument"
+                        | "instskin-waveforge"
+                        | "instskin-browser"
+                        | "instskin-plugins"
+                ) {
                     // the Instrument tab (simple card) on the same pad
                     self.set_lower(1);
-                    self.extra.browser_open = false;
+                    self.extra.browser_open =
+                        view.ends_with("-browser") || view.ends_with("-plugins");
+                    if self.extra.browser_open {
+                        // Browser › Instruments (ChipWave Instruments first)
+                        // or › VST3 & CLAP (neutral badges)
+                        self.br.filter.tab = if view == "instskin-plugins" {
+                            crate::browser::Tab::Plugins
+                        } else {
+                            crate::browser::Tab::Instruments
+                        };
+                        self.br_refresh();
+                    }
                 }
                 if view == "devices-drop" {
                     let it = self.br.items.iter().find(|i| i.key == "fx:Delay").cloned();
@@ -507,7 +598,14 @@ impl App {
                 self.set_lower(1);
                 self.dirty = false;
             }
-            "trackpie" | "trackpie-icons" | "trackpie-colour" | "trackpie-add" | "trackauto"
+            "trackpie"
+            | "trackpie-icons"
+            | "trackpie-colour"
+            | "trackpie-addring-1"
+            | "trackpie-addring-2"
+            | "trackpie-addring-3"
+            | "trackpie-addring-instr"
+            | "trackauto"
             | "split-preview" => {
                 // the default layout on the timeline-mode demo; the pie
                 // opens a few frames later (shot_pie)
@@ -526,7 +624,7 @@ impl App {
             }
             // the Drum Kit editor: a library pattern dropped on a new track
             // (CHIPWAVE_SHOT_PAT=<name>, default "Full-on Drive"); the
-            // generator's result when CHIPWAVE_SHOT_DK=generate (=added: then Add to track)
+            // generator's result when CHIPWAVE_SHOT_DK=generate (=added: then Add to track; =sound: the Sound tab)
             "timeline-drumkit" => {
                 self.enter_timeline();
                 let name = std::env::var("CHIPWAVE_SHOT_PAT").unwrap_or("Full-on Drive".into());
@@ -536,6 +634,9 @@ impl App {
                 self.dk.inst = (self.instr as usize).saturating_sub(1);
                 self.dk.sel = 3;
                 let dkv = std::env::var("CHIPWAVE_SHOT_DK").unwrap_or_default();
+                if dkv == "sound" {
+                    self.dk.tab = 1;
+                }
                 if dkv == "generate" || dkv == "added" {
                     self.dk.tab = 2;
                     self.dk.gen.result = Some(crate::drumkit::generate(1, 7, 0.7, 1, 0));
@@ -1117,6 +1218,12 @@ impl App {
         if f == SETUP_AT {
             self.shot_setup(ctx, &view);
         }
+        if view == "knob-mockup" && f >= SETUP_AT {
+            knob_mockup(ctx);
+        }
+        if view == "metronome-mockup" && f >= SETUP_AT {
+            super::metroicon::metronome_mockup(ctx);
+        }
         if f == SETUP_AT + 14 {
             if let Ok(m) = std::env::var("CHIPWAVE_SHOT_PR") {
                 self.shot_pr(ctx, &m);
@@ -1192,7 +1299,8 @@ impl App {
             let mut buf = vec![0.0f32; n * 2];
             self.with(|s| {
                 let Shared { song, engine, .. } = s;
-                if engine.playing {
+                // the count-in shot holds its countdown
+                if engine.playing && view != "record-countin" {
                     engine.render(song, &mut buf);
                 }
             });
@@ -1538,7 +1646,7 @@ impl App {
 }
 
 impl App {
-    /// CHIPWAVE_SHOT_PR=click | erase | select | chords | chord-pie |
+    /// CHIPWAVE_SHOT_PR=click | erase | select | line | chords | chord-pie |
     /// chord-block-pie | chord-generate (view timeline-notes): piano roll
     /// shots with scripted mouse input
     fn shot_pr(&mut self, ctx: &egui::Context, mode: &str) {
@@ -1567,7 +1675,7 @@ impl App {
         let none = egui::Modifiers::NONE;
         let prim = egui::PointerButton::Primary;
         match mode {
-            "click" | "erase" | "select" => {
+            "click" | "erase" | "select" | "line" => {
                 if mode == "click" {
                     // an empty clip: the script draws into it
                     if let Some(super::pianoview::Source::Notes(mut d)) = self.pr_read(t) {
@@ -1682,6 +1790,80 @@ impl App {
                     sc.push((f, mv(a + (b - a) * (k as f32 / 10.0))));
                 }
             }
+            "line" => {
+                // Pointer tool, an Alt+drag line from empty space through
+                // some of the notes, still held at the capture
+                self.pr.tool = super::pianoview::PrTool::Pointer;
+                let p = |a: &App, bars: f32, key: u8| {
+                    Pos2::new(x(a, (bars * bar as f32) as tl::Tick), key_y(a, key))
+                };
+                let pts = [
+                    p(self, 0.45, 57),
+                    p(self, 0.8, 63),
+                    p(self, 1.35, 73),
+                    p(self, 1.75, 64),
+                    p(self, 2.3, 71),
+                    p(self, 2.6, 66),
+                ];
+                let alt = egui::Modifiers::ALT;
+                let mut f = CAPTURE_AT - 60;
+                sc.push((f, mv(pts[0])));
+                f += 2;
+                sc.push((f, btn(pts[0], prim, true, alt)));
+                for w in pts.windows(2) {
+                    for k in 1..=8 {
+                        f += 1;
+                        sc.push((f, mv(w[0] + (w[1] - w[0]) * (k as f32 / 8.0))));
+                    }
+                }
+            }
+            "marker" => {
+                // bar 1 copied; a click in the ruler at bar 3 places the
+                // paste marker, then Ctrl+V twice: two copies end to end,
+                // the marker after them
+                self.pr.zoom = 10.0;
+                self.pr.tool = super::pianoview::PrTool::Pointer;
+                if let Some(super::pianoview::Source::Notes(mut d)) = self.pr_read(t) {
+                    d.notes.retain(|n| n.start < bar);
+                    if let Some(k) = d.notes.iter().map(|n| n.key).max() {
+                        // the copied notes in view
+                        self.pr.scroll_y = ((120.0 - k as f32 - 3.0) * self.pr.key_h).max(0.0);
+                    }
+                    self.pr.sel = (0..d.notes.len()).collect();
+                    self.pr_write(t, super::pianoview::Source::Notes(d));
+                }
+                self.pr_copy(false, ctx);
+                let rp = Pos2::new(x(self, 2 * bar) + 3.0, self.pr.grid_rect.top() - 8.0);
+                let cmd = egui::Modifiers::COMMAND;
+                let kv = |down: bool| egui::Event::Key {
+                    key: egui::Key::V,
+                    physical_key: None,
+                    pressed: down,
+                    repeat: false,
+                    modifiers: cmd,
+                };
+                let mut f = CAPTURE_AT - 60;
+                sc.push((f, mv(rp)));
+                f += 2;
+                sc.push((f, btn(rp, prim, true, none)));
+                f += 2;
+                sc.push((f, btn(rp, prim, false, none)));
+                for _ in 0..2 {
+                    f += 6;
+                    sc.push((f, kv(true)));
+                    f += 2;
+                    sc.push((f, kv(false)));
+                }
+                // the mouse off the ruler (no tooltip over the result)
+                f += 4;
+                sc.push((
+                    f,
+                    mv(Pos2::new(
+                        x(self, bar / 2),
+                        self.pr.grid_rect.bottom() - 4.0,
+                    )),
+                ));
+            }
             _ => {
                 // chord shots: a Cinematic progression in E minor on the lane
                 self.with(|s| {
@@ -1768,6 +1950,7 @@ impl App {
             .ok()
             .and_then(|v| v.parse::<f64>().ok());
         let now = ctx.input(|i| i.time);
+        let info = self.pie_info(tr);
         if let Some(p) = &mut self.pie {
             p.key = key;
             p.frozen = frozen;
@@ -1775,23 +1958,32 @@ impl App {
                 p.sub = Some((2, now));
                 p.sub_key = Some(6);
             }
-            if view == "trackpie-add" {
-                p.key = Some(3);
-                p.sub = Some((3, now));
-            }
-        }
-        if view == "trackpie-add" {
-            let info = self.pie_info(tr);
-            let at = super::trackpie::sub_items(super::trackpie::SEGS[3], &info)
-                .iter()
-                .position(|i| {
-                    i.act
-                        == Some(super::trackpie::PieAct::NewInstrument(
-                            super::trackpie::Builtin::WaveForge,
-                        ))
-                });
-            if let Some(p) = &mut self.pie {
-                p.sub_key = at;
+            // the Add rings: level 1, Drum pattern › and its Drum Kit ›
+            if let Some(lv) = view.strip_prefix("trackpie-addring-") {
+                use super::trackring::{ring_slots, Level};
+                p.open_ring(now);
+                let n = |l| ring_slots(l, &info).len();
+                if let Some(r) = &mut p.ring {
+                    // Instrument ›: the built-ins (StringWave too) and Browse…
+                    if lv == "instr" {
+                        let k = ring_slots(Level::Add, &info)
+                            .iter()
+                            .position(|s| s.label == "Instrument")
+                            .unwrap_or(0);
+                        r.enter(
+                            Level::Instrument,
+                            k,
+                            n(Level::Add),
+                            n(Level::Instrument),
+                            now,
+                        );
+                    } else if lv != "1" {
+                        r.enter(Level::DrumInstr, 1, n(Level::Add), n(Level::DrumInstr), now);
+                    }
+                    if lv == "3" {
+                        r.enter(Level::Kits, 1, n(Level::DrumInstr), n(Level::Kits), now);
+                    }
+                }
             }
         }
         if view == "trackauto" {
@@ -2051,5 +2243,330 @@ impl App {
                 })
                 .collect();
         }
+    }
+}
+
+/// `--view knob-mockup`: the knobs as the app wires them (left) beside the
+/// studio knob (`ember::knob_studio`, right) at its design sizes, painted 1:1
+/// by the app's own painter over the window. A design reference board.
+fn knob_mockup(ctx: &egui::Context) {
+    use crate::ember::{self, StudioKnob};
+    let t = th();
+    egui::Area::new(egui::Id::unique("knob_mockup"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(Pos2::ZERO)
+        .show(ctx, |ui| {
+            let full = ctx.content_rect();
+            ui.set_min_size(full.size());
+            let p = ui.painter().clone();
+            p.rect_filled(full, 0.0, t.bg_bot);
+            let head = |p: &egui::Painter, pos: Pos2, s: &str| {
+                p.text(
+                    pos,
+                    egui::Align2::LEFT_TOP,
+                    s,
+                    theme::label_font(14.0),
+                    t.ink,
+                );
+            };
+            let note = |p: &egui::Painter, pos: Pos2, s: &str| {
+                p.text(
+                    pos,
+                    egui::Align2::LEFT_TOP,
+                    s,
+                    egui::FontId::proportional(11.5),
+                    t.ink2,
+                );
+            };
+            head(
+                &p,
+                Pos2::new(24.0, 14.0),
+                "KNOB BOARD · 1:1 · IN THE APP (LEFT) AND THE STUDIO KNOB SIZES (RIGHT)",
+            );
+            note(
+                &p,
+                Pos2::new(24.0, 34.0),
+                "Painted by ChipWave's own painter at the app's sizes.",
+            );
+            let colw = (full.width() - 72.0) / 2.0;
+            let lx = 24.0;
+            let rx = lx + colw + 24.0;
+            // ---- 1 Master panel: Volume / Drive / Ceiling (rad 27)
+            let y0 = 64.0;
+            for (x, now) in [(lx, true), (rx, false)] {
+                let r = Rect::from_min_size(Pos2::new(x, y0), egui::vec2(colw, 176.0));
+                theme::cartridge(&p, r, t.slate);
+                head(
+                    &p,
+                    r.min + egui::vec2(14.0, 10.0),
+                    if now {
+                        "MASTER · IN THE APP"
+                    } else {
+                        "MASTER · STUDIO KNOB 27"
+                    },
+                );
+                let knobs = [
+                    ("Volume", 0.80, "+0.0", "-60", "+6", "+0.0 dB"),
+                    ("Drive", 0.0, "0.0", "0", "+24", "0.0 dB"),
+                    ("Ceiling", 0.92, "-1.0", "-12", "0", "-1.0 dB"),
+                ];
+                for (i, (name, f, rd, lo, hi, val)) in knobs.into_iter().enumerate() {
+                    let c = Pos2::new(r.left() + 90.0 + i as f32 * 120.0, r.top() + 96.0);
+                    if now {
+                        theme::knob_hero(
+                            &p,
+                            c,
+                            21.0,
+                            &StudioKnob {
+                                frac: f,
+                                title: name,
+                                value: rd,
+                                min_max: (lo, hi),
+                                dim: 1.0,
+                                ..Default::default()
+                            },
+                        );
+                    } else {
+                        let mut v = f;
+                        ember::knob_studio_ui(
+                            ui,
+                            c,
+                            27.0,
+                            egui::Id::unique(("mock_master", i)),
+                            &mut v,
+                            f,
+                            StudioKnob {
+                                frac: f,
+                                title: name,
+                                value: val,
+                                min_max: (lo, hi),
+                                dim: 1.0,
+                                ..Default::default()
+                            },
+                        );
+                    }
+                }
+            }
+            // ---- 2 a device card: Supersaw Cutoff / Detune / Attack / Release
+            let y1 = y0 + 192.0;
+            let dev = [
+                ("Cutoff", 0.62, "2.40 kHz", false, "20", "20k"),
+                ("Detune", 0.65, "+18 ct", true, "-50", "+50"),
+                ("Attack", 0.15, "12 ms", false, "0", "2 s"),
+                ("Release", 0.45, "320 ms", false, "0", "4 s"),
+            ];
+            for (x, now) in [(lx, true), (rx, false)] {
+                let r = Rect::from_min_size(Pos2::new(x, y1), egui::vec2(colw, 232.0));
+                theme::cartridge(&p, r, t.slate);
+                head(
+                    &p,
+                    r.min + egui::vec2(14.0, 10.0),
+                    if now {
+                        "DEVICE CARD · SUPERSAW · IN THE APP (60 x 66 CELLS)"
+                    } else {
+                        "DEVICE CARD · SUPERSAW · STUDIO KNOB"
+                    },
+                );
+                if now {
+                    let mut ch = ui.new_child(
+                        egui::UiBuilder::new()
+                            .max_rect(Rect::from_min_size(
+                                r.min + egui::vec2(14.0, 40.0),
+                                egui::vec2(colw - 28.0, 70.0),
+                            ))
+                            .layout(egui::Layout::left_to_right(egui::Align::Min)),
+                    );
+                    ch.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+                    for (k, (name, f, val, ..)) in dev.into_iter().enumerate() {
+                        let mut v = f;
+                        knob::knob(
+                            &mut ch,
+                            egui::Id::unique(("mock_old", k)),
+                            &mut v,
+                            knob::KnobArgs {
+                                caption: None,
+                                name,
+                                value_text: val.to_string(),
+                                default: 0.5,
+                                steps: 0.0,
+                                enabled: true,
+                                highlight: false,
+                                badge: None,
+                                locked: None,
+                                tip: "",
+                                rings: &[],
+                                live: None,
+                                auto_led: None,
+                            },
+                        );
+                    }
+                    note(
+                        &p,
+                        r.min + egui::vec2(14.0, 124.0),
+                        "Slate: the studio knob in the 60 x 66 cell, the value in orange under it.",
+                    );
+                } else {
+                    // the same 60 x 66 cells (rad 14), then a roomier 18 with end labels
+                    for (row, rad, cw, cy) in
+                        [(0, 14.0f32, 60.0f32, 82.0f32), (1, 18.0, 92.0, 178.0)]
+                    {
+                        for (k, (name, f, val, bip, lo, hi)) in dev.into_iter().enumerate() {
+                            let c =
+                                Pos2::new(r.left() + 14.0 + cw / 2.0 + k as f32 * cw, r.top() + cy);
+                            ember::knob_studio(
+                                &p,
+                                c,
+                                rad,
+                                &StudioKnob {
+                                    frac: f,
+                                    bipolar: bip,
+                                    title: name,
+                                    value: val,
+                                    min_max: (lo, hi),
+                                    dim: 1.0,
+                                    ..Default::default()
+                                },
+                            );
+                        }
+                        note(
+                            &p,
+                            Pos2::new(r.left() + 14.0 + 4.0 * cw + 16.0, r.top() + cy - 8.0),
+                            if row == 0 {
+                                "rad 14 in the 60 x 66 cell"
+                            } else {
+                                "rad 18 with end labels (92 wide)"
+                            },
+                        );
+                    }
+                }
+            }
+            // ---- 3 the scale variant and the other states (studio knob only)
+            let y2 = y1 + 248.0;
+            let r = Rect::from_min_size(
+                Pos2::new(lx, y2),
+                egui::vec2(full.width() - 48.0, full.height() - y2 - 16.0),
+            );
+            theme::cartridge(&p, r, t.slate);
+            head(
+                &p,
+                r.min + egui::vec2(14.0, 10.0),
+                "STUDIO KNOB · SCALE NUMBERS, BIPOLAR, STEPPED, DISABLED",
+            );
+            let cy = r.top() + 118.0;
+            let ms: [(&str, f32); 7] = [
+                ("2", 0.0),
+                ("8", 0.17),
+                ("14", 0.33),
+                ("19", 0.5),
+                ("25", 0.67),
+                ("30", 0.83),
+                ("40ms", 1.0),
+            ];
+            let cases: [(f32, StudioKnob); 5] = [
+                (
+                    30.0,
+                    StudioKnob {
+                        frac: 0.02,
+                        title: "Attack",
+                        value: "2 ms",
+                        scale: &ms,
+                        dim: 1.0,
+                        ..Default::default()
+                    },
+                ),
+                (
+                    24.0,
+                    StudioKnob {
+                        frac: 0.5,
+                        bipolar: true,
+                        title: "Pan",
+                        value: "C",
+                        min_max: ("L", "R"),
+                        dim: 1.0,
+                        ..Default::default()
+                    },
+                ),
+                (
+                    24.0,
+                    StudioKnob {
+                        frac: 0.3,
+                        bipolar: true,
+                        title: "Ratio",
+                        value: "-40",
+                        min_max: ("-100", "+100"),
+                        dim: 1.0,
+                        ..Default::default()
+                    },
+                ),
+                (
+                    22.0,
+                    StudioKnob {
+                        frac: 4.0 / 6.0,
+                        title: "Voices",
+                        value: "5",
+                        min_max: ("1", "7"),
+                        dots: 7,
+                        dim: 1.0,
+                        ..Default::default()
+                    },
+                ),
+                (
+                    22.0,
+                    StudioKnob {
+                        frac: 0.55,
+                        title: "Mix",
+                        value: "55 %",
+                        min_max: ("Raw", "Done"),
+                        dim: 0.45,
+                        ..Default::default()
+                    },
+                ),
+            ];
+            for (i, (rad, k)) in cases.iter().enumerate() {
+                let c = Pos2::new(r.left() + 110.0 + i as f32 * 200.0, cy);
+                ember::knob_studio(&p, c, *rad, k);
+            }
+            note(
+                &p,
+                Pos2::new(r.left() + 14.0, r.bottom() - 22.0),
+                "Mix is shown disabled (dimmed).",
+            );
+        });
+}
+
+impl App {
+    /// StringWave's panel on a new track instrument in the Timeline at
+    /// the automatic lower-panel height (a laptop's view):
+    /// stringwave-layers / -filtermod / -fx (the sub-tabs), -full (the full
+    /// view), -pie (a layer level's knob pie), -panelpie (the empty panel's
+    /// pie); CHIPWAVE_SHOT_SWTEXT=125|150|200 for the text size
+    fn shot_stringwave(&mut self, view: &str) {
+        self.psetup = None;
+        self.enter_timeline();
+        self.default_layout();
+        self.track_new_instrument(self.ch, super::trackpie::Builtin::StringWave);
+        self.ip.advanced = false;
+        self.set_lower(1);
+        self.extra.lower_h = 0.0;
+        self.extra.browser_open = false;
+        self.ip.sw.tab = match view {
+            "stringwave-filtermod" => 1,
+            "stringwave-fx" => 2,
+            _ => 0,
+        };
+        self.ip.sw.full = view == "stringwave-full";
+        self.extra.sw_text = std::env::var("CHIPWAVE_SHOT_SWTEXT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        self.ip.sw.pie_req = match view {
+            "stringwave-pie" => Some(Some(format!(
+                "sw.{}",
+                crate::strings::LAYER[1] + crate::strings::L_LVL
+            ))),
+            "stringwave-panelpie" => Some(None),
+            _ => None,
+        };
+        self.dirty = false;
     }
 }

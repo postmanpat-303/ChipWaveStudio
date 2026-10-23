@@ -2,6 +2,47 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.8.0: StringWave, the violet look and pie-ring Add
+
+Released 2026-10-23. Highlights (details below):
+- **StringWave, a new built-in string-ensemble instrument** with eight presets (Velvet Ensemble, Bowed Cathedral, Harp Shimmer, Undertow Drone, Hollow Body Pad, Echo Strings, Slow Swell Orchestra and Init): three layers, an undertone sub and drone, a filter with its own envelope, two LFOs, a mod envelope, chorus, echo and reverb, mod wheel, expression and sustain pedal. Find it in Track pie › Add › Instrument and in Browser › ChipWave Instruments.
+- **A violet look for ChipWave's own instruments.** Every built-in instrument panel, its card in Nested Device Chains and its row in the Browser share one violet tint (a little different per theme), so violet always means "built in"; plugins stay neutral.
+- **Track pie › Add opens rings round the pie:** Drum pattern › an instrument or Drum Kit › a kit makes a new track below with an empty 1-bar pattern, ready to play into; Instrument ›, Automation lane › and Browse… work the same way.
+- **Drum Kit: Kits… and Dice kit** now load the kit's name, sounds and pad names, and an empty pattern gets the kit's starter groove.
+- **Piano roll ruler:** a paste marker you click or drag on the ruler (Ctrl+V pastes there and carries on after the paste), the play marker follows the Timeline, and bar, beat and grid ticks with beat labels.
+- **CLAP plugins:** knob moves in a plugin's own window are heard on every track that plays it, a plugin's state is always saved (also when its window closes), new tracks start from the plugin's current sound, and plugin windows use the monitor's real scale.
+- **Studio knobs and a calmer panel:** Slate's knobs are studio knobs, the lower panel keeps one height for Piano roll, Instrument and Nested Device Chains, the Master level history moves calmly, and Nested Device Chains opens on Cards.
+- **Transport:** Play and Stop are one toggle, a Metronome toggle with a count-in of Off, 1 or 2 bars, and **Keys → Notes** (was Typing).
+- **Browser:** a simpler layout, the Plugins category is now **VST & CLAP**, plugin thumbnails are captured silently, and a plugin with many programs lists only its main instrument.
+- **Piano roll selection:** drag on empty space to box-select, Alt+drag to select every note a line crosses.
+- Songs that use StringWave are saved as reader version 8, which older versions refuse cleanly. Every other song saves, plays and renders exactly as before (checked against 0.2.7.0's renders).
+
+### Known limits
+- StringWave is a ChipWave instrument, not a plugin: it can't be used in other music programs.
+- The track pie's Drum pattern ring needs the Timeline (it's greyed out in the Tracker).
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
+
+### Details
+- **StringWave** (credits: StringWave by Del (postmanpat), MIT): three layers (Ensemble, Bowed, …) with Octave, Detune, Tone, Level and Pan; Undertones (Sub, Drone, Drone tone); an Amp envelope with Swell; a 12 / 24 dB filter with Cutoff, Resonance, Key track and its envelope; two LFOs and a mod envelope with targets; chorus, echo and reverb; a Master. Its panel has three pages (Layers, Filter & Mod, FX & Master), a full view and a knob pie. The mod wheel, expression (CC11) and sustain pedal (CC64) work out of the box; a CC you MIDI-learn wins. It plays from Timeline clips, the piano roll, Tracker blocks, rack layers and live MIDI, and saves inside the song and as `.cwi` instrument files.
+- **The violet built-in skin** ([INSTSKIN.md](INSTSKIN.md)): a translucent wash, a tinted frame and stripe, one type badge for every built-in, and knobs, card pictures and lights in the tint. VST3 and CLAP badges in the Browser are neutral grey. The app accent (Slate orange, Dark Circuit green, Amiga blue) stays for selection, the playhead and the transport.
+- **Track pie Add rings** ([TIMELINE.md](TIMELINE.md)): the rings replace the old Add panel. A drag with the right button held can go several rings deep; Esc, Backspace or ‹ Back steps back. Everything a ring makes is one Ctrl+Z.
+- **Drum Kit Kits… and Dice kit:** loading a kit used to keep the old name and pad names; now the kit's name, sounds and pad names arrive together, and an empty pattern gets the kit's starter groove in one undo step.
+- **Clip colour** shows at once on the Timeline, linked copies too (one undo step).
+- **Piano roll ruler:** click or drag the bar strip to set the paste marker (Alt: no snap); Ctrl+V pastes there and the next paste goes right after; Ctrl+D moves it. The play marker follows the Timeline's, also while playing. Ruler marks pick a readable colour in every theme.
+- **CLAP hosting:** edits in a plugin's editor reach all the instances that play (one per track); plugin state is captured on every save and when an editor closes, even from plugins that never say they changed; a new track playing the instrument starts from its live state; CLAP editors get the monitor's real DPI scale. `CHIPWAVE_PLUGIN_DEBUG=1` writes a plugin log with a freeze watchdog.
+- **Studio knobs** (Slate): every small knob, the master knobs and the instrument macros are studio knobs, with the name in caps and the value in orange. Knobs sit beside an instrument section's own controls when both don't fit.
+- **Steady panel height:** Piano roll, Instrument and Nested Device Chains share one height, and a height you drag survives a restart, New and Open (Ctrl+6 resets it).
+- **Master level history:** one column per quarter second for the last 30 seconds with a slow fall; right-click to pause or hide it.
+- **Nested Device Chains** opens on **Cards** by default; a Cards or Tree choice you make is remembered.
+- **Silent plugin previews:** Browser thumbnails are captured off-screen, without a taskbar flash, each plugin file at most once per session.
+- **VST & CLAP:** the Browser's Plugins category is renamed; a plugin file with many programs lists its main instrument (+N programs), and search or *Show all programs* shows the rest.
+- **Simpler Browser:** tiles and More, search with a Filter popover and pills, one ••• menu, and a preview bar; Find plugins, Add folder and Auto each have one place.
+- **Keys → Notes:** the Typing toggle is renamed, with a small keyboard icon; its lit text is readable in Amiga Workbench too.
+- **Play / Stop** is one toggle (Space still plays and stops).
+- **Metronome and count-in:** a Metronome toggle whose arm swings with the beat, and a count-in of Off, 1 bar or 2 bars (it clicks even with the metronome off) from its arrow or a right-click; Record blinks and the position counts down while counting in.
+- **Box and Alt-line select** in the piano roll: with the Pointer, a drag on empty space box-selects (Shift adds) and Alt+drag selects every note the line crosses; a click still draws.
+- **Visual fixes:** the On lights and slope labels on built-in cards are readable in Amiga Workbench; the M1–M8 badges and lock marks no longer touch long knob names (FEEDBACK, SWELL) or the knob ring; the filter picture's cutoff readout stays clear of the curve; instrument card macro names no longer run into each other on narrow cards.
+
 ## 0.2.7.0: Racks and Nested Device Chains
 
 Released 2026-10-21. Highlights (details below):
@@ -289,7 +330,7 @@ Released 2026-10-20. Highlights (details in the sections below):
 ### Piano roll chord lane, chord pies and Generate chord progression
 - **Chord lane** above the notes of a note clip: double-click adds, drag draws / moves / resizes, click plays on the track's instrument, slash chords (*Gsus2/E*) and roman numerals. Saved with the clip (songs without chords save as before).
 - **Chord pie** (round menu) on right-click: empty lane = styles with their progressions in an outer ring (hover previews, click inserts); a chord = Play, Transpose, Chord type, Suggestions, Write notes (8 voicings), Generate, Select, Delete, Edit. **Settings › Chord menus › List** for ordinary menus (with *Detect chords from the notes*). Reusable radial widget.
-- **Generate chord progression** dialog: 17 styles with common progressions, key + Any/Major/Minor, length, chord speed, start bar, Colour and Variation, walking bass, Another one, Preview, optional voice-led notes. One undo step. Guide: [CHORDS.md › Chord lane](CHORDS.md#chord-lane-in-the-piano-roll-unreleased).
+- **Generate chord progression** dialog: 17 styles with common progressions, key + Any/Major/Minor, length, chord speed, start bar, Colour and Variation, walking bass, Another one, Preview, optional voice-led notes. One undo step. Guide: [CHORDS.md › Chord lane](CHORDS.md#chord-lane-in-the-piano-roll-0241).
 
 ### Piano roll: single-click entry, eraser, tools and a tidy toolbar
 - **One click draws a note** the length of the last note drawn, resized or clicked (grid step at first); drag while drawing sets the length and is remembered. A long or wobbly click no longer shortens it. **Len** in the toolbar shows (and sets) it.
@@ -350,7 +391,7 @@ Released 2026-10-20. Highlights (details in the sections below):
   - Inspired by the modular environments of other DAWs (idea only, no code or assets; credited). Our own canvas, no new dependency.
   - Limits: 32 modules / 128 cables per patch, 2 delays (≈85 ms) and 4 ladders per voice; mode menus aren't automatable; Grid FX exposes only its macros and Mix; no containers, sample player, sequencer or envelope follower modules, canvas zoom or separate patch files yet; older versions can't open Grid songs.
 
-- **Wave, a wavetable synth generator:** **New… › Generator (wavetable)**. Guide: [GENERATORS.md › Wave](GENERATORS.md#wave-wavetable-unreleased).
+- **Wave, a wavetable synth generator:** **New… › Generator (wavetable)**. Guide: [GENERATORS.md › Wave](GENERATORS.md#wave-wavetable-0241).
   - **Two wavetable oscillators** with **position scanning** (smooth crossfades between frames), Semi/Fine and level each; **unison** up to 8 voices per oscillator with **Detune** and stereo **Spread**; a **sub** sine and **noise**.
   - **Band-limited:** every frame is stored as 10 FFT mipmaps (512 → 1 harmonics) and each note plays the richest one below Nyquist, so high notes don't alias (tested at 3.1 kHz: alias images below −74 dBFS).
   - ChipWave's **ladder filter** (LP/BP/HP, 12/24 dB, clean or vintage) with key tracking, drive and its own envelope, which can also sweep the table positions (**Env>Pos**); an amp envelope, glide and legato. 38xx–3Bxx move its cutoff and resonance.
@@ -362,7 +403,7 @@ Released 2026-10-20. Highlights (details in the sections below):
   - Design inspired by Vital by Matt Tytel and Surge XT's wavetable oscillator (ideas only; credited in About › Credits and THIRD_PARTY_LICENSES).
   - Limits: no warp modes or spectral morphing yet, no table drawing or sample-to-table conversion, modulators are per instrument (not per voice), octave mipmaps (see the guide), older versions can't open songs that use Wave.
 
-- **VST3 hosting:** VST3 instruments and effects next to CLAP. Guide: [PLUGINS.md › VST3](PLUGINS.md#vst3-unreleased).
+- **VST3 hosting:** VST3 instruments and effects next to CLAP. Guide: [PLUGINS.md › VST3](PLUGINS.md#vst3-0241).
   - **Same everything as CLAP:** the scan (crash-guarded child process, cache), the **Add plugin instrument** browser and the **Plugin effect ›** menus (marked VST3), the parameter list, 8 macros and 43xy, automation lanes, drag-to-modulate, plugin delay compensation, state saved in the song, missing-plugin placeholders, offline render and `--self-test`.
   - **Editor:** the plugin's own VST3 editor is embedded in a ChipWave window on Windows, resizable both ways. Linux and macOS use the parameter list for now.
   - **Portable songs:** plugins are saved by their VST3 class id in the SDK's text form, which is the same on every OS. Text songs take `patch = "vst3:<class id>"`. Songs without VST3 plugins open and render exactly as before.
@@ -403,7 +444,7 @@ Released 2026-10-20. Highlights (details in the sections below):
   - **MIDI:** live recording into a note clip on the cursor track while the timeline plays (time stamped, latency compensated), and **Capture played MIDI here** for the phrase you just played.
   - Songs without note clips play exactly as before (tested). Limits: no tracker conversion of note clips, no MIDI file import, no CLAP note ids or expressions yet, and plugin notes are tick-quantised.
   - Tests: cell round trips; UI tests for drawing, dragging, the velocity lane, keys, chords, quantise, recording and Capture; engine tests for chords, stealing, sample timing, seeks, loops and chance, and bit-exact block timelines. `--self-test` plays a note-clip chord.
-- **Plugin effects (CLAP FX):** any installed CLAP audio effect can go into an instrument's FX chain. Guide: [FX.md › Plugin effects](FX.md#plugin-effects-clap-unreleased).
+- **Plugin effects (CLAP FX):** any installed CLAP audio effect can go into an instrument's FX chain. Guide: [FX.md › Plugin effects](FX.md#plugin-effects-clap-0241).
   - Every add-effect menu (FX view **+ Device**, the FX tab's **+ Add effect**, right-click an instrument › **Add effect**) has a **Plugin effect ›** list from the plugin scan, with **Scan for plugins**.
   - The device panel shows the plugin's status and latency, **Editor…** (its own window), **Reload** and every parameter as a slider. Bypass, reorder, duplicate and remove work like built-in devices.
   - **Automation:** right-click a parameter › **Add automation lane**, or **+ Lane** › *instrument* › FX › parameter. Lanes also play in exports.

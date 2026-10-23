@@ -290,6 +290,7 @@ impl App {
                 .clicked()
             {
                 self.extra.chains_cards = false;
+                self.extra.chains_view_chosen = true;
                 self.save_settings();
             }
             let n_fx = chain.as_ref().map_or(0, |c| c.len());
@@ -412,7 +413,23 @@ impl App {
     /// the instrument card, as compact as the effects: its picture, four key
     /// knobs and Advanced › for the full editor (the Instrument tab)
     pub(super) fn devices_inst_card(&mut self, ui: &mut egui::Ui, h: f32, idx: usize) -> Rect {
+        let builtin = self
+            .with(|s| {
+                s.song
+                    .instruments
+                    .get(idx)
+                    .map(|i| crate::theme::is_builtin(&i.kind))
+            })
+            .unwrap_or(false);
+        // a built-in paints in the built-in skin; plugins and racks stay
+        // neutral, like the effect cards
+        let _scope = crate::theme::SkinScope::enter(crate::theme::instskin().filter(|_| builtin));
+        self.devices_inst_card_body(ui, h, idx)
+    }
+
+    fn devices_inst_card_body(&mut self, ui: &mut egui::Ui, h: f32, idx: usize) -> Rect {
         let t = th();
+        let skin = crate::theme::active_skin();
         let (name, tag) = self.with(|s| {
             s.song
                 .instruments
@@ -438,6 +455,12 @@ impl App {
                 Stroke::new(1.0, accent.gamma_multiply(0.55)),
                 egui::StrokeKind::Inside,
             );
+            if let Some(s) = skin {
+                s.panel(&p, rect, 8.0);
+            }
+        }
+        if let Some(s) = skin {
+            s.stripe(&p, rect, 8.0);
         }
         let id = ui.make_persistent_id("dev_inst");
         if self.dev.inst_folded {
@@ -467,7 +490,7 @@ impl App {
                     sw: 0,
                     se: 0,
                 },
-                accent.gamma_multiply(0.22),
+                skin.map_or(accent, |s| s.tint).gamma_multiply(0.22),
             );
         }
         let fold = Rect::from_center_size(
@@ -486,7 +509,14 @@ impl App {
             ),
             egui::vec2(tag_g.size().x + 12.0, 16.0),
         );
-        if !tag.is_empty() && t.ember {
+        if let (Some(s), false) = (skin, tag.is_empty()) {
+            let g = s.badge_galley(&p, tag);
+            let r = Rect::from_min_max(
+                Pos2::new(tag_r.right() - g.size().x - 14.0, tag_r.top()),
+                tag_r.max + egui::vec2(0.0, 1.0),
+            );
+            s.paint_badge(&p, r, g);
+        } else if !tag.is_empty() && t.ember {
             p.rect_filled(tag_r, 3, Color32::from_black_alpha(60));
             p.rect_stroke(
                 tag_r,
@@ -1105,6 +1135,7 @@ impl App {
                     ui.make_persistent_id(("dev_knob", owner, i, k)),
                     &mut v,
                     KnobArgs {
+                        caption: None,
                         name: pi.name,
                         value_text: pi.format(v0),
                         default: pi.to_norm(pi.def),

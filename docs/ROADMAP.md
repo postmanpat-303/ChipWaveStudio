@@ -89,7 +89,7 @@ Each item has a size, **[easy]** (an evening or two), **[medium]** (a few days) 
 - Keep file ratings and favourites when a file is moved (today they're keyed by path). [medium] start: `src/browser.rs`
 - Drop onto the mixer view or onto a chosen FX slot position. [medium] start: `src/app/browserview.rs`
 - Your own tags. [medium] start: `src/browser.rs`
-- Plugin thumbnails on macOS and Linux, and less flashing while an editor is captured. [medium] start: `src/plugin/thumb.rs`
+- Plugin thumbnails on macOS and Linux (on Windows the capture is silent now: off-screen, never activated, one load per plugin file). [medium] start: `src/plugin/thumb.rs`
 - Embedded plugin editors (VST3 included) on macOS and Linux. [big] start: `src/plugin/gui.rs`
 - VST3 program lists and a preset browser. [medium] start: `src/plugin/vst3.rs`
 - VST3 MIDI CC through `IMidiMapping`. [medium] start: `src/plugin/vst3.rs`

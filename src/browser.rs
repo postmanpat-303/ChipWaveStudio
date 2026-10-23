@@ -84,12 +84,14 @@ impl Fmt {
             Fmt::Fx => "effect",
         }
     }
-    /// badge colour (0xRRGGBB), the same in every theme (dark text on it)
+    /// badge colour (0xRRGGBB), the same in every theme (dark text on it).
+    /// Third-party plugin formats are neutral greys: violet means a
+    /// ChipWave built-in instrument (docs/INSTSKIN.md)
     pub fn colour(self) -> u32 {
         match self {
             Fmt::Cwi => 0x5CC07A,
-            Fmt::Vst3 => 0xA98BE0,
-            Fmt::Clap => 0xE07BB5,
+            Fmt::Vst3 => 0x9AA1AB,
+            Fmt::Clap => 0xB8BDC4,
             Fmt::Wav => 0x4FB8C9,
             Fmt::Flac => 0x4F9FD9,
             Fmt::Mp3 => 0x62C9B2,
@@ -136,6 +138,8 @@ pub enum Tab {
 }
 
 impl Tab {
+    /// every tab (the tiles reach them through MAIN and MORE)
+    #[cfg_attr(not(test), allow(dead_code))]
     pub const ALL: [Tab; 12] = [
         Tab::Instruments,
         Tab::Racks,
@@ -150,11 +154,46 @@ impl Tab {
         Tab::Patterns,
         Tab::Files,
     ];
+    /// the Browser's five main categories (always one click away)
+    pub const MAIN: [Tab; 5] = [
+        Tab::Instruments,
+        Tab::Effects,
+        Tab::Plugins,
+        Tab::Samples,
+        Tab::Songs,
+    ];
+    /// the rest, behind the More tile
+    pub const MORE: [Tab; 7] = [
+        Tab::Racks,
+        Tab::Presets,
+        Tab::Grid,
+        Tab::Wavetables,
+        Tab::Midi,
+        Tab::Patterns,
+        Tab::Files,
+    ];
+    /// one line about the category (the More menu, the tiles' tooltips)
+    pub fn blurb(self) -> &'static str {
+        match self {
+            Tab::Instruments => "ChipWave instruments, kits and your library",
+            Tab::Effects => "built-in effects, Grid FX and effect plugins",
+            Tab::Plugins => "your VST3 and CLAP instruments and effects",
+            Tab::Samples => "WAV, FLAC, MP3 and Ogg in your folders",
+            Tab::Songs => "demo songs and your .cwt songs",
+            Tab::Racks => "the racks you saved",
+            Tab::Presets => "factory presets for the current instrument",
+            Tab::Grid => "Grid starter patches",
+            Tab::Wavetables => "built-in and imported wavetables",
+            Tab::Midi => "MIDI files in your folders",
+            Tab::Patterns => "ready-made drum grooves by style",
+            Tab::Files => "your drives and folders",
+        }
+    }
     pub fn name(self) -> &'static str {
         match self {
             Tab::Instruments => "Instruments",
             Tab::Effects => "Effects",
-            Tab::Plugins => "Plugins",
+            Tab::Plugins => PLUGINS_TAB,
             Tab::Samples => "Samples",
             Tab::Songs => "Songs",
             Tab::Presets => "Presets",
@@ -182,6 +221,9 @@ impl Tab {
         }
     }
 }
+
+/// the scanned-plugins category's label (one place to rename it)
+pub const PLUGINS_TAB: &str = "VST & CLAP";
 
 /// where an item lives (the Location column)
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -265,6 +307,10 @@ pub struct Item {
     /// second line: type, size, length…
     pub detail: String,
     pub src: Src,
+    /// a second class / program of a plugin file (e.g. a 16-out variant
+    /// or a bundled effect): the VST & CLAP list shows only the file's main
+    /// instrument unless "Show all programs" is on or a search is typed
+    pub sub_program: bool,
 }
 
 impl Item {
@@ -385,6 +431,7 @@ fn item(
         tags,
         detail,
         src,
+        sub_program: false,
     }
 }
 
@@ -401,6 +448,7 @@ fn engine_name(e: &crate::gen::GenEngine) -> &'static str {
         G::Grid(_) => "Grid",
         G::Poly(_) => crate::poly::POLY_DISPLAY_NAME,
         G::Drums(_) => "Drum Kit",
+        G::Strings(_) => crate::strings::STRINGS_DISPLAY_NAME,
     }
 }
 
@@ -634,8 +682,22 @@ fn kind_label(k: &InstrumentKind) -> &'static str {
 /// Showcase tag from [`catalogue`] (Surge XT, Dexed, OB-Xf, …).
 pub fn plugin_items(c: &crate::plugin::scan::Cache) -> Vec<Item> {
     let mut v = vec![];
+    let entry = |f: &crate::plugin::scan::Found| {
+        c.entries
+            .iter()
+            .find(|e| e.status == "ok" && e.path == f.path && e.format == f.format)
+    };
     for f in c.instruments().into_iter().chain(c.effects()) {
         let inst = f.desc.is_instrument();
+        let e = entry(&f);
+        let sub = e.is_some_and(|e| e.is_sub_program(&f));
+        // the main row says how many more programs its file holds
+        let more = e.filter(|_| !sub).map_or(0, |e| {
+            e.plugins
+                .iter()
+                .filter(|p| (p.desc.is_instrument() || p.desc.is_effect()) && e.is_sub_program(p))
+                .count()
+        });
         let fmt = if f.format == "vst3" {
             Fmt::Vst3
         } else {
@@ -674,6 +736,11 @@ pub fn plugin_items(c: &crate::plugin::scan::Cache) -> Vec<Item> {
                 format!(" · {}", feats.join(", "))
             }
         );
+        let detail = match more {
+            0 => detail,
+            1 => format!("{detail} · +1 program"),
+            n => format!("{detail} · +{n} programs"),
+        };
         let mut it = item(
             format!("plugin:{}:{}", f.format, f.desc.id),
             f.desc.name.clone(),
@@ -685,6 +752,7 @@ pub fn plugin_items(c: &crate::plugin::scan::Cache) -> Vec<Item> {
             detail,
             Src::Plugin(f.clone()),
         );
+        it.sub_program = sub;
         if let Some(e) = known {
             for t in e.tags {
                 if !it.tags.contains(t) {
@@ -950,6 +1018,15 @@ pub struct Filter {
     pub creator: Option<String>,
     pub loc: LocFilter,
     pub sort: Sort,
+    /// VST & CLAP: list every class / program of a plugin file, not only
+    /// its main instrument
+    pub all_programs: bool,
+}
+
+/// hidden as a plugin file's extra program (VST & CLAP tab, no search,
+/// "Show all programs" off)
+pub fn hidden_program(it: &Item, f: &Filter) -> bool {
+    it.sub_program && f.tab == Tab::Plugins && !f.all_programs && f.query.trim().is_empty()
 }
 
 /// every search word must appear in the name, category, creator, detail or tags
@@ -990,6 +1067,7 @@ pub fn filter(
         .filter(|&i| {
             let it = &items[i];
             it.in_tab(f.tab)
+                && !hidden_program(it, f)
                 && matches_query(it, &f.query)
                 && f.tags.iter().all(|t| it.tags.contains(t))
                 && f.category.as_ref().is_none_or(|c| &it.category == c)
@@ -1026,6 +1104,7 @@ pub fn column_values(
     let mut m: BTreeMap<String, usize> = BTreeMap::new();
     for it in items.iter().filter(|it| {
         it.in_tab(f.tab)
+            && !hidden_program(it, f)
             && matches_query(it, &f.query)
             && f.tags.iter().all(|t| it.tags.contains(t))
             && (skip_cat || f.category.as_ref().is_none_or(|c| &it.category == c))

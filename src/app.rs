@@ -24,6 +24,8 @@ mod autolanes_tests;
 mod blocklen;
 #[cfg(test)]
 mod browser_tests;
+#[cfg(test)]
+mod browsera_tests;
 mod browserpanel;
 mod browserview;
 mod chains;
@@ -72,6 +74,7 @@ mod launcher_ui_tests;
 #[cfg(test)]
 mod layout_tests;
 mod library;
+mod metroicon;
 mod midiview;
 mod mixer;
 mod mixstrip;
@@ -102,6 +105,8 @@ mod plugsetup;
 #[cfg(test)]
 mod prollpan_tests;
 #[cfg(test)]
+mod prruler_tests;
+#[cfg(test)]
 mod rack_sweep_tests;
 #[cfg(test)]
 mod rack_tests;
@@ -124,6 +129,8 @@ mod split_tests;
 mod stabilise_tests;
 #[cfg(test)]
 mod stage3_tests;
+#[cfg(test)]
+mod stringsview_tests;
 mod timeline;
 #[cfg(test)]
 mod timeline_m2_tests;
@@ -137,6 +144,9 @@ mod trackops;
 mod trackpie;
 #[cfg(test)]
 mod trackpie_tests;
+mod trackring;
+#[cfg(test)]
+mod trackring_tests;
 mod transpose;
 mod typing;
 #[cfg(test)]

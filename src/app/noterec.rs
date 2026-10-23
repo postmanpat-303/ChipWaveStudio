@@ -4,8 +4,8 @@
 //! note clip.
 //!
 //! Record (the toolbar's ● button, R) starts a take: the armed track (or
-//! the selected one) records, the song plays from the play marker (after a
-//! one-bar count-in when the metronome is on), and every key goes in at the
+//! the selected one) records, the song plays from the play marker (after the
+//! count-in: Off / 1 / 2 bars, clicking even with the metronome off), and every key goes in at the
 //! time it was played, with its length and velocity - chords and
 //! overlapping notes as played - into the note clip under the playhead or a
 //! new one. A take is one undo step. Step input (one note after the other)
@@ -426,7 +426,8 @@ impl App {
     }
 
     /// Record: start a take (the ● button, R). Stopped: the song plays from
-    /// the play marker, after a bar's count-in when the metronome is on.
+    /// the play marker, after the count-in (Off / 1 / 2 bars, the
+    /// Metronome toggle's menu; it clicks even with the metronome off).
     /// Playing: it punches in.
     pub(super) fn rec_start(&mut self) {
         let info = self.with(|s| {
@@ -449,7 +450,9 @@ impl App {
         }
         let track = armed.unwrap_or(self.ch).min(nch - 1);
         self.rec_begin(track);
-        let count = self.extra.metronome && self.extra.count_in;
+        // the count-in clicks whether or not the metronome is on
+        let bars = self.extra.count_in_bars() as u32;
+        let count = bars > 0;
         let tl_cue = (self.tlv.cue.max(0) / ROW) as usize;
         let cue = self.tlv.cue;
         if let Some(f) = &mut self.fill {
@@ -473,13 +476,18 @@ impl App {
                     .as_deref()
                     .map_or(FOUR_FOUR, |t| t.sig_at(cue));
                 let beat = engine.row_secs() * (sig.beat_ticks() as f32 / ROW as f32);
-                engine.count_in(sig.num.max(1) as u32, beat);
+                let num = sig.num.max(1) as u32;
+                engine.count_in(num * bars, num, beat);
             }
         });
         self.status = format!(
             "Recording track {:02}{} (R or Record again: stop recording)",
             track + 1,
-            if count { " after a bar's count-in" } else { "" }
+            match bars {
+                0 => "",
+                1 => " after a bar's count-in",
+                _ => " after a 2-bar count-in",
+            }
         );
     }
 
@@ -609,6 +617,25 @@ impl App {
                     render(self, 6);
                 }
                 self.set_lower(3);
+            }
+            // the toolbar: idle, playing (Stop lit), the Metronome's ▾ menu
+            // open (topbar opens it), and a count-in under way
+            "record-idle" | "record-metro-menu" => {}
+            "record-playing" => {
+                self.extra.metronome = true;
+                self.play(0);
+            }
+            "record-countin" => {
+                self.ch = 5;
+                self.extra.set_count_in_bars(1);
+                self.rec_start();
+                // a beat and a half in: "Count-in 3" (the shot holds it)
+                self.with(|s| {
+                    let audio::Shared { song, engine, .. } = s;
+                    let beat = engine.row_secs() * (PPQ as f32 / ROW as f32);
+                    let mut buf = vec![0.0f32; 2 * (beat * 1.5 * engine.sr) as usize];
+                    engine.render(song, &mut buf);
+                });
             }
             "record-typing" => {
                 // musical typing on, the piano roll open on a note clip,

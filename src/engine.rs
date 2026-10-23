@@ -140,6 +140,11 @@ fn voice_raw(
             let v = synth.render_voice(p, vp, freq, sr, bpm);
             (v, !synth.amp.done())
         }
+        // StringWave renders in its own rack (strings::rack); the channel
+        // voice only keeps the note state, as for plugin instruments
+        InstrumentKind::Gen(gp) if matches!(gp.engine, crate::gen::GenEngine::Strings(_)) => {
+            ((0.0, 0.0), true)
+        }
         InstrumentKind::Gen(gp) => {
             let p = ov
                 .patches
@@ -173,6 +178,98 @@ fn voice_raw(
             ((v * g, v * g), !synth.amp.done())
         }
     }
+}
+
+/// The controls of StringWave instrument `instr` for the next chunk:
+/// the patch with automation / modulation knob overrides, and on its
+/// tracker channel `c` the 43xy macros and 38xx-3Bxx filter commands.
+fn sw_snap(
+    p: &crate::strings::StringsP,
+    auto: &AutoState,
+    instr: usize,
+    c: Option<&Chan>,
+) -> crate::strings::engine::Snap {
+    use crate::strings::{CUTOFF, RESO, STRINGS};
+    let ko = auto.gen.get(instr).unwrap_or(&crate::gen::NO_KNOBS);
+    let mut k2 = *ko;
+    let mut mac = c.map_or([-1.0; 8], |c| c.gmo);
+    if let Some(c) = c {
+        let fm = c.fm;
+        if fm.cut_abs > 0.0 || fm.cut_oct != 0.0 {
+            let cur = crate::gen::Ov {
+                mac: &mac,
+                knob: ko,
+            }
+            .get(CUTOFF)
+            .unwrap_or(p.p[CUTOFF]);
+            let hz = if fm.cut_abs > 0.0 {
+                fm.cut_abs
+            } else {
+                STRINGS[CUTOFF].map(cur)
+            };
+            k2[CUTOFF] = STRINGS[CUTOFF].unmap(hz * 2f32.powf(fm.cut_oct));
+            mac[CUTOFF] = -1.0;
+        }
+        if fm.res >= 0.0 {
+            k2[RESO] = STRINGS[RESO].unmap(fm.res);
+            mac[RESO] = -1.0;
+        }
+    }
+    let ov = crate::gen::Ov {
+        mac: &mac,
+        knob: &k2,
+    };
+    crate::strings::engine::Snap::new(p, &|k| ov.get(k))
+}
+
+/// One sample of the StringWave slots on channel `ch` (`layer`: DIRECT or
+/// a rack layer), each at its instrument's volume and level times `gain`.
+/// `c` is the channel's tracker state (pitch, volume, commands) for the
+/// direct slots. A slot renders its next chunk (at most `chunk` frames)
+/// when the last one is used up. Returns (left, right, sounding).
+#[allow(clippy::too_many_arguments)]
+fn sw_sample(
+    rack: &mut crate::strings::rack::Rack,
+    song: &Song,
+    auto: &AutoState,
+    ch: usize,
+    layer: u8,
+    c: Option<&Chan>,
+    chunk: usize,
+    gain: f32,
+) -> (f32, f32, bool) {
+    let (mut l, mut r, mut on) = (0.0, 0.0, false);
+    for s in rack.slots.iter_mut() {
+        if s.ch != ch || s.layer != layer {
+            continue;
+        }
+        let i = s.instr;
+        let Some(p) = crate::strings::rack::patch(song, i) else {
+            continue;
+        };
+        let mine = c.filter(|c| c.instr == i);
+        if s.needs_chunk() {
+            if let (Some(c), Some((n, _))) = (mine, s.held()) {
+                let base = note_freq(n.saturating_sub(11));
+                if base > 0.0 && c.freq > 0.0 {
+                    s.set_tune(12.0 * (c.freq / base).log2());
+                }
+            }
+            s.chunk(sw_snap(p, auto, i, mine), chunk);
+        }
+        let (x, xr) = s.sample();
+        let lvl = auto.level.get(i).copied().unwrap_or(1.0) * song.instruments[i].volume;
+        // volume column / 0C / 0D after the note: relative gain
+        let g = match (mine, s.held()) {
+            (Some(c), Some((_, v0))) => (c.vol / v0).min(4.0),
+            _ => 1.0,
+        } * lvl
+            * gain;
+        l += x * g;
+        r += xr * g;
+        on |= s.sounding();
+    }
+    (l, r, on)
 }
 
 impl Chan {
@@ -389,6 +486,9 @@ pub struct Engine {
     pub loud: crate::master::Readout,
     /// plugin instrument instances (src/plugin/), one per instrument x channel
     pub plugins: crate::plugin::Rack,
+    /// StringWave instances (src/strings/rack.rs); empty unless a song
+    /// plays StringWave
+    pub strings: crate::strings::rack::Rack,
     /// plugin effects in the FX chains (crate::plugin::fxrack)
     pub fx_plugins: crate::plugin::fxrack::FxRack,
     /// panic request (any thread sets it; the audio thread acts on it)
@@ -507,6 +607,7 @@ impl Engine {
             tone_ph: 0.0,
             live: Live::new(),
             plugins: crate::plugin::Rack::new(),
+            strings: crate::strings::rack::Rack::new(sr),
             fx_plugins: crate::plugin::fxrack::FxRack::new(),
             panic_req: Default::default(),
             panic_fade: 0,
@@ -537,6 +638,10 @@ impl Engine {
     /// sounding voices of instrument `idx` (Tracker channels, note clips and
     /// live MIDI): the poly synth editor's Voices readout
     pub fn inst_voices(&self, idx: usize) -> usize {
+        // StringWave: its engines' own voices
+        if self.strings.meter_of(idx).is_some() {
+            return self.strings.voices_of(idx);
+        }
         self.chans
             .iter()
             .filter(|c| c.active && c.instr == idx)
@@ -604,6 +709,50 @@ impl Engine {
                 LiveEv::Off { key } => self.plugins.live_off(key as u16),
                 LiveEv::AllOff => self.plugins.all_off(),
                 _ => {}
+            }
+        }
+        // StringWave plays live notes in its own engine (on this channel)
+        match ev {
+            LiveEv::On {
+                key,
+                note,
+                vel,
+                instr,
+                ch,
+            } => {
+                let i = (instr as usize).wrapping_sub(1);
+                if let (Some(inst), Some(_)) = (
+                    song.instruments.get(i),
+                    crate::strings::rack::patch(song, i),
+                ) {
+                    let n = (note as i32 + inst.transpose as i32).clamp(1, 127) as u8;
+                    // its sound goes through this channel's insert chain
+                    // (as for a plugin, above)
+                    if let Some(c) = self.chans.get_mut(ch as usize) {
+                        if c.instr == usize::MAX && c.tail.instr == usize::MAX {
+                            self.chains[ch as usize].sync(&inst.fx, i, self.sr);
+                        } else if !self.playing && !c.active && c.instr != i {
+                            c.instr = i;
+                        }
+                    }
+                    self.strings
+                        .live_on(song, i, ch as usize, key, midi_key(n), vel);
+                    return;
+                }
+            }
+            LiveEv::Off { key } => self.strings.live_off(key),
+            LiveEv::Sustain(on) => self.strings.sustain(on),
+            LiveEv::Bend(semi) => self.strings.bend(semi),
+            LiveEv::AllOff => self.strings.all_off(),
+            // mod wheel / expression: StringWave only (live, never saved)
+            LiveEv::Cc { cc, val } => {
+                let v = val as f32 / 127.0;
+                match cc {
+                    1 => self.strings.wheel(v),
+                    11 => self.strings.expression(v * v.sqrt()),
+                    _ => {}
+                }
+                return;
             }
         }
         let lv = &mut self.live;
@@ -747,6 +896,7 @@ impl Engine {
                     v.synth.fenv.release();
                 }
             }
+            LiveEv::Cc { .. } => {}
         }
     }
 
@@ -771,6 +921,7 @@ impl Engine {
     /// new index. Voices of a removed instrument stop.
     pub fn remap_instruments(&mut self, f: &dyn Fn(usize) -> Option<usize>) {
         drop(self.plugins.remap(f));
+        drop(self.strings.remap(f));
         drop(self.fx_plugins.remap(f));
         for c in &mut self.chans {
             if c.instr != usize::MAX {
@@ -1179,6 +1330,7 @@ impl Engine {
         self.nv.silence();
         self.av.silence();
         self.plugins.panic();
+        self.strings.all_off();
         self.fx_plugins.panic();
         self.panic_len = ((0.003 * self.sr) as u32).max(1);
         self.panic_fade = self.panic_len;
@@ -1220,6 +1372,7 @@ impl Engine {
         }
         self.lim.clear();
         self.plugins.panic();
+        self.strings.panic();
         self.fx_plugins.panic();
     }
 
@@ -1231,6 +1384,7 @@ impl Engine {
         self.nv.release_all(&mut self.plugins);
         self.av.release_all();
         self.plugins.all_off();
+        self.strings.all_off();
         for c in &mut self.chans {
             c.synth.amp.release();
         }
@@ -1445,6 +1599,19 @@ impl Engine {
                     }
                     _ => self.plugins.release_ch(ch),
                 }
+            }
+        }
+        // StringWave: note on / off (mono per channel, its tail rings on)
+        if cell.note == NOTE_OFF || (new_note && !gliding) {
+            let c = &self.chans[ch];
+            let (ci, cn, cv) = (c.instr, c.note, c.vol);
+            let sw = crate::strings::rack::patch(song, ci).is_some();
+            if sw && cell.note != NOTE_OFF {
+                let t = song.instruments[ci].transpose as i32;
+                let n = (cn as i32 + t).clamp(1, 127) as u8;
+                self.strings.tracker_note(song, ci, ch, midi_key(n), cv);
+            } else if !self.strings.is_empty() {
+                self.strings.release_ch(ch);
             }
         }
     }
@@ -2384,6 +2551,15 @@ impl Engine {
             } else {
                 0
             };
+            // StringWave chunks: up to the next tick, at most BLOCK frames
+            // (not cut at the callback's end, so the output doesn't depend
+            // on the buffer size)
+            let sw_on = !self.strings.is_empty();
+            let sw_chunk = if sw_on && self.playing {
+                (self.samples_to_tick.ceil().max(0.0) as usize + 1).min(crate::strings::rack::BLOCK)
+            } else {
+                crate::strings::rack::BLOCK
+            };
             let mut l = 0.0;
             let mut r = 0.0;
             let mut bus = [[0.0f32; 2]; 2];
@@ -2475,10 +2651,21 @@ impl Engine {
                 // note-clip voices of this track (before its insert chain)
                 if self.nv.any {
                     let base = i * notes::NOTE_VOICES;
-                    for v in self.nv.v[base..base + notes::NOTE_VOICES]
+                    for (k, v) in self.nv.v[base..base + notes::NOTE_VOICES]
                         .iter_mut()
-                        .filter(|v| v.active)
+                        .enumerate()
+                        .filter(|(_, v)| v.active)
                     {
+                        if v.sw_busy() {
+                            notes::sw_pull(
+                                v,
+                                &mut self.strings,
+                                song,
+                                i,
+                                crate::strings::rack::DIRECT,
+                                crate::strings::rack::CLIP + (base + k) as u16,
+                            );
+                        }
                         let (x, xr) = v.render(song, sr, &self.auto, bpm);
                         s += x;
                         s_r += xr;
@@ -2496,6 +2683,8 @@ impl Engine {
                         &self.auto,
                         bpm,
                         &mut self.fx_plugins,
+                        &mut self.strings,
+                        sw_chunk,
                         &mut lv_alive,
                     );
                     s += x;
@@ -2558,6 +2747,21 @@ impl Engine {
                         s += pl * g;
                         s_r += pr * g;
                     }
+                }
+                // StringWave on this channel (its own voices and tails)
+                if sw_on {
+                    let (x, xr, _) = sw_sample(
+                        &mut self.strings,
+                        song,
+                        &self.auto,
+                        i,
+                        crate::strings::rack::DIRECT,
+                        Some(&*c),
+                        sw_chunk,
+                        1.0,
+                    );
+                    s += x;
+                    s_r += xr;
                 }
                 if c.tail.gain > 0.0 {
                     let t = &mut c.tail;
@@ -2729,6 +2933,7 @@ fn resolve_plugins(
 pub fn render_song(song: &Song, sr: u32) -> Vec<f32> {
     let mut e = Engine::new(sr as f32);
     crate::plugin::prepare(&mut e.plugins, song, sr as f32);
+    crate::strings::rack::prepare(&mut e.strings, song, sr as f32);
     crate::plugin::fxrack::prepare(&mut e.fx_plugins, song, sr as f32);
     e.start(song, 0, 0, false, 0);
     let mut out = Vec::new();
@@ -2815,6 +3020,8 @@ pub(crate) mod alloc_count {
 mod layer_tests;
 #[cfg(test)]
 pub(crate) mod racks_tests;
+#[cfg(test)]
+pub(crate) mod strings_tests;
 #[cfg(test)]
 mod tests {
     use super::*;

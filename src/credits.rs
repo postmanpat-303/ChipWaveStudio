@@ -97,6 +97,9 @@ pub const CREDITS: &[Credit] = &[
         "Independent implementation, no code copied",
         "https://dood.al/pinktrombone/"),
     // Synthesis & generators
+    c(Synthesis, crate::strings_name!(), "Del (postmanpat)",
+        concat!("The ", crate::strings_name!(), " string-ensemble instrument, built in from its author's own synth"), "MIT",
+        "Ported by its author; MIT notice in THIRD_PARTY_LICENSES", ""),
     c(Synthesis, "Minimoog", "R. Moog",
         "Analog generator: the design it follows", "", "Design reference", ""),
     c(Synthesis, "polyBLEP oscillators", "after Välimäki & Huovilainen (2007)",

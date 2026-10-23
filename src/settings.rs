@@ -102,6 +102,10 @@ pub struct Extra {
     /// Full-height pattern: the lower panel is hidden
     #[serde(default)]
     pub full_height: bool,
+    /// StringWave panel text size in % (100 / 125 / 150 / 200; 0 = 100):
+    /// scales only that panel, on top of the UI zoom
+    #[serde(default)]
+    pub sw_text: u16,
     /// the pre-0.2.3.19 instrument editor in the sidebar
     #[serde(default)]
     pub classic_editor: bool,
@@ -193,9 +197,16 @@ pub struct Extra {
     /// metronome click while the timeline plays (and the record count-in)
     #[serde(default)]
     pub metronome: bool,
-    /// Record from stopped counts in one bar first (with the metronome on)
+    /// older settings: Record from stopped counts in one bar (with the
+    /// metronome on). Kept so old files load and older versions can read
+    /// new ones; `count_in_bars` is the setting now
     #[serde(default = "yes")]
     pub count_in: bool,
+    /// bars Record from stopped counts in, clicking even with the metronome
+    /// off: 0 (off), 1 or 2. None (older files): 1 bar, or off when the old
+    /// `count_in` was off. Read it with [`Extra::count_in_bars`]
+    #[serde(default)]
+    pub count_in_bars: Option<u8>,
     /// recorded note starts snap to the piano roll's grid
     #[serde(default)]
     pub rec_quantise: bool,
@@ -212,9 +223,17 @@ pub struct Extra {
     /// ... folded to a slim strip of names
     #[serde(default)]
     pub chains_tree_folded: bool,
-    /// ... shows the 0.2.4 card row instead of the tree (D1: Cards)
-    #[serde(default)]
+    /// ... shows the card row instead of the tree; Cards is the default
+    /// (Del, 22 Oct 2026; was the tree in 0.2.7.0)
+    #[serde(default = "yes")]
     pub chains_cards: bool,
+    /// the user picked Cards or Tree themselves (kept); without it a saved
+    /// 0.2.7.0 file's chains_cards = false gives way to the Cards default
+    #[serde(default)]
+    pub chains_view_chosen: bool,
+    /// the Master panel's LEVEL history: 0 scrolling, 1 paused, 2 hidden
+    #[serde(default)]
+    pub level_hist: u8,
     /// tree rows the user closed ("i3" instrument 3, "s3.1" a Split, ...)
     #[serde(default)]
     pub chains_closed: Vec<String>,
@@ -265,6 +284,7 @@ impl Default for Extra {
             follow_select: true,
             clip_list_menu: false,
             full_height: false,
+            sw_text: 0,
             classic_editor: false,
             cards_closed: vec![],
             new_in_timeline: true,
@@ -291,14 +311,33 @@ impl Default for Extra {
             show_tracker: false,
             metronome: false,
             count_in: true,
+            count_in_bars: None,
             rec_quantise: false,
             launch_q: 0,
             select_chains: true,
             chains_tree_w: tree_w(),
             chains_tree_folded: false,
-            chains_cards: false,
+            chains_cards: true,
+            chains_view_chosen: false,
+            level_hist: 0,
             chains_closed: vec![],
         }
+    }
+}
+
+impl Extra {
+    /// the record count-in in bars: 0 (off), 1 or 2
+    pub fn count_in_bars(&self) -> u8 {
+        self.count_in_bars
+            .unwrap_or(if self.count_in { 1 } else { 0 })
+            .min(2)
+    }
+
+    /// set the record count-in (0 off, 1 or 2 bars); the old flag follows
+    pub fn set_count_in_bars(&mut self, bars: u8) {
+        let b = bars.min(2);
+        self.count_in_bars = Some(b);
+        self.count_in = b > 0;
     }
 }
 
@@ -311,6 +350,14 @@ impl Extra {
     pub fn default_lower_view(&mut self) {
         if !self.lower_chosen {
             self.lower_inst = true;
+        }
+    }
+
+    /// no saved choice of Nested Device Chains view: Cards (0.2.7.0 files
+    /// always wrote chains_cards = false, the old Tree default)
+    pub fn default_chains_view(&mut self) {
+        if !self.chains_view_chosen {
+            self.chains_cards = true;
         }
     }
 }
@@ -378,6 +425,7 @@ pub fn load() -> Settings {
         .and_then(|t| toml::from_str(&t).ok())
         .unwrap_or_default();
     s.extra.default_lower_view();
+    s.extra.default_chains_view();
     Settings {
         zoom: if s.zoom.is_finite() {
             s.zoom.clamp(0.5, 3.0)
@@ -439,6 +487,27 @@ mod tests {
             let mut back: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
             back.extra.default_lower_view();
             assert_eq!(back.extra.lower_inst, inst);
+        }
+    }
+
+    #[test]
+    fn nested_device_chains_open_on_cards_unless_the_user_chose() {
+        assert!(Extra::default().chains_cards && !Extra::default().chains_view_chosen);
+        // 0.2.7.0 settings always wrote chains_cards = false
+        let mut e: Extra = toml::from_str("chains_cards = false").unwrap();
+        e.default_chains_view();
+        assert!(e.chains_cards, "no saved choice: Cards");
+        let mut e: Extra = toml::from_str("").unwrap();
+        e.default_chains_view();
+        assert!(e.chains_cards);
+        // a choice made in this version is kept, both ways
+        for cards in [false, true] {
+            let mut s = Settings::default();
+            s.extra.chains_cards = cards;
+            s.extra.chains_view_chosen = true;
+            let mut back: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
+            back.extra.default_chains_view();
+            assert_eq!(back.extra.chains_cards, cards);
         }
     }
 }

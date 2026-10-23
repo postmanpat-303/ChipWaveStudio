@@ -82,9 +82,9 @@ fn tl_tick(h: &Harness<'static, App>) -> Option<f64> {
 #[test]
 fn record_off_by_default_and_step_input_is_a_toggle() {
     let x = crate::settings::Extra::default();
-    assert!(!x.metronome && x.count_in && !x.rec_quantise);
+    assert!(!x.metronome && x.count_in_bars() == 1 && !x.rec_quantise);
     let old: crate::settings::Extra = toml::from_str("").unwrap();
-    assert!(!old.metronome && old.count_in && !old.rec_quantise);
+    assert!(!old.metronome && old.count_in_bars() == 1 && !old.rec_quantise);
     let mut h = new_song(1);
     assert!(!h.state().pr.step_input, "Step input is off by default");
     assert!(!h.state().typing.on, "musical typing is off by default");
@@ -128,6 +128,7 @@ fn record_takes_notes_at_their_played_time_length_and_velocity() {
     let mut h = new_song(2);
     h.state_mut().ch = 1;
     h.state_mut().extra.midi.velocity = true;
+    h.state_mut().extra.set_count_in_bars(0);
     frames(&mut h, 2);
     let undo0 = h.state().hist.len();
     // the toolbar's Record button
@@ -137,7 +138,7 @@ fn record_takes_notes_at_their_played_time_length_and_velocity() {
     assert!(h.state().with(|s| s.engine.playing), "and plays");
     assert!(
         !h.state().with(|s| s.engine.counting_in()),
-        "no count-in: metronome off"
+        "no count-in: set to Off"
     );
     // a bar in, a chord (C E G) held for 4 rows, then D two rows later
     // held over the chord's end (overlapping)
@@ -276,6 +277,105 @@ fn count_in_waits_a_bar_with_clicks_and_records_nothing_during_it() {
 }
 
 #[test]
+fn count_in_clicks_even_with_the_metronome_off() {
+    // the default: one bar, metronome off
+    let mut h = new_song(1);
+    assert!(!h.state().extra.metronome);
+    assert_eq!(h.state().extra.count_in_bars(), 1);
+    frames(&mut h, 2);
+    key(&mut h, Key::R, egui::Modifiers::NONE);
+    assert!(h.state().recording());
+    assert!(h.state().with(|s| s.engine.counting_in()), "counts in");
+    let t0 = tl_tick(&h).unwrap();
+    let sr = h.state().with(|s| s.engine.sr) as usize;
+    // half the bar: clicks although the metronome is off; the song waits
+    let peak = render_frames(&mut h, sr);
+    assert!(
+        peak > 0.05,
+        "count-in clicks with the metronome off: {peak}"
+    );
+    assert_eq!(tl_tick(&h).unwrap(), t0, "the song waits");
+    render_frames(&mut h, sr + 256);
+    assert!(!h.state().with(|s| s.engine.counting_in()));
+    assert!(tl_tick(&h).unwrap() > t0, "then it records");
+    // and with the metronome off, no clicks after it (an empty song)
+    assert_eq!(play_rows(&mut h, 8), 0.0);
+    h.state().with(|s| s.engine.stop());
+}
+
+#[test]
+fn count_in_of_two_bars_counts_eight_beats_down() {
+    let mut h = new_song(1);
+    h.state_mut().extra.set_count_in_bars(2);
+    frames(&mut h, 2);
+    assert_eq!(
+        h.query_all_by_label("Metronome").count(),
+        1,
+        "the toolbar's Metronome toggle"
+    );
+    assert_eq!(h.query_all_by_label("Click").count(), 0);
+    h.state_mut().rec_toggle();
+    assert_eq!(h.state().with(|s| s.engine.count_in_left()), Some(8));
+    frames(&mut h, 2);
+    assert!(
+        h.query_by_label_contains("Count-in ").is_some(),
+        "the toolbar counts down"
+    );
+    let t0 = tl_tick(&h).unwrap();
+    let sr = h.state().with(|s| s.engine.sr) as usize;
+    // one bar (2 s at 120 BPM): still counting in, four beats left
+    render_frames(&mut h, 2 * sr);
+    assert_eq!(h.state().with(|s| s.engine.count_in_left()), Some(4));
+    assert_eq!(tl_tick(&h).unwrap(), t0, "the song waits two bars");
+    render_frames(&mut h, 2 * sr + 256);
+    assert_eq!(h.state().with(|s| s.engine.count_in_left()), None);
+    assert!(tl_tick(&h).unwrap() > t0, "then it records");
+    h.state().with(|s| s.engine.stop());
+}
+
+#[test]
+fn count_in_off_records_at_once_even_with_the_metronome_on() {
+    let mut h = new_song(1);
+    h.state_mut().extra.metronome = true;
+    h.state_mut().extra.set_count_in_bars(0);
+    frames(&mut h, 2);
+    h.state_mut().rec_toggle();
+    assert!(h.state().recording());
+    assert!(!h.state().with(|s| s.engine.counting_in()), "no count-in");
+    let t0 = tl_tick(&h).unwrap();
+    play_rows(&mut h, 4);
+    assert!(tl_tick(&h).unwrap() > t0, "records at once");
+    h.state().with(|s| s.engine.stop());
+}
+
+#[test]
+fn old_count_in_settings_carry_over_as_bars() {
+    use crate::settings::Extra;
+    let on: Extra = toml::from_str("count_in = true").unwrap();
+    assert_eq!(on.count_in_bars(), 1, "count_in = true: one bar");
+    let off: Extra = toml::from_str("count_in = false").unwrap();
+    assert_eq!(off.count_in_bars(), 0, "count_in = false: Off");
+    let two: Extra = toml::from_str("count_in = true\ncount_in_bars = 2").unwrap();
+    assert_eq!(two.count_in_bars(), 2);
+    // set: the old flag follows (older versions read it), and it saves
+    let mut x = Extra::default();
+    x.set_count_in_bars(0);
+    assert!(!x.count_in);
+    x.set_count_in_bars(2);
+    assert!(x.count_in);
+    let back: Extra = toml::from_str(&toml::to_string(&x).unwrap()).unwrap();
+    assert_eq!(back.count_in_bars(), 2);
+    assert_eq!(
+        Extra {
+            count_in_bars: Some(9),
+            ..x
+        }
+        .count_in_bars(),
+        2
+    );
+}
+
+#[test]
 fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
     let mut h = new_song(1);
     let id = h
@@ -284,10 +384,20 @@ fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
     h.state_mut().tlv.sel = Some(id);
     h.state_mut().tlv.sels = vec![id];
     frames(&mut h, 2);
+    assert_eq!(
+        h.query_all_by_label("Keys → Notes").count(),
+        2,
+        "the toolbar toggle and the piano roll's are called Keys → Notes"
+    );
+    assert_eq!(
+        h.query_all_by_label_contains("Typing").count(),
+        0,
+        "no old Typing label"
+    );
     key(&mut h, Key::K, egui::Modifiers::COMMAND);
     assert!(h.state().typing.on, "Ctrl+K: musical typing on");
     assert!(
-        h.query_by_label_contains("Typing C4").is_some(),
+        h.query_by_label_contains("Keys → Notes · C4").is_some(),
         "the toolbar shows it with its octave"
     );
     // S would split the selected clip: now it is a note

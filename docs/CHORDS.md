@@ -41,7 +41,7 @@ Writes the progression into the current block with the current instrument, start
 - **Arp**: one channel; pattern up, down, up-down or random, one note every N rows, over 1–3 octaves.
 - **Bass**: one channel, the chord roots two octaves down; rhythm whole, 8ths, offbeat, rolling 16ths or octaves.
 
-## Chord lane in the piano roll (Unreleased)
+## Chord lane in the piano roll (0.2.4.1)
 
 ![Chord lane](screenshots/pianoroll-chords-lane.png)
 

@@ -1074,7 +1074,7 @@ pub fn source_note(it: &Item) -> String {
             s += &format!("Downloaded from: {}\nSHA-256: {}\n", a.url, a.sha256);
         }
     }
-    s += "\nInstalled by ChipWave Studio (Browser › Plugins › Get showcase instruments…).\n\
+    s += "\nInstalled by ChipWave Studio (Browser › VST & CLAP › Get showcase instruments…).\n\
           ChipWave did not build or change this plugin; it is the creator's own release.\n";
     s
 }

@@ -478,7 +478,7 @@ impl App {
 }
 
 /// a choice as a row of LEDs (blend operator, filter mode ...)
-fn led_row(ui: &mut egui::Ui, p: &Param, inst: &mut Instrument, cx: &mut Cx) {
+pub(super) fn led_row(ui: &mut egui::Ui, p: &Param, inst: &mut Instrument, cx: &mut Cx) {
     let Ctl::Choice(opts) = &p.ctl else {
         return;
     };

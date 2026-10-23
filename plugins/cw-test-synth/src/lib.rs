@@ -13,6 +13,12 @@
 //! Test hooks: if the plugin file's path contains "crash" the entry aborts
 //! the process on init (scanner crash guard); "hang" makes init sleep forever
 //! (scanner timeout).
+//!
+//! Editor simulation: `cw_test_gui_edit(plugin, id, value)` (exported) acts
+//! like the user dragging a knob in an editor: the edit is queued, the host's
+//! `request_flush` is called, and the next `process` or `params.flush` applies
+//! it and reports gesture begin / value / gesture end as output events. The
+//! plugin never calls `mark_dirty` (like many real plugins).
 #![allow(clippy::missing_safety_doc)]
 use clap_sys::entry::*;
 use clap_sys::events::*;
@@ -88,6 +94,9 @@ struct Plug {
     gain: f64,
     tone: f64,
     v: [Voice; 8],
+    host: *const clap_host,
+    /// editor edits not applied yet (see `cw_test_gui_edit`)
+    pending: std::sync::Mutex<Vec<(u32, f64)>>,
 }
 
 unsafe fn me<'a>(p: *const clap_plugin) -> &'a mut Plug {
@@ -158,6 +167,61 @@ impl Plug {
             _ => {}
         }
     }
+    /// apply queued editor edits and report them to the host
+    unsafe fn editor_edits(&mut self, out: *const clap_output_events) {
+        let edits: Vec<(u32, f64)> = match self.pending.lock() {
+            Ok(mut v) => std::mem::take(&mut *v),
+            Err(_) => return,
+        };
+        for (id, value) in edits {
+            match id {
+                1 => self.gain = value.clamp(0.0, 1.0),
+                2 => self.tone = value.clamp(0.0, 1.0),
+                _ => continue,
+            }
+            if out.is_null() {
+                continue;
+            }
+            let push = (*out).try_push.unwrap();
+            let hdr = |size: usize, ty: u16| clap_event_header {
+                size: size as u32,
+                time: 0,
+                space_id: CLAP_CORE_EVENT_SPACE_ID,
+                type_: ty,
+                flags: 0,
+            };
+            let g = clap_event_param_gesture {
+                header: hdr(
+                    std::mem::size_of::<clap_event_param_gesture>(),
+                    CLAP_EVENT_PARAM_GESTURE_BEGIN,
+                ),
+                param_id: id,
+            };
+            push(out, &g.header);
+            let v = clap_event_param_value {
+                header: hdr(
+                    std::mem::size_of::<clap_event_param_value>(),
+                    CLAP_EVENT_PARAM_VALUE,
+                ),
+                param_id: id,
+                cookie: std::ptr::null_mut(),
+                note_id: -1,
+                port_index: -1,
+                channel: -1,
+                key: -1,
+                value,
+            };
+            push(out, &v.header);
+            let e = clap_event_param_gesture {
+                header: hdr(
+                    std::mem::size_of::<clap_event_param_gesture>(),
+                    CLAP_EVENT_PARAM_GESTURE_END,
+                ),
+                param_id: id,
+            };
+            push(out, &e.header);
+        }
+    }
     fn sample(&mut self) -> f32 {
         let (att, rel) = (1.0 / (0.005 * self.sr), 1.0 / (0.05 * self.sr));
         let mut s = 0.0;
@@ -206,6 +270,7 @@ unsafe extern "C" fn p_process(
 ) -> clap_process_status {
     let s = me(p);
     let pr = &*pr;
+    s.editor_edits(pr.out_events);
     let n = pr.frames_count as usize;
     let inev = &*pr.in_events;
     let count = inev.size.map(|f| f(inev)).unwrap_or(0);
@@ -365,9 +430,10 @@ unsafe extern "C" fn pa_from_text(
 unsafe extern "C" fn pa_flush(
     p: *const clap_plugin,
     inev: *const clap_input_events,
-    _o: *const clap_output_events,
+    o: *const clap_output_events,
 ) {
     let s = me(p);
+    s.editor_edits(o);
     let inev = &*inev;
     for i in 0..inev.size.map(|f| f(inev)).unwrap_or(0) {
         s.event((inev.get.unwrap())(inev, i));
@@ -457,7 +523,7 @@ unsafe extern "C" fn f_desc(
 }
 unsafe extern "C" fn f_create(
     _f: *const clap_plugin_factory,
-    _host: *const clap_host,
+    host: *const clap_host,
     id: *const c_char,
 ) -> *const clap_plugin {
     if CStr::from_ptr(id) == fx::ID {
@@ -485,6 +551,8 @@ unsafe extern "C" fn f_create(
         gain: 0.5,
         tone: 0.0,
         v: [OFF; 8],
+        host,
+        pending: std::sync::Mutex::new(vec![]),
     }));
     (*b).plugin.plugin_data = b as *mut c_void;
     &(*b).plugin
@@ -513,6 +581,24 @@ unsafe extern "C" fn e_factory(id: *const c_char) -> *const c_void {
         &FACTORY as *const _ as *const c_void
     } else {
         null()
+    }
+}
+
+/// test hook: the "editor" of `p` (a Test Synth) sets parameter `id` to
+/// `value`; applied at the next process / params.flush (see the crate docs)
+#[no_mangle]
+pub unsafe extern "C" fn cw_test_gui_edit(p: *const clap_plugin, id: u32, value: f64) {
+    let s = me(p);
+    if let Ok(mut v) = s.pending.lock() {
+        v.push((id, value));
+    }
+    let h = s.host;
+    if h.is_null() {
+        return;
+    }
+    let ext = ((*h).get_extension.unwrap())(h, CLAP_EXT_PARAMS.as_ptr()) as *const clap_host_params;
+    if let Some(f) = ext.as_ref().and_then(|e| e.request_flush) {
+        f(h);
     }
 }
 

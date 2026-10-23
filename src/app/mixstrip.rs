@@ -615,8 +615,12 @@ pub(super) fn master(
     (r, f)
 }
 
-/// a pic-1 knob for the Master section: name above, readout inside, an
-/// editable value under it; `norm` 0..1
+/// the Master section knobs' radius (inside the old 27 px footprint)
+const BIG_RAD: f32 = 21.0;
+
+/// a studio knob for the Master section: name above, min / max under the
+/// ends of the dot ring and the value ("" = none) under those; `norm` 0..1.
+/// Takes about 28 px above `c` and 46 px under it.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn big(
     ui: &mut egui::Ui,
@@ -626,10 +630,11 @@ pub(super) fn big(
     def: f32,
     name: &str,
     readout: &str,
+    min_max: (&str, &str),
     enabled: bool,
 ) -> egui::Response {
-    let rad = 27.0;
-    let kr = Rect::from_center_size(c, egui::vec2(rad * 2.0, rad * 2.0));
+    let rad = BIG_RAD;
+    let kr = Rect::from_center_size(c, egui::vec2(rad * 2.0 + 8.0, rad * 2.0 + 8.0));
     let resp = ui.interact(
         kr,
         id,
@@ -655,8 +660,19 @@ pub(super) fn big(
     }
     let p = ui.painter();
     let dim = if enabled { 1.0 } else { 0.5 };
-    crate::theme::knob_hero(p, c, rad, *norm, false, readout, enabled, dim);
-    ember::knob_label(p, Pos2::new(c.x, c.y - rad - 9.0), name, 12.0);
+    crate::theme::knob_hero(
+        p,
+        c,
+        rad,
+        &ember::StudioKnob {
+            frac: *norm,
+            title: name,
+            value: readout,
+            min_max,
+            dim,
+            ..Default::default()
+        },
+    );
     let nm = name.to_string();
     let x = *norm;
     resp.widget_info(|| {
@@ -762,7 +778,7 @@ pub(super) fn master_panel(
         lim.enabled = !lim.enabled;
     }
     ui.add_space(26.0);
-    // three pic-1 knobs with the exact value under each
+    // three studio knobs (min / max under the ring) with the exact value under each
     let row = ui.available_rect_before_wrap();
     let cy = row.top() + 30.0;
     let xs = [row.left() + 40.0, row.center().x, row.right() - 40.0];
@@ -778,7 +794,8 @@ pub(super) fn master_panel(
         &mut g,
         0.0,
         "Gain",
-        &format!("{:.1}", lim.gain_db),
+        "",
+        ("0", "24"),
         en,
     )
     .on_hover_text("drives the mix into the limiter: louder, more limiting");
@@ -794,7 +811,8 @@ pub(super) fn master_panel(
         &mut c,
         11.0 / 12.0,
         "Ceiling",
-        &format!("{:.1}", lim.ceiling_db),
+        "",
+        ("-12", "0"),
         en,
     )
     .on_hover_text("maximum true peak; −1 dBTP is safe for MP3 and streaming");
@@ -810,7 +828,8 @@ pub(super) fn master_panel(
         &mut rl,
         0.45,
         "Release",
-        &format!("{:.0}", lim.release_ms),
+        "",
+        ("10", "1000"),
         en,
     )
     .on_hover_text("how fast the gain comes back after a peak");
@@ -818,7 +837,7 @@ pub(super) fn master_panel(
         lim.release_ms = (10.0 * 100f32.powf(rl)).round().clamp(10.0, 1000.0);
     }
     // exact values (type or drag)
-    let vy = cy + 36.0;
+    let vy = cy + 44.0;
     let vals = [(xs[0], 0usize), (xs[1], 1), (xs[2], 2)];
     ui.add_enabled_ui(en, |ui| {
         for (x, k) in vals {
