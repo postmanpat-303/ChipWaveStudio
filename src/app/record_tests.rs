@@ -503,6 +503,58 @@ fn song_master_sits_at_the_bottom_after_add_track() {
     assert_eq!(h.state().tlv.layout.master, Some(3));
 }
 
+/// Del's drawing: Song / Master docked as a footer at the bottom of the
+/// track list (always in view), the mixer tracks above it, the empty
+/// space between them free (display only: the song keeps Master last)
+#[test]
+fn song_master_is_docked_at_the_bottom_of_the_track_list() {
+    let mut h = new_song(2);
+    frames(&mut h, 2);
+    let heads = h.state().tlv.heads;
+    let lay = h.state().tlv.layout.clone();
+    assert!(lay.docked);
+    let m = lay.master.unwrap();
+    let (hm, rowm) = h.state().tlv.track_rects(m).unwrap();
+    assert!(
+        heads.bottom() - hm.bottom() < 4.0,
+        "Master's header at the panel's bottom: {hm:?} in {heads:?}"
+    );
+    assert!(rowm.right() > hm.right(), "its lane lines up with it");
+    let (h1, _) = h.state().tlv.track_rects(1).unwrap();
+    let mid = (h1.bottom() + hm.top()) / 2.0;
+    assert!(hm.top() - h1.bottom() > 100.0, "room between them");
+    let y = mid - heads.top() + h.state().tlv.scroll_y;
+    assert!(
+        lay.in_gap(y) && lay.part_at(y).is_none(),
+        "the gap is no track"
+    );
+    // many tracks: the list scrolls, Master stays put
+    for _ in 0..14 {
+        h.get_by_label("+ Add track").click();
+        frames(&mut h, 2);
+        if h.query_by_label("+ Add track").is_none() {
+            break;
+        }
+    }
+    h.state_mut().tlv.scroll_y = 0.0;
+    frames(&mut h, 2);
+    let lay = h.state().tlv.layout.clone();
+    let m = lay.master.unwrap();
+    let (hm0, _) = h.state().tlv.track_rects(m).unwrap();
+    h.state_mut().tlv.scroll_y = 1.0e6;
+    frames(&mut h, 2);
+    let (hm1, _) = h.state().tlv.track_rects(m).unwrap();
+    assert!(h.state().tlv.scroll_y > 0.0, "the tracks scroll");
+    assert!((hm0.top() - hm1.top()).abs() < 0.5, "Master stays docked");
+    // at the end of the list the last track sits above the footer
+    let (hl, _) = h.state().tlv.track_rects(m - 1).unwrap();
+    assert!(hl.bottom() <= hm1.top(), "{hl:?} above {hm1:?}");
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref().unwrap();
+        assert_eq!(t.tracks.last().unwrap().kind, tl::TrackKind::Master);
+    });
+}
+
 // ------------------------------------------- WaveForge on a track (Del's report)
 
 /// Del's report: a track given instrument 2 (WaveForge Supersaw Pad), a
