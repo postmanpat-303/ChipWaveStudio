@@ -689,7 +689,7 @@ impl App {
             .br
             .drag
             .as_ref()
-            .is_some_and(|i| super::browserview::is_instrumentish(i));
+            .is_some_and(super::browserview::is_instrumentish);
         let col = if dragging {
             t.accent
         } else {
