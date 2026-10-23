@@ -35,6 +35,7 @@ mod arrange;
 mod audio;
 mod audiofile;
 mod automation;
+mod bassgen;
 mod browser;
 mod chanops;
 mod chipfx;
