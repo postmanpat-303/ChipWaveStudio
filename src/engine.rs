@@ -744,6 +744,16 @@ impl Engine {
             LiveEv::Sustain(on) => self.strings.sustain(on),
             LiveEv::Bend(semi) => self.strings.bend(semi),
             LiveEv::AllOff => self.strings.all_off(),
+            // mod wheel / expression: StringWave only (live, never saved)
+            LiveEv::Cc { cc, val } => {
+                let v = val as f32 / 127.0;
+                match cc {
+                    1 => self.strings.wheel(v),
+                    11 => self.strings.expression(v * v.sqrt()),
+                    _ => {}
+                }
+                return;
+            }
         }
         let lv = &mut self.live;
         match ev {
@@ -886,6 +896,7 @@ impl Engine {
                     v.synth.fenv.release();
                 }
             }
+            LiveEv::Cc { .. } => {}
         }
     }
 

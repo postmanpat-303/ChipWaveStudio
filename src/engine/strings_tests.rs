@@ -230,3 +230,44 @@ fn deleting_the_instrument_stops_its_engine() {
     e.remap_instruments(&|i| if i == 0 { None } else { Some(i - 1) });
     assert!(e.strings.is_empty());
 }
+
+#[test]
+fn live_wheel_expression_and_pedal() {
+    use crate::midi::LiveEv;
+    let song = sw_song();
+    let rms = |exprv: Option<u8>, pedal: bool| {
+        let mut e = Engine::new(48000.0);
+        crate::strings::rack::prepare(&mut e.strings, &song, 48000.0);
+        if let Some(v) = exprv {
+            e.live_event(&song, LiveEv::Cc { cc: 11, val: v });
+        }
+        e.live_event(&song, LiveEv::Cc { cc: 1, val: 127 });
+        if pedal {
+            e.live_event(&song, LiveEv::Sustain(true));
+        }
+        e.live_event(
+            &song,
+            LiveEv::On {
+                key: 60,
+                note: 49,
+                vel: 0.8,
+                instr: 1,
+                ch: 0,
+            },
+        );
+        let mut buf = vec![0f32; 2 * 24000];
+        e.render(&song, &mut buf);
+        e.live_event(&song, LiveEv::Off { key: 60 });
+        let mut tail = vec![0f32; 2 * 48000];
+        e.render(&song, &mut tail);
+        let r = |b: &[f32]| (b.iter().map(|x| x * x).sum::<f32>() / b.len() as f32).sqrt();
+        (r(&buf), r(&tail[tail.len() - 9600..]))
+    };
+    let (full, rel) = rms(None, false);
+    let (soft, _) = rms(Some(40), false);
+    let (_, held) = rms(None, true);
+    assert!(full > 1e-3, "{full}");
+    assert!(soft < full * 0.5, "expression {soft} vs {full}");
+    // the pedal holds the note after its key-up
+    assert!(held > rel * 4.0 && held > 1e-4, "pedal {held} vs {rel}");
+}

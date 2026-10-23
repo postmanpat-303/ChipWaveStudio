@@ -137,6 +137,12 @@ pub enum LiveEv {
     Sustain(bool),
     /// pitch bend in semitones
     Bend(f32),
+    /// a controller the engine plays live (1 mod wheel, 11 expression:
+    /// StringWave); the UI gets it too (learn, modulators)
+    Cc {
+        cc: u8,
+        val: u8,
+    },
     /// release everything (device change, panic)
     AllOff,
 }
@@ -253,6 +259,11 @@ impl Config {
             Msg::Cc { cc: 64, val, .. } => (Some(LiveEv::Sustain(val >= 64)), None),
             // all sound off / all notes off
             Msg::Cc { cc: 120 | 123, .. } => (Some(LiveEv::AllOff), None),
+            Msg::Cc {
+                cc: cc @ (1 | 11),
+                val,
+                ..
+            } => (Some(LiveEv::Cc { cc, val }), Some(UiEv::Cc { cc, val })),
             Msg::Cc { cc, val, .. } => (None, Some(UiEv::Cc { cc, val })),
             Msg::Bend { value, .. } => {
                 let r = self.bend_range.load(Relaxed) as f32;
@@ -641,7 +652,10 @@ mod tests {
                 cc: 1,
                 val: 9
             }),
-            (None, Some(UiEv::Cc { cc: 1, val: 9 }))
+            (
+                Some(LiveEv::Cc { cc: 1, val: 9 }),
+                Some(UiEv::Cc { cc: 1, val: 9 })
+            )
         );
         assert_eq!(
             c.translate(Msg::Cc {

@@ -313,16 +313,6 @@ impl Rack {
         }
     }
 
-    /// the live instrument changed (a song or the selection): live
-    /// controllers start from their rests
-    pub fn live_owner(&mut self, instr: usize) {
-        if instr != self.live_instr {
-            self.live_instr = instr;
-            self.wheel = 0.0;
-            self.expr = 1.0;
-        }
-    }
-
     /// every note off (stop): tails ring out
     pub fn all_off(&mut self) {
         self.sustain = false;
