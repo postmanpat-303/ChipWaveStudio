@@ -368,6 +368,12 @@ impl App {
         self.extra.lcd_toolbar
     }
 
+    /// the compact Master meter is in the toolbar: the LCD toolbar, or the
+    /// classic one while the Clip Arranger (and its Master panel) is hidden
+    pub(super) fn master_in_toolbar(&self) -> bool {
+        self.lcd_on() || self.side_hidden()
+    }
+
     pub(super) fn lcd_pal(&self) -> Pal {
         pal(colour_of(&self.extra.lcd_colour))
     }

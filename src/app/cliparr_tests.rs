@@ -556,3 +556,37 @@ fn the_arranger_button_hides_and_shows_the_left_panel() {
         "Ctrl+8 brings the Clip Arranger back"
     );
 }
+
+/// Hiding the Clip Arranger hides its Master panel: the LCD toolbar always
+/// has the Master meter (popover); the classic toolbar gets it while hidden.
+#[test]
+fn the_master_stays_reachable_with_the_arranger_hidden() {
+    for lcd in [true, false] {
+        let mut h = tl_demo();
+        if !lcd {
+            classic_toolbar(&mut h);
+            assert!(
+                !has(&h, "Master meter"),
+                "classic: the panel is on the left"
+            );
+            assert!(h.state().ca.master.is_positive());
+        }
+        h.get_by_label("Arranger").click();
+        frames(&mut h, 4);
+        assert!(h.state().side_hidden());
+        assert!(
+            has(&h, "Master meter"),
+            "lcd {lcd}: the meter is in the toolbar"
+        );
+        h.get_by_label("Master meter").click();
+        frames(&mut h, 4);
+        assert!(h.state().lcd.master_open, "lcd {lcd}");
+        assert!(
+            h.state().ca.master.is_positive(),
+            "lcd {lcd}: the popover has the Master panel"
+        );
+        h.get_by_label("Arranger").click();
+        frames(&mut h, 4);
+        assert_eq!(has(&h, "Master meter"), lcd, "lcd {lcd}: shown again");
+    }
+}

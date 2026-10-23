@@ -1035,6 +1035,10 @@ impl App {
             });
             if lcd {
                 self.lcd_display(ui);
+            }
+            // (classic toolbar: only while the Clip Arranger, which holds the
+            // Master panel, is hidden; the meter's popover has the panel)
+            if self.master_in_toolbar() {
                 self.lcd_master(ui);
             }
             let mut tempo_r = None;

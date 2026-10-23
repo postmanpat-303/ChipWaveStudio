@@ -374,10 +374,14 @@ impl App {
         self.extra.side_hidden = !self.extra.side_hidden;
         if !self.extra.side_hidden {
             self.extra.clip_arranger = true;
+            if !self.lcd_on() {
+                // (the classic toolbar's meter goes: so does its popover)
+                self.lcd.master_open = false;
+            }
         }
         self.save_settings();
         self.status = if self.extra.side_hidden {
-            "Clip Arranger hidden: more room for the Timeline (the Arranger button or Ctrl+Shift+8 shows it)"
+            "Clip Arranger hidden: more room for the Timeline; the Master is in the toolbar meter (the Arranger button or Ctrl+Shift+8 shows it)"
         } else {
             "Clip Arranger shown on the left of the Timeline (the Arranger button or Ctrl+Shift+8 hides it)"
         }
@@ -2330,7 +2334,7 @@ impl App {
         }
         let playing = self.with(|s| s.engine.playing);
         // (the LCD toolbar's Master steps it every frame instead)
-        if playing && self.extra.level_hist != 1 && !self.lcd_on() {
+        if playing && self.extra.level_hist != 1 && !self.master_in_toolbar() {
             let dt = ui.input(|i| i.stable_dt);
             self.ca.hist_step(dt, peaks[0].max(peaks[1]));
         }
