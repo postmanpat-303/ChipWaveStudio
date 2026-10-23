@@ -135,6 +135,10 @@ impl Layers {
                 }
             }
             let v = &mut b.v[slot];
+            v.sw_stolen();
+            if crate::strings::rack::patch(song, l.slot).is_some() {
+                v.sw_start(l.slot, midi_key(n), vel);
+            }
             v.instr = l.slot;
             v.freq = freq;
             v.vol = vol;
@@ -249,27 +253,49 @@ impl Layers {
         auto: &AutoState,
         bpm: f32,
         fxp: &mut crate::plugin::fxrack::FxRack,
+        sw: &mut crate::strings::rack::Rack,
+        sw_chunk: usize,
         alive: &mut bool,
     ) -> (f32, f32) {
         let Some(b) = self.banks.get_mut(ch) else {
             return (0.0, 0.0);
         };
+        // StringWave layers sound at the rack's volume (as layer voices do)
+        let rack_vol = song.instruments.get(b.rack).map_or(1.0, |x| x.volume);
         let (mut l, mut r) = (0.0, 0.0);
         for k in 0..MAX_LAYERS {
             let base = k * LAYER_VOICES;
             let (mut s, mut sr2) = (0.0, 0.0);
             let mut on = false;
             let mut note = 0.0;
-            for v in b.v[base..base + LAYER_VOICES]
+            for (j, v) in b.v[base..base + LAYER_VOICES]
                 .iter_mut()
-                .filter(|v| v.active)
+                .enumerate()
+                .filter(|(_, v)| v.active)
             {
+                if v.sw_busy() {
+                    notes::sw_pull(
+                        v,
+                        sw,
+                        song,
+                        ch,
+                        k as u8,
+                        crate::strings::rack::LAYER + (base + j) as u16,
+                    );
+                }
                 let (x, xr) = v.render(song, sr, auto, bpm);
                 s += x;
                 sr2 += xr;
                 on = true;
                 note = v.freq;
                 *alive |= v.active;
+            }
+            if !sw.is_empty() {
+                let (x, xr, sounding) =
+                    sw_sample(sw, song, auto, ch, k as u8, None, sw_chunk, rack_vol);
+                s += x;
+                sr2 += xr;
+                on |= sounding;
             }
             let c = &mut b.chains[k];
             if !on && c.states.is_empty() {

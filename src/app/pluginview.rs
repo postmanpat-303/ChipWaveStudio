@@ -22,6 +22,8 @@ pub(super) struct PluginUi {
     /// parameter list of the shown instrument: (instrument, list)
     params: Option<(usize, Vec<ParamInfo>)>,
     pub tick: u32,
+    /// frame counter of the StringWave instance sync
+    pub sw_tick: u32,
     /// instances changed their state since the last capture
     pub state_dirty: bool,
     /// new folder typed in Settings > Plugins
@@ -57,6 +59,15 @@ impl App {
                 });
             } else {
                 ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            }
+        }
+        // StringWave: create / free its engines to match the song (the
+        // audio thread creates a missing one itself, this keeps it off there)
+        if self.with(|s| crate::strings::rack::song_has(&s.song) || !s.engine.strings.is_empty()) {
+            self.plug.sw_tick = self.plug.sw_tick.wrapping_add(1);
+            if self.plug.sw_tick % 15 == 1 {
+                let extra = (self.instr as usize).checked_sub(1).map(|i| (i, self.ch));
+                crate::strings::rack::sync(&self.shared, extra);
             }
         }
         let has_plugins = self.with(|s| {

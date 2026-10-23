@@ -1135,6 +1135,7 @@ impl App {
                     ui.make_persistent_id(("dev_knob", owner, i, k)),
                     &mut v,
                     KnobArgs {
+                        caption: None,
                         name: pi.name,
                         value_text: pi.format(v0),
                         default: pi.to_norm(pi.def),

@@ -494,6 +494,38 @@ const POLY: Spec = Spec {
         ),
     ],
 };
+/// StringWave in the Devices tab's instrument card (its own panel is
+/// `stringsview.rs`): the eight macro knobs (cutoff ... master), the three
+/// layer levels ("L1 Level" ...) and the rest of the amp envelope
+const SW: Spec = Spec {
+    macros: Macros::Params(&[
+        "sw.0", "sw.1", "sw.2", "sw.3", "sw.4", "sw.5", "sw.6", "sw.7",
+    ]),
+    secs: &[
+        s(
+            "Layers",
+            None,
+            &["sw.wave0"],
+            &[
+                ("sw.11", None),
+                ("sw.16", None),
+                ("sw.21", None),
+                ("sw.23", None),
+            ],
+        ),
+        s(
+            "Envelope",
+            Some("Amp envelope"),
+            &[],
+            &[
+                ("sw.31", None),
+                ("sw.32", None),
+                ("sw.33", None),
+                ("sw.50", None),
+            ],
+        ),
+    ],
+};
 const SAMPLE: Spec = Spec {
     macros: Macros::None,
     secs: &[Sec {
@@ -528,6 +560,7 @@ pub(crate) fn spec(tag: &str) -> &'static Spec {
         "Noise" => &NOISE,
         "Grid" => &GRID,
         crate::poly::POLY_DISPLAY_NAME => &POLY,
+        crate::strings::STRINGS_DISPLAY_NAME => &SW,
         "Sample" => &SAMPLE,
         _ => &PLUGIN,
     }
@@ -575,7 +608,7 @@ pub(crate) fn macros(l: &Layout, sp: &Spec) -> Vec<MacroRt> {
 
 /// the engine macro keys are &'static in the spec already; find it there
 fn leak_key(k: &str) -> &'static str {
-    for sp in [&DRUM, &CHIPFX, &FM, &GRID, &POLY] {
+    for sp in [&DRUM, &CHIPFX, &FM, &GRID, &POLY, &SW] {
         if let Macros::Params(ks) = &sp.macros {
             if let Some(s) = ks.iter().find(|x| **x == k) {
                 return s;
@@ -911,7 +944,7 @@ pub(crate) fn compact(v: &str) -> String {
 }
 
 /// a section frame: rounded panel and an uppercase title; returns the rect
-fn frame(ui: &egui::Ui, r: Rect, title: &str) {
+pub(super) fn frame(ui: &egui::Ui, r: Rect, title: &str) {
     let t = th();
     let p = ui.painter();
     if t.ember {
@@ -1404,7 +1437,7 @@ impl App {
     }
 
     /// "Preset: name ▾": the presets of this type, then Save / Library
-    fn preset_dropdown(&mut self, ui: &mut egui::Ui, inst: &Instrument, cx: &mut Cx) {
+    pub(super) fn preset_dropdown(&mut self, ui: &mut egui::Ui, inst: &Instrument, cx: &mut Cx) {
         let cur = self.current_preset(cx.idx, inst);
         let label = format!("Preset: {}", cur.as_deref().unwrap_or("custom"));
         let list = preset_list(inst);

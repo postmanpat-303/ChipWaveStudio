@@ -9,6 +9,7 @@ use super::*;
 pub(super) mod gridcanvas;
 pub(super) mod instcard;
 pub(super) mod polyview;
+pub(super) mod stringsview;
 
 /// lower-panel switch bar height
 const BAR_H: f32 = 26.0;
@@ -49,6 +50,8 @@ pub(super) struct InstUi {
     grid: gridcanvas::GridUi,
     /// the poly synth editor (section shown, Revert snapshot)
     pub poly: polyview::PolyUi,
+    /// StringWave's panel (sub-tab, full view, pie)
+    pub sw: stringsview::SwUi,
     /// the Grid FX patch window: (instrument, device) and its canvas state
     pub grid_fx: Option<(usize, usize)>,
     pub grid_fx_ui: gridcanvas::GridUi,
@@ -490,6 +493,18 @@ impl App {
     /// the pattern editor over the lower panel, with the splitter between
     pub(super) fn pattern_and_lower(&mut self, ui: &mut egui::Ui, inner: Rect) {
         self.lower_fallback();
+        // StringWave's full view: its panel gets the whole area
+        if self.ip.sw.full && self.extra.lower_inst && !self.ip.advanced {
+            // (not drawn yet: a screenshot or a fresh start; the view itself
+            // turns full off for another instrument)
+            if self.ip.sw.shown_at == 0 || self.sw_panel_shown(ui.ctx()) {
+                ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                    self.instrument_view(ui)
+                });
+                return;
+            }
+            self.ip.sw.full = false;
+        }
         let t = th();
         let nl = self.with(|s| s.song.automation.len());
         // Piano roll, Instrument and Nested Device Chains share one
@@ -972,6 +987,15 @@ impl App {
                 if matches!(g.engine, crate::gen::GenEngine::Poly(_)) {
                     self.ip.tab = Tab::Synth;
                 }
+                // StringWave: its own panel (Advanced › opens on Main)
+                if matches!(g.engine, crate::gen::GenEngine::Strings(_)) {
+                    self.ip.tab = Tab::Main;
+                }
+            }
+            self.ip.sw.pie = None;
+            if !matches!(&inst.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Strings(_)))
+            {
+                self.ip.sw.full = false;
             }
         }
         if self.ip.ab.as_ref().is_some_and(|a| a.inst != idx) {
@@ -1081,6 +1105,12 @@ impl App {
                 });
             });
             self.drumkit_view(ui, idx);
+            self.finish_edit(idx, inst, &orig, &orig_modm, cx);
+            return;
+        }
+        let strings = matches!(&inst.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Strings(_)));
+        if !self.ip.advanced && strings {
+            self.strings_panel(ui, &layout, &mut inst, &mut cx, n);
             self.finish_edit(idx, inst, &orig, &orig_modm, cx);
             return;
         }
@@ -1717,6 +1747,21 @@ impl App {
     }
 
     fn knob_ui(&mut self, ui: &mut egui::Ui, p: &Param, inst: &mut Instrument, cx: &mut Cx) {
+        if let Some((resp, def)) = self.knob_core(ui, p, inst, cx, None) {
+            self.param_menu(&resp, p, inst, cx, Some(def));
+        }
+    }
+
+    /// a parameter's knob (drag, double-click, modulation drops, the Dice
+    /// lock) without its right-click menu: (response, default)
+    fn knob_core(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &Param,
+        inst: &mut Instrument,
+        cx: &mut Cx,
+        caption: Option<&str>,
+    ) -> Option<(egui::Response, f32)> {
         let Ctl::Knob {
             lo,
             hi,
@@ -1725,7 +1770,7 @@ impl App {
             def,
         } = p.ctl
         else {
-            return;
+            return None;
         };
         let real = (p.get)(inst);
         let mut n = params::to_norm(real, lo, hi, log);
@@ -1757,6 +1802,7 @@ impl App {
             egui::Id::unique(("ipk", cx.idx, &p.key)),
             &mut n,
             KnobArgs {
+                caption: Some(caption.unwrap_or(p.caption())),
                 name: &p.name,
                 value_text: p.text(real),
                 default: params::to_norm(def, lo, hi, log),
@@ -1791,7 +1837,7 @@ impl App {
                 cx.changed = true;
             }
         }
-        self.param_menu(&out.resp, p, inst, cx, Some(def));
+        Some((out.resp, def))
     }
 
     /// a knob as a modulation target: drop a modulator chip on it, drag a
@@ -1914,7 +1960,7 @@ impl App {
             ui.horizontal(|ui| {
                 ui.add_enabled_ui(on, |ui| match &p.ctl {
                     Ctl::Choice(opts) => {
-                        let mut lbl = egui::RichText::new(&p.name).small();
+                        let mut lbl = egui::RichText::new(p.caption()).small();
                         if hl {
                             lbl = lbl.color(t.fx).strong();
                         }
@@ -1957,7 +2003,7 @@ impl App {
                     }
                     Ctl::Toggle => {
                         let mut b = v > 0.5;
-                        let mut txt = egui::RichText::new(&p.name);
+                        let mut txt = egui::RichText::new(p.caption());
                         if hl {
                             txt = txt.color(t.fx).strong();
                         }
@@ -2246,6 +2292,7 @@ impl App {
                         egui::Id::unique(("ipm", i, k)),
                         &mut n,
                         KnobArgs {
+                            caption: None,
                             name: &label,
                             value_text: txt,
                             default: def,

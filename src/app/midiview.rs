@@ -41,7 +41,7 @@ impl MidiUi {
 }
 
 /// human name of a learn target
-fn target_text(t: &str) -> String {
+pub(super) fn target_text(t: &str) -> String {
     match Target::parse(t) {
         Some(
             x @ (Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) | Target::Level(i)),
@@ -60,6 +60,14 @@ fn target_text(t: &str) -> String {
 }
 
 /// Write a learned CC value (0..1) into the song. Returns true if it applied.
+/// the knob a CC moves on StringWave instrument `instr` (1-based) when it
+/// isn't learned (`strings::DEFAULT_CC`)
+pub(super) fn default_cc_target(song: &crate::model::Song, instr: usize, cc: u8) -> Option<String> {
+    let i = instr.wrapping_sub(1);
+    crate::strings::rack::patch(song, i)?;
+    Some(Target::Gen(i, crate::strings::default_cc(cc)?).id())
+}
+
 pub(super) fn apply_learned(s: &mut Shared, target: &str, n: f32) -> bool {
     let Some(t) = Target::parse_in(target, &s.song) else {
         return false;
@@ -315,6 +323,14 @@ impl App {
             .filter(|(c, _)| *c == cc)
             .map(|(_, t)| t.clone())
             .collect();
+        let mut targets = targets;
+        // StringWave's default map (a learned CC wins): the MIDI instrument
+        if targets.is_empty() {
+            let instr = self.instr as usize;
+            if let Some(t) = self.with(|s| default_cc_target(&s.song, instr, cc)) {
+                targets.push(t);
+            }
+        }
         for t in targets {
             if self.with(|s| apply_learned(s, &t, val as f32 / 127.0)) {
                 self.dirty = true;
@@ -643,5 +659,29 @@ mod tests {
         assert!(p.cutoff > 10000.0);
         assert!(!apply_learned(&mut s, "instrument.99.cutoff", 1.0));
         assert!(!apply_learned(&mut s, "nonsense", 1.0));
+    }
+
+    #[test]
+    fn stringwave_default_ccs_move_knobs() {
+        let mut s = Shared {
+            song: crate::engine::strings_tests::sw_song(),
+            engine: Engine::new(48000.0),
+            preview: None,
+        };
+        use crate::strings::{CUTOFF, MASTER};
+        // CC 74 is cutoff, CC 7 master; CC 1/11 play live (no knob)
+        let t = default_cc_target(&s.song, 1, 74).unwrap();
+        assert!(apply_learned(&mut s, &t, 0.25));
+        let p = crate::strings::rack::patch(&s.song, 0).unwrap();
+        assert!((p.p[CUTOFF] - 0.25).abs() < 1e-6);
+        let t = default_cc_target(&s.song, 1, 7).unwrap();
+        assert!(apply_learned(&mut s, &t, 0.5));
+        let p = crate::strings::rack::patch(&s.song, 0).unwrap();
+        assert!((p.p[MASTER] - 0.5).abs() < 1e-6);
+        assert_eq!(default_cc_target(&s.song, 1, 1), None);
+        assert_eq!(default_cc_target(&s.song, 1, 11), None);
+        // other instruments have no default map
+        assert_eq!(default_cc_target(&s.song, 2, 74), None);
+        assert_eq!(default_cc_target(&crate::fileio::demo_song(), 1, 74), None);
     }
 }

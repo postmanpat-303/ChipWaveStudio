@@ -102,6 +102,10 @@ pub struct Extra {
     /// Full-height pattern: the lower panel is hidden
     #[serde(default)]
     pub full_height: bool,
+    /// StringWave panel text size in % (100 / 125 / 150 / 200; 0 = 100):
+    /// scales only that panel, on top of the UI zoom
+    #[serde(default)]
+    pub sw_text: u16,
     /// the pre-0.2.3.19 instrument editor in the sidebar
     #[serde(default)]
     pub classic_editor: bool,
@@ -280,6 +284,7 @@ impl Default for Extra {
             follow_select: true,
             clip_list_menu: false,
             full_height: false,
+            sw_text: 0,
             classic_editor: false,
             cards_closed: vec![],
             new_in_timeline: true,

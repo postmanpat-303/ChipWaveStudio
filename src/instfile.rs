@@ -451,6 +451,7 @@ mod tests {
             "Fat Moog Bass",
             "Metallic Bell",
             "Wind",
+            concat!(crate::strings_name!(), " Bowed Cathedral"),
         ] {
             insts.push(
                 instantiate(

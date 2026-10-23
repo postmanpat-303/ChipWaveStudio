@@ -142,6 +142,7 @@ pub fn render(song: &Song, o: &Opts, pr: &Progress) -> Result<Vec<f32>, String> 
     let mut e = crate::engine::Engine::new(sr as f32);
     // plugin instruments: fresh instances with the song's saved state
     crate::plugin::prepare(&mut e.plugins, &s, sr as f32);
+    crate::strings::rack::prepare(&mut e.strings, &s, sr as f32);
     crate::plugin::fxrack::prepare(&mut e.fx_plugins, &s, sr as f32);
     e.start(&s, 0, start_row(&s, o.scope), false, 0);
     let est = (s.length_seconds() + o.tail_secs as f64).max(0.1) * sr as f64 * 2.0;

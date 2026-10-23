@@ -684,6 +684,7 @@ pub struct Plan {
 /// Bring the rack of `shared`'s engine in line with its song: instances are
 /// created without holding the audio lock, then inserted under it.
 pub fn sync(shared: &crate::audio::SharedRef, extra: Option<(usize, usize)>) {
+    crate::strings::rack::sync(shared, extra);
     let (plan, sr) = {
         let s = crate::audio::lock(shared);
         (s.engine.plugins.plan(&s.song, extra), s.engine.sr)

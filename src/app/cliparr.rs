@@ -2131,6 +2131,7 @@ impl App {
                         ui.make_persistent_id("ca_master_vol"),
                         &mut v,
                         knob::KnobArgs {
+                            caption: None,
                             name: "Volume",
                             value_text: db(vol),
                             default: 0.5,
@@ -2154,6 +2155,7 @@ impl App {
                         ui.make_persistent_id("ca_master_drive"),
                         &mut g,
                         knob::KnobArgs {
+                            caption: None,
                             name: "Drive",
                             value_text: format!("+{:.1} dB", lim.gain_db),
                             default: crate::master::LimiterSettings::default().gain_db / 24.0,
@@ -2177,6 +2179,7 @@ impl App {
                         ui.make_persistent_id("ca_master_ceiling"),
                         &mut c,
                         knob::KnobArgs {
+                            caption: None,
                             name: "Ceiling",
                             value_text: format!("{:.1} dBTP", lim.ceiling_db),
                             default: (crate::master::LimiterSettings::default().ceiling_db + 12.0) / 12.0,

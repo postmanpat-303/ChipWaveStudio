@@ -382,6 +382,7 @@ impl App {
                 }
                 Key::I if cmd => self.toggle_instrument_panel(),
                 Key::B if cmd && !m.shift => self.toggle_browser(),
+                Key::F11 if m.shift && self.sw_panel_shown(ctx) => self.toggle_sw_full(),
                 Key::F11 => self.toggle_full_height(),
                 Key::F12 => self.show_help = !self.show_help,
                 Key::S if cmd => self.save(m.shift),
