@@ -56,7 +56,7 @@ fn click(h: &mut Harness<'static, App>, label: &str) {
 fn save_custom_rack_writes_a_file_and_a_name_clash_asks_first() {
     let d = racks_dir("save");
     let mut h = chains_on(7);
-    click(&mut h, "Save Custom Rack…");
+    click(&mut h, "Save rack…");
     assert!(h.state().dev.save_rack.is_some(), "the dialog opened");
     assert!(has(&h, "WHAT IS SAVED"));
     h.state_mut().dev.save_rack.as_mut().unwrap().name = "Glass Keys".into();
@@ -74,7 +74,7 @@ fn save_custom_rack_writes_a_file_and_a_name_clash_asks_first() {
     );
     let bytes0 = std::fs::read(&files[0]).unwrap();
     // same name again: it asks, and nothing is written until you choose
-    click(&mut h, "Save Custom Rack…");
+    click(&mut h, "Save rack…");
     h.state_mut().dev.save_rack.as_mut().unwrap().name = "Glass Keys".into();
     frames(&mut h, 2);
     assert!(!has(&h, "Save rack"), "no plain Save on a clash");
@@ -83,14 +83,14 @@ fn save_custom_rack_writes_a_file_and_a_name_clash_asks_first() {
     click(&mut h, "Save as new");
     assert_eq!(cwr(&d).len(), 2, "saved beside it");
     // Update existing keeps a backup
-    click(&mut h, "Save Custom Rack…");
+    click(&mut h, "Save rack…");
     h.state_mut().dev.save_rack.as_mut().unwrap().name = "Glass Keys".into();
     frames(&mut h, 2);
     click(&mut h, "Update existing");
     assert_eq!(cwr(&d).len(), 2);
     assert_eq!(std::fs::read_dir(d.join(".backup")).unwrap().count(), 1);
     // Cancel / Esc write nothing
-    click(&mut h, "Save Custom Rack…");
+    click(&mut h, "Save rack…");
     h.state_mut().dev.save_rack.as_mut().unwrap().name = "Not Saved".into();
     frames(&mut h, 2);
     click(&mut h, "Cancel");

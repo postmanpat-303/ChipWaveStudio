@@ -77,21 +77,15 @@ fn quiet_header_and_back_to_tracker_mode_in_the_song_menu() {
 }
 
 #[test]
-fn lower_panel_tabs_piano_devices_instrument_automation_order() {
+fn lower_panel_notes_rack_then_order_list_and_automation() {
     let h = tl_demo();
     let x = |t: &str| {
         h.query_all_by(|n| n.label().as_deref() == Some(t))
             .map(|n| n.rect().left())
             .fold(f32::NAN, f32::min)
     };
-    let xs = [
-        "Piano roll",
-        "Nested Device Chains",
-        "Instrument",
-        "Automation",
-        "Order list",
-    ]
-    .map(x);
+    // Notes | Rack; the Order list and Automation sit after them (Tracker)
+    let xs = ["Notes", "Rack", "Order list", "Automation"].map(x);
     assert!(xs.iter().all(|v| v.is_finite()), "{xs:?}");
     assert!(xs.windows(2).all(|w| w[0] < w[1]), "{xs:?}");
 }

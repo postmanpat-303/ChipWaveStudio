@@ -110,9 +110,9 @@ fn browser_drop_makes_the_first_track_and_undo_takes_it_away() {
     h.state_mut().extra.browser_open = true;
     frames(&mut h, 3);
     h.state_mut().br.filter.tab = crate::browser::Tab::Instruments;
-    h.state_mut().br.filter.query = "808 Boom".into();
+    h.state_mut().br.filter.query = "FM-4".into();
     frames(&mut h, 3);
-    let (_, r) = h.state().br.row_rects.first().cloned().expect("808 Boom");
+    let (_, r) = h.state().br.row_rects.first().cloned().expect("FM-4");
     let lanes = h.state().tlv.lanes;
     let y = h.state().tlv.tracks_bottom() + 40.0;
     drag(&mut h, r.center(), Pos2::new(lanes.left() + 200.0, y));
