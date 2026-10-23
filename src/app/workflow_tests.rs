@@ -1792,6 +1792,38 @@ fn clip_on(h: &Harness<'static, App>, track: usize) -> Option<tl::NoteClipData> 
     })
 }
 
+/// the Melody tab's Preview / Dice / Another one sit in their own pad: a
+/// big Preview over the two seed buttons, side by side with the controls
+#[test]
+fn melody_preview_dice_and_another_one_are_a_big_pad() {
+    let mut h = clip_setup();
+    h.state_mut().cl_open_gen_at(0);
+    h.state_mut().cl.gen.tab = genpanel::GenTab::Melody;
+    frames(&mut h, 3);
+    let rect = |h: &Harness<'_, App>, l: &str| h.get_by_label(l).rect();
+    let (pv, dice, next) = (
+        rect(&h, "Preview"),
+        rect(&h, "Dice"),
+        rect(&h, "Another one"),
+    );
+    let rh = rect(&h, "Quarters");
+    assert!(pv.height() >= 56.0, "a big Preview: {pv:?}");
+    assert!(dice.height() >= 36.0 && next.height() >= 36.0);
+    assert!(
+        dice.top() > pv.bottom() && next.top() > pv.bottom(),
+        "under Preview"
+    );
+    assert!(
+        (dice.left() - pv.left()).abs() < 1.0,
+        "Dice under Preview's left edge"
+    );
+    assert!(
+        next.left() > dice.right() && (next.top() - dice.top()).abs() < 1.0,
+        "Another one beside Dice"
+    );
+    assert!(rh.left() > pv.right(), "the controls beside the pad");
+}
+
 /// the panel: GENERATORS + the Chords / Melody pills; the Melody tab's
 /// controls and Advanced fold; the Chords tab's Write is one undo step
 #[test]

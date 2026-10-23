@@ -105,6 +105,95 @@ fn accent_ink() -> Color32 {
     }
 }
 
+/// the Melody tab's pad's width (beside the controls)
+const PAD_W: f32 = 200.0;
+
+/// the Melody tab's pad: a big Preview with Dice and Another one under it
+/// (`tall`), or the three in a row; a rounded square tinted with the accent
+fn melody_pad(ui: &mut egui::Ui, m: &mut MelDlg, acts: &mut Acts, tall: bool) {
+    let th = th();
+    egui::Frame::new()
+        .fill(th.accent.gamma_multiply(0.14))
+        .stroke(egui::Stroke::new(1.5, th.accent))
+        .corner_radius(18.0)
+        .inner_margin(12.0)
+        .show(ui, |ui| {
+            let iw = PAD_W - 24.0;
+            let (pw, ph) = if tall { (iw, 64.0) } else { (170.0, 52.0) };
+            let half = if tall { (iw - 8.0) / 2.0 } else { 120.0 };
+            let mut row = |ui: &mut egui::Ui| {
+                let pr = ui
+                    .add_sized(
+                        [pw, ph],
+                        egui::Button::new(
+                            egui::RichText::new("Preview")
+                                .strong()
+                                .size(19.0)
+                                .color(accent_ink()),
+                        )
+                        .fill(th.accent)
+                        .corner_radius(14.0),
+                    )
+                    .on_hover_text("hear it on the track's instrument");
+                // a play triangle left of the word
+                let c = Pos2::new(pr.rect.left() + 26.0, pr.rect.center().y);
+                ui.painter().add(egui::Shape::convex_polygon(
+                    vec![
+                        c + egui::vec2(-6.0, -9.0),
+                        c + egui::vec2(9.0, 0.0),
+                        c + egui::vec2(-6.0, 9.0),
+                    ],
+                    accent_ink(),
+                    egui::Stroke::NONE,
+                ));
+                if pr.clicked() {
+                    acts.preview = true;
+                }
+                pr
+            };
+            let big = |t: &str| {
+                egui::Button::new(egui::RichText::new(t).strong().size(15.0)).corner_radius(10.0)
+            };
+            let dice = |ui: &mut egui::Ui, m: &mut MelDlg| {
+                if ui
+                    .add_sized([half, 40.0], big("Dice"))
+                    .on_hover_text("a random seed")
+                    .clicked()
+                {
+                    let r = Instant::now().elapsed().as_nanos() as u64
+                        ^ std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_or(7, |d| d.as_nanos() as u64);
+                    m.opts.seed = r % 100_000;
+                }
+                if ui
+                    .add_sized([half, 40.0], big("Another one"))
+                    .on_hover_text("the next seed")
+                    .clicked()
+                {
+                    m.opts.seed = m.opts.seed.wrapping_add(1) % 100_000;
+                }
+            };
+            if tall {
+                ui.set_width(iw);
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
+                    row(ui);
+                    ui.horizontal(|ui| dice(ui, m));
+                });
+            } else {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
+                    row(ui);
+                    ui.vertical(|ui| {
+                        ui.add_space((ph - 40.0) / 2.0);
+                        ui.horizontal(|ui| dice(ui, m));
+                    });
+                });
+            }
+        });
+}
+
 fn cap(ui: &mut egui::Ui, t: &str) {
     ui.label(egui::RichText::new(t).color(th().ink2));
 }
@@ -776,105 +865,106 @@ impl App {
         melody_view(ui, mv, w, 140.0);
         strip(ui, mv.key, &mv.marks, w, 22.0);
         let m = &mut self.cl.gen.mel;
-        ui.horizontal_wrapped(|ui| {
-            if ui
-                .add_sized([60.0, 26.0], egui::Button::new("Dice"))
-                .on_hover_text("a random seed")
-                .clicked()
-            {
-                let r = Instant::now().elapsed().as_nanos() as u64
-                    ^ std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map_or(7, |d| d.as_nanos() as u64);
-                m.opts.seed = r % 100_000;
-            }
-            if ui
-                .add_sized([110.0, 26.0], egui::Button::new("Another one"))
-                .on_hover_text("the next seed")
-                .clicked()
-            {
-                m.opts.seed = m.opts.seed.wrapping_add(1) % 100_000;
-            }
-            if ui
-                .add_sized([80.0, 26.0], egui::Button::new("Preview"))
-                .on_hover_text("hear it on the track's instrument")
-                .clicked()
-            {
-                acts.preview = true;
-            }
-            cap(ui, "Seed");
-            ui.add(egui::DragValue::new(&mut m.opts.seed).range(0..=99_999));
-            ui.add_space(8.0);
-            let was = (m.lock_rhythm, m.lock_notes);
-            ui.checkbox(&mut m.lock_rhythm, "Lock rhythm")
-                .on_hover_text("keep these note times while you change the rest");
-            ui.checkbox(&mut m.lock_notes, "Lock notes")
-                .on_hover_text("keep these pitches (in order) while the rhythm changes");
-            if m.lock_rhythm && !was.0 {
-                m.locked_rhythm = m.last.iter().map(|n| (n.start, n.len)).collect();
-            }
-            if m.lock_notes && !was.1 {
-                m.locked_keys = m.last.iter().map(|n| n.key).collect();
-            }
-        });
-        egui::Grid::new("gen_mel_main")
-            .num_columns(2)
-            .spacing(egui::vec2(8.0, 6.0))
-            .show(ui, |ui| {
-                cap(ui, "Rhythm");
-                let names: Vec<&str> = Rhythm::ALL.iter().map(|r| r.name()).collect();
-                let on = Rhythm::ALL
-                    .iter()
-                    .position(|&r| r == m.opts.rhythm)
-                    .unwrap_or(0);
-                if let Some(i) = seg(ui, &names, on, ((w - 90.0) / 6.0 - 2.0).clamp(54.0, 96.0)) {
-                    m.opts.rhythm = Rhythm::ALL[i];
+        // Preview, Dice and Another one in a pad of their own, beside the
+        // controls (used all the time here; Del (postmanpat) 23 Oct 2026);
+        // above them when the panel is narrow
+        let side = w >= 620.0;
+        // the pad, the gap and the item spacing either side of it
+        let cw = if side { w - PAD_W - 34.0 } else { w };
+        let controls = |ui: &mut egui::Ui, m: &mut MelDlg| {
+            ui.horizontal_wrapped(|ui| {
+                cap(ui, "Seed");
+                ui.add(egui::DragValue::new(&mut m.opts.seed).range(0..=99_999));
+                ui.add_space(8.0);
+                let was = (m.lock_rhythm, m.lock_notes);
+                ui.checkbox(&mut m.lock_rhythm, "Lock rhythm")
+                    .on_hover_text("keep these note times while you change the rest");
+                ui.checkbox(&mut m.lock_notes, "Lock notes")
+                    .on_hover_text("keep these pitches (in order) while the rhythm changes");
+                if m.lock_rhythm && !was.0 {
+                    m.locked_rhythm = m.last.iter().map(|n| (n.start, n.len)).collect();
                 }
-                ui.end_row();
-                cap(ui, "Contour");
-                let names: Vec<&str> = Contour::ALL.iter().map(|r| r.name()).collect();
-                let on = Contour::ALL
-                    .iter()
-                    .position(|&r| r == m.opts.contour)
-                    .unwrap_or(0);
-                if let Some(i) = seg(ui, &names, on, 60.0) {
-                    m.opts.contour = Contour::ALL[i];
+                if m.lock_notes && !was.1 {
+                    m.locked_keys = m.last.iter().map(|n| n.key).collect();
                 }
-                ui.end_row();
-                cap(ui, "Motif");
-                let names: Vec<&str> = Motif::ALL.iter().map(|r| r.name()).collect();
-                let on = Motif::ALL
-                    .iter()
-                    .position(|&r| r == m.opts.motif)
-                    .unwrap_or(0);
-                if let Some(i) = seg(ui, &names, on, 0.0_f32.max(60.0)) {
-                    m.opts.motif = Motif::ALL[i];
-                }
-                ui.end_row();
             });
-        ui.horizontal_wrapped(|ui| {
-            let sw = ((w - 330.0) / 2.0).clamp(80.0, 170.0);
-            ui.add_enabled_ui(m.opts.rhythm != Rhythm::Euclid, |ui| {
-                pct(
-                    ui,
-                    &mut m.opts.density,
-                    "Density",
-                    sw,
-                    "how many notes (strong beats first)",
-                );
+            egui::Grid::new("gen_mel_main")
+                .num_columns(2)
+                .spacing(egui::vec2(8.0, 6.0))
+                .show(ui, |ui| {
+                    cap(ui, "Rhythm");
+                    let names: Vec<&str> = Rhythm::ALL.iter().map(|r| r.name()).collect();
+                    let on = Rhythm::ALL
+                        .iter()
+                        .position(|&r| r == m.opts.rhythm)
+                        .unwrap_or(0);
+                    let bw = ((cw - 90.0) / 6.0 - 2.0).clamp(54.0, 96.0);
+                    if let Some(i) = seg(ui, &names, on, bw) {
+                        m.opts.rhythm = Rhythm::ALL[i];
+                    }
+                    ui.end_row();
+                    cap(ui, "Contour");
+                    let names: Vec<&str> = Contour::ALL.iter().map(|r| r.name()).collect();
+                    let on = Contour::ALL
+                        .iter()
+                        .position(|&r| r == m.opts.contour)
+                        .unwrap_or(0);
+                    if let Some(i) = seg(ui, &names, on, 60.0) {
+                        m.opts.contour = Contour::ALL[i];
+                    }
+                    ui.end_row();
+                    cap(ui, "Motif");
+                    let names: Vec<&str> = Motif::ALL.iter().map(|r| r.name()).collect();
+                    let on = Motif::ALL
+                        .iter()
+                        .position(|&r| r == m.opts.motif)
+                        .unwrap_or(0);
+                    if let Some(i) = seg(ui, &names, on, 60.0) {
+                        m.opts.motif = Motif::ALL[i];
+                    }
+                    ui.end_row();
+                });
+            // each caption before its slider, a gap between the groups
+            ui.horizontal_wrapped(|ui| {
+                let sw = ((cw - 380.0) / 2.0).clamp(70.0, 150.0);
+                ui.add_enabled_ui(m.opts.rhythm != Rhythm::Euclid, |ui| {
+                    cap(ui, "Density");
+                    pct(
+                        ui,
+                        &mut m.opts.density,
+                        "",
+                        sw,
+                        "how many notes (strong beats first)",
+                    );
+                });
+                ui.add_space(12.0);
+                cap(ui, "Range");
+                ui.spacing_mut().slider_width = sw;
+                ui.add(
+                    egui::Slider::new(&mut m.opts.range, 12..=36)
+                        .trailing_fill(true)
+                        .suffix(" st"),
+                )
+                .on_hover_text("from the lowest to the highest note, in semitones");
+                ui.add_space(12.0);
+                cap(ui, "Octave");
+                ui.add(egui::DragValue::new(&mut m.opts.octave).range(1..=8))
+                    .on_hover_text("the lowest note's octave");
             });
-            ui.spacing_mut().slider_width = sw;
-            ui.add(
-                egui::Slider::new(&mut m.opts.range, 12..=36)
-                    .trailing_fill(true)
-                    .suffix(" st")
-                    .text("Range"),
-            )
-            .on_hover_text("from the lowest to the highest note, in semitones");
-            cap(ui, "Octave");
-            ui.add(egui::DragValue::new(&mut m.opts.octave).range(1..=8))
-                .on_hover_text("the lowest note's octave");
-        });
+        };
+        if side {
+            ui.horizontal_top(|ui| {
+                melody_pad(ui, m, acts, true);
+                ui.add_space(12.0);
+                ui.vertical(|ui| {
+                    ui.set_width(cw);
+                    controls(ui, m);
+                });
+            });
+        } else {
+            melody_pad(ui, m, acts, false);
+            controls(ui, m);
+        }
         let rr = ui
             .add(egui::Button::new("Advanced...").selected(m.adv))
             .on_hover_text("Euclid rhythm, leaps, chord tones, variation, rests, the ending");

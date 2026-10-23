@@ -74,7 +74,7 @@ Note clips show a **chord lane** between the piano roll's toolbar and the notes 
 
 Requested by Del (postmanpat). The **Melody** tab writes a tune over a chord progression. It follows the progression on the **Chords** tab (even before it is written), or the clip's chord lane (**Over: Clip's chord lane**; picked by default when the panel is opened from the track pie and the clip has chords). The key is the song key, or a guess from the chords.
 
-- **Dice** picks a new seed, **Another one** the next seed, **Seed** shows it (the same settings and seed always give the same notes). **Preview** plays it.
+- **Preview** (the big button in the pad left of the controls) plays it; **Dice** under it picks a new seed, **Another one** the next seed; **Seed** shows it (the same settings and seed always give the same notes).
 - **Rhythm** (Quarters, Eighths, Syncopated, Sixteenths, Long, Euclid), **Density**, **Range** (semitones), **Octave**, **Contour** (Arch, Rise, Fall, Wave, Walk) and **Motif** (Off, AABA, ABAB, call and response: the first phrase comes back moved to fit the chord).
 - **Lock rhythm** keeps the rhythm and changes the notes on the next roll; **Lock notes** keeps the notes and changes the rhythm.
 - **Advanced…:** Euclid pulses / steps / rotate (shown as *x..x..x.*), **Leap** (how often the line jumps; a leap is followed by a step back), **Chord-tone bias** (at 100 % every strong beat is a chord tone), **Variation** (how much a motif repeat may change; at 0 it is an exact transposition), rests, note length and **End on tonic**.
