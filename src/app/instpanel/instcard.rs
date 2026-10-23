@@ -1495,6 +1495,289 @@ impl App {
     }
 }
 
+// ---- the Rack's instrument card face (rack layout A, docs/racks/PLAN.md)
+
+/// the curated face per type (macro names): the knobs worth reaching for
+/// first; the rest stay behind Advanced ›. Types not listed show their
+/// first six macros.
+fn face_pick(tag: &str) -> &'static [&'static str] {
+    match tag {
+        "Synth" | "Moog" => &["Bright", "Width", "Attack", "Release", "Motion", "Drive"],
+        "Voice" => &["Bright", "Formant", "Breath", "Babble", "Attack", "Release"],
+        "Analog" => &["Bright", "Env", "Width", "Attack", "Release", "Drive"],
+        "Wave" => &["Morph", "Bright", "Width", "Sub", "Attack", "Release"],
+        crate::strings::STRINGS_DISPLAY_NAME => &[
+            "Cutoff",
+            "Resonance",
+            "Filter Env",
+            "Attack",
+            "Release",
+            "Chorus",
+        ],
+        "FM-4" => &[
+            "Bright", "Feedback", "Mod dec", "Ratio 2", "Attack", "Release",
+        ],
+        _ => &[],
+    }
+}
+
+/// Noise has no macros: these parameters instead
+const FACE_NOISE: [&str; 6] = ["nz.0", "nz.1", "nz.2", "nz.3", "nz.5", "nz.8"];
+/// the instrument's level parameter (the first one it has) is the face's
+/// Volume knob
+const FACE_LEVEL: [&str; 6] = [
+    "volume",
+    "fm.level",
+    "drum.level",
+    "chipfx.level",
+    "sw.7",
+    "level",
+];
+
+/// one knob on the Rack card's face
+pub(crate) enum FaceKnob {
+    /// a macro (several targets: a macro knob; one: the parameter's own
+    /// knob, captioned with the macro's name)
+    M(MacroRt),
+    /// a parameter by key; `true`: the Volume knob
+    P(&'static str, bool),
+}
+
+impl FaceKnob {
+    pub(crate) fn name(&self, l: &Layout) -> String {
+        match self {
+            FaceKnob::M(m) => m.name.clone(),
+            FaceKnob::P(_, true) => "Volume".into(),
+            FaceKnob::P(k, false) => l
+                .find(k)
+                .map(|p| p.caption().to_string())
+                .unwrap_or_default(),
+        }
+    }
+}
+
+/// the Rack card's knobs for `inst`: 4-6 curated ones, then Volume
+pub(crate) fn face_knobs(l: &Layout, inst: &Instrument) -> Vec<FaceKnob> {
+    let tag = params::type_tag(&inst.kind);
+    let mut out: Vec<FaceKnob> = vec![];
+    if tag == "Noise" {
+        out.extend(
+            FACE_NOISE
+                .iter()
+                .filter(|k| l.find(k).is_some_and(|p| matches!(p.ctl, Ctl::Knob { .. })))
+                .map(|k| FaceKnob::P(k, false)),
+        );
+    } else {
+        let mut ms = macros(l, spec(tag));
+        let want = face_pick(tag);
+        if want.is_empty() {
+            ms.truncate(6);
+            out.extend(ms.into_iter().map(FaceKnob::M));
+        } else {
+            for w in want {
+                if let Some(k) = ms.iter().position(|m| m.name == *w) {
+                    out.push(FaceKnob::M(ms.remove(k)));
+                }
+            }
+        }
+    }
+    if let Some(k) = FACE_LEVEL
+        .iter()
+        .find(|k| l.find(k).is_some_and(|p| matches!(p.ctl, Ctl::Knob { .. })))
+    {
+        out.push(FaceKnob::P(k, true));
+    }
+    out
+}
+
+impl App {
+    /// an edit context for the Rack card's controls (as the key knobs')
+    fn rack_cx(&mut self, idx: usize, inst: &Instrument) -> Cx {
+        let mut cx = Cx {
+            idx,
+            tag: params::type_tag(&inst.kind),
+            words: vec![],
+            changed: false,
+            touch: None,
+            acts: vec![],
+            flash: None,
+            jump: None,
+            card_h: 0.0,
+            toggle_card: None,
+            modm: Default::default(),
+            live: [0.0; crate::modulation::MAX_MODS],
+            labels: vec![],
+            mod_out: Default::default(),
+            no_locks: true,
+        };
+        (cx.modm, cx.live, cx.labels) = self.with(|s| {
+            let m = &s.song.modulation;
+            (
+                m.clone(),
+                s.engine.mods.out,
+                m.routes
+                    .iter()
+                    .map(|r| super::super::modview::target_label(&s.song, &r.target))
+                    .collect(),
+            )
+        });
+        cx
+    }
+
+    /// ⋮ › Presets: the instrument's presets, then Save as preset…
+    pub(crate) fn rack_presets(&mut self, ui: &mut egui::Ui, idx: usize) {
+        let Some(inst) = self.with(|s| s.song.instruments.get(idx).cloned()) else {
+            return;
+        };
+        let mut cx = self.rack_cx(idx, &inst);
+        let orig_modm = cx.modm.clone();
+        let cur = self.current_preset(idx, &inst);
+        let list = preset_list(&inst);
+        egui::ScrollArea::vertical()
+            .max_height(340.0)
+            .show(ui, |ui| {
+                if list.is_empty() {
+                    ui.label(egui::RichText::new("No presets for this type").color(th().ink2));
+                }
+                let mut last = "";
+                for (g, name, tip, k) in &list {
+                    if g != last && !g.is_empty() {
+                        ui.label(egui::RichText::new(g).small().strong());
+                    }
+                    last = g;
+                    let b = ui.selectable_label(cur.as_deref() == Some(name.as_str()), name);
+                    let b = if tip.is_empty() {
+                        b
+                    } else {
+                        b.on_hover_text(tip)
+                    };
+                    if b.clicked() {
+                        cx.acts.push(Act::Kind(Box::new(k.clone())));
+                        ui.close();
+                    }
+                }
+            });
+        ui.separator();
+        if ui.button("Save as preset…").clicked() {
+            cx.acts.push(Act::SaveLib);
+            ui.close();
+        }
+        let orig = inst.clone();
+        self.finish_edit(idx, inst, &orig, &orig_modm, cx);
+    }
+
+    /// the Rack's instrument card: Preset ▾, then the curated knobs and
+    /// Volume in rows of `cols` (at most `rows` rows), wired like the
+    /// editor's knobs (undo, automation, modulation); the number shown
+    pub(crate) fn rack_face(
+        &mut self,
+        ui: &mut egui::Ui,
+        idx: usize,
+        cols: usize,
+        rows: usize,
+        preset: bool,
+    ) -> usize {
+        let Some(inst) = self.with(|s| s.song.instruments.get(idx).cloned()) else {
+            return 0;
+        };
+        let orig = inst.clone();
+        let mut inst = inst;
+        let l = params::build(&inst, idx, self.gen_ui.sel.min(7));
+        let mut cx = self.rack_cx(idx, &inst);
+        let orig_modm = cx.modm.clone();
+        if preset && !preset_list(&inst).is_empty() {
+            ui.horizontal(|ui| {
+                let i2 = inst.clone();
+                self.preset_dropdown(ui, &i2, &mut cx);
+            });
+            ui.add_space(2.0);
+        }
+        if cols == 0 || rows == 0 {
+            self.finish_edit(idx, inst, &orig, &orig_modm, cx);
+            return 0;
+        }
+        let mut ks = face_knobs(&l, &inst);
+        ks.truncate(cols * rows);
+        // Volume always shows: the last cell when the rows are full
+        if let Some(v) = face_knobs(&l, &inst)
+            .pop()
+            .filter(|v| matches!(v, FaceKnob::P(_, true)))
+        {
+            if !ks.iter().any(|k| matches!(k, FaceKnob::P(_, true))) {
+                ks.pop();
+                ks.push(v);
+            }
+        }
+        let n = ks.len();
+        for row in ks.chunks(cols) {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                for (k, f) in row.iter().enumerate() {
+                    match f {
+                        FaceKnob::P(key, vol) => {
+                            if let Some(p) = l.find(key) {
+                                let cap = vol.then_some("Volume");
+                                if let Some((resp, def)) =
+                                    self.knob_core(ui, p, &mut inst, &mut cx, cap)
+                                {
+                                    self.param_menu(&resp, p, &mut inst, &mut cx, Some(def));
+                                }
+                            }
+                        }
+                        FaceKnob::M(m) => {
+                            let single = match m.targets.as_slice() {
+                                [Tg::P(key, s)] if (*s - 1.0).abs() < 1e-6 => l.find(key),
+                                _ => None,
+                            };
+                            if let Some(p) = single {
+                                if let Some((resp, def)) =
+                                    self.knob_core(ui, p, &mut inst, &mut cx, Some(&m.name))
+                                {
+                                    self.param_menu(&resp, p, &mut inst, &mut cx, Some(def));
+                                }
+                                continue;
+                            }
+                            let cur = macro_text(&l, &inst, m);
+                            let (mut v, text, def) = cur.clone().unwrap_or((0.0, "–".into(), 0.0));
+                            let tip = format!(
+                                "{} drives {} · drag · Ctrl-drag fine · double-click default",
+                                m.name,
+                                m.caption.to_lowercase()
+                            );
+                            let out = knob::knob(
+                                ui,
+                                egui::Id::unique(("rack_face", idx, k, &m.name)),
+                                &mut v,
+                                KnobArgs {
+                                    name: &m.name,
+                                    caption: None,
+                                    value_text: text,
+                                    default: def,
+                                    steps: 0.0,
+                                    enabled: cur.is_some(),
+                                    highlight: false,
+                                    badge: None,
+                                    locked: None,
+                                    tip: &tip,
+                                    rings: &[],
+                                    live: None,
+                                    auto_led: None,
+                                },
+                            );
+                            if out.changed {
+                                macro_turn(&l, &mut inst, m, v);
+                                cx.changed = true;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        self.finish_edit(idx, inst, &orig, &orig_modm, cx);
+        n
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

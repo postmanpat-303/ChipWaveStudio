@@ -112,6 +112,7 @@ mod rack_sweep_tests;
 mod rack_tests;
 mod rackops;
 mod rackui;
+mod rackview;
 mod radial;
 #[cfg(test)]
 mod record_tests;

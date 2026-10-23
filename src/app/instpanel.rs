@@ -970,7 +970,11 @@ impl App {
 }
 
 /// a two-way segmented toggle (Notes | Rack); the clicked index
-pub(super) fn seg_toggle(ui: &mut egui::Ui, items: &[(&str, &str)], on: Option<usize>) -> Option<usize> {
+pub(super) fn seg_toggle(
+    ui: &mut egui::Ui,
+    items: &[(&str, &str)],
+    on: Option<usize>,
+) -> Option<usize> {
     let t = th();
     let f = egui::FontId::proportional(13.0);
     let gs: Vec<_> = items
@@ -984,13 +988,22 @@ pub(super) fn seg_toggle(ui: &mut egui::Ui, items: &[(&str, &str)], on: Option<u
     let mut x = r.left();
     let p = ui.painter().clone();
     p.rect_filled(r, 11.0, t.ink2.gamma_multiply(0.10));
-    p.rect_stroke(r, 11.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    p.rect_stroke(
+        r,
+        11.0,
+        Stroke::new(1.0, t.border),
+        egui::StrokeKind::Inside,
+    );
     for (i, g) in gs.into_iter().enumerate() {
         let sw = g.size().x + 22.0;
         let cell = Rect::from_min_size(Pos2::new(x, r.top()), egui::vec2(sw, h));
         x += sw;
         let resp = ui
-            .interact(cell, egui::Id::unique(("lower_seg", items[i].0)), Sense::click())
+            .interact(
+                cell,
+                egui::Id::unique(("lower_seg", items[i].0)),
+                Sense::click(),
+            )
             .on_hover_text(items[i].1);
         let sel = on == Some(i);
         let label = items[i].0.to_string();

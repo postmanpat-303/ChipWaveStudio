@@ -2575,3 +2575,99 @@ impl App {
         self.dk_write(data, nd);
     }
 }
+
+impl App {
+    /// the Rack card's face for a Drum Kit: a pad picker, then the selected
+    /// pad's sound knobs and its level in rows of `cols` (at most `rows`)
+    pub(super) fn dk_rack_face(&mut self, ui: &mut egui::Ui, idx: usize, cols: usize, rows: usize) {
+        let Some(mut kit) = self.with(|s| dk::kit_of(s.song.instruments.get(idx)?).cloned()) else {
+            return;
+        };
+        if self.dk.inst != idx {
+            self.dk = DkUi {
+                inst: idx,
+                ..Default::default()
+            };
+        }
+        if kit.pads.is_empty() {
+            ui.label(egui::RichText::new("No pads: Advanced › adds them").color(th().ink2));
+            return;
+        }
+        self.dk.sel = self.dk.sel.min(kit.pads.len() - 1);
+        let orig = kit.clone();
+        let sel = self.dk.sel;
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Pad").small().color(th().ink2));
+            let name = |_i: usize, p: &dk::Pad| format!("{} {}", dk::key_name(p.key), p.name);
+            egui::ComboBox::from_id_salt(("rack_dk_pad", idx))
+                .width(150.0)
+                .selected_text(name(sel, &kit.pads[sel]))
+                .show_ui(ui, |ui| {
+                    for (i, p) in kit.pads.iter().enumerate() {
+                        ui.selectable_value(&mut self.dk.sel, i, name(i, p));
+                    }
+                })
+                .response
+                .on_hover_text("the pad whose sound these knobs edit");
+        });
+        ui.add_space(2.0);
+        let sel = self.dk.sel;
+        let pad = &mut kit.pads[sel];
+        let defs = pad.drum.kind.macros();
+        let cols = cols.max(1);
+        let max = cols * rows.max(1);
+        // the pad's macros, then Level (always shown: the last cell)
+        let nm = defs.len().min(max.saturating_sub(1));
+        let cells: Vec<Option<usize>> = (0..nm).map(Some).chain([None]).collect();
+        for row in cells.chunks(cols) {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                for c in row {
+                    let (def, mut n): (&MacroDef, f32) = match c {
+                        Some(i) => (&defs[*i], pad.drum.macros[*i]),
+                        None => (&MIX_LEVEL, MIX_LEVEL.unmap(pad.drum.level)),
+                    };
+                    let tip = def.tip.to_string();
+                    let vt = def.show(n);
+                    let out = super::knob::knob(
+                        ui,
+                        egui::Id::unique(("rack_dk", idx, sel, *c)),
+                        &mut n,
+                        super::knob::KnobArgs {
+                            name: def.name,
+                            caption: None,
+                            value_text: vt,
+                            default: (def.dice.0 + def.dice.1) * 0.5,
+                            steps: 0.0,
+                            enabled: true,
+                            highlight: false,
+                            badge: None,
+                            locked: None,
+                            tip: &tip,
+                            rings: &[],
+                            live: None,
+                            auto_led: None,
+                        },
+                    );
+                    if out.changed {
+                        match c {
+                            Some(i) => pad.drum.macros[*i] = n,
+                            None => pad.drum.level = MIX_LEVEL.map(n),
+                        }
+                    }
+                }
+            });
+        }
+        if kit != orig {
+            kit.fix();
+            self.with(|s| {
+                if let Some(InstrumentKind::Gen(g)) =
+                    s.song.instruments.get_mut(idx).map(|i| &mut i.kind)
+                {
+                    g.engine = GenEngine::Drums(kit);
+                }
+            });
+            self.dirty = true;
+        }
+    }
+}
