@@ -1,7 +1,7 @@
 //! The Clip Arranger (docs/CLIP_ARRANGER.md): scenes and slots left of the
 //! Timeline, rows on the timeline's tracks, quantised launches, stops,
 //! slot drags that make Tracker clips, the Master panel and Ctrl+8.
-use super::ui_tests::{click_at, drag, frame, harness_with, key};
+use super::ui_tests::{classic_toolbar, click_at, drag, frame, harness_with, key};
 use super::*;
 use crate::engine::launch::bit;
 use egui::Key;
@@ -59,7 +59,7 @@ fn slot(h: &Harness<'static, App>, tr: usize, b: usize) -> (Rect, Rect) {
 fn shows_on_the_timeline_with_rows_on_the_tracks_and_ctrl8_toggles_it() {
     let mut h = tl_demo();
     assert!(h.state().ca_active());
-    assert!(has(&h, "Clip Arranger") && has(&h, "Master"));
+    assert!(has(&h, "Clip Arranger") && has(&h, "Master meter"));
     assert!(!has(&h, "Instruments"), "the Instruments list made room");
     let nch = h.state().with(|s| s.song.channels);
     // every track row has its slots, centred on the timeline's track row
@@ -243,6 +243,8 @@ fn dragging_a_slot_onto_the_timeline_makes_a_tracker_clip_on_the_bar() {
 #[test]
 fn master_panel_edits_the_song_mixer() {
     let mut h = tl_demo();
+    // (the classic toolbar; lcd_tests has the LCD toolbar's popover)
+    classic_toolbar(&mut h);
     let m = h.state().ca.master;
     assert!(m.is_positive(), "the Master panel has room under the grid");
     let on = h.state().with(|s| s.song.mixer.limiter.enabled);
@@ -479,6 +481,9 @@ fn the_level_history_moves_a_column_per_quarter_second_and_keeps_every_peak() {
 #[test]
 fn right_click_the_level_history_pauses_or_hides_it_and_brings_it_back() {
     let mut h = tl_demo();
+    // the Master panel in the LCD toolbar's popover (its menus keep it open)
+    h.state_mut().lcd.master_open = true;
+    frames(&mut h, 3);
     let g = h.state().ca.level_rect;
     assert!(g.is_positive(), "the LEVEL history has room");
     super::objpie_tests::right_click(&mut h, g.center());
@@ -506,6 +511,7 @@ fn right_click_the_level_history_pauses_or_hides_it_and_brings_it_back() {
     frames(&mut h, 2);
     assert_eq!(h.state().extra.level_hist, 0);
     assert!(h.state().ca.level_rect.height() > 36.0);
+    assert!(h.state().lcd.master_open, "still open after its menus");
 }
 
 /// the Timeline's Arranger button hides the left panel for room (the lanes

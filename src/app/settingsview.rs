@@ -482,6 +482,19 @@ impl App {
                     }
                 });
                 ui.end_row();
+                ui.label("Top display");
+                ui.vertical(|ui| {
+                    changed |= ui
+                        .checkbox(&mut self.extra.lcd_toolbar, "LCD display with the Master in the toolbar")
+                        .on_hover_text(
+                            "tempo, position, time, the lamps and the engine load on one display, with a compact Master that opens the Master panel (off: the classic toolbar, the Master under the Clip Arranger)",
+                        )
+                        .changed();
+                    ui.add_enabled_ui(self.extra.lcd_toolbar, |ui| {
+                        changed |= self.lcd_colour_pick(ui);
+                    });
+                });
+                ui.end_row();
                 ui.label("Recording");
                 ui.horizontal(|ui| {
                     for (v, name, tip) in [

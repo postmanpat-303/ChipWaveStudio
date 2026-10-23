@@ -241,6 +241,14 @@ pub struct Extra {
     /// tree rows the user closed ("i3" instrument 3, "s3.1" a Split, ...)
     #[serde(default)]
     pub chains_closed: Vec<String>,
+    /// the toolbar's LCD display with the compact Master (0.2.10); off:
+    /// the classic toolbar and the Master panel under the Clip Arranger
+    #[serde(default = "yes")]
+    pub lcd_toolbar: bool,
+    /// the LCD's colour: a preset name ("Cyan", "Amber", ...) or "#RRGGBB";
+    /// "" = Cyan
+    #[serde(default)]
+    pub lcd_colour: String,
 }
 
 fn tree_w() -> f32 {
@@ -326,6 +334,8 @@ impl Default for Extra {
             chains_view_chosen: false,
             level_hist: 0,
             chains_closed: vec![],
+            lcd_toolbar: true,
+            lcd_colour: String::new(),
         }
     }
 }

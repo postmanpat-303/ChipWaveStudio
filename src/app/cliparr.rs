@@ -882,7 +882,11 @@ impl App {
         }
         let heads = self.tlv.heads;
         let ok = heads.is_positive() && heads.bottom() <= r.bottom() + 1.0;
-        let bottom = if ok {
+        // the LCD toolbar has the Master (a popover): the grid runs down
+        let lcd = self.lcd_on();
+        let bottom = if lcd {
+            r.bottom()
+        } else if ok {
             (heads.bottom() + 30.0).min(r.bottom())
         } else {
             r.bottom()
@@ -890,8 +894,11 @@ impl App {
         let top = Rect::from_min_max(r.min, Pos2::new(r.right(), bottom));
         self.ca_grid(ui, top);
         let mr = Rect::from_min_max(Pos2::new(r.left(), bottom + 8.0), r.max);
-        self.ca.master = Rect::NOTHING;
-        if mr.height() >= 150.0 {
+        if !lcd {
+            // (in the LCD toolbar the popover sets it)
+            self.ca.master = Rect::NOTHING;
+        }
+        if mr.height() >= 150.0 && !lcd {
             self.ca_master(ui, mr);
         }
         self.ca_drag(ui.ctx());
@@ -2094,7 +2101,7 @@ impl App {
     }
 
     /// Master: volume, limiter drive / ceiling, meters, loudness
-    fn ca_master(&mut self, ui: &mut egui::Ui, r: Rect) {
+    pub(super) fn ca_master(&mut self, ui: &mut egui::Ui, r: Rect) {
         let t = th();
         let p = ui.painter().clone();
         theme::cartridge(&p, r, t.slate);
@@ -2322,7 +2329,8 @@ impl App {
         );
         }
         let playing = self.with(|s| s.engine.playing);
-        if playing && self.extra.level_hist != 1 {
+        // (the LCD toolbar's Master steps it every frame instead)
+        if playing && self.extra.level_hist != 1 && !self.lcd_on() {
             let dt = ui.input(|i| i.stable_dt);
             self.ca.hist_step(dt, peaks[0].max(peaks[1]));
         }
