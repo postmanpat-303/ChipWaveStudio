@@ -305,7 +305,7 @@ impl App {
                     );
                     ui.add_space(12.0);
                     egui::Frame::new()
-                        .fill(th.crt_bot)
+                        .fill(well())
                         .corner_radius(14.0)
                         .inner_margin(3.0)
                         .show(ui, |ui| {
@@ -354,7 +354,7 @@ impl App {
                 let left_w = if stacked { w } else { w - card_w - 18.0 };
                 // an auto-sized window offers last frame's height, so ask
                 // for the full screen height whenever the content is taller
-                let body_h = (scr.height() - top - 70.0).max(200.0);
+                let body_h = (scr.height() - top - 100.0).max(200.0);
                 egui::ScrollArea::vertical()
                     .max_height(body_h)
                     .min_scrolled_height(body_h)
@@ -1232,10 +1232,22 @@ fn guess_key(marks: &[ChordMark]) -> Key {
 }
 
 /// the WRITE card's frame
+/// the recessed fill behind the pill tabs and the WRITE card: the dark
+/// screen colour on dark themes, a light panel tone on light ones (Amiga),
+/// so the widget text stays readable
+fn well() -> egui::Color32 {
+    let th = th();
+    if th.light {
+        th.cart_top
+    } else {
+        th.crt_bot
+    }
+}
+
 fn card(ui: &mut egui::Ui, w: f32, body: impl FnOnce(&mut egui::Ui)) {
     let th = th();
     egui::Frame::new()
-        .fill(th.crt_bot)
+        .fill(well())
         .corner_radius(6.0)
         .inner_margin(12.0)
         .stroke(egui::Stroke::new(1.0, th.line2))

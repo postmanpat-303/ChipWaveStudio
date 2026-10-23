@@ -1707,7 +1707,8 @@ impl App {
 
 impl App {
     /// CHIPWAVE_SHOT_PR=click | erase | select | line | chords | chord-pie |
-    /// chord-block-pie | chord-generate (view timeline-notes): piano roll
+    /// chord-block-pie | chord-generate | melody-generate[-adv] (view
+    /// timeline-notes): piano roll
     /// shots with scripted mouse input
     fn shot_pr(&mut self, ctx: &egui::Context, mode: &str) {
         use super::chordlane::PieOn;
@@ -1979,6 +1980,11 @@ impl App {
                         self.cl_open_gen_at(0);
                         self.cl.gen.opts = o;
                         self.cl.gen.write = true;
+                    }
+                    "melody-generate" | "melody-generate-adv" => {
+                        self.gen_open_melody(0);
+                        self.cl.gen.opts = o;
+                        self.cl.gen.mel.adv = mode.ends_with("-adv");
                     }
                     _ => {}
                 }
