@@ -73,6 +73,7 @@ mod lanes;
 mod launcher_ui_tests;
 #[cfg(test)]
 mod layout_tests;
+mod lcd;
 mod library;
 mod metroicon;
 mod midiview;
@@ -228,6 +229,8 @@ pub struct App {
     clip: Vec<Vec<Cell>>,
     /// the Advanced Edit panel's settings (src/app/advedit.rs)
     adv: advedit::AdvUi,
+    /// the toolbar LCD and the compact Master (src/app/lcd.rs)
+    lcd: lcd::LcdUi,
     /// tracker channel-header buttons as last drawn (channel, button, rect), for tests
     hdr_hits: Vec<(usize, pattern::HdrOp, Rect)>,
     view: View,
@@ -618,6 +621,7 @@ impl App {
             step: 1,
             edit: true,
             follow: true,
+            lcd: Default::default(),
             instr: 1,
             hist,
             undo_hold: 0,

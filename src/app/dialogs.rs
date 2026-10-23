@@ -167,6 +167,11 @@ impl App {
             self.status = "Drag cancelled".into();
             return true;
         }
+        if key == Key::Escape && self.lcd.master_open && !egui::Popup::is_any_open(ctx) {
+            // the toolbar's Master popover
+            self.lcd.master_open = false;
+            return true;
+        }
         if self.drop_ask.is_some() {
             // the clip-drop question: Esc cancels, nothing edits behind it
             if key == Key::Escape {
