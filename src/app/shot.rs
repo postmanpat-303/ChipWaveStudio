@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 104] = [
+pub const VIEWS: [&str; 105] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -102,6 +102,7 @@ pub const VIEWS: [&str; 104] = [
     "trackpie-addring-1",
     "trackpie-addring-2",
     "trackpie-addring-3",
+    "trackpie-addring-instr",
     "trackauto",
     "split-preview",
     "cliparranger",
@@ -597,8 +598,15 @@ impl App {
                 self.set_lower(1);
                 self.dirty = false;
             }
-            "trackpie" | "trackpie-icons" | "trackpie-colour" | "trackpie-addring-1"
-            | "trackpie-addring-2" | "trackpie-addring-3" | "trackauto" | "split-preview" => {
+            "trackpie"
+            | "trackpie-icons"
+            | "trackpie-colour"
+            | "trackpie-addring-1"
+            | "trackpie-addring-2"
+            | "trackpie-addring-3"
+            | "trackpie-addring-instr"
+            | "trackauto"
+            | "split-preview" => {
                 // the default layout on the timeline-mode demo; the pie
                 // opens a few frames later (shot_pie)
                 self.enter_timeline();
@@ -1956,7 +1964,20 @@ impl App {
                 p.open_ring(now);
                 let n = |l| ring_slots(l, &info).len();
                 if let Some(r) = &mut p.ring {
-                    if lv != "1" {
+                    // Instrument ›: the built-ins (StringWave too) and Browse…
+                    if lv == "instr" {
+                        let k = ring_slots(Level::Add, &info)
+                            .iter()
+                            .position(|s| s.label == "Instrument")
+                            .unwrap_or(0);
+                        r.enter(
+                            Level::Instrument,
+                            k,
+                            n(Level::Add),
+                            n(Level::Instrument),
+                            now,
+                        );
+                    } else if lv != "1" {
                         r.enter(Level::DrumInstr, 1, n(Level::Add), n(Level::DrumInstr), now);
                     }
                     if lv == "3" {
