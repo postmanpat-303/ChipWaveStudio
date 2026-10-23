@@ -591,17 +591,30 @@ mod tests {
         }
         let sc = Rect::from_min_size(Pos2::ZERO, egui::vec2(1366.0, 768.0));
         let r = 274.0;
-        for p in [Pos2::new(5.0, 5.0), Pos2::new(1360.0, 760.0), Pos2::new(683.0, 384.0)] {
+        for p in [
+            Pos2::new(5.0, 5.0),
+            Pos2::new(1360.0, 760.0),
+            Pos2::new(683.0, 384.0),
+        ] {
             let q = clamp_disc(p, sc, r);
             assert!(sc.shrink(r - 0.01).contains(q), "{p:?} -> {q:?}");
         }
-        assert_eq!(clamp_disc(Pos2::new(683.0, 384.0), sc, r), Pos2::new(683.0, 384.0));
+        assert_eq!(
+            clamp_disc(Pos2::new(683.0, 384.0), sc, r),
+            Pos2::new(683.0, 384.0)
+        );
         // too small: centred
         let tiny = Rect::from_min_size(Pos2::ZERO, egui::vec2(300.0, 200.0));
-        assert_eq!(clamp_disc(Pos2::new(1.0, 1.0), tiny, r), Pos2::new(150.0, 100.0));
+        assert_eq!(
+            clamp_disc(Pos2::new(1.0, 1.0), tiny, r),
+            Pos2::new(150.0, 100.0)
+        );
         let pts = slot_arc(0.0, 4, 1, 0.01, 8);
         assert_eq!(pts.len(), 9);
-        assert!((pts[4] - egui::vec2(0.0, 1.0)).length() < 1e-4, "slot 1 of 4 points down");
+        assert!(
+            (pts[4] - egui::vec2(0.0, 1.0)).length() < 1e-4,
+            "slot 1 of 4 points down"
+        );
         let m = strip_mesh(Pos2::ZERO, &pts, 10.0, 20.0, Color32::RED, Color32::BLUE);
         assert_eq!(m.vertices.len(), 18);
         assert_eq!(m.indices.len(), 8 * 6);
