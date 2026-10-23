@@ -993,7 +993,7 @@ impl App {
                 ui.add_enabled_ui(can_new, |ui| {
                     if ui
                         .add(egui::Button::new("New “Melody” track").selected(m.new_track))
-                        .on_hover_text("a new track below with a lead synth")
+                        .on_hover_text("a new track below, with a copy of this track's instrument (the sound Preview plays)")
                         .clicked()
                     {
                         m.new_track = true;
@@ -1117,7 +1117,8 @@ impl App {
         );
     }
 
-    /// a new track "Melody" below the clip's track with a lead synth and a
+    /// a new track "Melody" below the clip's track with a copy of the
+    /// track's instrument (what Preview played) and a
     /// note clip where the source clip is; false: not possible (the caller
     /// writes into the clip instead)
     fn gen_melody_track(&mut self, t: Target, mv: &MelView) -> bool {
@@ -1148,21 +1149,41 @@ impl App {
                 "All 255 instrument slots are used: the melody goes into this clip".into();
             return false;
         }
-        let Some((iname, kind)) = super::trackpie::Builtin::WaveForge.make() else {
-            return false;
+        // the sound Preview played: a copy of the clip's track instrument
+        // (its patch, parameters and effects), so the written melody sounds
+        // the same; a lead synth only when the track has none (or a kit)
+        let heard = (!self.track_needs_instrument(tr))
+            .then(|| self.track_instr(tr))
+            .and_then(|slot| {
+                self.with(|s| {
+                    s.song
+                        .instruments
+                        .get((slot as usize).wrapping_sub(1))
+                        .filter(|i| crate::drumkit::kit_of(i).is_none())
+                        .cloned()
+                })
+            });
+        let inst = match heard {
+            Some(i) => i,
+            None => {
+                let Some((name, kind)) = super::trackpie::Builtin::WaveForge.make() else {
+                    return false;
+                };
+                Instrument {
+                    name,
+                    volume: 0.8,
+                    transpose: 0,
+                    fx: vec![],
+                    kind,
+                }
+            }
         };
         let at = tr + 1;
         self.snapshot();
         self.undo_hold += 1;
         let slot = if self.track_insert(at, "Melody") {
             self.with(|s| {
-                let k = s.song.add_instrument(Instrument {
-                    name: iname,
-                    volume: 0.8,
-                    transpose: 0,
-                    fx: vec![],
-                    kind,
-                })?;
+                let k = s.song.add_instrument(inst)?;
                 crate::chanops::assign_track_instrument(&mut s.song, at, k as u8 + 1);
                 Some(k as u8 + 1)
             })

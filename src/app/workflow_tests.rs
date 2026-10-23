@@ -1853,14 +1853,15 @@ fn generators_panel_tabs_and_chords_write() {
     assert!(note_data(&h).notes.is_empty(), "one undo step");
 }
 
-/// Melody's default Write: a new "Melody" track with a lead synth under
-/// the clip's track holding exactly the melody shown; one undo removes it
+/// Melody's default Write: a new "Melody" track with a copy of the clip
+/// track's instrument under the clip's track holding exactly the melody shown; one undo removes it
 #[test]
 fn melody_write_adds_a_melody_track_in_one_undo() {
     let mut h = clip_setup();
     let (ch0, ins0) = h
         .state()
         .with(|s| (s.song.channels, s.song.instruments.len()));
+    let ins_heard = h.state().track_instr(2) as usize;
     h.state_mut().gen_open_melody(0);
     frames(&mut h, 3);
     let shown = h.state().cl.gen.mel.last.clone();
@@ -1884,7 +1885,10 @@ fn melody_write_adds_a_melody_track_in_one_undo() {
     assert_eq!(ch1, ch0 + 1, "{}", h.state().status);
     assert_eq!(ins1, ins0 + 1);
     assert_eq!(name, "Melody");
-    assert_eq!(iname, "WaveForge Saw Lead");
+    let src = h
+        .state()
+        .with(|s| s.song.instruments[ins_heard - 1].name.clone());
+    assert_eq!(iname, src, "a copy of the sound Preview played");
     let d = clip_on(&h, 3).expect("the melody clip on track 04");
     let got: Vec<(tl::Tick, u8)> = d.notes.iter().map(|n| (n.start, n.key)).collect();
     let want: Vec<(tl::Tick, u8)> = shown.iter().map(|n| (n.start, n.key)).collect();
@@ -1952,4 +1956,85 @@ fn melody_into_this_track_follows_the_lane_and_never_doubles() {
         note_data(&h).notes.is_empty(),
         "each write was one undo step"
     );
+}
+
+/// Del's bug: Write to timeline made the track sound like an init patch.
+/// After any write (Melody: new track or this track; Chords) the clip's
+/// track keeps its instrument slot and every parameter, and a new Melody
+/// track plays an identical copy (what Preview played), not a default
+#[test]
+fn generator_writes_keep_the_tracks_instrument_and_params() {
+    // the slot Preview plays (the demo's tracks have none assigned: the
+    // one their notes use) and the track's own field
+    let edited = |h: &mut Harness<'static, App>| {
+        let slot = h.state().track_instr(2);
+        h.state().with(|s| {
+            let given = s.song.timeline.as_deref().unwrap().tracks[2].instr;
+            let i = &mut s.song.instruments[slot as usize - 1];
+            // a tweaked sound (not any preset's values)
+            i.volume = 0.37;
+            i.transpose = 5;
+            (slot, given, i.clone())
+        })
+    };
+    let check = |h: &Harness<'static, App>, slot: u8, given: u8, want: &Instrument, what: &str| {
+        assert_eq!(
+            h.state().track_instr(2),
+            slot,
+            "{what}: plays the same slot"
+        );
+        h.state().with(|s| {
+            let t = s.song.timeline.as_deref().unwrap();
+            assert_eq!(t.tracks[2].instr, given, "{what}: track field");
+            assert_eq!(
+                &s.song.instruments[slot as usize - 1],
+                want,
+                "{what}: same params"
+            );
+        });
+    };
+    // Melody, default (a new track)
+    let mut h = clip_setup();
+    let (slot, given, want) = edited(&mut h);
+    h.state_mut().gen_open_melody(0);
+    frames(&mut h, 3);
+    let pv = h.state().track_instr(2);
+    assert_eq!(pv, slot, "Preview plays the track's instrument");
+    h.get_by_label("Write to timeline").click();
+    frames(&mut h, 3);
+    check(&h, slot, given, &want, "melody new track");
+    let (nslot, ninst) = h.state().with(|s| {
+        let k = s.song.timeline.as_deref().unwrap().tracks[3].instr;
+        (k, s.song.instruments[k as usize - 1].clone())
+    });
+    assert_ne!(
+        nslot, slot,
+        "its own copy (editing it leaves track 03 alone)"
+    );
+    assert_eq!(ninst, want, "the Melody track sounds like Preview");
+    // the Rack now shows the Melody track's copy, not a default
+    assert_eq!(h.state().instr, nslot);
+    // Melody into this track
+    let mut h = clip_setup();
+    let (slot, given, want) = edited(&mut h);
+    h.state_mut().gen_open_melody(0);
+    h.state_mut().cl.gen.mel.new_track = false;
+    frames(&mut h, 3);
+    let sel = h.state().instr;
+    h.get_by_label("Write to timeline").click();
+    frames(&mut h, 3);
+    check(&h, slot, given, &want, "melody this track");
+    assert!(note_data(&h).notes.iter().all(|n| n.instr == given));
+    assert_eq!(h.state().instr, sel, "the selected instrument stays");
+    // Chords with notes
+    let mut h = clip_setup();
+    let (slot, given, want) = edited(&mut h);
+    h.state_mut().cl_open_gen_at(0);
+    h.state_mut().cl.gen.write = true;
+    frames(&mut h, 3);
+    h.get_by_label("Write to timeline").click();
+    frames(&mut h, 3);
+    check(&h, slot, given, &want, "chords");
+    assert!(!note_data(&h).notes.is_empty());
+    assert!(note_data(&h).notes.iter().all(|n| n.instr == given));
 }

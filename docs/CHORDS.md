@@ -79,7 +79,7 @@ Requested by Del (postmanpat). The **Melody** tab writes a tune over a chord pro
 - **Lock rhythm** keeps the rhythm and changes the notes on the next roll; **Lock notes** keeps the notes and changes the rhythm.
 - **Advanced…:** Euclid pulses / steps / rotate (shown as *x..x..x.*), **Leap** (how often the line jumps; a leap is followed by a step back), **Chord-tone bias** (at 100 % every strong beat is a chord tone), **Variation** (how much a motif repeat may change; at 0 it is an exact transposition), rests, note length and **End on tonic**.
 - Every note is in the key's scale; notes between chord tones move by step.
-- WRITE card: by default **New “Melody” track** adds a track called *Melody* below the current one with the WaveForge Saw Lead instrument and the melody in a new clip (nothing is replaced). Or pick the current track, with **Replace notes** (replaces the notes inside the melody's bars; asks first if that deletes more than 8) or **Notes on top**. Writing twice never doubles notes, and each write is one undo step.
+- WRITE card: by default **New “Melody” track** adds a track called *Melody* below the current one with a copy of the current track's instrument (its parameters and effects: the sound Preview plays; the WaveForge Saw Lead when the track has none or plays a Drum Kit) and the melody in a new clip (nothing is replaced). Or pick the current track, with **Replace notes** (replaces the notes inside the melody's bars; asks first if that deletes more than 8) or **Notes on top**. Writing twice never doubles notes, and each write is one undo step.
 
 ## Scale lock
 
