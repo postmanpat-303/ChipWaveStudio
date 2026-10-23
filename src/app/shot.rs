@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 105] = [
+pub const VIEWS: [&str; 111] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -104,6 +104,12 @@ pub const VIEWS: [&str; 105] = [
     "trackpie-addring-3",
     "trackpie-addring-instr",
     "trackauto",
+    "tracks-dock",
+    "tracks-addpie",
+    "tracks-addpie-kits",
+    "tracks-trackpie",
+    "tracks-trackpie-kits",
+    "tracks-arranger-off",
     "split-preview",
     "cliparranger",
     "cliparranger-drag",
@@ -596,6 +602,33 @@ impl App {
                 self.default_layout();
                 self.tl_select_track(0, false);
                 self.set_lower(1);
+                self.dirty = false;
+            }
+            "tracks-dock"
+            | "tracks-addpie"
+            | "tracks-addpie-kits"
+            | "tracks-trackpie"
+            | "tracks-trackpie-kits"
+            | "tracks-arranger-off" => {
+                // a new song with three tracks: Song / Master docked at the
+                // bottom of the list, room under the tracks for the Add pie
+                self.new_song();
+                for (k, n) in ["Lead", "Bass", "Drums"].into_iter().enumerate() {
+                    self.track_insert(k, n);
+                }
+                self.view = View::Timeline;
+                self.default_layout();
+                self.extra.clip_arranger = true;
+                self.extra.reduce_motion = true;
+                self.extra.side_hidden = view == "tracks-arranger-off";
+                self.track_new_instrument(0, super::trackpie::Builtin::WaveForge);
+                self.track_new_instrument(1, super::trackpie::Builtin::Analog);
+                self.track_set_pattern_instrument(
+                    2,
+                    super::trackpie::Builtin::DrumKit,
+                    Some("909 Kit"),
+                );
+                self.tl_select_track(2, false);
                 self.dirty = false;
             }
             "trackpie"
@@ -1286,6 +1319,9 @@ impl App {
         if (view.starts_with("trackpie") || view == "trackauto") && f == SETUP_AT + 12 {
             self.shot_pie(ctx, &view);
         }
+        if view.starts_with("tracks-") && view.contains("pie") && f == SETUP_AT + 12 {
+            self.shot_tracks_pie(ctx, &view);
+        }
         if view == "split-preview" && f == SETUP_AT + 12 {
             self.shot_split();
         }
@@ -1931,6 +1967,39 @@ impl App {
 }
 
 impl App {
+    /// `--view tracks-addpie[-kits]`: the Add pie on the empty space under
+    /// the tracks; `tracks-trackpie[-kits]`: track 03's pie, its Add ring
+    /// (acting on that track) open, -kits: Drum pattern › Drum Kit ›
+    fn shot_tracks_pie(&mut self, ctx: &egui::Context, view: &str) {
+        use super::trackring::{ring_slots, Level};
+        let lanes = self.tlv.lanes;
+        let heads = self.tlv.heads;
+        let lay = self.tlv.layout.clone();
+        let sy = self.tlv.scroll_y;
+        let now = ctx.input(|i| i.time);
+        let empty = view.starts_with("tracks-addpie");
+        let tr = 2usize;
+        if empty {
+            let y = heads.top() + lay.body_end - sy + 95.0;
+            self.open_add_pie(Pos2::new(lanes.left() + 40.0, y), false, ctx);
+        } else {
+            let y = heads.top() + lay.top[tr] - sy + 20.0;
+            self.open_track_pie(tr, Pos2::new(heads.left() + 140.0, y), false, ctx);
+        }
+        let info = self.ring_info_for(tr, empty);
+        if let Some(p) = &mut self.pie {
+            p.open_ring(now);
+            let n = |l| ring_slots(l, &info).len();
+            if let Some(r) = &mut p.ring {
+                if view.ends_with("-kits") {
+                    r.enter(Level::DrumInstr, 1, n(Level::Add), n(Level::DrumInstr), now);
+                    r.enter(Level::Kits, 1, n(Level::DrumInstr), n(Level::Kits), now);
+                    r.key = Some(1);
+                }
+            }
+        }
+    }
+
     /// `--view trackpie[-icons]`: the track pie on track 2's header, Icon
     /// highlighted (trackpie-icons: its TRACK ICON grid popped out).
     /// CHIPWAVE_SHOT_PIE_T=<s> freezes the open animation at that time
