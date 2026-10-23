@@ -17,6 +17,7 @@
 use super::devcards::{self, open_key, CARD_MIN_W, CARD_W, GAP, MORE_W, ROW_H};
 use super::fxview::{strip_fill, FxOp};
 use super::knob::{self, KnobArgs, CELL};
+use super::rackview::{Pick, TabHit, TAB_W};
 use super::*;
 use crate::fx::{self, Device, FxKind};
 
@@ -71,6 +72,16 @@ pub(crate) struct DevUi {
     /// My Racks should be listed again (a rack was saved or changed)
     pub(crate) racks_dirty: bool,
     pub(crate) my_racks: super::rackui::MyRacks,
+    /// the Rack: the selected card
+    pub(crate) pick: super::rackview::Pick,
+    /// ... was the last panel clicked (Delete, Ctrl+D and 0 act on it)
+    pub(crate) focus: bool,
+    /// the chain editor (tree and detail) instead of the Rack row; opened
+    /// from a card's ⋮ › Open in the chain editor
+    pub(crate) tree: bool,
+    /// drawing a Rack card: its side tab has power, remove and "…", so
+    /// the card's header leaves them out
+    pub(crate) tabbed: bool,
 }
 
 impl Default for DevUi {
@@ -97,6 +108,10 @@ impl Default for DevUi {
             save_rack: None,
             racks_dirty: true,
             my_racks: Default::default(),
+            pick: Default::default(),
+            focus: false,
+            tree: false,
+            tabbed: false,
         }
     }
 }
@@ -264,7 +279,7 @@ impl App {
     /// the lower panel's Devices tab
     pub(super) fn devices_view(&mut self, ui: &mut egui::Ui) {
         self.devices_follow();
-        if !self.extra.chains_cards {
+        if self.dev.tree {
             self.chains_view(ui);
             return;
         }
@@ -276,36 +291,8 @@ impl App {
         }
         let idx = (self.instr as usize).wrapping_sub(1);
         let chain = self.with(|s| s.song.instruments.get(idx).map(|i| i.fx.clone()));
-        // ---- header (the how-to lives in the tooltip)
-        ui.horizontal(|ui| {
-            ui.add_space(6.0);
-            ui.label(egui::RichText::new("Devices").strong())
-                .on_hover_text(
-                    "drag effects in from Browser › Effects · drag a card's title to reorder · \
-                 right-click a card for more · … shows a device's other parameters",
-                );
-            if ui
-                .small_button("Tree")
-                .on_hover_text("back to Nested Device Chains' tree and detail view")
-                .clicked()
-            {
-                self.extra.chains_cards = false;
-                self.extra.chains_view_chosen = true;
-                self.save_settings();
-            }
-            let n_fx = chain.as_ref().map_or(0, |c| c.len());
-            ui.add(
-                egui::Label::new(
-                    egui::RichText::new(format!(
-                        "· {} · {n_fx} effect{}",
-                        self.devices_target_label(),
-                        if n_fx == 1 { "" } else { "s" }
-                    ))
-                    .color(t.ink2),
-                )
-                .truncate(),
-            );
-        });
+        // a rack's layer: the way back to its rack
+        self.rack_back_bar(ui, idx);
         let Some(chain) = chain else {
             self.dev.row = ui.max_rect();
             self.dev.inst = Rect::NOTHING;
@@ -323,7 +310,25 @@ impl App {
             });
             return;
         };
-        let h = (ui.available_height() - 4.0).max(120.0);
+        // the hint line under the row
+        let foot = 18.0;
+        let h = (ui.available_height() - 4.0 - foot).max(120.0);
+        let press = ui.input(|i| {
+            if i.pointer.any_pressed() {
+                i.pointer.press_origin()
+            } else {
+                None
+            }
+        });
+        let popup = egui::Popup::is_any_open(ui.ctx());
+        let builtin = self
+            .with(|s| {
+                s.song
+                    .instruments
+                    .get(idx)
+                    .map(|i| crate::theme::is_builtin(&i.kind))
+            })
+            .unwrap_or(false);
         let mut ops: Vec<FxOp> = vec![];
         let mut cards: Vec<Rect> = vec![];
         let mut inst_rect = Rect::NOTHING;
@@ -341,12 +346,20 @@ impl App {
                 })
                 .count();
             let slim = chain.iter().filter(|d| d.collapsed).count() + self.dev.inst_folded as usize;
-            let full = chain.len() + 1 - slim;
+            // the instrument card has its own width (its face's columns)
+            let iw = if self.dev.inst_folded {
+                0.0
+            } else {
+                super::rackview::inst_card_w(self, idx)
+            };
+            let full = chain.len() - chain.iter().filter(|d| d.collapsed).count();
             let fixed = 16.0
+                + iw
                 + plus_w(chain.is_empty())
                 + GAP * (chain.len() + 1) as f32
                 + SLIM * slim as f32
-                + MORE_W * open as f32;
+                + MORE_W * open as f32
+                + TAB_W * (chain.len() + 1) as f32;
             self.dev.card_w = if full == 0 {
                 CARD_W
             } else {
@@ -357,14 +370,25 @@ impl App {
         }
         egui::ScrollArea::horizontal()
             .id_salt("devices_row")
-            .auto_shrink([false, false])
+            .max_height(h + 4.0)
+            .auto_shrink([false, true])
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.add_space(4.0);
-                    inst_rect = self.devices_inst_card(ui, h, idx);
+                    self.dev.tabbed = true;
+                    let (tab, _) = ui.allocate_exact_size(egui::vec2(TAB_W, h), Sense::hover());
+                    let r = self.devices_inst_card(ui, h, idx);
+                    let folded = self.dev.inst_folded;
+                    if self.rack_tab(ui, tab, r, Pick::Inst, true, folded, builtin, idx, &mut ops)
+                        == Some(TabHit::Collapse)
+                    {
+                        self.dev.inst_folded = !folded;
+                    }
+                    inst_rect = tab.union(r);
                     chevron(ui, h);
                     for (i, d) in chain.iter().enumerate() {
+                        let (tab, _) = ui.allocate_exact_size(egui::vec2(TAB_W, h), Sense::hover());
                         let r = self.devices_card(
                             ui,
                             idx,
@@ -375,9 +399,27 @@ impl App {
                             chain.len(),
                             &mut ops,
                         );
-                        cards.push(r);
+                        let pick = Pick::Fx(i);
+                        match self.rack_tab(
+                            ui,
+                            tab,
+                            r,
+                            pick,
+                            d.enabled,
+                            d.collapsed,
+                            false,
+                            idx,
+                            &mut ops,
+                        ) {
+                            Some(TabHit::Power) => ops.push(FxOp::Toggle(i)),
+                            Some(TabHit::Remove) => ops.push(FxOp::Remove(i)),
+                            Some(TabHit::Collapse) => ops.push(FxOp::Collapse(i)),
+                            None => {}
+                        }
+                        cards.push(tab.union(r));
                         chevron(ui, h);
                     }
+                    self.dev.tabbed = false;
                     if plus_card(ui, h, chain.is_empty()) {
                         open_effects = true;
                     }
@@ -401,6 +443,38 @@ impl App {
             Pos2::new(ui.max_rect().left(), row_top),
             ui.max_rect().right_bottom(),
         );
+        let root = self.chains_root().unwrap_or(idx);
+        let flow = self.with(|s| super::chains::flow_text(&s.song, root));
+        ui.horizontal(|ui| {
+            ui.add_space(8.0);
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(
+                        "Click a card to select it · Delete removes it (Ctrl+Z undoes) · \
+                         Ctrl+D duplicates · 0 bypasses · drag a title to reorder · \
+                         drop from the Browser on +",
+                    )
+                    .size(11.0)
+                    .color(t.ink2),
+                )
+                .truncate(),
+            )
+            .on_hover_text(format!("Signal flow: {flow}"));
+        });
+        // the last panel clicked has the keys; a click picks a card
+        if let Some(p) = press.filter(|_| !popup) {
+            self.dev.focus = self.dev.row.contains(p);
+            if inst_rect.contains(p) {
+                self.dev.pick = Pick::Inst;
+            } else if let Some(k) = cards.iter().position(|r| r.contains(p)) {
+                self.dev.pick = Pick::Fx(k);
+            }
+        }
+        if let Pick::Fx(k) = self.dev.pick {
+            if k >= chain.len() {
+                self.dev.pick = chain.len().checked_sub(1).map_or(Pick::Inst, Pick::Fx);
+            }
+        }
         self.dev.inst = inst_rect;
         self.dev.cards = cards;
         if open_effects {
@@ -439,6 +513,8 @@ impl App {
         });
         let w = if self.dev.inst_folded {
             SLIM
+        } else if self.dev.tabbed {
+            super::rackview::inst_card_w(self, idx)
         } else {
             self.dev.card_w
         };
@@ -493,10 +569,12 @@ impl App {
                 skin.map_or(accent, |s| s.tint).gamma_multiply(0.22),
             );
         }
+        // a Rack card folds from its side tab
         let fold = Rect::from_center_size(
             Pos2::new(head.right() - 14.0, head.center().y),
             egui::vec2(18.0, 18.0),
-        );
+        )
+        .translate(egui::vec2(if self.dev.tabbed { 22.0 } else { 0.0 }, 0.0));
         let tag_g = p.layout_no_wrap(
             tag.to_string(),
             FontId::proportional(10.5),
@@ -553,17 +631,19 @@ impl App {
             nf,
             t.ink,
         );
-        let fr = ui
-            .interact(fold, id.with("fold"), Sense::click())
-            .on_hover_text("fold the instrument card");
-        chevron_icon(
-            &p,
-            fold.center(),
-            false,
-            if fr.hovered() { accent } else { t.ink2 },
-        );
-        if fr.clicked() {
-            self.dev.inst_folded = true;
+        if !self.dev.tabbed {
+            let fr = ui
+                .interact(fold, id.with("fold"), Sense::click())
+                .on_hover_text("fold the instrument card");
+            chevron_icon(
+                &p,
+                fold.center(),
+                false,
+                if fr.hovered() { accent } else { t.ink2 },
+            );
+            if fr.clicked() {
+                self.dev.inst_folded = true;
+            }
         }
         ui.interact(name_r, id.with("name"), Sense::hover())
             .on_hover_text(format!(
@@ -575,6 +655,10 @@ impl App {
             rect.max - egui::vec2(8.0, 6.0),
         );
         let foot_h = 22.0;
+        if self.dev.tabbed {
+            self.rack_inst_body(ui, &p, main, foot_h, idx, tag);
+            return rect;
+        }
         let gh = (main.height() - CELL.y - foot_h - 8.0).clamp(0.0, 240.0);
         let g = Rect::from_min_size(main.min, egui::vec2(main.width(), gh));
         if gh >= 24.0 {
@@ -691,6 +775,8 @@ impl App {
         }
         let id = ui.make_persistent_id(("dev_card", owner, i));
         let title = d.title();
+        // a Rack card: power, remove and the menu live on its side tab
+        let tabbed = self.dev.tabbed;
         let menu = |ui: &mut egui::Ui, ops: &mut Vec<FxOp>| {
             ui.label(egui::RichText::new(&title).strong());
             for (txt, op) in [
@@ -729,10 +815,15 @@ impl App {
                 Pos2::new(rect.center().x, rect.top() + 14.0),
                 egui::vec2(20.0, 20.0),
             );
-            if power(ui, &p, pw, id.with("pw"), d.enabled) {
+            if !tabbed && power(ui, &p, pw, id.with("pw"), d.enabled) {
                 ops.push(FxOp::Toggle(i));
             }
-            let body = Rect::from_min_max(Pos2::new(rect.left(), pw.bottom() + 4.0), rect.max);
+            let top = if tabbed {
+                rect.top() + 8.0
+            } else {
+                pw.bottom() + 4.0
+            };
+            let body = Rect::from_min_max(Pos2::new(rect.left(), top), rect.max);
             vertical_name(&p, body, &title.to_uppercase(), t.ink);
             let r = ui
                 .interact(body, id.with("open"), Sense::click_and_drag())
@@ -743,7 +834,11 @@ impl App {
             if r.drag_started() {
                 self.dev.drag = Some(i);
             }
-            r.context_menu(|ui| menu(ui, ops));
+            if tabbed {
+                r.context_menu(|ui| self.rack_menu(ui, owner, Pick::Fx(i), ops));
+            } else {
+                r.context_menu(|ui| menu(ui, ops));
+            }
             return rect;
         }
         // header: power · name (drag) · … · remove
@@ -770,7 +865,7 @@ impl App {
             Pos2::new(head.left() + 14.0, head.center().y),
             egui::vec2(20.0, 20.0),
         );
-        if power(ui, &p, pw, id.with("pw"), d.enabled) {
+        if !tabbed && power(ui, &p, pw, id.with("pw"), d.enabled) {
             ops.push(FxOp::Toggle(i));
         }
         let x_r = Rect::from_center_size(
@@ -781,10 +876,17 @@ impl App {
             Pos2::new(x_r.left() - 14.0, head.center().y),
             egui::vec2(22.0, 18.0),
         );
-        let name_r = Rect::from_min_max(
-            Pos2::new(pw.right() + 4.0, head.top()),
-            Pos2::new(more_r.left() - 2.0, head.bottom()),
-        );
+        let name_r = if tabbed {
+            Rect::from_min_max(
+                Pos2::new(head.left() + 10.0, head.top()),
+                Pos2::new(head.right() - 8.0, head.bottom()),
+            )
+        } else {
+            Rect::from_min_max(
+                Pos2::new(pw.right() + 4.0, head.top()),
+                Pos2::new(more_r.left() - 2.0, head.bottom()),
+            )
+        };
         let ink = if d.enabled { t.ink } else { t.ink2 };
         p.with_clip_rect(name_r).text(
             name_r.left_center(),
@@ -814,47 +916,52 @@ impl App {
         if nr.double_clicked() {
             ops.push(FxOp::Collapse(i));
         }
-        nr.context_menu(|ui| menu(ui, ops));
-        let mr = ui
-            .interact(more_r, id.with("more"), Sense::click())
-            .on_hover_text(if open {
-                "hide the other parameters"
-            } else {
-                "show the other parameters, presets and reset"
-            });
-        if open || mr.hovered() {
-            p.rect_filled(
-                more_r,
-                4,
-                t.ink.gamma_multiply(if open { 0.16 } else { 0.10 }),
-            );
+        if tabbed {
+            nr.context_menu(|ui| self.rack_menu(ui, owner, Pick::Fx(i), ops));
         }
-        p.text(
-            more_r.center(),
-            egui::Align2::CENTER_CENTER,
-            "…",
-            FontId::proportional(14.0),
-            if open || mr.hovered() { t.accent } else { ink },
-        );
-        if mr.clicked() {
-            let k = (owner, key);
-            if !self.dev.open.remove(&k) {
-                self.dev.open.insert(k);
+        if !tabbed {
+            nr.context_menu(|ui| menu(ui, ops));
+            let mr = ui
+                .interact(more_r, id.with("more"), Sense::click())
+                .on_hover_text(if open {
+                    "hide the other parameters"
+                } else {
+                    "show the other parameters, presets and reset"
+                });
+            if open || mr.hovered() {
+                p.rect_filled(
+                    more_r,
+                    4,
+                    t.ink.gamma_multiply(if open { 0.16 } else { 0.10 }),
+                );
             }
-        }
-        let xr = ui
-            .interact(x_r, id.with("x"), Sense::click())
-            .on_hover_text("remove (Ctrl+Z brings it back)");
-        let xc = if xr.hovered() { t.brick } else { ink };
-        let c = x_r.center();
-        for s in [-1.0, 1.0] {
-            p.line_segment(
-                [c + egui::vec2(-4.0, -4.0 * s), c + egui::vec2(4.0, 4.0 * s)],
-                Stroke::new(1.6, xc),
+            p.text(
+                more_r.center(),
+                egui::Align2::CENTER_CENTER,
+                "…",
+                FontId::proportional(14.0),
+                if open || mr.hovered() { t.accent } else { ink },
             );
-        }
-        if xr.clicked() {
-            ops.push(FxOp::Remove(i));
+            if mr.clicked() {
+                let k = (owner, key);
+                if !self.dev.open.remove(&k) {
+                    self.dev.open.insert(k);
+                }
+            }
+            let xr = ui
+                .interact(x_r, id.with("x"), Sense::click())
+                .on_hover_text("remove (Ctrl+Z brings it back)");
+            let xc = if xr.hovered() { t.brick } else { ink };
+            let c = x_r.center();
+            for s in [-1.0, 1.0] {
+                p.line_segment(
+                    [c + egui::vec2(-4.0, -4.0 * s), c + egui::vec2(4.0, 4.0 * s)],
+                    Stroke::new(1.6, xc),
+                );
+            }
+            if xr.clicked() {
+                ops.push(FxOp::Remove(i));
+            }
         }
         // the main column: graph, key knobs, a line about what's under "…"
         let main = Rect::from_min_max(
@@ -895,7 +1002,43 @@ impl App {
             },
         );
         let rest = devcards::more_params(d).len();
-        if !open && (rest > 0 || d.kind == FxKind::Plugin) {
+        if tabbed && (rest > 0 || d.kind == FxKind::Plugin) {
+            // the footer opens and closes the other parameters
+            let txt = if open {
+                "‹ fewer".to_string()
+            } else if d.kind == FxKind::Plugin {
+                "parameters ›".to_string()
+            } else {
+                format!("+{rest} more ›")
+            };
+            let fr = Rect::from_min_size(
+                Pos2::new(main.left(), main.bottom() - 15.0),
+                egui::vec2(90.0, 15.0),
+            );
+            let r = ui
+                .interact(fr, id.with("foot"), Sense::click())
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                .on_hover_text(if open {
+                    "hide the other parameters"
+                } else {
+                    "show every parameter, presets and reset"
+                });
+            // screen readers (and the tests) find it by its text
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &txt));
+            p.text(
+                fr.left_bottom(),
+                egui::Align2::LEFT_BOTTOM,
+                txt,
+                FontId::proportional(11.0),
+                if r.hovered() { t.accent } else { t.ink2 },
+            );
+            if r.clicked() {
+                let k = (owner, key);
+                if !self.dev.open.remove(&k) {
+                    self.dev.open.insert(k);
+                }
+            }
+        } else if !open && (rest > 0 || d.kind == FxKind::Plugin) {
             p.text(
                 Pos2::new(main.left(), main.bottom()),
                 egui::Align2::LEFT_BOTTOM,

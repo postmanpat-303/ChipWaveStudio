@@ -34,7 +34,7 @@ pub(super) fn chains_on(slot: u8) -> Harness<'static, App> {
     h.state_mut().instr = slot;
     h.state_mut().dev.follow_ch = h.state().ch;
     // these tests drive the tree (Cards is the default since 22 Oct 2026)
-    h.state_mut().extra.chains_cards = false;
+    h.state_mut().dev.tree = true;
     frames(&mut h, 3);
     h
 }
@@ -46,18 +46,25 @@ fn has(h: &Harness<'static, App>, label: &str) -> bool {
 }
 
 #[test]
-fn the_tab_is_called_nested_device_chains_and_ctrl_7_opens_it() {
-    let h = chains_on(7);
+fn the_chain_editor_is_a_detail_view_of_the_rack() {
+    let mut h = chains_on(7);
     assert!(h.state().devices_visible());
+    assert!(has(&h, "Rack"), "the Notes | Rack toggle");
+    assert!(!has(&h, "Nested Device Chains"), "the old name is gone");
     assert!(
-        crate::settings::Extra::default().chains_cards,
-        "Cards is the default (Del, 22 Oct 2026)"
+        !has(&h, "Cards") && !has(&h, "Fold tree"),
+        "no view toggles"
     );
-    assert!(has(&h, "Nested Device Chains"), "the lower panel's tab");
     assert!(
         h.query_by_label("Devices").is_none(),
         "no second device view"
     );
+    assert!(has(&h, "+ Add Device"));
+    let r = exact(&h, "‹ Back to Rack");
+    click_at(&mut h, r.center());
+    frames(&mut h, 3);
+    assert!(!h.state().dev.tree && !h.state().dev.vertical);
+    assert_eq!(h.state().dev.cards.len(), chain(&h, 7).len());
 }
 
 #[test]
@@ -178,47 +185,18 @@ fn clicking_rows_switches_the_detail_and_params_edit_in_one_undo_step() {
 }
 
 #[test]
-fn cards_keeps_the_old_row_and_tree_comes_back() {
-    let mut h = chains_on(7);
-    let r = exact(&h, "Cards");
-    click_at(&mut h, r.center());
-    frames(&mut h, 3);
-    assert!(h.state().extra.chains_cards);
-    assert_eq!(h.state().dev.cards.len(), chain(&h, 7).len());
-    assert!(!h.state().dev.vertical);
-    let r = exact(&h, "Tree");
-    click_at(&mut h, r.center());
-    frames(&mut h, 3);
-    assert!(!h.state().extra.chains_cards && h.state().dev.vertical);
-}
-
-#[test]
-fn fold_tree_and_the_timeline_keeps_three_rows_at_laptop_size() {
-    let mut h = chains_on(7);
-    let r = exact(&h, "Fold tree");
-    click_at(&mut h, r.center());
-    frames(&mut h, 2);
-    assert!(h.state().extra.chains_tree_folded);
-    assert!(has(&h, "Unfold tree"));
-    let w = h
-        .state()
-        .dev
-        .tree_rows
-        .first()
-        .map(|(r, _)| r.width())
-        .unwrap();
-    assert!(w <= chains::SLIM_TREE, "{w}");
+fn the_chain_editor_keeps_three_timeline_rows_at_laptop_size() {
     // 1366 x 768 on the Timeline: three track rows stay above the panel
     let mut h = super::unified_tests::tl_demo();
     h.state_mut().instr = 7;
-    h.state_mut().extra.chains_cards = false;
+    h.state_mut().dev.tree = true;
     h.state_mut().set_lower(4);
     super::unified_tests::laptop(&mut h);
     assert!(h.state().devices_visible() && h.state().view == View::Timeline);
     let rows = h.state().tlv.lanes.height() / h.state().tlv.track_h_pts();
     assert!(rows >= 2.95, "{rows}");
     assert!(has(&h, "Open full editor  Ctrl+I"), "the detail fits");
-    assert!(has(&h, "Fold tree"));
+    assert!(has(&h, "‹ Back to Rack"));
 }
 
 #[test]

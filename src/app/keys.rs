@@ -75,14 +75,19 @@ impl App {
             let roll_dup = self.pr_active()
                 && matches!(&ev, egui::Event::Key { key: Key::D, pressed: true, modifiers: m, .. }
                     if m.command && !m.shift && !m.alt);
-            if arr_visible && !roll_dup {
+            // the Rack (clicked into last) owns Delete, Ctrl+D and 0
+            let rack_owns = self.rack_focus()
+                && matches!(&ev, egui::Event::Key { key, pressed: true, modifiers: m, .. }
+                    if matches!(key, Key::Delete | Key::Backspace | Key::Num0)
+                        || (*key == Key::D && m.command));
+            if arr_visible && !roll_dup && !rack_owns {
                 if let Some(a) = input::arranger_shortcut(&ev, arr_focus) {
                     self.arranger_action(a, ctx);
                     continue;
                 }
             }
             // with the arranger focused, plain keys must not type notes into the pattern
-            if arr_focus {
+            if arr_focus && !rack_owns {
                 if let egui::Event::Key {
                     key, modifiers: m, ..
                 } = &ev
@@ -163,6 +168,10 @@ impl App {
                 && self.prompt.is_none()
             {
                 self.rec_toggle();
+                continue;
+            }
+            // the Rack has the keyboard (clicked into last)
+            if self.rack_key(key, m) {
                 continue;
             }
             // the piano roll has the keyboard (clicked into last)

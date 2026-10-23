@@ -456,16 +456,7 @@ fn the_tracker_tabs_are_hidden_by_default_and_the_tracker_stays_reachable() {
     ] {
         assert!(!has(&h, gone), "{gone} is hidden");
     }
-    for here in [
-        "TIMELINE",
-        "MIX",
-        "FX",
-        "SAMPLE",
-        "Piano roll",
-        "Nested Device Chains",
-        "Instrument",
-        "Play",
-    ] {
+    for here in ["TIMELINE", "MIX", "FX", "SAMPLE", "Notes", "Rack", "Play"] {
         assert!(has(&h, here), "{here} is shown");
     }
     assert_eq!(count(&h, "Play"), 1, "one transport (Play / Stop toggle)");
@@ -544,7 +535,7 @@ fn the_automation_tab_hides_with_the_tracker_and_the_piano_roll_stands_in() {
         !h.state().arr_focus,
         "the hidden Order list has no keyboard"
     );
-    assert!(has(&h, "Piano roll") && !has(&h, "Insert block"));
+    assert!(has(&h, "Notes") && !has(&h, "Insert block"));
     // asking for it (Ctrl+I back, the old tab number) lands on the piano roll
     h.state_mut().set_lower(1);
     h.state_mut().set_lower(2);

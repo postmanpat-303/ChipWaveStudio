@@ -175,7 +175,9 @@ impl Tab {
     /// one line about the category (the More menu, the tiles' tooltips)
     pub fn blurb(self) -> &'static str {
         match self {
-            Tab::Instruments => "ChipWave instruments, kits and your library",
+            Tab::Instruments => {
+                "ChipWave instruments and plugin instruments (presets: on the Rack card)"
+            }
             Tab::Effects => "built-in effects, Grid FX and effect plugins",
             Tab::Plugins => "your VST3 and CLAP instruments and effects",
             Tab::Samples => "WAV, FLAC, MP3 and Ogg in your folders",

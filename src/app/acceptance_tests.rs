@@ -57,14 +57,14 @@ fn acceptance_01_selecting_an_instrument_opens_nested_device_chains_under_the_ti
     frames(&mut h, 3);
     assert_eq!(h.state().view, View::Timeline, "no navigating away");
     assert!(h.state().extra.lower_dev && h.state().devices_visible());
-    // it opens on Cards, with the Tree one click away
+    // it opens on the Rack row; the chain editor is a detail view of it
     assert!(
-        h.state().extra.chains_cards && has(&h, "Tree"),
-        "the panel on Cards"
+        !h.state().dev.tree && has(&h, "Rack") && h.state().dev.inst.width() > 0.0,
+        "the panel on the Rack row"
     );
-    h.state_mut().extra.chains_cards = false;
+    h.state_mut().dev.tree = true;
     frames(&mut h, 2);
-    assert!(has(&h, "Fold tree"), "the panel with its tree");
+    assert!(has(&h, "‹ Back to Rack"), "the chain editor");
     assert_eq!(
         h.state().chains_root(),
         Some(6),

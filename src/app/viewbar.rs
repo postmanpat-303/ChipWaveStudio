@@ -42,7 +42,7 @@ pub(crate) const VTABS: [(VTab, &str, &str); 10] = [
     (
         VTab::Devices,
         "CHAINS",
-        "Nested Device Chains: the selected track's instrument, layers and effects in the lower panel (Ctrl+7)",
+        "Rack: the selected track's instrument, layers and effects in the lower panel (Ctrl+7)",
     ),
     (
         VTab::Inst,

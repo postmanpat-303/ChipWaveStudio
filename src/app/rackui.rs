@@ -495,7 +495,7 @@ impl App {
             ui.add_space(8.0);
             ui.label(
                 egui::RichText::new(
-                    "No racks yet. In Nested Device Chains, Save Custom Rack… keeps a rack (or any instrument) here with every setting.",
+                    "No racks yet. In the Rack, Save rack… keeps a rack (or any instrument) here with every setting.",
                 )
                 .color(t.ink2),
             );

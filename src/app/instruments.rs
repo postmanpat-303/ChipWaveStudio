@@ -303,7 +303,7 @@ impl App {
                             // in View › FX)
                             let tl_song = self.with(|s| s.song.timeline.is_some());
                             let (lab, tip) = if tl_song {
-                                ("Show effects (Nested Device Chains)", "this instrument's effect chain in the lower panel, under the timeline")
+                                ("Show effects (Rack)", "this instrument's effect chain in the lower panel, under the timeline")
                             } else {
                                 ("Open in FX view", "this instrument's effect chain in the FX view")
                             };
@@ -402,7 +402,7 @@ impl App {
                                 self.set_lower(4);
                                 ui.close();
                             }
-                            if ui.button("Save Custom Rack…").clicked() {
+                            if ui.button("Save rack…").clicked() {
                                 let idx = slot as usize - 1;
                                 let root = self.with(|s| s.song.rack_of(idx)).unwrap_or(idx);
                                 self.open_save_rack(root);

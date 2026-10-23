@@ -433,6 +433,11 @@ impl App {
             &self.extra.browser_favs,
             &self.extra.browser_ratings,
         );
+        // only the plain listing: a Location the user picked (This song,
+        // Library, Favourites, a folder) still shows everything in it
+        if self.br.filter.tab == br::Tab::Instruments && self.br.filter.loc == br::LocFilter::All {
+            instruments_only(&self.br.items, &mut self.br.results);
+        }
     }
 
     /// the selected item
@@ -1285,4 +1290,16 @@ impl App {
         }
         true
     }
+}
+
+/// Browser › Instruments lists the instruments themselves: the built-in ones
+/// and the plugin instruments. Their presets are on the Rack card (Preset ▾
+/// and ⋮ › Presets), so they don't crowd the list. Applied to Location
+/// "All" only.
+pub(crate) fn instruments_only(items: &[Item], res: &mut Vec<usize>) {
+    res.retain(|&i| match &items[i].src {
+        br::Src::Tool(_) => true,
+        br::Src::Plugin(f) => f.desc.is_instrument(),
+        _ => false,
+    });
 }

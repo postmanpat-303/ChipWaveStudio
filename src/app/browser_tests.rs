@@ -98,8 +98,19 @@ fn search_tags_and_filters_narrow_the_results() {
     h.state_mut().br.filter.tab = Tab::Instruments;
     frames(&mut h, 2);
     let all = h.state().br_result_items().len();
-    assert!(all > 20, "instruments: {all}");
+    assert!(all >= 10, "instruments: {all}");
+    // the rack layout: Instruments lists instruments, not their presets
+    assert!(h.state().br_result_items().iter().all(|i| matches!(
+        i.src,
+        crate::browser::Src::Tool(_) | crate::browser::Src::Plugin(_)
+    )));
     h.state_mut().br.filter.query = "808".into();
+    frames(&mut h, 2);
+    assert!(
+        h.state().br_result_items().is_empty(),
+        "808 Boom is a preset: it is on the Rack card, not in Instruments"
+    );
+    h.state_mut().br.filter.query = "fm".into();
     frames(&mut h, 2);
     let names: Vec<String> = h
         .state()
@@ -107,23 +118,9 @@ fn search_tags_and_filters_narrow_the_results() {
         .iter()
         .map(|i| i.name.clone())
         .collect();
-    assert!(
-        !names.is_empty()
-            && names
-                .iter()
-                .all(|n| n.to_lowercase().contains("808") || !n.is_empty())
-    );
+    assert!(names.contains(&"FM-4".to_string()), "{names:?}");
     assert!(names.len() < all);
     h.state_mut().br.filter.query.clear();
-    h.state_mut().br.filter.tags = vec!["Bass"];
-    frames(&mut h, 2);
-    let bass = h.state().br_result_items().len();
-    assert!(bass > 0 && bass < all);
-    assert!(h
-        .state()
-        .br_result_items()
-        .iter()
-        .all(|i| i.tags.contains(&"Bass")));
     // the song's own instruments: Location "This song"
     h.state_mut().br.filter.tags.clear();
     h.state_mut().br.filter.loc = crate::browser::LocFilter::Song;
@@ -144,11 +141,11 @@ fn double_click_loads_and_enter_loads_the_selection() {
     let mut h = tl_harness();
     let n0 = song(&mut h, |s| s.instruments.len());
     let ch0 = song(&mut h, |s| s.channels);
-    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "808 Boom");
+    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "FM-4");
     dbl(&mut h, p);
     assert_eq!(song(&mut h, |s| s.instruments.len()), n0 + 1);
     assert_eq!(h.state().instr as usize, n0 + 1);
-    assert_eq!(song(&mut h, |s| s.instruments[n0].name.clone()), "808 Boom");
+    assert_eq!(song(&mut h, |s| s.instruments[n0].name.clone()), "E-Piano");
     // double-click makes a new track playing it and opens the instrument panel
     assert_eq!(song(&mut h, |s| s.channels), ch0 + 1);
     assert!(h.state().extra.lower_inst && h.state().lower_visible());
@@ -161,12 +158,12 @@ fn double_click_loads_and_enter_loads_the_selection() {
     key(&mut h, Key::ArrowDown, egui::Modifiers::NONE);
     let sel = h.state().br_selected().expect("a selection").name;
     let ch1 = song(&mut h, |s| s.channels);
+    let ni = song(&mut h, |s| s.instruments.len());
     key(&mut h, Key::Enter, egui::Modifiers::NONE);
     frames(&mut h, 2);
-    assert_eq!(
-        song(&mut h, |s| s.instruments.last().unwrap().name.clone()),
-        sel
-    );
+    // a ChipWave instrument row loads its starting sound on a new track
+    assert!(!sel.is_empty());
+    assert_eq!(song(&mut h, |s| s.instruments.len()), ni + 1);
     assert_eq!(song(&mut h, |s| s.channels), ch1 + 1);
     // undo takes the load back
     ctrl(&mut h, Key::Z);
@@ -177,7 +174,7 @@ fn double_click_loads_and_enter_loads_the_selection() {
 #[test]
 fn favourites_and_ratings_are_saved_in_settings() {
     let mut h = tl_harness();
-    let (k, p) = find(&mut h, crate::browser::Tab::Instruments, "808 Boom");
+    let (k, p) = find(&mut h, crate::browser::Tab::Instruments, "FM-4");
     let r = h.state().br.row_rects[0].1;
     // the heart at the right end of the row
     super::ui_tests::click_at(&mut h, Pos2::new(r.right() - 12.0, p.y));
@@ -207,7 +204,7 @@ fn favourites_and_ratings_are_saved_in_settings() {
 fn preview_plays_through_the_current_track_and_stops() {
     let mut h = tl_harness();
     h.state_mut().ch = 2;
-    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "808 Boom");
+    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "FM-4");
     super::ui_tests::click_at(&mut h, p);
     frames(&mut h, 2);
     // auto-play is on by default
@@ -229,14 +226,14 @@ fn preview_plays_through_the_current_track_and_stops() {
 fn drop_on_a_track_header_assigns_the_instrument_with_undo() {
     let mut h = tl_harness();
     let before = song(&mut h, |s| s.clone());
-    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "808 Boom");
+    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "FM-4");
     let (head, _) = h.state().tlv.track_rects(1).expect("track 2 header");
     drag(&mut h, p, head.center());
     frames(&mut h, 2);
     let slot = song(&mut h, |s| s.instruments.len()) as u8;
     assert_eq!(
         song(&mut h, |s| s.instruments.last().unwrap().name.clone()),
-        "808 Boom"
+        "E-Piano"
     );
     // every note of track 2 now plays it
     let ok = song(&mut h, |s| {
@@ -277,13 +274,13 @@ fn drop_below_the_last_track_makes_a_named_track() {
     h.state_mut().set_channels(4);
     frames(&mut h, 3);
     let n0 = song(&mut h, |s| s.channels);
-    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "808 Boom");
+    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "FM-4");
     let y = h.state().tlv.tracks_bottom() + 30.0;
     let x = h.state().tlv.heads.center().x;
     drag(&mut h, p, Pos2::new(x, y));
     frames(&mut h, 2);
     assert_eq!(song(&mut h, |s| s.channels), n0 + 1);
-    assert_eq!(song(&mut h, |s| s.channel_names[n0].clone()), "808 Boom");
+    assert_eq!(song(&mut h, |s| s.channel_names[n0].clone()), "FM-4");
     let slot = song(&mut h, |s| s.instruments.len()) as u8;
     assert_eq!(
         song(&mut h, |s| s.timeline.as_ref().unwrap().tracks[n0].instr),
@@ -297,18 +294,24 @@ fn drop_below_the_last_track_makes_a_named_track() {
 }
 
 #[test]
-fn drop_on_an_instrument_slot_replaces_its_sound() {
+fn drop_on_an_instrument_slot_gives_the_track_the_new_instrument() {
     let mut h = tl_harness();
     // the Instruments list (the Clip Arranger takes its place on the Timeline)
     h.state_mut().extra.clip_arranger = false;
     frames(&mut h, 2);
-    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "808 Boom");
+    let n0 = song(&mut h, |s| s.instruments.len());
+    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "FM-4");
     let (slot, r) = h.state().br.slot_rects[2];
+    let old = song(&mut h, |s| s.instruments[slot as usize - 1].clone());
     drag(&mut h, p, r.center());
     frames(&mut h, 2);
+    // a ChipWave instrument is a fresh one for the selected track; the
+    // slot's own sound is left alone (Browser › Presets replaces in place)
+    assert_eq!(song(&mut h, |s| s.instruments.len()), n0 + 1);
+    assert_eq!(song(&mut h, |s| s.instruments[n0].name.clone()), "E-Piano");
     assert_eq!(
         song(&mut h, |s| s.instruments[slot as usize - 1].name.clone()),
-        "808 Boom"
+        old.name
     );
 }
 
@@ -378,10 +381,10 @@ fn add_track_with_instrument_opens_the_browser_and_makes_the_track() {
     frames(&mut h, 2);
     assert!(h.state().extra.browser_open);
     assert_eq!(h.state().br.filter.tab, crate::browser::Tab::Instruments);
-    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "808 Boom");
+    let (_, p) = find(&mut h, crate::browser::Tab::Instruments, "FM-4");
     dbl(&mut h, p);
     assert_eq!(song(&mut h, |s| s.channels), n0 + 1);
-    assert_eq!(song(&mut h, |s| s.channel_names[1].clone()), "808 Boom");
+    assert_eq!(song(&mut h, |s| s.channel_names[1].clone()), "FM-4");
 }
 
 #[test]

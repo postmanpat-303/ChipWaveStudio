@@ -1,25 +1,50 @@
-# Racks and Nested Device Chains
+# The Rack, the chain editor and racks
 
-ChipWave Studio 0.2.7.0 adds **Nested Device Chains**, a panel
-under the Timeline that shows an instrument, its layers and their effects as
-a tree. It also adds **racks**: one instrument made of up to four
-instruments that play together. You can save racks to **My Racks** and use
-them in any song.
+Since 0.2.9.0 a track's sound is shown in the **Rack**, one row under the
+Timeline: the instrument first, then its effects in order. The tree from
+0.2.7.0 (Nested Device Chains) is still there as the **chain editor**, for
+Splits, layer settings and moving a device into another chain. **Racks**
+are one instrument made of up to four instruments that play together. You
+can save racks to **My Racks** and use them in any song.
 
-## The panel
+## The Rack
 
-- Click a track or an instrument and Nested Device Chains opens under the
-  Timeline (**Ctrl+7**). Settings › *Follow the Timeline selection* can open
-  the Instrument tab instead.
-- The **tree** is on the left. **Fold tree** narrows it to names, and
-  **Cards** brings back the old row of device cards. The **detail** for the
-  selected row is on the right: the instrument card, a device's controls, a
-  Split's paths or a layer's settings.
+The lower panel has one switch, **Notes | Rack** (Ctrl+7 shows the Rack).
+With the Tracker on, **Order list** and **Automation** sit next to it, on the
+Notes side.
+
+- Click a track or an instrument and the **Rack** opens under the Timeline:
+  one row, the instrument first, then its effects in order, then a **+** drop
+  zone. A row wider than the panel scrolls sideways.
+- Every card has a **side tab**: ⏻ bypass, ✕ remove and ‹ collapse (a
+  collapsed card is a slim name strip). The instrument's tab only collapses;
+  it is swapped, not removed (right-click › **Replace instrument…**).
+  Right-click a card for the rest: Presets ›, Open advanced editor, Make
+  rack and Save rack… on the instrument; Duplicate, Move left / right,
+  Show all parameters and Open in the chain editor on an effect.
+- The instrument card shows a few chosen knobs and **Volume**; everything
+  else is behind **Advanced ›**, which opens the full Instrument editor. A
+  Drum Kit shows the selected pad's knobs and a pad picker. A rack shows its
+  layers in place, each with **Open ›** to edit that layer.
+- Click a card to select it (built-in instruments outline in violet, the rest
+  in the accent colour). **Delete** removes it, **Ctrl+D** duplicates it and
+  **0** bypasses it, but only while the Rack was the last thing you clicked:
+  click the Timeline and Delete deletes clips again. **Ctrl+Z** undoes.
+- Drag a title to reorder the cards. Drop an effect from the Browser on the
+  row (or the **+** zone) to put it there, or on a timeline track.
+- Presets are on the card (its preset field and right-click › **Presets ›**),
+  so **Browser › Instruments** lists the instruments themselves: the
+  ChipWave instruments and your plugin instruments.
+- **Save rack…** (right of the switch) keeps the whole row as a custom rack.
+- **Open in the chain editor** shows the instrument as a **tree** on the left
+  with the selected row's **detail** on the right (Splits, layer settings,
+  moving a device into another chain). **‹ Back to Rack** returns.
 - **+ Add Device** (in the header and on every chain) opens a searchable list
   of ChipWave effects, a Split and your plugin effects. The new device goes
   exactly where the title of the list says.
-- Drag rows to reorder them or to move a device into another chain. Hold
-  Ctrl while dropping to copy it instead. Right-click a row for Bypass,
+- In the chain editor, drag rows to reorder them or to move a device into
+  another chain. Hold Ctrl while dropping to copy it instead. Right-click a
+  row for Bypass,
   Duplicate, Remove and "Add device before / after".
 - Every change is one undo step (**Ctrl+Z** undoes it, **Ctrl+Y** redoes it).
 

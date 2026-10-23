@@ -23,8 +23,13 @@ the DSP never allocates in the audio thread: buffers are built once when a chain
 
 ## Devices tab (0.2.4.1)
 
+*Since 0.2.9.0 this row is the **Rack** (the lower panel's **Notes | Rack** switch, **Ctrl+7**), with
+side tabs, a selected card and curated instrument knobs: see [RACKS.md › The Rack](RACKS.md#the-rack).
+The rest of this section describes the 0.2.4.1 Devices tab; the effect cards' graphs and key knobs
+below still apply.*
+
 The lower panel's **Devices** tab (next to Piano roll; **DEVICES** in the view tab bar, **Ctrl+7**)
-shows the selected track's chain left to right, the way Del (postmanpat) picked from a reference
+showed the selected track's chain left to right, the way Del (postmanpat) picked from a reference
 screenshot: the **instrument card**, then a **card per device** and a **+** drop slot at the end
 (click it for Browser › Effects). Every card is **the same size**: as wide as fits the row
 (256 px, down to 196 px when the chain is long), so a typical chain fits on screen; past that the

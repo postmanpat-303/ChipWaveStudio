@@ -685,7 +685,7 @@ pub(crate) fn build(inst: &Instrument, idx: usize, kit_sel: usize) -> Layout {
         }
         InstrumentKind::Rack(r) => {
             b.card(Tab::Main, "Rack").note = format!(
-                "{} layer{} · add, remove and set them up in Nested Device Chains (Ctrl+7)",
+                "{} layer{} · add, remove and set them up in the Rack (Ctrl+7)",
                 r.layers.len(),
                 if r.layers.len() == 1 { "" } else { "s" }
             );

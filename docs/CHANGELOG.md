@@ -2,6 +2,36 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.9.0: the new Rack
+
+Released 2026-10-23. Highlights (details below):
+- **The Rack.** Click a track and the lower panel shows its sound as one sideways row: the instrument first, then its effects in order, then a **+** drop zone. It replaces the Nested Device Chains tree as the main view; the tree is still there as the **chain editor** (right-click an effect › *Open in the chain editor*, **‹ Back to Rack** returns).
+- **Side tabs on every card:** ⏻ bypass, ✕ remove and ‹ collapse to a slim name strip. The instrument's tab only collapses: you swap an instrument (right-click › *Replace instrument…*), you don't remove it.
+- **Select a device:** click a card and it is outlined (violet for ChipWave's own instruments, the theme colour for the rest). **Delete** removes it, **Ctrl+D** duplicates it and **0** bypasses it, all undoable with Ctrl+Z, and only while the Rack was the last thing you clicked, so Delete on the Timeline still deletes clips.
+- **Starter knobs:** each instrument card shows a few chosen knobs and Volume; **Advanced ›** opens the full instrument editor.
+- **Drum Kit pad picker:** a Drum Kit's card shows the selected pad's knobs and a picker to choose the pad.
+- **Racks in place:** a rack's layers show inside its card, each with **Open ›** to edit that layer.
+- **Drag and drop:** drag a card's title to reorder; drop an effect from the Browser on the row, on the **+** zone or on a Timeline track.
+- **Save rack…** next to the switch keeps the whole row as a custom rack in My Racks (also on the menus).
+- **Notes | Rack:** one switch in the lower panel replaces the Piano roll, Instrument and Devices tabs (Ctrl+7 shows the Rack). With the Tracker on, Order list and Automation sit on the Notes side.
+- **Browser › Instruments lists instruments only** (ChipWave's own and your plugin instruments). Presets are on the Rack card: its preset field and right-click › *Presets ›*.
+- **CI and test fixes:** the Windows (MSVC) check build links again, two security advisories in the update checker's TLS crates are fixed by newer versions, and two tests that could fail on a busy machine are steady now.
+- Songs save, play and render exactly as in 0.2.8.0 (checked against its renders); the song format is unchanged.
+
+### Known limits
+- Splits, layer settings and moving a device into another chain are edited in the chain editor, not on the Rack row.
+- The racks limits from 0.2.7.0 still apply: plugin instruments can't be layers, live MIDI and the note preview only play the first layer, and there are no plugin effects or automation inside a Split.
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
+
+### Details
+- **The Rack row** ([RACKS.md](RACKS.md)): a row wider than the panel scrolls sideways. Right-click the instrument card for Presets ›, Open advanced editor, Make rack and Save rack…; right-click an effect for Duplicate, Move left / right, Show all parameters and Open in the chain editor. The hint line under the row says what a click, Delete, Ctrl+D, 0, a drag and a drop do.
+- **Selection and keys:** the selected card keeps its outline while you work on it; the keys act on it only while the Rack has the focus. Every change is one undo step.
+- **Curated faces:** each built-in instrument picks its own starter knobs (for example Cutoff, Res, Env amt and Blend on WaveForge; Bright, Width, Attack and Release on a Synth), always with Volume.
+- **The chain editor** is the 0.2.7.0 tree with the selected row's detail beside it; its Cards and Fold tree buttons and the signal-flow text are gone (the text is now the Rack hint's tooltip).
+- **Labels:** menus, tooltips and the track pie say Rack instead of Nested Device Chains; the track pie's *Devices* opens the Rack.
+- **Browser:** the plain Instruments listing (Location *All*) shows instruments without their presets; a Location you pick (This song, Library, Favourites, a folder) still shows everything in it.
+- **CI:** the maths overrides for the Windows release build (mingw) are now only compiled for that build, so the MSVC check build no longer clashes with the C runtime (LNK2005); rustls-webpki 0.103.16 and webpki-roots 1.0.10 fix RUSTSEC-2026-0381 and RUSTSEC-2026-0382; the MIDI recording test allows for the real time between key down and key up, and the plugin test fixtures are installed one at a time across parallel tests.
+
 ## 0.2.8.0: StringWave, the violet look and pie-ring Add
 
 Released 2026-10-23. Highlights (details below):

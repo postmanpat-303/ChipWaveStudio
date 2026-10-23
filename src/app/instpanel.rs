@@ -862,7 +862,11 @@ impl App {
         }
     }
 
-    /// Arranger | Instrument | Automation, and Full-height pattern
+    /// the lower panel's bar (rack layout A, Del (postmanpat) 23 Oct 2026):
+    /// a Notes | Rack toggle, the Tracker's Order list and Automation on
+    /// the Notes side (only with the Tracker), what is shown, then Save
+    /// rack… and Full-height view. The full instrument editor has no tab:
+    /// Advanced › on the instrument card opens it, ‹ Rack goes back.
     fn lower_switch_bar(&mut self, ui: &mut egui::Ui) {
         let t = th();
         let r = ui.max_rect();
@@ -871,51 +875,57 @@ impl App {
         ui.horizontal_centered(|ui| {
             ui.add_space(4.0);
             let cur = self.lower_mode();
-            // Piano roll, Devices, Instrument, Automation, then the tracker's
-            // Order list
-            let tabs = [
-                (0u8, "Order list", "the song's blocks in order, over time"),
-                (
-                    1,
-                    "Instrument",
-                    "edit the selected instrument with knobs (Ctrl+I)",
-                ),
-                (
-                    2,
-                    "Automation",
-                    "the Order list with its song automation lanes (Tracker)",
-                ),
-                (
-                    3,
-                    "Piano roll",
-                    "the notes of the selected clip (or the current block column) as bars: draw, move, resize",
-                ),
-                (
-                    4,
-                    "Nested Device Chains",
-                    "the selected instrument, its layers and its effect chains, with the selected device's controls beside them (Ctrl+7)",
-                ),
-            ];
-            let tracker = self.lower_tracker_tabs();
-            for (m, name, tip) in [3, 4, 1, 2, 0].map(|k| tabs[k]) {
-                // the Order list and its Automation lanes belong to the
-                // Tracker (Settings › Show Tracker, or the Tracker view
-                // itself); the Timeline's automation is under each track
-                if (m == 0 || m == 2) && !tracker {
-                    continue;
-                }
-                if crate::ember::tab(ui, cur == m, name)
-                    .on_hover_text(tip)
+            if cur == 1
+                && ui
+                    .button("‹ Rack")
+                    .on_hover_text("back to the Rack (the instrument card and its effects)")
                     .clicked()
-                    && cur != m
-                {
-                    self.set_lower(m);
-                }
+            {
+                self.set_lower(4);
             }
-            if self.extra.lower_inst || self.extra.lower_dev || self.pr.open {
-                if let Some(txt) = self.lower_breadcrumb() {
-                    ui.add(egui::Label::new(egui::RichText::new(txt).small().color(t.ink2)).truncate())
-                        .on_hover_text("what the lower panel is editing: the track, its clip, and the instrument (the track's, when the track shows)");
+            let on = match cur {
+                4 | 1 => Some(1),
+                3 => Some(0),
+                _ => None,
+            };
+            match seg_toggle(
+                ui,
+                &[
+                    (
+                        "Notes",
+                        "the notes of the selected clip (or the current block column) as bars: draw, move, resize",
+                    ),
+                    (
+                        "Rack",
+                        "the selected track's instrument and its effects as a row of devices (Ctrl+7)",
+                    ),
+                ],
+                on,
+            ) {
+                Some(0) if cur != 3 => self.set_lower(3),
+                Some(1) if cur != 4 => self.set_lower(4),
+                _ => {}
+            }
+            // the Order list and its Automation lanes belong to the Tracker
+            // (Settings › Show Tracker, or the Tracker view itself); the
+            // Timeline's automation is under each track
+            if self.lower_tracker_tabs() {
+                ui.add_space(4.0);
+                for (m, name, tip) in [
+                    (0u8, "Order list", "the song's blocks in order, over time"),
+                    (
+                        2,
+                        "Automation",
+                        "the Order list with its song automation lanes (Tracker)",
+                    ),
+                ] {
+                    if crate::ember::tab(ui, cur == m, name)
+                        .on_hover_text(tip)
+                        .clicked()
+                        && cur != m
+                    {
+                        self.set_lower(m);
+                    }
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -927,9 +937,94 @@ impl App {
                 {
                     self.toggle_full_height();
                 }
+                if cur == 4 || cur == 1 {
+                    let root = self.chains_root();
+                    if ui
+                        .add_enabled(root.is_some(), egui::Button::new("Save rack…"))
+                        .on_hover_text(
+                            "the instrument (or rack) with its effects and every setting, into My Racks",
+                        )
+                        .clicked()
+                    {
+                        if let Some(root) = root {
+                            self.open_save_rack(root);
+                        }
+                    }
+                }
+                if cur == 1 || cur == 3 || cur == 4 {
+                    if let Some(txt) = self.lower_breadcrumb() {
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.add_space(6.0);
+                            ui.add(
+                                egui::Label::new(egui::RichText::new(txt).color(t.ink2))
+                                    .truncate(),
+                            )
+                            .on_hover_text("what the lower panel is editing: the track, its clip, and the instrument (the track's, when the track shows)");
+                        });
+                    }
+                }
             });
         });
     }
+}
+
+/// a two-way segmented toggle (Notes | Rack); the clicked index
+pub(super) fn seg_toggle(
+    ui: &mut egui::Ui,
+    items: &[(&str, &str)],
+    on: Option<usize>,
+) -> Option<usize> {
+    let t = th();
+    let f = egui::FontId::proportional(13.0);
+    let gs: Vec<_> = items
+        .iter()
+        .map(|(n, _)| ui.painter().layout_no_wrap((*n).into(), f.clone(), t.ink))
+        .collect();
+    let h = 22.0;
+    let w: f32 = gs.iter().map(|g| g.size().x + 22.0).sum();
+    let (r, _) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
+    let mut out = None;
+    let mut x = r.left();
+    let p = ui.painter().clone();
+    p.rect_filled(r, 11.0, t.ink2.gamma_multiply(0.10));
+    p.rect_stroke(
+        r,
+        11.0,
+        Stroke::new(1.0, t.border),
+        egui::StrokeKind::Inside,
+    );
+    for (i, g) in gs.into_iter().enumerate() {
+        let sw = g.size().x + 22.0;
+        let cell = Rect::from_min_size(Pos2::new(x, r.top()), egui::vec2(sw, h));
+        x += sw;
+        let resp = ui
+            .interact(
+                cell,
+                egui::Id::unique(("lower_seg", items[i].0)),
+                Sense::click(),
+            )
+            .on_hover_text(items[i].1);
+        let sel = on == Some(i);
+        let label = items[i].0.to_string();
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, sel, &label));
+        let col = if sel {
+            p.rect_filled(cell.shrink(2.0), 9.0, t.accent);
+            if t.light {
+                Color32::WHITE
+            } else {
+                Color32::from_rgb(24, 18, 12)
+            }
+        } else if resp.hovered() {
+            t.ink
+        } else {
+            t.ink2
+        };
+        p.galley(cell.center() - g.size() / 2.0, g, col);
+        if resp.clicked() {
+            out = Some(i);
+        }
+    }
+    out
 }
 
 impl App {

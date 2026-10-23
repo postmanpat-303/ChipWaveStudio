@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.9.0" date="2026-10-23">
+      <description><p>The new Rack: the instrument and then its effects in one sideways row under the Timeline, with side tabs for bypass, remove and collapse, a highlighted selected device, Delete and Ctrl+D with undo, a few chosen knobs per instrument with Advanced for the rest, a Drum Kit pad picker, racks shown in place and Save rack; a Notes | Rack switch in the lower panel; Browser Instruments lists instruments, with presets on the card; CI and test fixes.</p></description>
+    </release>
     <release version="0.2.8.0" date="2026-10-23">
       <description><p>StringWave, a new built-in string-ensemble instrument with presets; a violet look for ChipWave's own instruments; track pie Add rings (Drum pattern, instrument, kit); Drum Kit kits with starter grooves; piano roll ruler paste and play markers; CLAP plugin fixes; studio knobs, a steady panel height, Play / Stop toggle, metronome and count-in, Keys to Notes, a simpler Browser and visual fixes.</p></description>
     </release>

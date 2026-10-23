@@ -44,14 +44,34 @@
   <a href="https://github.com/postmanpat-303/BigWaveRadio"><b>BigWave Radio</b></a> (sister project)
 </p>
 
-**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **StringWave**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Stack sounds into **racks** with Nested Device Chains, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and for those who love the classic way there is an optional OctaMED-style **Tracker** view. Up to 32 tracks per song. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
+**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **StringWave**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Build each track's sound in the **Rack**, a row of the instrument and its effects under the Timeline, stack sounds into **racks**, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and for those who love the classic way there is an optional OctaMED-style **Tracker** view. Up to 32 tracks per song. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
 
 > **ChipWave Studio was called ChipWave Tracker until 0.2.3.19.** It was renamed in 0.2.4.0 to tell it apart from an unrelated iOS app called "ChipWave". Same app, same settings, same `.cwt` songs; the old GitHub links redirect here. Website: **[postmanpat-303.github.io/ChipWaveStudio](https://postmanpat-303.github.io/ChipWaveStudio/)**. Details: [docs/RENAME.md](docs/RENAME.md).
 
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.8.0: StringWave, the violet look and pie-ring Add
+## New in 0.2.9.0: the new Rack
+
+- **The Rack**: click a track and its sound shows under the Timeline as one sideways row, the instrument first and then its effects in order, with a **+** zone at the end. A wide row scrolls sideways.
+- **Side tabs on every card**: ⏻ bypass, ✕ remove and ‹ collapse. The instrument only collapses; right-click › *Replace instrument…* swaps it.
+- **Select a device** and it is highlighted (violet for ChipWave's own instruments). **Delete** removes it and **Ctrl+D** duplicates it, with Ctrl+Z to undo. Delete on the Timeline still deletes clips.
+- **Starter knobs**: each instrument card shows a few chosen knobs and Volume; **Advanced ›** opens the full editor. A **Drum Kit** card has a pad picker, and a **rack** shows its layers in place.
+- **Drag from the Browser** onto the row, its **+** zone or a Timeline track; drag a card's title to reorder. **Save rack…** keeps the whole row in My Racks.
+- **Notes | Rack**: one switch in the lower panel replaces the three old tabs (Ctrl+7 shows the Rack).
+- **Browser › Instruments shows instruments only**; their presets are on the Rack card.
+- **CI and test fixes** since 0.2.8.0.
+
+Every song saves, plays and renders exactly as in 0.2.8.0. Known limits and details in the [CHANGELOG](docs/CHANGELOG.md). The tree from 0.2.7.0 is still there as the **chain editor** for Splits and layer settings (right-click an effect › *Open in the chain editor*).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/rack-row.png" alt="The Rack under the Timeline in the Slate theme: the WaveForge Saw Lead card selected with its starter knobs and Advanced, then EQ, Compressor and Reverb cards, each with side tabs for bypass, remove and collapse"><br><b>The Rack</b>: the instrument and its effects in one row; the selected card is outlined, and the side tabs bypass, remove or collapse a card.</td>
+    <td width="50%"><img src="docs/screenshots/rack-row-dark.png" alt="The Rack in the Dark Circuit theme with the Browser's Effects list beside it, ready to drag an effect onto the row"><br><b>Drag from the Browser</b>: drop an effect on the row, its + zone or a Timeline track.</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.8.0: StringWave, the violet look and pie-ring Add</b></summary>
 
 - **StringWave**, a new built-in string-ensemble instrument: three layers, undertones (sub and drone), a filter with its own envelope, two LFOs, chorus, echo and a big reverb, with eight presets from *Velvet Ensemble* to *Slow Swell Orchestra*. The mod wheel, expression and sustain pedal work out of the box. Find it in **Track pie › Add › Instrument** or **Browser › ChipWave Instruments**.
 - **A violet look for ChipWave's own instruments**: every built-in instrument panel, its card in Nested Device Chains and its row in the Browser share one violet tint, so you can tell a ChipWave instrument from a plugin at a glance.
@@ -74,6 +94,8 @@ Songs that use StringWave need 0.2.8.0 to open; every other song plays exactly a
   </tr>
 </table>
 
+</details>
+
 <details><summary><b>New in 0.2.7.0: racks and Nested Device Chains</b></summary>
 
 
@@ -89,7 +111,7 @@ Known limits: plugin instruments can't be layers and plugin effects on a layer p
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/racks-panel.png" alt="Nested Device Chains under the Timeline: the Glass Keys rack with two layers, a Split with two paths and Rack effects, and the Split's paths with Level and Pan"><br><b>Nested Device Chains</b>: a rack's layers, a Split's parallel paths and the Rack effects as a tree under the Timeline, with the selected device's controls on the right.</td>
+    <td width="50%"><img src="docs/screenshots/racks-panel.png" alt="Nested Device Chains under the Timeline: the Glass Keys rack with two layers, a Split with two paths and Rack effects, and the Split's paths with Level and Pan"><br><b>Nested Device Chains</b> (0.2.7.0; since 0.2.9.0 this tree is the chain editor behind the Rack): a rack's layers, a Split's parallel paths and the Rack effects, with the selected device's controls on the right.</td>
     <td width="50%"><img src="docs/screenshots/racks-add-device.png" alt="The Add Device list: ChipWave effects, Split and plugin effects, with search"><br><b>+ Add Device</b>: a searchable list of ChipWave effects, a Split and your plugin effects; the device goes exactly where the list says.</td>
   </tr>
   <tr>
@@ -235,7 +257,7 @@ Known limits: the launcher holds note clips only, there's no recording into slot
 | 🎛️ **Effects column** | `01`/`02` slide, `08` note decay, `09` speed, `0C` volume, `0D` volume slide, `0F` tempo; Voice `30`–`37` (`33`/`34` stutter any instrument); filter and acid `38`–`3D` (cutoff, resonance, cutoff slides, 303 glide, accent); `3E` speak word; `3F`–`42` Voice Transform and chrome devices; `43xy` generator macros. Full table: [TRACKER.md](docs/TRACKER.md#5-effect-commands) |
 | 🔌 **Plugin instruments** | CLAP instruments such as Surge XT: crash-guarded scanner, browser, native editor (Windows), parameter list, 8 macros for `43xy` and automation, state saved in the song, offline render. VST3 instruments and effects are hosted the same way (0.2.4.1). [PLUGINS.md](docs/PLUGINS.md) |
 | 🎲 **Generators** | macro-knob instruments: Drum Synth and kits, Drum Kit (32 pads, step sequencer, groove generator), Chip FX (sfxr), Analog (Moog-style), FM-4, Noise, Wave, Grid, WaveForge (polyphonic, two oscillators with unison), StringWave (string ensemble); Dice, Mutate, locks, 16-roll history, Bake to sample; presets for each |
-| 🧩 **Racks & device chains** | Nested Device Chains under the Timeline (Ctrl+7): a tree of the instrument, its layers and effects; + Add Device, drag to reorder or move (Ctrl: copy), bypass; **Split** into 2–4 parallel paths; **racks** of up to 4 layers (level, pan, transpose, key range, own effects); Save Custom Rack and **Browser › My Racks** ([RACKS.md](docs/RACKS.md)) |
+| 🧩 **Rack & device chains** | the **Rack** under the Timeline (Ctrl+7): the instrument and its effects in one row with side tabs (bypass, remove, collapse), Delete / Ctrl+D on the selected card, starter knobs with Advanced ›, drag from the Browser; the **chain editor** tree for Splits and layers, + Add Device, drag to reorder or move (Ctrl: copy); **Split** into 2–4 parallel paths; **racks** of up to 4 layers (level, pan, transpose, key range, own effects); Save Custom Rack and **Browser › My Racks** ([RACKS.md](docs/RACKS.md)) |
 | 🗣️ **Voice** | synthetic vowels, babble, stutter, spoken words, Throat (vocal tract) mode and the Transform (metal, digital, sub) |
 | 🧱 **Master limiter** | lookahead true-peak limiter on the master and in every export (ceiling −1 dBTP by default, gain, release, bypass), with a loudness meter: momentary, short-term and integrated LUFS plus true peak, and a loudness-target hint |
 | 🔊 **Samples** | import WAV (button or drag and drop), sample view with loop points and preview, chop / slice into instruments or notes |
@@ -322,7 +344,7 @@ On Linux, build it from source (below).
 | `F9` / `F10` | mute / solo channel |
 | `Ctrl+T`, `Ctrl+3`…`5`, `Ctrl+Tab` | Timeline / Mixer / FX / Sample view (`Ctrl+1` / `Ctrl+2`: the Tracker / Order list, also View › Tracker) |
 | `Ctrl+6` | the default layout: Timeline on top, piano roll below (also View › Reset to default layout) |
-| `Ctrl+7` | Nested Device Chains in the lower panel: the selected track's instrument, layers and effects ([RACKS.md](docs/RACKS.md)) |
+| `Ctrl+7` | the Rack in the lower panel (Notes \| Rack): the selected track's instrument and effects in one row ([RACKS.md](docs/RACKS.md)) |
 | `Ctrl+8` | Clip Arranger on / off: scenes and slots left of the Timeline (also View › Clip Arranger; off shows the Instruments list there) |
 | `Ctrl+T` | Timeline view (tracks and clips; in timeline mode drag, loop, split, copy clips, [TIMELINE.md](docs/TIMELINE.md)) |
 | `Ctrl+Shift+F` | Fill to length |
@@ -385,7 +407,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 - [CLIP_ARRANGER.md](docs/CLIP_ARRANGER.md) — the Clip Arranger: scenes and slots left of the Timeline, launched on the next bar, and the Master panel
 - [INSPECTOR.md](docs/INSPECTOR.md) — the Inspector (I) and the view tab bar along the bottom
 - [BROWSER.md](docs/BROWSER.md) — the Browser (Ctrl+B): find and load instruments, plugins, samples, songs, presets, Grid patches and wavetables; drag them onto tracks; Find plugins
-- [RACKS.md](docs/RACKS.md) — Nested Device Chains, Split, racks with layers, Save Custom Rack and My Racks ([rack file format](docs/racks/FORMAT.md))
+- [RACKS.md](docs/RACKS.md) — the Rack, the chain editor, Split, racks with layers, Save Custom Rack and My Racks ([rack file format](docs/racks/FORMAT.md))
 - [DAW_TIMELINE_PLAN.md](docs/DAW_TIMELINE_PLAN.md) — the DAW timeline plan and milestones
 - [AUTO_ARRANGE.md](docs/AUTO_ARRANGE.md) — fill-to-length auto arrange and quick-start fun features
 - [EXPORT.md](docs/EXPORT.md) — WAV/MP3 export

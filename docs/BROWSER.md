@@ -22,8 +22,8 @@ From top to bottom:
 
    | Category | Shows |
    |---|---|
-   | **Instruments** | blank Synth and Voice, every generator preset (Drum Synth, kits, Chip FX, Analog, FM-4, Noise, Wave, Grid), your `.cwi` instrument library, `.cwi` files in your locations, and the open song's instruments (Location *This song*) |
-   | **Effects** | ChipWave's built-in effects (EQ, Delay, Reverb, Compressor, Filter …, each with a one-line description), the Grid FX patches and every effect plugin from the scan. The slim **Adds to: …** line under the search says which track / instrument a double-click adds to; when Nested Device Chains is hidden, clicking it opens it (also **Ctrl+7**), so you can drag an effect between two devices ([FX.md › Devices](FX.md#devices-tab-0241)) |
+   | **Instruments** | the instruments themselves: ChipWave's own instruments and your plugin instruments (since 0.2.9.0 their presets are on the Rack card: its preset field and right-click › *Presets ›*). A Location you pick (This song, Library, Favourites, a folder) still shows everything in it: your `.cwi` instrument library, `.cwi` files in your locations, and the open song's instruments (Location *This song*) |
+   | **Effects** | ChipWave's built-in effects (EQ, Delay, Reverb, Compressor, Filter …, each with a one-line description), the Grid FX patches and every effect plugin from the scan. The slim **Adds to: …** line under the search says which track / instrument a double-click adds to; when the Rack is hidden, clicking it opens it (also **Ctrl+7**), so you can drag an effect between two cards ([RACKS.md › The Rack](RACKS.md#the-rack)) |
    | **VST & CLAP** | CLAP and VST3 plugins from the plugin scan, instruments and effects (the subtitle says which). A plugin file that holds several instruments or programs is listed once, by its **main instrument** (the one named like the file, else the shortest instrument name); the row says *+N programs*. Searching finds the others, and **Show all programs** (shown on this category only when a file has extras) lists them all. Effect-only files are listed as before. **Find plugins…**, **Get showcase instruments…** and **Rescan plugins** are in **•••**. (Until this version the category was called *Plugins*.) |
    | **Samples** | WAV, FLAC, MP3 and Ogg files in your locations |
    | **Songs** | the demo songs, `.cwt` / `.cwt.toml` songs in your locations, and MOD / MED files (listed; import is planned) |
@@ -199,7 +199,7 @@ Drag a row out of the Browser. A ghost shows the item and what letting go there 
 | **Below the last track** (the empty area under the headers or lanes) | a **new track**, named after it, playing it | – | a new track with it as a sample instrument |
 | **An instrument slot** in the sidebar list | replaces that slot's sound (notes kept) | added to that slot's FX chain | replaces that slot's sound |
 | **The FX view** | – | added to the current instrument's chain | – |
-| **The Devices row** (lower panel) | replaces the track's instrument, **keeping its effects** | inserted where the marker shows (between two cards; on the instrument card = first) | replaces the track's instrument |
+| **The Rack row** (lower panel) | replaces the track's instrument, **keeping its effects** | inserted where the marker shows (between two cards; on the instrument card = first) | replaces the track's instrument |
 | **The Tracker** (or any other view) | a new instrument slot, made current, ready to type with | added to the current instrument's chain | a new sample instrument |
 
 The drop indicator on the timeline is an outlined header and a tinted row, or an **insertion line** under the last track with **"New track: <name>"**. A full song (32 tracks) says "All 32 tracks are used" instead.

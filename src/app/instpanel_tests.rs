@@ -329,7 +329,7 @@ fn switch_bar_keeps_arranger_and_automation_working() {
     for (name, inst, auto) in [
         ("Order list", false, false),
         ("Automation", false, true),
-        ("Instrument", true, false),
+        ("Rack", false, false),
     ] {
         let r = labelled_rect(&h, Role::Button, name).unwrap_or_else(|| panic!("{name}"));
         let c = r.center();
@@ -346,7 +346,9 @@ fn switch_bar_keeps_arranger_and_automation_working() {
         }
         frames(&mut h, 2);
         assert_eq!(h.state().extra.lower_inst, inst, "{name}");
-        if !inst {
+        if name == "Rack" {
+            assert!(h.state().devices_visible(), "the Rack row");
+        } else if !inst {
             assert_eq!(h.state().show_auto, auto, "{name}");
             assert!(h.state().arr_docked(), "{name}: the arranger is docked");
             assert!(has_label(&h, "Insert block"), "{name}: the arranger draws");
