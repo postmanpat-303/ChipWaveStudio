@@ -625,6 +625,12 @@ impl App {
                 self.extra.metronome = true;
                 self.play(0);
             }
+            // the LCD toolbar's Master popover open, playing
+            "record-lcd-master" => {
+                self.extra.metronome = true;
+                self.play(0);
+                self.lcd.master_open = true;
+            }
             "record-countin" => {
                 self.ch = 5;
                 self.extra.set_count_in_bars(1);
