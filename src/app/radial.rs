@@ -480,6 +480,76 @@ pub(crate) fn paint_ricon(p: &egui::Painter, ic: RIcon, c: Pos2, col: Color32) {
     }
 }
 
+// ------------------------------------------------------------ n-slot rings
+// A ring of `n` equal slots, slot 0 centred on angle `a0`, clockwise (the
+// track pie's Add rings, `trackring.rs`; the same geometry as its segments).
+
+/// the centre angle of slot `k` of `n`
+pub(crate) fn slot_angle(a0: f32, n: usize, k: usize) -> f32 {
+    a0 + k as f32 * TAU / n.max(1) as f32
+}
+
+/// the slot of `n` (slot 0 centred on `a0`) that angle `a` falls in
+pub(crate) fn slot_at(a0: f32, n: usize, a: f32) -> usize {
+    let n = n.max(1);
+    let step = TAU / n as f32;
+    let x = (a - a0 + step / 2.0).rem_euclid(TAU);
+    ((x / step) as usize).min(n - 1)
+}
+
+/// `p` moved in so a disc of radius `r` around it is inside `screen`
+/// (centred on an axis the screen is too small for)
+pub(crate) fn clamp_disc(p: Pos2, screen: Rect, r: f32) -> Pos2 {
+    let c = |v: f32, lo: f32, hi: f32| {
+        if hi < lo {
+            (lo + hi) / 2.0
+        } else {
+            v.clamp(lo, hi)
+        }
+    };
+    Pos2::new(
+        c(p.x, screen.left() + r, screen.right() - r),
+        c(p.y, screen.top() + r, screen.bottom() - r),
+    )
+}
+
+/// unit vectors along slot `k`'s arc (`gap` radians kept at each side,
+/// `steps` pieces): the outline / mesh of an annulus slot
+pub(crate) fn slot_arc(a0: f32, n: usize, k: usize, gap: f32, steps: usize) -> Vec<egui::Vec2> {
+    let step = TAU / n.max(1) as f32;
+    let c = slot_angle(a0, n, k);
+    let (s0, s1) = (c - step / 2.0 + gap, c + step / 2.0 - gap);
+    (0..=steps.max(1))
+        .map(|j| {
+            let a = s0 + (s1 - s0) * j as f32 / steps.max(1) as f32;
+            egui::vec2(a.cos(), a.sin())
+        })
+        .collect()
+}
+
+/// a filled annulus strip between radii `r0` and `r1` along `pts` (unit
+/// vectors, `slot_arc`), shaded from `fill_in` to `fill_out`
+pub(crate) fn strip_mesh(
+    c: Pos2,
+    pts: &[egui::Vec2],
+    r0: f32,
+    r1: f32,
+    fill_in: Color32,
+    fill_out: Color32,
+) -> egui::epaint::Mesh {
+    let mut mesh = egui::epaint::Mesh::default();
+    for v in pts {
+        mesh.colored_vertex(c + *v * r0, fill_in);
+        mesh.colored_vertex(c + *v * r1, fill_out);
+    }
+    for j in 0..(pts.len() as u32).saturating_sub(1) {
+        let a = 2 * j;
+        mesh.add_triangle(a, a + 1, a + 3);
+        mesh.add_triangle(a, a + 3, a + 2);
+    }
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -503,5 +573,37 @@ mod tests {
         r.hover = Some(1);
         // the middle child of item 1 sits on its centre line, in the outer ring
         assert_eq!(r.hit(Pos2::new(445.0, 300.0)), Some((1, Some(1))));
+    }
+
+    #[test]
+    fn n_slot_rings_round_trip_and_clamp() {
+        for n in [1usize, 7, 9, 13] {
+            let a0 = -1.1f32;
+            for k in 0..n {
+                let a = slot_angle(a0, n, k);
+                assert_eq!(slot_at(a0, n, a), k, "n {n} k {k}");
+                // just inside both edges
+                let half = TAU / n as f32 / 2.0;
+                assert_eq!(slot_at(a0, n, a - half + 0.01), k);
+                assert_eq!(slot_at(a0, n, a + half - 0.01), k);
+                assert_eq!(slot_at(a0, n, a + TAU * 3.0), k, "wraps");
+            }
+        }
+        let sc = Rect::from_min_size(Pos2::ZERO, egui::vec2(1366.0, 768.0));
+        let r = 274.0;
+        for p in [Pos2::new(5.0, 5.0), Pos2::new(1360.0, 760.0), Pos2::new(683.0, 384.0)] {
+            let q = clamp_disc(p, sc, r);
+            assert!(sc.shrink(r - 0.01).contains(q), "{p:?} -> {q:?}");
+        }
+        assert_eq!(clamp_disc(Pos2::new(683.0, 384.0), sc, r), Pos2::new(683.0, 384.0));
+        // too small: centred
+        let tiny = Rect::from_min_size(Pos2::ZERO, egui::vec2(300.0, 200.0));
+        assert_eq!(clamp_disc(Pos2::new(1.0, 1.0), tiny, r), Pos2::new(150.0, 100.0));
+        let pts = slot_arc(0.0, 4, 1, 0.01, 8);
+        assert_eq!(pts.len(), 9);
+        assert!((pts[4] - egui::vec2(0.0, 1.0)).length() < 1e-4, "slot 1 of 4 points down");
+        let m = strip_mesh(Pos2::ZERO, &pts, 10.0, 20.0, Color32::RED, Color32::BLUE);
+        assert_eq!(m.vertices.len(), 18);
+        assert_eq!(m.indices.len(), 8 * 6);
     }
 }
