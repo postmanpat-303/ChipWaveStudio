@@ -577,6 +577,10 @@ impl App {
 
     fn pr_audition(&mut self, key: u8, instr: u8, vel: f32) {
         let chu = self.pr_channel();
+        // an Empty track makes no sound until it gets an instrument
+        if instr == 0 && self.track_needs_instrument(chu) {
+            return;
+        }
         let ch = chu as u8;
         // a note's own instrument, else the track's (as typing plays it)
         let ins = if instr > 0 {
@@ -613,6 +617,9 @@ impl App {
     /// play several keys at once for `ms` (chords from the chord lane)
     pub(super) fn pr_audition_keys(&mut self, keys: &[u8], ms: u64) {
         let chu = self.pr_channel();
+        if self.track_needs_instrument(chu) {
+            return;
+        }
         let ch = chu as u8;
         let ins = self.track_instr(chu);
         if let Some(&k) = keys.first() {
@@ -997,55 +1004,88 @@ impl App {
     }
 
     /// move the selection by `dt` ticks and `dk` semitones (keys)
-    fn pr_nudge(&mut self, dt: Tick, dk: i32) {
-        let Some(t) = self.pr.target else { return };
-        let Some(mut src) = self.pr_read(t) else {
-            return;
+    /// Arrow keys: move the selection `dt` ticks and `dk` semitones as one
+    /// group (one undo step). If any note would leave the clip's start or
+    /// end (block columns) or the key range C-0..B-9, nothing moves.
+    /// Returns whether it moved.
+    pub(super) fn pr_nudge(&mut self, dt: Tick, dk: i32) -> bool {
+        let Some(t) = self.pr.target else {
+            return false;
         };
-        if self.pr.sel.is_empty() {
-            return;
+        let Some(mut src) = self.pr_read(t) else {
+            return false;
+        };
+        if self.pr.sel.is_empty() || (dt == 0 && dk == 0) {
+            return false;
         }
-        self.snapshot();
+        let keys_ok = |keys: &[u8]| keys.iter().all(|&k| (1..=120).contains(&(k as i32 + dk)));
         match (&mut src, t) {
             (Source::Block(p), Target::Block { col, .. }) => {
-                let rows = p.rows as i64;
-                let mut sel = self.pr.sel.clone();
-                // move in the direction of travel first, so notes don't collide
-                sel.sort_unstable();
-                if dt > 0 {
-                    sel.reverse();
+                let ns: Vec<_> = roll::col_notes(p, col)
+                    .into_iter()
+                    .filter(|n| self.pr.sel.contains(&n.row))
+                    .collect();
+                if ns.is_empty() {
+                    return false;
                 }
-                let mut out = vec![];
-                for r in sel {
-                    let Some(n) = roll::note_at(p, col, r).filter(|n| n.row == r) else {
-                        continue;
-                    };
-                    let to = (r as i64 + dt / ROW).clamp(0, rows - 1) as usize;
-                    let k = (n.key as i32 + dk).clamp(1, 120) as u8;
-                    roll::move_note(p, col, r, to, k);
-                    out.push(to);
+                let drow = dt / ROW;
+                let rows = p.rows.max(1) as i64;
+                let time_ok = ns
+                    .iter()
+                    .all(|n| (0..rows).contains(&(n.row as i64 + drow)));
+                if !time_ok || !keys_ok(&ns.iter().map(|n| n.key).collect::<Vec<_>>()) {
+                    self.status = Self::nudge_blocked(time_ok);
+                    return false;
                 }
-                self.pr.sel = out;
+                self.snapshot();
+                let rows: Vec<usize> = ns.iter().map(|n| n.row).collect();
+                self.pr.sel = roll::move_notes(p, col, &rows, drow, dk);
             }
             (Source::Notes(d), _) => {
-                let idx = self.pr.sel.clone();
-                roll::transpose(&mut d.notes, &idx, dk);
-                let min = idx
+                let ids: Vec<usize> = self
+                    .pr
+                    .sel
                     .iter()
-                    .filter_map(|&i| d.notes.get(i))
-                    .map(|n| n.start)
-                    .min()
-                    .unwrap_or(0);
-                let dt = dt.max(-min);
-                for &i in &idx {
-                    if let Some(n) = d.notes.get_mut(i) {
-                        n.start += dt;
-                    }
+                    .copied()
+                    .filter(|&i| i < d.notes.len())
+                    .collect();
+                if ids.is_empty() {
+                    return false;
+                }
+                let time_ok = ids.iter().all(|&i| d.notes[i].start + dt >= 0);
+                if !time_ok || !keys_ok(&ids.iter().map(|&i| d.notes[i].key).collect::<Vec<_>>()) {
+                    self.status = Self::nudge_blocked(time_ok);
+                    return false;
+                }
+                self.snapshot();
+                for &i in &ids {
+                    let n = &mut d.notes[i];
+                    n.start += dt;
+                    n.key = (n.key as i32 + dk) as u8;
                 }
             }
-            _ => {}
+            _ => return false,
         }
         self.pr_write(t, src);
+        true
+    }
+
+    fn nudge_blocked(time_ok: bool) -> String {
+        if time_ok {
+            "Not moved: a selected note would go outside the key range (C-0 to B-9)".into()
+        } else {
+            "Not moved: a selected note would go outside the clip".into()
+        }
+    }
+
+    /// the step for Left / Right: the snap grid. With snap off, plain
+    /// arrows nudge one tick (free timing) and Shift+arrows Auto's step
+    /// (the finest grid at least 12 px wide at this zoom)
+    fn pr_nudge_step(&self, shift: bool) -> Tick {
+        match self.pr.target {
+            Some(Target::Notes { .. }) if shift && self.pr.grid == 1 => smart_grid(self.pr.zoom),
+            _ => self.pr_grid(),
+        }
     }
 
     /// Q: quantise the selection (or every note) of a note clip to the grid
@@ -1392,16 +1432,25 @@ impl App {
 
     /// keys while the roll has focus; true = used
     pub(super) fn pr_key(&mut self, key: Key, m: egui::Modifiers) -> bool {
-        let grid = self.pr_grid();
+        let grid = self.pr_nudge_step(m.shift);
         match key {
             Key::Delete | Key::Backspace if self.pr.sel.is_empty() && self.cl.sel.is_some() => {
                 self.cl_delete_sel()
             }
             Key::Delete | Key::Backspace => self.pr_delete(),
-            Key::ArrowUp => self.pr_nudge(0, if m.shift { 12 } else { 1 }),
-            Key::ArrowDown => self.pr_nudge(0, if m.shift { -12 } else { -1 }),
-            Key::ArrowLeft if !m.command => self.pr_nudge(-grid, 0),
-            Key::ArrowRight if !m.command => self.pr_nudge(grid, 0),
+            // arrows (plain or Shift) move the selection a semitone / a
+            // grid step; Ctrl+Up/Down an octave (Ctrl+Left/Right stay the
+            // previous / next block)
+            Key::ArrowUp | Key::ArrowDown => {
+                let d = if m.command { 12 } else { 1 };
+                self.pr_nudge(0, if key == Key::ArrowUp { d } else { -d });
+            }
+            Key::ArrowLeft if !m.command => {
+                self.pr_nudge(-grid, 0);
+            }
+            Key::ArrowRight if !m.command => {
+                self.pr_nudge(grid, 0);
+            }
             Key::A if m.command => {
                 let Some(t) = self.pr.target else {
                     return false;
@@ -1677,7 +1726,7 @@ impl App {
                     if pr_btn(ui, "Chords", on, true, "show the chord lane above the notes").clicked() {
                         self.cl.hidden = on;
                     }
-                    if pr_btn(ui, "Generate", false, true, "Generate chord progression… (styles, key, length, colour)").clicked() {
+                    if pr_btn(ui, "Generate", false, true, "Generators: chord progression… (styles, key, length, colour; Melody is its second tab)").clicked() {
                         let at = self.cl.sel.and_then(|i| self.cl_marks(target).get(i).map(|m| m.start)).unwrap_or(0);
                         self.cl_open_gen_at(at);
                     }

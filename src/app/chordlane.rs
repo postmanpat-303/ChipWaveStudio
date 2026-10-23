@@ -48,6 +48,14 @@ pub(crate) struct GenDlg {
     /// written notes go on top of the clip's notes; off (the default):
     /// they replace the notes that start inside each chord's span
     pub(crate) on_top: bool,
+    /// the Generators panel's tab (`super::genpanel`)
+    pub(crate) tab: super::genpanel::GenTab,
+    /// the Chords tab was shown since the panel opened (Melody then
+    /// follows its progression rather than the clip's chord lane)
+    pub(crate) chords_seen: bool,
+    pub(crate) mel: super::genpanel::MelDlg,
+    /// the Bass tab
+    pub(crate) bass: super::genpanel::BassDlg,
 }
 
 /// a chord-note write waiting for an OK: it would delete more than
@@ -124,6 +132,10 @@ impl Default for GenDlg {
             voicing: Voicing::Full,
             octave: 4,
             on_top: false,
+            tab: Default::default(),
+            chords_seen: false,
+            mel: Default::default(),
+            bass: Default::default(),
         }
     }
 }
@@ -140,8 +152,8 @@ pub(crate) struct LaneUi {
     /// the chord edit window
     pub(crate) edit: Option<usize>,
     /// auditions queued: (seconds from `t0`, keys, seconds long)
-    preview: Vec<(f64, Vec<u8>, f64)>,
-    t0: Option<Instant>,
+    pub(crate) preview: Vec<(f64, Vec<u8>, f64)>,
+    pub(crate) t0: Option<Instant>,
     /// screen rect of the lane (tests)
     pub(crate) rect: Rect,
     /// the "Replace notes?" confirm
@@ -379,6 +391,21 @@ impl App {
         chords: &[ChordMark],
         what: String,
     ) {
+        let on_top = self.cl.gen.on_top;
+        self.cl_put_notes_ex(t, marks, notes, chords, what, on_top);
+    }
+
+    /// [`Self::cl_put_notes`] with the on-top choice given (the Melody
+    /// tab has its own)
+    pub(super) fn cl_put_notes_ex(
+        &mut self,
+        t: Target,
+        marks: Vec<ChordMark>,
+        notes: Vec<tl::Note>,
+        chords: &[ChordMark],
+        what: String,
+        on_top: bool,
+    ) {
         // new notes play the track's instrument (the header's)
         let instr = self.pr_track_instr(t);
         let notes: Vec<tl::Note> = notes
@@ -388,7 +415,7 @@ impl App {
                 ..n
             })
             .collect();
-        if self.cl.gen.on_top {
+        if on_top {
             let n = notes.len();
             self.cl_write_ex(t, marks, notes, None, true);
             self.status = format!("{what} · {n} note(s) added on top");
@@ -532,6 +559,12 @@ impl App {
                 )
             })
             .collect();
+        self.cl.t0 = Some(Instant::now());
+    }
+
+    /// queue auditions: (seconds from now, keys, seconds)
+    pub(super) fn cl_queue(&mut self, q: Vec<(f64, Vec<u8>, f64)>) {
+        self.cl.preview = q;
         self.cl.t0 = Some(Instant::now());
     }
 
@@ -1080,7 +1113,7 @@ impl App {
             }
         }
         self.cl_edit_window(ctx, t);
-        self.cl_gen_window(ctx, t);
+        self.gen_panel(ctx, t);
         self.cl_confirm_window(ctx);
     }
 
@@ -1134,6 +1167,7 @@ impl App {
         let key = self.song_key_or_c();
         let g = &mut self.cl.gen;
         g.open = true;
+        g.tab = super::genpanel::GenTab::Chords;
         g.opts.start_bar = (at / BAR) as u32;
         g.opts.root = key.root;
         g.opts.prog = None;
@@ -1292,336 +1326,6 @@ impl App {
         }
         if !open {
             self.cl.edit = None;
-        }
-    }
-
-    fn cl_gen_window(&mut self, ctx: &egui::Context, t: Target) {
-        if !self.cl.gen.open {
-            return;
-        }
-        let th = th();
-        let mut open = true;
-        let mut apply = false;
-        let mut cancel = false;
-        let mut preview = false;
-        let res = cg::generate(&self.cl.gen.opts);
-        // the style `res` was made in: a style button clicked below changes
-        // `opts.style` this frame, and `res.prog` indexes the old style's list
-        let res_style = self.cl.gen.opts.style.min(cg::STYLES.len() - 1);
-        let res_len = cg::STYLES[res_style]
-            .progs
-            .get(res.prog)
-            .map_or(0, |p| cg::parse_prog(p).len());
-        let track = match t {
-            Target::Notes { clip: Some(id), .. } => self
-                .tlv
-                .cache
-                .as_ref()
-                .and_then(|c| c.tl.clips.iter().find(|x| x.id == id))
-                .map(|c| c.track as usize),
-            _ => None,
-        };
-        let inst = self.with(|s| {
-            track
-                .and_then(|k| s.song.channel_names.get(k).cloned())
-                .filter(|n| !n.is_empty())
-                .or_else(|| track.map(|k| format!("track {}", k + 1)))
-                .unwrap_or_else(|| "the track".into())
-        });
-        // where Apply writes: the progression's span in this clip
-        let scope = {
-            let a = res.marks.iter().map(|m| m.start).min().unwrap_or(0);
-            let b = res.marks.iter().map(|m| m.end()).max().unwrap_or(a);
-            self.cl_scope(t, a, b)
-        };
-        egui::Window::new("Generate chord progression")
-            .id(egui::Id::unique("cl_gen_win"))
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .default_width(620.0)
-            .show(ctx, |ui| {
-                let g = &mut self.cl.gen;
-                ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
-                ui.label(egui::RichText::new("Style").color(th.ink2));
-                egui::Grid::new("cl_styles")
-                    .spacing(egui::vec2(6.0, 6.0))
-                    .show(ui, |ui| {
-                        for (i, s) in cg::STYLES.iter().enumerate() {
-                            let on = g.opts.style == i;
-                            if ui
-                                .add_sized([112.0, 24.0], egui::Button::new(s.name).selected(on))
-                                .on_hover_text(s.desc)
-                                .clicked()
-                            {
-                                g.opts.style = i;
-                                g.opts.prog = None;
-                            }
-                            if i % 5 == 4 {
-                                ui.end_row();
-                            }
-                        }
-                    });
-                ui.label(
-                    egui::RichText::new(cg::STYLES[g.opts.style].desc)
-                        .italics()
-                        .color(th.ink2),
-                );
-                ui.add_space(2.0);
-                ui.label(egui::RichText::new("Key").color(th.ink2));
-                ui.horizontal(|ui| {
-                    let k = Key::new(
-                        0,
-                        if g.opts.mode == Mode::Major {
-                            Scale::Major
-                        } else {
-                            Scale::Minor
-                        },
-                    );
-                    for r in 0..12u8 {
-                        let name = match r {
-                            1 => "C#",
-                            3 => "Eb",
-                            6 => "F#",
-                            8 => "Ab",
-                            10 => "Bb",
-                            _ => k.note_name(r),
-                        };
-                        if ui
-                            .add_sized(
-                                [30.0, 22.0],
-                                egui::Button::new(name).selected(g.opts.root == r),
-                            )
-                            .clicked()
-                        {
-                            g.opts.root = r;
-                        }
-                    }
-                    ui.add_space(12.0);
-                    for (m, l) in [
-                        (Mode::Any, "Any"),
-                        (Mode::Major, "Major"),
-                        (Mode::Minor, "Minor"),
-                    ] {
-                        if ui
-                            .add_sized(
-                                [50.0, 22.0],
-                                egui::Button::new(l).selected(g.opts.mode == m),
-                            )
-                            .clicked()
-                        {
-                            g.opts.mode = m;
-                            g.opts.prog = None;
-                        }
-                    }
-                });
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Length").color(th.ink2));
-                    for b in [4u32, 8, 16, 32] {
-                        if ui
-                            .add_sized(
-                                [30.0, 22.0],
-                                egui::Button::new(b.to_string()).selected(g.opts.bars == b),
-                            )
-                            .on_hover_text(format!("{b} bars"))
-                            .clicked()
-                        {
-                            g.opts.bars = b;
-                        }
-                    }
-                    ui.add_space(14.0);
-                    ui.label(egui::RichText::new("Chord speed").color(th.ink2));
-                    for (s, l) in [(-1i8, "Slower"), (0, "Style"), (1, "Faster")] {
-                        if ui
-                            .add_sized(
-                                [54.0, 22.0],
-                                egui::Button::new(l).selected(g.opts.speed == s),
-                            )
-                            .clicked()
-                        {
-                            g.opts.speed = s;
-                        }
-                    }
-                    ui.add_space(14.0);
-                    ui.label(egui::RichText::new("Starts at bar").color(th.ink2));
-                    ui.label(egui::RichText::new((g.opts.start_bar + 1).to_string()).strong());
-                    if ui.small_button(" - ").clicked() {
-                        g.opts.start_bar = g.opts.start_bar.saturating_sub(1);
-                    }
-                    if ui.small_button(" + ").clicked() {
-                        g.opts.start_bar += 1;
-                    }
-                });
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().slider_width = 200.0;
-                    let mut c = g.opts.colour * 100.0;
-                    ui.add(
-                        egui::Slider::new(&mut c, 0.0..=100.0)
-                            .trailing_fill(true)
-                            .fixed_decimals(0)
-                            .suffix("%")
-                            .text("Colour"),
-                    )
-                    .on_hover_text("7ths, 9ths and suspensions");
-                    g.opts.colour = c / 100.0;
-                    ui.add_space(10.0);
-                    let mut v = g.opts.variation * 100.0;
-                    ui.add(
-                        egui::Slider::new(&mut v, 0.0..=100.0)
-                            .trailing_fill(true)
-                            .fixed_decimals(0)
-                            .suffix("%")
-                            .text("Variation"),
-                    )
-                    .on_hover_text("swap in related chords (relative, sus, 7ths)");
-                    g.opts.variation = v / 100.0;
-                });
-                ui.checkbox(&mut g.opts.walking_bass, "Walking bass (inversions)")
-                    .on_hover_text("slash chords: the bass moves to the nearest chord tone");
-                ui.separator();
-                // the result
-                let key = res.key;
-                let kname = format!(
-                    "{} {}",
-                    key.note_name(key.root),
-                    if key.scale == Scale::Minor {
-                        "minor"
-                    } else {
-                        "major"
-                    }
-                );
-                let mut seen = vec![];
-                let nums: Vec<String> = res
-                    .marks
-                    .iter()
-                    .filter_map(|m| {
-                        let n = m.numeral(key);
-                        (seen.len() < 16 && seen.len() < res_len).then(|| {
-                            seen.push(n.clone());
-                            n
-                        })
-                    })
-                    .collect();
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(kname).strong());
-                    ui.label(egui::RichText::new(nums.join(" - ")).color(th.ink2));
-                });
-                let (sr, _) = ui.allocate_exact_size(
-                    egui::vec2(ui.available_width().max(560.0), 46.0),
-                    Sense::hover(),
-                );
-                let total = res.marks.iter().map(|m| m.end()).max().unwrap_or(1)
-                    - res.marks.first().map_or(0, |m| m.start);
-                let t0 = res.marks.first().map_or(0, |m| m.start);
-                let p = ui.painter_at(sr);
-                for m in &res.marks {
-                    let x0 = sr.left() + sr.width() * ((m.start - t0) as f32 / total.max(1) as f32);
-                    let x1 = sr.left() + sr.width() * ((m.end() - t0) as f32 / total.max(1) as f32);
-                    let r = Rect::from_min_max(
-                        Pos2::new(x0 + 1.0, sr.top()),
-                        Pos2::new(x1 - 1.0, sr.bottom()),
-                    );
-                    p.rect_filled(r, 3.0, mark_colour(key, m));
-                    if r.width() > 20.0 {
-                        p.text(
-                            r.left_top() + egui::vec2(5.0, 5.0),
-                            egui::Align2::LEFT_TOP,
-                            m.name(key),
-                            FontId::proportional(12.0),
-                            Color32::WHITE,
-                        );
-                        p.text(
-                            r.left_bottom() + egui::vec2(5.0, -5.0),
-                            egui::Align2::LEFT_BOTTOM,
-                            m.numeral(key),
-                            FontId::proportional(10.0),
-                            Color32::from_white_alpha(180),
-                        );
-                    }
-                }
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    if ui
-                        .add_sized([96.0, 26.0], egui::Button::new("Another one"))
-                        .on_hover_text("roll a new progression in this style")
-                        .clicked()
-                    {
-                        g.opts.seed = g.opts.seed.wrapping_add(1);
-                        g.opts.prog = None;
-                    }
-                    if ui
-                        .add_sized([80.0, 26.0], egui::Button::new("Preview"))
-                        .on_hover_text("hear it on the track's instrument")
-                        .clicked()
-                    {
-                        preview = true;
-                    }
-                    ui.add_space(10.0);
-                    ui.checkbox(&mut g.write, format!("Also write the notes on {inst}"));
-                    egui::ComboBox::from_id_salt("cl_voicing")
-                        .width(84.0)
-                        .selected_text(g.voicing.name())
-                        .show_ui(ui, |ui| {
-                            for v in Voicing::ALL {
-                                ui.selectable_value(&mut g.voicing, v, v.name());
-                            }
-                        });
-                    ui.label("Octave");
-                    ui.add(egui::DragValue::new(&mut g.octave).range(1..=7));
-                });
-                // the target and what Apply does to the notes already there
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(egui::RichText::new("Target:").color(th.ink2));
-                    ui.label(egui::RichText::new(&scope).strong());
-                    let what = if !g.write {
-                        "chord markers only (notes untouched)"
-                    } else if g.on_top {
-                        "notes added on top of the clip's notes"
-                    } else {
-                        "replaces the notes inside each chord's span only"
-                    };
-                    ui.label(egui::RichText::new(format!("· {what}")).color(th.ink2));
-                });
-                ui.add_enabled_ui(g.write, |ui| {
-                    ui.checkbox(&mut g.on_top, "Add on top (keep the notes already there)")
-                        .on_hover_text(
-                            "off: the chord notes replace the notes that start inside each \
-                             chord's span (asks first if that deletes more than 8 notes or \
-                             notes outside the chords' range)",
-                        );
-                });
-                ui.add_space(4.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .add_sized(
-                            [80.0, 26.0],
-                            egui::Button::new(egui::RichText::new("Apply").strong()).fill(th.sel),
-                        )
-                        .clicked()
-                    {
-                        apply = true;
-                    }
-                    if ui
-                        .add_sized([80.0, 26.0], egui::Button::new("Cancel"))
-                        .clicked()
-                    {
-                        cancel = true;
-                    }
-                });
-            });
-        if preview {
-            self.cl_play_seq(&res.marks);
-        }
-        if apply {
-            let (w, v, o) = (self.cl.gen.write, self.cl.gen.voicing, self.cl.gen.octave);
-            if self.with(|s| s.song.info.key.is_none()) {
-                self.with(|s| s.song.info.key = Some(res.key));
-            }
-            self.cl_insert(t, res.marks, w, v, o);
-            self.cl.gen.open = false;
-        }
-        if cancel || !open {
-            self.cl.gen.open = false;
         }
     }
 }

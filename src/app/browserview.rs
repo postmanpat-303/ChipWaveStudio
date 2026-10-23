@@ -192,7 +192,7 @@ pub(crate) fn plugin_instrument(f: &crate::plugin::scan::Found) -> Instrument {
 }
 
 /// instrument-like: loads as an instrument (not songs, effects, MIDI)
-fn is_instrumentish(it: &Item) -> bool {
+pub(super) fn is_instrumentish(it: &Item) -> bool {
     match &it.src {
         Src::Plugin(f) => f.desc.is_instrument(),
         Src::GridFx(_) | Src::Demo(_) | Src::Pattern(_) => false,
@@ -588,7 +588,8 @@ impl App {
                     self.undo_hold -= 1;
                     return;
                 }
-                at
+                // where it actually landed (`at` may be past the last track)
+                self.ch
             }
             Act::Track(tr) => tr,
             _ => {
@@ -598,6 +599,8 @@ impl App {
         };
         let n = self.with(|s| crate::chanops::assign_track_instrument(&mut s.song, tr, slot));
         self.undo_hold -= 1;
+        // the track is lit (not a stale Song / Master) and plays it
+        self.tl_select_track(tr, false);
         self.instr = slot;
         self.ch = tr;
         self.dirty = true;
@@ -1093,6 +1096,17 @@ impl App {
             .drag
             .as_ref()
             .map(|i| (i.is_effect(), is_instrumentish(i)));
+        // an Empty track's empty Rack: an instrument becomes the track's
+        // (a new slot; never replaces the last-selected instrument)
+        if let Some((effect, inst)) = kind.filter(|_| {
+            self.view == View::Timeline
+                && self.lower_visible()
+                && (self.extra.lower_dev || self.extra.lower_inst)
+                && self.dev.row.contains(p)
+                && self.chooser_wanted()
+        }) {
+            return (inst && !effect).then_some(DropAt::Track(self.ch, None));
+        }
         if let Some((effect, inst)) = kind
             .filter(|k| k.0 || k.1)
             .filter(|_| self.devices_visible() && self.dev.row.contains(p) && self.instr > 0)

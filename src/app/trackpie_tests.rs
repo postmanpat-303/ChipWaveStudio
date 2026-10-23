@@ -494,3 +494,52 @@ fn the_tracker_header_opens_it_too_and_shows_the_icon() {
     assert!(h.state().pie_open());
     assert_eq!(h.state().pie.as_ref().unwrap().track, 1);
 }
+
+/// right-click on the empty space under the last track (in the list and in
+/// the lanes) opens the Add pie: its rings only, a new track at the end;
+/// right-click on a track header still opens THAT track's pie
+#[test]
+fn right_click_the_empty_area_opens_the_add_pie() {
+    let mut h = harness_tl();
+    // the Timeline full height: room under the demo's tracks
+    h.state_mut().extra.full_height = true;
+    h.state_mut().pr.open = false;
+    frames(&mut h, 3);
+    let (heads, lanes, lay, sy) = {
+        let a = h.state();
+        (
+            a.tlv.heads,
+            a.tlv.lanes,
+            a.tlv.layout.clone(),
+            a.tlv.scroll_y,
+        )
+    };
+    assert!(lay.docked, "Song / Master docked at the bottom");
+    let m = lay.master.unwrap();
+    assert!(
+        lay.top[m] - lay.body_end > 60.0,
+        "a free gap above the dock"
+    );
+    // well below "+ Add track", above the dock
+    let y = heads.top() + (lay.body_end + lay.top[m]) / 2.0 + 15.0 - sy;
+    for p in [
+        Pos2::new(heads.left() + 140.0, y),
+        Pos2::new(lanes.left() + 200.0, y),
+    ] {
+        press(&mut h, p, egui::PointerButton::Secondary, true);
+        press(&mut h, p, egui::PointerButton::Secondary, false);
+        frames(&mut h, 2);
+        let pie = h.state().pie.as_ref().map(|p| (p.empty, p.ring.is_some()));
+        assert_eq!(pie, Some((true, true)), "the Add pie at {p:?}");
+        assert_eq!(h.state().ring_now().unwrap().3[0].label, "Instrument track");
+        h.state_mut().pie = None;
+        frames(&mut h, 2);
+    }
+    // a header: the track's own pie
+    let head = Pos2::new(heads.left() + 60.0, heads.top() + lay.top[0] + 10.0 - sy);
+    press(&mut h, head, egui::PointerButton::Secondary, true);
+    press(&mut h, head, egui::PointerButton::Secondary, false);
+    frames(&mut h, 2);
+    let pie = h.state().pie.as_ref().map(|p| (p.empty, p.track));
+    assert_eq!(pie, Some((false, 0)), "the track pie");
+}

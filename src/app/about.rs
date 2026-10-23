@@ -292,7 +292,7 @@ impl App {
                     );
                     ui.add_space(2.0);
                     ui.label(
-                        egui::RichText::new(format!("v{}", crate::VERSION))
+                        egui::RichText::new(format!("v{}", crate::version_label()))
                             .size(13.0)
                             .color(muted()),
                     )
@@ -397,7 +397,7 @@ impl App {
                     ui.label(egui::RichText::new(k).size(13.0).color(muted()));
                 };
                 key(ui, "Version");
-                ui.label(egui::RichText::new(crate::VERSION).size(13.0));
+                ui.label(egui::RichText::new(crate::version_label()).size(13.0));
                 ui.end_row();
                 key(ui, "Licence");
                 link(

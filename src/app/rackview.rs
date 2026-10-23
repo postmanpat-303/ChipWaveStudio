@@ -139,6 +139,18 @@ impl App {
         let cx = tab.center().x;
         let mut y = tab.top() + 14.0;
         let mut hit = None;
+        // the tab itself (under its buttons): a double-click expands or
+        // collapses the card (Del (postmanpat) 23 Oct 2026)
+        let bg = ui
+            .interact(tab, id.with("tab"), Sense::click())
+            .on_hover_text(if collapsed {
+                "Double-click to expand"
+            } else {
+                "Double-click to collapse to a strip"
+            });
+        if bg.double_clicked() {
+            hit = Some(TabHit::Collapse);
+        }
         let button = |p: &egui::Painter, y: f32, key: &str, tip: &str| {
             let r = Rect::from_center_size(Pos2::new(cx, y), egui::vec2(20.0, 22.0));
             let resp = ui

@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 105] = [
+pub const VIEWS: [&str; 120] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -104,6 +104,18 @@ pub const VIEWS: [&str; 105] = [
     "trackpie-addring-3",
     "trackpie-addring-instr",
     "trackauto",
+    "tracks-dock",
+    "tracks-addpie",
+    "tracks-addpie-kits",
+    "tracks-addpie-instr",
+    "tracks-trackpie",
+    "tracks-trackpie-kits",
+    "tracks-trackpie-melodic",
+    "tracks-trackpie-sounds",
+    "tracks-trackpie-empty",
+    "tracks-arranger-off",
+    "classic-arranger-off",
+    "classic-arranger-off-master",
     "split-preview",
     "cliparranger",
     "cliparranger-drag",
@@ -125,6 +137,7 @@ pub const VIEWS: [&str; 105] = [
     "record-playing",
     "record-metro-menu",
     "record-countin",
+    "record-lcd-master",
     "record-master",
     "racks-panel",
     "racks-add-device",
@@ -142,6 +155,8 @@ pub const VIEWS: [&str; 105] = [
     "stringwave-pie",
     "stringwave-panelpie",
     "metronome-mockup",
+    "rack-compact",
+    "rack-empty",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -436,6 +451,18 @@ impl App {
                             .insert((6, super::devcards::open_key(&chain, n)));
                     }
                 }
+                // CHIPWAVE_SHOT_COLLAPSE=N: device N folded to a strip (what
+                // a double-click on its side tab does)
+                if let Some(n) = std::env::var("CHIPWAVE_SHOT_COLLAPSE")
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                {
+                    self.with(|s| {
+                        if let Some(d) = s.song.instruments[ii].fx.get_mut(n) {
+                            d.collapsed = true;
+                        }
+                    });
+                }
                 self.set_lower(4);
                 self.extra.lower_h = 430.0;
                 self.dev.inst_folded = std::env::var_os("CHIPWAVE_SHOT_FOLD").is_some();
@@ -596,6 +623,61 @@ impl App {
                 self.default_layout();
                 self.tl_select_track(0, false);
                 self.set_lower(1);
+                self.dirty = false;
+            }
+            "tracks-dock"
+            | "tracks-addpie"
+            | "tracks-addpie-kits"
+            | "tracks-addpie-instr"
+            | "tracks-trackpie"
+            | "tracks-trackpie-kits"
+            | "tracks-trackpie-melodic"
+            | "tracks-trackpie-sounds"
+            | "tracks-trackpie-empty"
+            | "tracks-arranger-off"
+            | "classic-arranger-off"
+            | "classic-arranger-off-master"
+            | "rack-compact"
+            | "rack-empty" => {
+                // a new song with three tracks: Song / Master docked at the
+                // bottom of the list, room under the tracks for the Add pie
+                self.new_song();
+                for (k, n) in ["Lead", "Bass", "Drums"].into_iter().enumerate() {
+                    self.track_insert(k, n);
+                }
+                self.view = View::Timeline;
+                self.default_layout();
+                self.extra.clip_arranger = true;
+                self.extra.reduce_motion = true;
+                // classic-*: the classic toolbar with the Arranger hidden,
+                // its compact Master meter (popover open in -master)
+                let classic = view.starts_with("classic-");
+                self.extra.side_hidden = view.ends_with("arranger-off") || classic;
+                if classic {
+                    self.extra.lcd_toolbar = false;
+                    self.lcd.master_open = view == "classic-arranger-off-master";
+                }
+                self.track_new_instrument(0, super::trackpie::Builtin::WaveForge);
+                self.track_new_instrument(1, super::trackpie::Builtin::Analog);
+                self.track_set_pattern_instrument(
+                    2,
+                    super::trackpie::Builtin::DrumKit,
+                    Some("909 Kit"),
+                );
+                // -empty: a fourth track with no instrument yet
+                if view == "tracks-trackpie-empty" || view == "rack-empty" {
+                    self.track_add(3);
+                }
+                self.tl_select_track(2, false);
+                // rack-compact: the pie's Add › WaveForge on track 01, its
+                // compact Rack card; rack-empty: the empty track's Rack
+                if view == "rack-compact" {
+                    self.track_new_instrument(0, super::trackpie::Builtin::WaveForge);
+                }
+                if view == "rack-empty" {
+                    self.tl_select_track(3, false);
+                    self.set_lower(4);
+                }
                 self.dirty = false;
             }
             "trackpie"
@@ -1286,6 +1368,9 @@ impl App {
         if (view.starts_with("trackpie") || view == "trackauto") && f == SETUP_AT + 12 {
             self.shot_pie(ctx, &view);
         }
+        if view.starts_with("tracks-") && view.contains("pie") && f == SETUP_AT + 12 {
+            self.shot_tracks_pie(ctx, &view);
+        }
         if view == "split-preview" && f == SETUP_AT + 12 {
             self.shot_split();
         }
@@ -1647,7 +1732,8 @@ impl App {
 
 impl App {
     /// CHIPWAVE_SHOT_PR=click | erase | select | line | chords | chord-pie |
-    /// chord-block-pie | chord-generate (view timeline-notes): piano roll
+    /// chord-block-pie | chord-generate | melody-generate[-adv] |
+    /// bass-generate[-adv|-moved] (view timeline-notes): piano roll
     /// shots with scripted mouse input
     fn shot_pr(&mut self, ctx: &egui::Context, mode: &str) {
         use super::chordlane::PieOn;
@@ -1920,6 +2006,21 @@ impl App {
                         self.cl.gen.opts = o;
                         self.cl.gen.write = true;
                     }
+                    "melody-generate" | "melody-generate-adv" => {
+                        self.gen_open_melody(0);
+                        self.cl.gen.opts = o;
+                        self.cl.gen.mel.adv = mode.ends_with("-adv");
+                    }
+                    "bass-generate" | "bass-generate-adv" | "bass-generate-moved" => {
+                        self.gen_open_bass(0);
+                        self.cl.gen.opts = o;
+                        self.cl.gen.bass.opts.style = crate::bassgen::BassStyle::Syncopated;
+                        self.cl.gen.bass.adv = mode.ends_with("-adv");
+                        if mode.ends_with("-moved") {
+                            // as if dragged by its grip (down and left)
+                            self.extra.gen_pos = Some([40.0, 150.0]);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -1931,6 +2032,56 @@ impl App {
 }
 
 impl App {
+    /// `--view tracks-addpie[-kits|-instr]`: the Add pie on the empty
+    /// space under the tracks (-kits: its Drum pattern ring, -instr: its
+    /// Instrument ring); `tracks-trackpie[-kits]`: the drum track 03's pie,
+    /// its Add ring open (-kits: Swap kit ›); -melodic / -sounds: the
+    /// melodic track 01's (-sounds: its Sounds ›); -empty: the empty track
+    /// 04's
+    fn shot_tracks_pie(&mut self, ctx: &egui::Context, view: &str) {
+        use super::trackring::{ring_slots, Level};
+        let lanes = self.tlv.lanes;
+        let heads = self.tlv.heads;
+        let lay = self.tlv.layout.clone();
+        let sy = self.tlv.scroll_y;
+        let now = ctx.input(|i| i.time);
+        let empty = view.starts_with("tracks-addpie");
+        let tr = match view {
+            "tracks-trackpie-melodic" | "tracks-trackpie-sounds" => 0usize,
+            "tracks-trackpie-empty" => 3,
+            _ => 2,
+        };
+        if empty {
+            let y = heads.top() + lay.body_end - sy + 95.0;
+            self.open_add_pie(Pos2::new(lanes.left() + 40.0, y), false, ctx);
+        } else {
+            let y = heads.top() + lay.top.get(tr).copied().unwrap_or(0.0) - sy + 20.0;
+            self.open_track_pie(tr, Pos2::new(heads.left() + 140.0, y), false, ctx);
+        }
+        let info = self.ring_info_for(tr, empty);
+        let n = |l| ring_slots(l, &info).len();
+        let pos = |label: &str| {
+            ring_slots(Level::Add, &info)
+                .iter()
+                .position(|s| s.label == label)
+                .unwrap_or(0)
+        };
+        let into = match view {
+            "tracks-addpie-kits" => Some((Level::DrumInstr, pos("Drum pattern"))),
+            "tracks-addpie-instr" => Some((Level::Instrument, pos("Instrument track"))),
+            "tracks-trackpie-kits" => Some((Level::DrumInstr, pos("Swap kit"))),
+            "tracks-trackpie-sounds" => Some((Level::Sounds, pos("Sounds"))),
+            _ => None,
+        };
+        if let Some(p) = &mut self.pie {
+            p.open_ring(now, n(Level::Add));
+            if let (Some(r), Some((l, k))) = (&mut p.ring, into) {
+                r.enter(l, k, n(Level::Add), n(l), now);
+                r.key = Some(1);
+            }
+        }
+    }
+
     /// `--view trackpie[-icons]`: the track pie on track 2's header, Icon
     /// highlighted (trackpie-icons: its TRACK ICON grid popped out).
     /// CHIPWAVE_SHOT_PIE_T=<s> freezes the open animation at that time
@@ -1961,8 +2112,8 @@ impl App {
             // the Add rings: level 1, Drum pattern › and its Drum Kit ›
             if let Some(lv) = view.strip_prefix("trackpie-addring-") {
                 use super::trackring::{ring_slots, Level};
-                p.open_ring(now);
                 let n = |l| ring_slots(l, &info).len();
+                p.open_ring(now, n(Level::Add));
                 if let Some(r) = &mut p.ring {
                     // Instrument ›: the built-ins (StringWave too) and Browse…
                     if lv == "instr" {
@@ -1977,11 +2128,15 @@ impl App {
                             n(Level::Instrument),
                             now,
                         );
+                    } else if lv == "3" {
+                        // Sounds ›: the melodic track's presets
+                        let k = ring_slots(Level::Add, &info)
+                            .iter()
+                            .position(|s| s.label == "Sounds")
+                            .unwrap_or(1);
+                        r.enter(Level::Sounds, k, n(Level::Add), n(Level::Sounds), now);
                     } else if lv != "1" {
                         r.enter(Level::DrumInstr, 1, n(Level::Add), n(Level::DrumInstr), now);
-                    }
-                    if lv == "3" {
-                        r.enter(Level::Kits, 1, n(Level::DrumInstr), n(Level::Kits), now);
                     }
                 }
             }

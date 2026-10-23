@@ -387,6 +387,43 @@ fn add_track_with_instrument_opens_the_browser_and_makes_the_track() {
     assert_eq!(song(&mut h, |s| s.channel_names[1].clone()), "FM-4");
 }
 
+/// Del's report: a new track made with an instrument sometimes wasn't the
+/// active track / instrument. The song's own instruments, presets, samples
+/// and plugins go through one path that (1) used the asked-for index even
+/// past the last track (Song / Master's "Add track with instrument…" asks
+/// for m + 1: the instrument went to a track that doesn't exist and `ch`
+/// pointed there) and (2) never lit the new track, so a lit Song / Master
+/// (a stale `song_sel`) stayed the current track.
+#[test]
+fn a_new_track_with_an_instrument_is_the_active_track_and_instrument() {
+    use super::browserview::Act;
+    let mut h = tl_harness();
+    frames(&mut h, 2);
+    let n0 = song(&mut h, |s| s.channels);
+    let m = h.state().tlv.layout.master.expect("Song / Master");
+    assert_eq!(m, n0);
+    let items = song(&mut h, crate::browser::song_items);
+    assert!(items.len() >= 2, "the test song has instruments");
+    // 1: Master lit, its menu's "Add track with instrument…" (at m + 1)
+    h.state_mut().tl_select_track(m, false);
+    h.state_mut().br_instrument(&items[1], Act::NewTrack(m + 1));
+    frames(&mut h, 2);
+    assert_eq!(song(&mut h, |s| s.channels), n0 + 1);
+    assert_eq!(h.state().tl_cur_track(), n0, "the new track is lit");
+    assert_eq!(h.state().ch, n0);
+    assert_eq!(h.state().instr, 2, "its instrument is the active one");
+    assert_eq!(h.state().track_slot(n0), 2, "and the new track plays it");
+    // 2: track 1 then Master lit; a new track with an instrument at 1
+    h.state_mut().tl_select_track(1, false);
+    let m = h.state().tlv.layout.master.unwrap();
+    h.state_mut().tl_select_track(m, false);
+    h.state_mut().br_instrument(&items[0], Act::NewTrack(1));
+    frames(&mut h, 2);
+    assert_eq!(h.state().tl_cur_track(), 1, "not Song / Master");
+    assert_eq!(h.state().instr, 1);
+    assert_eq!(h.state().track_slot(1), 1);
+}
+
 #[test]
 fn folders_scan_in_the_background_and_samples_load() {
     let d = std::env::temp_dir().join(format!("cw-br-ui-{}", std::process::id()));
@@ -543,8 +580,10 @@ fn chipwave_instruments_lead_the_instruments_tab_with_the_pies_add_list() {
         .iter()
         .map(|s| s.label.clone())
         .collect();
+    // the pie's ring is the melodic ones (drums are in Drum pattern ›)
     let all: Vec<&str> = Builtin::ALL.iter().map(|b| b.label()).collect();
-    assert_eq!(pie, all);
+    let mel: Vec<&str> = super::trackring::melodic().map(|b| b.label()).collect();
+    assert_eq!(pie, mel);
     let names: Vec<String> = tool_rows(&mut h).into_iter().map(|r| r.0).collect();
     assert_eq!(names, all, "the same set, in the pie's order");
     for want in [
@@ -616,12 +655,12 @@ fn a_chipwave_instrument_dropped_on_a_track_plays_it_and_opens_its_editor() {
         before.channels,
         "no new track"
     );
-    // the track is selected, its full editor open below the timeline
+    // the track is selected, its compact Rack card below the timeline
     assert_eq!(h.state().ch, 2);
     assert_eq!(h.state().tl_cur_track(), 2);
     assert_eq!(h.state().instr as usize, n);
     assert_eq!(h.state().view, View::Timeline);
-    assert!(h.state().extra.lower_inst, "the instrument editor is open");
+    assert!(h.state().extra.lower_dev, "the Rack is open");
     // one undo step takes it all back
     ctrl(&mut h, Key::Z);
     frames(&mut h, 2);
@@ -663,7 +702,7 @@ fn a_chipwave_instrument_dropped_below_the_tracks_makes_a_new_track() {
         slot
     );
     assert_eq!(h.state().ch, n0);
-    assert!(h.state().extra.lower_inst);
+    assert!(h.state().extra.lower_dev);
     // the new track and its instrument are one undo step
     ctrl(&mut h, Key::Z);
     frames(&mut h, 2);

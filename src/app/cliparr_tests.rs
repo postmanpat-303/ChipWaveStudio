@@ -1,7 +1,7 @@
 //! The Clip Arranger (docs/CLIP_ARRANGER.md): scenes and slots left of the
 //! Timeline, rows on the timeline's tracks, quantised launches, stops,
 //! slot drags that make Tracker clips, the Master panel and Ctrl+8.
-use super::ui_tests::{click_at, drag, frame, harness_with, key};
+use super::ui_tests::{classic_toolbar, click_at, drag, frame, harness_with, key};
 use super::*;
 use crate::engine::launch::bit;
 use egui::Key;
@@ -59,7 +59,7 @@ fn slot(h: &Harness<'static, App>, tr: usize, b: usize) -> (Rect, Rect) {
 fn shows_on_the_timeline_with_rows_on_the_tracks_and_ctrl8_toggles_it() {
     let mut h = tl_demo();
     assert!(h.state().ca_active());
-    assert!(has(&h, "Clip Arranger") && has(&h, "Master"));
+    assert!(has(&h, "Clip Arranger") && has(&h, "Master meter"));
     assert!(!has(&h, "Instruments"), "the Instruments list made room");
     let nch = h.state().with(|s| s.song.channels);
     // every track row has its slots, centred on the timeline's track row
@@ -243,6 +243,8 @@ fn dragging_a_slot_onto_the_timeline_makes_a_tracker_clip_on_the_bar() {
 #[test]
 fn master_panel_edits_the_song_mixer() {
     let mut h = tl_demo();
+    // (the classic toolbar; lcd_tests has the LCD toolbar's popover)
+    classic_toolbar(&mut h);
     let m = h.state().ca.master;
     assert!(m.is_positive(), "the Master panel has room under the grid");
     let on = h.state().with(|s| s.song.mixer.limiter.enabled);
@@ -479,6 +481,9 @@ fn the_level_history_moves_a_column_per_quarter_second_and_keeps_every_peak() {
 #[test]
 fn right_click_the_level_history_pauses_or_hides_it_and_brings_it_back() {
     let mut h = tl_demo();
+    // the Master panel in the LCD toolbar's popover (its menus keep it open)
+    h.state_mut().lcd.master_open = true;
+    frames(&mut h, 3);
     let g = h.state().ca.level_rect;
     assert!(g.is_positive(), "the LEVEL history has room");
     super::objpie_tests::right_click(&mut h, g.center());
@@ -506,4 +511,118 @@ fn right_click_the_level_history_pauses_or_hides_it_and_brings_it_back() {
     frames(&mut h, 2);
     assert_eq!(h.state().extra.level_hist, 0);
     assert!(h.state().ca.level_rect.height() > 36.0);
+    assert!(h.state().lcd.master_open, "still open after its menus");
+}
+
+/// the Timeline's Arranger button hides the left panel for room (the lanes
+/// get wider), it is remembered in the settings, Ctrl+Shift+8 / Ctrl+8
+/// bring it back; the Tracker keeps its Instruments list
+#[test]
+fn the_arranger_button_hides_and_shows_the_left_panel() {
+    let mut h = tl_demo();
+    assert!(!h.state().extra.side_hidden);
+    let w0 = h.state().tlv.lanes.width();
+    h.get_by_label("Arranger").click();
+    frames(&mut h, 4);
+    assert!(h.state().extra.side_hidden, "remembered in the settings");
+    assert!(!h.state().ca_active());
+    assert!(!has(&h, "Clip Arranger") && !has(&h, "Instruments"));
+    assert!(
+        h.state().tlv.lanes.width() > w0 + 250.0,
+        "the lanes get the room"
+    );
+    // old settings files have no field: shown
+    let x: crate::settings::Extra = serde_json::from_str("{}").unwrap();
+    assert!(!x.side_hidden && x.clip_arranger);
+    // the Tracker keeps its Instruments list
+    h.state_mut().view = View::Pattern;
+    frames(&mut h, 4);
+    assert!(has(&h, "Instruments"));
+    h.state_mut().view = View::Timeline;
+    frames(&mut h, 4);
+    key(
+        &mut h,
+        Key::Num8,
+        egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+    );
+    frames(&mut h, 4);
+    assert!(h.state().ca_active() && has(&h, "Clip Arranger"));
+    h.get_by_label("Arranger").click();
+    frames(&mut h, 4);
+    key(&mut h, Key::Num8, egui::Modifiers::COMMAND);
+    frames(&mut h, 4);
+    assert!(
+        h.state().ca_active(),
+        "Ctrl+8 brings the Clip Arranger back"
+    );
+}
+
+/// Hiding the Clip Arranger hides its Master panel: the LCD toolbar always
+/// has the Master meter (popover); the classic toolbar gets it while hidden.
+#[test]
+fn the_master_stays_reachable_with_the_arranger_hidden() {
+    for lcd in [true, false] {
+        let mut h = tl_demo();
+        if !lcd {
+            classic_toolbar(&mut h);
+            assert!(
+                !has(&h, "Master meter"),
+                "classic: the panel is on the left"
+            );
+            assert!(h.state().ca.master.is_positive());
+        }
+        h.get_by_label("Arranger").click();
+        frames(&mut h, 4);
+        assert!(h.state().side_hidden());
+        assert!(
+            has(&h, "Master meter"),
+            "lcd {lcd}: the meter is in the toolbar"
+        );
+        h.get_by_label("Master meter").click();
+        frames(&mut h, 4);
+        assert!(h.state().lcd.master_open, "lcd {lcd}");
+        assert!(
+            h.state().ca.master.is_positive(),
+            "lcd {lcd}: the popover has the Master panel"
+        );
+        h.get_by_label("Arranger").click();
+        frames(&mut h, 4);
+        assert_eq!(has(&h, "Master meter"), lcd, "lcd {lcd}: shown again");
+    }
+}
+
+/// a playing slot's ▶ is a ■: clicking it again stops the track at the
+/// next launch boundary (the launch quantise), not at once
+#[test]
+fn a_playing_slots_play_button_toggles_to_stop_on_the_launch_boundary() {
+    let mut h = tl_demo();
+    h.state_mut().extra.launch_q = 2; // a beat
+    frames(&mut h, 2);
+    let b = 3;
+    let (strip, _) = slot(&h, 1, b);
+    click_at(&mut h, strip.center());
+    play_rows(&mut h, 4);
+    frames(&mut h, 2);
+    let (scene, held) = h.state().with(|s| (s.engine.scene(), s.engine.held()));
+    assert_eq!(scene, Some(b));
+    assert_eq!(held & bit(1), 0, "track 02 plays");
+    // click again: a quantised stop, queued for the next beat
+    let (strip, _) = slot(&h, 1, b);
+    click_at(&mut h, strip.center());
+    let q = h.state().with(|s| s.engine.cue()).expect("a queued stop");
+    assert_ne!(q.off & bit(1), 0);
+    assert_eq!((q.on & bit(1), q.every), (0, 4));
+    assert_eq!(h.state().with(|s| s.engine.held()) & bit(1), 0, "not yet");
+    play_rows(&mut h, 4);
+    frames(&mut h, 2);
+    assert_ne!(h.state().with(|s| s.engine.held()) & bit(1), 0, "stopped");
+    // and ▶ once more launches it again
+    let (strip, _) = slot(&h, 1, b);
+    click_at(&mut h, strip.center());
+    play_rows(&mut h, 4);
+    assert_eq!(
+        h.state().with(|s| s.engine.held()) & bit(1),
+        0,
+        "plays again"
+    );
 }

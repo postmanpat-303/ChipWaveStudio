@@ -62,6 +62,25 @@ fn tool_button(
     tool_button_w(ui, ic, label, on, icon_col, 0.0)
 }
 
+/// [`tool_button_w`]; `icon_only` hides the label (the LCD toolbar) but
+/// keeps it as the button's name
+fn tool_button_opt(
+    ui: &mut egui::Ui,
+    ic: Ic,
+    label: &str,
+    on: bool,
+    icon_col: Color32,
+    min_w: f32,
+    icon_only: bool,
+) -> egui::Response {
+    let shown = if icon_only { "" } else { label };
+    let min_w = if icon_only { 0.0 } else { min_w };
+    tool_button_named(ui, shown, label, on, min_w, |p, ir, v_text| {
+        let ic_col = if on && th().light { v_text } else { icon_col };
+        paint_icon(p, ir, ic, ic_col);
+    })
+}
+
 /// [`tool_button`] at least `min_w` wide (a toggle whose label changes
 /// keeps its size)
 fn tool_button_w(
@@ -88,17 +107,32 @@ fn tool_button_with(
     min_w: f32,
     icon: impl FnOnce(&egui::Painter, Rect, Color32),
 ) -> egui::Response {
+    tool_button_named(ui, label, label, on, min_w, icon)
+}
+
+/// `tool_button_with` showing `label` (may be empty: icon only) while
+/// screen readers and the UI tests see `name`
+fn tool_button_named(
+    ui: &mut egui::Ui,
+    label: &str,
+    name: &str,
+    on: bool,
+    min_w: f32,
+    icon: impl FnOnce(&egui::Painter, Rect, Color32),
+) -> egui::Response {
     let font = egui::TextStyle::Button.resolve(ui.style());
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_string(), font, Color32::PLACEHOLDER);
-    let size = egui::vec2(
-        (10.0 + 18.0 + 6.0 + galley.size().x + 10.0).max(min_w),
-        26.0,
-    );
+    let text_w = if label.is_empty() {
+        -6.0
+    } else {
+        galley.size().x
+    };
+    let size = egui::vec2((10.0 + 18.0 + 6.0 + text_w + 10.0).max(min_w), 26.0);
     let (r, resp) = ui.allocate_exact_size(size, Sense::click());
-    // screen readers (and the UI tests) see its label
-    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), label));
+    // screen readers (and the UI tests) see its name
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), name));
     if ui.is_rect_visible(r) {
         let v = ui.style().interact_selectable(&resp, on);
         let p = ui.painter();
@@ -215,6 +249,21 @@ fn group_if(on: bool, ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut eg
     if on {
         group(ui, caption, add);
     }
+}
+
+/// the audio status hover text: device, latency, underruns, load
+pub(super) fn audio_tip(a: &audio::Audio) -> String {
+    format!(
+        "audio: {} @ {} Hz · buffer {}\nlatency queued ahead of the device \
+         (grows after underruns, up to {:.0} ms) and buffer underruns\n\
+         engine load {:.0} % of real time{}",
+        a.device_name,
+        a.sample_rate,
+        a.buffer,
+        audio::MAX_TARGET as f32 * 1000.0 / a.sample_rate as f32,
+        a.load_pct(),
+        a.advice().map(|s| format!("\n{s}")).unwrap_or_default()
+    )
 }
 
 pub(super) fn hdr_text() -> Color32 {
@@ -829,12 +878,15 @@ impl App {
             // tracker-only controls (Play block, Octave, Edit / Step) show
             // in the Tracker view; their keys work everywhere
             let tracker = self.view == View::Pattern;
+            // the LCD toolbar (0.2.10): icon-only transport, then the
+            // display (tempo, position, lamps, load) and the compact Master
+            let lcd = self.lcd_on();
             group(ui, "TRANSPORT", |ui| {
                 let loop_on = playing && self.with(|s| s.engine.loop_pattern);
                 // Play block is a tracker control: shown in the Tracker view
                 // (Space still loops the block everywhere)
                 if tracker
-                    && tool_button(ui, Ic::Play, "Play block", loop_on, t.accent)
+                    && tool_button_opt(ui, Ic::Play, "Play block", loop_on, t.accent, 0.0, lcd)
                     .on_hover_text("loop the current block (Space)")
                     .clicked()
                 {
@@ -893,7 +945,7 @@ impl App {
                     })
                     .fold(0.0f32, f32::max)
                     + 44.0;
-                if tool_button_w(ui, ic, label, playing, t.accent, min_w)
+                if tool_button_opt(ui, ic, label, playing, t.accent, min_w, lcd)
                     .on_hover_text(tip)
                     .clicked()
                 {
@@ -945,7 +997,7 @@ impl App {
                     ) {
                         self.rec_toggle();
                     }
-                    if rec {
+                    if rec && !lcd {
                         let rec_txt = if t.ember {
                             // Slate: a lit (glowing) red tally
                             egui::RichText::new("REC")
@@ -960,7 +1012,9 @@ impl App {
                     self.metronome_toggle(ui);
                 }
                 let left = self.with(|s| s.engine.count_in_left());
-                if let Some(n) = left {
+                if lcd {
+                    // the display shows the position and the count-in
+                } else if let Some(n) = left {
                     // the countdown, in the playhead's place: Count-in 4, 3, 2, 1
                     ui.label(
                         egui::RichText::new(format!("Count-in {n}"))
@@ -979,8 +1033,17 @@ impl App {
                     .on_hover_text("playhead (stopped: the play marker)");
                 }
             });
+            if lcd {
+                self.lcd_display(ui);
+            }
+            // (classic toolbar: only while the Clip Arranger, which holds the
+            // Master panel, is hidden; the meter's popover has the panel)
+            if self.master_in_toolbar() {
+                self.lcd_master(ui);
+            }
             let mut tempo_r = None;
-            group(ui, "TEMPO", |ui| {
+            // the LCD has the tempo (and the Speed in the Tracker view)
+            group_if(!lcd, ui, "TEMPO", |ui| {
                 let (mut bpm, mut speed) = self.with(|s| (s.song.bpm, s.song.speed));
                 ui.label(egui::RichText::new("BPM").color(hdr_text()));
                 let r = ui
@@ -1099,7 +1162,8 @@ impl App {
                     self.panic();
                 }
                 ui.add_space(6.0);
-                if let Some(a) = &self.audio {
+                // the LCD shows the buffer and underruns itself
+                if let Some(a) = self.audio.as_ref().filter(|_| !lcd) {
                     let u = a.stats.underruns.load(std::sync::atomic::Ordering::Relaxed);
                     let txt = format!(
                         "{:.0} ms{} · {} underruns",
@@ -1113,17 +1177,7 @@ impl App {
                         _ => hdr_dim(),
                     };
                     ui.label(egui::RichText::new(txt).small().monospace().color(col))
-                        .on_hover_text(format!(
-                            "audio: {} @ {} Hz · buffer {}\nlatency queued ahead of the device \
-                             (grows after underruns, up to {:.0} ms) and buffer underruns\n\
-                             engine load {:.0} % of real time{}",
-                            a.device_name,
-                            a.sample_rate,
-                            a.buffer,
-                            audio::MAX_TARGET as f32 * 1000.0 / a.sample_rate as f32,
-                            a.load_pct(),
-                            a.advice().map(|s| format!("\n{s}")).unwrap_or_default()
-                        ));
+                        .on_hover_text(audio_tip(a));
                 }
                 // Keys → Notes (musical typing): lit with its octave and
                 // velocity while on, a small keyboard icon just left of it
@@ -1351,7 +1405,10 @@ impl App {
                 ui.add_space(6.0);
                 if ui
                     .button("Later")
-                    .on_hover_text("keep the copies and ask again next start")
+                    .on_hover_text(
+                        "decide later: until ChipWave closes normally (then the copies \
+                         move to the recovery-archive folder and are not offered again)",
+                    )
                     .clicked()
                 {
                     later = true;
@@ -1408,7 +1465,8 @@ impl App {
             }
         }
         if later {
-            self.orphans.clear();
+            let dirs = self.orphans.drain(..).map(|o| o.dir);
+            self.orphans_later.extend(dirs);
         }
     }
 }
@@ -1447,7 +1505,8 @@ impl App {
         if (m && beat.is_some()) || count.is_some() {
             ui.ctx().request_repaint();
         }
-        let r = tool_button_with(ui, "Metronome", m, 0.0, |p, ir, _| {
+        let shown = if self.lcd_on() { "" } else { "Metronome" };
+        let r = tool_button_named(ui, shown, "Metronome", m, 0.0, |p, ir, _| {
             super::metroicon::paint_metronome(p, ir, look)
         })
         .on_hover_text(format!(

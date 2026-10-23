@@ -96,6 +96,26 @@ fn capture_makes_linked_launcher_clips_that_launch_and_edit() {
         "{}",
         h.state().ca.line
     );
+    // its ▶ is a ■ now: a click stops it on the boundary, again plays it
+    let (strip, _) = slot(&h, 0, 0);
+    click_at(&mut h, strip.center());
+    frames(&mut h, 1);
+    render(&mut h, 400);
+    assert_eq!(
+        h.state().with(|s| s.engine.launched(0)),
+        None,
+        "■ stopped it"
+    );
+    frames(&mut h, 2);
+    click_at(&mut h, strip.center());
+    frames(&mut h, 1);
+    render(&mut h, 40);
+    assert_eq!(
+        h.state().with(|s| s.engine.launched(0)),
+        Some(lid),
+        "▶ again"
+    );
+    frames(&mut h, 2);
     // Stop all
     h.get_by_label("Stop all").click();
     frames(&mut h, 2);

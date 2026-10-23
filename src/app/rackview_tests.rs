@@ -2,7 +2,7 @@
 //! Delete / Ctrl+D / 0 keys on the last-clicked card, drops and reorder,
 //! Browser › Instruments without presets, and the curated instrument faces
 use super::rackview::{Pick, TAB_W};
-use super::ui_tests::{click_at, drag, frame, key};
+use super::ui_tests::{click_at, double_click, drag, frame, key};
 use super::*;
 use crate::fx::FxKind;
 use egui::Key;
@@ -40,6 +40,58 @@ fn rack() -> Harness<'static, App> {
 /// an empty spot of a card's side tab (below its buttons): selects the card
 fn tab_blank(c: egui::Rect) -> Pos2 {
     Pos2::new(c.left() + TAB_W / 2.0, c.bottom() - 12.0)
+}
+
+/// a double-click on a side tab (anywhere off its buttons) collapses its
+/// card to a strip and expands it again: every effect and the instrument;
+/// a single click still only picks the card
+#[test]
+fn a_double_click_on_a_side_tab_collapses_and_expands_the_card() {
+    let mut h = rack();
+    let before = chain(&h);
+    let collapsed = |h: &Harness<'static, App>, i: usize| {
+        h.state().with(|s| s.song.instruments[6].fx[i].collapsed)
+    };
+    for i in 0..before.len() {
+        let w0 = h.state().dev.cards[i].width();
+        {
+            let p = tab_blank(h.state().dev.cards[i]);
+            click_at(&mut h, p);
+        }
+        frames(&mut h, 2);
+        assert_eq!(h.state().dev.pick, Pick::Fx(i), "one click picks it");
+        assert!(!collapsed(&h, i), "one click does not fold");
+        {
+            let p = tab_blank(h.state().dev.cards[i]);
+            double_click(&mut h, p);
+        }
+        frames(&mut h, 2);
+        assert!(collapsed(&h, i), "effect {i} collapses");
+        assert!(h.state().dev.cards[i].width() < 40.0 + TAB_W, "a strip");
+        {
+            let p = tab_blank(h.state().dev.cards[i]);
+            double_click(&mut h, p);
+        }
+        frames(&mut h, 2);
+        assert!(!collapsed(&h, i), "effect {i} expands");
+        assert_eq!(h.state().dev.cards[i].width(), w0);
+    }
+    assert_eq!(chain(&h), before, "nothing else changed");
+    let w0 = h.state().dev.inst.width();
+    {
+        let p = tab_blank(h.state().dev.inst);
+        double_click(&mut h, p);
+    }
+    frames(&mut h, 2);
+    assert!(h.state().dev.inst_folded, "the instrument collapses");
+    assert!(h.state().dev.inst.width() < w0);
+    {
+        let p = tab_blank(h.state().dev.inst);
+        double_click(&mut h, p);
+    }
+    frames(&mut h, 2);
+    assert!(!h.state().dev.inst_folded, "and expands");
+    assert_eq!(h.state().dev.inst.width(), w0);
 }
 
 #[test]

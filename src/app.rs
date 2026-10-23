@@ -55,6 +55,7 @@ mod focus;
 mod focus_tests;
 mod fxplugview;
 mod fxview;
+mod genpanel;
 mod genview;
 #[cfg(test)]
 mod glyph_tests;
@@ -73,6 +74,9 @@ mod lanes;
 mod launcher_ui_tests;
 #[cfg(test)]
 mod layout_tests;
+mod lcd;
+#[cfg(test)]
+mod lcd_tests;
 mod library;
 mod metroicon;
 mod midiview;
@@ -228,6 +232,8 @@ pub struct App {
     clip: Vec<Vec<Cell>>,
     /// the Advanced Edit panel's settings (src/app/advedit.rs)
     adv: advedit::AdvUi,
+    /// the toolbar LCD and the compact Master (src/app/lcd.rs)
+    lcd: lcd::LcdUi,
     /// tracker channel-header buttons as last drawn (channel, button, rect), for tests
     hdr_hits: Vec<(usize, pattern::HdrOp, Rect)>,
     view: View,
@@ -299,8 +305,8 @@ pub struct App {
     clip_rename: Option<objpie::ClipRename>,
     /// a pie to open at the next `obj_pie_frame`
     opie_req: Option<(objpie::PieFor, Pos2)>,
-    /// user chose "Don't save" (recovery copy may be deleted on exit)
-    discarded: bool,
+    /// recovery copies put off with "Later" (archived on a clean exit)
+    orphans_later: Vec<PathBuf>,
     allow_close: bool,
     /// clip to highlight briefly after duplicate/insert, with start time
     arr_flash: Option<(Vec<usize>, f64)>,
@@ -515,7 +521,11 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
     }
     let opts = eframe::NativeOptions {
         viewport: vb
-            .with_title("ChipWave Studio")
+            .with_title(if option_env!("CW_BUILD").is_some() {
+                format!("ChipWave Studio {}", crate::version_label())
+            } else {
+                "ChipWave Studio".to_string()
+            })
             .with_min_inner_size([800.0, 500.0])
             .with_drag_and_drop(true)
             .with_icon(std::sync::Arc::new(
@@ -618,6 +628,7 @@ impl App {
             step: 1,
             edit: true,
             follow: true,
+            lcd: Default::default(),
             instr: 1,
             hist,
             undo_hold: 0,
@@ -673,7 +684,7 @@ impl App {
             opie: None,
             clip_rename: None,
             opie_req: None,
-            discarded: false,
+            orphans_later: Vec::new(),
             allow_close: false,
             arr_flash: None,
             arr_multi: Default::default(),
@@ -987,7 +998,7 @@ impl App {
                     ("Space", "play / stop current block (loop)"), ("Shift+Space", "play / stop song (from the play marker)"), ("Enter / Ctrl+Enter", "restart block / play from row"), ("Ctrl+= / Ctrl+- / Ctrl+0", "UI scale up / down / 100 %"), ("Esc", "edit mode on/off"),
                     ("Ctrl+Z / Ctrl+Y", "undo / redo"), ("Ctrl+Shift+F", "fill to length (auto arrange)"), ("1-7 / 0 in the Order list", "tag block role / clear"), ("Alt +/- (Shift = octave)", "transpose selection or channel (also the Block bar -12 -1 +1 +12 buttons, Edit > Transpose)"), ("F9 / F10", "mute / solo channel"),
                     ("Numpad - / +", "base octave down / up"), ("Ctrl+Shift+PgDn / PgUp", "double / halve the block length (Length field in the Block bar; Song > Block: set length, stretch, squash)"), ("Row numbers", "decimal 00-63 by default; View > Row numbers or Settings > Look switches to hex 00-3F. Effect values stay hex"), ("Shift+arrows, PgUp/PgDn, mouse drag", "select"), ("Ctrl+A", "select channel, again = block"),
-                    ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Piano roll (click into it)", "Ctrl+C / X / V copy / cut / paste notes (paste at the playhead, again = after them; works between clips), Ctrl+D duplicate after the selection, Ctrl+A all, Del delete, arrows nudge (Shift = octave), Ctrl-drag notes: drop copies, Q quantise, 1 / 2 / 3 tools"), ("Ctrl+Shift+A", "Advanced Edit panel (tracker): section, content mask, flip / shrink / expand, mix-paste, safe transpose, mirror, volume fade, replace instrument"), ("Delete (with selection)", "clear selection"),
+                    ("Ctrl+C / X / V", "copy / cut / paste at cursor"), ("Piano roll (click into it)", "Ctrl+C / X / V copy / cut / paste notes (paste at the playhead, again = after them; works between clips), Ctrl+D duplicate after the selection, Ctrl+A all, Del delete, arrows or Shift+arrows move a semitone / grid step, Ctrl+Up/Down an octave, Ctrl-drag notes: drop copies, Q quantise, 1 / 2 / 3 tools"), ("Ctrl+Shift+A", "Advanced Edit panel (tracker): section, content mask, flip / shrink / expand, mix-paste, safe transpose, mirror, volume fade, replace instrument"), ("Delete (with selection)", "clear selection"),
                     ("Ctrl+T, Ctrl+3..5, Ctrl+Tab", "views: Timeline / mixer / FX / sample (Ctrl+1 / Ctrl+2: Tracker / Order list, also View > Tracker)"), ("Ctrl+6", "Timeline + piano roll: the default layout (View > Reset to default layout)"), ("Ctrl+8", "Clip Arranger on / off: scenes and slots left of the Timeline (View > Clip Arranger)"), ("I (Alt+I in the Tracker)", "Inspector: the selected track or clip (View > Inspector)"), ("View tab bar (bottom)", "TIMELINE / MIX / FX / SAMPLE (then ORDER / TRACKER with Settings > Show Tracker); View > View tab bar hides it"), ("F12", "this key list"), ("F11", "full-height view (hide / show the lower panel)"), ("Ctrl+I", "instrument editor in the lower panel"), ("Ctrl+F", "search instrument parameters"), ("knob: Ctrl-drag / double-click", "fine adjust / default"), ("Ctrl+Q", "quit"), ("FX view: Up / Down", "previous / next instrument"), ("Ctrl+D / Ctrl+Shift+D", "Order list: duplicate clip / as new block (when visible)"),
                     ("Order list (click it to focus)", "click / Shift+click / Ctrl+click select; Ctrl+X/C/V cut/copy/paste after selection; Ctrl+Shift+V paste as new blocks; Del; Ctrl+A; right-click menu"), ("Ctrl+Shift+K", "debug: show last 10 input events"),
                     ("Order list: Left/Right, Del, Ins, Ctrl+D, +/-", "select clip, delete, insert, duplicate, zoom"),
@@ -1066,18 +1077,7 @@ impl eframe::App for App {
             let r = rx.recv().unwrap_or_else(|_| Err("save thread died".into()));
             self.finish_save(path, r);
         }
-        // clean exit: the recovery folder of this session is not needed
-        if let Some(s) = &self.session {
-            s.wait_idle(std::time::Duration::from_secs(10));
-            if crate::prompt::may_delete_recovery(self.dirty, self.discarded) {
-                s.close();
-            } else {
-                // unsaved work and no explicit discard: keep a fresh recovery copy
-                let song = self.with(|s| s.song.clone());
-                let _ = crate::recovery::Session::autosave_blocking(&s.dir, &song);
-                std::fs::write(s.dir.join("heartbeat"), "0").ok();
-            }
-        }
+        self.clean_exit();
     }
 
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
@@ -1357,29 +1357,33 @@ impl eframe::App for App {
         if !ca_on {
             self.ca.drag = None;
         }
-        egui::Panel::left("side")
-            .exact_size(330.0)
-            .resizable(false)
-            .frame(egui::Frame::NONE.inner_margin(egui::Margin {
-                left: 8,
-                right: 4,
-                top: 6,
-                bottom: 6,
-            }))
-            .show(ui, |ui| {
-                // the Clip Arranger fades in over the Instruments list; it
-                // is drawn after the Timeline (rows line up with its tracks)
-                self.ca.rect = ui.max_rect();
-                if ca_fade < 1.0 {
-                    if ca_fade > 0.0 {
-                        ui.multiply_opacity(1.0 - ca_fade);
+        if self.side_hidden() {
+            self.ca.rect = Rect::NOTHING;
+        } else {
+            egui::Panel::left("side")
+                .exact_size(330.0)
+                .resizable(false)
+                .frame(egui::Frame::NONE.inner_margin(egui::Margin {
+                    left: 8,
+                    right: 4,
+                    top: 6,
+                    bottom: 6,
+                }))
+                .show(ui, |ui| {
+                    // the Clip Arranger fades in over the Instruments list; it
+                    // is drawn after the Timeline (rows line up with its tracks)
+                    self.ca.rect = ui.max_rect();
+                    if ca_fade < 1.0 {
+                        if ca_fade > 0.0 {
+                            ui.multiply_opacity(1.0 - ca_fade);
+                        }
+                        theme::cartridge(ui.painter(), ui.max_rect(), th().slate);
+                        egui::ScrollArea::vertical()
+                            .id_salt("side_scroll")
+                            .show(ui, |ui| self.side_panel(ui));
                     }
-                    theme::cartridge(ui.painter(), ui.max_rect(), th().slate);
-                    egui::ScrollArea::vertical()
-                        .id_salt("side_scroll")
-                        .show(ui, |ui| self.side_panel(ui));
-                }
-            });
+                });
+        }
         if self.extra.browser_open {
             self.browser_side(ui);
         } else {

@@ -619,17 +619,11 @@ impl App {
             );
             return;
         }
-        // a track with no instrument: "Choose an instrument" over the editor
-        // (the track pie's Add list; 3.3)
-        let body = if (self.extra.lower_inst || self.extra.lower_dev) && self.chooser_wanted() {
-            let h = if body.width() < 1200.0 { 52.0 } else { 30.0 };
-            let strip = Rect::from_min_size(body.min, egui::vec2(body.width(), h));
-            ui.scope_builder(
-                egui::UiBuilder::new().max_rect(strip.shrink2(egui::vec2(8.0, 3.0))),
-                |ui| self.instrument_chooser(ui),
-            );
-            Rect::from_min_max(Pos2::new(body.left(), strip.bottom() + 2.0), body.max)
-        } else if (self.extra.lower_inst || self.extra.lower_dev) && !self.shared_with().is_empty()
+        // a track with no instrument shows only the Rack's drop box (the
+        // chooser row over it is gone: the track pie's Add, or a Browser drop)
+        let body = if (self.extra.lower_inst || self.extra.lower_dev)
+            && !self.chooser_wanted()
+            && !self.shared_with().is_empty()
         {
             // the instrument is shared: say so, offer a copy for this track (3.5)
             let strip = Rect::from_min_size(body.min, egui::vec2(body.width(), 26.0));
@@ -657,18 +651,63 @@ impl App {
     /// the current Timeline track has no instrument (D6: none assigned and
     /// none played by its clips)
     pub(super) fn chooser_wanted(&self) -> bool {
+        self.track_needs_instrument(self.ch)
+    }
+
+    /// Timeline track `tr` is an instrument track with no instrument yet
+    /// (an Empty track / + Add track): its Rack is empty, it makes no sound
+    /// and a Browser drop on the Rack gives it one
+    pub(super) fn track_needs_instrument(&self, tr: usize) -> bool {
         if self.view != View::Timeline {
             return false;
         }
         let real = self.with(|s| {
             s.song.timeline.as_deref().is_some_and(|t| {
-                t.tracks.get(self.ch).is_some_and(|k| {
+                t.tracks.get(tr).is_some_and(|k| {
                     k.kind != crate::timeline::TrackKind::Master
                         && k.kind != crate::timeline::TrackKind::Audio
                 })
             })
         });
-        real && self.track_instrument(self.ch).is_none()
+        real && self.track_instrument(tr).is_none()
+    }
+
+    /// the empty Rack of a track with no instrument
+    pub(super) fn empty_rack_hint(&mut self, ui: &mut egui::Ui) {
+        let t = th();
+        let r = ui.max_rect().shrink(10.0);
+        self.dev.row = ui.max_rect();
+        self.dev.inst = Rect::NOTHING;
+        self.dev.cards.clear();
+        let dragging = self
+            .br
+            .drag
+            .as_ref()
+            .is_some_and(super::browserview::is_instrumentish);
+        let col = if dragging {
+            t.accent
+        } else {
+            t.ink2.gamma_multiply(0.6)
+        };
+        let p = ui.painter();
+        p.rect_stroke(r, 8, egui::Stroke::new(1.5, col), egui::StrokeKind::Inside);
+        p.text(
+            r.center() - egui::vec2(0.0, 10.0),
+            egui::Align2::CENTER_CENTER,
+            "Drag an instrument here",
+            egui::FontId::proportional(16.0),
+            if dragging { t.accent } else { t.ink },
+        );
+        p.text(
+            r.center() + egui::vec2(0.0, 12.0),
+            egui::Align2::CENTER_CENTER,
+            format!(
+                "Track {:02} has no instrument yet: drop one from the Browser, or right-click the track header › Add",
+                self.ch + 1
+            ),
+            egui::FontId::proportional(12.0),
+            t.ink2,
+        );
     }
 
     /// the other Timeline tracks that play the current track's instrument
@@ -819,46 +858,6 @@ impl App {
                 "Track {:02} now plays its own copy, instrument {new:02} (the other tracks keep {old:02})",
                 tr + 1
             );
-        }
-    }
-
-    /// "Choose an instrument" for the current track: the built-ins and
-    /// Browse… (the same list and actions as the track pie's Add)
-    fn instrument_chooser(&mut self, ui: &mut egui::Ui) {
-        let t = th();
-        let tr = self.ch;
-        let full = self.with(|s| s.song.instruments.len() >= 255);
-        let mut pick = None;
-        let mut browse = false;
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(4.0, 3.0);
-            ui.label(
-                egui::RichText::new(format!("Track {:02} has no instrument · Choose an instrument:", tr + 1))
-                    .strong()
-                    .color(t.ink),
-            );
-            for b in super::trackpie::Builtin::ALL {
-                if ui
-                    .add_enabled(!full, egui::Button::new(b.label()).small())
-                    .on_hover_text(b.tip())
-                    .on_disabled_hover_text("all 255 instrument slots are used")
-                    .clicked()
-                {
-                    pick = Some(b);
-                }
-            }
-            if ui
-                .add(egui::Button::new("Browse…").small())
-                .on_hover_text("the Browser's Instruments (your Favourites first): the one you pick plays this track")
-                .clicked()
-            {
-                browse = true;
-            }
-        });
-        if let Some(b) = pick {
-            self.track_new_instrument(tr, b);
-        } else if browse {
-            self.track_change_instrument(tr);
         }
     }
 
@@ -1031,6 +1030,10 @@ impl App {
     /// the instrument editor (lower panel, Instrument); a built-in
     /// instrument paints in the built-in skin (docs/INSTSKIN.md)
     pub(super) fn instrument_view(&mut self, ui: &mut egui::Ui) {
+        if self.chooser_wanted() {
+            self.empty_rack_hint(ui);
+            return;
+        }
         let i = (self.instr as usize).wrapping_sub(1);
         let builtin = self
             .with(|s| {

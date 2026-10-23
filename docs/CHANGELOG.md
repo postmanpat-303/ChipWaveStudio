@@ -2,6 +2,33 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.10.0: Generators (Chords, Melody, Bass), the LCD toolbar and smarter pies
+
+Released 2026-10-23. Highlights (details below):
+- **The Generators panel** has three tabs, **Chords | Melody | Bass**, with one fixed **Write** card. Drag the **⠿ GENERATORS** grip to move the panel; it stays on screen and reopens where you left it (a double-click on the grip puts it back at the top centre).
+- **Melody generator:** a seeded tune over your chords, with Rhythm (Quarters, Eighths, Syncopated, Sixteenths, Long notes, Euclid), Contour, Motif, Density, Range and Octave, and Lock rhythm / Lock notes.
+- **Bass generator:** a bass line that follows the chord roots in six styles: Root, Octave pump, Walking, Acid (accents and ties), Syncopated and Euclid.
+- **A big Preview pad:** Preview, Dice and Another one sit in one large rounded pad beside the controls.
+- **Write to timeline keeps your sound:** the new Melody or Bass track gets a copy of the track's instrument (the sound Preview played), with its settings and effects. Bass falls back to Fat Moog Bass (Acid Squelch for Acid) when the track has no instrument or plays drums.
+- **LCD toolbar:** a display with tempo, position, time, signature and load, in five colours (Cyan, Amber, Green, Red, Ice) or your own, and a compact Master meter whose popover holds the Master panel. Settings › Top display turns it off for the classic toolbar, which now shows the Master meter while the Clip Arranger is hidden.
+- **Context-aware pies:** the track pie's first ring follows the track (empty, drum or melodic): drum tracks get Swap kit, Drum pattern and Dice kit, melodic tracks get Instrument, Sounds, New pattern, Chords…, Melody… and Bass…. A right-click on the empty space under the tracks opens a New track pie.
+- **Tracks:** Song / Master sits at the bottom of the track list, a new empty track has no instrument (an empty Rack says *Drag an instrument here*), a Drum Kit picked in the pie fills that track, and a new track with an instrument is always the active one.
+- **The Rack:** a built-in instrument added from the pie or the Browser opens as its compact card, with a **Drag an effect here** box beside it (a click opens Browser › Effects). The *Choose an instrument* row is gone. A double-click on any side tab collapses or expands its card.
+- **Clip Arranger:** a playing slot's ▶ shows ■ and a click stops it; the **Arranger** button (Ctrl+Shift+8) hides or shows the panel for room.
+- **Piano roll:** Shift+arrows nudge the selection a semitone or a grid step; the octave move is now **Ctrl+Up/Down**.
+- **Clean exit:** a normal exit leaves no recovery copy, so the recovery dialog only appears after a real crash.
+- Old songs save, play and render exactly as in 0.2.9.0 (checked against its renders); the song format is unchanged.
+
+### Known limits
+- The Acid bass style has accents and ties but no slides yet, because Timeline notes can't glide.
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
+
+### Details
+- **Generators** ([CHORDS.md](CHORDS.md#generators-panel-chords-melody-and-bass)): open with Generate in the piano roll, the track pie's Chords…, Melody… or Bass…. Every write is one Ctrl+Z; the default target is a new track below the current one, and nothing is replaced.
+- **Research credits** (ideas only, no code copied): the Melody generator draws on Computoser (Bozhidar Bozhanov), Toussaint's Euclidean rhythms (Bjorklund's algorithm), total-serialism (Timo Hoogland), isobar (Daniel Jones) and Emilie Gillet's open Eurorack firmware; the Bass generator on acid-banger (David Whiting, vitling), aciduino and JC-303 (midilab; JC-303's engine is Open303 by Robin Schmidt), acid-test (Zack Scholl) and WalkingBass (philxan). All are listed in Help › About.
+- **Recovery** ([SAFETY.md](SAFETY.md)): copies put off with Later move to `recovery-archive/` (newest 10 kept) on the next clean exit; old clean-exit leftovers are removed.
+- **Empty tracks** are silent until they get an instrument; a Rack drop on an empty track assigns a new instrument instead of replacing the selected one.
+
 ## 0.2.9.0: the new Rack
 
 Released 2026-10-23. Highlights (details below):

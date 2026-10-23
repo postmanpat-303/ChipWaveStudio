@@ -106,6 +106,14 @@ pub(super) fn drag(h: &mut Harness<'static, App>, from: Pos2, to: Pos2) {
 }
 
 /// a quick click (a held press would count as a long-press, not a click)
+/// the classic toolbar (Settings → Look → Top display off): the BPM and
+/// Speed boxes, the Master under the Clip Arranger
+pub(super) fn classic_toolbar(h: &mut Harness<'static, App>) {
+    h.state_mut().extra.lcd_toolbar = false;
+    frame(h);
+    frame(h);
+}
+
 pub(super) fn click_at(h: &mut Harness<'static, App>, p: Pos2) {
     click_with(h, p, egui::PointerButton::Primary);
 }
@@ -256,6 +264,7 @@ fn mixer_fader_pan_mute_solo_send_undo_with_ctrl_z() {
 #[test]
 fn tempo_drag_undo_restores_song_and_engine() {
     let mut h = harness();
+    classic_toolbar(&mut h);
     let bpm0 = song(&mut h, |s| s.bpm);
     let t = rects(
         &h,
@@ -285,6 +294,7 @@ const SPEED: &str = "ticks per row (effect 09xx sets it in the Tracker)";
 #[test]
 fn tempo_typed_then_ctrl_z_while_field_focused() {
     let mut h = harness();
+    classic_toolbar(&mut h);
     let (bpm0, sp0) = song(&mut h, |s| (s.bpm, s.speed));
     // an earlier, different edit: speed by drag
     let sp = rects(&h, Role::SpinButton, Some(SPEED))[0];
@@ -325,6 +335,7 @@ fn tempo_typed_then_ctrl_z_while_field_focused() {
 #[test]
 fn tempo_entered_then_ctrl_z_with_field_refocused() {
     let mut h = harness();
+    classic_toolbar(&mut h);
     let bpm0 = song(&mut h, |s| s.bpm);
     let t = rects(&h, Role::SpinButton, Some(TEMPO))[0];
     type_into(&mut h, t, "123");
@@ -369,6 +380,7 @@ fn pattern_view_mute_solo_keys_undo() {
 #[test]
 fn speed_and_edit_menu_undo() {
     let mut h = harness();
+    classic_toolbar(&mut h);
     let sp0 = song(&mut h, |s| s.speed);
     let t = rects(
         &h,
@@ -3073,7 +3085,14 @@ fn mixer_return_strips_never_hide_behind_master() {
                 .map(|n| n.rect())
                 .collect();
             assert_eq!(on.len(), 2, "{w}: two return strips");
-            let master = text_rect(&h, "Master");
+            // (the mixer's Master strip, not the toolbar's Master meter)
+            let master = h
+                .query_all_by(|n| {
+                    n.label().as_deref() == Some("Master") || n.value().as_deref() == Some("Master")
+                })
+                .next()
+                .expect("the Master strip")
+                .rect();
             // strips are 110 px wide, centred on their labels
             let ret_b_right = on[1].center().x + 55.0;
             let master_left = master.center().x - 55.0;

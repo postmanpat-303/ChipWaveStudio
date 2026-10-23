@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.10.0" date="2026-10-23">
+      <description><p>Generators panel with Chords, Melody and Bass tabs, a movable panel and a big Preview pad; Write to timeline keeps the track's sound; an LCD toolbar with colour presets and a Master popover; context-aware track pies and a New track pie; empty tracks without an instrument, Song / Master at the bottom; a compact Rack card with an effect drop box and double-click side tabs; Clip Arranger stop toggle; Shift+arrow note nudge; no recovery prompt after a clean exit.</p></description>
+    </release>
     <release version="0.2.9.0" date="2026-10-23">
       <description><p>The new Rack: the instrument and then its effects in one sideways row under the Timeline, with side tabs for bypass, remove and collapse, a highlighted selected device, Delete and Ctrl+D with undo, a few chosen knobs per instrument with Advanced for the rest, a Drum Kit pad picker, racks shown in place and Save rack; a Notes | Rack switch in the lower panel; Browser Instruments lists instruments, with presets on the card; CI and test fixes.</p></description>
     </release>

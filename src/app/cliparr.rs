@@ -358,12 +358,43 @@ impl App {
     /// the Clip Arranger takes the left panel now
     pub(crate) fn ca_active(&self) -> bool {
         self.extra.clip_arranger
+            && !self.side_hidden()
             && self.view == View::Timeline
             && self.with(|s| s.song.timeline.is_some())
     }
 
+    /// the left panel is hidden on the Timeline (more room for the tracks)
+    pub(crate) fn side_hidden(&self) -> bool {
+        self.extra.side_hidden && self.view == View::Timeline
+    }
+
+    /// the Timeline's "Arranger" button / Ctrl+Shift+8: show or hide the
+    /// Clip Arranger panel on the left (remembered)
+    pub(crate) fn toggle_side_panel(&mut self) {
+        self.extra.side_hidden = !self.extra.side_hidden;
+        if !self.extra.side_hidden {
+            self.extra.clip_arranger = true;
+            if !self.lcd_on() {
+                // (the classic toolbar's meter goes: so does its popover)
+                self.lcd.master_open = false;
+            }
+        }
+        self.save_settings();
+        self.status = if self.extra.side_hidden {
+            "Clip Arranger hidden: more room for the Timeline; the Master is in the toolbar meter (the Arranger button or Ctrl+Shift+8 shows it)"
+        } else {
+            "Clip Arranger shown on the left of the Timeline (the Arranger button or Ctrl+Shift+8 hides it)"
+        }
+        .into();
+    }
+
     /// Ctrl+8 / View › Clip Arranger
     pub(crate) fn toggle_clip_arranger(&mut self) {
+        if self.extra.side_hidden {
+            // a hidden panel comes back first
+            self.extra.side_hidden = false;
+            self.extra.clip_arranger = false;
+        }
         self.extra.clip_arranger = !self.extra.clip_arranger;
         self.save_settings();
         self.status = if self.extra.clip_arranger {
@@ -855,7 +886,11 @@ impl App {
         }
         let heads = self.tlv.heads;
         let ok = heads.is_positive() && heads.bottom() <= r.bottom() + 1.0;
-        let bottom = if ok {
+        // the LCD toolbar has the Master (a popover): the grid runs down
+        let lcd = self.lcd_on();
+        let bottom = if lcd {
+            r.bottom()
+        } else if ok {
             (heads.bottom() + 30.0).min(r.bottom())
         } else {
             r.bottom()
@@ -863,8 +898,11 @@ impl App {
         let top = Rect::from_min_max(r.min, Pos2::new(r.right(), bottom));
         self.ca_grid(ui, top);
         let mr = Rect::from_min_max(Pos2::new(r.left(), bottom + 8.0), r.max);
-        self.ca.master = Rect::NOTHING;
-        if mr.height() >= 150.0 {
+        if !lcd {
+            // (in the LCD toolbar the popover sets it)
+            self.ca.master = Rect::NOTHING;
+        }
+        if mr.height() >= 150.0 && !lcd {
             self.ca_master(ui, mr);
         }
         self.ca_drag(ui.ctx());
@@ -1371,7 +1409,7 @@ impl App {
                 let strip_hover = resp.hover_pos().is_some_and(|q| strip.contains(q));
                 let tip = if launch {
                     format!(
-                        "{}: track {:02}'s launcher clip. ▶ plays it, looping, from the next {} (the other \
+                        "{}: track {:02}'s launcher clip. ▶ plays it, looping, from the next {} (■ while playing: click stops it there) (the other \
                          tracks play on) · drag it onto the timeline for a linked copy (Alt: an independent \
                          one) · double-click opens it in the piano roll · right-click: play, edit, place, rename, colour…",
                         names[b],
@@ -1380,7 +1418,7 @@ impl App {
                     )
                 } else if secs.is_some() {
                     format!(
-                        "{}: track {:02}'s clip. ▶ plays it, looping, from the next {} · drag it onto the \
+                        "{}: track {:02}'s clip. ▶ plays it, looping, from the next {} (■ while playing: click stops it there) · drag it onto the \
                          timeline for a linked copy (Alt: an independent one) · double-click opens it",
                         names[b],
                         tr + 1,
@@ -1388,7 +1426,7 @@ impl App {
                     )
                 } else {
                     format!(
-                        "{}: track {:02}'s column of block {b:02}. ▶ plays it from the next {} · drag it onto the \
+                        "{}: track {:02}'s column of block {b:02}. ▶ plays it from the next {} (■ while playing: click stops it there) · drag it onto the \
                          timeline for a {} · double-click opens it in the Tracker",
                         names[b],
                         tr + 1,
@@ -1441,7 +1479,15 @@ impl App {
                 } else if resp.double_clicked() {
                     act = Some((2, tr, b));
                 } else if resp.clicked() {
-                    act = Some(if strip_hover { (1, tr, b) } else { (3, tr, b) });
+                    // ▶ toggles: playing here (and no stop queued yet) =
+                    // stop the track at the next launch boundary (■)
+                    act = Some(if !strip_hover {
+                        (3, tr, b)
+                    } else if pl.is_some() && !row_held && !row_off_q {
+                        (4, tr, b)
+                    } else {
+                        (1, tr, b)
+                    });
                 }
                 let dim = if row_held { 0.55 } else { 1.0 };
                 let look = lid.and_then(|id| links.get(&id));
@@ -1464,16 +1510,26 @@ impl App {
                     },
                     theme::mix(col, Color32::BLACK, if strip_hover { 0.25 } else { 0.45 }),
                 );
-                play_tri(
-                    &pc,
-                    strip.center(),
-                    4.0,
-                    if pl.is_some() {
-                        t.accent
-                    } else {
-                        Color32::from_white_alpha(220)
-                    },
-                );
+                if pl.is_some() && !row_held {
+                    // playing: ■ (click stops it); a queued stop shows dimmed
+                    let q = if row_off_q { 0.45 } else { 1.0 };
+                    pc.rect_filled(
+                        Rect::from_center_size(strip.center(), egui::vec2(7.0, 7.0)),
+                        1.0,
+                        t.accent.gamma_multiply(q),
+                    );
+                } else {
+                    play_tri(
+                        &pc,
+                        strip.center(),
+                        4.0,
+                        if pl.is_some() {
+                            t.accent
+                        } else {
+                            Color32::from_white_alpha(220)
+                        },
+                    );
+                }
                 // mini preview: the column's notes
                 if let Some(sp) = self.ca.prev.get(b).and_then(|v| v.get(tr)) {
                     let pv = Rect::from_min_max(
@@ -2067,7 +2123,7 @@ impl App {
     }
 
     /// Master: volume, limiter drive / ceiling, meters, loudness
-    fn ca_master(&mut self, ui: &mut egui::Ui, r: Rect) {
+    pub(super) fn ca_master(&mut self, ui: &mut egui::Ui, r: Rect) {
         let t = th();
         let p = ui.painter().clone();
         theme::cartridge(&p, r, t.slate);
@@ -2295,7 +2351,8 @@ impl App {
         );
         }
         let playing = self.with(|s| s.engine.playing);
-        if playing && self.extra.level_hist != 1 {
+        // (the LCD toolbar's Master steps it every frame instead)
+        if playing && self.extra.level_hist != 1 && !self.master_in_toolbar() {
             let dt = ui.input(|i| i.stable_dt);
             self.ca.hist_step(dt, peaks[0].max(peaks[1]));
         }
