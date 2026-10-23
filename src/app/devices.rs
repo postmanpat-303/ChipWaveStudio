@@ -284,6 +284,11 @@ impl App {
             return;
         }
         self.dev.vertical = false;
+        // an Empty track: an empty Rack, not the last-selected instrument
+        if self.chooser_wanted() {
+            self.empty_rack_hint(ui);
+            return;
+        }
         let t = th();
         let n = self.with(|s| s.song.instruments.len());
         if n > 0 && (self.instr == 0 || self.instr as usize > n) {

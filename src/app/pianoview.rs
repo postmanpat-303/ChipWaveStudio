@@ -577,6 +577,10 @@ impl App {
 
     fn pr_audition(&mut self, key: u8, instr: u8, vel: f32) {
         let chu = self.pr_channel();
+        // an Empty track makes no sound until it gets an instrument
+        if instr == 0 && self.track_needs_instrument(chu) {
+            return;
+        }
         let ch = chu as u8;
         // a note's own instrument, else the track's (as typing plays it)
         let ins = if instr > 0 {
@@ -613,6 +617,9 @@ impl App {
     /// play several keys at once for `ms` (chords from the chord lane)
     pub(super) fn pr_audition_keys(&mut self, keys: &[u8], ms: u64) {
         let chu = self.pr_channel();
+        if self.track_needs_instrument(chu) {
+            return;
+        }
         let ch = chu as u8;
         let ins = self.track_instr(chu);
         if let Some(&k) = keys.first() {

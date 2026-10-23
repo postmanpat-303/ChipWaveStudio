@@ -657,18 +657,63 @@ impl App {
     /// the current Timeline track has no instrument (D6: none assigned and
     /// none played by its clips)
     pub(super) fn chooser_wanted(&self) -> bool {
+        self.track_needs_instrument(self.ch)
+    }
+
+    /// Timeline track `tr` is an instrument track with no instrument yet
+    /// (an Empty track / + Add track): its Rack is empty, it makes no sound
+    /// and a Browser drop on the Rack gives it one
+    pub(super) fn track_needs_instrument(&self, tr: usize) -> bool {
         if self.view != View::Timeline {
             return false;
         }
         let real = self.with(|s| {
             s.song.timeline.as_deref().is_some_and(|t| {
-                t.tracks.get(self.ch).is_some_and(|k| {
+                t.tracks.get(tr).is_some_and(|k| {
                     k.kind != crate::timeline::TrackKind::Master
                         && k.kind != crate::timeline::TrackKind::Audio
                 })
             })
         });
-        real && self.track_instrument(self.ch).is_none()
+        real && self.track_instrument(tr).is_none()
+    }
+
+    /// the empty Rack of a track with no instrument
+    pub(super) fn empty_rack_hint(&mut self, ui: &mut egui::Ui) {
+        let t = th();
+        let r = ui.max_rect().shrink(10.0);
+        self.dev.row = ui.max_rect();
+        self.dev.inst = Rect::NOTHING;
+        self.dev.cards.clear();
+        let dragging = self
+            .br
+            .drag
+            .as_ref()
+            .is_some_and(|i| super::browserview::is_instrumentish(i));
+        let col = if dragging {
+            t.accent
+        } else {
+            t.ink2.gamma_multiply(0.6)
+        };
+        let p = ui.painter();
+        p.rect_stroke(r, 8, egui::Stroke::new(1.5, col), egui::StrokeKind::Inside);
+        p.text(
+            r.center() - egui::vec2(0.0, 10.0),
+            egui::Align2::CENTER_CENTER,
+            "Drag an instrument here",
+            egui::FontId::proportional(16.0),
+            if dragging { t.accent } else { t.ink },
+        );
+        p.text(
+            r.center() + egui::vec2(0.0, 12.0),
+            egui::Align2::CENTER_CENTER,
+            format!(
+                "Track {:02} has no instrument yet: drop one from the Browser, or right-click the track header › Add",
+                self.ch + 1
+            ),
+            egui::FontId::proportional(12.0),
+            t.ink2,
+        );
     }
 
     /// the other Timeline tracks that play the current track's instrument
@@ -1031,6 +1076,10 @@ impl App {
     /// the instrument editor (lower panel, Instrument); a built-in
     /// instrument paints in the built-in skin (docs/INSTSKIN.md)
     pub(super) fn instrument_view(&mut self, ui: &mut egui::Ui) {
+        if self.chooser_wanted() {
+            self.empty_rack_hint(ui);
+            return;
+        }
         let i = (self.instr as usize).wrapping_sub(1);
         let builtin = self
             .with(|s| {

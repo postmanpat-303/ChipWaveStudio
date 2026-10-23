@@ -164,3 +164,58 @@ fn a_shared_instrument_says_so_and_a_track_gets_its_own_copy() {
     frames(&mut h, 2);
     assert_eq!(h.state().with(|s| s.song.instruments.len()), n0);
 }
+
+/// Add pie › Empty track (and + Add track, Audio track) give the new track
+/// NO instrument: nothing assigned, an empty Rack (not the last-selected
+/// instrument's), no sound from typing; an instrument dropped in fills it
+#[test]
+fn an_empty_track_has_no_instrument_an_empty_rack_and_no_sound() {
+    let (mut h, _) = two_instrument_song();
+    // instrument 02 is the selected one (the old silent default)
+    h.state_mut().instr = 2;
+    h.state_mut().extra.lower_dev = true;
+    h.state_mut().extra.lower_inst = false;
+    let n0 = h
+        .state()
+        .with(|s| (s.song.channels, s.song.instruments.len()));
+    h.state_mut()
+        .pie_apply_new(trackpie::PieAct::AddEmpty(false));
+    frames(&mut h, 3);
+    let tr = h.state().ch;
+    let (n1, ni, given) = h.state().with(|s| {
+        (
+            s.song.channels,
+            s.song.instruments.len(),
+            s.song.timeline.as_deref().unwrap().tracks[tr].instr,
+        )
+    });
+    assert_eq!((n1, ni), (n0.0 + 1, n0.1), "a track, no new instrument");
+    assert_eq!(given, 0, "no instrument assigned");
+    assert_eq!(h.state().track_instrument(tr), None);
+    assert!(h.state().chooser_wanted());
+    assert!(h.state().devices_visible());
+    assert!(h.state().dev.cards.is_empty(), "an empty Rack");
+    assert_eq!(h.state().dev.inst, Rect::NOTHING, "no instrument card");
+    assert_eq!(h.state().instr, 2, "the selection is left alone");
+    // typing on it makes no sound
+    h.state_mut().typing_on(egui::Key::A);
+    assert!(h.state().typing.held.is_empty(), "no note played");
+    // + Add track and Audio track: the same, nothing assigned
+    let n = h.state().with(|s| s.song.channels);
+    assert!(h.state_mut().track_add(n));
+    h.state_mut().track_add_audio(n + 1);
+    frames(&mut h, 2);
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref().unwrap();
+        assert_eq!((t.tracks[n].instr, t.tracks[n + 1].instr), (0, 0));
+        assert_eq!(t.tracks[n + 1].kind, crate::timeline::TrackKind::Audio);
+    });
+    assert_eq!(h.state().track_instrument(n), None);
+    // given an instrument, the Rack shows it
+    h.state_mut().ch = tr;
+    h.state()
+        .with(|s| crate::chanops::assign_track_instrument(&mut s.song, tr, 1));
+    frames(&mut h, 3);
+    assert!(!h.state().chooser_wanted());
+    assert_ne!(h.state().dev.inst, Rect::NOTHING, "its card shows");
+}

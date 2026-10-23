@@ -40,7 +40,7 @@ pub(crate) struct Typing {
     pub(crate) octave: i32,
     pub(crate) vel: f32,
     /// keys down: (key, id sent, note)
-    held: Vec<(Key, u8, u8)>,
+    pub(super) held: Vec<(Key, u8, u8)>,
 }
 
 impl Default for Typing {
@@ -232,6 +232,13 @@ impl App {
             note = sk.snap(note);
         }
         let id = KEY_BASE + k as u8;
+        if self.track_needs_instrument(self.ch) {
+            self.status = format!(
+                "Track {:02} has no instrument yet: drag one onto its Rack or the track",
+                self.ch + 1
+            );
+            return;
+        }
         let (ch, instr, vel) = (self.ch as u8, self.typing_instr(), self.typing.vel);
         self.with(|s| {
             let audio::Shared { song, engine, .. } = s;
