@@ -271,3 +271,109 @@ fn live_wheel_expression_and_pedal() {
     // the pedal holds the note after its key-up
     assert!(held > rel * 4.0 && held > 1e-4, "pedal {held} vs {rel}");
 }
+
+/// The demo: Velvet Ensemble chords, an Undertow Drone bass and a Harp
+/// Shimmer arpeggio, D minor, 80 BPM, through the app's MP3 export.
+///   CW_SW_DEMO=/path/out.mp3 cargo test --release --bin chipwave stringwave_demo -- --ignored --nocapture
+#[test]
+#[ignore]
+fn stringwave_demo() {
+    let Ok(out) = std::env::var("CW_SW_DEMO") else {
+        return;
+    };
+    let out = std::path::PathBuf::from(out);
+    let mut s = one_note_song();
+    s.title = concat!(crate::strings_name!(), " demo").into();
+    s.bpm = 80.0;
+    let chans = 5;
+    s.channels = chans;
+    s.channel_names = ["Strings 1", "Strings 2", "Strings 3", "Drone", "Harp"]
+        .map(String::from)
+        .to_vec();
+    s.mixer.channels = vec![crate::model::ChanMix::default(); chans];
+    s.mixer.channels[4].pan = 0.2;
+    s.mixer.master = 1.0;
+    let pre = crate::strings::presets::presets();
+    let get = |n: &str| pre.iter().find(|p| p.0.ends_with(n)).unwrap().2.clone();
+    let mk = |name: &str, vol: f32| crate::model::Instrument {
+        name: concat!(crate::strings_name!(), " ").to_string() + name,
+        volume: vol,
+        transpose: 0,
+        fx: vec![],
+        kind: InstrumentKind::Gen(crate::gen::GenPatch {
+            engine: crate::gen::GenEngine::Strings(get(name)),
+            ..Default::default()
+        }),
+    };
+    s.instruments[0] = mk("Velvet Ensemble", 0.7);
+    s.instruments[1] = mk("Undertow Drone", 0.5);
+    s.instruments[2] = mk("Harp Shimmer", 0.4);
+    // note number: C-0 = 1
+    let n = |semi: u8, oct: u8| 1 + oct * 12 + semi;
+    let (c, d, e, f, g, a, bb) = (0, 2, 4, 5, 7, 9, 10);
+    // (chord, bass, arpeggio) per half pattern
+    let dm = (
+        [n(d, 3), n(f, 3), n(a, 3)],
+        n(d, 2),
+        [n(d, 4), n(f, 4), n(a, 4), n(d, 5)],
+    );
+    let bf = (
+        [n(d, 3), n(f, 3), n(bb, 3)],
+        n(bb, 1),
+        [n(bb, 3), n(d, 4), n(f, 4), n(bb, 4)],
+    );
+    let ff = (
+        [n(c, 3), n(f, 3), n(a, 3)],
+        n(f, 2),
+        [n(f, 4), n(a, 4), n(c, 5), n(f, 5)],
+    );
+    let cc = (
+        [n(c, 3), n(e, 3), n(g, 3)],
+        n(c, 2),
+        [n(e, 4), n(g, 4), n(c, 5), n(e, 5)],
+    );
+    let plan = [
+        (dm, bf, false, false),
+        (ff, cc, false, false),
+        (dm, bf, true, false),
+        (ff, cc, true, false),
+        (dm, dm, true, true),
+    ];
+    s.patterns.clear();
+    for (pi, (h1, h2, harp, last)) in plan.into_iter().enumerate() {
+        let mut p = crate::model::Pattern::new(&format!("Part {}", pi + 1), 64, chans);
+        let note = |instr: u8, note: u8| Cell {
+            note,
+            instr,
+            ..Default::default()
+        };
+        for (r0, (ch, bass, arp)) in [(0usize, h1), (32, h2)] {
+            if !(last && r0 == 32) {
+                for (k, &x) in ch.iter().enumerate() {
+                    p.cells[r0][k] = note(1, x);
+                }
+                p.cells[r0][3] = note(2, bass);
+            }
+            if harp && !(last && r0 == 32) {
+                for i in 0..16 {
+                    p.cells[r0 + i * 2][4] = note(3, arp[[0, 1, 2, 3, 2, 1, 0, 1][i % 8]]);
+                }
+            }
+        }
+        if last {
+            for k in 0..5 {
+                p.cells[40][k] = note(0, NOTE_OFF);
+            }
+        }
+        s.patterns.push(p);
+    }
+    s.order = (0..plan.len()).collect();
+    let o = crate::export::Opts {
+        tail_secs: 6.0,
+        normalise: true,
+        ..Default::default()
+    };
+    let msg = crate::export::export(&s, &o, &out, &crate::export::Progress::default()).unwrap();
+    println!("{msg}");
+    crate::fileio::save_cwt(&s, &out.with_extension("cwt")).unwrap();
+}
