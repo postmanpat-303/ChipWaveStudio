@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 112] = [
+pub const VIEWS: [&str; 114] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -110,6 +110,8 @@ pub const VIEWS: [&str; 112] = [
     "tracks-trackpie",
     "tracks-trackpie-kits",
     "tracks-arranger-off",
+    "classic-arranger-off",
+    "classic-arranger-off-master",
     "split-preview",
     "cliparranger",
     "cliparranger-drag",
@@ -610,7 +612,9 @@ impl App {
             | "tracks-addpie-kits"
             | "tracks-trackpie"
             | "tracks-trackpie-kits"
-            | "tracks-arranger-off" => {
+            | "tracks-arranger-off"
+            | "classic-arranger-off"
+            | "classic-arranger-off-master" => {
                 // a new song with three tracks: Song / Master docked at the
                 // bottom of the list, room under the tracks for the Add pie
                 self.new_song();
@@ -621,7 +625,14 @@ impl App {
                 self.default_layout();
                 self.extra.clip_arranger = true;
                 self.extra.reduce_motion = true;
-                self.extra.side_hidden = view == "tracks-arranger-off";
+                // classic-*: the classic toolbar with the Arranger hidden,
+                // its compact Master meter (popover open in -master)
+                let classic = view.starts_with("classic-");
+                self.extra.side_hidden = view.ends_with("arranger-off") || classic;
+                if classic {
+                    self.extra.lcd_toolbar = false;
+                    self.lcd.master_open = view == "classic-arranger-off-master";
+                }
                 self.track_new_instrument(0, super::trackpie::Builtin::WaveForge);
                 self.track_new_instrument(1, super::trackpie::Builtin::Analog);
                 self.track_set_pattern_instrument(
