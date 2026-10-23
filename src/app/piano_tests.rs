@@ -323,6 +323,14 @@ fn midi_records_into_a_note_clip_while_the_timeline_plays_and_capture() {
     h.state_mut().midi_note_on(60, 49, 0.5, now);
     h.state_mut().midi_note_on(64, 53, 1.0, now);
     h.state_mut().midi_note_off(60);
+    // a note goes back by the time since its key went down (`now`); on a
+    // busy CI runner that can be a few ms, so allow what really elapsed
+    let slack = {
+        let tps = h
+            .state()
+            .with(|s| tl::ROW as f64 / s.engine.row_secs().max(1e-4) as f64);
+        (now.elapsed().as_secs_f64() * tps).ceil() as tl::Tick
+    };
     let d = note_data(&h);
     assert_eq!(d.notes.len(), 2);
     let id = h.state().tlv.sel.unwrap();
@@ -341,8 +349,10 @@ fn midi_records_into_a_note_clip_while_the_timeline_plays_and_capture() {
     assert_eq!(clip.start, 16 * tl::ROW, "starts on the bar");
     // row 20 (minus nothing: no audio device in tests) = 4 rows into the clip
     assert!(
-        d.notes.iter().all(|n| (n.start - 4 * tl::ROW).abs() <= 2),
-        "{:?}",
+        d.notes
+            .iter()
+            .all(|n| n.start <= 4 * tl::ROW + 2 && n.start >= 4 * tl::ROW - 2 - slack),
+        "slack {slack}: {:?}",
         d.notes
     );
     assert!((tl::roll::vel_f(d.notes[0].vel) - 0.5).abs() < 1e-3);
