@@ -25,6 +25,15 @@ pub(super) struct NoteVoice {
     pub(super) age: u32,
     /// the note plays on a plugin instrument (no synth voice)
     plug: bool,
+    /// the note plays on StringWave: the voice only tracks the note, the
+    /// rack slot sounds it ([`sw_pull`])
+    pub(super) sw: bool,
+    /// StringWave: the note-on is still to be sent (MIDI key, velocity)
+    sw_new: Option<(u8, f32)>,
+    /// StringWave: the MIDI key sent and not yet released
+    sw_sent: Option<u8>,
+    /// StringWave: a stolen note to release first (instrument, MIDI key)
+    sw_kill: Option<(usize, u8)>,
 }
 
 impl NoteVoice {
@@ -36,7 +45,7 @@ impl NoteVoice {
         auto: &AutoState,
         bpm: f32,
     ) -> (f32, f32) {
-        if self.plug {
+        if self.plug || self.sw {
             return (0.0, 0.0);
         }
         let ((x, xr), alive) = voice(
@@ -65,7 +74,74 @@ impl NoteVoice {
             off_at: 0.0,
             age: 0,
             plug: false,
+            sw: false,
+            sw_new: None,
+            sw_sent: None,
+            sw_kill: None,
         }
+    }
+
+    /// Start StringWave note `key` (MIDI) at `vel` on this voice for
+    /// instrument `instr`; a note it still sounds is released first.
+    pub(super) fn sw_start(&mut self, instr: usize, key: u8, vel: f32) {
+        self.sw_stolen();
+        self.instr = instr;
+        self.sw = true;
+        self.sw_new = Some((key, vel));
+    }
+
+    /// StringWave note events to send ([`sw_pull`])
+    pub(super) fn sw_busy(&self) -> bool {
+        self.sw || self.sw_kill.is_some()
+    }
+
+    /// the voice is re-used: a StringWave note it sounds is to be released
+    pub(super) fn sw_stolen(&mut self) {
+        if self.sw && self.active {
+            if let Some(k) = self.sw_sent.take() {
+                self.sw_kill = Some((self.instr, k));
+            }
+        }
+        self.sw_new = None;
+        self.sw = false;
+    }
+}
+
+/// Send a StringWave voice's pending note events to its rack slot
+/// (instr, `ch`, `layer`) with note tag `tag`; the voice is free once its
+/// note is released (the slot plays the tail).
+pub(super) fn sw_pull(
+    v: &mut NoteVoice,
+    rack: &mut crate::strings::rack::Rack,
+    song: &Song,
+    ch: usize,
+    layer: u8,
+    tag: u16,
+) {
+    if let Some((i, key)) = v.sw_kill.take() {
+        if let Some(si) = rack.find(i, ch, layer) {
+            rack.slots[si].note_off(key, tag);
+        }
+    }
+    if !v.sw {
+        return;
+    }
+    if let Some((key, vel)) = v.sw_new.take() {
+        if let Some(si) = rack.ensure(song, v.instr, ch, layer) {
+            rack.slots[si].note_on(key, vel, tag);
+            v.sw_sent = Some(key);
+        }
+    }
+    if let Some(key) = v.sw_sent {
+        if !v.down {
+            if let Some(si) = rack.find(v.instr, ch, layer) {
+                rack.slots[si].note_off(key, tag);
+            }
+            v.sw_sent = None;
+        }
+    }
+    if v.sw_sent.is_none() {
+        v.active = false;
     }
 }
 
@@ -399,6 +475,10 @@ pub(super) fn note_on(
         return;
     }
     let v = &mut st.v[slot];
+    v.sw_stolen();
+    if crate::strings::rack::patch(song, idx).is_some() {
+        v.sw_start(idx, midi_key(key), n.vel);
+    }
     v.instr = idx;
     v.freq = note_freq(key) * 2f32.powf(n.tune / 12.0);
     v.vol = vol;
@@ -560,6 +640,7 @@ pub(super) fn restrike(
                 };
                 let sustains = song.instruments.get(idx).is_some_and(|i| {
                     matches!(i.kind, InstrumentKind::Plugin(_))
+                        || crate::strings::rack::patch(song, idx).is_some()
                         || i.kind.patch().is_some_and(|p| p.amp.s >= 0.05)
                 });
                 if sustains {

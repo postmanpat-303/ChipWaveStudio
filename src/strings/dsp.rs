@@ -127,10 +127,6 @@ impl Limiter {
         let g = std::mem::replace(&mut self.min_gain, self.gain);
         20.0 * g.max(1e-4).log10()
     }
-    /// Current gain reduction in dB (0 = none), for metering.
-    pub fn reduction_db(&self) -> f32 {
-        20.0 * self.gain.max(1e-4).log10()
-    }
 }
 
 #[inline]
@@ -238,9 +234,6 @@ impl Svf {
         self.ic1 = 2.0 * v1 - self.ic1;
         self.ic2 = 2.0 * v2 - self.ic2;
         v2
-    }
-    pub fn reset(&mut self) {
-        *self = Self::default();
     }
 }
 

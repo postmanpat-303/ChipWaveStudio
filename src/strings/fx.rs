@@ -1,4 +1,6 @@
 //! Global effects: string ensemble chorus, stereo echo, lush FDN reverb.
+// ported DSP: index loops kept as in the stand-alone build (same output)
+#![allow(clippy::needless_range_loop, clippy::too_many_arguments)]
 use super::dsp::*;
 
 pub struct Chorus {

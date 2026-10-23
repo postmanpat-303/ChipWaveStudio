@@ -1,5 +1,7 @@
 //! The synth engine: voices, modulation, effects. Independent of the plugin wrapper so it can be
 //! rendered offline in tests.
+// ported DSP: index loops kept as in the stand-alone build (same output)
+#![allow(clippy::needless_range_loop)]
 use super::dsp::*;
 use super::fx::*;
 use super::{Dest, LfoWave, SubOct, Wave};
@@ -235,7 +237,7 @@ impl Layer {
     #[inline]
     fn tick(&mut self, rng: &mut Rng, vel: f32) -> f32 {
         let c = &self.ctl;
-        let out = match self.wave {
+        match self.wave {
             Wave::Ensemble => {
                 let mut acc = 0.0;
                 for k in 0..7 {
@@ -277,8 +279,7 @@ impl Layer {
                 let lp = self.dc[0].lp(o, 0.0015);
                 o - lp
             }
-        };
-        out
+        }
     }
 }
 
@@ -448,11 +449,6 @@ impl Engine {
         self.limiter.reset();
     }
 
-    /// The smoothed values currently in use (for tests).
-    pub fn current(&self) -> &Snap {
-        &self.cur
-    }
-
     fn sync_cur(&mut self, snap: &Snap) {
         if !self.has_cur {
             self.cur = *snap;
@@ -607,16 +603,6 @@ impl Engine {
                 v.amp.gate_off();
                 v.fenv.gate_off();
                 v.menv.gate_off();
-            }
-        }
-    }
-
-    pub fn choke(&mut self, note: u8, channel: u16) {
-        for v in self.voices.iter_mut() {
-            if v.active && v.note == note && v.channel == channel {
-                v.pending = None;
-                v.fade = 1.0; // fades out quickly then goes idle
-                v.released = true;
             }
         }
     }

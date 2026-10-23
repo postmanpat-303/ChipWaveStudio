@@ -540,6 +540,10 @@ pub enum GenEngine {
     Poly(crate::poly::PolyP),
     /// Drum Kit: up to 32 pads, each a drum voice on its own key (Unreleased)
     Drums(crate::drumkit::DrumKitP),
+    /// StringWave: layered string ensemble with its own filter, modulation,
+    /// effects and limiter; rendered by its own per-channel engine
+    /// (`strings::rack`), not by the voice synth. File tag "Strings".
+    Strings(crate::strings::StringsP),
 }
 
 impl GenEngine {
@@ -554,6 +558,7 @@ impl GenEngine {
                 | GenEngine::Wave(_)
                 | GenEngine::Grid(_)
                 | GenEngine::Poly(_)
+                | GenEngine::Strings(_)
         )
     }
 }
@@ -627,6 +632,7 @@ impl GenPatch {
             GenEngine::Grid(x) => x.fix(),
             GenEngine::Poly(x) => x.fix(),
             GenEngine::Drums(k) => k.fix(),
+            GenEngine::Strings(x) => x.fix(),
         }
         self.sync_poly();
         self.mutate = if self.mutate.is_finite() {
@@ -674,6 +680,7 @@ impl GenPatch {
             GenEngine::Wave(w) => w.dice(seed),
             GenEngine::Grid(x) => x.dice(seed),
             GenEngine::Poly(x) => x.dice(seed),
+            GenEngine::Strings(x) => x.dice(seed),
             _ => {
                 if let Some(d) = self.drum_mut(sel) {
                     roll(d, seed)
@@ -693,6 +700,7 @@ impl GenPatch {
             GenEngine::Wave(w) => w.dice(seed),
             GenEngine::Grid(x) => x.dice(seed),
             GenEngine::Poly(x) => x.dice(seed),
+            GenEngine::Strings(x) => x.dice(seed),
             GenEngine::Kit(k) => {
                 for (i, d) in k.pieces.iter_mut().enumerate() {
                     roll(d, seed.wrapping_add(i as u32 * 0x9E37_79B9));
@@ -716,6 +724,7 @@ impl GenPatch {
             GenEngine::Wave(x) => return x.mutate(a, seed),
             GenEngine::Grid(x) => return x.mutate(a, seed),
             GenEngine::Poly(x) => return x.mutate(a, seed),
+            GenEngine::Strings(x) => return x.mutate(a, seed),
             _ => {}
         }
         let Some(d) = self.drum_mut(sel) else {
@@ -840,6 +849,9 @@ pub fn gen_knobs(g: &GenPatch) -> Vec<(usize, String)> {
         GenEngine::Poly(_) => (0..crate::poly::PN)
             .map(|k| (k, crate::poly::knob_label(k)))
             .collect(),
+        GenEngine::Strings(_) => (0..crate::strings::SN)
+            .map(|k| (k, crate::strings::knob_label(k)))
+            .collect(),
         GenEngine::Grid(x) => x.knobs(),
         // pad p macro m = knob p*8+m (pads past GEN_KNOBS/8 are not automatable yet)
         GenEngine::Drums(k) => k
@@ -870,6 +882,7 @@ pub fn gen_knob_def(g: &GenPatch, k: usize) -> Option<&'static MacroDef> {
         GenEngine::Noise(_) => crate::gen2::NOISE.get(k),
         GenEngine::Wave(_) => crate::gen_wave::WAVE.get(k),
         GenEngine::Poly(_) => crate::poly::POLY.get(k),
+        GenEngine::Strings(_) => crate::strings::STRINGS.get(k),
         GenEngine::Grid(x) => x.knob_def(k),
         GenEngine::Drums(kp) if k < GEN_KNOBS => kp.pads.get(k / 8)?.drum.kind.macros().get(k % 8),
         GenEngine::Drums(_) => None,
@@ -887,6 +900,7 @@ pub fn gen_knob_norm(g: &GenPatch, k: usize) -> Option<f32> {
         GenEngine::Noise(n) => n.p.get(k).copied(),
         GenEngine::Wave(w) => w.p.get(k).copied(),
         GenEngine::Poly(x) => x.p.get(k).copied(),
+        GenEngine::Strings(x) => x.p.get(k).copied(),
         GenEngine::Grid(x) => x.p.get(k).copied(),
         GenEngine::Drums(kp) if k < GEN_KNOBS => {
             kp.pads.get(k / 8)?.drum.macros.get(k % 8).copied()
@@ -918,6 +932,7 @@ pub fn set_gen_knob_norm(g: &mut GenPatch, k: usize, v: f32) -> bool {
         GenEngine::Noise(n) => n.p.get_mut(k),
         GenEngine::Wave(w) => w.p.get_mut(k),
         GenEngine::Poly(x) => x.p.get_mut(k),
+        GenEngine::Strings(x) => x.p.get_mut(k),
         GenEngine::Grid(x) => x.p.get_mut(k),
         GenEngine::Drums(kp) => match kp.pads.get_mut(k / 8) {
             Some(p) if k < GEN_KNOBS => p.drum.macros.get_mut(k % 8),
@@ -1084,6 +1099,11 @@ impl GenState {
         if let GenEngine::Drums(k) = &g.engine {
             return self.render_pads(k, ov, freq, sr);
         }
+        if let GenEngine::Strings(_) = &g.engine {
+            // StringWave plays through its own engine (strings::rack)
+            self.done = true;
+            return (0.0, 0.0, false);
+        }
         let (d, ratio) = match &g.engine {
             GenEngine::Drums(_)
             | GenEngine::ChipFx(_)
@@ -1092,7 +1112,8 @@ impl GenState {
             | GenEngine::Noise(_)
             | GenEngine::Wave(_)
             | GenEngine::Grid(_)
-            | GenEngine::Poly(_) => {
+            | GenEngine::Poly(_)
+            | GenEngine::Strings(_) => {
                 unreachable!()
             }
             GenEngine::Drum(d) => (
@@ -1714,6 +1735,16 @@ pub fn presets() -> Vec<(&'static str, &'static str, GenPatch)> {
         g.base.legato = legato;
         v.push((n, tip, g));
     }
+    for (n, tip, x) in crate::strings::presets::presets() {
+        v.push((
+            n,
+            tip,
+            GenPatch {
+                engine: GenEngine::Strings(x),
+                ..Default::default()
+            },
+        ));
+    }
     v
 }
 
@@ -1736,6 +1767,9 @@ pub fn preset(name: &str) -> Option<GenPatch> {
 /// Render one note offline (for Bake to sample and tests): mono samples
 /// until the generator finishes (at most `max_s` seconds).
 pub fn bake(g: &GenPatch, freq: f32, sr: f32, max_s: f32) -> Vec<f32> {
+    if let GenEngine::Strings(p) = &g.engine {
+        return bake_strings(p, freq, sr, max_s);
+    }
     let mut v = crate::synth::SynthVoice::seeded(g.seed.wrapping_mul(2_654_435_761) | 1);
     let mut out = Vec::with_capacity((sr * max_s.min(2.0)) as usize);
     let hold = (sr * 1.2) as usize;
@@ -1750,6 +1784,50 @@ pub fn bake(g: &GenPatch, freq: f32, sr: f32, max_s: f32) -> Vec<f32> {
         }
     }
     // trim the silent tail and fade the last 2 ms
+    while out.len() > 1 && out.last().is_some_and(|x| x.abs() < 1e-5) {
+        out.pop();
+    }
+    let n = out.len();
+    let f = ((sr * 0.002) as usize).min(n);
+    for i in 0..f {
+        out[n - f + i] *= 1.0 - i as f32 / f as f32;
+    }
+    out
+}
+
+/// [`bake`] for StringWave: its own engine, held 1.2 s, then released
+/// until the tail is silent
+fn bake_strings(p: &crate::strings::StringsP, freq: f32, sr: f32, max_s: f32) -> Vec<f32> {
+    use crate::strings::engine::{Engine, Snap};
+    let mut e = Engine::new(sr);
+    let snap = Snap::new(p, &|_| None);
+    // the nearest key, the rest as a fine tune (the engine's A4 = key 69)
+    let semis = 12.0 * (freq.max(1.0) / 440.0).log2() + 69.0;
+    let key = semis.round().clamp(0.0, 127.0);
+    e.tune = semis - key;
+    e.note_on(&snap, key as u8, 0.8, None, 0);
+    let hold = (sr * 1.2) as usize;
+    let total = (sr * max_s) as usize;
+    let mut out = Vec::with_capacity(total.min((sr * 4.0) as usize));
+    let (mut l, mut r) = ([0.0f32; 64], [0.0f32; 64]);
+    let mut quiet = 0usize;
+    while out.len() < total {
+        if out.len() >= hold && out.len() < hold + 64 {
+            e.note_off(key as u8, 0);
+        }
+        let n = 64.min(total - out.len());
+        e.render(&snap, &mut l[..n], &mut r[..n]);
+        let mut peak = 0.0f32;
+        for k in 0..n {
+            let y = 0.5 * (l[k] + r[k]);
+            peak = peak.max(y.abs());
+            out.push(y);
+        }
+        quiet = if peak < 1e-5 { quiet + n } else { 0 };
+        if out.len() > hold && quiet > (sr * 0.2) as usize {
+            break;
+        }
+    }
     while out.len() > 1 && out.last().is_some_and(|x| x.abs() < 1e-5) {
         out.pop();
     }
@@ -1776,6 +1854,13 @@ mod tests {
     #[test]
     fn every_preset_sounds_at_a_sane_level_and_finishes() {
         for (name, _, g) in presets() {
+            if matches!(g.engine, GenEngine::Strings(_)) {
+                // its own engine: strings::tests (levels) and bake below
+                let y = bake(&g, C4, SR, 4.0);
+                let pk = y.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+                assert!((0.05..=1.0).contains(&pk), "{name}: bake peak {pk:.3}");
+                continue;
+            }
             let freqs: Vec<f32> = match &g.engine {
                 GenEngine::Kit(_) => (0..12).map(|k| C4 * 2f32.powf(k as f32 / 12.0)).collect(),
                 _ => vec![C4],

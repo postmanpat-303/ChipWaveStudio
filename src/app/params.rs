@@ -279,6 +279,7 @@ pub(crate) fn type_tag(k: &InstrumentKind) -> &'static str {
             GenEngine::Grid(_) => "Grid",
             GenEngine::Poly(_) => crate::poly::POLY_DISPLAY_NAME,
             GenEngine::Drums(_) => "Drum Kit",
+            GenEngine::Strings(_) => crate::strings::STRINGS_DISPLAY_NAME,
         },
     }
 }
@@ -301,6 +302,7 @@ fallback!(d_fm, crate::gen2::FmP, Default::default());
 fallback!(d_nz, crate::gen2::NoiseP, Default::default());
 fallback!(d_wv, crate::gen_wave::WaveP, Default::default());
 fallback!(d_ps, crate::poly::PolyP, Default::default());
+fallback!(d_sw, crate::strings::StringsP, Default::default());
 fallback!(d_gd, crate::grid::GridP, crate::grid::GridP::empty());
 fallback!(d_sfx, crate::chipfx::SfxP, Default::default());
 
@@ -367,6 +369,7 @@ engine_acc!(nz, nz_mut, Noise, crate::gen2::NoiseP, d_nz);
 engine_acc!(wv, wv_mut, Wave, crate::gen_wave::WaveP, d_wv);
 engine_acc!(gd, gd_mut, Grid, crate::grid::GridP, d_gd);
 engine_acc!(ps, ps_mut, Poly, crate::poly::PolyP, d_ps);
+engine_acc!(sw, sw_mut, Strings, crate::strings::StringsP, d_sw);
 engine_acc!(sfx, sfx_mut, ChipFx, crate::chipfx::SfxP, d_sfx);
 
 fn drum(i: &Instrument, sel: usize) -> DrumP {
@@ -1661,6 +1664,7 @@ fn generator(b: &mut B, g: &GenPatch, sel: usize) {
         GenEngine::Grid(x) => grid(b, x),
         GenEngine::Poly(_) => polysynth(b),
         GenEngine::Drums(_) => drums(b, g, sel),
+        GenEngine::Strings(_) => stringwave(b),
     }
     if !g.engine.own_env() {
         // release + optional filter (drums, kit, chip FX)
@@ -2150,6 +2154,223 @@ fn noise(b: &mut B) {
     for k in [12, 13] {
         gen_knob!(b, "nz", nz, nz_mut, NOISE, k);
     }
+}
+
+/// a StringWave choice (index in, index out)
+fn sw_choice<'b>(
+    b: &'b mut B,
+    key: &str,
+    name: &str,
+    opts: Vec<String>,
+    get: impl Fn(&crate::strings::StringsP) -> usize + 'static,
+    set: impl Fn(&mut crate::strings::StringsP, usize) + 'static,
+) -> &'b mut Param {
+    let n = opts.len();
+    let gs: (Get, Set) = (
+        Box::new(move |i| get(sw(i)) as f32),
+        Box::new(move |i, v| {
+            if let Some(x) = sw_mut(i) {
+                set(x, (v.round().max(0.0) as usize).min(n - 1));
+            }
+        }),
+    );
+    b.choice(key, name, opts, gs)
+}
+
+/// a StringWave switch
+fn sw_toggle<'b>(
+    b: &'b mut B,
+    key: &str,
+    name: &str,
+    get: impl Fn(&crate::strings::StringsP) -> bool + 'static,
+    set: impl Fn(&mut crate::strings::StringsP, bool) + 'static,
+) -> &'b mut Param {
+    let gs: (Get, Set) = (
+        Box::new(move |i| get(sw(i)) as u8 as f32),
+        Box::new(move |i, v| {
+            if let Some(x) = sw_mut(i) {
+                set(x, v > 0.5);
+            }
+        }),
+    );
+    b.toggle(key, name, gs)
+}
+
+/// StringWave's placeholder editor: the generic cards (Layers on Main,
+/// Filter & Mod on Modulation, FX & Master on FX). The styled panel waits
+/// on the built-in instrument look.
+fn stringwave(b: &mut B) {
+    use crate::strings::*;
+    let k = |b: &mut B, i: usize| {
+        let p = gen_knob!(b, "sw", sw, sw_mut, STRINGS, i);
+        // double-click resets to the factory default
+        if let Ctl::Knob { def, .. } = &mut p.ctl {
+            *def = StringsP::default().p[i];
+        }
+        p.badge = None;
+    };
+    let dests: Vec<String> = Dest::ALL.iter().map(|d| d.name().to_string()).collect();
+    for l in 0..3usize {
+        b.card(Tab::Main, ["Layer 1", "Layer 2", "Layer 3"][l]);
+        sw_toggle(
+            b,
+            &format!("sw.on{l}"),
+            "On",
+            move |x| x.layer_on[l],
+            move |x, v| x.layer_on[l] = v,
+        );
+        sw_choice(
+            b,
+            &format!("sw.wave{l}"),
+            "Wave",
+            Wave::ALL.iter().map(|w| w.name().to_string()).collect(),
+            move |x| x.wave[l] as usize,
+            move |x, v| x.wave[l] = Wave::ALL[v],
+        )
+        .tip("Ensemble: detuned saw section; Plucked: bright attack that dies down; Bowed: slow bow with rosin noise; Body: hollow wooden resonance");
+        for j in [L_OCT, L_DET, L_TONE, L_LVL, L_PAN] {
+            k(b, LAYER[l] + j);
+        }
+        sw_toggle(
+            b,
+            &format!("sw.mute{l}"),
+            "Mute",
+            move |x| x.layer_mute[l],
+            move |x, v| x.layer_mute[l] = v,
+        );
+        sw_toggle(
+            b,
+            &format!("sw.solo{l}"),
+            "Solo",
+            move |x| x.layer_solo[l],
+            move |x, v| x.layer_solo[l] = v,
+        );
+    }
+    b.card(Tab::Main, "Undertones");
+    sw_toggle(b, "sw.und", "On", |x| x.und_on, |x, v| x.und_on = v);
+    sw_choice(
+        b,
+        "sw.suboct",
+        "Sub octave",
+        SubOct::ALL.iter().map(|w| w.name().to_string()).collect(),
+        |x| x.sub_oct as usize,
+        |x, v| x.sub_oct = SubOct::ALL[v],
+    );
+    for i in [SUB_LVL, DRONE_LVL, DRONE_TONE] {
+        k(b, i);
+    }
+    sw_toggle(
+        b,
+        "sw.undmute",
+        "Mute",
+        |x| x.und_mute,
+        |x, v| x.und_mute = v,
+    );
+    sw_toggle(
+        b,
+        "sw.undsolo",
+        "Solo",
+        |x| x.und_solo,
+        |x, v| x.und_solo = v,
+    );
+    b.card(Tab::Main, "Amp envelope").viz = Some(Box::new(|i| {
+        let x = sw(i);
+        Viz::Adsr(x.get(AMP_A), x.get(AMP_D), x.get(AMP_S), x.get(AMP_R))
+    }));
+    for i in [AMP_A, AMP_D, AMP_S, AMP_R, VEL, VOICES] {
+        k(b, i);
+    }
+
+    b.card(Tab::Modulation, "Filter").viz = Some(Box::new(|i| {
+        let x = sw(i);
+        Viz::Filter(x.get(CUTOFF), x.get(RESO), 0)
+    }));
+    sw_toggle(
+        b,
+        "sw.filter",
+        "On",
+        |x| x.filter_on,
+        |x, v| x.filter_on = v,
+    );
+    sw_choice(
+        b,
+        "sw.slope",
+        "Slope",
+        vec!["12 dB".into(), "24 dB".into()],
+        |x| x.f24 as usize,
+        |x, v| x.f24 = v == 1,
+    );
+    for i in [CUTOFF, RESO, F_KEY] {
+        k(b, i);
+    }
+    b.card(Tab::Modulation, "Filter envelope").viz = Some(Box::new(|i| {
+        let x = sw(i);
+        Viz::Adsr(x.get(F_A), x.get(F_D), x.get(F_S), x.get(F_R))
+    }));
+    for i in [F_ENV, F_A, F_D, F_S, F_R] {
+        k(b, i);
+    }
+    for n in 0..2usize {
+        b.card(Tab::Modulation, ["LFO 1", "LFO 2"][n]);
+        sw_toggle(
+            b,
+            &format!("sw.lfo{n}"),
+            "On",
+            move |x| x.lfo_on[n],
+            move |x, v| x.lfo_on[n] = v,
+        );
+        sw_choice(
+            b,
+            &format!("sw.lfow{n}"),
+            "Shape",
+            LfoWave::ALL.iter().map(|w| w.name().to_string()).collect(),
+            move |x| x.lfo_wave[n] as usize,
+            move |x, v| x.lfo_wave[n] = LfoWave::ALL[v],
+        );
+        k(b, LFO[n]);
+        k(b, LFO[n] + 1);
+        sw_choice(
+            b,
+            &format!("sw.lfod{n}"),
+            "Target",
+            dests.clone(),
+            move |x| x.lfo_dest[n] as usize,
+            move |x, v| x.lfo_dest[n] = Dest::ALL[v],
+        );
+    }
+    b.card(Tab::Modulation, "Mod envelope");
+    sw_toggle(b, "sw.me", "On", |x| x.me_on, |x, v| x.me_on = v);
+    for i in [ME_A, ME_D, ME_AMT] {
+        k(b, i);
+    }
+    sw_choice(
+        b,
+        "sw.med",
+        "Target",
+        dests,
+        |x| x.me_dest as usize,
+        |x, v| x.me_dest = Dest::ALL[v],
+    );
+    b.card(Tab::Modulation, "Mod wheel");
+    k(b, WHEEL);
+
+    b.card(Tab::Fx, "Chorus");
+    sw_toggle(b, "sw.cho", "On", |x| x.cho_on, |x, v| x.cho_on = v);
+    for i in [CHO_RATE, CHO_DEPTH, CHO_MIX] {
+        k(b, i);
+    }
+    b.card(Tab::Fx, "Echo");
+    sw_toggle(b, "sw.echo", "On", |x| x.echo_on, |x, v| x.echo_on = v);
+    for i in [ECHO_TIME, ECHO_FB, ECHO_TONE, ECHO_MIX] {
+        k(b, i);
+    }
+    b.card(Tab::Fx, "Reverb");
+    sw_toggle(b, "sw.rev", "On", |x| x.rev_on, |x, v| x.rev_on = v);
+    for i in [REV_SIZE, REV_DAMP, REV_MIX] {
+        k(b, i);
+    }
+    b.card(Tab::Fx, "Master");
+    k(b, MASTER);
 }
 
 /// a poly synth choice whose names come from `opts` (index in, index out)

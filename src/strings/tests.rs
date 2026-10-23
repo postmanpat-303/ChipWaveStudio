@@ -1,5 +1,6 @@
 //! StringWave engine tests (ported from the stand-alone build): every
 //! control is live, edits don't click, levels match, nothing blows up.
+#![allow(clippy::field_reassign_with_default, clippy::type_complexity)]
 use super::engine::{Engine, Snap};
 use super::*;
 
@@ -440,7 +441,7 @@ fn patches_round_trip_through_files_by_name() {
     assert_eq!(p.p[CUTOFF], 0.25);
     assert_eq!(p.p[RESO], StringsP::default().p[RESO]);
     assert_eq!(STRINGS.len(), KEYS.len());
-    assert!(SN <= crate::gen::GEN_KNOBS);
+    const _: () = assert!(SN <= crate::gen::GEN_KNOBS);
 }
 
 #[test]
