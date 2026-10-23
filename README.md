@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.8.0-00d0ff" alt="Version 0.2.8.0">
+  <img src="https://img.shields.io/badge/version-0.2.10.0-00d0ff" alt="Version 0.2.10.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -20,7 +20,7 @@
 
 ```
  ┌──────────────────────────────────────────────────────────────────────────┐
- │  C H I P W A V E   S T U D I O            v0.2.8.0     BPM 140  SPD 06  │
+ │  C H I P W A V E   S T U D I O            v0.2.10.0    BPM 140  SPD 06  │
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
  │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ free music studio │
  │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ sequencer + synth │
@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.8.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.10.0</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -51,7 +51,31 @@
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.9.0: the new Rack
+## New in 0.2.10.0: Generators, the LCD toolbar and smarter pies
+
+- **Generators: Chords | Melody | Bass.** One panel with three tabs and one Write card. The **Melody** tab writes a seeded tune over your chords (rhythm, contour, motif, density, range); the **Bass** tab follows the chord roots in six styles (Root, Octave pump, Walking, Acid, Syncopated, Euclid). Drag the **⠿ GENERATORS** grip to move the panel anywhere.
+- **A big Preview pad**: Preview, Dice and Another one sit in one large rounded pad, and **Write to timeline** gives the new track a copy of your track's instrument, so it sounds like the preview.
+- **LCD toolbar**: tempo, position, time, signature and load on a display in Cyan, Amber, Green, Red, Ice or your own colour, with a compact Master meter that opens the Master panel. Settings › Top display brings back the classic toolbar.
+- **Context-aware pies**: right-click a track and the first ring fits it (drum tracks get kits, patterns and Dice kit; melodic tracks get instruments, Sounds, Chords…, Melody… and Bass…). Right-click under the tracks for a New track pie.
+- **Tracks and the Rack**: Song / Master sits at the bottom, a new empty track has no instrument until you give it one, a new built-in instrument opens as its compact Rack card with a **Drag an effect here** box beside it, and a double-click on a side tab collapses or expands a card.
+- **Clip Arranger**: ▶ becomes ■ on a playing slot to stop it, and the **Arranger** button hides the panel for room.
+- **Piano roll**: Shift+arrows nudge notes; the octave move is now Ctrl+Up/Down.
+- **Clean exit**: the recovery dialog only appears after a real crash.
+
+Every song saves, plays and renders exactly as in 0.2.9.0. Known limits and details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/generators-bass.png" alt="The Generators panel in the Slate theme on its Bass tab: a bass line over Em7, G/D, D and Am/C, the big Preview pad with Dice and Another one, the six bass styles and the Write card"><br><b>Generators</b>: Chords, Melody and Bass tabs, the big Preview pad and the Write card.</td>
+    <td width="50%"><img src="docs/screenshots/lcd-master-popover.png" alt="The LCD toolbar in cyan with tempo, position, time and load, and the Master popover open with Volume, Drive, Ceiling, level meters and the loudness history"><br><b>LCD toolbar</b>: the display and the compact Master meter, with its popover open.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/rack-compact.png" alt="The Rack with a WaveForge Saw Lead compact card and a large Drag an effect here box beside it"><br><b>Compact Rack card</b>: a new instrument with room to drop effects.</td>
+    <td width="50%"><img src="docs/screenshots/trackpie-melodic.png" alt="The track pie on a melodic track with Instrument, Sounds, New pattern, Chords and the other choices"><br><b>Context-aware track pie</b>: the first ring fits the track.</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.9.0: the new Rack</b></summary>
 
 - **The Rack**: click a track and its sound shows under the Timeline as one sideways row, the instrument first and then its effects in order, with a **+** zone at the end. A wide row scrolls sideways.
 - **Side tabs on every card**: ⏻ bypass, ✕ remove and ‹ collapse. The instrument only collapses; right-click › *Replace instrument…* swaps it.
@@ -70,6 +94,8 @@ Every song saves, plays and renders exactly as in 0.2.8.0. Known limits and deta
     <td width="50%"><img src="docs/screenshots/rack-row-dark.png" alt="The Rack in the Dark Circuit theme with the Browser's Effects list beside it, ready to drag an effect onto the row"><br><b>Drag from the Browser</b>: drop an effect on the row, its + zone or a Timeline track.</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.8.0: StringWave, the violet look and pie-ring Add</b></summary>
 
@@ -460,6 +486,8 @@ ChipWave stands on the shoulders of open source and published research. With tha
 - **Robert Moog**'s Minimoog and **Vesa Välimäki & Antti Huovilainen**'s polyBLEP oscillators (IEEE SPM 2007): the Analog generator. **Matt Tytel**'s [Vital](https://github.com/mtytel/vital) (GPL-3) and the **Surge Synth Team**'s [Surge XT](https://github.com/surge-synthesizer/surge) (GPL-3): oscillator drift, noise and macro ideas. **Pascal Gauthier**'s [Dexed](https://github.com/asb2m10/dexed) (GPL-3) and **Raph Levien**'s [MSFA](https://github.com/google/music-synthesizer-for-android) (Apache-2.0), plus the Yamaha DX21/TX81Z algorithms: the FM-4 generator. **Paul Kellet**'s [pink noise filter](https://www.musicdsp.org/en/latest/Filters/76-pink-noise-filter.html), and the Dust generators of [SuperCollider](https://github.com/supercollider/supercollider) and DaisySP: the Noise generator. **Vadim Zavalishin**'s *The Art of VA Filter Design* (zero-delay filters) and the polyBLEP paper above: the WaveForge generator. All of it was written from scratch (no code copied).
 - **The free-audio project** (**Alexandre Bique** and contributors): [CLAP](https://github.com/free-audio/clap) (MIT), the plugin standard ChipWave hosts, through **micahrj**'s [clap-sys](https://github.com/micahrj/clap-sys) bindings (MIT/Apache-2.0). Host design references, no code copied: [clack](https://github.com/prokopyl/clack) by **Adrien Prokopowicz** (MIT/Apache-2.0), [Carla](https://github.com/falkTX/Carla) by **Filipe Coelho (falkTX)** and [Ardour](https://ardour.org) (GPL-2.0+). Plugin loading uses [libloading](https://github.com/nagisa/rust_libloading) (**Simonas Kazlauskas**, ISC), editor windows [windows-sys](https://github.com/microsoft/windows-rs) (Microsoft, MIT/Apache-2.0). Tested with [Surge XT](https://surge-synthesizer.github.io) (Surge Synth Team, GPL-3; not bundled).
 - **Carol L. Krumhansl & Edward J. Kessler** (1982), [key profiles](https://doi.org/10.1037/0033-295X.89.4.334), and the **Krumhansl–Schmuckler** key-finding algorithm (Krumhansl, *Cognitive Foundations of Musical Pitch*, 1990): the chord helper's key detection.
+- **The Melody generator** (ideas only, no code copied): **Bozhidar Bozhanov**'s [Computoser](https://arxiv.org/abs/1412.3079) paper (2014), **Godfried T. Toussaint**'s Euclidean rhythms (2005, after **E. Bjorklund**'s algorithm, also used by the Bass generator), **Timo Hoogland**'s [total-serialism](https://github.com/tmhglnd/total-serialism) (MIT), **Daniel Jones**'s [isobar](https://github.com/ideoforms/isobar) (MIT) and **Emilie Gillet**'s open [Eurorack firmware](https://github.com/pichenettes/eurorack) (MIT).
+- **The Bass generator** (ideas only, no code copied): **David Whiting (vitling)**'s [acid-banger](https://github.com/vitling/acid-banger) (CC BY 4.0), **midilab**'s [aciduino](https://github.com/midilab/aciduino) (MIT) and [JC-303](https://github.com/midilab/jc303) (GPL-3.0, its engine Open303 by **Robin Schmidt**), **Zack Scholl**'s [acid-test](https://github.com/schollz/acid-test) (MIT) and **philxan**'s [WalkingBass](https://github.com/philxan/WalkingBass) (MIT).
 - **Scaler** by Plugin Boutique: the inspiration for the chord pads and progressions (no code, data or artwork used).
 - The **Roland TB-303**, whose glide and accent the `3C` / `3D` effects imitate.
 - **Teijo Kinnunen and Ray Burt-Frost** for [OctaMED](https://en.wikipedia.org/wiki/OctaMED), whose workflow ChipWave follows.

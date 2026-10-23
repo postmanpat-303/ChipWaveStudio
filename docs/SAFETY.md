@@ -34,7 +34,7 @@ The portable Windows build keeps everything next to the exe ([PACKAGING.md](PACK
 - **Next launch:** if any session folder is left without a clean-exit marker, a **Recovery dialog** lists each one:
   - The song name, the time of the last change (local time, e.g. "Today 14:32"), and its source (autosave + journal, or emergency snapshot).
   - Buttons: **Recover** (opens as "Untitled (recovered)"; you choose where to save, the original is untouched), **Compare** (info only), **Discard**, and **Later**.
-- **Since 0.2.9.x (tracks branch):** every normal exit (window ✕, Alt+F4, File › Quit, after Save or Don't save) deletes the session folder, so unsaved changes you did not keep are gone and nothing is offered next time. Only a crash or a killed process leaves a copy. Copies put off with **Later** move to `recovery-archive/` (newest 10 kept) on the next clean exit; leftovers of older versions' clean exits (heartbeat `0`, no `crash.txt`) are removed without asking.
+- **Since 0.2.10.0:** every normal exit (window ✕, Alt+F4, File › Quit, after Save or Don't save) deletes the session folder, so unsaved changes you did not keep are gone and nothing is offered next time. Only a crash or a killed process leaves a copy. Copies put off with **Later** move to `recovery-archive/` (newest 10 kept) on the next clean exit; leftovers of older versions' clean exits (heartbeat `0`, no `crash.txt`) are removed without asking.
 - Recovery folders older than 30 days are cleaned up after asking.
 
 ## 4. Recent files
