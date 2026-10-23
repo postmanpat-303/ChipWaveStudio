@@ -17,6 +17,8 @@ impl App {
         }
         let n = self.with(|s| s.song.channels);
         self.ch = at.min(n - 1);
+        // the new track is the current one, not a lit Song / Master
+        self.tlv.song_sel = None;
         self.dirty = true;
         crate::plugin::sync(&self.shared, None);
         true

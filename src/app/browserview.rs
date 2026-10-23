@@ -588,7 +588,8 @@ impl App {
                     self.undo_hold -= 1;
                     return;
                 }
-                at
+                // where it actually landed (`at` may be past the last track)
+                self.ch
             }
             Act::Track(tr) => tr,
             _ => {
@@ -598,6 +599,8 @@ impl App {
         };
         let n = self.with(|s| crate::chanops::assign_track_instrument(&mut s.song, tr, slot));
         self.undo_hold -= 1;
+        // the track is lit (not a stale Song / Master) and plays it
+        self.tl_select_track(tr, false);
         self.instr = slot;
         self.ch = tr;
         self.dirty = true;
