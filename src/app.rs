@@ -113,6 +113,8 @@ mod rack_tests;
 mod rackops;
 mod rackui;
 mod rackview;
+#[cfg(test)]
+mod rackview_tests;
 mod radial;
 #[cfg(test)]
 mod record_tests;
