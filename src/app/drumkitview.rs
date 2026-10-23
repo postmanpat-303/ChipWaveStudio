@@ -764,6 +764,18 @@ impl App {
         }
     }
 
+    /// queue a Dice kit on Drum Kit instrument `idx` (the track pie's
+    /// Dice kit): it lands the next time its editor draws
+    pub(super) fn dk_queue_dice(&mut self, idx: usize, seed: u32) {
+        if self.dk.inst != idx {
+            self.dk = DkUi {
+                inst: idx,
+                ..Default::default()
+            };
+        }
+        self.dk.load = Some(KitLoad::Dice(seed | 1));
+    }
+
     fn dk_btn_dice(&mut self, ui: &mut egui::Ui, _kit: &mut DrumKitP) {
         if crate::ember::button(ui, "Dice kit", false)
             .on_hover_text(

@@ -142,11 +142,9 @@ pub(crate) enum PieAct {
     /// Add › Drum pattern › <instrument>: a new track below with it and an
     /// empty 1-bar pattern at the play marker (`track_new_pattern_track`)
     DrumTrack(Builtin),
-    /// ... › Drum Kit › <kit>: the same with that Drum Kit
+    /// ... › <kit>: the same with that Drum Kit
     DrumKitTrack(&'static str),
-    /// ... › Browse…: the Browser's Instruments; the pick makes that track
-    DrumBrowse,
-    /// ... › Drum Kit › More kits…: the Browser on Drum Kits, the same
+    /// ... › More kits…: the Browser on Drum Kits; the pick makes that track
     MoreKits,
     /// Add › Automation lane › Show / Hide lanes
     AutoToggle,
@@ -168,6 +166,14 @@ pub(crate) enum PieAct {
     MoreKitsHere,
     /// an empty 1-bar pattern on this track at the play marker
     NewPattern,
+    /// a drum track: Dice kit on its Drum Kit (as the kit's Dice kit)
+    DiceKit,
+    /// a melodic track: its instrument becomes preset `k` of
+    /// `instcard::preset_list` (Sounds ›)
+    Sound(u8),
+    /// a melodic track: the chord generator on its first pattern (a new
+    /// empty one when it has none)
+    Chords,
     /// mute / solo this track (as its M / S buttons)
     Mute,
     Solo,
@@ -207,6 +213,11 @@ impl Builtin {
         Builtin::ChipFx,
         Builtin::Voice,
     ];
+    /// a drum instrument (Drum pattern › / Drum kit ›); the rest are
+    /// melodic (Instrument ›). Agrees with `is_drum_kind` on `make`
+    pub(crate) fn is_drum(self) -> bool {
+        matches!(self, Builtin::DrumKit | Builtin::DrumSynth)
+    }
     pub(crate) fn label(self) -> &'static str {
         match self {
             Builtin::WaveForge => crate::poly::POLY_DISPLAY_NAME,
@@ -328,6 +339,24 @@ pub(crate) struct Item {
     pub(crate) header: bool,
 }
 
+/// what a track plays, for the context-aware rings
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum TrackClass {
+    /// no instrument yet (an empty or audio track)
+    Empty,
+    /// a Drum Kit, Drum Synth or one-shot drum (`is_drum_kind`)
+    Drum,
+    #[default]
+    Melodic,
+}
+
+/// a drum instrument: the Drum Kit, the Drum Synth kit or a single drum
+/// voice. Everything else (synths, samples, plugins, racks) is melodic
+pub(crate) fn is_drum_kind(k: &InstrumentKind) -> bool {
+    use crate::gen::GenEngine as G;
+    matches!(k, InstrumentKind::Gen(g) if matches!(g.engine, G::Drum(_) | G::Kit(_) | G::Drums(_)))
+}
+
 /// what the pie needs to know about its track
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct TrackInfo {
@@ -345,6 +374,14 @@ pub(crate) struct TrackInfo {
     pub(crate) lanes_shown: bool,
     pub(crate) mute: bool,
     pub(crate) solo: bool,
+    /// what the track plays: no instrument, drums or a melodic one
+    pub(crate) class: TrackClass,
+    /// it plays a Drum Kit (Dice kit)
+    pub(crate) kit: bool,
+    /// its instrument's presets (Sounds ›), the first `MAX_SOUNDS`
+    pub(crate) sounds: Vec<String>,
+    /// the preset its sound is now, if any
+    pub(crate) sound: Option<String>,
     /// the empty-area pie (right-click below the tracks): every choice
     /// makes a NEW track at the end; the track pie never does (but Duplicate)
     pub(crate) new: bool,
@@ -885,7 +922,41 @@ impl App {
         }
     }
 
+    /// the slots of the track pie's first ring (it follows the track)
+    pub(crate) fn ring_root_n(&self) -> usize {
+        let Some(p) = &self.pie else { return 9 };
+        super::trackring::ring_slots(
+            super::trackring::Level::Add,
+            &self.ring_info_for(p.track, p.empty),
+        )
+        .len()
+    }
+
     pub(crate) fn pie_info(&self, tr: usize) -> TrackInfo {
+        let slot = self.track_instrument(tr);
+        let inst =
+            slot.and_then(|k| self.with(|s| s.song.instruments.get(k as usize - 1).cloned()));
+        let class = match &inst {
+            None => TrackClass::Empty,
+            Some(i) if is_drum_kind(&i.kind) => TrackClass::Drum,
+            Some(_) => TrackClass::Melodic,
+        };
+        let kit = inst
+            .as_ref()
+            .is_some_and(|i| crate::drumkit::kit_of(i).is_some());
+        let (sounds, sound) = match (&inst, class) {
+            (Some(i), TrackClass::Melodic) => {
+                let list = super::instpanel::instcard::preset_list(i);
+                let sound = list.iter().find(|p| p.3 == i.kind).map(|p| p.1.clone());
+                let names = list
+                    .into_iter()
+                    .take(super::trackring::MAX_SOUNDS)
+                    .map(|p| p.1)
+                    .collect();
+                (names, sound)
+            }
+            _ => (vec![], None),
+        };
         let lanes = self
             .track_lanes(tr)
             .into_iter()
@@ -908,6 +979,10 @@ impl App {
                 lanes_shown,
                 mute: mx.is_some_and(|m| m.mute),
                 solo: mx.is_some_and(|m| m.solo),
+                class,
+                kit,
+                sounds,
+                sound,
                 new: false,
             }
         })
@@ -939,8 +1014,9 @@ impl App {
         };
         let now = ctx.input(|i| i.time);
         if seg.has_ring() {
+            let n = self.ring_root_n();
             if let Some(p) = &mut self.pie {
-                p.open_ring(now);
+                p.open_ring(now, n);
             }
             return;
         }
@@ -1149,6 +1225,7 @@ impl App {
                     },
                 );
             } else {
+                let ring_n = self.ring_root_n();
                 let p = self.pie.as_mut().unwrap();
                 let ptr_moved =
                     moved || (ptr.is_some() && p.last_ptr != ptr && p.last_ptr.is_some());
@@ -1187,7 +1264,7 @@ impl App {
                                 p.aim_from = ptr;
                             }
                         } else if SEGS[k].has_ring() {
-                            p.open_ring(now);
+                            p.open_ring(now, ring_n);
                             p.aim_from = None;
                         } else if p.sub.is_some() {
                             p.sub = None;
@@ -1588,18 +1665,14 @@ impl App {
 
     /// Drum pattern › Browse… / More kits…: the Browser's pick makes a new
     /// track at `at` with an empty 1-bar pattern at the play marker
-    fn pie_drum_browse(&mut self, at: usize, kits: bool) {
+    fn pie_drum_browse(&mut self, at: usize) {
         if self.with(|s| s.song.channels) >= MAX_CHANNELS {
             self.status = "All 32 tracks are used (the channel limit)".into();
             return;
         }
         self.open_browser_tab(crate::browser::Tab::Instruments);
-        if kits {
-            self.br.filter.category = Some("Drum Kit".into());
-            self.status = "Pick a Drum Kit: it goes on a new track with an empty 1-bar pattern at the play marker".into();
-        } else {
-            self.status = "Pick an instrument: it goes on a new track with an empty 1-bar pattern at the play marker".into();
-        }
+        self.br.filter.category = Some("Drum Kit".into());
+        self.status = "Pick a Drum Kit: it goes on a new track with an empty 1-bar pattern at the play marker".into();
         self.br.new_track_at = Some(at);
         self.br.new_track_pattern = true;
     }
@@ -1616,7 +1689,7 @@ impl App {
             PieAct::DrumKitTrack(k) => {
                 self.track_new_pattern_track(n.saturating_sub(1), Builtin::DrumKit, Some(k));
             }
-            PieAct::DrumBrowse | PieAct::MoreKits => self.pie_drum_browse(n, a == PieAct::MoreKits),
+            PieAct::MoreKits => self.pie_drum_browse(n),
             PieAct::AddInstrument => self.track_add_with(n),
             PieAct::AddAudio => self.track_add_audio(n),
             PieAct::AddEmpty(_) => {
@@ -1701,6 +1774,9 @@ impl App {
                     tr + 1
                 );
             }
+            PieAct::DiceKit => self.track_dice_kit(tr),
+            PieAct::Sound(k) => self.track_sound(tr, k as usize),
+            PieAct::Chords => self.track_chords(tr),
             PieAct::NewPattern => {
                 self.snapshot();
                 self.undo_hold += 1;
@@ -1738,9 +1814,7 @@ impl App {
             PieAct::DrumKitTrack(k) => {
                 self.track_new_pattern_track(tr, Builtin::DrumKit, Some(k));
             }
-            PieAct::DrumBrowse | PieAct::MoreKits => {
-                self.pie_drum_browse(tr + 1, a == PieAct::MoreKits)
-            }
+            PieAct::MoreKits => self.pie_drum_browse(tr + 1),
             PieAct::AutoToggle => {
                 self.auto_op(super::timeline::autolanes::AutoOp::Toggle(tr));
             }

@@ -1,13 +1,14 @@
 //! The track pie's Add › as rings around the pie: Add (level 1), then
-//! Instrument ›, Drum pattern › (its instrument) › Drum Kit › (a kit) and
-//! Automation lane ›. A ring of `n` equal slots (`radial::slot_*`) drawn
+//! Instrument › (melodic only), Drum kit › / Drum pattern › (kits and drum
+//! instruments only), Sounds › (the instrument's presets) and Automation
+//! lane ›. What level 1 holds follows the track (`TrackClass`). A ring of `n` equal slots (`radial::slot_*`) drawn
 //! like the pie's segments; going deeper swaps the ring, the likely next
 //! choice centred where the pointer already is and ‹ Back beside it.
 //! Esc / Backspace / ‹ Back / a click on the dimmed pie step back one ring.
 use super::radial::{slot_angle, slot_arc, slot_at, strip_mesh};
 use super::trackpie::{
-    ease_out, hit, pal, seg_angle, Builtin, Hit, Pal, Pie, PieAct, Seg, TrackInfo, AIM_SETTLE_S,
-    HOVER_S, MARGIN, R_IN, R_OUT, SEGS, SUB_S,
+    ease_out, hit, pal, seg_angle, Builtin, Hit, Pal, Pie, PieAct, Seg, TrackClass, TrackInfo,
+    AIM_SETTLE_S, HOVER_S, MARGIN, R_IN, R_OUT, SEGS, SUB_S,
 };
 use super::*;
 use egui::{Shape, Vec2};
@@ -32,19 +33,15 @@ pub(crate) const RING_KITS: [&str; 6] = [
     "Trap Kit",
     "Lo-fi Kit",
 ];
-/// Drum pattern ›: the instruments after Drum Kit ›
-pub(crate) const DRUM_INSTRS: [Builtin; 10] = [
-    Builtin::DrumSynth,
-    Builtin::Grid,
-    Builtin::Noise,
-    Builtin::ChipFx,
-    Builtin::WaveForge,
-    Builtin::Synth,
-    Builtin::Analog,
-    Builtin::Fm4,
-    Builtin::Wavetable,
-    Builtin::Voice,
-];
+/// Drum pattern ›: the drum instruments after the kits (`Builtin::is_drum`)
+pub(crate) const DRUM_INSTRS: [Builtin; 1] = [Builtin::DrumSynth];
+
+/// Instrument ›: the melodic built-ins (every one that is not a drum)
+pub(crate) fn melodic() -> impl Iterator<Item = Builtin> {
+    Builtin::ALL.into_iter().filter(|b| !b.is_drum())
+}
+/// Sounds ›: at most this many of the instrument's presets
+pub(crate) const MAX_SOUNDS: usize = 10;
 /// Automation lane ›: at most this many of the track's lanes
 const MAX_LANES: usize = 9;
 
@@ -53,7 +50,7 @@ pub(crate) enum Level {
     Add,
     Instrument,
     DrumInstr,
-    Kits,
+    Sounds,
     Automation,
 }
 
@@ -96,11 +93,6 @@ pub(crate) fn add_seg() -> usize {
 }
 
 impl Ring {
-    /// level 1: Drum pattern › (slot 1) centred on the Add segment
-    pub(crate) fn root(now: f64) -> Ring {
-        Ring::root_n(now, 9, add_seg())
-    }
-
     /// level 1 of `n` slots, slot 1 centred on pie segment `seg`'s angle
     pub(crate) fn root_n(now: f64, n: usize, seg: usize) -> Ring {
         Ring {
@@ -140,10 +132,10 @@ impl Ring {
 }
 
 impl Pie {
-    /// open level 1 (hovering / choosing Add)
-    pub(crate) fn open_ring(&mut self, now: f64) {
+    /// open level 1 of `n` slots (hovering / choosing Add)
+    pub(crate) fn open_ring(&mut self, now: f64, n: usize) {
         if self.ring.is_none() {
-            self.ring = Some(Ring::root(now));
+            self.ring = Some(Ring::root_n(now, n, add_seg()));
         }
         self.key = Some(add_seg());
         self.sub = None;
@@ -170,58 +162,45 @@ fn back() -> Slot {
 }
 
 /// the track pie's rings: everything acts on THIS track (`i.index`) and
-/// none makes a new one (Duplicate copies it on purpose). None: the level
-/// is the same in both pies (Automation)
+/// none makes a new one (Duplicate copies it on purpose). They follow what
+/// the track plays (`TrackClass`): an empty track offers Instrument › and
+/// Drum kit › first; a drum track its kits, patterns and Dice kit; a
+/// melodic track melodic swaps, its Sounds ›, patterns and Chords….
+/// None: the level is the same in both pies (Automation)
 fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
     // an instrument and its pattern on this track
     let pattern_ok = i.timeline && !i.instr_full;
     let pattern_why = if !i.timeline { NEED_TL } else { INSTR_FULL };
-    let here = |l: &str, b: Option<Go>, tip: String| slot(l, b, tip);
-    Some(match level {
-        Level::Add => vec![
-            slot(
-                "Instrument",
-                Some(Go::Open(Level::Instrument)),
-                "a new instrument for THIS track (WaveForge, Drum Kit, Synth … or Browse)",
-            ),
-            slot(
-                "Drum pattern",
-                pattern_ok.then_some(Go::Open(Level::DrumInstr)),
-                if pattern_ok {
-                    "THIS track plays a drum instrument and its pattern opens (a Drum Kit's empty pattern gets a starter groove). Next: choose it"
-                } else {
-                    pattern_why
-                },
-            ),
-            slot(
-                "Automation lane",
-                i.timeline.then_some(Go::Open(Level::Automation)),
-                if i.timeline {
-                    "automate a parameter on this track, or show / hide its lanes. Next: pick"
-                } else {
-                    NEED_TL
-                },
-            ),
-            slot(
-                "Browse…",
-                Some(Go::Act(PieAct::ChangeInstrument)),
-                "the Browser's Instruments (your Favourites first): the one you pick plays this track",
-            ),
-            slot(
-                "New pattern",
-                i.timeline.then_some(Go::Act(PieAct::NewPattern)),
-                if i.timeline {
-                    "an empty 1-bar pattern on this track at the play marker"
-                } else {
-                    NEED_TL
-                },
-            ),
+    let tl = |a: PieAct| i.timeline.then_some(Go::Act(a));
+    let tl_tip = |t: &'static str| if i.timeline { t } else { NEED_TL };
+    let instrument =
+        |label: &str, tip: &'static str| slot(label, Some(Go::Open(Level::Instrument)), tip);
+    let drums = |label: &str, tip: &'static str| {
+        slot(
+            label,
+            pattern_ok.then_some(Go::Open(Level::DrumInstr)),
+            if pattern_ok { tip } else { pattern_why },
+        )
+    };
+    let automation = || {
+        slot(
+            "Automation lane",
+            i.timeline.then_some(Go::Open(Level::Automation)),
+            tl_tip("automate a parameter on this track, or show / hide its lanes. Next: pick"),
+        )
+    };
+    let tail = || {
+        vec![
             Slot {
                 on: i.mute,
                 ..slot(
                     "Mute",
                     Some(Go::Act(PieAct::Mute)),
-                    if i.mute { "unmute this track" } else { "mute this track (F9)" },
+                    if i.mute {
+                        "unmute this track"
+                    } else {
+                        "mute this track (F9)"
+                    },
                 )
             },
             Slot {
@@ -229,7 +208,11 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
                 ..slot(
                     "Solo",
                     Some(Go::Act(PieAct::Solo)),
-                    if i.solo { "unsolo this track" } else { "solo this track (F10)" },
+                    if i.solo {
+                        "unsolo this track"
+                    } else {
+                        "solo this track (F10)"
+                    },
                 )
             },
             slot(
@@ -246,11 +229,94 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
                 Some(Go::Act(PieAct::Devices)),
                 "this track's instrument and effects in the Rack",
             ),
-        ],
+        ]
+    };
+    Some(match level {
+        Level::Add => {
+            let mut v = match i.class {
+                TrackClass::Empty => vec![
+                    instrument(
+                        "Instrument",
+                        "a melodic instrument for THIS track (WaveForge, FM-4, Strings … or Browse). Next: pick it",
+                    ),
+                    drums(
+                        "Drum kit",
+                        "THIS track plays a drum kit and its pattern opens (an empty pattern gets a starter groove). Next: pick a kit",
+                    ),
+                    automation(),
+                    slot(
+                        "Browse…",
+                        Some(Go::Act(PieAct::ChangeInstrument)),
+                        "the Browser's Instruments (your Favourites first): the one you pick plays this track",
+                    ),
+                ],
+                TrackClass::Drum => vec![
+                    drums(
+                        "Swap kit",
+                        "another kit or drum instrument on THIS track (the notes stay; an empty pattern gets a starter groove). Next: pick it",
+                    ),
+                    slot(
+                        "Drum pattern",
+                        tl(PieAct::NewPattern),
+                        tl_tip("an empty 1-bar drum pattern on this track at the play marker, in the step sequencer"),
+                    ),
+                    slot(
+                        "Dice kit",
+                        (i.kit && i.timeline).then_some(Go::Act(PieAct::DiceKit)),
+                        if !i.timeline {
+                            NEED_TL
+                        } else if i.kit {
+                            "a random kit: an empty pattern gets its starter groove, else every pad's unlocked knobs re-roll (the pattern stays). Undo takes it back"
+                        } else {
+                            "Dice kit is for a Drum Kit (this track plays another drum instrument)"
+                        },
+                    ),
+                    automation(),
+                    slot(
+                        "More kits…",
+                        Some(Go::Act(PieAct::MoreKitsHere)),
+                        "the Browser, on Drum Kits: the one you pick plays this track",
+                    ),
+                ],
+                TrackClass::Melodic => vec![
+                    instrument(
+                        "Instrument",
+                        "another melodic instrument for THIS track (WaveForge, FM-4, Strings … or Browse). Next: pick it",
+                    ),
+                    slot(
+                        "Sounds",
+                        (!i.sounds.is_empty()).then_some(Go::Open(Level::Sounds)),
+                        if i.sounds.is_empty() {
+                            "this instrument has no built-in presets: Browse… for another sound"
+                        } else {
+                            "a preset of this instrument (keeps its name and effects). Next: pick it"
+                        },
+                    ),
+                    slot(
+                        "New pattern",
+                        tl(PieAct::NewPattern),
+                        tl_tip("an empty 1-bar pattern on this track at the play marker, in the piano roll"),
+                    ),
+                    slot(
+                        "Chords…",
+                        tl(PieAct::Chords),
+                        tl_tip("the chord generator on this track's first pattern (a new one if it has none)"),
+                    ),
+                    automation(),
+                    slot(
+                        "Browse…",
+                        Some(Go::Act(PieAct::ChangeInstrument)),
+                        "the Browser's Instruments (your Favourites first): the one you pick plays this track",
+                    ),
+                ],
+            };
+            v.extend(tail());
+            v
+        }
         Level::Instrument => {
             let mut v = vec![back()];
-            v.extend(Builtin::ALL.iter().map(|&b| {
-                here(
+            v.extend(melodic().map(|b| {
+                slot(
                     b.label(),
                     (!i.instr_full).then_some(Go::Act(PieAct::NewInstrument(b))),
                     if i.instr_full {
@@ -268,40 +334,9 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
             v
         }
         Level::DrumInstr => {
-            let mut v = vec![
-                back(),
-                slot(
-                    "Drum Kit",
-                    pattern_ok.then_some(Go::Open(Level::Kits)),
-                    if pattern_ok {
-                        "Drum Kit: 16 pads and the step sequencer on this track. Next: pick a kit"
-                    } else {
-                        pattern_why
-                    },
-                ),
-            ];
-            v.extend(DRUM_INSTRS.iter().map(|&b| {
-                here(
-                    b.label(),
-                    pattern_ok.then_some(Go::Act(PieAct::DrumHere(b))),
-                    if pattern_ok {
-                        format!("{}. Click: this track plays it, its pattern opens", b.tip())
-                    } else {
-                        pattern_why.to_string()
-                    },
-                )
-            }));
-            v.push(slot(
-                "Browse…",
-                Some(Go::Act(PieAct::ChangeInstrument)),
-                "the Browser's Instruments: the one you pick plays this track",
-            ));
-            v
-        }
-        Level::Kits => {
             let mut v = vec![back()];
             v.extend(RING_KITS.iter().map(|&k| {
-                here(
+                slot(
                     k,
                     pattern_ok.then_some(Go::Act(PieAct::DrumKitHere(k))),
                     if pattern_ok {
@@ -314,11 +349,34 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
                     },
                 )
             }));
+            v.extend(DRUM_INSTRS.iter().map(|&b| {
+                slot(
+                    b.label(),
+                    pattern_ok.then_some(Go::Act(PieAct::DrumHere(b))),
+                    if pattern_ok {
+                        format!("{}. Click: this track plays it, its pattern opens", b.tip())
+                    } else {
+                        pattern_why.to_string()
+                    },
+                )
+            }));
             v.push(slot(
                 "More kits…",
                 Some(Go::Act(PieAct::MoreKitsHere)),
                 "the Browser, on Drum Kits: the one you pick plays this track",
             ));
+            v
+        }
+        Level::Sounds => {
+            let mut v = vec![back()];
+            v.extend(i.sounds.iter().take(MAX_SOUNDS).enumerate().map(|(k, n)| Slot {
+                on: i.sound.as_deref() == Some(n.as_str()),
+                ..slot(
+                    n,
+                    Some(Go::Act(PieAct::Sound(k as u8))),
+                    format!("{n}: this instrument's sound becomes it (keeps its name and effects). Undo takes it back"),
+                )
+            }));
             v
         }
         Level::Automation => return None,
@@ -352,14 +410,14 @@ pub(crate) fn ring_slots(level: Level, i: &TrackInfo) -> Vec<Slot> {
                 } else if i.instr_full {
                     INSTR_FULL
                 } else {
-                    "a new track playing a new instrument (WaveForge, Drum Kit, Synth …). Next: pick it"
+                    "a new track playing a new melodic instrument (WaveForge, FM-4, Strings …). Next: pick it"
                 },
             ),
             slot(
                 "Drum pattern",
                 pattern_ok.then_some(Go::Open(Level::DrumInstr)),
                 if pattern_ok {
-                    "Drum pattern: a new drum track with a 1-bar pattern at the play marker. Next: choose its instrument"
+                    "Drum pattern: a new drum track with a 1-bar pattern at the play marker. Next: pick a kit"
                 } else {
                     pattern_why
                 },
@@ -405,7 +463,7 @@ pub(crate) fn ring_slots(level: Level, i: &TrackInfo) -> Vec<Slot> {
         ],
         Level::Instrument => {
             let mut v = vec![back()];
-            v.extend(Builtin::ALL.iter().map(|&b| {
+            v.extend(melodic().map(|b| {
                 slot(
                     b.label(),
                     (!i.instr_full && !i.full).then_some(Go::Act(PieAct::NewTrackWith(b))),
@@ -426,41 +484,6 @@ pub(crate) fn ring_slots(level: Level, i: &TrackInfo) -> Vec<Slot> {
             v
         }
         Level::DrumInstr => {
-            let mut v = vec![
-                back(),
-                slot(
-                    "Drum Kit",
-                    pattern_ok.then_some(Go::Open(Level::Kits)),
-                    if pattern_ok {
-                        "Drum Kit: 16 pads and the step sequencer. Next: pick a kit"
-                    } else {
-                        pattern_why
-                    },
-                ),
-            ];
-            v.extend(DRUM_INSTRS.iter().map(|&b| {
-                slot(
-                    b.label(),
-                    pattern_ok.then_some(Go::Act(PieAct::DrumTrack(b))),
-                    if pattern_ok {
-                        format!("{}. Click: {NEW_PATTERN}", b.tip())
-                    } else {
-                        pattern_why.to_string()
-                    },
-                )
-            }));
-            v.push(slot(
-                "Browse…",
-                pattern_ok.then_some(Go::Act(PieAct::DrumBrowse)),
-                if pattern_ok {
-                    "the Browser's Instruments: the one you pick makes a new track with an empty 1-bar pattern at the play marker"
-                } else {
-                    pattern_why
-                },
-            ));
-            v
-        }
-        Level::Kits => {
             let mut v = vec![back()];
             v.extend(RING_KITS.iter().map(|&k| {
                 slot(
@@ -471,6 +494,17 @@ pub(crate) fn ring_slots(level: Level, i: &TrackInfo) -> Vec<Slot> {
                             "{k}: {}. Click: a new track with this Drum Kit and an empty 1-bar pattern at the play marker",
                             crate::drumpat::kit_desc(k)
                         )
+                    } else {
+                        pattern_why.to_string()
+                    },
+                )
+            }));
+            v.extend(DRUM_INSTRS.iter().map(|&b| {
+                slot(
+                    b.label(),
+                    pattern_ok.then_some(Go::Act(PieAct::DrumTrack(b))),
+                    if pattern_ok {
+                        format!("{}. Click: {NEW_PATTERN}", b.tip())
                     } else {
                         pattern_why.to_string()
                     },
@@ -487,6 +521,8 @@ pub(crate) fn ring_slots(level: Level, i: &TrackInfo) -> Vec<Slot> {
             ));
             v
         }
+        // only the track pie has a track with presets
+        Level::Sounds => vec![back()],
         Level::Automation => {
             let any = !i.lanes.is_empty();
             let mut v = vec![
@@ -544,8 +580,8 @@ fn titles(level: Level, name: &str, new: bool) -> (&'static str, String) {
         Level::Instrument if new => ("INSTRUMENT", "New track".into()),
         Level::Instrument => ("INSTRUMENT", "For this track".into()),
         Level::DrumInstr if new => ("DRUM PATTERN", "New track".into()),
-        Level::DrumInstr => ("DRUM PATTERN", name.to_string()),
-        Level::Kits => ("DRUM KIT", "Pick a kit".into()),
+        Level::DrumInstr => ("DRUM KIT", name.to_string()),
+        Level::Sounds => ("SOUNDS", name.to_string()),
         Level::Automation => ("AUTOMATION", name.to_string()),
     }
 }

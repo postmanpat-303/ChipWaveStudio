@@ -580,8 +580,10 @@ fn chipwave_instruments_lead_the_instruments_tab_with_the_pies_add_list() {
         .iter()
         .map(|s| s.label.clone())
         .collect();
+    // the pie's ring is the melodic ones (drums are in Drum pattern ›)
     let all: Vec<&str> = Builtin::ALL.iter().map(|b| b.label()).collect();
-    assert_eq!(pie, all);
+    let mel: Vec<&str> = super::trackring::melodic().map(|b| b.label()).collect();
+    assert_eq!(pie, mel);
     let names: Vec<String> = tool_rows(&mut h).into_iter().map(|r| r.0).collect();
     assert_eq!(names, all, "the same set, in the pie's order");
     for want in [

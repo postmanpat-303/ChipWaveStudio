@@ -1664,7 +1664,14 @@ fn add_a_built_in_instrument_from_the_track_pie() {
     let last = items.len() - 1;
     assert_eq!(items[0].label, "Back");
     assert_eq!(items[1].label, crate::poly::POLY_DISPLAY_NAME);
-    assert_eq!(items[2].label, "Drum Kit");
+    assert_eq!(
+        items[2].label,
+        Builtin::StringWave.label(),
+        "no drums in Instrument ›"
+    );
+    assert!(items
+        .iter()
+        .all(|i| i.label != "Drum Kit" && i.label != "Drum Synth"));
     assert_eq!(items[last].label, "Browse…");
     assert_eq!(items[last].go, Some(Go::Act(PieAct::ChangeInstrument)));
     assert_eq!(
@@ -1676,7 +1683,7 @@ fn add_a_built_in_instrument_from_the_track_pie() {
     assert!(items[1..last]
         .iter()
         .all(|i| i.go.is_none() && i.tip.contains("255")));
-    // with the pointer: Add › Instrument › Drum Kit on track 01 of the demo
+    // with the pointer: Add › Instrument › StringWave on track 01 of the demo
     let mut h = pie_harness(Pos2::new(600.0, 400.0));
     h.state_mut().extra.reduce_motion = true;
     h.state_mut().undo_reset();
@@ -1727,7 +1734,7 @@ fn add_a_built_in_instrument_from_the_track_pie() {
     assert_eq!(n, before.0 + 1, "one new instrument");
     assert_eq!(slot as usize, n, "assigned to the track");
     assert!(
-        matches!(kind, InstrumentKind::Gen(ref g) if matches!(g.engine, crate::gen::GenEngine::Drums(_)))
+        matches!(kind, InstrumentKind::Gen(ref g) if matches!(g.engine, crate::gen::GenEngine::Strings(_)))
     );
     assert!(notes_ok);
     assert!(

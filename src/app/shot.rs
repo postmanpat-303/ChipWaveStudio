@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 114] = [
+pub const VIEWS: [&str; 118] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -107,8 +107,12 @@ pub const VIEWS: [&str; 114] = [
     "tracks-dock",
     "tracks-addpie",
     "tracks-addpie-kits",
+    "tracks-addpie-instr",
     "tracks-trackpie",
     "tracks-trackpie-kits",
+    "tracks-trackpie-melodic",
+    "tracks-trackpie-sounds",
+    "tracks-trackpie-empty",
     "tracks-arranger-off",
     "classic-arranger-off",
     "classic-arranger-off-master",
@@ -610,8 +614,12 @@ impl App {
             "tracks-dock"
             | "tracks-addpie"
             | "tracks-addpie-kits"
+            | "tracks-addpie-instr"
             | "tracks-trackpie"
             | "tracks-trackpie-kits"
+            | "tracks-trackpie-melodic"
+            | "tracks-trackpie-sounds"
+            | "tracks-trackpie-empty"
             | "tracks-arranger-off"
             | "classic-arranger-off"
             | "classic-arranger-off-master" => {
@@ -640,6 +648,10 @@ impl App {
                     super::trackpie::Builtin::DrumKit,
                     Some("909 Kit"),
                 );
+                // -empty: a fourth track with no instrument yet
+                if view == "tracks-trackpie-empty" {
+                    self.track_add(3);
+                }
                 self.tl_select_track(2, false);
                 self.dirty = false;
             }
@@ -1979,9 +1991,12 @@ impl App {
 }
 
 impl App {
-    /// `--view tracks-addpie[-kits]`: the Add pie on the empty space under
-    /// the tracks; `tracks-trackpie[-kits]`: track 03's pie, its Add ring
-    /// (acting on that track) open, -kits: Drum pattern › Drum Kit ›
+    /// `--view tracks-addpie[-kits|-instr]`: the Add pie on the empty
+    /// space under the tracks (-kits: its Drum pattern ring, -instr: its
+    /// Instrument ring); `tracks-trackpie[-kits]`: the drum track 03's pie,
+    /// its Add ring open (-kits: Swap kit ›); -melodic / -sounds: the
+    /// melodic track 01's (-sounds: its Sounds ›); -empty: the empty track
+    /// 04's
     fn shot_tracks_pie(&mut self, ctx: &egui::Context, view: &str) {
         use super::trackring::{ring_slots, Level};
         let lanes = self.tlv.lanes;
@@ -1990,24 +2005,38 @@ impl App {
         let sy = self.tlv.scroll_y;
         let now = ctx.input(|i| i.time);
         let empty = view.starts_with("tracks-addpie");
-        let tr = 2usize;
+        let tr = match view {
+            "tracks-trackpie-melodic" | "tracks-trackpie-sounds" => 0usize,
+            "tracks-trackpie-empty" => 3,
+            _ => 2,
+        };
         if empty {
             let y = heads.top() + lay.body_end - sy + 95.0;
             self.open_add_pie(Pos2::new(lanes.left() + 40.0, y), false, ctx);
         } else {
-            let y = heads.top() + lay.top[tr] - sy + 20.0;
+            let y = heads.top() + lay.top.get(tr).copied().unwrap_or(0.0) - sy + 20.0;
             self.open_track_pie(tr, Pos2::new(heads.left() + 140.0, y), false, ctx);
         }
         let info = self.ring_info_for(tr, empty);
+        let n = |l| ring_slots(l, &info).len();
+        let pos = |label: &str| {
+            ring_slots(Level::Add, &info)
+                .iter()
+                .position(|s| s.label == label)
+                .unwrap_or(0)
+        };
+        let into = match view {
+            "tracks-addpie-kits" => Some((Level::DrumInstr, pos("Drum pattern"))),
+            "tracks-addpie-instr" => Some((Level::Instrument, pos("Instrument track"))),
+            "tracks-trackpie-kits" => Some((Level::DrumInstr, pos("Swap kit"))),
+            "tracks-trackpie-sounds" => Some((Level::Sounds, pos("Sounds"))),
+            _ => None,
+        };
         if let Some(p) = &mut self.pie {
-            p.open_ring(now);
-            let n = |l| ring_slots(l, &info).len();
-            if let Some(r) = &mut p.ring {
-                if view.ends_with("-kits") {
-                    r.enter(Level::DrumInstr, 1, n(Level::Add), n(Level::DrumInstr), now);
-                    r.enter(Level::Kits, 1, n(Level::DrumInstr), n(Level::Kits), now);
-                    r.key = Some(1);
-                }
+            p.open_ring(now, n(Level::Add));
+            if let (Some(r), Some((l, k))) = (&mut p.ring, into) {
+                r.enter(l, k, n(Level::Add), n(l), now);
+                r.key = Some(1);
             }
         }
     }
@@ -2042,8 +2071,8 @@ impl App {
             // the Add rings: level 1, Drum pattern › and its Drum Kit ›
             if let Some(lv) = view.strip_prefix("trackpie-addring-") {
                 use super::trackring::{ring_slots, Level};
-                p.open_ring(now);
                 let n = |l| ring_slots(l, &info).len();
+                p.open_ring(now, n(Level::Add));
                 if let Some(r) = &mut p.ring {
                     // Instrument ›: the built-ins (StringWave too) and Browse…
                     if lv == "instr" {
@@ -2058,11 +2087,15 @@ impl App {
                             n(Level::Instrument),
                             now,
                         );
+                    } else if lv == "3" {
+                        // Sounds ›: the melodic track's presets
+                        let k = ring_slots(Level::Add, &info)
+                            .iter()
+                            .position(|s| s.label == "Sounds")
+                            .unwrap_or(1);
+                        r.enter(Level::Sounds, k, n(Level::Add), n(Level::Sounds), now);
                     } else if lv != "1" {
                         r.enter(Level::DrumInstr, 1, n(Level::Add), n(Level::DrumInstr), now);
-                    }
-                    if lv == "3" {
-                        r.enter(Level::Kits, 1, n(Level::DrumInstr), n(Level::Kits), now);
                     }
                 }
             }

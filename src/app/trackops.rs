@@ -418,4 +418,105 @@ impl App {
         self.track_open_pattern(at, id);
         Some((id, bar))
     }
+
+    /// the track pie's Dice kit on a drum track: its Drum Kit's editor opens
+    /// on its first pattern and rolls (as the kit's own Dice kit; one undo)
+    pub(crate) fn track_dice_kit(&mut self, tr: usize) {
+        let slot = self.track_slot(tr);
+        let kit = self.with(|s| {
+            s.song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .is_some_and(|i| crate::drumkit::kit_of(i).is_some())
+        });
+        if !kit {
+            self.status = format!("Track {:02}: Dice kit needs a Drum Kit", tr + 1);
+            return;
+        }
+        match self.track_first_note_clip(tr) {
+            Some((id, _)) => self.track_open_pattern(tr, id),
+            None => {
+                self.tl_select_track(tr, false);
+                self.ch = tr;
+                self.instr = slot;
+                self.show_instrument_editor();
+            }
+        }
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(1, |d| d.subsec_nanos() ^ d.as_secs() as u32);
+        self.dk_queue_dice(slot as usize - 1, seed);
+        self.status = format!("Track {:02}: Dice kit (Undo takes it back)", tr + 1);
+    }
+
+    /// the track pie's Sounds › pick: the track's instrument becomes preset
+    /// `k` of its type (keeps its name and effects), one undo
+    pub(crate) fn track_sound(&mut self, tr: usize, k: usize) {
+        let slot = self.track_slot(tr);
+        let Some(inst) = self.with(|s| {
+            s.song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .cloned()
+        }) else {
+            return;
+        };
+        let Some((_, name, _, kind)) = super::instpanel::instcard::preset_list(&inst)
+            .into_iter()
+            .nth(k)
+        else {
+            return;
+        };
+        self.snapshot();
+        self.with(|s| {
+            if let Some(x) = s.song.instruments.get_mut(slot as usize - 1) {
+                x.kind = kind;
+            }
+        });
+        self.dirty = true;
+        crate::plugin::sync(&self.shared, None);
+        self.status = format!("Track {:02}: {name}", tr + 1);
+    }
+
+    /// the track pie's Chords… on a melodic track: its first pattern (a new
+    /// empty 1-bar one when it has none) opens in the piano roll with the
+    /// chord generator on its first bar
+    pub(crate) fn track_chords(&mut self, tr: usize) {
+        let (id, at) = match self.track_first_note_clip(tr) {
+            Some(c) => c,
+            None => {
+                self.snapshot();
+                self.undo_hold += 1;
+                let r = self.track_add_empty_pattern(tr);
+                self.undo_hold -= 1;
+                let Some((id, _)) = r else {
+                    self.status = "Can't add a pattern there".into();
+                    return;
+                };
+                let at = self.with(|s| {
+                    s.song
+                        .timeline
+                        .as_deref()
+                        .and_then(|t| t.clips.iter().find(|c| c.id == id))
+                        .map_or(0, |c| c.start)
+                });
+                (id, at)
+            }
+        };
+        self.track_open_pattern(tr, id);
+        self.cl_open_gen_at(at);
+        self.status = format!("Track {:02}: the chord generator", tr + 1);
+    }
+
+    /// the earliest note clip on track `tr`: (id, start)
+    fn track_first_note_clip(&self, tr: usize) -> Option<(u32, i64)> {
+        self.with(|s| {
+            let t = s.song.timeline.as_deref()?;
+            t.clips
+                .iter()
+                .filter(|c| c.track as usize == tr && c.notes().is_some())
+                .min_by_key(|c| c.start)
+                .map(|c| (c.id, c.start))
+        })
+    }
 }
