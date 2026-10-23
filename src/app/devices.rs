@@ -1023,6 +1023,8 @@ impl App {
                 } else {
                     "show every parameter, presets and reset"
                 });
+            // screen readers (and the tests) find it by its text
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &txt));
             p.text(
                 fr.left_bottom(),
                 egui::Align2::LEFT_BOTTOM,

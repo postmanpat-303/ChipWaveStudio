@@ -413,7 +413,9 @@ impl App {
             egui::Key::Delete | egui::Key::Backspace if plain => match fx {
                 Some(i) => FxOp::Remove(i),
                 None => {
-                    self.status = "The instrument stays: ⋮ › Replace instrument… swaps it".into();
+                    self.status =
+                        "The instrument stays: right-click it › Replace instrument… swaps it"
+                            .into();
                     return true;
                 }
             },
