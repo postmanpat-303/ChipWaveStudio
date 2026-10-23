@@ -162,6 +162,10 @@ pub(super) fn tag_text_colour(tag: &str) -> Color32 {
 
 /// a small rounded type pill
 pub(super) fn tag_pill(ui: &mut egui::Ui, tag: &str) -> egui::Response {
+    if let Some(s) = crate::theme::active_skin() {
+        // the built-in skin: one badge for every built-in, in the tint
+        return s.badge(ui, tag);
+    }
     if th().ember {
         // Ember: a small outlined tag in acc-hot capitals
         let t = th();
@@ -914,8 +918,30 @@ impl App {
 }
 
 impl App {
-    /// the instrument editor (lower panel, Instrument)
+    /// the instrument editor (lower panel, Instrument); a built-in
+    /// instrument paints in the built-in skin (docs/INSTSKIN.md)
     pub(super) fn instrument_view(&mut self, ui: &mut egui::Ui) {
+        let i = (self.instr as usize).wrapping_sub(1);
+        let builtin = self
+            .with(|s| {
+                s.song
+                    .instruments
+                    .get(i)
+                    .map(|i| crate::theme::is_builtin(&i.kind))
+            })
+            .unwrap_or(false);
+        let skin = crate::theme::instskin().filter(|_| builtin);
+        let _scope = crate::theme::SkinScope::enter(skin);
+        if let Some(s) = skin {
+            let r = ui.max_rect();
+            s.panel(ui.painter(), r, 0.0);
+            s.stripe(ui.painter(), r, 0.0);
+            ui.add_space(3.0);
+        }
+        self.instrument_view_body(ui);
+    }
+
+    fn instrument_view_body(&mut self, ui: &mut egui::Ui) {
         let t = th();
         let n = self.with(|s| s.song.instruments.len());
         if n == 0 {
@@ -1040,6 +1066,9 @@ impl App {
                         .size(15.0),
                 );
                 tag_pill(ui, tag);
+                // the same header as every other built-in: name, badge,
+                // preset (the kit's toolbar doesn't repeat the name)
+                self.preset_menu(ui, &inst, &mut cx);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(6.0);
                     if ui

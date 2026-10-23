@@ -241,7 +241,6 @@ impl App {
         if compact {
             self.dk_compact(
                 ui,
-                &name,
                 &mut kit,
                 &pats,
                 cur.as_ref(),
@@ -334,7 +333,6 @@ impl App {
     fn dk_compact(
         &mut self,
         ui: &mut egui::Ui,
-        name: &str,
         kit: &mut DrumKitP,
         pats: &[PatRow],
         cur: Option<&Cur>,
@@ -348,7 +346,7 @@ impl App {
         area(ui, tb, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.add_space(4.0);
-                ui.label(egui::RichText::new(name).strong().color(th().ink));
+                // (the instrument header above names the kit)
                 self.dk_btn_kits(ui, kit);
                 self.dk_btn_dice(ui, kit);
                 ui.separator();
