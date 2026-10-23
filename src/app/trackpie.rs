@@ -1620,7 +1620,8 @@ impl App {
             PieAct::AddInstrument => self.track_add_with(n),
             PieAct::AddAudio => self.track_add_audio(n),
             PieAct::AddEmpty(_) => {
-                if self.track_add(n) {
+                let added = self.track_add(n);
+                if added {
                     self.status = format!("Added track {:02}", n + 1);
                 }
             }
