@@ -350,6 +350,7 @@ impl App {
             .clicked()
         {
             self.dev.tree = true;
+            self.extra.chains_tree_folded = false;
             self.dev.sel = Some(Sel::Dev(idx, DevPath::top(i)));
             ui.close();
         }

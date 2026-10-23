@@ -378,6 +378,13 @@ impl App {
         // ---- header: what is shown, then the panel's actions
         ui.horizontal(|ui| {
             ui.add_space(6.0);
+            if ui
+                .small_button("‹ Back to Rack")
+                .on_hover_text("the track's sound as one row of cards")
+                .clicked()
+            {
+                self.dev.tree = false;
+            }
             let (name, tag) = self.with(|s| {
                 let i = &s.song.instruments[root];
                 (i.name.clone(), params::type_tag(&i.kind).to_string())
@@ -395,15 +402,6 @@ impl App {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(4.0);
                 if ui
-                    .button("Save Custom Rack…")
-                    .on_hover_text(
-                        "this rack (or this instrument as a 1-layer rack) with every setting, into My Racks",
-                    )
-                    .clicked()
-                {
-                    self.open_save_rack(root);
-                }
-                if ui
                     .button("+ Add Device")
                     .on_hover_text(
                         "a ChipWave effect, a Split or a plugin effect: after the selected device, or at the end of the selected chain",
@@ -411,30 +409,6 @@ impl App {
                     .clicked()
                 {
                     self.add_device_here();
-                }
-                if ui
-                    .button("Cards")
-                    .on_hover_text(
-                        "the chain as a row of cards, left to right (the 0.2.4 view); Tree comes back from there",
-                    )
-                    .clicked()
-                {
-                    self.extra.chains_cards = true;
-                    self.extra.chains_view_chosen = true;
-                    self.save_settings();
-                }
-                let fold = if self.extra.chains_tree_folded {
-                    "Unfold tree"
-                } else {
-                    "Fold tree"
-                };
-                if ui
-                    .button(fold)
-                    .on_hover_text("the tree column as a slim list of names, or full width again")
-                    .clicked()
-                {
-                    self.extra.chains_tree_folded = !self.extra.chains_tree_folded;
-                    self.save_settings();
                 }
             });
         });
@@ -1025,7 +999,7 @@ impl App {
     fn chains_detail(
         &mut self,
         ui: &mut egui::Ui,
-        root: usize,
+        _root: usize,
         sel: Sel,
         ops: &mut Vec<(usize, FxOp)>,
     ) {
@@ -1090,14 +1064,6 @@ impl App {
                     self.devices_inst_card(ui, h, i);
                     self.dev.inst_folded = fold;
                     self.dev.card_w = keep;
-                    // the signal flow beside the card, when there is room for it
-                    if ui.available_width() > 150.0 {
-                        ui.add_space(10.0);
-                        ui.vertical(|ui| {
-                            ui.set_width(ui.available_width() - 8.0);
-                            self.chains_flow(ui, root);
-                        });
-                    }
                 });
             }
             Sel::Path(i, sp, p) => {
@@ -1957,27 +1923,6 @@ impl App {
             return;
         }
         self.dev.add = if close { None } else { Some(a) };
-    }
-
-    /// "Signal flow": the order the sound goes through, in words
-    fn chains_flow(&mut self, ui: &mut egui::Ui, root: usize) {
-        let t = th();
-        let line = self.with(|s| flow_text(&s.song, root));
-        ui.label(
-            egui::RichText::new("SIGNAL FLOW")
-                .small()
-                .strong()
-                .color(t.ink2),
-        );
-        ui.label(egui::RichText::new(line).color(t.ink));
-        ui.add_space(6.0);
-        ui.label(
-            egui::RichText::new(
-                "Select a row on the left to see its controls here. Every change is one undo step (Ctrl+Z).",
-            )
-            .small()
-            .color(t.ink2),
-        );
     }
 }
 

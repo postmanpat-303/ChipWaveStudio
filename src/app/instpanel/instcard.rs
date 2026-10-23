@@ -1544,6 +1544,8 @@ pub(crate) enum FaceKnob {
 }
 
 impl FaceKnob {
+    /// the knob's caption (tests and the docs' faces)
+    #[cfg(test)]
     pub(crate) fn name(&self, l: &Layout) -> String {
         match self {
             FaceKnob::M(m) => m.name.clone(),

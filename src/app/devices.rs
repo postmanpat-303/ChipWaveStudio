@@ -443,6 +443,8 @@ impl App {
             Pos2::new(ui.max_rect().left(), row_top),
             ui.max_rect().right_bottom(),
         );
+        let root = self.chains_root().unwrap_or(idx);
+        let flow = self.with(|s| super::chains::flow_text(&s.song, root));
         ui.horizontal(|ui| {
             ui.add_space(8.0);
             ui.add(
@@ -456,7 +458,8 @@ impl App {
                     .color(t.ink2),
                 )
                 .truncate(),
-            );
+            )
+            .on_hover_text(format!("Signal flow: {flow}"));
         });
         // the last panel clicked has the keys; a click picks a card
         if let Some(p) = press.filter(|_| !popup) {
