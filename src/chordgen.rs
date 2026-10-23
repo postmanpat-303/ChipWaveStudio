@@ -501,15 +501,17 @@ pub struct GenResult {
     pub marks: Vec<ChordMark>,
 }
 
-struct Rng(u64);
+/// xorshift: seeded and the same on every platform (shared with
+/// `crate::melodygen`)
+pub(crate) struct Rng(pub(crate) u64);
 impl Rng {
-    fn f(&mut self) -> f32 {
+    pub(crate) fn f(&mut self) -> f32 {
         self.0 ^= self.0 << 13;
         self.0 ^= self.0 >> 7;
         self.0 ^= self.0 << 17;
         (self.0 >> 40) as f32 / (1u64 << 24) as f32
     }
-    fn pick(&mut self, n: usize) -> usize {
+    pub(crate) fn pick(&mut self, n: usize) -> usize {
         ((self.f() * n as f32) as usize).min(n.saturating_sub(1))
     }
 }

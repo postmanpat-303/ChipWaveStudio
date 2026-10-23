@@ -59,6 +59,7 @@ mod instfile;
 mod keymap;
 mod ladder;
 mod master;
+mod melodygen;
 mod midi;
 mod model;
 mod modulation;
