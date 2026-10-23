@@ -60,7 +60,9 @@ mod transform;
 mod update;
 mod voice;
 mod wavetable;
-#[cfg(windows)]
+// only the windows-gnu (mingw) build: MSVC's ucrt maths is fast already,
+// and its import library defines the same symbols (LNK2005)
+#[cfg(all(windows, target_env = "gnu"))]
 mod winmath;
 
 use std::path::PathBuf;

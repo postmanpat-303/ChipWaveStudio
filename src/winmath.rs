@@ -12,6 +12,10 @@
 //! `powf`... in the engine (and in the C code we link) uses them. Results are
 //! accurate to within an ulp, so Windows output can differ from earlier
 //! Windows builds in the last bit; Linux and macOS are untouched.
+//!
+//! Only built for windows-gnu (the release build): an MSVC build links
+//! ucrt, whose maths is fast and whose import library already defines
+//! these names, so defining them again fails to link (LNK2005).
 macro_rules! unary {
     ($($n:ident: $t:ty),* $(,)?) => {
         $(
