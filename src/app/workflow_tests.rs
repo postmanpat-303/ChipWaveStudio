@@ -1668,6 +1668,11 @@ fn add_a_built_in_instrument_from_the_track_pie() {
                 matches!(&kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Poly(_)))
             );
         }
+        if b == Builtin::StringWave {
+            assert!(
+                matches!(&kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Strings(_)))
+            );
+        }
         if b == Builtin::DrumKit {
             assert!(
                 matches!(&kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Drums(_)))

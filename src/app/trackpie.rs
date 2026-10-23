@@ -149,6 +149,7 @@ pub(crate) enum PieAct {
 pub(crate) enum Builtin {
     WaveForge,
     DrumKit,
+    StringWave,
     Synth,
     Analog,
     Fm4,
@@ -161,9 +162,10 @@ pub(crate) enum Builtin {
 }
 
 impl Builtin {
-    pub(crate) const ALL: [Builtin; 11] = [
+    pub(crate) const ALL: [Builtin; 12] = [
         Builtin::WaveForge,
         Builtin::DrumKit,
+        Builtin::StringWave,
         Builtin::Synth,
         Builtin::Analog,
         Builtin::Fm4,
@@ -178,6 +180,7 @@ impl Builtin {
         match self {
             Builtin::WaveForge => crate::poly::POLY_DISPLAY_NAME,
             Builtin::DrumKit => "Drum Kit",
+            Builtin::StringWave => crate::strings::STRINGS_DISPLAY_NAME,
             Builtin::Synth => "Synth",
             Builtin::Analog => "Analog",
             Builtin::Fm4 => "FM-4",
@@ -193,6 +196,10 @@ impl Builtin {
         match self {
             Builtin::WaveForge => "WaveForge polyphonic synth · starts on Saw Lead",
             Builtin::DrumKit => "Drum Kit: 16 pads and a step sequencer · starts on Psy Kit",
+            Builtin::StringWave => concat!(
+                crate::strings_name!(),
+                ": a lush string ensemble · starts on Velvet Ensemble"
+            ),
             Builtin::Synth => "the classic ChipWave synth · starts on Supersaw lead",
             Builtin::Analog => "Analog: 3 oscillators into a ladder filter · starts on Warm Lead",
             Builtin::Fm4 => "FM-4: four-operator FM · starts on E-Piano",
@@ -207,7 +214,7 @@ impl Builtin {
     /// the browser row's glyph (`glyphs::glyph_for`)
     pub(crate) fn glyph_tag(self) -> &'static str {
         match self {
-            Builtin::WaveForge | Builtin::Synth | Builtin::Fm4 => "Synth",
+            Builtin::WaveForge | Builtin::Synth | Builtin::Fm4 | Builtin::StringWave => "Synth",
             Builtin::DrumKit | Builtin::DrumSynth => "Drum",
             Builtin::Analog => "Analog",
             Builtin::Wavetable => "Wave",
@@ -246,6 +253,10 @@ impl Builtin {
                 }
                 None => ("Synth".into(), InstrumentKind::Synth(Default::default())),
             }),
+            Builtin::StringWave => gen(
+                |e| matches!(e, G::Strings(_)),
+                concat!(crate::strings_name!(), " Velvet Ensemble"),
+            ),
             Builtin::Analog => gen(|e| matches!(e, G::Analog(_)), "Warm Lead"),
             Builtin::Fm4 => gen(|e| matches!(e, G::Fm(_)), "E-Piano"),
             Builtin::Wavetable => gen(|e| matches!(e, G::Wave(_)), "Wave Supersaw"),

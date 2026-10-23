@@ -557,6 +557,7 @@ fn chipwave_instruments_lead_the_instruments_tab_with_the_pies_add_list() {
         "Synth",
         "Drum Synth",
         "Voice",
+        crate::strings::STRINGS_DISPLAY_NAME,
     ] {
         assert!(names.iter().any(|n| n == want), "{want}");
     }
@@ -579,7 +580,10 @@ fn chipwave_instruments_lead_the_instruments_tab_with_the_pies_add_list() {
         let (name, _) = b.make().unwrap();
         assert!(!name.to_lowercase().contains("init"), "{b:?}: {name}");
         assert!(
-            b.tip().contains(name.trim_start_matches("WaveForge ")),
+            b.tip().contains(
+                name.trim_start_matches("WaveForge ")
+                    .trim_start_matches(concat!(crate::strings_name!(), " "))
+            ),
             "{b:?}"
         );
     }
