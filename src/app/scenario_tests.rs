@@ -181,12 +181,10 @@ fn scenario_a_drum_kit_pattern_launcher_drag_duplicate_render() {
 #[test]
 fn scenario_b_waveforge_new_launcher_clip_drag_render() {
     let (mut h, _) = notes_song();
-    // track 01 has no instrument: the lower panel offers the chooser
+    // track 01 has no instrument: the track pie's Add instrument › WaveForge
     h.state_mut().tl_select_track(0, false);
-    h.state_mut().set_lower(1);
-    frames(&mut h, 3);
-    let r = exact(&h, crate::poly::POLY_DISPLAY_NAME);
-    click_at(&mut h, r.center());
+    h.state_mut()
+        .track_new_instrument(0, super::trackpie::Builtin::WaveForge);
     frames(&mut h, 3);
     let wf = h
         .state()

@@ -98,8 +98,8 @@ impl App {
     }
 
     /// the pie's Add › WaveForge, Drum Kit, …: a new built-in instrument
-    /// (its Init or first preset) plays track `tr`; one undo step, and its
-    /// editor opens
+    /// (its Init or first preset) plays track `tr`; one undo step, and the
+    /// Rack shows its compact card (the full editor outside the Timeline)
     pub(crate) fn track_new_instrument(&mut self, tr: usize, b: super::trackpie::Builtin) {
         let Some((name, kind)) = b.make() else {
             self.status = format!("No {} preset to start from", b.label());
@@ -119,7 +119,13 @@ impl App {
         self.tl_select_track(tr, false);
         self.instr = slot;
         self.dirty = true;
-        self.show_instrument_panel();
+        // the Rack: the instrument's compact card with room beside it for
+        // effects (Del (postmanpat) 23 Oct 2026), not the full editor
+        if matches!(self.view, View::Timeline | View::Pattern) {
+            self.set_lower(4);
+        } else {
+            self.show_instrument_panel();
+        }
         self.status = format!(
             "Track {:02} now plays {slot:02X} {name}{}",
             tr + 1,

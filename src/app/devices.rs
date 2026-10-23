@@ -373,6 +373,8 @@ impl App {
                     .floor()
             };
         }
+        // where an empty chain's drop box ends (the row's visible right edge)
+        let row_right = ui.max_rect().right();
         egui::ScrollArea::horizontal()
             .id_salt("devices_row")
             .max_height(h + 4.0)
@@ -425,7 +427,8 @@ impl App {
                         chevron(ui, h);
                     }
                     self.dev.tabbed = false;
-                    if plus_card(ui, h, chain.is_empty()) {
+                    let fill = (row_right - ui.cursor().left() - 12.0).max(plus_w(true));
+                    if plus_card(ui, h, chain.is_empty(), fill) {
                         open_effects = true;
                     }
                     ui.add_space(12.0);
@@ -1754,9 +1757,11 @@ fn plus_w(empty: bool) -> f32 {
     }
 }
 
-fn plus_card(ui: &mut egui::Ui, h: f32, empty: bool) -> bool {
+/// `fill`: an empty chain's box takes the rest of the row (the empty
+/// track's "Drag an instrument here" look, Del (postmanpat) 23 Oct 2026)
+fn plus_card(ui: &mut egui::Ui, h: f32, empty: bool, fill: f32) -> bool {
     let t = th();
-    let w = plus_w(empty);
+    let w = if empty { fill } else { plus_w(false) };
     let (r, resp) = ui.allocate_exact_size(egui::vec2(w, h), Sense::click());
     let resp = resp.on_hover_text("add an effect: opens Browser › Effects (or drag one here)");
     let p = ui.painter();
@@ -1765,6 +1770,40 @@ fn plus_card(ui: &mut egui::Ui, h: f32, empty: bool) -> bool {
     } else {
         t.ink2.gamma_multiply(0.7)
     };
+    if empty {
+        // the empty Rack's drop box: a rounded outline, a title and a hint
+        let r2 = r.shrink2(egui::vec2(2.0, 6.0));
+        p.rect_stroke(r2, 8, Stroke::new(1.5, col), egui::StrokeKind::Inside);
+        let wrap = (r2.width() - 20.0).max(60.0);
+        let title = p.layout(
+            "Drag an effect here".into(),
+            FontId::proportional(16.0),
+            if resp.hovered() { t.accent } else { t.ink },
+            wrap,
+        );
+        let hint = p.layout(
+            "No effects yet: drop one from Browser › Effects, or click to open it".into(),
+            FontId::proportional(12.0),
+            t.ink2,
+            wrap,
+        );
+        let tot = title.size().y + 6.0 + hint.size().y;
+        let y0 = r2.center().y - tot / 2.0;
+        p.galley(
+            Pos2::new(r2.center().x - title.size().x / 2.0, y0),
+            title,
+            t.ink,
+        );
+        p.galley(
+            Pos2::new(
+                r2.center().x - hint.size().x / 2.0,
+                y0 + tot - hint.size().y,
+            ),
+            hint,
+            t.ink2,
+        );
+        return resp.clicked();
+    }
     // dashed outline
     let r2 = r.shrink(2.0);
     for (a, b) in [
@@ -1780,7 +1819,7 @@ fn plus_card(ui: &mut egui::Ui, h: f32, empty: bool) -> bool {
             4.0,
         ));
     }
-    let c = Pos2::new(r.center().x, r.center().y - if empty { 14.0 } else { 0.0 });
+    let c = r.center();
     p.line_segment(
         [c - egui::vec2(9.0, 0.0), c + egui::vec2(9.0, 0.0)],
         Stroke::new(2.2, col),
@@ -1789,15 +1828,6 @@ fn plus_card(ui: &mut egui::Ui, h: f32, empty: bool) -> bool {
         [c - egui::vec2(0.0, 9.0), c + egui::vec2(0.0, 9.0)],
         Stroke::new(2.2, col),
     );
-    if empty {
-        p.text(
-            Pos2::new(r.center().x, c.y + 26.0),
-            egui::Align2::CENTER_CENTER,
-            "No effects yet\nclick, or drag one in from Browser › Effects",
-            FontId::proportional(11.0),
-            col,
-        );
-    }
     resp.clicked()
 }
 

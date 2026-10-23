@@ -94,18 +94,24 @@ fn a_header_shows_the_instrument_and_a_clip_shows_the_clip() {
 }
 
 #[test]
-fn a_track_without_an_instrument_offers_the_chooser() {
+fn a_track_without_an_instrument_shows_the_empty_rack_without_a_chooser_row() {
     let (mut h, _) = two_instrument_song();
     let p = head_spot(&h, 1);
     click_at(&mut h, p);
     frames(&mut h, 3);
     assert_eq!(h.state().ch, 1);
     assert!(h.state().chooser_wanted());
-    let label = "Track 02 has no instrument · Choose an instrument:";
-    assert!(h.query_by_label(label).is_some());
+    // the chooser row over the Rack is gone (Del (postmanpat) 23 Oct 2026)
+    for lower in [1, 4] {
+        h.state_mut().set_lower(lower);
+        frames(&mut h, 3);
+        let label = "Track 02 has no instrument · Choose an instrument:";
+        assert!(h.query_by_label(label).is_none(), "no chooser row");
+    }
+    // the track pie's Add instrument: the Rack with the compact card
     let n0 = h.state().with(|s| s.song.instruments.len());
-    let r = exact(&h, "Drum Kit");
-    click_at(&mut h, r.center());
+    h.state_mut()
+        .track_new_instrument(1, super::trackpie::Builtin::WaveForge);
     frames(&mut h, 3);
     let (n1, given) = h.state().with(|s| {
         (
@@ -113,11 +119,20 @@ fn a_track_without_an_instrument_offers_the_chooser() {
             s.song.timeline.as_deref().unwrap().tracks[1].instr,
         )
     });
-    assert_eq!(n1, n0 + 1, "a new Drum Kit");
+    assert_eq!(n1, n0 + 1, "a new instrument");
     assert_eq!(given as usize, n1, "track 02 plays it");
     assert!(!h.state().chooser_wanted());
-    assert!(h.query_by_label(label).is_none());
-    assert!(h.state().extra.lower_inst, "its editor shows");
+    assert!(
+        h.state().extra.lower_dev,
+        "the Rack shows, not the full editor"
+    );
+    assert!(!h.state().extra.lower_inst);
+    let (inst, row) = (h.state().dev.inst, h.state().dev.row);
+    assert!(inst != Rect::NOTHING, "the instrument card");
+    assert!(
+        inst.width() < row.width() * 0.5,
+        "a compact card with room for effects: {inst:?} in {row:?}"
+    );
 }
 
 #[test]

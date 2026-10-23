@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 118] = [
+pub const VIEWS: [&str; 120] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -155,6 +155,8 @@ pub const VIEWS: [&str; 118] = [
     "stringwave-pie",
     "stringwave-panelpie",
     "metronome-mockup",
+    "rack-compact",
+    "rack-empty",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -622,7 +624,9 @@ impl App {
             | "tracks-trackpie-empty"
             | "tracks-arranger-off"
             | "classic-arranger-off"
-            | "classic-arranger-off-master" => {
+            | "classic-arranger-off-master"
+            | "rack-compact"
+            | "rack-empty" => {
                 // a new song with three tracks: Song / Master docked at the
                 // bottom of the list, room under the tracks for the Add pie
                 self.new_song();
@@ -649,10 +653,19 @@ impl App {
                     Some("909 Kit"),
                 );
                 // -empty: a fourth track with no instrument yet
-                if view == "tracks-trackpie-empty" {
+                if view == "tracks-trackpie-empty" || view == "rack-empty" {
                     self.track_add(3);
                 }
                 self.tl_select_track(2, false);
+                // rack-compact: the pie's Add › WaveForge on track 01, its
+                // compact Rack card; rack-empty: the empty track's Rack
+                if view == "rack-compact" {
+                    self.track_new_instrument(0, super::trackpie::Builtin::WaveForge);
+                }
+                if view == "rack-empty" {
+                    self.tl_select_track(3, false);
+                    self.set_lower(4);
+                }
                 self.dirty = false;
             }
             "trackpie"

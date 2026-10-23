@@ -655,12 +655,12 @@ fn a_chipwave_instrument_dropped_on_a_track_plays_it_and_opens_its_editor() {
         before.channels,
         "no new track"
     );
-    // the track is selected, its full editor open below the timeline
+    // the track is selected, its compact Rack card below the timeline
     assert_eq!(h.state().ch, 2);
     assert_eq!(h.state().tl_cur_track(), 2);
     assert_eq!(h.state().instr as usize, n);
     assert_eq!(h.state().view, View::Timeline);
-    assert!(h.state().extra.lower_inst, "the instrument editor is open");
+    assert!(h.state().extra.lower_dev, "the Rack is open");
     // one undo step takes it all back
     ctrl(&mut h, Key::Z);
     frames(&mut h, 2);
@@ -702,7 +702,7 @@ fn a_chipwave_instrument_dropped_below_the_tracks_makes_a_new_track() {
         slot
     );
     assert_eq!(h.state().ch, n0);
-    assert!(h.state().extra.lower_inst);
+    assert!(h.state().extra.lower_dev);
     // the new track and its instrument are one undo step
     ctrl(&mut h, Key::Z);
     frames(&mut h, 2);
