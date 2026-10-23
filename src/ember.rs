@@ -931,7 +931,14 @@ pub fn paint_button(
 pub fn led_item(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     let t = th();
     let font = label_font(12.5);
-    let col = if on { t.acc_hot } else { INK3 };
+    // the lit label: the hot accent on dark cards; light themes (Amiga's
+    // lavender skinned cards) need a dark ink, the skin's text if any
+    let lit = if t.light {
+        crate::theme::instskin::active().map_or(t.ink, |s| s.text)
+    } else {
+        t.acc_hot
+    };
+    let col = if on { lit } else { INK3 };
     let g = ui.painter().layout_no_wrap(text.to_string(), font, col);
     let (r, resp) = ui.allocate_exact_size(
         Vec2::new(g.size().x + 12.0, g.size().y.max(16.0)),
