@@ -174,6 +174,9 @@ pub(crate) enum PieAct {
     /// a melodic track: the chord generator on its first pattern (a new
     /// empty one when it has none)
     Chords,
+    /// a melodic track: the melody generator (Generators › Melody) on its
+    /// first pattern
+    Melody,
     /// mute / solo this track (as its M / S buttons)
     Mute,
     Solo,
@@ -1777,6 +1780,7 @@ impl App {
             PieAct::DiceKit => self.track_dice_kit(tr),
             PieAct::Sound(k) => self.track_sound(tr, k as usize),
             PieAct::Chords => self.track_chords(tr),
+            PieAct::Melody => self.track_melody(tr),
             PieAct::NewPattern => {
                 self.snapshot();
                 self.undo_hold += 1;

@@ -482,6 +482,24 @@ impl App {
     /// empty 1-bar one when it has none) opens in the piano roll with the
     /// chord generator on its first bar
     pub(crate) fn track_chords(&mut self, tr: usize) {
+        if self.track_gen(tr) {
+            self.status = format!("Track {:02}: the chord generator", tr + 1);
+        }
+    }
+
+    /// the track pie's Melody…: as [`Self::track_chords`], on the
+    /// Generators panel's Melody tab
+    pub(crate) fn track_melody(&mut self, tr: usize) {
+        if self.track_gen(tr) {
+            let at = self.cl.gen.opts.start_bar as i64 * super::chordlane::BAR;
+            self.gen_open_melody(at);
+            self.status = format!("Track {:02}: the melody generator", tr + 1);
+        }
+    }
+
+    /// open the track's first pattern (a new one if it has none) with the
+    /// Generators panel on its Chords tab; false: no pattern
+    fn track_gen(&mut self, tr: usize) -> bool {
         let (id, at) = match self.track_first_note_clip(tr) {
             Some(c) => c,
             None => {
@@ -491,7 +509,7 @@ impl App {
                 self.undo_hold -= 1;
                 let Some((id, _)) = r else {
                     self.status = "Can't add a pattern there".into();
-                    return;
+                    return false;
                 };
                 let at = self.with(|s| {
                     s.song
@@ -505,7 +523,7 @@ impl App {
         };
         self.track_open_pattern(tr, id);
         self.cl_open_gen_at(at);
-        self.status = format!("Track {:02}: the chord generator", tr + 1);
+        true
     }
 
     /// the earliest note clip on track `tr`: (id, start)

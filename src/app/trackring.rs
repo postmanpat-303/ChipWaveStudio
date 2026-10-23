@@ -165,7 +165,7 @@ fn back() -> Slot {
 /// none makes a new one (Duplicate copies it on purpose). They follow what
 /// the track plays (`TrackClass`): an empty track offers Instrument › and
 /// Drum kit › first; a drum track its kits, patterns and Dice kit; a
-/// melodic track melodic swaps, its Sounds ›, patterns and Chords….
+/// melodic track melodic swaps, its Sounds ›, patterns, Chords… and Melody….
 /// None: the level is the same in both pies (Automation)
 fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
     // an instrument and its pattern on this track
@@ -301,6 +301,11 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
                         "Chords…",
                         tl(PieAct::Chords),
                         tl_tip("the chord generator on this track's first pattern (a new one if it has none)"),
+                    ),
+                    slot(
+                        "Melody…",
+                        tl(PieAct::Melody),
+                        tl_tip("the melody generator over this track's first pattern's chords (writes a new Melody track or this one)"),
                     ),
                     automation(),
                     slot(

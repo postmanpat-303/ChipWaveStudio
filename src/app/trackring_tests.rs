@@ -215,6 +215,7 @@ fn the_track_pie_follows_what_the_track_plays() {
             "Sounds",
             "New pattern",
             "Chords…",
+            "Melody…",
             "Automation lane",
             "Browse…",
             "Mute",
@@ -226,6 +227,7 @@ fn the_track_pie_follows_what_the_track_plays() {
     assert_eq!(add[1].go, Some(Go::Open(Level::Sounds)));
     assert_eq!(add[2].go, Some(Go::Act(PieAct::NewPattern)));
     assert_eq!(add[3].go, Some(Go::Act(PieAct::Chords)));
+    assert_eq!(add[4].go, Some(Go::Act(PieAct::Melody)));
     assert!(
         !labels(&add)
             .iter()
@@ -320,7 +322,9 @@ fn the_rings_hold_the_approved_entries() {
         ..i.clone()
     };
     let m = ring_slots(Level::Add, &muted);
-    assert!(m[6].on && !m[7].on, "Mute lit when muted");
+    let mu = m.iter().position(|s| s.label == "Mute").unwrap();
+    assert_eq!(m[mu + 1].label, "Solo");
+    assert!(m[mu].on && !m[mu + 1].on, "Mute lit when muted");
     // the empty-area pie: new tracks
     let new = TrackInfo {
         new: true,
@@ -363,7 +367,9 @@ fn the_rings_hold_the_approved_entries() {
         full: true,
         ..i.clone()
     };
-    assert_eq!(ring_slots(Level::Add, &full)[8].go, None, "no Duplicate");
+    let fr = ring_slots(Level::Add, &full);
+    let du = fr.iter().position(|s| s.label == "Duplicate").unwrap();
+    assert_eq!(fr[du].go, None, "no Duplicate");
     let full = TrackInfo { new: true, ..full };
     for l in [Level::Add, Level::Instrument, Level::DrumInstr] {
         for s in ring_slots(l, &full) {
@@ -389,6 +395,7 @@ fn the_rings_hold_the_approved_entries() {
                     | "Dice kit"
                     | "New pattern"
                     | "Chords…"
+                    | "Melody…"
                     | "Automation lane"
             ) {
                 assert_eq!(s.go, None, "{c:?} {}", s.label);
@@ -506,6 +513,16 @@ fn the_app_gives_each_track_its_context() {
     assert!(h.state().pr.open, "the piano roll");
     assert!(h.state().cl.gen.open, "the chord generator");
     assert_eq!(h.state().tl_cur_track(), 0);
+    assert_eq!(h.state().cl.gen.tab, super::genpanel::GenTab::Chords);
+    // Melody… on it: the same pattern, the Generators panel on Melody
+    h.state_mut().cl.gen.open = false;
+    h.state_mut().pie_apply(0, PieAct::Melody, &ctx);
+    frames(&mut h, 2);
+    assert!(h.state().cl.gen.open, "the generators");
+    assert_eq!(h.state().cl.gen.tab, super::genpanel::GenTab::Melody);
+    use egui_kittest::kittest::Queryable;
+    assert!(h.query_by_label("Write to timeline").is_some());
+    assert!(h.query_by_label("Lock rhythm").is_some());
     // Dice kit on the drum track: the kit changes, one undo takes it back
     h.state_mut().cl.gen.open = false;
     h.state_mut().undo_reset();
