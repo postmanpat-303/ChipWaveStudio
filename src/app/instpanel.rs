@@ -875,14 +875,13 @@ impl App {
         ui.horizontal_centered(|ui| {
             ui.add_space(4.0);
             let cur = self.lower_mode();
-            if cur == 1 {
-                if ui
+            if cur == 1
+                && ui
                     .button("‹ Rack")
                     .on_hover_text("back to the Rack (the instrument card and its effects)")
                     .clicked()
-                {
-                    self.set_lower(4);
-                }
+            {
+                self.set_lower(4);
             }
             let on = match cur {
                 4 | 1 => Some(1),
