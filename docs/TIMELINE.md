@@ -86,7 +86,7 @@ The lower panel's **Notes** side is the piano roll (the **Notes | Rack** switch;
 - note clips: the **snap** menu (Bar, Beat, 1/8, 1/16, 1/32, 1/16T, **Auto** = follows the zoom, like the Timeline's Auto, off), **Quantize** (Q);
 - **Fit** (F: zoom to the notes); **Scale** turns the song key on or off (its notes are highlighted; the same key as the Chords window) with the **key** and **scale** menus;
 - **Len**: the length the next click draws (also a menu).
-- note clips: **Chords** shows the **chord lane** above the notes, **Generate** opens the *Generators* panel (Chords and Melody tabs), and **Stamp** picks the chord the click draws (see [CHORDS.md › Chord lane](CHORDS.md#chord-lane-in-the-piano-roll-0241)).
+- note clips: **Chords** shows the **chord lane** above the notes, **Generate** opens the *Generators* panel (Chords, Melody and Bass tabs), and **Stamp** picks the chord the click draws (see [CHORDS.md › Chord lane](CHORDS.md#chord-lane-in-the-piano-roll-0241)).
 
 **Single-click entry:** one click on empty grid draws a note **the length of the last note you drew, resized or clicked** (the grid step at first), snapped to the grid. Drag while drawing to set its length; that becomes the new length. A slightly long or wobbly click keeps the remembered length (it only changes once the mouse moves half a grid step). Double-clicking still works (the second click selects the new note). Clicking a note selects it and never draws.
 

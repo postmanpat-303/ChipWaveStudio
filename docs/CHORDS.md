@@ -54,11 +54,13 @@ Note clips show a **chord lane** between the piano roll's toolbar and the notes 
 - **Settings › Chord menus › List** uses ordinary list menus instead of the pies (the list also has **Detect chords from the notes**: one chord per bar from the clip's notes).
 - The radial menu is a reusable widget (`src/app/radial.rs`).
 
-### Generators panel (Chords and Melody)
+### Generators panel (Chords, Melody and Bass)
 
 ![Generators panel](screenshots/pianoroll-chord-generate.png)
 
-**Generate** in the toolbar, **More…** / **Generate** in a pie, or **Chords…** in the track pie opens the **GENERATORS** panel on the **Chords** tab; **Melody…** in the track pie opens it on the **Melody** tab. The panel has the generator on the left and a fixed **WRITE** card on the right that always says what will happen: the target track, bars from–to, the write mode and a plain line such as *replaces notes in bars 2–9 on track 03*. **Write to timeline** does it, and one **Ctrl+Z** takes it back. Below about 980 pixels wide the card moves under the generator; on a short screen the panel scrolls.
+**Generate** in the toolbar, **More…** / **Generate** in a pie, or **Chords…** in the track pie opens the **GENERATORS** panel on the **Chords** tab; **Melody…** in the track pie opens it on the **Melody** tab, and **Bass…** on the **Bass** tab. The panel has the generator on the left and a fixed **WRITE** card on the right that always says what will happen: the target track, bars from–to, the write mode and a plain line such as *replaces notes in bars 2–9 on track 03*. **Write to timeline** does it, and one **Ctrl+Z** takes it back. Below about 980 pixels wide the card moves under the generator; on a short screen the panel scrolls.
+
+**Moving the panel:** drag the **⠿ GENERATORS** grip at its top left to move it anywhere (the pointer shows a hand). It always stays on screen, with the whole width and the header visible, and the body scrolls in whatever height is left. The spot is remembered in the settings, so it opens there next time. **Double-click** the grip to put it back at the top centre.
 
 **Chords tab**
 - **Style:** Cinematic, Ambient, Indie Pop, Emo, Pop, Lo-fi / Neo Soul, Synthwave, EDM / Trance, Dark / Horror, Folk / Country, Blues, Heroic / Game, Dark psy, House, Jazz, Rock and Classical, each with a one-line description. Every style has a table of common progressions (for example Pop I–V–vi–IV and vi–IV–I–V, Rock I–bVII–IV, the 12-bar blues, Jazz ii–V–I and I–vi–ii–V, Trance vi–IV–I–V and i–VI–III–VII, Dark psy i–bII and i–bII–i–bVII, House i–iv and ii9–V9, Synthwave i–bVI–bIII–bVII, Lo-fi IVmaj7–iii7–vi7 and ii9–V13–Imaj9, the Andalusian i–bVII–bVI–V and the canon I–V–vi–iii–IV–I–IV–V). These are generic, centuries-old or genre-standard progressions.
@@ -81,6 +83,24 @@ Requested by Del (postmanpat). The **Melody** tab writes a tune over a chord pro
 - Every note is in the key's scale; notes between chord tones move by step.
 - WRITE card: by default **New “Melody” track** adds a track called *Melody* below the current one with a copy of the current track's instrument (its parameters and effects: the sound Preview plays; the WaveForge Saw Lead when the track has none or plays a Drum Kit) and the melody in a new clip (nothing is replaced). Or pick the current track, with **Replace notes** (replaces the notes inside the melody's bars; asks first if that deletes more than 8) or **Notes on top**. Writing twice never doubles notes, and each write is one undo step.
 
+### Bass generator
+
+Requested by Del (postmanpat). The **Bass** tab writes a bass line under a chord progression, rule based and seeded like the Melody tab (the same settings and seed always give the same notes). It follows the same chords: the **Chords** tab's progression or the clip's chord lane (**Over**).
+
+- Every chord starts with a note on its first beat, on the chord's root (or its slash bass, so *G/B* starts on B). Other steps play the root, the fifth or the octave, read against the chord sounding there.
+- **Style:**
+  - **Root**: the root on the beat (halves, quarters or eighths by Density).
+  - **Octave pump**: eighths, with the root on the beat and its octave on the off-beat.
+  - **Walking**: quarters through chord and scale tones, leading into each next root (a half step, a scale step or the fifth before it). Density under a third gives the two-feel (halves).
+  - **Acid**: a looping two-bar 16th line with position-weighted odds, a root-heavy note set, accents (louder notes), ties (a note held into the next) and octave jumps. Timeline note clips have no slide/glide, so Acid uses accents and ties only.
+  - **Syncopated**: 16th syncopation around the root and the fifth.
+  - **Euclid**: pulses spread evenly over steps (set them in Advanced), on roots, fifths and octaves.
+- **Density**, **Range** (semitones, 12–36) and **Octave** (the lowest note's octave; 2 is the bass register). **Lock rhythm** / **Lock notes** work as on the Melody tab.
+- **Preview**, **Dice** and **Another one** in the pad, as on the Melody tab.
+- **Advanced…:** Euclid steps / pulses / rotate, **Approach** (the chance the note before a chord change leads into the next root), **Fifths/octaves**, **Note length**, and for Acid **Accent** and **Tie**.
+- The line is monophonic (a note ends before the next starts) and stays inside Octave / Range.
+- WRITE card: by default **New “Bass” track** adds a track called *Bass* below the current one with a copy of the current track's instrument (its parameters and effects). When the track has no instrument or plays drums, it gets a bass synth instead (*Fat Moog Bass*, or *Acid Squelch* for Acid), never a drum kit. Or pick the current track, with **Replace notes** or **Notes on top**. Each write is one undo step.
+
 ## Scale lock
 
 **Scale lock** (in the chord helper; shown as *lock A minor* in the block bar) snaps every note typed on the computer keyboard and every MIDI note (played and recorded) to the nearest note of the song key; ties go down. Note-offs are not changed. It is a setting, so it stays on until you turn it off; it does nothing while the song has no key.
@@ -90,4 +110,5 @@ Requested by Del (postmanpat). The **Melody** tab writes a tune over a chord pro
 - C. L. Krumhansl & E. J. Kessler (1982), "Tracing the dynamic changes in perceived tonal organization in a spatial representation of musical keys", *Psychological Review* 89(4), 334–368, https://doi.org/10.1037/0033-295X.89.4.334: the key profiles.
 - C. L. Krumhansl (1990), *Cognitive Foundations of Musical Pitch*, Oxford University Press: the Krumhansl–Schmuckler algorithm.
 - Melody generator: the Computoser paper by Bozhidar Bozhanov (2014, https://arxiv.org/abs/1412.3079; rules from the paper, no code); G. T. Toussaint (2005), "The Euclidean Algorithm Generates Traditional Musical Rhythms", and E. Bjorklund's algorithm (idea only); total-serialism by Timo Hoogland (MIT, ideas only); isobar by Daniel Jones (MIT, ideas only); the scale quantiser and lock / mutate-the-loop ideas in Emilie Gillet's eurorack firmware (MIT, ideas only). No code was copied.
+- Bass generator: acid-banger by David Whiting (CC BY 4.0, https://github.com/vitling/acid-banger; position-weighted step odds, root-heavy note sets, accents); aciduino by midilab (MIT, https://github.com/midilab/aciduino) and JC-303 by midilab (GPL-3.0, https://github.com/midilab/jc303) for the acid generator's controls; acid-test by Zack Scholl (MIT, https://github.com/schollz/acid-test); WalkingBass by philxan (MIT, https://github.com/philxan/WalkingBass) for the walking-bass rules; Toussaint's Euclidean rhythms, total-serialism and isobar as above. Ideas only: no code was copied.
 - The pad-and-progression workflow is inspired by **Scaler** by Plugin Boutique. No code, data or artwork from Scaler is used; scales, chord names and the presets are standard music theory.
