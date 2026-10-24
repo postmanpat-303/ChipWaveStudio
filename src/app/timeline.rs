@@ -1944,7 +1944,7 @@ impl App {
                     &np,
                     Pos2::new(tx + nw + 5.0, ty),
                     egui::Align2::LEFT_CENTER,
-                    &name,
+                    name,
                     crate::theme::prop(crate::theme::ts::BODY),
                     t.ink,
                     hr.right() - 135.0 - (tx + nw + 5.0),

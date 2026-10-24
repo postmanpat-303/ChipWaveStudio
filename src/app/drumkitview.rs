@@ -1086,7 +1086,7 @@ impl App {
         let (top, side) = if compact { (2.0, 2.0) } else { (26.0, 16.0) };
         // compact: an "+ ADD PAD" that would start a row of its own is a
         // short strip instead, so the pads keep room for two lines of text
-        let strip_h = if compact && n > kit.pads.len() && kit.pads.len() % cols == 0 {
+        let strip_h = if compact && n > kit.pads.len() && kit.pads.len().is_multiple_of(cols) {
             crate::theme::row_h(ui.painter(), &crate::theme::prop(ts::SMALL)) + 8.0
         } else {
             0.0
