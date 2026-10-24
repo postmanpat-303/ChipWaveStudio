@@ -353,6 +353,9 @@ fn block_column_copy_paste_duplicate_and_ctrl_drag() {
     undo(&mut h);
     // Ctrl-drag the first note 8 rows on: a copy
     h.state_mut().pr.sel = vec![0];
+    // the notes mid-roll (the two-row toolbar leaves a shorter roll)
+    let pr = &mut h.state_mut().pr;
+    pr.scroll_y = (120.0 - 51.0) * pr.key_h - pr.grid_rect.height() / 2.0;
     frames(&mut h, 1);
     let (a, b) = (at(&h, 0, 49, 5.0), at(&h, 8, 49, 5.0));
     drag_m(&mut h, a, b, CMD);

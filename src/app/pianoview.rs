@@ -1522,7 +1522,13 @@ impl App {
         let grid_t = self.pr_grid();
         let (song_key, ninstr) = self.with(|s| (s.song.info.key, s.song.instruments.len()));
         // ---- layout
-        let tool = Rect::from_min_size(full.min, egui::vec2(full.width(), TOOL_H));
+        // one row on wide docks; two below (1366 px, big text), set by the
+        // dock width alone so the notes never jump when the tools change
+        let two_rows = full.width() < crate::theme::ts::px(crate::theme::ts::BODY) * 140.0;
+        let tool = Rect::from_min_size(
+            full.min,
+            egui::vec2(full.width(), if two_rows { 2.0 * TOOL_H } else { TOOL_H }),
+        );
         // the chord lane (note clips, Chords on)
         let lane_h = if matches!(target, Target::Notes { .. }) && !self.cl.hidden {
             super::chordlane::LANE_H
@@ -1591,7 +1597,9 @@ impl App {
         let mut tool_edit: Option<RNote> = None;
         let mut use_instr_clip: Option<u32> = None;
         let mut make_unique: Option<u32> = None;
-        ui.scope_builder(egui::UiBuilder::new().max_rect(tool.shrink2(egui::vec2(6.0, 1.0))), |ui| {
+        let row1 = Rect::from_min_size(tool.min, egui::vec2(tool.width(), TOOL_H));
+        let row2 = row1.translate(egui::vec2(0.0, TOOL_H));
+        ui.scope_builder(egui::UiBuilder::new().max_rect(row1.shrink2(egui::vec2(6.0, 1.0))), |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 // narrow docks (1366 px at 100 %): shorter button names, so
@@ -1665,7 +1673,7 @@ impl App {
                         grid_name(self.pr.grid).to_string()
                     };
                     egui::ComboBox::from_id_salt("pr_grid")
-                        .width(92.0)
+                        .width(if narrow { 64.0 } else { 92.0 })
                         .selected_text(shown)
                         .show_ui(ui, |ui| {
                             for (g, n) in GRIDS {
@@ -1679,7 +1687,7 @@ impl App {
                         })
                         .response
                         .on_hover_text("snap grid");
-                    if pr_btn(ui, if narrow { "Quant" } else { "Quantize" }, false, true, "snap the selected notes (or all) to the grid (Q)").clicked() {
+                    if pr_btn_as(ui, if narrow { "Quant" } else { "Quantize" }, "Quantize", false, true, "snap the selected notes (or all) to the grid (Q)").clicked() {
                         self.pr_quantise();
                     }
                 }
@@ -1688,13 +1696,13 @@ impl App {
                 }
                 if let Target::Notes { .. } = target {
                     let on = self.pr.step_input;
-                    if pr_btn(ui, if narrow { "Step in" } else { "Step input" }, on, true, "MIDI / typed notes go in one step after the other at the step position (chords: hold the keys together). Off: they only play - press Record (R) to record in time").clicked() {
+                    if pr_btn_as(ui, if narrow { "Step" } else { "Step input" }, "Step input", on, true, "MIDI / typed notes go in one step after the other at the step position (chords: hold the keys together). Off: they only play - press Record (R) to record in time").clicked() {
                         self.pr.step_input = !on;
                         self.pr.step = None;
                         self.status = format!("Step input {}", if on { "off" } else { "on" });
                     }
                     let on = self.typing.on;
-                    if pr_btn(ui, "Keys → Notes", on, true, "Keys → Notes (Ctrl+K): play notes on your computer keyboard. Off: those keys are normal shortcuts again.").clicked() {
+                    if pr_btn_as(ui, if narrow { "Keys" } else { "Keys → Notes" }, "Keys → Notes", on, true, "Keys → Notes (Ctrl+K): play notes on your computer keyboard. Off: those keys are normal shortcuts again.").clicked() {
                         self.typing_toggle();
                     }
                     // "Use track instrument": only while the clip has notes
@@ -1729,7 +1737,7 @@ impl App {
                     if pr_btn(ui, "Chords", on, true, "show the chord lane above the notes").clicked() {
                         self.cl.hidden = on;
                     }
-                    if pr_btn(ui, if narrow { "Gen…" } else { "Generate" }, false, true, "Generators: chord progression… (styles, key, length, colour; Melody is its second tab)").clicked() {
+                    if pr_btn_as(ui, if narrow { "Gen…" } else { "Generate" }, "Generate", false, true, "Generators: chord progression… (styles, key, length, colour; Melody is its second tab)").clicked() {
                         let at = self.cl.sel.and_then(|i| self.cl_marks(target).get(i).map(|m| m.start)).unwrap_or(0);
                         self.cl_open_gen_at(at);
                     }
@@ -1752,6 +1760,19 @@ impl App {
                         self.pr.chord = k;
                     }
                 }
+                // two rows: the key, length and inspector go on the second
+                let mut row2_ui;
+                let ui: &mut egui::Ui = if two_rows {
+                    row2_ui = ui.new_child(
+                        egui::UiBuilder::new()
+                            .max_rect(row2.shrink2(egui::vec2(6.0, 1.0)))
+                            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+                    );
+                    row2_ui.spacing_mut().item_spacing.x = 4.0;
+                    &mut row2_ui
+                } else {
+                    ui
+                };
                 // the song key: highlights its notes (and sets the Chords key)
                 let on = song_key.is_some();
                 if pr_btn(ui, "Scale", on, true, "highlight the song key's notes (the same key as the Chords window)").clicked() {
@@ -1772,7 +1793,7 @@ impl App {
                         .response
                         .on_hover_text("key");
                     egui::ComboBox::from_id_salt("pr_key_scale")
-                        .width(92.0)
+                        .width(if narrow { 64.0 } else { 92.0 })
                         .selected_text(k.scale.name())
                         .show_ui(ui, |ui| {
                             for sc in chords::Scale::ALL {
@@ -1788,9 +1809,12 @@ impl App {
                     }
                     self.pr.last_key = Some(sk);
                 }
-                ui.add_space(6.0);
-                // the remembered length of the next drawn note
-                ui.label(egui::RichText::new("Len").color(t.ink2));
+                // the remembered length of the next drawn note (narrow: the
+                // combo alone, its tooltip names it)
+                if !narrow {
+                    ui.add_space(6.0);
+                    ui.label(egui::RichText::new("Len").color(t.ink2));
+                }
                 let gstep = self.pr_grid();
                 egui::ComboBox::from_id_salt("pr_len")
                     .width(52.0)
@@ -1803,7 +1827,7 @@ impl App {
                         }
                     })
                     .response
-                    .on_hover_text("length of the next note you click in: the last note drawn, resized or clicked");
+                    .on_hover_text("note length (Len) of the next note you click in: the last note drawn, resized or clicked");
                 ui.separator();
                 match sel_note {
                     Some(n) => {
@@ -1836,7 +1860,8 @@ impl App {
                         } else {
                             "click: draw (same length as the last note) · drag a note: move · its right edge: length · drag empty space: box select · Alt+drag: line select · Shift: add · right-click or right-drag: erase · click the bar strip: paste marker".into()
                         };
-                        ui.label(egui::RichText::new(tip).small().color(t.ink2));
+                        // elided where the toolbar ends; the full hint on hover
+                        ui.add(egui::Label::new(egui::RichText::new(tip).small().color(t.ink2)).truncate());
                     }
                 }
             });
@@ -2977,12 +3002,32 @@ const BTN_H: f32 = 20.0;
 
 /// a toolbar text button with a highlighted active state
 fn pr_btn(ui: &mut egui::Ui, label: &str, on: bool, enabled: bool, tip: &str) -> egui::Response {
+    pr_btn_as(ui, label, label, on, enabled, tip)
+}
+
+/// [`pr_btn`] showing `label` (a short name in narrow docks) but keeping its
+/// full `name` for screen readers and the tests
+fn pr_btn_as(
+    ui: &mut egui::Ui,
+    label: &str,
+    name: &str,
+    on: bool,
+    enabled: bool,
+    tip: &str,
+) -> egui::Response {
     let t = th();
     let font = crate::theme::prop(crate::theme::ts::COMPACT);
     let g = ui
         .painter()
         .layout_no_wrap(label.to_string(), font, Color32::PLACEHOLDER);
-    let w = (g.size().x + 16.0).max(30.0);
+    // Slate paints capitals in the label font with an LED dot when on: room
+    // for both, so the label never runs past the outline (or jumps on toggle)
+    let tw = if t.ember {
+        crate::ember::button_text_w(ui.painter(), label, BTN_H, true)
+    } else {
+        g.size().x
+    };
+    let w = (tw + 16.0).max(30.0);
     let (r, resp) = ui.allocate_exact_size(
         egui::vec2(w, BTN_H),
         if enabled {
@@ -3009,7 +3054,7 @@ fn pr_btn(ui: &mut egui::Ui, label: &str, on: bool, enabled: bool, tip: &str) ->
         };
         ui.painter().galley(r.center() - g.size() / 2.0, g, col);
     }
-    let name = label.to_string();
+    let name = name.to_string();
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, &name));
     resp.on_hover_text(tip)
 }

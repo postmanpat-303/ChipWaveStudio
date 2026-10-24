@@ -849,6 +849,18 @@ pub fn button_ex(
     resp
 }
 
+/// the width the outlined button's label needs at height `h` (capitals in
+/// the label font, plus the LED dot), for callers that size their own rect
+pub fn button_text_w(p: &Painter, text: &str, h: f32, selected: bool) -> f32 {
+    let font = label_font(if h < 20.0 {
+        crate::theme::ts::LABEL
+    } else {
+        crate::theme::ts::COMPACT
+    });
+    let g = p.layout_no_wrap(text.to_uppercase(), font, Color32::PLACEHOLDER);
+    g.size().x + if selected { 10.0 } else { 0.0 }
+}
+
 /// paint the outlined button into `r` (shared by `button_ex` and the
 /// existing toolbar / piano-roll buttons in Slate): bevelled face, 1 px
 /// outline, capital label; `selected` adds the LED dot and orange text,

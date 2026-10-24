@@ -816,6 +816,12 @@ fn alt_drag_draws_a_line_that_selects_the_notes_it_crosses() {
         &mut h,
         &[(0, 60, r), (4, 70, r), (8, 60, r), (12, 70, r), (16, 60, 6)],
     );
+    // C4 to B4 in view (the two-row toolbar leaves a shorter roll)
+    {
+        let pr = &mut h.state_mut().pr;
+        pr.scroll_y = (120.0 - 64.0) * pr.key_h - pr.grid_rect.height() / 2.0;
+    }
+    frame(&mut h);
     let alt = egui::Modifiers::ALT;
     // a wavy line along C4 that dips below, never up to A#4
     let path = [
@@ -837,7 +843,6 @@ fn alt_drag_draws_a_line_that_selects_the_notes_it_crosses() {
     assert!(h.state().pr.line.is_empty(), "the line goes when let go");
     // Shift+Alt adds the A#4 at row 4
     let shift_alt = egui::Modifiers::SHIFT | egui::Modifiers::ALT;
-    // (from key 71: key 72 is in the ruler strip at this scroll)
     let pts = [at(&h, 3, 71, 0.0), at(&h, 5, 68, 0.0)];
     left_path(&mut h, &pts, shift_alt);
     assert_eq!(sel_notes(&h), vec![(0, 60), (4, 70), (8, 60), (16, 60)]);
