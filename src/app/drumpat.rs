@@ -276,11 +276,11 @@ fn nav_button(ui: &mut egui::Ui, dir: u8, enabled: bool, tip: &str) -> egui::Res
 
 fn pill(ui: &mut egui::Ui, label: &str, on: bool) -> egui::Response {
     let t = th();
-    let b = egui::Button::new(egui::RichText::new(label).size(11.5).color(if on {
-        t.ink
-    } else {
-        t.ink2
-    }))
+    let b = egui::Button::new(
+        egui::RichText::new(label)
+            .size(crate::theme::ts::px(crate::theme::ts::LABEL))
+            .color(if on { t.ink } else { t.ink2 }),
+    )
     .corner_radius(6)
     .fill(if on { t.sel } else { well(&t, 1.0) })
     .stroke(Stroke::new(1.0, if on { t.accent } else { t.border }));
@@ -566,11 +566,11 @@ impl App {
             }
             let crumb = |ui: &mut egui::Ui, s: &str, last: bool| {
                 ui.add(
-                    egui::Label::new(egui::RichText::new(s).size(12.0).color(if last {
-                        t.ink
-                    } else {
-                        t.ink2
-                    }))
+                    egui::Label::new(
+                        egui::RichText::new(s)
+                            .size(crate::theme::ts::px(crate::theme::ts::COMPACT))
+                            .color(if last { t.ink } else { t.ink2 }),
+                    )
                     .truncate()
                     .sense(Sense::click()),
                 )
@@ -632,14 +632,14 @@ impl App {
                             Pos2::new(r.left() + 36.0, r.center().y),
                             egui::Align2::LEFT_CENTER,
                             *name,
-                            FontId::proportional(12.5),
+                            crate::theme::prop(crate::theme::ts::COMPACT),
                             t.ink,
                         );
                         p.text(
                             Pos2::new(r.right() - 10.0, r.center().y),
                             egui::Align2::RIGHT_CENTER,
                             format!("{n} patterns"),
-                            FontId::proportional(10.5),
+                            crate::theme::prop(crate::theme::ts::SMALL),
                             t.ink2,
                         );
                         if resp.clicked() {
@@ -701,7 +701,7 @@ impl App {
                     let tag_w = if w < 280.0 { 8.0 } else { 64.0 };
                     let tag_r = Rect::from_min_max(Pos2::new(r.right() - tag_w, r.top()), Pos2::new(r.right() - 6.0, r.bottom()));
                     if w >= 280.0 {
-                        pt.text(tag_r.right_center(), egui::Align2::RIGHT_CENTER, "PATTERN", FontId::proportional(10.0), t.ink2);
+                        pt.text(tag_r.right_center(), egui::Align2::RIGHT_CENTER, "PATTERN", crate::theme::prop(crate::theme::ts::TINY), t.ink2);
                     }
                     let heart = Rect::from_center_size(Pos2::new(tag_r.left() - 10.0, r.center().y), egui::vec2(16.0, 16.0));
                     let fav = favs.contains(&key);
@@ -720,8 +720,8 @@ impl App {
                     tp.text(
                         Pos2::new(text_r.left(), r.top() + 11.0),
                         egui::Align2::LEFT_CENTER,
-                        super::pattern::fit(&tp, p.name, &FontId::proportional(12.5), text_r.width()),
-                        FontId::proportional(12.5),
+                        super::pattern::fit(&tp, p.name, &crate::theme::prop(crate::theme::ts::COMPACT), text_r.width()),
+                        crate::theme::prop(crate::theme::ts::COMPACT),
                         if playing { t.accent } else { t.ink },
                     );
                     let detail = if flat {
@@ -729,8 +729,8 @@ impl App {
                     } else {
                         format!("{} · {} bar{} · {}", p.kit.trim_end_matches(" Kit"), p.bars, if p.bars == 1 { "" } else { "s" }, p.bpm_tag())
                     };
-                    let detail = super::pattern::fit(&tp, &detail, &FontId::proportional(10.5), text_r.width());
-                    tp.text(Pos2::new(text_r.left(), r.top() + 25.0), egui::Align2::LEFT_CENTER, detail, FontId::proportional(10.5), t.ink2);
+                    let detail = super::pattern::fit(&tp, &detail, &crate::theme::prop(crate::theme::ts::SMALL), text_r.width());
+                    tp.text(Pos2::new(text_r.left(), r.top() + 25.0), egui::Align2::LEFT_CENTER, detail, crate::theme::prop(crate::theme::ts::SMALL), t.ink2);
                     if playing {
                         // progress underline under the name
                         let x0 = text_r.left();
@@ -833,13 +833,21 @@ impl App {
                         (None, false) => format!("loops at the song tempo ({bpm:.0} BPM)"),
                     };
                     ui.add(
-                        egui::Label::new(egui::RichText::new(&txt).size(11.0).color(t.ink))
-                            .truncate(),
+                        egui::Label::new(
+                            egui::RichText::new(&txt)
+                                .size(crate::theme::ts::px(crate::theme::ts::SMALL))
+                                .color(t.ink),
+                        )
+                        .truncate(),
                     )
                     .on_hover_text(&txt);
                 });
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Volume").size(11.0).color(t.ink2));
+                    ui.label(
+                        egui::RichText::new("Volume")
+                            .size(crate::theme::ts::px(crate::theme::ts::SMALL))
+                            .color(t.ink2),
+                    );
                     let mut v = self.extra.pattern_vol;
                     // the slider gives way to "Auto" when the panel is narrow
                     ui.spacing_mut().slider_width =
@@ -858,7 +866,8 @@ impl App {
                     }
                     ui.checkbox(
                         &mut self.extra.browser_autoplay,
-                        egui::RichText::new("Auto").size(11.0),
+                        egui::RichText::new("Auto")
+                            .size(crate::theme::ts::px(crate::theme::ts::SMALL)),
                     )
                     .on_hover_text("preview each pattern when it's selected");
                 });
@@ -1003,7 +1012,7 @@ impl App {
             }
             let drives = self.br.files.drives.clone();
             let elevated = self.br.files.elevated == Some(true);
-            let mr = ui.menu_button(egui::RichText::new("Drives").size(11.5), |ui| {
+            let mr = ui.menu_button(egui::RichText::new("Drives").size(crate::theme::ts::px(crate::theme::ts::LABEL)), |ui| {
                 ui.set_min_width(220.0);
                 if drives.is_empty() {
                     ui.label(egui::RichText::new("Looking for drives…").small());
@@ -1019,7 +1028,7 @@ impl App {
                     let txt = format!("{tag}{}{state}", d.title());
                     let b = ui.add_enabled(
                         d.ok != Some(false) || d.kind == drives::Kind::Network,
-                        egui::Button::new(egui::RichText::new(txt).size(11.5)),
+                        egui::Button::new(egui::RichText::new(txt).size(crate::theme::ts::px(crate::theme::ts::LABEL))),
                     );
                     if b.on_hover_text(d.kind.name()).clicked() {
                         ops.push(FOp::Go(PathBuf::from(&d.root)));
@@ -1060,7 +1069,7 @@ impl App {
             // leave room for Refresh and Sort: a bar wider than the space
             // left would widen the panel, and then itself, every frame
             let sort_w = ui.fonts_mut(|f| {
-                f.layout_no_wrap("Sort".into(), FontId::proportional(12.5), t.ink).size().x
+                f.layout_no_wrap("Sort".into(), crate::theme::prop(crate::theme::ts::COMPACT), t.ink).size().x
             });
             let reserve = 24.0 + sort_w + 2.0 * ui.spacing().button_padding.x + 3.0 * 3.0 + 10.0;
             let w = (ui.available_width() - reserve).max(30.0);
@@ -1097,10 +1106,10 @@ impl App {
                 let mut hits: Vec<(Rect, PathBuf)> = vec![];
                 for (k, a) in comps.iter().enumerate() {
                     let txt = label(a);
-                    let g = p.layout_no_wrap(txt, FontId::proportional(11.5), if k == 0 { t.ink } else { t.ink2 });
+                    let g = p.layout_no_wrap(txt, crate::theme::prop(crate::theme::ts::LABEL), if k == 0 { t.ink } else { t.ink2 });
                     let wd = g.size().x;
                     if x - wd < r.left() + 26.0 && k > 0 {
-                        p.text(Pos2::new(r.left() + 6.0, r.center().y), egui::Align2::LEFT_CENTER, "…  ›", FontId::proportional(11.5), t.ink2);
+                        p.text(Pos2::new(r.left() + 6.0, r.center().y), egui::Align2::LEFT_CENTER, "…  ›", crate::theme::prop(crate::theme::ts::LABEL), t.ink2);
                         break;
                     }
                     x -= wd;
@@ -1109,7 +1118,7 @@ impl App {
                     hits.push((gr.expand(2.0), a.clone()));
                     if k + 1 < comps.len() {
                         x -= 14.0;
-                        p.text(Pos2::new(x + 7.0, r.center().y), egui::Align2::CENTER_CENTER, "›", FontId::proportional(11.5), t.ink2);
+                        p.text(Pos2::new(x + 7.0, r.center().y), egui::Align2::CENTER_CENTER, "›", crate::theme::prop(crate::theme::ts::LABEL), t.ink2);
                     }
                 }
                 if resp.clicked() {
@@ -1146,17 +1155,21 @@ impl App {
         let here_fav = fav_dirs.contains(&here);
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
-            ui.menu_button(egui::RichText::new("Favourites").size(11.5), |ui| {
-                if fav_dirs.is_empty() {
-                    ui.label(egui::RichText::new("No favourite folders yet").small());
-                }
-                for d in &fav_dirs {
-                    if ui.button(d).clicked() {
-                        ops.push(FOp::Go(PathBuf::from(d)));
-                        ui.close();
+            ui.menu_button(
+                egui::RichText::new("Favourites")
+                    .size(crate::theme::ts::px(crate::theme::ts::LABEL)),
+                |ui| {
+                    if fav_dirs.is_empty() {
+                        ui.label(egui::RichText::new("No favourite folders yet").small());
                     }
-                }
-            });
+                    for d in &fav_dirs {
+                        if ui.button(d).clicked() {
+                            ops.push(FOp::Go(PathBuf::from(d)));
+                            ui.close();
+                        }
+                    }
+                },
+            );
             if pill(
                 ui,
                 if here_fav {
@@ -1180,7 +1193,7 @@ impl App {
                         } else {
                             "+ Locations"
                         })
-                        .size(11.5),
+                        .size(crate::theme::ts::px(crate::theme::ts::LABEL)),
                     ),
                 )
                 .on_hover_text(
@@ -1238,7 +1251,7 @@ impl App {
                             br_.center(),
                             egui::Align2::CENTER_CENTER,
                             f.badge(),
-                            FontId::proportional(9.0),
+                            crate::theme::prop(crate::theme::ts::TINY),
                             Color32::from_rgb(0x15, 0x17, 0x1a),
                         );
                     }
@@ -1257,14 +1270,14 @@ impl App {
                         Pos2::new(tr.left(), r.center().y),
                         egui::Align2::LEFT_CENTER,
                         &e.name,
-                        FontId::proportional(12.0),
+                        crate::theme::prop(crate::theme::ts::COMPACT),
                         t.ink,
                     );
                     p.text(
                         Pos2::new(r.right() - 6.0, r.center().y),
                         egui::Align2::RIGHT_CENTER,
                         right,
-                        FontId::proportional(10.0),
+                        crate::theme::prop(crate::theme::ts::TINY),
                         t.ink2,
                     );
                     if resp.clicked() {

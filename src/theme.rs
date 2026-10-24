@@ -118,7 +118,8 @@ pub const DARK: Theme = Theme {
     crt_bot: hex(0x131517),
     crt_grid: hex(0x262A2F),
     ink: hex(0xD4D7DB),
-    ink2: hex(0x9AA0A8),
+    // at least 6:1 on the cards and pills (was 9AA0A8, 4.5:1)
+    ink2: hex(0xB4BAC2),
     value: hex(0x8FC7A0),
     slate: hex(0x3E4A44),
     brick: hex(0xB06A64),
@@ -153,14 +154,16 @@ pub const AMIGA: Theme = Theme {
     cart_top: hex(0xDFE4EA),
     cart_bot: hex(0xAEB6C1),
     pill: hex(0xEEF1F4),
-    hdr_top: hex(0x3F7FE6),
+    // white header text reads at 5.9:1 or more (3F7FE6 gave 3.9:1)
+    hdr_top: hex(0x2A5FC4),
     hdr_bot: hex(0x1747A8),
     crt_top: hex(0x173A72),
     crt_bot: hex(0x0A1F45),
     crt_grid: hex(0x24477F),
     ink: hex(0x1B2330),
     ink2: hex(0x3E4652),
-    value: hex(0x1F5FD1),
+    // 6.8:1 on the cards (1F5FD1 was 4.5:1, 2.8:1 on their lower edge)
+    value: hex(0x17469E),
     slate: hex(0x516D96),
     brick: hex(0x9C4F4B),
     sage: hex(0x4E7D5B),
@@ -203,6 +206,52 @@ pub fn set(t: Theme) {
     *CURRENT.write().unwrap() = t;
 }
 
+/// WCAG relative luminance of a colour (alpha ignored)
+pub fn luminance(c: Color32) -> f32 {
+    let f = |v: u8| {
+        let v = v as f32 / 255.0;
+        if v <= 0.040_45 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * f(c.r()) + 0.7152 * f(c.g()) + 0.0722 * f(c.b())
+}
+
+/// WCAG contrast ratio between two colours (1 … 21)
+pub fn contrast(a: Color32, b: Color32) -> f32 {
+    let (x, y) = (luminance(a), luminance(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+}
+
+/// light and dark ink for surfaces the theme's own ink does not suit
+const LIGHT_INK: Color32 = Color32::from_rgb(0xEE, 0xF1, 0xF4);
+const LIGHT_INK2: Color32 = Color32::from_rgb(0xB4, 0xBC, 0xC8);
+const DARK_INK: Color32 = Color32::from_rgb(0x14, 0x18, 0x1E);
+const DARK_INK2: Color32 = Color32::from_rgb(0x3A, 0x42, 0x4E);
+
+/// the text colour for a surface: the theme's ink where it reads (at
+/// least 4.5:1), else light or dark ink, whichever reads better. Painted
+/// views use it on wells, pads, the CRT and headers so text follows the
+/// surface (the Amiga theme's dark-on-dark fix).
+pub fn on(bg: Color32) -> Color32 {
+    pick(th().ink, LIGHT_INK, DARK_INK, bg)
+}
+/// secondary text for a surface (as [`on`])
+pub fn on2(bg: Color32) -> Color32 {
+    pick(th().ink2, LIGHT_INK2, DARK_INK2, bg)
+}
+fn pick(own: Color32, light: Color32, dark: Color32, bg: Color32) -> Color32 {
+    if contrast(own, bg) >= 4.5 {
+        own
+    } else if contrast(light, bg) >= contrast(dark, bg) {
+        light
+    } else {
+        dark
+    }
+}
+
 pub fn apply(ctx: &egui::Context, t: Theme) {
     set(t);
     let mut v = if t.light {
@@ -216,8 +265,19 @@ pub fn apply(ctx: &egui::Context, t: Theme) {
     v.window_fill = t.cart_top;
     v.extreme_bg_color = t.crt_bot;
     v.override_text_color = Some(t.ink);
-    v.selection.bg_fill = t.slate;
-    v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
+    // selected rows keep the theme ink readable (Amiga: the slate blue
+    // gave 3:1, so it takes its pale selection blue)
+    v.selection.bg_fill = if contrast(t.ink, t.slate) >= 4.5 {
+        t.slate
+    } else {
+        t.sel
+    };
+    // text fields: typed text is the theme ink, so their fill must suit it
+    // (Amiga's dark CRT blue hid it)
+    if contrast(t.ink, t.crt_bot) < 4.5 {
+        v.text_edit_bg_color = Some(t.pill);
+    }
+    v.selection.stroke = Stroke::new(1.0, sel_text(v.selection.bg_fill));
     v.window_stroke = Stroke::new(1.0, t.border);
     for w in [
         &mut v.widgets.inactive,
@@ -273,11 +333,12 @@ pub fn apply(ctx: &egui::Context, t: Theme) {
     if t.ember {
         ember_visuals(&mut v, &t);
     }
-    fonts(ctx, t.ember);
+    fonts(ctx);
     ctx.set_visuals(v);
     ctx.global_style_mut(|s| {
         s.spacing.item_spacing = egui::vec2(6.0, 5.0);
         s.spacing.button_padding = egui::vec2(9.0, 3.0);
+        s.text_styles = text_styles();
     });
 }
 
@@ -306,8 +367,25 @@ fn polish(v: &mut egui::Visuals, t: &Theme) {
     v.widgets.active.bg_stroke = Stroke::new(1.0, mix(t.border, Color32::BLACK, 0.2));
     v.widgets.hovered.bg_stroke = Stroke::new(1.0, mix(t.border, t.ink, 0.25));
     // selected tabs / toggles: the accent shows through, text stays light
-    v.selection.bg_fill = mix(t.slate, t.accent, if t.light { 0.45 } else { 0.4 });
-    v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
+    let selc = mix(t.slate, t.accent, if t.light { 0.45 } else { 0.4 });
+    // the text on it is the theme ink: dark ink (Amiga) needs the pale
+    // selection blue to stay readable
+    v.selection.bg_fill = if contrast(t.ink, selc) >= 4.5 {
+        selc
+    } else {
+        t.sel
+    };
+    v.selection.stroke = Stroke::new(1.0, sel_text(v.selection.bg_fill));
+}
+
+/// the text on a selected widget: white where it reads (4.5:1), else the
+/// ink that suits the fill (Amiga's pale selection blue)
+fn sel_text(fill: Color32) -> Color32 {
+    if contrast(Color32::WHITE, fill) >= 4.5 {
+        Color32::WHITE
+    } else {
+        on(fill)
+    }
 }
 
 /// The Ember skin (Slate) on top: pic-2 outlined grey buttons, recessed
@@ -353,83 +431,220 @@ fn ember_visuals(v: &mut egui::Visuals, t: &Theme) {
     v.widgets.hovered.expansion = 0.0;
 }
 
-/// The family of the condensed label font (Barlow Semi Condensed) and the
-/// numeric readout font (Geist Mono). Registered in every theme, so code
-/// may use them anywhere; Slate also makes Inter the body font.
-pub fn label_font(size: f32) -> egui::FontId {
-    egui::FontId::new(size, egui::FontFamily::Name("label".into()))
-}
-pub fn num_font(size: f32) -> egui::FontId {
-    egui::FontId::new(size, egui::FontFamily::Name("num".into()))
+/// The central type scale (docs/UI_SCALING.md). Code asks for a step by
+/// name, never a raw number; every size goes through [`ts::px`], which
+/// applies the minimum readable size and Settings › Look › Text size.
+pub mod ts {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    /// the smallest text anywhere: LCD captions, knob scale marks, badges
+    pub const TINY: f32 = 10.0;
+    /// secondary text, hints, `.small()`
+    pub const SMALL: f32 = 11.0;
+    /// uppercase captions and knob names (label family)
+    pub const LABEL: f32 = 11.5;
+    /// dense lists and table rows
+    pub const COMPACT: f32 = 12.5;
+    /// tracker cells and mono text
+    pub const MONO: f32 = 12.5;
+    /// normal UI text and buttons
+    pub const BODY: f32 = 13.0;
+    /// numeric readouts (num family)
+    pub const LCD: f32 = 13.0;
+    /// emphasised names (instrument titles, big pads)
+    pub const LARGE: f32 = 15.0;
+    pub const HEADING: f32 = 16.0;
+    pub const TITLE: f32 = 19.0;
+    /// the big LCD digits
+    pub const DISPLAY: f32 = 26.0;
+    /// nothing renders smaller than this (at 100 % Text size)
+    pub const MIN: f32 = TINY;
+    /// Text size range (Settings › Look)
+    pub const TEXT_MIN: f32 = 0.9;
+    pub const TEXT_MAX: f32 = 1.5;
+
+    static SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000); // 1.0
+    pub fn text_scale() -> f32 {
+        f32::from_bits(SCALE.load(Ordering::Relaxed))
+    }
+    /// set the Text size (1.0 = 100 %); call `theme::apply` afterwards
+    pub fn set_text_scale(k: f32) {
+        let k = if k.is_finite() {
+            k.clamp(TEXT_MIN, TEXT_MAX)
+        } else {
+            1.0
+        };
+        SCALE.store(k.to_bits(), Ordering::Relaxed);
+    }
+    /// a type-scale size → the points to render: times the Text size, and
+    /// never below [`MIN`] (a 90 % Text size keeps the smallest role at 10 pt)
+    pub fn px(size: f32) -> f32 {
+        px_at(size, text_scale())
+    }
+    /// [`px`] at a given Text size
+    pub fn px_at(size: f32, text: f32) -> f32 {
+        (size * text).max(MIN)
+    }
 }
 
-/// embedded fonts (SIL OFL 1.1, LICENSES/*-OFL.txt, credited in About)
-fn fonts(ctx: &egui::Context, ember: bool) {
-    let id = egui::Id::NULL.with("chipwave_fonts_ember");
-    if ctx.data(|d| d.get_temp::<bool>(id)) == Some(ember) {
+/// proportional (body) text at a type-scale size
+pub fn prop(size: f32) -> egui::FontId {
+    egui::FontId::proportional(ts::px(size))
+}
+/// monospace text at a type-scale size
+pub fn mono(size: f32) -> egui::FontId {
+    egui::FontId::monospace(ts::px(size))
+}
+
+/// the height of one row of text in `font` (follows the type scale and
+/// the Text size, so painted layouts can size their rows from it)
+pub fn row_h(p: &egui::Painter, font: &egui::FontId) -> f32 {
+    p.fonts_mut(|f| f.row_height(font))
+}
+
+/// the width of `text` in `font`
+pub fn text_w(p: &egui::Painter, text: &str, font: egui::FontId) -> f32 {
+    p.layout_no_wrap(text.to_owned(), font, egui::Color32::WHITE)
+        .size()
+        .x
+}
+
+/// `font`, a half point smaller at a time (never under the type scale's
+/// minimum) until `text` fits `max_w`: tight painted cells try this before
+/// cutting with "…"
+pub fn shrink_to_fit(
+    p: &egui::Painter,
+    text: &str,
+    font: egui::FontId,
+    max_w: f32,
+) -> egui::FontId {
+    let min = ts::px(ts::MIN);
+    let mut f = font;
+    while f.size > min && text_w(p, text, f.clone()) > max_w {
+        f.size = (f.size - 0.5).max(min);
+    }
+    f
+}
+
+/// paint one line of text that never runs past `max_w`: it is cut with
+/// "…" where it would. Returns the painted rect and whether it was cut
+/// (so the caller can put the full text in a tooltip).
+pub fn text_fit(
+    p: &egui::Painter,
+    pos: egui::Pos2,
+    align: egui::Align2,
+    text: &str,
+    font: egui::FontId,
+    color: egui::Color32,
+    max_w: f32,
+) -> (egui::Rect, bool) {
+    let mut job = egui::text::LayoutJob::simple_singleline(text.to_owned(), font, color);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(max_w.max(1.0));
+    let g = p.layout_job(job);
+    let r = align.anchor_size(pos, g.size());
+    let cut = g.elided;
+    p.galley(r.min, g, color);
+    (r, cut)
+}
+
+/// egui's text styles from the type scale (plus the named Tiny, Label and
+/// Lcd styles), so `.small()`, buttons and headings follow it too
+pub fn text_styles() -> std::collections::BTreeMap<egui::TextStyle, egui::FontId> {
+    use egui::{FontFamily as F, FontId, TextStyle as T};
+    let lab = || F::Name("label".into());
+    [
+        (T::Small, prop(ts::SMALL)),
+        (T::Body, prop(ts::BODY)),
+        (T::Button, prop(ts::BODY)),
+        (T::Heading, FontId::new(ts::px(ts::HEADING), lab())),
+        (T::Monospace, mono(ts::MONO)),
+        (T::Name("tiny".into()), prop(ts::TINY)),
+        (
+            T::Name("label".into()),
+            FontId::new(ts::px(ts::LABEL), lab()),
+        ),
+        (T::Name("lcd".into()), num_font(ts::LCD)),
+    ]
+    .into()
+}
+
+/// The label family (Atkinson Hyperlegible Next SemiBold: knob names,
+/// captions, headings, buttons) and the numeric readout family (Atkinson
+/// Hyperlegible Mono SemiBold: LCD, values). Registered in every theme.
+pub fn label_font(size: f32) -> egui::FontId {
+    egui::FontId::new(ts::px(size), egui::FontFamily::Name("label".into()))
+}
+pub fn num_font(size: f32) -> egui::FontId {
+    egui::FontId::new(ts::px(size), egui::FontFamily::Name("num".into()))
+}
+
+/// Embedded fonts (SIL OFL 1.1, LICENSES/*-OFL.txt, credited in About and
+/// THIRD_PARTY_LICENSES.txt), the same in every theme (docs/UI_SCALING.md):
+/// - text: Atkinson Hyperlegible Next Regular, labels: its SemiBold;
+/// - monospace (tracker, mono text): Atkinson Hyperlegible Mono Medium,
+///   numbers / LCD: its SemiBold.
+///
+/// Fallbacks for glyphs the Atkinson fonts lack: Inter (arrows, ▶ ■ ● ✓ ♥,
+/// Greek and Cyrillic in song / instrument names), then egui's Hack (▾) and
+/// emoji fonts. egui's Ubuntu-Light is not used.
+fn fonts(ctx: &egui::Context) {
+    let id = egui::Id::NULL.with("chipwave_fonts_atkinson");
+    if ctx.data(|d| d.get_temp::<bool>(id)).is_some() {
         return;
     }
-    ctx.data_mut(|d| d.insert_temp(id, ember));
+    ctx.data_mut(|d| d.insert_temp(id, true));
+    ctx.set_fonts(font_definitions());
+}
+
+/// the font set [`fonts`] installs (also used by tests)
+pub fn font_definitions() -> egui::FontDefinitions {
     use egui::{FontData, FontFamily};
     use std::sync::Arc;
     let mut f = egui::FontDefinitions::default();
-    let add = |f: &mut egui::FontDefinitions, k: &str, b: &'static [u8]| {
+    // the emoji / icon fallbacks egui ships (everything but its text fonts)
+    let emoji: Vec<String> = f
+        .families
+        .get(&FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|k| k != "Ubuntu-Light" && k != "Hack")
+        .collect();
+    f.font_data.remove("Ubuntu-Light");
+    let mut add = |k: &str, b: &'static [u8]| {
         f.font_data
             .insert(k.into(), Arc::new(FontData::from_static(b)));
     };
     add(
-        &mut f,
-        "inter",
-        include_bytes!("../assets/fonts/Inter-Regular.ttf"),
+        "atkinson",
+        include_bytes!("../assets/fonts/AtkinsonHyperlegibleNext-Regular.ttf"),
     );
     add(
-        &mut f,
-        "barlow",
-        include_bytes!("../assets/fonts/BarlowSemiCondensed-SemiBold.ttf"),
+        "atkinson-sb",
+        include_bytes!("../assets/fonts/AtkinsonHyperlegibleNext-SemiBold.ttf"),
     );
     add(
-        &mut f,
-        "geist",
-        include_bytes!("../assets/fonts/GeistMono-SemiBold.ttf"),
+        "atkinson-mono",
+        include_bytes!("../assets/fonts/AtkinsonHyperlegibleMono-Medium.ttf"),
     );
-    let prop = f
-        .families
-        .get(&FontFamily::Proportional)
-        .cloned()
-        .unwrap_or_default();
-    let mono = f
-        .families
-        .get(&FontFamily::Monospace)
-        .cloned()
-        .unwrap_or_default();
-    let with = |first: &str, rest: &[String]| {
-        let mut v = vec![first.to_string()];
-        v.extend(rest.iter().cloned());
+    add(
+        "atkinson-mono-sb",
+        include_bytes!("../assets/fonts/AtkinsonHyperlegibleMono-SemiBold.ttf"),
+    );
+    add("inter", include_bytes!("../assets/fonts/Inter-Regular.ttf"));
+    let chain = |first: &str| {
+        let mut v = vec![first.to_string(), "inter".into(), "Hack".into()];
+        v.extend(emoji.iter().cloned());
         v
     };
-    // Inter as a fallback everywhere: it has the arrows, ▶ and ✓ that
-    // Barlow and the default fonts lack (no missing-glyph boxes)
-    let inter = |mut v: Vec<String>| {
-        if !v.iter().any(|x| x == "inter") {
-            v.push("inter".into());
-        }
-        v
-    };
-    let mut label = vec!["barlow".to_string(), "inter".to_string()];
-    label.extend(prop.iter().cloned());
-    f.families.insert(FontFamily::Name("label".into()), label);
     f.families
-        .insert(FontFamily::Name("num".into()), inter(with("geist", &mono)));
+        .insert(FontFamily::Proportional, chain("atkinson"));
     f.families
-        .insert(FontFamily::Monospace, inter(mono.clone()));
-    if ember {
-        f.families
-            .insert(FontFamily::Proportional, with("inter", &prop));
-    } else {
-        f.families
-            .insert(FontFamily::Proportional, inter(prop.clone()));
-    }
-    ctx.set_fonts(f);
+        .insert(FontFamily::Name("label".into()), chain("atkinson-sb"));
+    f.families
+        .insert(FontFamily::Monospace, chain("atkinson-mono"));
+    f.families
+        .insert(FontFamily::Name("num".into()), chain("atkinson-mono-sb"));
+    f
 }
 
 /// linear mix of two colours (opaque result), `k` = 0 → a, 1 → b
@@ -978,7 +1193,7 @@ pub fn knob_hero(p: &egui::Painter, c: Pos2, rad: f32, k: &crate::ember::StudioK
             c - egui::vec2(0.0, rad * 0.8 + 8.0),
             egui::Align2::CENTER_CENTER,
             k.title.to_uppercase(),
-            egui::FontId::proportional(11.0),
+            prop(ts::SMALL),
             th().ink.gamma_multiply(k.dim),
         );
     }
@@ -986,7 +1201,7 @@ pub fn knob_hero(p: &egui::Painter, c: Pos2, rad: f32, k: &crate::ember::StudioK
         c + egui::vec2(0.0, rad * 0.8 + 8.0),
         egui::Align2::CENTER_CENTER,
         k.value,
-        egui::FontId::monospace(10.0),
+        mono(ts::TINY),
         th().value.gamma_multiply(k.dim),
     );
 }
@@ -1021,5 +1236,112 @@ pub fn meter_peak(p: &egui::Painter, r: Rect, frac: f32, peak: Option<f32>) {
     if let Some(pk) = peak.filter(|k| *k > 0.0) {
         let y = r.bottom() - pk.clamp(0.0, 1.0) * r.height();
         p.hline(r.x_range(), y, Stroke::new(1.5, th().ink));
+    }
+}
+
+#[cfg(test)]
+mod type_tests {
+    use super::*;
+
+    #[test]
+    fn every_type_scale_role_is_at_least_10_pt() {
+        for (name, s) in [
+            ("TINY", ts::TINY),
+            ("SMALL", ts::SMALL),
+            ("LABEL", ts::LABEL),
+            ("COMPACT", ts::COMPACT),
+            ("MONO", ts::MONO),
+            ("BODY", ts::BODY),
+            ("LCD", ts::LCD),
+            ("LARGE", ts::LARGE),
+            ("HEADING", ts::HEADING),
+            ("TITLE", ts::TITLE),
+            ("DISPLAY", ts::DISPLAY),
+        ] {
+            assert!(s >= 10.0, "{name} is {s} pt");
+        }
+        // a stray literal below the floor still renders at the floor
+        assert!(ts::px(7.0) >= 10.0);
+        let small = ts::px_at(ts::TINY, ts::TEXT_MIN);
+        assert!(small >= 10.0, "TINY at the smallest Text size is {small}");
+    }
+
+    #[test]
+    fn theme_text_reads_on_its_surfaces() {
+        // the panels, cards and pills text sits on (the window backdrop
+        // `bg_*` only shows between panels)
+        for t in THEMES {
+            for (what, bg) in [
+                ("cart_top", t.cart_top),
+                ("cart_bot", t.cart_bot),
+                ("pill", t.pill),
+            ] {
+                let c = contrast(t.ink, bg);
+                assert!(c >= 4.5, "{}: ink on {what} {c:.2}", t.name);
+                let c = contrast(t.ink2, bg);
+                assert!(c >= 4.5, "{}: ink2 on {what} {c:.2}", t.name);
+            }
+        }
+    }
+
+    #[test]
+    fn ink_on_a_fill_follows_the_fill() {
+        // the Ember faces are dark in every theme; Amiga's pale blues light
+        for bg in [
+            crate::ember::BG2,
+            crate::ember::BG3,
+            crate::ember::BG4,
+            crate::ember::DISP0,
+            crate::ember::DISP1,
+            AMIGA.sel,
+            AMIGA.pill,
+            AMIGA.cart_top,
+            hex(0xFFFFFF),
+            hex(0x000000),
+        ] {
+            assert!(contrast(on(bg), bg) >= 4.5, "on({bg:?})");
+            assert!(contrast(on2(bg), bg) >= 4.5, "on2({bg:?})");
+        }
+    }
+
+    /// sizes come from the type scale: no raw FontId outside theme.rs (and
+    /// the tests), so Text size and the 10 pt floor reach every label
+    #[test]
+    fn no_raw_font_ids_outside_the_theme() {
+        let mut bad = Vec::new();
+        let mut dirs = vec![std::path::PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src"
+        ))];
+        while let Some(d) = dirs.pop() {
+            for e in std::fs::read_dir(&d).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    dirs.push(p);
+                    continue;
+                }
+                let name = p.file_name().unwrap().to_string_lossy().to_string();
+                if !name.ends_with(".rs") || name == "theme.rs" || name.ends_with("_tests.rs") {
+                    continue;
+                }
+                let src = std::fs::read_to_string(&p).unwrap();
+                for (i, l) in src.lines().enumerate() {
+                    for pat in [
+                        "FontId::proportional(",
+                        "FontId::monospace(",
+                        "FontId::new(",
+                    ] {
+                        if l.contains(pat) {
+                            bad.push(format!("{}:{}: {}", p.display(), i + 1, l.trim()));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "raw FontId (use theme::prop / mono / label_font / num_font):\n{}",
+            bad.join("\n")
+        );
     }
 }

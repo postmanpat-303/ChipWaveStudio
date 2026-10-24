@@ -727,7 +727,7 @@ impl App {
         let mut remove = None;
         for (k, d) in self.extra.plugin_dirs.iter().enumerate() {
             ui.horizontal(|ui| {
-                if ui.small_button("✕").on_hover_text("remove").clicked() {
+                if ui.small_button("×").on_hover_text("remove").clicked() {
                     remove = Some(k);
                 }
                 ui.label(egui::RichText::new(d).monospace().small());

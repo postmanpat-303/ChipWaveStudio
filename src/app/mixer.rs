@@ -592,7 +592,7 @@ impl App {
                 bar.center(),
                 egui::Align2::CENTER_CENTER,
                 mixer_bar_label(a, b, nch, nret),
-                egui::FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 Color32::WHITE,
             );
         }

@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.10.0-00d0ff" alt="Version 0.2.10.0">
+  <img src="https://img.shields.io/badge/version-0.2.11.0-00d0ff" alt="Version 0.2.11.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -20,7 +20,7 @@
 
 ```
  ┌──────────────────────────────────────────────────────────────────────────┐
- │  C H I P W A V E   S T U D I O            v0.2.10.0    BPM 140  SPD 06  │
+ │  C H I P W A V E   S T U D I O            v0.2.11.0    BPM 140  SPD 06  │
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
  │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ free music studio │
  │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ sequencer + synth │
@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.10.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.11.0</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -51,7 +51,29 @@
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.10.0: Generators, the LCD toolbar and smarter pies
+## New in 0.2.11.0: easier-to-read text, UI scale and Text size
+
+- **New fonts**: the bundled **Atkinson Hyperlegible Next** for text and **Atkinson Hyperlegible Mono** for numbers, the tracker and the LCD, in every theme. One type scale sets every size, and nothing is smaller than 10 pt.
+- **UI scale and Text size**: Settings › Look, each 90 to 150 % in 5 % steps (Ctrl+= / Ctrl+- / Ctrl+0 for the UI scale). ChipWave follows your Windows, Wayland or X11 display scale.
+- **Fits small and scaled screens**: every view fits at 1366 × 768 and at 150 % on 1920 × 1080 in Slate, Dark and Amiga. Long names end in "…" with a tooltip, and the piano roll's toolbar goes to two rows when narrow.
+- **Contrast**: higher text contrast in Dark, readable selection text, and text that follows the surface under it.
+- **Import**: an imported instrument becomes the active one, on its own track on the Timeline.
+- **One gradient over the tracks**: Timeline clips share one top-to-bottom gradient across all tracks.
+
+Every song saves, plays and renders exactly as in 0.2.10.0. Known limits and details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/atkinson-1366.png" alt="ChipWave in the Slate theme at 1366 by 768 with Atkinson Hyperlegible text: the Timeline with five tracks and the piano roll with its two-row toolbar"><br><b>Atkinson Hyperlegible</b> at 1366 × 768, piano roll toolbar in two rows.</td>
+    <td width="50%"><img src="docs/screenshots/timeline-overall-gradient.png" alt="The Timeline with eight tracks whose clips share one gradient from top to bottom"><br><b>One gradient over the tracks</b>.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/settings-look-scale.png" alt="Settings, Look: Theme, Interface style, Motion, UI scale and Text size sliders at 100 percent with Reset buttons, Accent and Top display"><br><b>Settings › Look</b>: UI scale and Text size.</td>
+    <td width="50%"><img src="docs/screenshots/amiga-0.2.11.png" alt="The Amiga theme at 1920 by 1080 with the new fonts"><br><b>Amiga</b> with the new fonts.</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.10.0: Generators, the LCD toolbar and smarter pies</b></summary>
 
 - **Generators: Chords | Melody | Bass.** One panel with three tabs and one Write card. The **Melody** tab writes a seeded tune over your chords (rhythm, contour, motif, density, range); the **Bass** tab follows the chord roots in six styles (Root, Octave pump, Walking, Acid, Syncopated, Euclid). Drag the **⠿ GENERATORS** grip to move the panel anywhere.
 - **A big Preview pad**: Preview, Dice and Another one sit in one large rounded pad, and **Write to timeline** gives the new track a copy of your track's instrument, so it sounds like the preview.
@@ -74,6 +96,8 @@ Every song saves, plays and renders exactly as in 0.2.9.0. Known limits and deta
     <td width="50%"><img src="docs/screenshots/trackpie-melodic.png" alt="The track pie on a melodic track with Instrument, Sounds, New pattern, Chords and the other choices"><br><b>Context-aware track pie</b>: the first ring fits the track.</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.9.0: the new Rack</b></summary>
 
@@ -491,7 +515,7 @@ ChipWave stands on the shoulders of open source and published research. With tha
 - **Scaler** by Plugin Boutique: the inspiration for the chord pads and progressions (no code, data or artwork used).
 - The **Roland TB-303**, whose glide and accent the `3C` / `3D` effects imitate.
 - **Teijo Kinnunen and Ray Burt-Frost** for [OctaMED](https://en.wikipedia.org/wiki/OctaMED), whose workflow ChipWave follows.
-- The fonts of the Slate theme, embedded under the [SIL Open Font License 1.1](LICENSES/Inter-OFL.txt): [**Inter**](https://github.com/rsms/inter) by **Rasmus Andersson** (The Inter Project Authors), [**Barlow Semi Condensed**](https://github.com/jpt/barlow) by **Jeremy Tribby** (The Barlow Project Authors) and [**Geist Mono**](https://github.com/vercel/geist-font) by **Vercel** (The Geist Project Authors). Their licences are in `LICENSES/` and `THIRD_PARTY_LICENSES.txt`.
+- The interface fonts, embedded under the [SIL Open Font License 1.1](LICENSES/AtkinsonHyperlegibleNext-OFL.txt): [**Atkinson Hyperlegible Next**](https://github.com/googlefonts/atkinson-hyperlegible-next) and [**Atkinson Hyperlegible Mono**](https://github.com/googlefonts/atkinson-hyperlegible-next-mono) by the **Braille Institute of America** (The Atkinson Hyperlegible Next / Mono Project Authors), with [**Inter**](https://github.com/rsms/inter) by **Rasmus Andersson** (The Inter Project Authors) as the fallback for symbols, Greek and Cyrillic. Their licences are in `LICENSES/` and `THIRD_PARTY_LICENSES.txt`.
 - The Rust crates ChipWave is built on (egui/eframe, cpal, midir, hound, toml, zip, mp3lame-encoder and more), listed with their licences in `THIRD_PARTY_LICENSES.txt`.
 
 Research notes: [docs/research/voice-glitch.md](docs/research/voice-glitch.md).

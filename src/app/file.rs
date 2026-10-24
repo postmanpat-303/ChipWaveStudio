@@ -408,13 +408,14 @@ impl App {
         match fileio::import_wav(&path) {
             Ok(inst) => {
                 let name = inst.name.clone();
-                let n = self.with(|s| {
-                    s.song.instruments.push(inst);
-                    s.song.instruments.len()
-                });
-                self.instr = n as u8;
-                self.dirty = true;
-                self.status = format!("Imported '{name}' into slot {:02X}", n);
+                self.snapshot();
+                self.undo_hold += 1;
+                match self.with(|s| s.song.add_instrument(inst)) {
+                    // the active instrument, on a track (library.rs)
+                    Some(i) => self.adopt_new_instrument((i + 1) as u8, &name),
+                    None => self.status = "All 255 instrument slots are used".into(),
+                }
+                self.undo_hold -= 1;
             }
             Err(e) => self.status = format!("Import failed: {e}"),
         }

@@ -150,7 +150,7 @@ fn accent_btn(ui: &mut egui::Ui, text: &str, w: f32, h: f32) -> egui::Response {
         egui::Button::new(
             egui::RichText::new(text)
                 .strong()
-                .size(14.0)
+                .size(crate::theme::ts::px(crate::theme::ts::LARGE))
                 .color(accent_ink()),
         )
         .fill(th.accent),
@@ -189,7 +189,7 @@ fn melody_pad(ui: &mut egui::Ui, seed: &mut u64, acts: &mut Acts, tall: bool) {
                         egui::Button::new(
                             egui::RichText::new("Preview")
                                 .strong()
-                                .size(19.0)
+                                .size(crate::theme::ts::px(crate::theme::ts::TITLE))
                                 .color(accent_ink()),
                         )
                         .fill(th.accent)
@@ -213,7 +213,12 @@ fn melody_pad(ui: &mut egui::Ui, seed: &mut u64, acts: &mut Acts, tall: bool) {
                 pr
             };
             let big = |t: &str| {
-                egui::Button::new(egui::RichText::new(t).strong().size(15.0)).corner_radius(10.0)
+                egui::Button::new(
+                    egui::RichText::new(t)
+                        .strong()
+                        .size(crate::theme::ts::px(crate::theme::ts::LARGE)),
+                )
+                .corner_radius(10.0)
             };
             let dice = |ui: &mut egui::Ui, seed: &mut u64| {
                 if ui
@@ -269,7 +274,7 @@ fn warn(ui: &mut egui::Ui, text: &str) {
             r.center(),
             egui::Align2::CENTER_CENTER,
             "!",
-            FontId::proportional(11.0),
+            crate::theme::prop(crate::theme::ts::SMALL),
             Color32::BLACK,
         );
         ui.add(egui::Label::new(egui::RichText::new(text).color(th.ochre)).wrap());
@@ -329,7 +334,7 @@ fn strip(ui: &mut egui::Ui, key: Key, marks: &[ChordMark], w: f32, h: f32) -> Re
                 r.left_top() + egui::vec2(5.0, if h > 30.0 { 5.0 } else { 3.0 }),
                 egui::Align2::LEFT_TOP,
                 m.name(key),
-                FontId::proportional(if h > 40.0 { 14.0 } else { 11.0 }),
+                crate::theme::prop(if h > 40.0 { 14.0 } else { 11.0 }),
                 Color32::WHITE,
             );
             if h > 30.0 {
@@ -337,7 +342,7 @@ fn strip(ui: &mut egui::Ui, key: Key, marks: &[ChordMark], w: f32, h: f32) -> Re
                     r.left_bottom() + egui::vec2(5.0, -5.0),
                     egui::Align2::LEFT_BOTTOM,
                     m.numeral(key),
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     Color32::from_white_alpha(190),
                 );
             }
@@ -392,7 +397,7 @@ fn gen_clamp(scr: egui::Rect, w: f32, p: egui::Pos2) -> egui::Pos2 {
 /// double-click to put it back at the top
 fn gen_grip(ui: &mut egui::Ui) -> egui::Response {
     let th = th();
-    let font = egui::FontId::proportional(13.0);
+    let font = crate::theme::prop(crate::theme::ts::BODY);
     let text = "GENERATORS";
     let galley = ui
         .painter()
@@ -691,7 +696,11 @@ impl App {
             })
             .collect();
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(key_name(key)).strong().size(15.0));
+            ui.label(
+                egui::RichText::new(key_name(key))
+                    .strong()
+                    .size(crate::theme::ts::px(crate::theme::ts::LARGE)),
+            );
             ui.label(egui::RichText::new(nums.join(" - ")).color(th.ink2));
         });
         strip(ui, key, &res.marks, w, 72.0);
@@ -1020,7 +1029,11 @@ impl App {
     /// the Over row (Chords tab / Clip's chord lane) for Melody and Bass
     fn gen_over_row(&mut self, ui: &mut egui::Ui, mv: &MelView) {
         ui.horizontal_wrapped(|ui| {
-            ui.label(egui::RichText::new(key_name(mv.key)).strong().size(15.0));
+            ui.label(
+                egui::RichText::new(key_name(mv.key))
+                    .strong()
+                    .size(crate::theme::ts::px(crate::theme::ts::LARGE)),
+            );
             ui.add_space(8.0);
             cap(ui, "Over");
             let on = usize::from(mv.from == MelFrom::Clip);
@@ -1733,7 +1746,7 @@ fn card_title(ui: &mut egui::Ui) {
     ui.label(
         egui::RichText::new("WRITE")
             .strong()
-            .size(13.0)
+            .size(crate::theme::ts::px(crate::theme::ts::BODY))
             .color(th().ink2),
     );
 }
@@ -1777,7 +1790,7 @@ fn melody_view(ui: &mut egui::Ui, mv: &MelView, w: f32, h: f32) {
             r.center(),
             egui::Align2::CENTER_CENTER,
             "no notes",
-            FontId::proportional(12.0),
+            crate::theme::prop(crate::theme::ts::COMPACT),
             th.ink2,
         );
         return;

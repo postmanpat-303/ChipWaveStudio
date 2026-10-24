@@ -738,9 +738,11 @@ impl App {
             Pos2::new(strip.left(), icon(2).bottom() + 6.0),
             Pos2::new(strip.right(), rr.top() - 6.0),
         );
-        let galley =
-            ui.painter()
-                .layout_no_wrap(d.title().to_uppercase(), FontId::proportional(12.5), ink);
+        let galley = ui.painter().layout_no_wrap(
+            d.title().to_uppercase(),
+            crate::theme::prop(crate::theme::ts::COMPACT),
+            ink,
+        );
         let gw = galley.size().x.min(name_r.height());
         let gh = galley.size().y;
         let pos = Pos2::new(
@@ -829,14 +831,14 @@ impl App {
                     row.left_center(),
                     egui::Align2::LEFT_CENTER,
                     info.name,
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     t.ink2,
                 );
                 pr.text(
                     row.right_center(),
                     egui::Align2::RIGHT_CENTER,
                     info.format(v),
-                    FontId::monospace(11.0),
+                    crate::theme::mono(crate::theme::ts::SMALL),
                     t.value,
                 );
                 if !info.choices.is_empty() {
@@ -887,7 +889,7 @@ fn io_tag(ui: &mut egui::Ui, s: &str, h: f32) {
         r.center(),
         egui::Align2::CENTER_CENTER,
         s,
-        FontId::monospace(11.0),
+        crate::theme::mono(crate::theme::ts::SMALL),
         th().ink2,
     );
     p.hline(

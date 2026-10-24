@@ -231,7 +231,9 @@ fn header(ui: &mut egui::Ui, r: Rect, title: &str, col: Color32) {
     } else {
         t.ink
     };
-    let txt = egui::RichText::new(title).font(label_font(13.0)).color(ink);
+    let txt = egui::RichText::new(title)
+        .font(label_font(crate::theme::ts::BODY))
+        .color(ink);
     ui.put(h, egui::Label::new(txt).truncate().selectable(false));
 }
 
@@ -268,7 +270,7 @@ fn meters(ui: &mut egui::Ui, r: Rect, id: egui::Id, levels: &[f32]) {
                 Pos2::new(x0 + 3.0 + k as f32 * 11.0, fr.bottom() + 1.0),
                 egui::Align2::CENTER_TOP,
                 *s,
-                label_font(10.0),
+                label_font(crate::theme::ts::TINY),
                 ember::INK3,
             );
         }
@@ -366,14 +368,14 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
                 let label = super::pattern::fit(
                     p,
                     &label,
-                    &egui::FontId::proportional(10.5),
+                    &crate::theme::prop(crate::theme::ts::SMALL),
                     sr.width() - 18.0,
                 );
                 p.text(
                     Pos2::new(sr.left() + 14.0, sr.center().y),
                     egui::Align2::LEFT_CENTER,
                     label,
-                    egui::FontId::proportional(10.5),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     if *on { th().ink } else { ember::INK3 },
                 );
             }
@@ -382,7 +384,7 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
                     sr.center(),
                     egui::Align2::CENTER_CENTER,
                     "+ Insert",
-                    egui::FontId::proportional(10.5),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     ember::INK3,
                 );
             }
@@ -471,7 +473,7 @@ pub(super) fn channel(ui: &mut egui::Ui, h: f32, c: Chan) -> ChanOut {
             Pos2::new(r.left() + 80.0, py + 14.0),
             egui::Align2::CENTER_TOP,
             "KEY",
-            label_font(10.0),
+            label_font(crate::theme::ts::TINY),
             th().acc_hot,
         );
     }
@@ -609,7 +611,7 @@ pub(super) fn master(
         Pos2::new(r.center().x, r.bottom() - 16.0),
         egui::Align2::CENTER_CENTER,
         note,
-        egui::FontId::proportional(10.5),
+        crate::theme::prop(crate::theme::ts::SMALL),
         th().ink2,
     );
     (r, f)
@@ -691,7 +693,7 @@ pub(super) fn dot_row(ui: &mut egui::Ui, name: &str, frac: f32, warn: bool, num:
         r.left_center(),
         egui::Align2::LEFT_CENTER,
         name.to_uppercase(),
-        label_font(11.5),
+        label_font(crate::theme::ts::LABEL),
         th().ink2,
     );
     let mr = Rect::from_min_max(
@@ -703,7 +705,7 @@ pub(super) fn dot_row(ui: &mut egui::Ui, name: &str, frac: f32, warn: bool, num:
         r.right_center(),
         egui::Align2::RIGHT_CENTER,
         num,
-        num_font(11.0),
+        num_font(crate::theme::ts::SMALL),
         th().ink,
     );
 }
@@ -739,7 +741,7 @@ pub(super) fn master_panel(
     ui.horizontal(|ui| {
         ui.label(
             egui::RichText::new("Limiter & loudness")
-                .font(label_font(14.0))
+                .font(label_font(crate::theme::ts::LARGE))
                 .color(t.ink),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -754,13 +756,13 @@ pub(super) fn master_panel(
                 lr.right_center(),
                 egui::Align2::RIGHT_CENTER,
                 &v,
-                num_font(13.0),
+                num_font(crate::theme::ts::LCD),
                 t.acc_hot,
                 true,
             );
             ui.label(
                 egui::RichText::new("LUFS")
-                    .font(label_font(11.5))
+                    .font(label_font(crate::theme::ts::LABEL))
                     .color(t.ink2),
             );
         });
@@ -927,13 +929,13 @@ pub(super) fn master_panel(
         ] {
             ui.label(
                 egui::RichText::new(name)
-                    .font(label_font(12.0))
+                    .font(label_font(crate::theme::ts::COMPACT))
                     .color(t.ink2),
             )
             .on_hover_text(tip);
             ui.label(
                 egui::RichText::new(fmt(v, unit))
-                    .font(num_font(12.0))
+                    .font(num_font(crate::theme::ts::COMPACT))
                     .color(t.acc_hot),
             );
             ui.end_row();
@@ -943,7 +945,7 @@ pub(super) fn master_panel(
     ui.horizontal(|ui| {
         ui.label(
             egui::RichText::new("TARGET")
-                .font(label_font(11.5))
+                .font(label_font(crate::theme::ts::LABEL))
                 .color(t.ink2),
         );
         let cur = crate::master::TARGETS

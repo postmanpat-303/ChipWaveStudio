@@ -269,7 +269,11 @@ const BIG: f32 = 18.0;
 const MID: f32 = 13.0;
 
 fn lab(p: &egui::Painter, at: Pos2, s: &str, col: Color32) -> f32 {
-    let g = p.layout_no_wrap(s.to_string(), theme::label_font(9.5), col);
+    let g = p.layout_no_wrap(
+        s.to_string(),
+        theme::label_font(crate::theme::ts::TINY),
+        col,
+    );
     let w = g.size().x;
     p.galley(at, g, col);
     w
@@ -557,7 +561,7 @@ impl App {
             tap_r.center(),
             egui::Align2::CENTER_CENTER,
             "TAP",
-            theme::label_font(8.0),
+            theme::label_font(crate::theme::ts::TINY),
             if tapping { pl.hot } else { pl.label },
         );
         let bpm_val = Rect::from_min_max(
@@ -790,7 +794,7 @@ impl App {
             Pos2::new(r.right() - 9.0, y1),
             egui::Align2::RIGHT_TOP,
             pct,
-            theme::label_font(9.5),
+            theme::label_font(crate::theme::ts::TINY),
             pl.lit,
         );
         let bt = match st.load {
@@ -1030,7 +1034,7 @@ fn lcd_edit(ui: &mut egui::Ui, r: Rect, id: egui::Id, s: &mut String, pl: &Pal) 
         r,
         egui::TextEdit::singleline(s)
             .id(id)
-            .font(egui::FontId::monospace(14.0))
+            .font(crate::theme::mono(crate::theme::ts::LARGE))
             .text_color(pl.hot)
             .background_color(pl.bg_bot)
             .align(egui::Align2::RIGHT_CENTER),
@@ -1100,7 +1104,7 @@ impl App {
                 r.left_top() + egui::vec2(8.0, 4.0),
                 egui::Align2::LEFT_TOP,
                 "MASTER",
-                theme::label_font(9.5),
+                theme::label_font(crate::theme::ts::TINY),
                 dim,
             );
             let db = if vol <= 0.0001 {
@@ -1112,7 +1116,7 @@ impl App {
                 Pos2::new(r.right() - 22.0, r.top() + 4.0),
                 egui::Align2::RIGHT_TOP,
                 "dB",
-                theme::label_font(9.5),
+                theme::label_font(crate::theme::ts::TINY),
                 dim,
             );
             if vol > 0.0001 {
@@ -1121,7 +1125,7 @@ impl App {
                     Pos2::new(r.right() - 40.0, r.top() + 3.0),
                     egui::Align2::RIGHT_TOP,
                     &db,
-                    egui::FontId::monospace(11.0),
+                    crate::theme::mono(crate::theme::ts::SMALL),
                     pl.lit,
                 );
             } else {
@@ -1129,7 +1133,7 @@ impl App {
                     Pos2::new(r.right() - 40.0, r.top() + 4.0),
                     egui::Align2::RIGHT_TOP,
                     "-inf",
-                    theme::label_font(10.0),
+                    theme::label_font(crate::theme::ts::TINY),
                     pl.lit,
                 );
             }
@@ -1173,7 +1177,7 @@ impl App {
                     Pos2::new(r.left() + 9.0, *y + 3.0),
                     egui::Align2::LEFT_CENTER,
                     *name,
-                    theme::label_font(9.0),
+                    theme::label_font(crate::theme::ts::TINY),
                     dim,
                 );
                 let lit = (frac(peaks[k]) * n as f32).round() as usize;
@@ -1224,14 +1228,9 @@ impl App {
                     pl.warn,
                 );
             }
-            p.text(
-                Pos2::new(gx + 2.5, r.top() + 37.0),
-                egui::Align2::CENTER_TOP,
-                "GR",
-                theme::label_font(7.0),
-                dim,
-            );
-            // clip light: a true peak over 0 dBTP since Play
+            // clip light: a true peak over 0 dBTP since Play (the GR bar and
+            // the light have no captions: at a readable size they do not
+            // fit the 42 pt LCD; the tooltip names them)
             let clip = loud.true_peak.is_finite() && loud.true_peak > 0.0;
             let cc = Pos2::new(r.right() - 11.0, r.top() + 27.0);
             if clip {
@@ -1240,13 +1239,6 @@ impl App {
             } else {
                 p.circle_filled(cc, 3.2, pl.ghost.gamma_multiply(2.4));
             }
-            p.text(
-                Pos2::new(cc.x, r.top() + 37.0),
-                egui::Align2::CENTER_TOP,
-                "CLIP",
-                theme::label_font(7.0),
-                dim,
-            );
         }
         let resp = resp.on_hover_text(
             "Master: level L / R with peak hold, limiter reduction (GR) and the clip light · \

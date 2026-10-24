@@ -106,6 +106,10 @@ pub struct Extra {
     /// scales only that panel, on top of the UI zoom
     #[serde(default)]
     pub sw_text: u16,
+    /// Settings › Look › Text size in % (90–150, 5 % steps; 0 = 100):
+    /// every font, on top of the UI scale (docs/UI_SCALING.md)
+    #[serde(default)]
+    pub text_size: u16,
     /// the pre-0.2.3.19 instrument editor in the sidebar
     #[serde(default)]
     pub classic_editor: bool,
@@ -301,6 +305,7 @@ impl Default for Extra {
             clip_list_menu: false,
             full_height: false,
             sw_text: 0,
+            text_size: 0,
             classic_editor: false,
             cards_closed: vec![],
             new_in_timeline: true,
@@ -382,6 +387,31 @@ impl Extra {
     }
 }
 
+/// Settings › Look › UI scale range (on top of the OS display scale)
+pub const ZOOM_MIN: f32 = 0.9;
+pub const ZOOM_MAX: f32 = 1.5;
+/// UI scale and Text size step
+pub const SCALE_STEP: f32 = 0.05;
+
+/// a scale snapped to the 5 % steps and the UI scale range
+pub fn snap_zoom(z: f32) -> f32 {
+    if !z.is_finite() {
+        return 1.0;
+    }
+    ((z / SCALE_STEP).round() * SCALE_STEP).clamp(ZOOM_MIN, ZOOM_MAX)
+}
+
+impl Extra {
+    /// the Text size as a factor (1.0 = 100 %)
+    pub fn text_scale(&self) -> f32 {
+        if self.text_size == 0 {
+            1.0
+        } else {
+            (self.text_size.clamp(90, 150) as f32 / 5.0).round() * 0.05
+        }
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -447,11 +477,7 @@ pub fn load() -> Settings {
     s.extra.default_lower_view();
     s.extra.default_chains_view();
     Settings {
-        zoom: if s.zoom.is_finite() {
-            s.zoom.clamp(0.5, 3.0)
-        } else {
-            1.0
-        },
+        zoom: snap_zoom(s.zoom),
         ..s
     }
 }

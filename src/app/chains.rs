@@ -526,7 +526,7 @@ impl App {
         let link = |ui: &mut egui::Ui, r: Rect, id: egui::Id, text: &str, tip: &str| -> bool {
             let g = ui.painter().layout_no_wrap(
                 text.to_string(),
-                FontId::proportional(11.5),
+                crate::theme::prop(crate::theme::ts::LABEL),
                 th().accent,
             );
             let b = Rect::from_min_size(
@@ -597,8 +597,8 @@ impl App {
                         }
                     }
                     x += 15.0;
-                    let font = FontId::proportional(12.5);
-                    let small = FontId::proportional(11.0);
+                    let font = crate::theme::prop(crate::theme::ts::COMPACT);
+                    let small = crate::theme::prop(crate::theme::ts::SMALL);
                     let after = |p: &egui::Painter, g: Rect, s: &str, c: Color32| {
                         if !slim && !s.is_empty() {
                             // stop short of the row's "+ Add …" link
@@ -610,7 +610,7 @@ impl App {
                                 Pos2::new(g.right() + 8.0, r.center().y),
                                 egui::Align2::LEFT_CENTER,
                                 s,
-                                FontId::proportional(11.0),
+                                crate::theme::prop(crate::theme::ts::SMALL),
                                 c,
                             );
                         }
@@ -630,7 +630,7 @@ impl App {
                                 Pos2::new(x, r.center().y),
                                 egui::Align2::LEFT_CENTER,
                                 format!("{:02X} {name}", i + 1),
-                                FontId::proportional(13.0),
+                                crate::theme::prop(crate::theme::ts::BODY),
                                 t.acc_hot,
                             );
                             after(&p, g, &tag, t.ink2);
@@ -1739,7 +1739,7 @@ impl App {
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("ADD DEVICE").strong().size(15.0));
+                    ui.label(egui::RichText::new("ADD DEVICE").strong().size(crate::theme::ts::px(crate::theme::ts::LARGE)));
                     ui.add(
                         egui::Label::new(egui::RichText::new(&target).color(t.accent)).truncate(),
                     );

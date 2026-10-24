@@ -317,7 +317,7 @@ fn badge(p: &egui::Painter, r: Rect, f: Fmt) {
         r.center(),
         egui::Align2::CENTER_CENTER,
         f.badge(),
-        FontId::proportional(9.5),
+        crate::theme::prop(crate::theme::ts::TINY),
         ink,
     );
 }
@@ -406,7 +406,7 @@ impl App {
         ui.horizontal(|ui| {
             let g = egui::RichText::new("BROWSER")
                 .strong()
-                .size(11.0)
+                .size(crate::theme::ts::px(crate::theme::ts::SMALL))
                 .color(Color32::from_rgb(0x1a, 0x1c, 0x1f))
                 .background_color(rgb(Fmt::Cwi.colour()));
             ui.label(g);
@@ -591,7 +591,16 @@ impl App {
         let list_h = (ui.available_height() - bottom_h).max(60.0);
         let thumbs =
             self.extra.browser_thumbs && matches!(self.br.filter.tab, Tab::Plugins | Tab::Effects);
-        let row_h = if thumbs { 40.0 } else { 32.0 };
+        // two text lines at the type scale (Text size) and a little air
+        let (name_f, detail_f) = (
+            crate::theme::prop(crate::theme::ts::COMPACT),
+            crate::theme::prop(crate::theme::ts::SMALL),
+        );
+        let (name_h, detail_h) = (
+            crate::theme::row_h(ui.painter(), &name_f),
+            crate::theme::row_h(ui.painter(), &detail_f),
+        );
+        let row_h = (name_h + detail_h + 4.0).max(if thumbs { 40.0 } else { 32.0 });
         // prefetch thumbnails for the rows about to be drawn
         if thumbs {
             let first = (self.br.list_off / row_h).floor().max(0.0) as usize;
@@ -772,23 +781,29 @@ impl App {
                     Pos2::new(stars.left() - 4.0, r.bottom()),
                 );
                 let tp = p.with_clip_rect(text_r);
-                tp.text(
-                    Pos2::new(text_r.left(), r.top() + 10.0),
-                    egui::Align2::LEFT_CENTER,
+                // cut with "…" (the tooltip has the detail line in full)
+                let y0 = r.center().y - (name_h + detail_h) / 2.0;
+                crate::theme::text_fit(
+                    &tp,
+                    Pos2::new(text_r.left(), y0),
+                    egui::Align2::LEFT_TOP,
                     &it.name,
-                    FontId::proportional(12.5),
+                    name_f.clone(),
                     if on {
                         t.ink
                     } else {
                         t.ink.gamma_multiply(0.92)
                     },
+                    text_r.width(),
                 );
-                tp.text(
-                    Pos2::new(text_r.left(), r.top() + 23.0),
-                    egui::Align2::LEFT_CENTER,
+                crate::theme::text_fit(
+                    &tp,
+                    Pos2::new(text_r.left(), y0 + name_h),
+                    egui::Align2::LEFT_TOP,
                     &it.detail,
-                    FontId::proportional(10.5),
+                    detail_f.clone(),
                     t.ink2,
+                    text_r.width(),
                 );
                 // input
                 if resp.clicked() {
@@ -832,7 +847,9 @@ impl App {
                         resp.on_hover_text(match &it.src {
                             Src::File(p) => p.display().to_string(),
                             Src::Plugin(f) => f.path.clone(),
-                            _ => format!("{} · {}", it.fmt.what(), it.category),
+                            _ => format!("{}\n{} · {}", it.detail, it.fmt.what(), it.category)
+                                .trim_start()
+                                .to_string(),
                         })
                     }
                 } else {
@@ -1186,7 +1203,11 @@ impl App {
                 );
                 if let Some(h) = &hint {
                     // in the lanes, clear of the "+ Add track" button under the headers
-                    let g = p.layout_no_wrap(h.to_string(), FontId::proportional(13.0), t.accent);
+                    let g = p.layout_no_wrap(
+                        h.to_string(),
+                        crate::theme::prop(crate::theme::ts::BODY),
+                        t.accent,
+                    );
                     let at = Pos2::new(self.tlv.lanes.left() + 10.0, y + 12.0);
                     let bg = Rect::from_min_size(
                         at - egui::vec2(6.0, g.size().y / 2.0 + 3.0),
@@ -1197,7 +1218,7 @@ impl App {
                         at,
                         egui::Align2::LEFT_CENTER,
                         h,
-                        FontId::proportional(13.0),
+                        crate::theme::prop(crate::theme::ts::BODY),
                         t.accent,
                     );
                 }
@@ -1230,11 +1251,11 @@ impl App {
         // the ghost
         if let Some(q) = pos {
             let txt = format!("{}  {}", it.fmt.badge(), it.name);
-            let g = p.layout_no_wrap(txt, FontId::proportional(12.0), t.ink);
+            let g = p.layout_no_wrap(txt, crate::theme::prop(crate::theme::ts::COMPACT), t.ink);
             let hint_txt = hint.clone().unwrap_or_else(|| "can't drop here".into());
             let hg = p.layout_no_wrap(
                 hint_txt,
-                FontId::proportional(10.5),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 if hint.is_some() { t.accent } else { t.ink2 },
             );
             let w = g.size().x.max(hg.size().x) + 16.0;
@@ -1299,11 +1320,11 @@ fn tab_tip(tb: Tab) -> &'static str {
 /// a rounded chip (tags, categories, the active-filter pills)
 fn chip(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     let t = th();
-    let b = egui::Button::new(egui::RichText::new(text).size(11.5).color(if on {
-        t.ink
-    } else {
-        t.ink2
-    }))
+    let b = egui::Button::new(
+        egui::RichText::new(text)
+            .size(crate::theme::ts::px(crate::theme::ts::LABEL))
+            .color(if on { t.ink } else { t.ink2 }),
+    )
     .corner_radius(9)
     .fill(if on { t.sel } else { well(&t, 1.0) })
     .stroke(egui::Stroke::new(1.0, if on { t.accent } else { t.border }));
@@ -1312,7 +1333,12 @@ fn chip(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
 
 /// a small caps section heading
 fn heading(ui: &mut egui::Ui, s: &str) {
-    ui.label(egui::RichText::new(s).size(10.0).strong().color(th().ink2));
+    ui.label(
+        egui::RichText::new(s)
+            .size(crate::theme::ts::px(crate::theme::ts::TINY))
+            .strong()
+            .color(th().ink2),
+    );
 }
 
 /// a tile's background (the polished look: bevel and glow), with the
@@ -1356,8 +1382,7 @@ fn tile_bg(p: &egui::Painter, r: Rect, on: bool, hot: bool, c: Color32) {
 
 /// one line of text at `pos` (left-centre), ending in "…" past `max_w`
 fn text_trunc(p: &egui::Painter, pos: Pos2, s: &str, size: f32, col: Color32, max_w: f32) {
-    let mut job =
-        egui::text::LayoutJob::simple_singleline(s.into(), FontId::proportional(size), col);
+    let mut job = egui::text::LayoutJob::simple_singleline(s.into(), crate::theme::prop(size), col);
     job.wrap = egui::text::TextWrapping::truncate_at_width(max_w.max(8.0));
     let g = p.layout_job(job);
     let h = g.size().y;
@@ -1985,7 +2010,7 @@ impl App {
                             r.center(),
                             egui::Align2::CENTER_CENTER,
                             "?",
-                            FontId::proportional(11.0),
+                            crate::theme::prop(crate::theme::ts::SMALL),
                             if hot { t.ink } else { t.ink2 },
                         );
                         resp.widget_info(|| {
@@ -2017,14 +2042,17 @@ impl App {
                         });
                         ui.checkbox(
                             &mut self.extra.browser_autoplay,
-                            egui::RichText::new("Auto").size(11.0),
+                            egui::RichText::new("Auto")
+                                .size(crate::theme::ts::px(crate::theme::ts::SMALL)),
                         )
                         .on_hover_text("auto-play: preview each item when it's selected");
                         // the label gets what is left, truncated with "…"
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                             ui.add(
                                 egui::Label::new(
-                                    egui::RichText::new(&text).size(11.0).color(t.ink),
+                                    egui::RichText::new(&text)
+                                        .size(crate::theme::ts::px(crate::theme::ts::SMALL))
+                                        .color(t.ink),
                                 )
                                 .truncate(),
                             )

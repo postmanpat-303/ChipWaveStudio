@@ -179,7 +179,7 @@ pub(in crate::app) fn grid_editor(
                     head.left_center() + vec2(6.0, 0.0),
                     egui::Align2::LEFT_CENTER,
                     g.label(m.id),
-                    egui::FontId::proportional(12.5),
+                    crate::theme::prop(crate::theme::ts::COMPACT),
                     t.ink,
                 );
                 let hr = ui
@@ -231,7 +231,7 @@ pub(in crate::app) fn grid_editor(
                         c + vec2(9.0, 0.0),
                         egui::Align2::LEFT_CENTER,
                         *name,
-                        egui::FontId::proportional(11.0),
+                        crate::theme::prop(crate::theme::ts::SMALL),
                         t.ink2,
                     );
                     let pr = Rect::from_center_size(c, vec2(16.0, 14.0));
@@ -259,7 +259,7 @@ pub(in crate::app) fn grid_editor(
                         c - vec2(9.0, 0.0),
                         egui::Align2::RIGHT_CENTER,
                         *name,
-                        egui::FontId::proportional(11.0),
+                        crate::theme::prop(crate::theme::ts::SMALL),
                         t.ink2,
                     );
                     let pr = Rect::from_center_size(c, vec2(16.0, 14.0));

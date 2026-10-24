@@ -1,12 +1,12 @@
 // ChipWave Studio - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-/// Display version (Cargo: 0.2.10+fix.0 -> "0.2.10.0"; the updater compares it part by part).
-pub const VERSION: &str = "0.2.10.0";
+/// Display version (Cargo: 0.2.11+fix.0 -> "0.2.11.0"; the updater compares it part by part).
+pub const VERSION: &str = "0.2.11.0";
 
 /// The version as shown (About, window title): a test build (the pack
 /// scripts set CW_BUILD, e.g. "combo2 8bdf40c") reads
-/// "0.2.10.0 · test build (combo2 8bdf40c)"; a release build just "0.2.10.0".
+/// "0.2.11.0 · test build (combo2 8bdf40c)"; a release build just "0.2.11.0".
 pub fn version_label() -> String {
     version_label_for(option_env!("CW_BUILD"))
 }
@@ -1047,7 +1047,7 @@ fn screenshot(args: &[String], i: usize) -> i32 {
     };
     let Some(out) = args.get(i + 1).filter(|a| !a.starts_with("--")) else {
         eprintln!(
-            "usage: --screenshot <out.png> [--view {}] [--theme slate|dark|amiga] [--size 1600x900] [--song file.cwt|file.cwt.toml]",
+            "usage: --screenshot <out.png> [--view {}] [--theme slate|dark|amiga] [--size 1600x900] [--zoom 0.9..1.5] [--text 0.9..1.5] [--song file.cwt|file.cwt.toml]",
             app::shot::VIEWS.join("|")
         );
         return 2;
@@ -1089,6 +1089,13 @@ fn screenshot(args: &[String], i: usize) -> i32 {
         ..Default::default()
     };
     st.extra.update_check = false;
+    // --zoom 1.5 (UI scale) / --text 1.2 (Text size)
+    if let Some(z) = flag("--zoom").and_then(|s| s.parse::<f32>().ok()) {
+        st.zoom = settings::snap_zoom(z);
+    }
+    if let Some(t) = flag("--text").and_then(|s| s.parse::<f32>().ok()) {
+        st.extra.text_size = ((t * 20.0).round() * 5.0).clamp(90.0, 150.0) as u16;
+    }
     settings::save(&st);
     let mut shot = app::shot::Shot::new(PathBuf::from(out), &view);
     shot.hold = flag("--hold").and_then(|s| s.parse().ok());

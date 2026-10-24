@@ -1561,7 +1561,14 @@ fn scale_slider_applies_on_release_only() {
     let ppp0 = h.ctx.pixels_per_point();
     assert!((h.state().zoom - 1.0).abs() < 0.001);
     assert!(h.state().max_zoom >= 1.5, "max {}", h.state().max_zoom);
-    let reset = h.get_by_label("Reset to 100 %").rect();
+    // the UI scale's Reset (the first; Text size has its own below it)
+    let ui_reset = |h: &Harness<'static, App>| {
+        h.query_all_by_label("Reset to 100 %")
+            .map(|n| n.rect())
+            .min_by(|a, b| a.top().total_cmp(&b.top()))
+            .expect("Reset to 100 %")
+    };
+    let reset = ui_reset(&h);
     let slider = h
         .query_all_by(|n| n.role() == Role::Slider)
         .map(|n| n.rect())
@@ -1572,7 +1579,7 @@ fn scale_slider_applies_on_release_only() {
     let from = Pos2::new(slider.left() + 4.0, y);
     // part way up (at the top end the Reset button scrolls out of the
     // harness window)
-    let to = Pos2::new(slider.left() + slider.width() * 0.7, y);
+    let to = Pos2::new(slider.left() + slider.width() * 0.45, y);
     let ev = |h: &mut Harness<'static, App>, e: egui::Event| {
         h.input_mut().events.push(e);
         frame(h);
@@ -1624,7 +1631,7 @@ fn scale_slider_applies_on_release_only() {
     assert!(h.ctx.pixels_per_point() > ppp0 + 0.1, "rescaled on release");
     // Reset to 100 %
     frames(&mut h, 2);
-    let c = h.get_by_label("Reset to 100 %").rect().center();
+    let c = ui_reset(&h).center();
     click_at(&mut h, Pos2::new(c.x, c.y));
     frames(&mut h, 3);
     assert!((h.state().zoom - 1.0).abs() < 0.001);
@@ -1633,7 +1640,7 @@ fn scale_slider_applies_on_release_only() {
     key(&mut h, egui::Key::Equals, egui::Modifiers::COMMAND);
     frames(&mut h, 2);
     assert!(
-        (h.state().zoom - 1.25).abs() < 0.001,
+        (h.state().zoom - 1.1).abs() < 0.001,
         "Ctrl+= {}",
         h.state().zoom
     );
@@ -1641,8 +1648,8 @@ fn scale_slider_applies_on_release_only() {
     key(&mut h, egui::Key::Minus, egui::Modifiers::COMMAND);
     frames(&mut h, 2);
     assert!(
-        (h.state().zoom - 0.75).abs() < 0.001,
-        "Ctrl+- {}",
+        (h.state().zoom - crate::settings::ZOOM_MIN).abs() < 0.001,
+        "Ctrl+- stops at 90 %: {}",
         h.state().zoom
     );
     key(&mut h, egui::Key::Num0, egui::Modifiers::COMMAND);

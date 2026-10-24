@@ -390,7 +390,7 @@ impl App {
                 Pos2::new(rect.left() + 10.0, rect.top() + 11.0),
                 egui::Align2::LEFT_CENTER,
                 title.to_uppercase(),
-                egui::FontId::proportional(11.5),
+                crate::theme::prop(crate::theme::ts::LABEL),
                 t.ink,
             );
         }

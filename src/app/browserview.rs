@@ -578,7 +578,7 @@ impl App {
     }
 
     /// give track `tr` (Act::Track) or a new track (Act::NewTrack) slot `slot`
-    fn br_assign_slot(&mut self, slot: u8, name: &str, act: Act) {
+    pub(super) fn br_assign_slot(&mut self, slot: u8, name: &str, act: Act) {
         self.snapshot();
         self.undo_hold += 1;
         let tr = match act {

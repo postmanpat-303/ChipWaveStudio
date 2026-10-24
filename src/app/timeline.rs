@@ -764,8 +764,10 @@ impl App {
         };
         // ---- toolbar
         let mut fit = false;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             // a slim tool strip (0.2.4 polish): tighter buttons, one line
+            // (a second line when a narrow window, the Browser or a large
+            // Text size leaves no room: nothing is cut off)
             let sp = ui.spacing_mut();
             sp.button_padding = egui::vec2(5.0, 0.0);
             sp.item_spacing.x = 5.0;
@@ -774,7 +776,7 @@ impl App {
                 egui::RichText::new(" TIMELINE ")
                     .strong()
                     .monospace()
-                    .size(10.5)
+                    .size(crate::theme::ts::px(crate::theme::ts::SMALL))
                     .color(Color32::from_rgb(0x1A, 0x1C, 0x1F))
                     .background_color(t.accent),
             )
@@ -799,7 +801,7 @@ impl App {
             if ui
                 .add(egui::Button::selectable(
                     shown,
-                    egui::RichText::new("Arranger").size(11.0),
+                    egui::RichText::new("Arranger").size(crate::theme::ts::px(crate::theme::ts::SMALL)),
                 ))
                 .on_hover_text(if shown {
                     "hide the Clip Arranger on the left: more room for the tracks (Ctrl+Shift+8)"
@@ -813,7 +815,16 @@ impl App {
             // timeline mode needs no label: Song › Back to tracker
             // mode… turns it back
             if !mode {
-                ui.label(egui::RichText::new("Tracker mode · from the order list").color(t.ink2))
+                // narrow windows (1366 px at 100 %): the short label, the
+                // tooltip says the rest
+                let narrow = ui.available_width()
+                    < crate::theme::ts::px(crate::theme::ts::BODY) * 95.0;
+                let lab = if narrow {
+                    "Tracker mode"
+                } else {
+                    "Tracker mode · from the order list"
+                };
+                ui.label(egui::RichText::new(lab).color(t.ink2))
                     .on_hover_text(
                         "The timeline shows this song's order list as clips per track (track = mixer channel). \
                          To move, loop and split clips here, switch the song to timeline mode. \
@@ -1155,7 +1166,7 @@ impl App {
                     Pos2::new(x + 3.0, ruler.top() + 2.0),
                     egui::Align2::LEFT_TOP,
                     label,
-                    FontId::monospace(11.0),
+                    crate::theme::mono(crate::theme::ts::SMALL),
                     crt_ink,
                 );
             }
@@ -1201,6 +1212,13 @@ impl App {
         let pol = theme::polished();
         let mut glows: Vec<Rect> = vec![];
         let cur_tr = self.tl_cur_track();
+        // one gradient over the whole track area (not one per clip): a clip's
+        // shade comes from its y in the visible tracks, so it flows top to
+        // bottom across every track. Anchored to the viewport (the tracks when
+        // they all fit), so it reads the same at any scroll and track count.
+        let g_top = lanes.top();
+        let g_h = (total_h - sy).min(lanes.height()).max(lane_h);
+        let g_tone = move |y: f32| 0.08 - 0.26 * ((y - g_top) / g_h).clamp(0.0, 1.0);
         for tr in first_tr..last_tr {
             let lr = lane_rect(tr);
             if tr == cur_tr {
@@ -1318,19 +1336,20 @@ impl App {
                 if pol {
                     // rounded body with a gentle gradient, header rounded on top,
                     // a 1 px darker border; selected: a soft glow + outline
+                    let tn = |c: Color32, y: f32, lift: f32| theme::tone(c, g_tone(y) + lift);
                     theme::round_mesh(
                         &mut bodies,
                         r,
                         [3.0; 4],
-                        theme::tone(body_c, 0.06),
-                        theme::tone(body_c, -0.14),
+                        tn(body_c, r.top(), 0.0),
+                        tn(body_c, r.bottom(), 0.0),
                     );
                     theme::round_mesh(
                         &mut bodies,
                         hr,
                         [3.0, 3.0, 0.0, 0.0],
-                        theme::tone(head_c, 0.08),
-                        theme::tone(head_c, -0.04),
+                        tn(head_c, hr.top(), 0.04),
+                        tn(head_c, hr.bottom(), 0.04),
                     );
                     if sel {
                         glows.push(r);
@@ -1597,7 +1616,7 @@ impl App {
                 p,
                 egui::Align2::LEFT_CENTER,
                 txt,
-                FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 colr,
             );
         }
@@ -1655,7 +1674,7 @@ impl App {
                     Pos2::new(lx, marks.center().y),
                     egui::Align2::LEFT_CENTER,
                     &m.name,
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     crt_ink_hi,
                 );
             }
@@ -1685,7 +1704,7 @@ impl App {
                     Pos2::new(cap.right() - 8.0, r.center().y),
                     egui::Align2::RIGHT_CENTER,
                     txt,
-                    FontId::proportional(10.5),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     t.ink2,
                 );
             }
@@ -1694,7 +1713,7 @@ impl App {
                     Pos2::new(cap.left() + 8.0, marks.center().y),
                     egui::Align2::LEFT_CENTER,
                     "Shift+M adds one",
-                    FontId::proportional(10.0),
+                    crate::theme::prop(crate::theme::ts::TINY),
                     t.ink2.gamma_multiply(0.7),
                 );
             }
@@ -1916,7 +1935,7 @@ impl App {
                 } else {
                     format!("{:02}", tr + 1)
                 },
-                FontId::monospace(10.0),
+                crate::theme::mono(crate::theme::ts::TINY),
                 t.ink2,
             );
             let nw = num.size().x;
@@ -1927,21 +1946,27 @@ impl App {
                     Pos2::new((hr.right() - 136.0).max(tx + nw + 60.0), ty + 10.0),
                 ));
             } else {
-                np.text(
+                // cut with "…" before the buttons (the tooltip and the
+                // Inspector have the full name)
+                crate::theme::text_fit(
+                    &np,
                     Pos2::new(tx + nw + 5.0, ty),
                     egui::Align2::LEFT_CENTER,
                     name,
-                    FontId::proportional(13.0),
+                    crate::theme::prop(crate::theme::ts::BODY),
                     t.ink,
+                    hr.right() - 135.0 - (tx + nw + 5.0),
                 );
             }
             if !one_line {
-                np.text(
+                crate::theme::text_fit(
+                    &np,
                     Pos2::new(tx, hr.top() + 28.0),
                     egui::Align2::LEFT_CENTER,
-                    sub(tr),
-                    FontId::proportional(10.5),
+                    &sub(tr),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     t.ink2,
+                    hr.right() - 135.0 - tx,
                 );
             }
             // M / S
@@ -1976,7 +2001,7 @@ impl App {
                     r.center(),
                     egui::Align2::CENTER_CENTER,
                     label,
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     if on {
                         Color32::from_rgb(0x16, 0x18, 0x1B)
                     } else {
@@ -2020,7 +2045,7 @@ impl App {
                     ar.center(),
                     egui::Align2::CENTER_CENTER,
                     "A",
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     if open {
                         Color32::from_rgb(0x16, 0x18, 0x1B)
                     } else if nl > 0 {
@@ -2099,7 +2124,7 @@ impl App {
                     Pos2::new(mr.left() - bs - 7.0, hr.bottom() - 9.0),
                     egui::Align2::RIGHT_CENTER,
                     format!("speed {speed}"),
-                    FontId::proportional(10.0),
+                    crate::theme::prop(crate::theme::ts::TINY),
                     t.ochre,
                 );
             }
@@ -2213,7 +2238,7 @@ impl App {
                 Pos2::new(p.x + 14.0, p.y),
                 egui::Align2::LEFT_CENTER,
                 format!("move track {:02}", from + 1),
-                FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 t.accent,
             );
             if !ui.ctx().input(|i| i.pointer.primary_down()) {
@@ -2257,7 +2282,11 @@ impl App {
                 let full = n >= MAX_CHANNELS;
                 let r = ui.put(
                     br,
-                    egui::Button::new(egui::RichText::new("+ Add track").size(11.5)).small(),
+                    egui::Button::new(
+                        egui::RichText::new("+ Add track")
+                            .size(crate::theme::ts::px(crate::theme::ts::LABEL)),
+                    )
+                    .small(),
                 );
                 add_btn = r.rect;
                 let r = if full {
@@ -2298,7 +2327,7 @@ impl App {
                 Pos2::new(lanes.left() + 24.0, y),
                 egui::Align2::LEFT_TOP,
                 "Drag an instrument from the Browser here, or + Add track",
-                egui::FontId::proportional(15.0),
+                crate::theme::prop(crate::theme::ts::LARGE),
                 t.ink2,
             );
         }
@@ -2650,7 +2679,11 @@ impl App {
                 }
                 let bp = c.tl.bar_pos(at);
                 let txt = format!("Split {}.{}.{:03}", bp.bar, bp.beat, bp.tick);
-                let g = p.layout_no_wrap(txt, egui::FontId::proportional(11.5), Color32::BLACK);
+                let g = p.layout_no_wrap(
+                    txt,
+                    crate::theme::prop(crate::theme::ts::LABEL),
+                    Color32::BLACK,
+                );
                 let lab = Rect::from_min_size(
                     Pos2::new(
                         x + 6.0,

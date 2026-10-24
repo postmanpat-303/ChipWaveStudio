@@ -110,7 +110,11 @@ impl App {
     pub(super) fn settings_view(&mut self, ui: &mut egui::Ui) {
         let t = th();
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Settings").strong().size(17.0));
+            ui.label(
+                egui::RichText::new("Settings")
+                    .strong()
+                    .size(crate::theme::ts::px(crate::theme::ts::HEADING)),
+            );
             ui.label(
                 egui::RichText::new("arrows = move · Enter = open / close · Esc or Ctrl+, = back")
                     .small()
@@ -162,7 +166,9 @@ impl App {
                                             ui.label(
                                                 egui::RichText::new(CARDS[i])
                                                     .strong()
-                                                    .size(15.0)
+                                                    .size(crate::theme::ts::px(
+                                                        crate::theme::ts::LARGE,
+                                                    ))
                                                     .color(if placeholder {
                                                         t.ink2
                                                     } else {
@@ -227,7 +233,11 @@ impl App {
                 }
                 if let Some(i) = self.set_open {
                     ui.separator();
-                    ui.label(egui::RichText::new(CARDS[i]).strong().size(16.0));
+                    ui.label(
+                        egui::RichText::new(CARDS[i])
+                            .strong()
+                            .size(crate::theme::ts::px(crate::theme::ts::HEADING)),
+                    );
                     ui.add_space(4.0);
                     match i {
                         0 => self.audio_details(ui),
@@ -399,37 +409,48 @@ impl App {
                     )
                     .changed();
                 ui.end_row();
-                ui.label("Scale");
+                ui.label("UI scale");
                 ui.horizontal(|ui| {
                     // the slider edits a pending value; the UI rescales only
                     // when it is let go (dragging a live scale moved the
                     // slider under the pointer)
+                    let fit = self.zoom_fit();
                     let mut z = self.zoom_drag.unwrap_or(self.zoom);
                     let r = ui
                         .add(
-                            egui::Slider::new(&mut z, 0.5..=self.max_zoom.max(1.0))
-                                .step_by(0.25)
-                                .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
+                            egui::Slider::new(
+                                &mut z,
+                                crate::settings::ZOOM_MIN..=crate::settings::ZOOM_MAX,
+                            )
+                            .step_by(crate::settings::SCALE_STEP as f64)
+                            .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
                         )
-                        .on_hover_text("let go to apply");
+                        .on_hover_text(
+                            "everything: text, controls and spacing, on top of the \
+                             display scale set in Windows / your desktop. Let go to apply",
+                        );
                     if r.changed() || r.dragged() {
-                        // what set_zoom will apply (quarter steps, fits the window)
-                        let q = ((z * 4.0).round() / 4.0).clamp(0.5, self.max_zoom.max(0.5));
-                        self.zoom_drag = Some(q);
+                        self.zoom_drag = Some(crate::settings::snap_zoom(z));
                     }
                     if let Some(p) = self.zoom_drag {
                         if r.dragged() {
                             // the workspace at that scale (window size at 100 %)
                             let base = ui.ctx().content_rect().size() * ui.ctx().zoom_factor();
-                            ui.label(
-                                egui::RichText::new(format!(
+                            let msg = if p > fit + 0.001 {
+                                format!(
+                                    "{:.0} % does not fit this window; {:.0} % is the largest",
+                                    p * 100.0,
+                                    fit * 100.0
+                                )
+                            } else {
+                                format!(
                                     "{:.0} % · {:.0}×{:.0} at this scale",
                                     p * 100.0,
                                     base.x / p,
                                     base.y / p
-                                ))
-                                .strong(),
-                            );
+                                )
+                            };
+                            ui.label(egui::RichText::new(msg).strong());
                         } else {
                             // let go (or a click / arrow key on the slider)
                             self.zoom_drag = None;
@@ -453,6 +474,44 @@ impl App {
                             .small()
                             .color(th().ink2),
                     );
+                });
+                ui.end_row();
+                ui.label("Text size");
+                ui.horizontal(|ui| {
+                    // pending value while dragging, applied on release
+                    let tid = egui::Id::NULL.with("settings_text_drag");
+                    let mut t = ui
+                        .data(|d| d.get_temp::<f32>(tid))
+                        .unwrap_or(self.extra.text_scale());
+                    let r = ui
+                        .add(
+                            egui::Slider::new(&mut t, theme::ts::TEXT_MIN..=theme::ts::TEXT_MAX)
+                                .step_by(crate::settings::SCALE_STEP as f64)
+                                .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
+                        )
+                        .on_hover_text(
+                            "only the text, on top of the UI scale; rows grow with it. Let go to apply",
+                        );
+                    if r.dragged() {
+                        ui.data_mut(|d| d.insert_temp(tid, t));
+                    } else {
+                        ui.data_mut(|d| d.remove::<f32>(tid));
+                        let pct = ((t * 20.0).round() * 5.0) as u16;
+                        if pct != (self.extra.text_scale() * 100.0).round() as u16 {
+                            self.extra.text_size = pct;
+                            changed = true;
+                        }
+                    }
+                    if ui
+                        .add_enabled(
+                            self.extra.text_size != 0 && self.extra.text_size != 100,
+                            egui::Button::new("Reset to 100 %"),
+                        )
+                        .clicked()
+                    {
+                        self.extra.text_size = 0;
+                        changed = true;
+                    }
                 });
                 ui.end_row();
                 ui.label("Accent");

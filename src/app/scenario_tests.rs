@@ -201,8 +201,14 @@ fn scenario_b_waveforge_new_launcher_clip_drag_render() {
     double_click(&mut h, e.center());
     frames(&mut h, 3);
     let lid = h.state().pr.launch.expect("open in the piano roll");
-    // draw a note in the roll
+    // draw a note in the roll (C4 mid-roll: the two-row toolbar leaves a
+    // shorter roll in the test window)
     let key_n = 60u8;
+    {
+        let pr = &mut h.state_mut().pr;
+        pr.scroll_y = (120.0 - key_n as f32) * pr.key_h - pr.grid_rect.height() / 2.0;
+    }
+    frames(&mut h, 1);
     let p = Pos2::new(
         h.state().pr.x_of(0) + 5.0,
         h.state().pr.y_of(key_n) + h.state().pr.key_h / 2.0,

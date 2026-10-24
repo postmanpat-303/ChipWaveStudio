@@ -51,6 +51,7 @@ impl App {
 
     pub(super) fn apply_theme(&self, ctx: &egui::Context) {
         theme::set_polished(!self.extra.flat_ui);
+        theme::ts::set_text_scale(self.extra.text_scale());
         theme::apply(ctx, theme::with_accent(self.theme, &self.extra.accent));
     }
 
@@ -284,7 +285,7 @@ impl App {
                     if t.ember {
                         ui.label(
                             egui::RichText::new(title)
-                                .font(theme::label_font(19.0))
+                                .font(theme::label_font(crate::theme::ts::TITLE))
                                 .color(t.ink),
                         );
                     } else {

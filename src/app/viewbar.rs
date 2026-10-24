@@ -227,17 +227,20 @@ impl App {
                     Some(m) => (m == tab, m != tab && cur == Some(tab)),
                     None => (cur == Some(tab), false),
                 };
-                let txt = egui::RichText::new(name).size(11.0).strong().color(if on {
-                    if t.light {
-                        t.hdr_bot
+                let txt = egui::RichText::new(name)
+                    .size(crate::theme::ts::px(crate::theme::ts::SMALL))
+                    .strong()
+                    .color(if on {
+                        if t.light {
+                            t.hdr_bot
+                        } else {
+                            Color32::from_rgb(0x16, 0x18, 0x1B)
+                        }
+                    } else if host_on {
+                        hdr_text()
                     } else {
-                        Color32::from_rgb(0x16, 0x18, 0x1B)
-                    }
-                } else if host_on {
-                    hdr_text()
-                } else {
-                    hdr_dim()
-                });
+                        hdr_dim()
+                    });
                 let mut b = egui::Button::new(txt)
                     .min_size(egui::vec2(62.0, 22.0))
                     .corner_radius(if theme::polished() { 5 } else { 2 });
@@ -273,11 +276,9 @@ impl App {
                         .add(
                             egui::Button::selectable(
                                 on,
-                                egui::RichText::new(name).size(11.0).color(if on {
-                                    t.ink
-                                } else {
-                                    hdr_dim()
-                                }),
+                                egui::RichText::new(name)
+                                    .size(crate::theme::ts::px(crate::theme::ts::SMALL))
+                                    .color(if on { t.ink } else { hdr_dim() }),
                             )
                             .min_size(egui::vec2(0.0, 20.0)),
                         )

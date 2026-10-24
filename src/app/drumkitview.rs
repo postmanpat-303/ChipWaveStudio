@@ -7,6 +7,7 @@
 use super::*;
 use crate::drumkit::{self as dk, DrumKitP, DrumMeta};
 use crate::gen::{DrumKind, DrumP, GenEngine, MacroDef};
+use crate::theme::ts;
 use crate::timeline::{self as tl, Note, Tick, ROW};
 
 /// editor state that is not part of the song
@@ -188,7 +189,7 @@ fn card(ui: &egui::Ui, r: egui::Rect, caption: &str) {
         r.left_top() + egui::vec2(16.0, 7.0),
         egui::Align2::LEFT_TOP,
         caption.to_uppercase(),
-        egui::FontId::proportional(10.0),
+        crate::theme::prop(crate::theme::ts::TINY),
         th().ink2,
     );
 }
@@ -289,7 +290,7 @@ impl App {
                         } else {
                             "The step sequencer edits note clips: switch the song to timeline mode first"
                         },
-                        egui::FontId::proportional(13.0),
+                        crate::theme::prop(crate::theme::ts::BODY),
                         th().ink2,
                     );
                 }
@@ -311,7 +312,7 @@ impl App {
                     egui::pos2(fr.center().x, fr.bottom() - 6.0),
                     egui::Align2::CENTER_BOTTOM,
                     "More below: scroll down",
-                    egui::FontId::proportional(11.5),
+                    crate::theme::prop(crate::theme::ts::LABEL),
                     th().ochre,
                 );
             }
@@ -429,7 +430,7 @@ impl App {
                     } else {
                         "The step sequencer edits note clips: switch the song to timeline mode first"
                     },
-                    egui::FontId::proportional(12.5),
+                    crate::theme::prop(crate::theme::ts::COMPACT),
                     th().ink2,
                 );
             }
@@ -620,7 +621,7 @@ impl App {
                 r.left_top() + egui::vec2(16.0, 24.0),
                 egui::Align2::LEFT_TOP,
                 s,
-                egui::FontId::proportional(17.0),
+                crate::theme::prop(crate::theme::ts::HEADING),
                 th().ink,
             );
         };
@@ -629,7 +630,7 @@ impl App {
                 r.left_top() + egui::vec2(16.0, 50.0),
                 egui::Align2::LEFT_TOP,
                 s,
-                egui::FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 th().ink2,
             );
         };
@@ -1081,14 +1082,26 @@ impl App {
         let w = ui.available_width();
         let cols = if compact { 4usize } else { 8 };
         let n = kit.pads.len() + usize::from(kit.pads.len() < dk::MAX_PADS);
-        let rows = n.div_ceil(cols).max(1);
         let gap = if compact { 4.0 } else { 6.0 };
         let (top, side) = if compact { (2.0, 2.0) } else { (26.0, 16.0) };
+        // compact: an "+ ADD PAD" that would start a row of its own is a
+        // short strip instead, so the pads keep room for two lines of text
+        let strip_h = if compact && n > kit.pads.len() && kit.pads.len().is_multiple_of(cols) {
+            crate::theme::row_h(ui.painter(), &crate::theme::prop(ts::SMALL)) + 8.0
+        } else {
+            0.0
+        };
+        let rows = if strip_h > 0.0 {
+            kit.pads.len().div_ceil(cols).max(1)
+        } else {
+            n.div_ceil(cols).max(1)
+        };
+        let strip = if strip_h > 0.0 { strip_h + gap } else { 0.0 };
         let ph = match fit {
-            Some(h) => ((h - top - 6.0) / rows as f32 - gap).clamp(24.0, 34.0),
+            Some(h) => ((h - top - 6.0 - strip) / rows as f32 - gap).clamp(24.0, 40.0),
             None => 50.0,
         };
-        let h = top + rows as f32 * (ph + gap) + 6.0;
+        let h = top + rows as f32 * (ph + gap) + strip + 6.0;
         let (r, _) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::hover());
         if !compact {
             card(
@@ -1100,14 +1113,31 @@ impl App {
                 egui::pos2(r.right() - 16.0, r.top() + 7.0),
                 egui::Align2::RIGHT_TOP,
                 "click = hear and select · right-click = more",
-                egui::FontId::proportional(10.0),
+                crate::theme::prop(crate::theme::ts::TINY),
                 th().ink2,
             );
         }
-        let (f_name, f_tag, inset) = if compact {
-            (11.5, 9.0, 4.0)
+        let (f_name, f_tag) = if compact {
+            (ts::LABEL, ts::TINY)
         } else {
-            (13.0, 10.0, 8.0)
+            (ts::BODY, ts::SMALL)
+        };
+        let name_font = crate::theme::prop(f_name);
+        let tag_font = crate::theme::mono(f_tag);
+        let (name_h, tag_h) = {
+            let p = ui.painter();
+            (
+                crate::theme::row_h(p, &name_font),
+                crate::theme::row_h(p, &tag_font),
+            )
+        };
+        // two lines (name over key) when the pad is tall enough, else one
+        // line with the key on the right; rows follow the text
+        let two_lines = ph >= name_h + tag_h + 4.0;
+        let inset = if two_lines {
+            ((ph - name_h - tag_h) / 2.0).clamp(2.0, 8.0)
+        } else {
+            ((ph - name_h) / 2.0).max(1.0)
         };
         let pw = (r.width() - 2.0 * side - gap * (cols - 1) as f32) / cols as f32;
         let mut act: Option<(u8, usize)> = None;
@@ -1118,7 +1148,14 @@ impl App {
                     r.left() + side + cx as f32 * (pw + gap),
                     r.top() + top + cy as f32 * (ph + gap),
                 ),
-                egui::vec2(pw, ph),
+                egui::vec2(
+                    pw,
+                    if i == kit.pads.len() && strip_h > 0.0 {
+                        strip_h
+                    } else {
+                        ph
+                    },
+                ),
             );
             let id = ui.make_persistent_id(("dk_pad", i));
             let resp = ui.interact(pr, id, egui::Sense::click());
@@ -1129,8 +1166,8 @@ impl App {
                     pr.center(),
                     egui::Align2::CENTER_CENTER,
                     "+ ADD PAD",
-                    egui::FontId::proportional(f_name - 1.0),
-                    th().ink2,
+                    crate::theme::prop(ts::SMALL),
+                    crate::theme::on2(crate::ember::DISP1),
                 );
                 if resp
                     .on_hover_text(
@@ -1169,13 +1206,6 @@ impl App {
                     col.gamma_multiply(0.3)
                 },
             );
-            p.text(
-                pr.left_top() + egui::vec2(13.0, inset - 1.0),
-                egui::Align2::LEFT_TOP,
-                &pad.name,
-                egui::FontId::proportional(f_name),
-                if kit.audible(i) { th().ink } else { th().ink2 },
-            );
             let mut tag = dk::key_name(pad.key);
             if pad.choke > 0 {
                 tag += &format!(" · choke {}", pad.choke);
@@ -1186,13 +1216,46 @@ impl App {
             if pad.solo {
                 tag += " · S";
             }
-            p.text(
-                pr.left_bottom() + egui::vec2(13.0, 1.0 - inset),
-                egui::Align2::LEFT_BOTTOM,
-                tag,
-                egui::FontId::monospace(f_tag),
-                th().ink2,
-            );
+            let ink = if kit.audible(i) {
+                crate::theme::on(crate::ember::DISP1)
+            } else {
+                crate::theme::on2(crate::ember::DISP1)
+            };
+            let ink2 = crate::theme::on2(crate::ember::DISP1);
+            let text_w = pw - 13.0 - 5.0;
+            let name_font = crate::theme::shrink_to_fit(p, &pad.name, name_font.clone(), text_w);
+            if two_lines {
+                crate::theme::text_fit(
+                    p,
+                    pr.left_top() + egui::vec2(13.0, inset),
+                    egui::Align2::LEFT_TOP,
+                    &pad.name,
+                    name_font.clone(),
+                    ink,
+                    text_w,
+                );
+                crate::theme::text_fit(
+                    p,
+                    pr.left_bottom() + egui::vec2(13.0, -inset),
+                    egui::Align2::LEFT_BOTTOM,
+                    &tag,
+                    tag_font.clone(),
+                    ink2,
+                    text_w,
+                );
+            } else {
+                // one line: the name only (the key and choke group are in
+                // the tooltip and on the lanes)
+                crate::theme::text_fit(
+                    p,
+                    pr.left_center() + egui::vec2(13.0, 0.0),
+                    egui::Align2::LEFT_CENTER,
+                    &pad.name,
+                    name_font.clone(),
+                    ink,
+                    text_w,
+                );
+            }
             let resp = resp.on_hover_text(format!(
                 "{} · {:?} {} · key {}",
                 pad.name,
@@ -1281,8 +1344,12 @@ impl App {
             }
         }
         lane_ix.sort_unstable();
+        // compact: the Add-to-track line (at 29) and the bar numbers stack
+        // above the grid at their own text heights (Text size)
+        let line_h = crate::theme::row_h(ui.painter(), &crate::theme::prop(ts::SMALL));
+        let ruler_h = crate::theme::row_h(ui.painter(), &crate::theme::mono(ts::TINY));
         let (top, vel_h, side) = if compact {
-            (50.0, 20.0, 8.0)
+            ((29.0 + line_h + ruler_h + 1.0f32).max(50.0), 20.0, 8.0)
         } else {
             (62.0, 46.0, 16.0)
         };
@@ -1344,23 +1411,28 @@ impl App {
         } else {
             egui::pos2(r.right() - 16.0, r.top() + 7.0)
         };
-        let line_r = ui.painter().text(
+        // cut with "…" so the pattern's name keeps 120 pt (the full line
+        // is the Add to track tooltip)
+        let (line_r, _) = crate::theme::text_fit(
+            ui.painter(),
             line_at,
             egui::Align2::RIGHT_TOP,
             &add_line,
-            egui::FontId::proportional(if compact { 11.0 } else { 10.5 }),
+            crate::theme::prop(if compact { ts::SMALL } else { ts::TINY }),
             if compact { th().ink } else { th().ink2 },
+            r.width() - 2.0 * side - if compact { 160.0 } else { 260.0 },
         );
         if compact {
             // the pattern's name (and hidden lanes) in what's left of the line
             let free = egui::Rect::from_min_max(
                 egui::pos2(r.left() + side, r.top() + 27.0),
-                egui::pos2(line_r.left() - 10.0, r.top() + 43.0),
+                egui::pos2(line_r.left() - 10.0, r.top() + 29.0 + line_h),
             );
-            ui.painter_at(free).text(
+            crate::theme::text_fit(
+                &ui.painter_at(free),
                 egui::pos2(r.left() + side, r.top() + 29.0),
                 egui::Align2::LEFT_TOP,
-                if hidden > 0 {
+                &if hidden > 0 {
                     format!(
                         "{} · {steps} steps · {hidden} more lanes: drag the panel taller",
                         d.name
@@ -1368,8 +1440,9 @@ impl App {
                 } else {
                     format!("{} · {steps} steps", d.name)
                 },
-                egui::FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 if hidden > 0 { th().ochre } else { th().ink2 },
+                free.width(),
             );
         }
         area(ui, row, |ui| {
@@ -1494,7 +1567,7 @@ impl App {
                 lane.left_center() + egui::vec2(12.0, 0.0),
                 egui::Align2::LEFT_CENTER,
                 &pad.name,
-                egui::FontId::proportional(12.0),
+                crate::theme::prop(crate::theme::ts::COMPACT),
                 if sel { th().ink } else { th().ink2 },
             );
             // M / S
@@ -1520,7 +1593,7 @@ impl App {
                     br.center(),
                     egui::Align2::CENTER_CENTER,
                     lbl,
-                    egui::FontId::monospace(10.0),
+                    crate::theme::mono(crate::theme::ts::TINY),
                     if on {
                         if j == 0 {
                             th().brick
@@ -1528,7 +1601,8 @@ impl App {
                             th().ochre
                         }
                     } else {
-                        th().ink2
+                        // the well is dark in every theme
+                        crate::theme::on2(crate::ember::DISP1)
                     },
                 );
                 if rr.clicked() {
@@ -1618,11 +1692,11 @@ impl App {
                 painter.text(
                     egui::pos2(
                         gx + s as f32 * sw + 3.0,
-                        gy - if compact { 7.0 } else { 12.0 },
+                        gy - if compact { ruler_h / 2.0 + 1.0 } else { 12.0 },
                     ),
                     egui::Align2::LEFT_CENTER,
                     format!("{}.{}", k / 16 + 1, (k % 16) / 4 + 1),
-                    egui::FontId::monospace(9.5),
+                    crate::theme::mono(crate::theme::ts::TINY),
                     th().ink2,
                 );
             }
@@ -1638,7 +1712,7 @@ impl App {
                 "Velocity · {}",
                 kit.pads.get(self.dk.sel).map_or("", |p| p.name.as_str())
             ),
-            egui::FontId::proportional(11.0),
+            crate::theme::prop(crate::theme::ts::SMALL),
             th().ink2,
         );
         let sp = self.dk.sel;
@@ -2115,7 +2189,7 @@ impl App {
                 egui::pos2(r.right() - 16.0, r.bottom() - 12.0),
                 egui::Align2::RIGHT_BOTTOM,
                 &add_line,
-                egui::FontId::proportional(12.0),
+                crate::theme::prop(crate::theme::ts::COMPACT),
                 th().ink,
             );
             let inner = egui::Rect::from_min_max(
@@ -2167,7 +2241,7 @@ impl App {
                             gr.center(),
                             egui::Align2::CENTER_CENTER,
                             "Regenerate makes a groove",
-                            egui::FontId::proportional(12.0),
+                            crate::theme::prop(crate::theme::ts::COMPACT),
                             th().ink2,
                         );
                     }
@@ -2193,7 +2267,7 @@ impl App {
                             gr.left_bottom() + egui::vec2(6.0, -6.0),
                             egui::Align2::LEFT_BOTTOM,
                             format!("from \"{src}\" · {steps} steps · {} hits", notes.len()),
-                            egui::FontId::proportional(10.5),
+                            crate::theme::prop(crate::theme::ts::SMALL),
                             th().ink2,
                         );
                     }
@@ -2398,7 +2472,14 @@ impl App {
                 act = Some(2);
             }
         });
-        ui.add(egui::Label::new(egui::RichText::new(add_line).size(11.5).color(th().ink)).wrap());
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(add_line)
+                    .size(crate::theme::ts::px(crate::theme::ts::LABEL))
+                    .color(th().ink),
+            )
+            .wrap(),
+        );
         if ui
             .add_enabled_ui(has && has_cur, |ui| crate::ember::button(ui, "Replace pattern", false))
             .inner

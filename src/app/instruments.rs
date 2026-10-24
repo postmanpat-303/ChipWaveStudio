@@ -103,7 +103,11 @@ impl App {
         // header: title, count and (for long lists) the search box on one row
         ui.horizontal(|ui| {
             ui.add_space(10.0);
-            ui.label(egui::RichText::new("Instruments").strong().size(15.0));
+            ui.label(
+                egui::RichText::new("Instruments")
+                    .strong()
+                    .size(crate::theme::ts::px(crate::theme::ts::LARGE)),
+            );
             ui.label(
                 egui::RichText::new(format!("{}", names.len()))
                     .small()
@@ -1144,7 +1148,7 @@ fn instrument_row(
         );
         let nx = x0 + font.size * 1.9;
         // type tag on the right (Drum, Analog, FM-4, Voice, CLAP, VST3...)
-        let tf = egui::FontId::proportional((font.size * 0.82).max(9.0));
+        let tf = crate::theme::prop((font.size * 0.82).max(9.0));
         let tg = ui.fonts_mut(|f| {
             f.layout_no_wrap(
                 kind.to_string(),
@@ -1207,7 +1211,7 @@ impl App {
             ui.add_space(10.0);
             ui.spacing_mut().item_spacing.x = 3.0;
             let r = ui
-                .menu_button(egui::RichText::new("+").size(14.0).strong(), |ui| {
+                .menu_button(egui::RichText::new("+").size(crate::theme::ts::px(crate::theme::ts::LARGE)).strong(), |ui| {
                     self.new_instrument_menu(ui)
                 })
                 .response;

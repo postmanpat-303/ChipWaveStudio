@@ -2,6 +2,27 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.11.0: easier-to-read text, UI scale and Text size
+
+Released 2026-10-24. Highlights (details below):
+- **New fonts:** every theme uses the bundled **Atkinson Hyperlegible Next** for text and **Atkinson Hyperlegible Mono** for numbers, the tracker and the LCD (SIL Open Font License, credited in Help › About and `LICENSES/`).
+- **One type scale:** every text size comes from one central scale, and nothing is drawn smaller than 10 pt.
+- **UI scale and Text size:** Settings › Look has **UI scale** and **Text size**, each from 90 to 150 % in 5 % steps. Ctrl+= / Ctrl+- step the UI scale by 10 % and Ctrl+0 resets it. ChipWave follows the display scale you set in Windows, Wayland or X11.
+- **Fits small and scaled screens:** every view fits at 1366 × 768 at 100 % and at 1920 × 1080 at 150 % in Slate, Dark and Amiga. When space is short, long names and hints end in "…" with the full text in a tooltip. The piano roll's toolbar goes to two rows with shorter button names (screen readers still get the full names), and the Rack, device chain and tracker channels scroll sideways.
+- **Contrast:** Dark's secondary text is now at least 4.5:1, selected text stays readable, and text picks its colour from the surface under it.
+- **Importing an instrument makes it the active one:** a .cwi from File, the Library or a drop, a WAV import, or Browser › *Add as a new instrument* now selects the new instrument. On the Timeline it goes to the selected empty track or a new track below, in one undo step.
+- **One gradient over the tracks:** Timeline clips now share one gradient that runs top to bottom over the whole track area, instead of each clip having its own. Track colours and the selection highlight are unchanged.
+- Old songs save, play and render exactly as in 0.2.10.0 (checked against its renders); the song format is unchanged.
+
+### Known limits
+- To fit at 1366 px, the LCD drops its GR / CLIP captions, compact drum pads keep their key and choke in the tooltip, and track names may end in "…".
+- The Amiga theme's secondary text on the top background is 3.8:1; the panels meet 4.5:1.
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
+
+### Details
+- **Scaling** ([UI_SCALING.md](UI_SCALING.md)): UI scale multiplies the OS scale; Text size changes only the text. Saved zoom levels from older versions are moved into 90 to 150 %.
+- **Style** ([STYLE_EMBER.md](STYLE_EMBER.md)): the type scale (10, 11, 11.5, 12.5, 13, 15, 16, 19 and 26 pt) and the contrast rules.
+
 ## 0.2.10.0: Generators (Chords, Melody, Bass), the LCD toolbar and smarter pies
 
 Released 2026-10-23. Highlights (details below):

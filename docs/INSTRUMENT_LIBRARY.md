@@ -24,6 +24,8 @@
 
 `›` auditions a sound (a short phrase with the current song's tempo, about 2.5 s, without touching the song), `+` adds it as a new instrument (selected, undoable), and right-click > **Replace sound of XX** swaps the selected slot's sound while keeping its notes. The search box matches the name, kind and category; the chips filter by kind. **Rescan** re-reads the folder, **Open folder** opens it in the file manager, **Import .cwi…** adds a file from anywhere. Dropping a `.cwi` file on the window imports it too.
 
+**An imported instrument is the active one.** File › Import instrument (.cwi)…, the library's `+` and Import .cwi…, a dropped `.cwi` or WAV, Import WAV… and the Browser's *Add as a new instrument* all switch to the new instrument. In the Timeline the selected track plays it when that track is empty, otherwise a new track right below it does (named after the instrument); that track is lit and the Rack shows the instrument's compact card. It is one Ctrl+Z. In a tracker song the new slot is selected for the instrument column, as before.
+
 The library folder defaults to `%APPDATA%\ChipWave\Instruments` on Windows (`~/.config/chipwave/Instruments` on Linux); change it in **Settings > Files & Safety > Instrument library**. Up to 4000 files are listed.
 
 ## The `.cwi` file

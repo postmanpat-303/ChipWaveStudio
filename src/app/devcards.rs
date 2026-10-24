@@ -288,7 +288,7 @@ pub(super) fn param_row(
         r.left_center() + egui::vec2(2.0, 0.0),
         egui::Align2::LEFT_CENTER,
         name,
-        FontId::proportional(11.5),
+        crate::theme::prop(crate::theme::ts::LABEL),
         t.ink,
     );
     p.rect_filled(
@@ -310,7 +310,7 @@ pub(super) fn param_row(
         r.right_center() - egui::vec2(2.0, 0.0),
         egui::Align2::RIGHT_CENTER,
         text,
-        FontId::monospace(11.0),
+        crate::theme::mono(crate::theme::ts::SMALL),
         t.value,
     );
     let mut out = None;

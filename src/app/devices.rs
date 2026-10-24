@@ -462,7 +462,7 @@ impl App {
                          Ctrl+D duplicates · 0 bypasses · drag a title to reorder · \
                          drop from the Browser on +",
                     )
-                    .size(11.0)
+                    .size(crate::theme::ts::px(crate::theme::ts::SMALL))
                     .color(t.ink2),
                 )
                 .truncate(),
@@ -585,7 +585,7 @@ impl App {
         .translate(egui::vec2(if self.dev.tabbed { 22.0 } else { 0.0 }, 0.0));
         let tag_g = p.layout_no_wrap(
             tag.to_string(),
-            FontId::proportional(10.5),
+            crate::theme::prop(crate::theme::ts::SMALL),
             super::instpanel::tag_text_colour(tag),
         );
         let tag_r = Rect::from_min_size(
@@ -614,7 +614,7 @@ impl App {
                 tag_r.center(),
                 egui::Align2::CENTER_CENTER,
                 tag.to_uppercase(),
-                crate::theme::label_font(11.0),
+                crate::theme::label_font(crate::theme::ts::SMALL),
                 t.acc_hot,
             );
         } else if !tag.is_empty() {
@@ -626,9 +626,9 @@ impl App {
             Pos2::new(tag_r.left() - 6.0, head.bottom()),
         );
         let nf = if t.ember {
-            crate::theme::label_font(14.0)
+            crate::theme::label_font(crate::theme::ts::LARGE)
         } else {
-            FontId::proportional(12.5)
+            crate::theme::prop(crate::theme::ts::COMPACT)
         };
         let label =
             super::pattern::fit(&p, &format!("{:02X} {name}", idx + 1), &nf, name_r.width());
@@ -681,7 +681,7 @@ impl App {
                         g.center(),
                         egui::Align2::CENTER_CENTER,
                         tag,
-                        FontId::proportional(14.0),
+                        crate::theme::prop(crate::theme::ts::LARGE),
                         t.ink2,
                     );
                 }
@@ -905,9 +905,9 @@ impl App {
                 format!("{title} (bypassed)")
             },
             if t.ember {
-                crate::theme::label_font(14.0)
+                crate::theme::label_font(crate::theme::ts::LARGE)
             } else {
-                FontId::proportional(12.5)
+                crate::theme::prop(crate::theme::ts::COMPACT)
             },
             ink,
         );
@@ -947,7 +947,7 @@ impl App {
                 more_r.center(),
                 egui::Align2::CENTER_CENTER,
                 "…",
-                FontId::proportional(14.0),
+                crate::theme::prop(crate::theme::ts::LARGE),
                 if open || mr.hovered() { t.accent } else { ink },
             );
             if mr.clicked() {
@@ -1037,7 +1037,7 @@ impl App {
                 fr.left_bottom(),
                 egui::Align2::LEFT_BOTTOM,
                 txt,
-                FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 if r.hovered() { t.accent } else { t.ink2 },
             );
             if r.clicked() {
@@ -1055,7 +1055,7 @@ impl App {
                 } else {
                     format!("+{rest} more under …")
                 },
-                FontId::proportional(10.5),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 t.ink2.gamma_multiply(0.8),
             );
         }
@@ -1192,7 +1192,9 @@ impl App {
                             ui.add_sized(
                                 egui::vec2(76.0, ROW_H),
                                 egui::Label::new(
-                                    egui::RichText::new(pi.name).size(11.5).color(t.ink),
+                                    egui::RichText::new(pi.name)
+                                        .size(crate::theme::ts::px(crate::theme::ts::LABEL))
+                                        .color(t.ink),
                                 )
                                 .truncate(),
                             );
@@ -1380,7 +1382,7 @@ impl App {
                     c,
                     egui::Align2::CENTER_CENTER,
                     format!("{}", b + 1),
-                    crate::theme::label_font(9.5),
+                    crate::theme::label_font(crate::theme::ts::TINY),
                     if hot { t.acc_hot } else { t.ink },
                 );
             } else {
@@ -1435,7 +1437,7 @@ impl App {
                 main.center(),
                 egui::Align2::CENTER_CENTER,
                 &pp.name,
-                FontId::proportional(15.0),
+                crate::theme::prop(crate::theme::ts::LARGE),
                 t.ink2,
             );
         }
@@ -1500,7 +1502,7 @@ fn comp_graph(p: &egui::Painter, r: Rect, d: &Device) {
         r.left_top() + egui::vec2(4.0, 2.0),
         egui::Align2::LEFT_TOP,
         format!("{:.0} dB · {:.1}:1", thr, ratio),
-        FontId::proportional(10.0),
+        crate::theme::prop(crate::theme::ts::TINY),
         t.ink2,
     );
 }
@@ -1548,7 +1550,7 @@ fn delay_graph(p: &egui::Painter, r: Rect, d: &Device, bpm: f32) {
             secs * 1000.0,
             if pp { " · ping-pong" } else { "" }
         ),
-        FontId::proportional(10.0),
+        crate::theme::prop(crate::theme::ts::TINY),
         t.ink2,
     );
 }
@@ -1585,7 +1587,7 @@ fn reverb_graph(p: &egui::Painter, r: Rect, d: &Device) {
         r.right_top() + egui::vec2(-4.0, 2.0),
         egui::Align2::RIGHT_TOP,
         format!("~{decay:.1} s"),
-        FontId::proportional(10.0),
+        crate::theme::prop(crate::theme::ts::TINY),
         t.ink2,
     );
 }
@@ -1621,7 +1623,7 @@ fn split_graph(p: &egui::Painter, r: Rect, d: &Device) {
                 path.devices.len(),
                 if path.devices.len() == 1 { "" } else { "s" }
             ),
-            FontId::proportional(10.5),
+            crate::theme::prop(crate::theme::ts::SMALL),
             t.ink,
         );
     }
@@ -1742,7 +1744,11 @@ fn chevron(ui: &mut egui::Ui, h: f32) {
 
 /// a name written bottom to top in a slim card
 fn vertical_name(p: &egui::Painter, r: Rect, s: &str, col: Color32) {
-    let g = p.layout_no_wrap(s.to_string(), FontId::proportional(12.0), col);
+    let g = p.layout_no_wrap(
+        s.to_string(),
+        crate::theme::prop(crate::theme::ts::COMPACT),
+        col,
+    );
     let pos = Pos2::new(r.center().x - g.size().y * 0.5, r.bottom() - 10.0);
     p.add(egui::epaint::TextShape::new(pos, g, col).with_angle(-std::f32::consts::FRAC_PI_2));
 }
@@ -1777,13 +1783,13 @@ fn plus_card(ui: &mut egui::Ui, h: f32, empty: bool, fill: f32) -> bool {
         let wrap = (r2.width() - 20.0).max(60.0);
         let title = p.layout(
             "Drag an effect here".into(),
-            FontId::proportional(16.0),
+            crate::theme::prop(crate::theme::ts::HEADING),
             if resp.hovered() { t.accent } else { t.ink },
             wrap,
         );
         let hint = p.layout(
             "No effects yet: drop one from Browser › Effects, or click to open it".into(),
-            FontId::proportional(12.0),
+            crate::theme::prop(crate::theme::ts::COMPACT),
             t.ink2,
             wrap,
         );

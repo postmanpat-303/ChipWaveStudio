@@ -205,7 +205,7 @@ pub fn well(p: &Painter, r: Rect, rad: u8) {
     );
 }
 
-/// LCD readout: near-black well, Geist Mono acc-hot with a glow, an
+/// LCD readout: near-black well, Atkinson Hyperlegible Mono acc-hot with a glow, an
 /// optional uppercase unit in ink3 before it
 pub fn lcd(p: &Painter, r: Rect, unit: &str, text: &str, size: f32) {
     let t = th();
@@ -741,7 +741,7 @@ pub fn fader(p: &Painter, slot: Rect, frac: f32, scale: &[(&str, f32)], hovered:
             Pos2::new(slot.left() - 8.0, y),
             Align2::RIGHT_CENTER,
             txt,
-            label_font(10.0),
+            label_font(crate::theme::ts::TINY),
             col,
             zero,
         );
@@ -815,14 +815,21 @@ pub fn button_ex(
     min: Vec2,
 ) -> egui::Response {
     let t = th();
-    let font = label_font(12.5);
+    let font = label_font(crate::theme::ts::COMPACT);
     let txt = text.to_uppercase();
     let g = ui
         .painter()
         .layout_no_wrap(txt.clone(), font.clone(), t.ink);
     let dot = if selected { 10.0 } else { 0.0 };
     let w = (g.size().x + dot + 16.0).max(min.x);
-    let h = ui.spacing().interact_size.y.max(20.0).max(min.y);
+    // as tall as the text needs (Text size), at least the usual 20
+    let h = ui
+        .spacing()
+        .interact_size
+        .y
+        .max(20.0)
+        .max(g.size().y + 4.0)
+        .max(min.y);
     let (r, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
     let label = text.to_string();
     resp.widget_info(|| {
@@ -842,6 +849,18 @@ pub fn button_ex(
     resp
 }
 
+/// the width the outlined button's label needs at height `h` (capitals in
+/// the label font, plus the LED dot), for callers that size their own rect
+pub fn button_text_w(p: &Painter, text: &str, h: f32, selected: bool) -> f32 {
+    let font = label_font(if h < 20.0 {
+        crate::theme::ts::LABEL
+    } else {
+        crate::theme::ts::COMPACT
+    });
+    let g = p.layout_no_wrap(text.to_uppercase(), font, Color32::PLACEHOLDER);
+    g.size().x + if selected { 10.0 } else { 0.0 }
+}
+
 /// paint the outlined button into `r` (shared by `button_ex` and the
 /// existing toolbar / piano-roll buttons in Slate): bevelled face, 1 px
 /// outline, capital label; `selected` adds the LED dot and orange text,
@@ -856,7 +875,19 @@ pub fn paint_button(
     enabled: bool,
 ) {
     let t = th();
-    let font = label_font(if r.height() < 20.0 { 11.5 } else { 12.5 });
+    // a disabled ui halves the painter's opacity: the dark face would turn
+    // grey on Amiga's light card and the dimmed text vanish into it, so the
+    // face stays solid and only the text is dimmed (below)
+    let mut p = p.clone();
+    if !enabled {
+        p.set_opacity(1.0);
+    }
+    let p = &p;
+    let font = label_font(if r.height() < 20.0 {
+        crate::theme::ts::LABEL
+    } else {
+        crate::theme::ts::COMPACT
+    });
     let txt = text.to_uppercase();
     let g = p.layout_no_wrap(txt.clone(), font.clone(), t.ink);
     let dot = if selected { 10.0 } else { 0.0 };
@@ -898,12 +929,16 @@ pub fn paint_button(
         LINE2
     };
     p.rect_stroke(r, 4, Stroke::new(1.0, outline), egui::StrokeKind::Inside);
+    // the face is dark in every theme: the text follows it (Amiga's
+    // dark ink would vanish), the hot accent only where it reads
+    let face = if resp.hovered() { BG4 } else { BG3 };
     let col = if !enabled {
-        INK3
-    } else if selected || primary {
+        // dimmed, but still legible (INK3 was 2.5:1 on the face)
+        crate::theme::mix(crate::theme::on2(face), face, 0.3)
+    } else if (selected || primary) && crate::theme::contrast(t.acc_hot, face) >= 3.0 {
         t.acc_hot
     } else {
-        t.ink
+        crate::theme::on(face)
     };
     let tw = g.size().x + dot;
     let x0 = r.center().x - tw * 0.5;
@@ -930,7 +965,7 @@ pub fn paint_button(
 /// one LED + label (a toggle or one option of an LED selector)
 pub fn led_item(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     let t = th();
-    let font = label_font(12.5);
+    let font = label_font(crate::theme::ts::COMPACT);
     // the lit label: the hot accent on dark cards; light themes (Amiga's
     // lavender skinned cards) need a dark ink, the skin's text if any
     let lit = if t.light {
@@ -938,7 +973,14 @@ pub fn led_item(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     } else {
         t.acc_hot
     };
-    let col = if on { lit } else { INK3 };
+    // the unlit label still reads (INK3 gave 2.5-3.5:1): the secondary ink
+    // of the card it sits on
+    let off = if t.light {
+        crate::theme::instskin::active().map_or(t.ink2, |s| s.text.gamma_multiply(0.75))
+    } else {
+        crate::theme::on2(BG2)
+    };
+    let col = if on { lit } else { off };
     let g = ui.painter().layout_no_wrap(text.to_string(), font, col);
     let (r, resp) = ui.allocate_exact_size(
         Vec2::new(g.size().x + 12.0, g.size().y.max(16.0)),
@@ -951,7 +993,7 @@ pub fn led_item(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     if ui.is_rect_visible(r) {
         let p = ui.painter();
         led(p, Pos2::new(r.left() + 3.5, r.center().y), 3.5, on);
-        let col = if resp.hovered() && !on { t.ink2 } else { col };
+        let col = if resp.hovered() && !on { lit } else { col };
         p.galley_with_override_text_color(
             Pos2::new(r.left() + 12.0, r.center().y - g.size().y * 0.5),
             g,
@@ -997,7 +1039,7 @@ pub fn title(p: &Painter, pos: Pos2, text: &str) -> Rect {
         pos,
         Align2::LEFT_CENTER,
         text.to_uppercase(),
-        label_font(13.0),
+        label_font(crate::theme::ts::BODY),
         th().ink,
     )
 }
@@ -1020,10 +1062,15 @@ pub fn tab(ui: &mut egui::Ui, selected: bool, text: &str) -> egui::Response {
     if !t.ember {
         return ui.selectable_label(selected, egui::RichText::new(text).strong());
     }
-    let font = egui::FontId::proportional(13.0);
+    let font = crate::theme::prop(crate::theme::ts::BODY);
     let g = ui.painter().layout_no_wrap(text.to_string(), font, t.ink);
     let (r, resp) = ui.allocate_exact_size(
-        Vec2::new(g.size().x + 20.0, ui.available_height().clamp(20.0, 26.0)),
+        Vec2::new(
+            g.size().x + 20.0,
+            ui.available_height()
+                .clamp(20.0, 26.0)
+                .max(g.size().y + 6.0),
+        ),
         egui::Sense::click(),
     );
     let label = text.to_string();

@@ -76,14 +76,50 @@ impl App {
     pub(super) fn add_library_instrument(&mut self, inst: Instrument) {
         let name = inst.name.clone();
         self.snapshot();
+        self.undo_hold += 1;
         match self.with(|s| s.song.add_instrument(inst)) {
-            Some(i) => {
-                self.instr = (i + 1) as u8;
-                self.dirty = true;
-                self.status = format!("Added instrument {:02X} {name}", i + 1);
-            }
+            Some(i) => self.adopt_new_instrument((i + 1) as u8, &name),
             None => self.status = "All 255 instrument slots are used".into(),
         }
+        self.undo_hold -= 1;
+    }
+
+    /// A just-imported / added instrument in slot `slot` becomes THE active
+    /// one (Del (postmanpat) 24 Oct 2026: imports didn't switch to it).
+    /// Setting `instr` alone was the bug: on the Timeline the current
+    /// instrument is the selected track's (`track_instrument`, the one rule
+    /// the Rack, typing, the piano roll and the next track click follow),
+    /// so the new slot played nowhere, an empty track's Rack stayed empty
+    /// and the next click on a track switched back. Like the track pie's
+    /// Add and a Browser load: an empty selected track plays it, else a new
+    /// track below the selected one does; that track is lit and the Rack
+    /// shows its compact card. Outside the Timeline (tracker songs) the
+    /// slot is selected for the instrument column, as before. The caller
+    /// holds the undo step (snapshot + `undo_hold`).
+    pub(super) fn adopt_new_instrument(&mut self, slot: u8, name: &str) {
+        self.instr = slot;
+        self.dirty = true;
+        let tl = self.view == View::Timeline && self.with(|s| s.song.timeline.is_some());
+        let nch = self.with(|s| s.song.channels);
+        if !tl || (nch >= MAX_CHANNELS && !self.track_needs_instrument(self.ch)) {
+            self.status = if tl {
+                format!("Added instrument {slot:02X} {name} (all 32 tracks are used: drop it onto a track to play it)")
+            } else {
+                format!("Added instrument {slot:02X} {name}")
+            };
+            return;
+        }
+        use super::browserview::Act;
+        let act = if self.tlv.song_sel.is_some() || self.ch >= nch {
+            // Song / Master lit: a new track at the end
+            Act::NewTrack(nch)
+        } else if self.track_needs_instrument(self.ch) {
+            Act::Track(self.ch)
+        } else {
+            Act::NewTrack(self.ch + 1)
+        };
+        self.br_assign_slot(slot, name, act);
+        self.set_lower(4);
     }
 
     /// replace slot `slot`'s sound, keeping every note that uses it
