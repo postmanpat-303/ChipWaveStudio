@@ -362,8 +362,8 @@ impl App {
                 Key::Space if self.view == View::Timeline => self.play(0),
                 Key::Space => self.play(if m.shift { 0 } else { 1 }),
                 Key::Enter => self.play(if cmd || m.shift { 2 } else { 3 }),
-                Key::Plus | Key::Equals if cmd => self.set_zoom(self.zoom + 0.25),
-                Key::Minus if cmd => self.set_zoom(self.zoom - 0.25),
+                Key::Plus | Key::Equals if cmd => self.set_zoom(self.zoom + 0.1),
+                Key::Minus if cmd => self.set_zoom(self.zoom - 0.1),
                 Key::Num0 if cmd => self.set_zoom(1.0),
                 // Esc is the Tracker's Edit mode switch only where the
                 // Tracker shows; elsewhere it must not change how notes and
@@ -508,10 +508,18 @@ impl App {
         }
     }
 
+    /// the largest UI scale (5 % steps) at which the workspace fits the
+    /// window, at least 90 %
+    pub(super) fn zoom_fit(&self) -> f32 {
+        let m = (self.max_zoom / crate::settings::SCALE_STEP + 0.001).floor()
+            * crate::settings::SCALE_STEP;
+        m.clamp(crate::settings::ZOOM_MIN, crate::settings::ZOOM_MAX)
+    }
+
     pub(super) fn set_zoom(&mut self, z: f32) {
-        let z = (z * 4.0).round() / 4.0;
-        self.zoom = z.clamp(0.5, self.max_zoom.max(0.5));
-        if z > self.max_zoom + 0.001 {
+        let z = crate::settings::snap_zoom(z);
+        self.zoom = z.min(self.zoom_fit());
+        if z > self.zoom_fit() + 0.001 {
             self.status = format!(
                 "Scale limited to {:.0} % so everything fits the window",
                 self.zoom * 100.0

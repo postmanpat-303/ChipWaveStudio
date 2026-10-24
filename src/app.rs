@@ -1178,13 +1178,13 @@ impl eframe::App for App {
         self.max_zoom = (win.x / 1000.0).min(win.y / 560.0).clamp(0.5, 3.0);
         if !self.zoom_checked && win.x > 100.0 {
             self.zoom_checked = true;
-            if self.zoom > self.max_zoom {
-                self.zoom = 1.0f32.min(self.max_zoom);
+            if self.zoom > self.zoom_fit() {
+                self.zoom = 1.0f32.min(self.zoom_fit());
                 self.status = "Saved scale did not fit this window; reset to 100 %".into();
             }
         }
-        if self.zoom > self.max_zoom + 0.001 {
-            self.zoom = self.max_zoom;
+        if self.zoom > self.zoom_fit() + 0.001 {
+            self.zoom = self.zoom_fit();
         }
         if (ctx.zoom_factor() - self.zoom).abs() > 0.001 {
             ctx.set_zoom_factor(self.zoom);
