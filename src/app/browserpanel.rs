@@ -591,7 +591,16 @@ impl App {
         let list_h = (ui.available_height() - bottom_h).max(60.0);
         let thumbs =
             self.extra.browser_thumbs && matches!(self.br.filter.tab, Tab::Plugins | Tab::Effects);
-        let row_h = if thumbs { 40.0 } else { 32.0 };
+        // two text lines at the type scale (Text size) and a little air
+        let (name_f, detail_f) = (
+            crate::theme::prop(crate::theme::ts::COMPACT),
+            crate::theme::prop(crate::theme::ts::SMALL),
+        );
+        let (name_h, detail_h) = (
+            crate::theme::row_h(ui.painter(), &name_f),
+            crate::theme::row_h(ui.painter(), &detail_f),
+        );
+        let row_h = (name_h + detail_h + 4.0).max(if thumbs { 40.0 } else { 32.0 });
         // prefetch thumbnails for the rows about to be drawn
         if thumbs {
             let first = (self.br.list_off / row_h).floor().max(0.0) as usize;
@@ -772,23 +781,29 @@ impl App {
                     Pos2::new(stars.left() - 4.0, r.bottom()),
                 );
                 let tp = p.with_clip_rect(text_r);
-                tp.text(
-                    Pos2::new(text_r.left(), r.top() + 10.0),
-                    egui::Align2::LEFT_CENTER,
+                // cut with "…" (the tooltip has the detail line in full)
+                let y0 = r.center().y - (name_h + detail_h) / 2.0;
+                crate::theme::text_fit(
+                    &tp,
+                    Pos2::new(text_r.left(), y0),
+                    egui::Align2::LEFT_TOP,
                     &it.name,
-                    crate::theme::prop(crate::theme::ts::COMPACT),
+                    name_f.clone(),
                     if on {
                         t.ink
                     } else {
                         t.ink.gamma_multiply(0.92)
                     },
+                    text_r.width(),
                 );
-                tp.text(
-                    Pos2::new(text_r.left(), r.top() + 23.0),
-                    egui::Align2::LEFT_CENTER,
+                crate::theme::text_fit(
+                    &tp,
+                    Pos2::new(text_r.left(), y0 + name_h),
+                    egui::Align2::LEFT_TOP,
                     &it.detail,
-                    crate::theme::prop(crate::theme::ts::SMALL),
+                    detail_f.clone(),
                     t.ink2,
+                    text_r.width(),
                 );
                 // input
                 if resp.clicked() {
@@ -832,7 +847,9 @@ impl App {
                         resp.on_hover_text(match &it.src {
                             Src::File(p) => p.display().to_string(),
                             Src::Plugin(f) => f.path.clone(),
-                            _ => format!("{} · {}", it.fmt.what(), it.category),
+                            _ => format!("{}\n{} · {}", it.detail, it.fmt.what(), it.category)
+                                .trim_start()
+                                .to_string(),
                         })
                     }
                 } else {

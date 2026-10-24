@@ -1278,22 +1278,39 @@ impl App {
         }
         let shown: Vec<Vec<&Param>> = sp.secs.iter().map(|s| shown_knobs(l, inst, s)).collect();
         // widths: by knob count (at least 3 knobs wide), the rest shared out
-        let want: Vec<f32> = sp
+        // (need = the least that holds the knobs and custom controls)
+        let need: Vec<f32> = sp
             .secs
             .iter()
             .enumerate()
             .map(|(k, s)| {
-                let nk = if offs[k] { 2 } else { shown[k].len().max(3) };
+                let nk = if offs[k] { 2 } else { shown[k].len() };
                 let cw = s
                     .customs
                     .iter()
                     .filter_map(|c| l.find(c).and_then(|p| p.custom()))
                     .map(|c| custom_size(c, row.height()).0)
                     .fold(0.0, f32::max);
-                (nk as f32 * CELL.x + 24.0).max(cw + 20.0).max(220.0)
+                (nk as f32 * CELL.x + 16.0).max(cw + 20.0)
             })
             .collect();
-        let total: f32 = want.iter().sum::<f32>() + GAP * (want.len() - 1) as f32;
+        let mut want: Vec<f32> = need
+            .iter()
+            .zip(&shown)
+            .map(|(n, kn)| (kn.len().max(3) as f32 * CELL.x + 24.0).max(*n).max(220.0))
+            .collect();
+        let gaps = GAP * (want.len() - 1) as f32;
+        let total: f32 = want.iter().sum::<f32>() + gaps;
+        // a narrow card (the Browser open at 1366 px): the roomy widths give
+        // back what they have over `need` so the last section isn't clipped
+        if total > row.width() {
+            let spare: f32 = want.iter().zip(&need).map(|(w, n)| w - n).sum();
+            let k = ((total - row.width()) / spare.max(1.0)).min(1.0);
+            for (w, n) in want.iter_mut().zip(&need) {
+                *w -= (*w - n) * k;
+            }
+        }
+        let total: f32 = want.iter().sum::<f32>() + gaps;
         let extra = ((row.width() - total) / want.len() as f32).max(0.0);
         let mut x = row.left();
         for (k, sec) in sp.secs.iter().enumerate() {
@@ -1302,8 +1319,16 @@ impl App {
             x += w + GAP;
             frame(ui, r, sec.title);
             // header controls on the right of the title
+            // (from the end of the title, so a narrow section still has
+            // room for them)
+            let title_end =
+                16.0 + crate::theme::text_w(
+                    ui.painter(),
+                    &sec.title.to_uppercase(),
+                    crate::theme::label_font(crate::theme::ts::BODY),
+                ) + 10.0;
             let head = Rect::from_min_max(
-                Pos2::new(r.left() + 90.0, r.top() + 2.0),
+                Pos2::new(r.left() + title_end, r.top() + 2.0),
                 Pos2::new(r.right() - 6.0, r.top() + SEC_HEAD),
             );
             let heads: Vec<&Param> = sec
@@ -1407,9 +1432,23 @@ impl App {
         match &p.ctl {
             Ctl::Choice(opts) => {
                 let cur = v.round().max(0.0) as usize;
+                // a narrow section: the combo shrinks and its name moves to
+                // the tooltip (it is the hover text already)
+                let name_w = crate::theme::text_w(
+                    ui.painter(),
+                    &p.name,
+                    egui::TextStyle::Small.resolve(ui.style()),
+                );
+                let avail = ui.available_width();
+                let with_name = avail >= 110.0 + 8.0 + name_w;
+                let cw = if with_name {
+                    110.0
+                } else {
+                    (avail - 4.0).clamp(56.0, 110.0)
+                };
                 let r = egui::ComboBox::from_id_salt(("sc_head", cx.idx, &p.key))
                     .selected_text(p.text(v))
-                    .width(110.0)
+                    .width(cw)
                     .show_ui(ui, |ui| {
                         for (k, o) in opts.iter().enumerate() {
                             if o == "other" {
@@ -1424,7 +1463,9 @@ impl App {
                     .response;
                 let r = r.on_hover_text(if p.tip.is_empty() { &p.name } else { &p.tip });
                 self.param_menu(&r, p, inst, cx, None);
-                ui.label(egui::RichText::new(&p.name).small().color(t.ink2));
+                if with_name {
+                    ui.label(egui::RichText::new(&p.name).small().color(t.ink2));
+                }
             }
             Ctl::Toggle => {
                 let mut b = v > 0.5;

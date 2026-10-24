@@ -188,6 +188,8 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     } else {
         t.ink2.gamma_multiply(0.7)
     };
+    // a long caption steps down to the type scale's minimum before "…"
+    let small = crate::theme::shrink_to_fit(&p, &name, small.clone(), CELL.x - 2.0);
     let mut job = egui::text::LayoutJob::simple_singleline(name, small.clone(), name_col);
     job.wrap = egui::text::TextWrapping::truncate_at_width(CELL.x - 2.0);
     job.halign = egui::Align::Center;
@@ -198,6 +200,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         kc.y + RAD + 3.0
     };
     p.galley(Pos2::new(cell.center().x, name_y), g, name_col);
+    let mono = crate::theme::shrink_to_fit(&p, &a.value_text, mono, CELL.x);
     let mut job = egui::text::LayoutJob::simple_singleline(
         a.value_text.clone(),
         mono,
