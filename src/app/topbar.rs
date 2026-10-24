@@ -129,7 +129,10 @@ fn tool_button_named(
     } else {
         galley.size().x
     };
-    let size = egui::vec2((10.0 + 18.0 + 6.0 + text_w + 10.0).max(min_w), 26.0);
+    let size = egui::vec2(
+        (10.0 + 18.0 + 6.0 + text_w + 10.0).max(min_w),
+        (galley.size().y + 8.0).max(26.0),
+    );
     let (r, resp) = ui.allocate_exact_size(size, Sense::click());
     // screen readers (and the UI tests) see its name
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), name));
@@ -138,12 +141,22 @@ fn tool_button_named(
         let p = ui.painter();
         p.rect(r, 5, v.weak_bg_fill, v.bg_stroke, egui::StrokeKind::Inside);
         theme::raise(p, r, 5.0, resp.is_pointer_button_down_on() || on);
-        let ir = Rect::from_min_size(r.min + egui::vec2(10.0, 4.0), egui::vec2(18.0, 18.0));
-        icon(p, ir, v.text_color());
+        let ir = Rect::from_center_size(
+            Pos2::new(r.left() + 19.0, r.center().y),
+            egui::vec2(18.0, 18.0),
+        );
+        // the text follows the face (Amiga's pale selected fill under the
+        // white selection text was 1.5:1)
+        let col = if theme::contrast(v.text_color(), v.weak_bg_fill) < 4.5 {
+            theme::on(v.weak_bg_fill)
+        } else {
+            v.text_color()
+        };
+        icon(p, ir, col);
         p.galley(
             Pos2::new(ir.right() + 6.0, r.center().y - galley.size().y / 2.0),
             galley,
-            v.text_color(),
+            col,
         );
     }
     resp
@@ -276,7 +289,8 @@ pub(super) fn hdr_text() -> Color32 {
 
 pub(super) fn hdr_dim() -> Color32 {
     if th().light {
-        Color32::from_white_alpha(190)
+        // opaque: 4.6:1 or more on the whole header gradient
+        hex(0xDCE4F0)
     } else {
         th().ink2
     }
@@ -1152,7 +1166,10 @@ impl App {
                 // PANIC (0.2.3.16): far right, small, never a focus target
                 if ui
                     .add(
-                        egui::Button::new(egui::RichText::new("Panic").small().color(hdr_dim()))
+                        egui::Button::new(egui::RichText::new("Panic").small().color(
+                            // the button face, not the header, is behind it
+                            crate::theme::on2(ui.visuals().widgets.inactive.weak_bg_fill),
+                        ))
                             .small()
                             .min_size(egui::vec2(0.0, 16.0)),
                     )
@@ -1268,7 +1285,14 @@ impl App {
                     toggled = true;
                 }
                 if ui
-                    .selectable_label(m.chord_spread, egui::RichText::new("Chord").small())
+                    .selectable_label(
+                        m.chord_spread,
+                        egui::RichText::new("Chord").small().color(if m.chord_spread {
+                            crate::theme::on(ui.visuals().selection.bg_fill)
+                        } else {
+                            hdr_dim()
+                        }),
+                    )
                     .on_hover_text(format!(
                         "MIDI chord spread: {}\nwhen on, the notes of a chord go into the cursor channel and the channels to its right",
                         if m.chord_spread { "on" } else { "off" }
