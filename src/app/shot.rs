@@ -1038,6 +1038,16 @@ impl App {
             self.tlv.cue = (row as i64) * crate::timeline::ROW;
             if view == "timeline-notes" {
                 self.shot_note_clip(row);
+                // CHIPWAVE_SHOT_GEN=chords|melody|bass: the Generators panel
+                // open on that clip
+                if let Ok(g) = std::env::var("CHIPWAVE_SHOT_GEN") {
+                    self.cl_open_gen_at(self.tlv.cue.max(0) as crate::timeline::Tick);
+                    self.cl.gen.tab = match g.as_str() {
+                        "melody" => super::genpanel::GenTab::Melody,
+                        "bass" => super::genpanel::GenTab::Bass,
+                        _ => super::genpanel::GenTab::Chords,
+                    };
+                }
             }
             if view == "timeline-audio" {
                 self.shot_audio_clips(row);
