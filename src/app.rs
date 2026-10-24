@@ -60,6 +60,8 @@ mod genview;
 #[cfg(test)]
 mod glyph_tests;
 mod glyphs;
+#[cfg(test)]
+mod import_tests;
 mod inspector;
 #[cfg(test)]
 mod inspector_tests;
