@@ -764,8 +764,10 @@ impl App {
         };
         // ---- toolbar
         let mut fit = false;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             // a slim tool strip (0.2.4 polish): tighter buttons, one line
+            // (a second line when a narrow window, the Browser or a large
+            // Text size leaves no room: nothing is cut off)
             let sp = ui.spacing_mut();
             sp.button_padding = egui::vec2(5.0, 0.0);
             sp.item_spacing.x = 5.0;
@@ -813,7 +815,16 @@ impl App {
             // timeline mode needs no label: Song › Back to tracker
             // mode… turns it back
             if !mode {
-                ui.label(egui::RichText::new("Tracker mode · from the order list").color(t.ink2))
+                // narrow windows (1366 px at 100 %): the short label, the
+                // tooltip says the rest
+                let narrow = ui.available_width()
+                    < crate::theme::ts::px(crate::theme::ts::BODY) * 95.0;
+                let lab = if narrow {
+                    "Tracker mode"
+                } else {
+                    "Tracker mode · from the order list"
+                };
+                ui.label(egui::RichText::new(lab).color(t.ink2))
                     .on_hover_text(
                         "The timeline shows this song's order list as clips per track (track = mixer channel). \
                          To move, loop and split clips here, switch the song to timeline mode. \
@@ -1927,21 +1938,27 @@ impl App {
                     Pos2::new((hr.right() - 136.0).max(tx + nw + 60.0), ty + 10.0),
                 ));
             } else {
-                np.text(
+                // cut with "…" before the buttons (the tooltip and the
+                // Inspector have the full name)
+                crate::theme::text_fit(
+                    &np,
                     Pos2::new(tx + nw + 5.0, ty),
                     egui::Align2::LEFT_CENTER,
-                    name,
+                    &name,
                     crate::theme::prop(crate::theme::ts::BODY),
                     t.ink,
+                    hr.right() - 135.0 - (tx + nw + 5.0),
                 );
             }
             if !one_line {
-                np.text(
+                crate::theme::text_fit(
+                    &np,
                     Pos2::new(tx, hr.top() + 28.0),
                     egui::Align2::LEFT_CENTER,
-                    sub(tr),
+                    &sub(tr),
                     crate::theme::prop(crate::theme::ts::SMALL),
                     t.ink2,
+                    hr.right() - 135.0 - tx,
                 );
             }
             // M / S

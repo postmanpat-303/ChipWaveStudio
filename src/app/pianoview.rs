@@ -1594,6 +1594,9 @@ impl App {
         ui.scope_builder(egui::UiBuilder::new().max_rect(tool.shrink2(egui::vec2(6.0, 1.0))), |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
+                // narrow docks (1366 px at 100 %): shorter button names, so
+                // the note length still fits (the tooltips say the rest)
+                let narrow = ui.available_width() < crate::theme::ts::px(crate::theme::ts::BODY) * 90.0;
                 // the clip / block chip: colour dot + name
                 let (label, tip) = match target {
                     Target::Block { pattern, col } => {
@@ -1676,7 +1679,7 @@ impl App {
                         })
                         .response
                         .on_hover_text("snap grid");
-                    if pr_btn(ui, "Quantize", false, true, "snap the selected notes (or all) to the grid (Q)").clicked() {
+                    if pr_btn(ui, if narrow { "Quant" } else { "Quantize" }, false, true, "snap the selected notes (or all) to the grid (Q)").clicked() {
                         self.pr_quantise();
                     }
                 }
@@ -1685,7 +1688,7 @@ impl App {
                 }
                 if let Target::Notes { .. } = target {
                     let on = self.pr.step_input;
-                    if pr_btn(ui, "Step input", on, true, "MIDI / typed notes go in one step after the other at the step position (chords: hold the keys together). Off: they only play - press Record (R) to record in time").clicked() {
+                    if pr_btn(ui, if narrow { "Step in" } else { "Step input" }, on, true, "MIDI / typed notes go in one step after the other at the step position (chords: hold the keys together). Off: they only play - press Record (R) to record in time").clicked() {
                         self.pr.step_input = !on;
                         self.pr.step = None;
                         self.status = format!("Step input {}", if on { "off" } else { "on" });
@@ -1726,7 +1729,7 @@ impl App {
                     if pr_btn(ui, "Chords", on, true, "show the chord lane above the notes").clicked() {
                         self.cl.hidden = on;
                     }
-                    if pr_btn(ui, "Generate", false, true, "Generators: chord progression… (styles, key, length, colour; Melody is its second tab)").clicked() {
+                    if pr_btn(ui, if narrow { "Gen…" } else { "Generate" }, false, true, "Generators: chord progression… (styles, key, length, colour; Melody is its second tab)").clicked() {
                         let at = self.cl.sel.and_then(|i| self.cl_marks(target).get(i).map(|m| m.start)).unwrap_or(0);
                         self.cl_open_gen_at(at);
                     }

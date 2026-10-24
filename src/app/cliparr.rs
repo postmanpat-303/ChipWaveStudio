@@ -1696,7 +1696,13 @@ impl App {
         }
         // the Song / Master row: not launchable
         if let Some((hr, _)) = self.tlv.track_rects(nch) {
-            if hr.height() > 10.0 && clip_all.y_range().contains(hr.center().y) {
+            // not over a track row scrolled under the docked footer
+            let covered = (0..nch).any(|k| {
+                self.tlv.track_rects(k).is_some_and(|(r, _)| {
+                    r.height() > 1.0 && r.y_range().intersects(hr.shrink(2.0).y_range())
+                })
+            });
+            if hr.height() > 10.0 && !covered && clip_all.y_range().contains(hr.center().y) {
                 pc.text(
                     Pos2::new(gx0 + 4.0, hr.center().y),
                     egui::Align2::LEFT_CENTER,
@@ -1745,33 +1751,42 @@ impl App {
                     2,
                 )
             };
-            let w = if launch { 58.0 } else { 60.0 };
+            // sized from its text (the type scale and Text size)
+            let bf = crate::theme::prop(crate::theme::ts::SMALL);
+            let w = crate::theme::text_w(&p, label, bf.clone()) + 16.0;
             let br = Rect::from_center_size(
                 Pos2::new(inner.right() - w / 2.0, top.bottom() - 13.0),
-                egui::vec2(w, 18.0),
+                egui::vec2(w, (crate::theme::row_h(&p, &bf) + 4.0).max(18.0)),
             );
             text_clip.max.x = br.left() - 6.0;
             let resp = ui
                 .put(
                     br,
-                    egui::Button::new(
-                        egui::RichText::new(label)
-                            .size(crate::theme::ts::px(crate::theme::ts::SMALL)),
-                    )
-                    .small(),
+                    // the measured font (not the Button style's semibold),
+                    // never wrapped
+                    egui::Button::new(egui::RichText::new(label).font(bf.clone()))
+                        .small()
+                        .wrap_mode(egui::TextWrapMode::Extend),
                 )
                 .on_hover_text(tip);
             if resp.clicked() {
                 title_op = Some(op);
             }
         }
-        p.with_clip_rect(text_clip).text(
+        // cut with "…" before the button; the full line is its tooltip
+        let (tr_, cut) = crate::theme::text_fit(
+            &p.with_clip_rect(text_clip),
             Pos2::new(gx0 + 2.0, top.bottom() - 13.0),
             egui::Align2::LEFT_CENTER,
-            msg.clone(),
+            &msg,
             crate::theme::prop(crate::theme::ts::LABEL),
             t.ink2,
+            text_clip.right() - (gx0 + 2.0),
         );
+        if cut {
+            ui.interact(tr_, ui.scope_id().with("ca_status_tip"), Sense::hover())
+                .on_hover_text(msg.clone());
+        }
         self.ca.line = msg;
         match title_op {
             Some(1) => self.ca_add_scene(),
