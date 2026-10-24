@@ -273,11 +273,12 @@ pub fn apply(ctx: &egui::Context, t: Theme) {
     if t.ember {
         ember_visuals(&mut v, &t);
     }
-    fonts(ctx, t.ember);
+    fonts(ctx);
     ctx.set_visuals(v);
     ctx.global_style_mut(|s| {
         s.spacing.item_spacing = egui::vec2(6.0, 5.0);
         s.spacing.button_padding = egui::vec2(9.0, 3.0);
+        s.text_styles = text_styles();
     });
 }
 
@@ -353,83 +354,165 @@ fn ember_visuals(v: &mut egui::Visuals, t: &Theme) {
     v.widgets.hovered.expansion = 0.0;
 }
 
-/// The family of the condensed label font (Barlow Semi Condensed) and the
-/// numeric readout font (Geist Mono). Registered in every theme, so code
-/// may use them anywhere; Slate also makes Inter the body font.
-pub fn label_font(size: f32) -> egui::FontId {
-    egui::FontId::new(size, egui::FontFamily::Name("label".into()))
-}
-pub fn num_font(size: f32) -> egui::FontId {
-    egui::FontId::new(size, egui::FontFamily::Name("num".into()))
+/// The central type scale (docs/UI_SCALING.md). Code asks for a step by
+/// name, never a raw number; every size goes through [`ts::px`], which
+/// applies the minimum readable size and Settings › Look › Text size.
+pub mod ts {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    /// the smallest text anywhere: LCD captions, knob scale marks, badges
+    pub const TINY: f32 = 10.0;
+    /// secondary text, hints, `.small()`
+    pub const SMALL: f32 = 11.0;
+    /// uppercase captions and knob names (label family)
+    pub const LABEL: f32 = 11.5;
+    /// dense lists and table rows
+    pub const COMPACT: f32 = 12.5;
+    /// tracker cells and mono text
+    pub const MONO: f32 = 12.5;
+    /// normal UI text and buttons
+    pub const BODY: f32 = 13.0;
+    /// numeric readouts (num family)
+    pub const LCD: f32 = 13.0;
+    /// emphasised names (instrument titles, big pads)
+    pub const LARGE: f32 = 15.0;
+    pub const HEADING: f32 = 16.0;
+    pub const TITLE: f32 = 19.0;
+    /// the big LCD digits
+    pub const DISPLAY: f32 = 26.0;
+    /// nothing renders smaller than this (at 100 % Text size)
+    pub const MIN: f32 = TINY;
+    /// Text size range (Settings › Look)
+    pub const TEXT_MIN: f32 = 0.9;
+    pub const TEXT_MAX: f32 = 1.5;
+
+    static SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000); // 1.0
+    pub fn text_scale() -> f32 {
+        f32::from_bits(SCALE.load(Ordering::Relaxed))
+    }
+    /// set the Text size (1.0 = 100 %); call `theme::apply` afterwards
+    pub fn set_text_scale(k: f32) {
+        let k = if k.is_finite() {
+            k.clamp(TEXT_MIN, TEXT_MAX)
+        } else {
+            1.0
+        };
+        SCALE.store(k.to_bits(), Ordering::Relaxed);
+    }
+    /// a type-scale size → the points to render: at least [`MIN`], times
+    /// the Text size
+    pub fn px(size: f32) -> f32 {
+        size.max(MIN) * text_scale()
+    }
 }
 
-/// embedded fonts (SIL OFL 1.1, LICENSES/*-OFL.txt, credited in About)
-fn fonts(ctx: &egui::Context, ember: bool) {
-    let id = egui::Id::NULL.with("chipwave_fonts_ember");
-    if ctx.data(|d| d.get_temp::<bool>(id)) == Some(ember) {
+/// proportional (body) text at a type-scale size
+pub fn prop(size: f32) -> egui::FontId {
+    egui::FontId::proportional(ts::px(size))
+}
+/// monospace text at a type-scale size
+pub fn mono(size: f32) -> egui::FontId {
+    egui::FontId::monospace(ts::px(size))
+}
+
+/// egui's text styles from the type scale (plus the named Tiny, Label and
+/// Lcd styles), so `.small()`, buttons and headings follow it too
+pub fn text_styles() -> std::collections::BTreeMap<egui::TextStyle, egui::FontId> {
+    use egui::{FontFamily as F, FontId, TextStyle as T};
+    let lab = || F::Name("label".into());
+    [
+        (T::Small, prop(ts::SMALL)),
+        (T::Body, prop(ts::BODY)),
+        (T::Button, prop(ts::BODY)),
+        (T::Heading, FontId::new(ts::px(ts::HEADING), lab())),
+        (T::Monospace, mono(ts::MONO)),
+        (T::Name("tiny".into()), prop(ts::TINY)),
+        (
+            T::Name("label".into()),
+            FontId::new(ts::px(ts::LABEL), lab()),
+        ),
+        (T::Name("lcd".into()), num_font(ts::LCD)),
+    ]
+    .into()
+}
+
+/// The label family (Atkinson Hyperlegible Next SemiBold: knob names,
+/// captions, headings, buttons) and the numeric readout family (Atkinson
+/// Hyperlegible Mono SemiBold: LCD, values). Registered in every theme.
+pub fn label_font(size: f32) -> egui::FontId {
+    egui::FontId::new(ts::px(size), egui::FontFamily::Name("label".into()))
+}
+pub fn num_font(size: f32) -> egui::FontId {
+    egui::FontId::new(ts::px(size), egui::FontFamily::Name("num".into()))
+}
+
+/// Embedded fonts (SIL OFL 1.1, LICENSES/*-OFL.txt, credited in About and
+/// THIRD_PARTY_LICENSES.txt), the same in every theme (docs/UI_SCALING.md):
+/// - text: Atkinson Hyperlegible Next Regular, labels: its SemiBold;
+/// - monospace (tracker, mono text): Atkinson Hyperlegible Mono Medium,
+///   numbers / LCD: its SemiBold.
+///
+/// Fallbacks for glyphs the Atkinson fonts lack: Inter (arrows, ▶ ■ ● ✓ ♥,
+/// Greek and Cyrillic in song / instrument names), then egui's Hack (▾) and
+/// emoji fonts. egui's Ubuntu-Light is not used.
+fn fonts(ctx: &egui::Context) {
+    let id = egui::Id::NULL.with("chipwave_fonts_atkinson");
+    if ctx.data(|d| d.get_temp::<bool>(id)).is_some() {
         return;
     }
-    ctx.data_mut(|d| d.insert_temp(id, ember));
+    ctx.data_mut(|d| d.insert_temp(id, true));
+    ctx.set_fonts(font_definitions());
+}
+
+/// the font set [`fonts`] installs (also used by tests)
+pub fn font_definitions() -> egui::FontDefinitions {
     use egui::{FontData, FontFamily};
     use std::sync::Arc;
     let mut f = egui::FontDefinitions::default();
-    let add = |f: &mut egui::FontDefinitions, k: &str, b: &'static [u8]| {
+    // the emoji / icon fallbacks egui ships (everything but its text fonts)
+    let emoji: Vec<String> = f
+        .families
+        .get(&FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|k| k != "Ubuntu-Light" && k != "Hack")
+        .collect();
+    f.font_data.remove("Ubuntu-Light");
+    let mut add = |k: &str, b: &'static [u8]| {
         f.font_data
             .insert(k.into(), Arc::new(FontData::from_static(b)));
     };
     add(
-        &mut f,
-        "inter",
-        include_bytes!("../assets/fonts/Inter-Regular.ttf"),
+        "atkinson",
+        include_bytes!("../assets/fonts/AtkinsonHyperlegibleNext-Regular.ttf"),
     );
     add(
-        &mut f,
-        "barlow",
-        include_bytes!("../assets/fonts/BarlowSemiCondensed-SemiBold.ttf"),
+        "atkinson-sb",
+        include_bytes!("../assets/fonts/AtkinsonHyperlegibleNext-SemiBold.ttf"),
     );
     add(
-        &mut f,
-        "geist",
-        include_bytes!("../assets/fonts/GeistMono-SemiBold.ttf"),
+        "atkinson-mono",
+        include_bytes!("../assets/fonts/AtkinsonHyperlegibleMono-Medium.ttf"),
     );
-    let prop = f
-        .families
-        .get(&FontFamily::Proportional)
-        .cloned()
-        .unwrap_or_default();
-    let mono = f
-        .families
-        .get(&FontFamily::Monospace)
-        .cloned()
-        .unwrap_or_default();
-    let with = |first: &str, rest: &[String]| {
-        let mut v = vec![first.to_string()];
-        v.extend(rest.iter().cloned());
+    add(
+        "atkinson-mono-sb",
+        include_bytes!("../assets/fonts/AtkinsonHyperlegibleMono-SemiBold.ttf"),
+    );
+    add("inter", include_bytes!("../assets/fonts/Inter-Regular.ttf"));
+    let chain = |first: &str| {
+        let mut v = vec![first.to_string(), "inter".into(), "Hack".into()];
+        v.extend(emoji.iter().cloned());
         v
     };
-    // Inter as a fallback everywhere: it has the arrows, ▶ and ✓ that
-    // Barlow and the default fonts lack (no missing-glyph boxes)
-    let inter = |mut v: Vec<String>| {
-        if !v.iter().any(|x| x == "inter") {
-            v.push("inter".into());
-        }
-        v
-    };
-    let mut label = vec!["barlow".to_string(), "inter".to_string()];
-    label.extend(prop.iter().cloned());
-    f.families.insert(FontFamily::Name("label".into()), label);
     f.families
-        .insert(FontFamily::Name("num".into()), inter(with("geist", &mono)));
+        .insert(FontFamily::Proportional, chain("atkinson"));
     f.families
-        .insert(FontFamily::Monospace, inter(mono.clone()));
-    if ember {
-        f.families
-            .insert(FontFamily::Proportional, with("inter", &prop));
-    } else {
-        f.families
-            .insert(FontFamily::Proportional, inter(prop.clone()));
-    }
-    ctx.set_fonts(f);
+        .insert(FontFamily::Name("label".into()), chain("atkinson-sb"));
+    f.families
+        .insert(FontFamily::Monospace, chain("atkinson-mono"));
+    f.families
+        .insert(FontFamily::Name("num".into()), chain("atkinson-mono-sb"));
+    f
 }
 
 /// linear mix of two colours (opaque result), `k` = 0 → a, 1 → b

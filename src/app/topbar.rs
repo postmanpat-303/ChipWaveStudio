@@ -353,9 +353,9 @@ impl App {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.add_space(6.0);
             if th().ember {
-                // Slate: CHIP in ink, WAVE in the accent (Barlow capitals)
+                // Slate: CHIP in ink, WAVE in the accent (label-font capitals)
                 let mut job = egui::text::LayoutJob::default();
-                let f = theme::label_font(17.0);
+                let f = theme::label_font(crate::theme::ts::HEADING);
                 job.append("CHIP", 0.0, egui::TextFormat::simple(f.clone(), th().ink));
                 job.append("WAVE", 0.0, egui::TextFormat::simple(f, th().accent));
                 ui.label(job).on_hover_text("ChipWave Studio");
@@ -363,7 +363,7 @@ impl App {
                 ui.label(
                     egui::RichText::new("ChipWave")
                         .strong()
-                        .size(16.0)
+                        .size(crate::theme::ts::px(crate::theme::ts::HEADING))
                         .color(hdr_text()),
                 );
             }
@@ -1001,7 +1001,7 @@ impl App {
                         let rec_txt = if t.ember {
                             // Slate: a lit (glowing) red tally
                             egui::RichText::new("REC")
-                                .font(theme::label_font(13.0))
+                                .font(theme::label_font(crate::theme::ts::BODY))
                                 .color(crate::ember::RED)
                         } else {
                             egui::RichText::new("REC").small().strong().color(t.brick)
@@ -1079,7 +1079,7 @@ impl App {
                     egui::RichText::new(format!("{}", self.octave))
                         .monospace()
                         .strong()
-                        .size(16.0)
+                        .size(crate::theme::ts::px(crate::theme::ts::HEADING))
                         .color(if t.light { Color32::WHITE } else { t.value }),
                 )
                 .on_hover_text("base octave for note entry (F1-F8)");
@@ -1298,7 +1298,7 @@ impl App {
                     dot + egui::vec2(9.0, 0.0),
                     egui::Align2::LEFT_CENTER,
                     "MIDI",
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     hdr_dim(),
                 );
                 if resp

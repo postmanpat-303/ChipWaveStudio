@@ -491,7 +491,7 @@ ChipWave stands on the shoulders of open source and published research. With tha
 - **Scaler** by Plugin Boutique: the inspiration for the chord pads and progressions (no code, data or artwork used).
 - The **Roland TB-303**, whose glide and accent the `3C` / `3D` effects imitate.
 - **Teijo Kinnunen and Ray Burt-Frost** for [OctaMED](https://en.wikipedia.org/wiki/OctaMED), whose workflow ChipWave follows.
-- The fonts of the Slate theme, embedded under the [SIL Open Font License 1.1](LICENSES/Inter-OFL.txt): [**Inter**](https://github.com/rsms/inter) by **Rasmus Andersson** (The Inter Project Authors), [**Barlow Semi Condensed**](https://github.com/jpt/barlow) by **Jeremy Tribby** (The Barlow Project Authors) and [**Geist Mono**](https://github.com/vercel/geist-font) by **Vercel** (The Geist Project Authors). Their licences are in `LICENSES/` and `THIRD_PARTY_LICENSES.txt`.
+- The interface fonts, embedded under the [SIL Open Font License 1.1](LICENSES/AtkinsonHyperlegibleNext-OFL.txt): [**Atkinson Hyperlegible Next**](https://github.com/googlefonts/atkinson-hyperlegible-next) and [**Atkinson Hyperlegible Mono**](https://github.com/googlefonts/atkinson-hyperlegible-next-mono) by the **Braille Institute of America** (The Atkinson Hyperlegible Next / Mono Project Authors), with [**Inter**](https://github.com/rsms/inter) by **Rasmus Andersson** (The Inter Project Authors) as the fallback for symbols, Greek and Cyrillic. Their licences are in `LICENSES/` and `THIRD_PARTY_LICENSES.txt`.
 - The Rust crates ChipWave is built on (egui/eframe, cpal, midir, hound, toml, zip, mp3lame-encoder and more), listed with their licences in `THIRD_PARTY_LICENSES.txt`.
 
 Research notes: [docs/research/voice-glitch.md](docs/research/voice-glitch.md).

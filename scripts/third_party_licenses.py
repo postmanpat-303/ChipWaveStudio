@@ -451,11 +451,11 @@ if mpl:
     here = os.path.dirname(os.path.abspath(__file__))
     out.write(open(os.path.join(here, "licenses", "MPL-2.0.txt"), encoding="utf-8").read().strip() + "\n\n")
 
-# Fonts embedded in the app (Slate theme): SIL Open Font License 1.1
+# Fonts embedded in the app: SIL Open Font License 1.1
 repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-fonts = [("Inter (Regular) by The Inter Project Authors, https://github.com/rsms/inter", "Inter-OFL.txt"),
-         ("Barlow Semi Condensed (SemiBold) by The Barlow Project Authors, https://github.com/jpt/barlow", "Barlow-OFL.txt"),
-         ("Geist Mono (SemiBold) by The Geist Project Authors, https://github.com/vercel/geist-font", "GeistMono-OFL.txt")]
+fonts = [("Atkinson Hyperlegible Next (Regular, SemiBold) by the Braille Institute of America and The Atkinson Hyperlegible Next Project Authors, https://github.com/googlefonts/atkinson-hyperlegible-next", "AtkinsonHyperlegibleNext-OFL.txt"),
+         ("Atkinson Hyperlegible Mono (Medium, SemiBold) by the Braille Institute of America and The Atkinson Hyperlegible Mono Project Authors, https://github.com/googlefonts/atkinson-hyperlegible-next-mono", "AtkinsonHyperlegibleMono-OFL.txt"),
+         ("Inter (Regular) by The Inter Project Authors, https://github.com/rsms/inter", "Inter-OFL.txt")]
 for name, f in fonts:
     out.write("=" * 60 + "\n")
     out.write(f"Font: {name} - OFL-1.1\n")

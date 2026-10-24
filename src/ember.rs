@@ -205,7 +205,7 @@ pub fn well(p: &Painter, r: Rect, rad: u8) {
     );
 }
 
-/// LCD readout: near-black well, Geist Mono acc-hot with a glow, an
+/// LCD readout: near-black well, Atkinson Hyperlegible Mono acc-hot with a glow, an
 /// optional uppercase unit in ink3 before it
 pub fn lcd(p: &Painter, r: Rect, unit: &str, text: &str, size: f32) {
     let t = th();
@@ -741,7 +741,7 @@ pub fn fader(p: &Painter, slot: Rect, frac: f32, scale: &[(&str, f32)], hovered:
             Pos2::new(slot.left() - 8.0, y),
             Align2::RIGHT_CENTER,
             txt,
-            label_font(10.0),
+            label_font(crate::theme::ts::TINY),
             col,
             zero,
         );
@@ -815,7 +815,7 @@ pub fn button_ex(
     min: Vec2,
 ) -> egui::Response {
     let t = th();
-    let font = label_font(12.5);
+    let font = label_font(crate::theme::ts::COMPACT);
     let txt = text.to_uppercase();
     let g = ui
         .painter()
@@ -930,7 +930,7 @@ pub fn paint_button(
 /// one LED + label (a toggle or one option of an LED selector)
 pub fn led_item(ui: &mut egui::Ui, text: &str, on: bool) -> egui::Response {
     let t = th();
-    let font = label_font(12.5);
+    let font = label_font(crate::theme::ts::COMPACT);
     // the lit label: the hot accent on dark cards; light themes (Amiga's
     // lavender skinned cards) need a dark ink, the skin's text if any
     let lit = if t.light {
@@ -997,7 +997,7 @@ pub fn title(p: &Painter, pos: Pos2, text: &str) -> Rect {
         pos,
         Align2::LEFT_CENTER,
         text.to_uppercase(),
-        label_font(13.0),
+        label_font(crate::theme::ts::BODY),
         th().ink,
     )
 }
@@ -1020,7 +1020,7 @@ pub fn tab(ui: &mut egui::Ui, selected: bool, text: &str) -> egui::Response {
     if !t.ember {
         return ui.selectable_label(selected, egui::RichText::new(text).strong());
     }
-    let font = egui::FontId::proportional(13.0);
+    let font = crate::theme::prop(crate::theme::ts::BODY);
     let g = ui.painter().layout_no_wrap(text.to_string(), font, t.ink);
     let (r, resp) = ui.allocate_exact_size(
         Vec2::new(g.size().x + 20.0, ui.available_height().clamp(20.0, 26.0)),
