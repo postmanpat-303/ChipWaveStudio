@@ -1228,14 +1228,9 @@ impl App {
                     pl.warn,
                 );
             }
-            p.text(
-                Pos2::new(gx + 2.5, r.top() + 37.0),
-                egui::Align2::CENTER_TOP,
-                "GR",
-                theme::label_font(crate::theme::ts::TINY),
-                dim,
-            );
-            // clip light: a true peak over 0 dBTP since Play
+            // clip light: a true peak over 0 dBTP since Play (the GR bar and
+            // the light have no captions: at a readable size they do not
+            // fit the 42 pt LCD; the tooltip names them)
             let clip = loud.true_peak.is_finite() && loud.true_peak > 0.0;
             let cc = Pos2::new(r.right() - 11.0, r.top() + 27.0);
             if clip {
@@ -1244,13 +1239,6 @@ impl App {
             } else {
                 p.circle_filled(cc, 3.2, pl.ghost.gamma_multiply(2.4));
             }
-            p.text(
-                Pos2::new(cc.x, r.top() + 37.0),
-                egui::Align2::CENTER_TOP,
-                "CLIP",
-                theme::label_font(crate::theme::ts::TINY),
-                dim,
-            );
         }
         let resp = resp.on_hover_text(
             "Master: level L / R with peak hold, limiter reduction (GR) and the clip light · \
