@@ -52,9 +52,11 @@ fn badge_colour(lic: &str) -> Color32 {
 
 fn badge(ui: &mut egui::Ui, text: &str) {
     let col = badge_colour(text);
-    let galley = ui
-        .painter()
-        .layout_no_wrap(text.to_string(), FontId::proportional(11.0), col);
+    let galley = ui.painter().layout_no_wrap(
+        text.to_string(),
+        crate::theme::prop(crate::theme::ts::SMALL),
+        col,
+    );
     let size = galley.size() + egui::vec2(10.0, 3.0);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     let p = ui.painter();
@@ -110,7 +112,9 @@ fn credit_row(ui: &mut egui::Ui, c: &Credit, left_w: f32) {
             |ui| {
                 ui.set_width(left_w);
                 ui.spacing_mut().item_spacing.y = 1.0;
-                let name = egui::RichText::new(c.name).strong().size(13.5);
+                let name = egui::RichText::new(c.name)
+                    .strong()
+                    .size(crate::theme::ts::px(crate::theme::ts::BODY));
                 if c.url.is_empty() {
                     ui.add(egui::Label::new(name.color(th().ink)).wrap());
                 } else {
@@ -118,8 +122,12 @@ fn credit_row(ui: &mut egui::Ui, c: &Credit, left_w: f32) {
                 }
                 if !c.by.is_empty() {
                     ui.add(
-                        egui::Label::new(egui::RichText::new(c.by).size(11.5).color(muted()))
-                            .wrap(),
+                        egui::Label::new(
+                            egui::RichText::new(c.by)
+                                .size(crate::theme::ts::px(crate::theme::ts::LABEL))
+                                .color(muted()),
+                        )
+                        .wrap(),
                     );
                 }
             },
@@ -127,7 +135,12 @@ fn credit_row(ui: &mut egui::Ui, c: &Credit, left_w: f32) {
         ui.vertical(|ui| {
             ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing.y = 3.0;
-            ui.add(egui::Label::new(egui::RichText::new(c.what).size(13.0)).wrap());
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(c.what).size(crate::theme::ts::px(crate::theme::ts::BODY)),
+                )
+                .wrap(),
+            );
             if !c.licence.is_empty() || !c.note.is_empty() {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
@@ -137,7 +150,7 @@ fn credit_row(ui: &mut egui::Ui, c: &Credit, left_w: f32) {
                     if !c.note.is_empty() {
                         ui.label(
                             egui::RichText::new(c.note)
-                                .size(11.5)
+                                .size(crate::theme::ts::px(crate::theme::ts::LABEL))
                                 .italics()
                                 .color(muted()),
                         );
@@ -261,14 +274,14 @@ impl App {
             if !self.about.msg.is_empty() {
                 ui.label(
                     egui::RichText::new(&self.about.msg)
-                        .size(12.0)
+                        .size(crate::theme::ts::px(crate::theme::ts::COMPACT))
                         .color(muted()),
                 );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
                     egui::RichText::new(format!("{} credits · thank you!", CREDITS.len()))
-                        .size(12.0)
+                        .size(crate::theme::ts::px(crate::theme::ts::COMPACT))
                         .color(muted()),
                 );
             });
@@ -286,33 +299,47 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new("ChipWave Studio")
-                            .size(26.0)
+                            .size(crate::theme::ts::px(crate::theme::ts::DISPLAY))
                             .strong()
                             .color(th().ink),
                     );
                     ui.add_space(2.0);
                     ui.label(
                         egui::RichText::new(format!("v{}", crate::version_label()))
-                            .size(13.0)
+                            .size(crate::theme::ts::px(crate::theme::ts::BODY))
                             .color(muted()),
                     )
                     .on_hover_text("Version");
                 });
-                ui.label(egui::RichText::new(TAGLINE).size(14.0));
+                ui.label(
+                    egui::RichText::new(TAGLINE)
+                        .size(crate::theme::ts::px(crate::theme::ts::LARGE)),
+                );
                 ui.label(
                     egui::RichText::new("Created by Del (postmanpat)")
-                        .size(13.0)
+                        .size(crate::theme::ts::px(crate::theme::ts::BODY))
                         .color(muted()),
                 );
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
-                    link(ui, egui::RichText::new("Website").size(13.0), WEBSITE_URL);
-                    ui.label(egui::RichText::new("·").color(muted()));
-                    link(ui, egui::RichText::new("GitHub").size(13.0), GITHUB_URL);
+                    link(
+                        ui,
+                        egui::RichText::new("Website")
+                            .size(crate::theme::ts::px(crate::theme::ts::BODY)),
+                        WEBSITE_URL,
+                    );
                     ui.label(egui::RichText::new("·").color(muted()));
                     link(
                         ui,
-                        egui::RichText::new("GPL-3.0-or-later").size(13.0),
+                        egui::RichText::new("GitHub")
+                            .size(crate::theme::ts::px(crate::theme::ts::BODY)),
+                        GITHUB_URL,
+                    );
+                    ui.label(egui::RichText::new("·").color(muted()));
+                    link(
+                        ui,
+                        egui::RichText::new("GPL-3.0-or-later")
+                            .size(crate::theme::ts::px(crate::theme::ts::BODY)),
                         LICENCE_URL,
                     );
                 });
@@ -330,7 +357,8 @@ impl App {
                 (AboutTab::Licences, "Licences"),
             ] {
                 let on = self.about.tab == t;
-                let txt = egui::RichText::new(label).size(14.0);
+                let txt =
+                    egui::RichText::new(label).size(crate::theme::ts::px(crate::theme::ts::LARGE));
                 if ui
                     .add(egui::Button::selectable(
                         on,
@@ -357,7 +385,11 @@ impl App {
             .inner_margin(egui::Margin::same(14))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.label(egui::RichText::new("Support ChipWave").size(15.0).strong());
+                ui.label(
+                    egui::RichText::new("Support ChipWave")
+                        .size(crate::theme::ts::px(crate::theme::ts::LARGE))
+                        .strong(),
+                );
                 ui.add_space(2.0);
                 ui.label("To keep the software going I need Coffee :)");
                 ui.add_space(8.0);
@@ -368,8 +400,11 @@ impl App {
                         ("PayPal", PAYPAL_URL),
                         ("YouTube: demos & promos", YOUTUBE_URL),
                     ] {
-                        let b = egui::Button::new(egui::RichText::new(label).size(13.5))
-                            .min_size(egui::vec2(0.0, 30.0));
+                        let b = egui::Button::new(
+                            egui::RichText::new(label)
+                                .size(crate::theme::ts::px(crate::theme::ts::BODY)),
+                        )
+                        .min_size(egui::vec2(0.0, 30.0));
                         if ui.add(b).on_hover_text(url).clicked() {
                             ui.ctx().open_url(egui::OpenUrl::new_tab(url));
                         }
@@ -384,7 +419,7 @@ impl App {
                      tracker with an arranger, mixer, master limiter and loudness meter, synths, \
                      Voice, generators, samples and CLAP / VST3 plugins.",
                 )
-                .size(13.0),
+                .size(crate::theme::ts::px(crate::theme::ts::BODY)),
             )
             .wrap(),
         );
@@ -394,27 +429,46 @@ impl App {
             .spacing([18.0, 7.0])
             .show(ui, |ui| {
                 let key = |ui: &mut egui::Ui, k: &str| {
-                    ui.label(egui::RichText::new(k).size(13.0).color(muted()));
+                    ui.label(
+                        egui::RichText::new(k)
+                            .size(crate::theme::ts::px(crate::theme::ts::BODY))
+                            .color(muted()),
+                    );
                 };
                 key(ui, "Version");
-                ui.label(egui::RichText::new(crate::version_label()).size(13.0));
+                ui.label(
+                    egui::RichText::new(crate::version_label())
+                        .size(crate::theme::ts::px(crate::theme::ts::BODY)),
+                );
                 ui.end_row();
                 key(ui, "Licence");
                 link(
                     ui,
-                    egui::RichText::new("GNU GPL 3.0 or later").size(13.0),
+                    egui::RichText::new("GNU GPL 3.0 or later")
+                        .size(crate::theme::ts::px(crate::theme::ts::BODY)),
                     LICENCE_URL,
                 );
                 ui.end_row();
                 key(ui, "Website");
-                link(ui, egui::RichText::new(WEBSITE_URL).size(13.0), WEBSITE_URL);
+                link(
+                    ui,
+                    egui::RichText::new(WEBSITE_URL)
+                        .size(crate::theme::ts::px(crate::theme::ts::BODY)),
+                    WEBSITE_URL,
+                );
                 ui.end_row();
                 key(ui, "Source code");
-                link(ui, egui::RichText::new(GITHUB_URL).size(13.0), GITHUB_URL);
+                link(
+                    ui,
+                    egui::RichText::new(GITHUB_URL)
+                        .size(crate::theme::ts::px(crate::theme::ts::BODY)),
+                    GITHUB_URL,
+                );
                 ui.end_row();
                 key(ui, "Built with");
                 ui.label(
-                    egui::RichText::new("Rust, egui and open-source work (see Credits)").size(13.0),
+                    egui::RichText::new("Rust, egui and open-source work (see Credits)")
+                        .size(crate::theme::ts::px(crate::theme::ts::BODY)),
                 );
                 ui.end_row();
             });
@@ -454,7 +508,7 @@ impl App {
             }
             shown += rows.len();
             let head = egui::RichText::new(g.title())
-                .size(14.5)
+                .size(crate::theme::ts::px(crate::theme::ts::LARGE))
                 .strong()
                 .color(th().ink);
             let mut h = egui::CollapsingHeader::new(head)
@@ -490,7 +544,11 @@ impl App {
 
     fn about_tab_licences(&mut self, ui: &mut egui::Ui) {
         ui.add_space(4.0);
-        ui.label(egui::RichText::new("ChipWave Studio").size(15.0).strong());
+        ui.label(
+            egui::RichText::new("ChipWave Studio")
+                .size(crate::theme::ts::px(crate::theme::ts::LARGE))
+                .strong(),
+        );
         ui.add_space(2.0);
         ui.add(
             egui::Label::new(
@@ -500,7 +558,7 @@ impl App {
                      option) any later version. It comes with ABSOLUTELY NO WARRANTY. The licence \
                      text is installed next to the app as LICENSE.txt.",
                 )
-                .size(13.0),
+                .size(crate::theme::ts::px(crate::theme::ts::BODY)),
             )
             .wrap(),
         );
@@ -509,14 +567,15 @@ impl App {
             badge(ui, "GPL-3.0-or-later");
             link(
                 ui,
-                egui::RichText::new("Read the GNU GPL v3").size(13.0),
+                egui::RichText::new("Read the GNU GPL v3")
+                    .size(crate::theme::ts::px(crate::theme::ts::BODY)),
                 LICENCE_URL,
             );
         });
         ui.add_space(14.0);
         ui.label(
             egui::RichText::new("Licences of credited work")
-                .size(15.0)
+                .size(crate::theme::ts::px(crate::theme::ts::LARGE))
                 .strong(),
         );
         ui.add_space(2.0);
@@ -525,7 +584,7 @@ impl App {
                 "Projects whose code, data or design ChipWave uses or credits. Papers, \
                  products and ideas have no licence badge.",
             )
-            .size(12.0)
+            .size(crate::theme::ts::px(crate::theme::ts::COMPACT))
             .color(muted()),
         );
         ui.add_space(8.0);
@@ -555,7 +614,13 @@ impl App {
                         badge(ui, lic);
                     },
                 );
-                ui.add(egui::Label::new(egui::RichText::new(names.join(", ")).size(13.0)).wrap());
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(names.join(", "))
+                            .size(crate::theme::ts::px(crate::theme::ts::BODY)),
+                    )
+                    .wrap(),
+                );
             });
         }
     }

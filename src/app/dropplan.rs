@@ -319,7 +319,7 @@ impl App {
                             g.left_top() + egui::vec2(5.0, 3.0),
                             egui::Align2::LEFT_TOP,
                             &i.name,
-                            FontId::proportional(11.5),
+                            crate::theme::prop(crate::theme::ts::LABEL),
                             t.ink,
                         );
                     }
@@ -348,7 +348,7 @@ impl App {
                 let lab = format!("{} · snap {}", bar_of(pl.start), pl.snap);
                 let gal = p.layout_no_wrap(
                     lab,
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     Color32::from_rgb(0x16, 0x18, 0x1B),
                 );
                 let r = Rect::from_min_size(Pos2::new(x0, top), gal.size() + egui::vec2(10.0, 4.0));
@@ -478,7 +478,7 @@ impl App {
         let gals: Vec<_> = lines
             .into_iter()
             .map(|(s, c, b)| {
-                let f = FontId::proportional(if b { 12.0 } else { 11.0 });
+                let f = crate::theme::prop(if b { 12.0 } else { 11.0 });
                 (p.layout_no_wrap(s, f, c), c)
             })
             .collect();

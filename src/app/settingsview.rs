@@ -110,7 +110,11 @@ impl App {
     pub(super) fn settings_view(&mut self, ui: &mut egui::Ui) {
         let t = th();
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Settings").strong().size(17.0));
+            ui.label(
+                egui::RichText::new("Settings")
+                    .strong()
+                    .size(crate::theme::ts::px(crate::theme::ts::HEADING)),
+            );
             ui.label(
                 egui::RichText::new("arrows = move · Enter = open / close · Esc or Ctrl+, = back")
                     .small()
@@ -162,7 +166,9 @@ impl App {
                                             ui.label(
                                                 egui::RichText::new(CARDS[i])
                                                     .strong()
-                                                    .size(15.0)
+                                                    .size(crate::theme::ts::px(
+                                                        crate::theme::ts::LARGE,
+                                                    ))
                                                     .color(if placeholder {
                                                         t.ink2
                                                     } else {
@@ -227,7 +233,11 @@ impl App {
                 }
                 if let Some(i) = self.set_open {
                     ui.separator();
-                    ui.label(egui::RichText::new(CARDS[i]).strong().size(16.0));
+                    ui.label(
+                        egui::RichText::new(CARDS[i])
+                            .strong()
+                            .size(crate::theme::ts::px(crate::theme::ts::HEADING)),
+                    );
                     ui.add_space(4.0);
                     match i {
                         0 => self.audio_details(ui),

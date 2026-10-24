@@ -1429,7 +1429,7 @@ impl App {
                 ic + egui::vec2(0.0, 22.0 * sc),
                 egui::Align2::CENTER_CENTER,
                 label,
-                FontId::proportional(11.5 * sc.max(0.8)),
+                crate::theme::prop(11.5 * sc.max(0.8)),
                 (if en { pl.ink } else { pl.ink2 }).gamma_multiply(alpha),
             );
         }
@@ -1456,10 +1456,10 @@ impl App {
                 centre - egui::vec2(0.0, 9.0 * sc),
                 egui::Align2::CENTER_CENTER,
                 if empty { "ADD" } else { "TRACK" },
-                FontId::proportional(10.0 * sc.max(0.8)),
+                crate::theme::prop(10.0 * sc.max(0.8)),
                 pl.disc_ink2.gamma_multiply(k0),
             );
-            let f = FontId::proportional(12.5 * sc.max(0.8));
+            let f = crate::theme::prop(12.5 * sc.max(0.8));
             let nm = super::pattern::fit(&painter, &name, &f, 2.0 * rr - 12.0);
             painter.text(
                 centre + egui::vec2(0.0, 8.0 * sc),
@@ -1500,7 +1500,7 @@ impl App {
                 tf(r.min + egui::vec2(SUB_PAD + 2.0, SUB_PAD + 9.0)),
                 egui::Align2::LEFT_CENTER,
                 sub_title(SEGS[si]),
-                FontId::proportional(11.0 * sc),
+                crate::theme::prop(11.0 * sc),
                 pl.ink2.gamma_multiply(ks),
             );
             let mut tip: Option<(&'static str, Pos2)> = None;
@@ -1610,7 +1610,7 @@ impl App {
                                 egui::Align2::LEFT_CENTER
                             },
                             txt,
-                            FontId::proportional(12.0 * sc),
+                            crate::theme::prop(12.0 * sc),
                             ink.gamma_multiply(ks),
                         );
                     }
@@ -1632,7 +1632,12 @@ impl App {
 
 /// a small tooltip box drawn by the pie (its own layer stays on top)
 fn tooltip(p: &egui::Painter, pl: &Pal, text: &str, at: Pos2, screen: Rect) {
-    let g = p.layout(text.to_string(), FontId::proportional(11.5), pl.ink, 260.0);
+    let g = p.layout(
+        text.to_string(),
+        crate::theme::prop(crate::theme::ts::LABEL),
+        pl.ink,
+        260.0,
+    );
     let size = g.size() + egui::vec2(14.0, 10.0);
     let mut r = Rect::from_min_size(Pos2::new(at.x - size.x / 2.0, at.y), size);
     let dx =
@@ -1971,7 +1976,7 @@ impl App {
             egui::TextEdit::singleline(&mut text)
                 .id(id)
                 .text_color(ink)
-                .font(FontId::proportional(13.0))
+                .font(crate::theme::prop(crate::theme::ts::BODY))
                 .char_limit(32),
         );
         if !self.tr_focus {

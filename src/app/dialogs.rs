@@ -284,7 +284,7 @@ impl App {
                     if t.ember {
                         ui.label(
                             egui::RichText::new(title)
-                                .font(theme::label_font(19.0))
+                                .font(theme::label_font(crate::theme::ts::TITLE))
                                 .color(t.ink),
                         );
                     } else {

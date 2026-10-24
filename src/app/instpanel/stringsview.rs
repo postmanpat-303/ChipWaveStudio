@@ -472,9 +472,9 @@ impl App {
                     ui.set_max_width(170.0);
                     ui.add(
                         egui::Label::new(if t.ember {
-                            head.font(crate::theme::label_font(17.0)).color(t.ink)
+                            head.font(crate::theme::label_font(crate::theme::ts::HEADING)).color(t.ink)
                         } else {
-                            head.strong().size(15.0)
+                            head.strong().size(crate::theme::ts::px(crate::theme::ts::LARGE))
                         })
                         .truncate(),
                     );
@@ -683,7 +683,7 @@ impl App {
                 tpos,
                 egui::Align2::LEFT_CENTER,
                 sc.title.to_uppercase(),
-                egui::FontId::proportional(11.5),
+                crate::theme::prop(crate::theme::ts::LABEL),
                 t.ink,
             );
         }

@@ -1084,7 +1084,7 @@ impl App {
                 ui.label(
                     egui::RichText::new("Clip Arranger")
                         .strong()
-                        .size(14.0)
+                        .size(crate::theme::ts::px(crate::theme::ts::LARGE))
                         .color(t.ink),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1103,7 +1103,7 @@ impl App {
                             (first + 1).min(nb),
                             (first + nvis).min(nb)
                         ))
-                        .size(11.0)
+                        .size(crate::theme::ts::px(crate::theme::ts::SMALL))
                         .color(t.ink2),
                     );
                     if ui
@@ -1117,7 +1117,10 @@ impl App {
                     let q = self.extra.launch_q.min(3) as usize;
                     let mut nq = q;
                     egui::ComboBox::from_id_salt("ca_launch_q")
-                        .selected_text(egui::RichText::new(QUANT[q].0).size(11.0))
+                        .selected_text(
+                            egui::RichText::new(QUANT[q].0)
+                                .size(crate::theme::ts::px(crate::theme::ts::SMALL)),
+                        )
                         .width(58.0)
                         .show_ui(ui, |ui| {
                             for (k, (n, tip)) in QUANT.iter().enumerate() {
@@ -1130,7 +1133,11 @@ impl App {
                         self.extra.launch_q = nq as u8;
                         self.save_settings();
                     }
-                    ui.label(egui::RichText::new("Launch").size(11.0).color(t.ink2));
+                    ui.label(
+                        egui::RichText::new("Launch")
+                            .size(crate::theme::ts::px(crate::theme::ts::SMALL))
+                            .color(t.ink2),
+                    );
                 });
             },
         );
@@ -1232,7 +1239,11 @@ impl App {
                 t.ink
             };
             play_tri(&p, Pos2::new(sr.left() + 10.0, sr.center().y), 4.5, ink);
-            let g = p.layout_no_wrap(name.clone(), FontId::proportional(11.5), ink);
+            let g = p.layout_no_wrap(
+                name.clone(),
+                crate::theme::prop(crate::theme::ts::LABEL),
+                ink,
+            );
             let clip = Rect::from_min_max(
                 Pos2::new(sr.left() + 18.0, sr.top()),
                 Pos2::new(sr.right() - 3.0, sr.bottom()),
@@ -1564,12 +1575,16 @@ impl App {
                         Pos2::new(strip.right() + 3.0, sr.bottom() - 2.0),
                         egui::Align2::LEFT_BOTTOM,
                         name,
-                        FontId::proportional(10.5),
+                        crate::theme::prop(crate::theme::ts::SMALL),
                         t.ink,
                     );
                 }
                 if let Some(n) = look.map(|x| x.0).filter(|&n| n > 1) {
-                    let g = pc.layout_no_wrap(format!("×{n}"), FontId::proportional(10.5), t.ink);
+                    let g = pc.layout_no_wrap(
+                        format!("×{n}"),
+                        crate::theme::prop(crate::theme::ts::SMALL),
+                        t.ink,
+                    );
                     let br = Rect::from_min_size(
                         Pos2::new(sr.right() - g.size().x - 7.0, sr.top() + 2.0),
                         g.size() + egui::vec2(5.0, 1.0),
@@ -1686,7 +1701,7 @@ impl App {
                     Pos2::new(gx0 + 4.0, hr.center().y),
                     egui::Align2::LEFT_CENTER,
                     "Song / Master · not launchable",
-                    FontId::proportional(11.5),
+                    crate::theme::prop(crate::theme::ts::LABEL),
                     t.ink2,
                 );
             }
@@ -1739,7 +1754,11 @@ impl App {
             let resp = ui
                 .put(
                     br,
-                    egui::Button::new(egui::RichText::new(label).size(11.0)).small(),
+                    egui::Button::new(
+                        egui::RichText::new(label)
+                            .size(crate::theme::ts::px(crate::theme::ts::SMALL)),
+                    )
+                    .small(),
                 )
                 .on_hover_text(tip);
             if resp.clicked() {
@@ -1750,7 +1769,7 @@ impl App {
             Pos2::new(gx0 + 2.0, top.bottom() - 13.0),
             egui::Align2::LEFT_CENTER,
             msg.clone(),
-            FontId::proportional(11.5),
+            crate::theme::prop(crate::theme::ts::LABEL),
             t.ink2,
         );
         self.ca.line = msg;
@@ -2000,7 +2019,7 @@ impl App {
                 fmt(loud.short_term, "LUFS"),
                 fmt(loud.true_peak, "dBTP")
             ))
-            .size(11.0)
+            .size(crate::theme::ts::px(crate::theme::ts::SMALL))
             .color(t.ink2),
         );
         // the level over the last 30 s: glowing bars in a well
@@ -2059,7 +2078,7 @@ impl App {
                 gr.left_top() + egui::vec2(6.0, 4.0),
                 egui::Align2::LEFT_TOP,
                 "LEVEL",
-                theme::label_font(10.5),
+                theme::label_font(crate::theme::ts::SMALL),
                 t.ink2,
             );
         }
@@ -2084,7 +2103,7 @@ impl App {
                 gr.left_center() + egui::vec2(6.0, 0.0),
                 egui::Align2::LEFT_CENTER,
                 "Level history hidden · right-click to show",
-                FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 t.ink2,
             );
         } else if self.extra.level_hist == 1 {
@@ -2092,7 +2111,7 @@ impl App {
                 gr.right_top() + egui::vec2(-6.0, 4.0),
                 egui::Align2::RIGHT_TOP,
                 "PAUSED",
-                theme::label_font(10.5),
+                theme::label_font(crate::theme::ts::SMALL),
                 t.ink2,
             );
         }
@@ -2152,13 +2171,13 @@ impl App {
                 .layout(egui::Layout::top_down(egui::Align::Min)),
             |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Master").strong().size(14.0).color(t.ink));
+                    ui.label(egui::RichText::new("Master").strong().size(crate::theme::ts::px(crate::theme::ts::LARGE)).color(t.ink));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let txt = if lim.enabled { "Limiter on" } else { "Limiter off" };
                         if ui
                             .add(egui::Button::selectable(
                                 lim.enabled,
-                                egui::RichText::new(txt).size(11.0),
+                                egui::RichText::new(txt).size(crate::theme::ts::px(crate::theme::ts::SMALL)),
                             ))
                             .on_hover_text(
                                 "the true-peak limiter on the master (off: the classic soft clipper)",
@@ -2274,7 +2293,7 @@ impl App {
                         Pos2::new(rr.left(), rr.center().y),
                         egui::Align2::LEFT_CENTER,
                         n,
-                        FontId::proportional(10.5),
+                        crate::theme::prop(crate::theme::ts::SMALL),
                         t.ink2,
                     );
                     let bar = Rect::from_min_max(Pos2::new(rr.left() + 24.0, rr.top() + 3.0), Pos2::new(rr.right(), rr.bottom() - 3.0));
@@ -2313,7 +2332,7 @@ impl App {
                         fmt(loud.short_term, "LUFS"),
                         fmt(loud.true_peak, "dBTP")
                     ))
-                    .size(11.0)
+                    .size(crate::theme::ts::px(crate::theme::ts::SMALL))
                     .color(t.ink2),
                 );
                 // the level over the last 30 s (one column per quarter
@@ -2343,7 +2362,7 @@ impl App {
                         gr.left_top() + egui::vec2(6.0, 4.0),
                         egui::Align2::LEFT_TOP,
                         "level",
-                        FontId::proportional(10.5),
+                        crate::theme::prop(crate::theme::ts::SMALL),
                         t.ink2,
                     );
                 }

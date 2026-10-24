@@ -6,7 +6,7 @@ use super::App;
 use crate::model::Song;
 use crate::modulation::{self as md, LfoShape, ModKind, Modulation, MAX_MODS};
 use crate::theme::th;
-use eframe::egui::{self, Color32, FontId, Pos2, Rect, Sense, Stroke};
+use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke};
 
 /// drag-and-drop payload: a modulator id
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -160,8 +160,11 @@ fn chip(
     let dot = Pos2::new(rect.left() + 10.0, rect.center().y);
     p.circle_filled(dot, 4.5, col);
     p.circle_stroke(dot, 7.0, Stroke::new(1.0, col.gamma_multiply(0.7)));
-    let mut job =
-        egui::text::LayoutJob::simple_singleline(title.clone(), FontId::proportional(11.0), t.ink);
+    let mut job = egui::text::LayoutJob::simple_singleline(
+        title.clone(),
+        crate::theme::prop(crate::theme::ts::SMALL),
+        t.ink,
+    );
     job.wrap = egui::text::TextWrapping::truncate_at_width(rect.width() - 24.0);
     let g = ui.fonts_mut(|f| f.layout_job(job));
     p.galley(Pos2::new(rect.left() + 20.0, rect.top() + 3.0), g, t.ink);

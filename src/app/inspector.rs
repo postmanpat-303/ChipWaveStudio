@@ -42,7 +42,7 @@ fn section(ui: &mut egui::Ui, id: &str, title: &str, add: impl FnOnce(&mut egui:
     let t = th();
     egui::CollapsingHeader::new(
         egui::RichText::new(title.to_uppercase())
-            .size(11.0)
+            .size(crate::theme::ts::px(crate::theme::ts::SMALL))
             .strong()
             .color(t.ink2),
     )
@@ -73,7 +73,7 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
             r.left_center(),
             egui::Align2::LEFT_CENTER,
             label,
-            FontId::proportional(11.5),
+            crate::theme::prop(crate::theme::ts::LABEL),
             th().ink2,
         );
         add(ui)
@@ -169,7 +169,7 @@ impl App {
                 egui::RichText::new(" INSPECTOR ")
                     .strong()
                     .monospace()
-                    .size(10.5)
+                    .size(crate::theme::ts::px(crate::theme::ts::SMALL))
                     .color(Color32::from_rgb(0x1A, 0x1C, 0x1F))
                     .background_color(t.accent),
             );
@@ -261,7 +261,11 @@ impl App {
                 ),
                 _ => format!("{len_beats:.2} beats · {bpm:.0} BPM"),
             };
-            ui.label(egui::RichText::new(at).size(10.5).color(t.ink2));
+            ui.label(
+                egui::RichText::new(at)
+                    .size(crate::theme::ts::px(crate::theme::ts::SMALL))
+                    .color(t.ink2),
+            );
             if let Some(l) = clip.loop_len {
                 ui.label(
                     egui::RichText::new(format!("loops every {:.2} beats", beats(l)))

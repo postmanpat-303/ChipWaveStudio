@@ -94,7 +94,11 @@ impl InstSkin {
     /// the type badge laid out in `ui` (caps, tinted fill, tint outline)
     pub fn badge(&self, ui: &mut egui::Ui, tag: &str) -> egui::Response {
         let g = ui.fonts_mut(|f| {
-            f.layout_no_wrap(tag.to_uppercase(), super::label_font(11.0), self.text)
+            f.layout_no_wrap(
+                tag.to_uppercase(),
+                super::label_font(crate::theme::ts::SMALL),
+                self.text,
+            )
         });
         let (r, resp) = ui.allocate_exact_size(egui::vec2(g.size().x + 14.0, 17.0), Sense::hover());
         self.paint_badge(ui.painter(), r, g);
@@ -103,7 +107,11 @@ impl InstSkin {
 
     /// a badge's width for `tag` (to right-align one before painting it)
     pub fn badge_galley(&self, p: &egui::Painter, tag: &str) -> std::sync::Arc<egui::Galley> {
-        p.layout_no_wrap(tag.to_uppercase(), super::label_font(11.0), self.text)
+        p.layout_no_wrap(
+            tag.to_uppercase(),
+            super::label_font(crate::theme::ts::SMALL),
+            self.text,
+        )
     }
 
     /// paint a badge with the laid-out label `g` into `r`

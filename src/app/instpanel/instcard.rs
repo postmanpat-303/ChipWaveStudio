@@ -829,13 +829,17 @@ fn big_knob(
         if resp.hovered() && enabled {
             p.circle_stroke(c, r + 7.5, Stroke::new(1.0, t.ink2.gamma_multiply(0.4)));
         }
-        let cap =
-            super::super::pattern::fit(p, caption, &egui::FontId::proportional(10.0), cell.width());
+        let cap = super::super::pattern::fit(
+            p,
+            caption,
+            &crate::theme::prop(crate::theme::ts::TINY),
+            cell.width(),
+        );
         p.text(
             Pos2::new(cell.center().x, cell.bottom() - 6.0),
             egui::Align2::CENTER_CENTER,
             cap,
-            egui::FontId::proportional(10.0),
+            crate::theme::prop(crate::theme::ts::TINY),
             crate::ember::INK3,
         );
         return (resp, changed);
@@ -844,7 +848,7 @@ fn big_knob(
         Pos2::new(cell.center().x, cell.top() + 6.0),
         egui::Align2::CENTER_CENTER,
         name.to_uppercase(),
-        egui::FontId::proportional(11.0),
+        crate::theme::prop(crate::theme::ts::SMALL),
         t.ink.gamma_multiply(dim),
     );
     // track and value arc over 270°
@@ -896,20 +900,24 @@ fn big_knob(
         Pos2::new(cell.center().x, c.y + r + 13.0),
         egui::Align2::CENTER_CENTER,
         value,
-        egui::FontId::monospace(10.5),
+        crate::theme::mono(crate::theme::ts::SMALL),
         if enabled {
             t.value
         } else {
             t.ink2.gamma_multiply(0.6)
         },
     );
-    let cap =
-        super::super::pattern::fit(p, caption, &egui::FontId::proportional(10.0), cell.width());
+    let cap = super::super::pattern::fit(
+        p,
+        caption,
+        &crate::theme::prop(crate::theme::ts::TINY),
+        cell.width(),
+    );
     p.text(
         Pos2::new(cell.center().x, c.y + r + 27.0),
         egui::Align2::CENTER_CENTER,
         cap,
-        egui::FontId::proportional(10.0),
+        crate::theme::prop(crate::theme::ts::TINY),
         t.ink2.gamma_multiply(0.85 * dim),
     );
     (resp, changed)
@@ -970,7 +978,7 @@ pub(super) fn frame(ui: &egui::Ui, r: Rect, title: &str) {
         Pos2::new(r.left() + 10.0, r.top() + SEC_HEAD * 0.5),
         egui::Align2::LEFT_CENTER,
         title.to_uppercase(),
-        egui::FontId::proportional(11.5),
+        crate::theme::prop(crate::theme::ts::LABEL),
         t.ink,
     );
 }
@@ -1092,9 +1100,9 @@ impl App {
             }
             let head = egui::RichText::new(format!("{:02X} {}", idx + 1, inst.name));
             ui.label(if t.ember {
-                head.font(crate::theme::label_font(17.0)).color(t.ink)
+                head.font(crate::theme::label_font(crate::theme::ts::HEADING)).color(t.ink)
             } else {
-                head.strong().size(15.0)
+                head.strong().size(crate::theme::ts::px(crate::theme::ts::LARGE))
             });
             tag_pill(ui, tag);
             ui.add_space(6.0);
@@ -1324,7 +1332,7 @@ impl App {
                     body.left_top() + egui::vec2(2.0, 8.0),
                     egui::Align2::LEFT_TOP,
                     format!("{} off", sec.title),
-                    egui::FontId::proportional(11.5),
+                    crate::theme::prop(crate::theme::ts::LABEL),
                     t.ink2,
                 );
                 continue;

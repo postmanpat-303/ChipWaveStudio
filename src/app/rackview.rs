@@ -536,7 +536,7 @@ impl App {
                             g.center(),
                             egui::Align2::CENTER_CENTER,
                             tag,
-                            FontId::proportional(14.0),
+                            crate::theme::prop(crate::theme::ts::LARGE),
                             t.ink2,
                         );
                     }
@@ -622,7 +622,7 @@ impl App {
                 Pos2::new(r.left() + 12.0, r.center().y),
                 egui::Align2::CENTER_CENTER,
                 letter,
-                crate::theme::label_font(13.0),
+                crate::theme::label_font(crate::theme::ts::BODY),
                 if *on { t.accent } else { t.ink2 },
             );
             let open = Rect::from_min_max(
@@ -638,14 +638,14 @@ impl App {
                 Pos2::new(open.left() - 6.0, r.center().y),
                 egui::Align2::RIGHT_CENTER,
                 &dbs,
-                FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 t.ink2,
             );
             let nr = Rect::from_min_max(
                 Pos2::new(r.left() + 24.0, r.top()),
                 Pos2::new(open.left() - 58.0, r.bottom()),
             );
-            let nf = FontId::proportional(12.0);
+            let nf = crate::theme::prop(crate::theme::ts::COMPACT);
             let txt = super::pattern::fit(p, &format!("{name} · {tag}"), &nf, nr.width());
             p.text(
                 nr.left_center(),

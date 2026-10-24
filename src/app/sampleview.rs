@@ -738,7 +738,7 @@ impl App {
                     flag.center(),
                     egui::Align2::CENTER_CENTER,
                     label,
-                    FontId::monospace(11.0),
+                    crate::theme::mono(crate::theme::ts::SMALL),
                     t.crt_bot,
                 );
             }
@@ -756,7 +756,7 @@ impl App {
                     Pos2::new(x + 3.0, wave.bottom() - 3.0),
                     egui::Align2::LEFT_BOTTOM,
                     format!("{}", k + 1),
-                    FontId::monospace(10.0),
+                    crate::theme::mono(crate::theme::ts::TINY),
                     t.value,
                 );
             }
@@ -928,7 +928,7 @@ impl App {
             Pos2::new(wave.left(), bar.bottom() + 12.0),
             egui::Align2::LEFT_CENTER,
             format!("{} frames · {:.3} s · {} Hz  ·  {}  ·  {}  ·  drag: select / S,E handles · wheel: zoom · Space: preview", len, secs(len), rate, sel_txt, loop_txt),
-            FontId::monospace(11.5),
+            crate::theme::mono(crate::theme::ts::LABEL),
             t.ink2,
         );
     }

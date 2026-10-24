@@ -635,7 +635,11 @@ impl App {
                 egui::StrokeKind::Inside,
             );
             let name = m.name(key);
-            let g = p.layout_no_wrap(name, FontId::proportional(11.0), Color32::WHITE);
+            let g = p.layout_no_wrap(
+                name,
+                crate::theme::prop(crate::theme::ts::SMALL),
+                Color32::WHITE,
+            );
             let gw = g.size().x;
             if mr.width() > 18.0 {
                 p.galley(
@@ -649,7 +653,7 @@ impl App {
                     Pos2::new(mr.left() + gw + 10.0, mr.center().y),
                     egui::Align2::LEFT_CENTER,
                     m.numeral(key),
-                    FontId::proportional(9.5),
+                    crate::theme::prop(crate::theme::ts::TINY),
                     Color32::from_white_alpha(170),
                 );
             }
@@ -659,7 +663,7 @@ impl App {
                 Pos2::new(r.left() + 6.0, r.center().y),
                 egui::Align2::LEFT_CENTER,
                 "Chords: double-click to add one, drag to draw one, right-click for styles and progressions",
-                FontId::proportional(10.0),
+                crate::theme::prop(crate::theme::ts::TINY),
                 th.ink2,
             );
         }

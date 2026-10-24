@@ -240,7 +240,12 @@ impl App {
         let hint = ui.visuals().text_color().gamma_multiply(0.8);
         let head = |ui: &mut egui::Ui, s: &str| {
             ui.add_space(4.0);
-            ui.label(egui::RichText::new(s).strong().size(12.5).color(strong));
+            ui.label(
+                egui::RichText::new(s)
+                    .strong()
+                    .size(crate::theme::ts::px(crate::theme::ts::COMPACT))
+                    .color(strong),
+            );
         };
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("A<>E  Advanced Edit").strong());

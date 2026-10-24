@@ -167,11 +167,14 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         p.circle_stroke(lp, 3.6, Stroke::new(1.0, Color32::from_black_alpha(160)));
     }
     let (small, mono) = if t.ember {
-        (crate::theme::label_font(11.0), crate::theme::num_font(10.0))
+        (
+            crate::theme::label_font(crate::theme::ts::SMALL),
+            crate::theme::num_font(crate::theme::ts::TINY),
+        )
     } else {
         (
-            egui::FontId::proportional(10.5),
-            egui::FontId::monospace(10.0),
+            crate::theme::prop(crate::theme::ts::SMALL),
+            crate::theme::mono(crate::theme::ts::TINY),
         )
     };
     let cap = a.caption.unwrap_or(a.name);
@@ -221,7 +224,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
             Pos2::new(cell.left() + 0.5, corner_y),
             egui::Align2::LEFT_TOP,
             b,
-            egui::FontId::monospace(8.5),
+            crate::theme::mono(crate::theme::ts::TINY),
             t.ink2.gamma_multiply(0.9),
         );
     }
@@ -268,7 +271,9 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
             .ctx()
             .layer_painter(egui::LayerId::new(egui::Order::Tooltip, id.with("bub")));
         let txt = format!("{}: {}", a.name, a.value_text);
-        let g = ui.fonts_mut(|f| f.layout_no_wrap(txt, egui::FontId::proportional(12.0), t.ink));
+        let g = ui.fonts_mut(|f| {
+            f.layout_no_wrap(txt, crate::theme::prop(crate::theme::ts::COMPACT), t.ink)
+        });
         let r = Rect::from_center_size(
             Pos2::new(kc.x, cell.top() - 12.0),
             g.size() + egui::vec2(10.0, 4.0),
@@ -413,7 +418,7 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
             // the line, high-pass: left), clear of the resonance peak, on a
             // plate so the curve never runs through it; flipped when it
             // would leave the picture
-            let g = p.layout_no_wrap(txt, egui::FontId::monospace(9.0), mark);
+            let g = p.layout_no_wrap(txt, crate::theme::mono(crate::theme::ts::TINY), mark);
             let (w, gap) = (g.size().x, 6.0);
             let right = *mode != 1;
             let fits_r = cx + gap + w <= inner.right();
@@ -497,7 +502,7 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
                     rc.center(),
                     egui::Align2::CENTER_CENTER,
                     format!("{}", o + 1),
-                    egui::FontId::monospace(10.0),
+                    crate::theme::mono(crate::theme::ts::TINY),
                     if carrier { t.crt_bot } else { t.ink },
                 );
             }
@@ -505,7 +510,7 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
                 Pos2::new(inner.right(), inner.bottom() + 2.0),
                 egui::Align2::RIGHT_BOTTOM,
                 name,
-                egui::FontId::monospace(9.0),
+                crate::theme::mono(crate::theme::ts::TINY),
                 t.ink2,
             );
         }

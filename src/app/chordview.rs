@@ -343,7 +343,7 @@ impl App {
                             chords::roman(key, d, &c),
                             c.name(key)
                         ))
-                        .size(15.0)
+                        .size(crate::theme::ts::px(crate::theme::ts::LARGE))
                         .strong();
                         if ui
                             .add(egui::Button::new(txt).min_size(egui::vec2(82.0, 52.0)))

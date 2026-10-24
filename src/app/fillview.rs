@@ -391,7 +391,7 @@ impl App {
                 arrange::mmss(self.with(|s| p.seconds(&s.song))),
                 p.bars()
             ),
-            FontId::monospace(10.0),
+            crate::theme::mono(crate::theme::ts::TINY),
             th().ink2,
         );
         let mut t = 0usize;
@@ -434,7 +434,7 @@ impl App {
                     name,
                     if derived { "'" } else { "" }
                 ),
-                FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 th().ink,
             );
             let ops: Vec<String> = s
@@ -454,7 +454,7 @@ impl App {
                 r.left_top() + egui::vec2(5.0, 17.0),
                 egui::Align2::LEFT_TOP,
                 sub,
-                FontId::proportional(10.0),
+                crate::theme::prop(crate::theme::ts::TINY),
                 th().ink2,
             );
         }
@@ -669,7 +669,7 @@ impl App {
                                 r.center(),
                                 egui::Align2::CENTER_CENTER,
                                 lbl,
-                                FontId::monospace(fs),
+                                crate::theme::mono(fs),
                                 th().ink,
                             );
                         }
@@ -705,7 +705,7 @@ impl App {
                         srect.center(),
                         egui::Align2::CENTER_CENTER,
                         "no proposal yet: press Generate (G)",
-                        FontId::proportional(12.0),
+                        crate::theme::prop(crate::theme::ts::COMPACT),
                         th().ink2,
                     );
                 }
@@ -744,7 +744,7 @@ impl App {
                     nrect.left_top(),
                     egui::Align2::LEFT_TOP,
                     line1,
-                    FontId::proportional(12.0),
+                    crate::theme::prop(crate::theme::ts::COMPACT),
                     th().ink,
                 );
                 let mut notes: Vec<String> = vec![];
@@ -770,7 +770,7 @@ impl App {
                     } else {
                         notes.join(" · ")
                     },
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     if warn { th().brick } else { th().ink2 },
                 );
                 ui.add_space(2.0);
@@ -929,7 +929,7 @@ fn energy_editor(ui: &mut egui::Ui, f: &mut FillState) -> bool {
                     Pos2::new(x0 + 2.0, body.top()),
                     egui::Align2::LEFT_TOP,
                     s.role.short(),
-                    FontId::monospace(8.0),
+                    crate::theme::mono(crate::theme::ts::TINY),
                     role_col(s.role).gamma_multiply(0.9),
                 );
             }

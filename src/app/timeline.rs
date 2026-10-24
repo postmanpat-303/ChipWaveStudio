@@ -774,7 +774,7 @@ impl App {
                 egui::RichText::new(" TIMELINE ")
                     .strong()
                     .monospace()
-                    .size(10.5)
+                    .size(crate::theme::ts::px(crate::theme::ts::SMALL))
                     .color(Color32::from_rgb(0x1A, 0x1C, 0x1F))
                     .background_color(t.accent),
             )
@@ -799,7 +799,7 @@ impl App {
             if ui
                 .add(egui::Button::selectable(
                     shown,
-                    egui::RichText::new("Arranger").size(11.0),
+                    egui::RichText::new("Arranger").size(crate::theme::ts::px(crate::theme::ts::SMALL)),
                 ))
                 .on_hover_text(if shown {
                     "hide the Clip Arranger on the left: more room for the tracks (Ctrl+Shift+8)"
@@ -1155,7 +1155,7 @@ impl App {
                     Pos2::new(x + 3.0, ruler.top() + 2.0),
                     egui::Align2::LEFT_TOP,
                     label,
-                    FontId::monospace(11.0),
+                    crate::theme::mono(crate::theme::ts::SMALL),
                     crt_ink,
                 );
             }
@@ -1597,7 +1597,7 @@ impl App {
                 p,
                 egui::Align2::LEFT_CENTER,
                 txt,
-                FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 colr,
             );
         }
@@ -1655,7 +1655,7 @@ impl App {
                     Pos2::new(lx, marks.center().y),
                     egui::Align2::LEFT_CENTER,
                     &m.name,
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     crt_ink_hi,
                 );
             }
@@ -1685,7 +1685,7 @@ impl App {
                     Pos2::new(cap.right() - 8.0, r.center().y),
                     egui::Align2::RIGHT_CENTER,
                     txt,
-                    FontId::proportional(10.5),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     t.ink2,
                 );
             }
@@ -1694,7 +1694,7 @@ impl App {
                     Pos2::new(cap.left() + 8.0, marks.center().y),
                     egui::Align2::LEFT_CENTER,
                     "Shift+M adds one",
-                    FontId::proportional(10.0),
+                    crate::theme::prop(crate::theme::ts::TINY),
                     t.ink2.gamma_multiply(0.7),
                 );
             }
@@ -1916,7 +1916,7 @@ impl App {
                 } else {
                     format!("{:02}", tr + 1)
                 },
-                FontId::monospace(10.0),
+                crate::theme::mono(crate::theme::ts::TINY),
                 t.ink2,
             );
             let nw = num.size().x;
@@ -1931,7 +1931,7 @@ impl App {
                     Pos2::new(tx + nw + 5.0, ty),
                     egui::Align2::LEFT_CENTER,
                     name,
-                    FontId::proportional(13.0),
+                    crate::theme::prop(crate::theme::ts::BODY),
                     t.ink,
                 );
             }
@@ -1940,7 +1940,7 @@ impl App {
                     Pos2::new(tx, hr.top() + 28.0),
                     egui::Align2::LEFT_CENTER,
                     sub(tr),
-                    FontId::proportional(10.5),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     t.ink2,
                 );
             }
@@ -1976,7 +1976,7 @@ impl App {
                     r.center(),
                     egui::Align2::CENTER_CENTER,
                     label,
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     if on {
                         Color32::from_rgb(0x16, 0x18, 0x1B)
                     } else {
@@ -2020,7 +2020,7 @@ impl App {
                     ar.center(),
                     egui::Align2::CENTER_CENTER,
                     "A",
-                    FontId::proportional(11.0),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     if open {
                         Color32::from_rgb(0x16, 0x18, 0x1B)
                     } else if nl > 0 {
@@ -2099,7 +2099,7 @@ impl App {
                     Pos2::new(mr.left() - bs - 7.0, hr.bottom() - 9.0),
                     egui::Align2::RIGHT_CENTER,
                     format!("speed {speed}"),
-                    FontId::proportional(10.0),
+                    crate::theme::prop(crate::theme::ts::TINY),
                     t.ochre,
                 );
             }
@@ -2213,7 +2213,7 @@ impl App {
                 Pos2::new(p.x + 14.0, p.y),
                 egui::Align2::LEFT_CENTER,
                 format!("move track {:02}", from + 1),
-                FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 t.accent,
             );
             if !ui.ctx().input(|i| i.pointer.primary_down()) {
@@ -2257,7 +2257,11 @@ impl App {
                 let full = n >= MAX_CHANNELS;
                 let r = ui.put(
                     br,
-                    egui::Button::new(egui::RichText::new("+ Add track").size(11.5)).small(),
+                    egui::Button::new(
+                        egui::RichText::new("+ Add track")
+                            .size(crate::theme::ts::px(crate::theme::ts::LABEL)),
+                    )
+                    .small(),
                 );
                 add_btn = r.rect;
                 let r = if full {
@@ -2298,7 +2302,7 @@ impl App {
                 Pos2::new(lanes.left() + 24.0, y),
                 egui::Align2::LEFT_TOP,
                 "Drag an instrument from the Browser here, or + Add track",
-                egui::FontId::proportional(15.0),
+                crate::theme::prop(crate::theme::ts::LARGE),
                 t.ink2,
             );
         }
@@ -2650,7 +2654,11 @@ impl App {
                 }
                 let bp = c.tl.bar_pos(at);
                 let txt = format!("Split {}.{}.{:03}", bp.bar, bp.beat, bp.tick);
-                let g = p.layout_no_wrap(txt, egui::FontId::proportional(11.5), Color32::BLACK);
+                let g = p.layout_no_wrap(
+                    txt,
+                    crate::theme::prop(crate::theme::ts::LABEL),
+                    Color32::BLACK,
+                );
                 let lab = Rect::from_min_size(
                     Pos2::new(
                         x + 6.0,

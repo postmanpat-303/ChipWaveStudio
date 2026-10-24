@@ -1210,7 +1210,7 @@ impl App {
         while (every * bar_t) as f32 * ppt < 24.0 && every < 1024 {
             every *= 2;
         }
-        let font = FontId::proportional(10.0);
+        let font = crate::theme::prop(crate::theme::ts::TINY);
         let mut b = t0 / bar_t;
         while b * bar_t <= t1 {
             if b % every == 0 {
@@ -1225,7 +1225,7 @@ impl App {
             b += 1;
         }
         if beat_t as f32 * ppt >= 40.0 {
-            let small = FontId::proportional(9.0);
+            let small = crate::theme::prop(crate::theme::ts::TINY);
             let mut tk = t0.div_euclid(beat_t) * beat_t;
             while tk <= t1 {
                 if tk % bar_t != 0 {
@@ -1913,7 +1913,7 @@ impl App {
                         Pos2::new(kr.right() - 3.0, kr.center().y),
                         egui::Align2::RIGHT_CENTER,
                         note_name(k),
-                        FontId::monospace(self.pr.key_h.clamp(7.0, 11.0)),
+                        crate::theme::mono(self.pr.key_h.clamp(7.0, 11.0)),
                         if is_black(k) {
                             Color32::from_gray(200)
                         } else {
@@ -1966,7 +1966,7 @@ impl App {
                 br.center(),
                 egui::Align2::CENTER_CENTER,
                 txt,
-                FontId::monospace(9.5),
+                crate::theme::mono(crate::theme::ts::TINY),
                 t.ink,
             );
         }
@@ -2068,7 +2068,7 @@ impl App {
                     r.left_center() + egui::vec2(3.0, 0.0),
                     egui::Align2::LEFT_CENTER,
                     note_name(n.key),
-                    FontId::monospace(self.pr.key_h.clamp(7.0, 10.0)),
+                    crate::theme::mono(self.pr.key_h.clamp(7.0, 10.0)),
                     ink,
                 );
             }
@@ -2116,7 +2116,7 @@ impl App {
             Pos2::new(full.left() + 4.0, vel_r.center().y),
             egui::Align2::LEFT_CENTER,
             "Vel",
-            FontId::proportional(10.0),
+            crate::theme::prop(crate::theme::ts::TINY),
             t.ink2,
         );
         // playhead: the Timeline's own (the transport while it plays, the
@@ -2577,7 +2577,7 @@ impl App {
                                 pos + egui::vec2(14.0, -14.0),
                                 egui::Align2::LEFT_BOTTOM,
                                 format!("+ copy {n}"),
-                                FontId::proportional(11.0),
+                                crate::theme::prop(crate::theme::ts::SMALL),
                                 t.ink,
                             );
                             self.status = format!(
@@ -2975,7 +2975,7 @@ const BTN_H: f32 = 20.0;
 /// a toolbar text button with a highlighted active state
 fn pr_btn(ui: &mut egui::Ui, label: &str, on: bool, enabled: bool, tip: &str) -> egui::Response {
     let t = th();
-    let font = FontId::proportional(12.0);
+    let font = crate::theme::prop(crate::theme::ts::COMPACT);
     let g = ui
         .painter()
         .layout_no_wrap(label.to_string(), font, Color32::PLACEHOLDER);
@@ -3107,7 +3107,7 @@ fn pr_tool_btn(ui: &mut egui::Ui, tool: PrTool, on: bool, tip: &str) -> egui::Re
 /// the clip / block name chip with its colour dot
 fn pr_chip(ui: &mut egui::Ui, col: Color32, label: &str) -> egui::Response {
     let t = th();
-    let font = FontId::proportional(12.0);
+    let font = crate::theme::prop(crate::theme::ts::COMPACT);
     let g = ui.painter().layout_no_wrap(label.to_string(), font, t.ink);
     let w = (g.size().x + 26.0).min(220.0);
     let (r, resp) = ui.allocate_exact_size(egui::vec2(w, BTN_H), Sense::hover());

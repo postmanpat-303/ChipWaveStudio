@@ -516,7 +516,7 @@ impl App {
                         Pos2::new(x + 3.0, rect.top() + 1.0),
                         egui::Align2::LEFT_TOP,
                         format!("{}", r / 16 + 1),
-                        FontId::monospace(10.0),
+                        crate::theme::mono(crate::theme::ts::TINY),
                         th().ink2,
                     );
                 }
@@ -644,7 +644,7 @@ impl App {
                         cr.left_top() + egui::vec2(6.0, 3.0),
                         egui::Align2::LEFT_TOP,
                         format!("{b:02} {name}"),
-                        FontId::proportional(12.0),
+                        crate::theme::prop(crate::theme::ts::COMPACT),
                         Color32::WHITE,
                     );
                     // role badge (muted palette), top-right
@@ -665,7 +665,7 @@ impl App {
                                 br.center(),
                                 egui::Align2::CENTER_CENTER,
                                 txt,
-                                FontId::proportional(10.0),
+                                crate::theme::prop(crate::theme::ts::TINY),
                                 Color32::from_rgb(0x16, 0x18, 0x1b),
                             );
                         }
@@ -675,7 +675,7 @@ impl App {
                             cr.left_bottom() + egui::vec2(6.0, -3.0),
                             egui::Align2::LEFT_BOTTOM,
                             "derived'",
-                            FontId::proportional(10.0),
+                            crate::theme::prop(crate::theme::ts::TINY),
                             Color32::from_white_alpha(200),
                         );
                     }
@@ -948,7 +948,7 @@ impl App {
                                 .unwrap_or_else(|| lane.label.clone()),
                             readout
                         ),
-                        FontId::proportional(11.5),
+                        crate::theme::prop(crate::theme::ts::LABEL),
                         col.gamma_multiply(1.1),
                     );
                     if resp.clicked() || resp.drag_started() || resp.secondary_clicked() {

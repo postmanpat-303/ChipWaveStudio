@@ -128,7 +128,7 @@ pub(super) fn paint_metronome(p: &egui::Painter, r: Rect, look: MetroLook) {
             bc + egui::vec2(0.0, 0.5 * s),
             egui::Align2::CENTER_CENTER,
             n.min(9).to_string(),
-            egui::FontId::monospace(8.5 * s),
+            crate::theme::mono(8.5 * s),
             Color32::WHITE,
         );
     }
@@ -151,7 +151,7 @@ pub(super) fn metronome_mockup(ctx: &egui::Context) {
                     pos,
                     egui::Align2::LEFT_TOP,
                     s,
-                    egui::FontId::proportional(size),
+                    crate::theme::prop(size),
                     col,
                 );
             };

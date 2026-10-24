@@ -2420,7 +2420,7 @@ fn knob_mockup(ctx: &egui::Context) {
                     pos,
                     egui::Align2::LEFT_TOP,
                     s,
-                    theme::label_font(14.0),
+                    theme::label_font(crate::theme::ts::LARGE),
                     t.ink,
                 );
             };
@@ -2429,7 +2429,7 @@ fn knob_mockup(ctx: &egui::Context) {
                     pos,
                     egui::Align2::LEFT_TOP,
                     s,
-                    egui::FontId::proportional(11.5),
+                    crate::theme::prop(crate::theme::ts::LABEL),
                     t.ink2,
                 );
             };

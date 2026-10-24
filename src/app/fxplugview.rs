@@ -287,14 +287,14 @@ impl App {
                         row.left_center(),
                         egui::Align2::LEFT_CENTER,
                         info.label(),
-                        FontId::proportional(11.0),
+                        crate::theme::prop(crate::theme::ts::SMALL),
                         t.ink2,
                     );
                     pr.text(
                         row.right_center(),
                         egui::Align2::RIGHT_CENTER,
                         txt,
-                        FontId::monospace(11.0),
+                        crate::theme::mono(crate::theme::ts::SMALL),
                         t.value,
                     );
                     let mut x = *v;

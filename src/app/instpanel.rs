@@ -172,7 +172,7 @@ pub(super) fn tag_pill(ui: &mut egui::Ui, tag: &str) -> egui::Response {
     if th().ember {
         // Ember: a small outlined tag in acc-hot capitals
         let t = th();
-        let font = crate::theme::label_font(11.5);
+        let font = crate::theme::label_font(crate::theme::ts::LABEL);
         let txt = tag.to_uppercase();
         let g = ui.fonts_mut(|f| f.layout_no_wrap(txt, font, t.acc_hot));
         let (r, resp) = ui.allocate_exact_size(egui::vec2(g.size().x + 12.0, 17.0), Sense::hover());
@@ -184,7 +184,7 @@ pub(super) fn tag_pill(ui: &mut egui::Ui, tag: &str) -> egui::Response {
             .galley(r.center() - g.size() / 2.0, g, t.acc_hot);
         return resp;
     }
-    let font = egui::FontId::proportional(11.0);
+    let font = crate::theme::prop(crate::theme::ts::SMALL);
     let g = ui.fonts_mut(|f| f.layout_no_wrap(tag.to_string(), font, Color32::BLACK));
     let size = egui::vec2(g.size().x + 12.0, 17.0);
     let (r, resp) = ui.allocate_exact_size(size, Sense::hover());
@@ -614,7 +614,7 @@ impl App {
                 body.center(),
                 egui::Align2::CENTER_CENTER,
                 "release to hide the lower panel (F11 brings it back)",
-                egui::FontId::proportional(14.0),
+                crate::theme::prop(crate::theme::ts::LARGE),
                 t.accent,
             );
             return;
@@ -695,7 +695,7 @@ impl App {
             r.center() - egui::vec2(0.0, 10.0),
             egui::Align2::CENTER_CENTER,
             "Drag an instrument here",
-            egui::FontId::proportional(16.0),
+            crate::theme::prop(crate::theme::ts::HEADING),
             if dragging { t.accent } else { t.ink },
         );
         p.text(
@@ -705,7 +705,7 @@ impl App {
                 "Track {:02} has no instrument yet: drop one from the Browser, or right-click the track header › Add",
                 self.ch + 1
             ),
-            egui::FontId::proportional(12.0),
+            crate::theme::prop(crate::theme::ts::COMPACT),
             t.ink2,
         );
     }
@@ -974,7 +974,7 @@ pub(super) fn seg_toggle(
     on: Option<usize>,
 ) -> Option<usize> {
     let t = th();
-    let f = egui::FontId::proportional(13.0);
+    let f = crate::theme::prop(crate::theme::ts::BODY);
     let gs: Vec<_> = items
         .iter()
         .map(|(n, _)| ui.painter().layout_no_wrap((*n).into(), f.clone(), t.ink))
@@ -1185,7 +1185,7 @@ impl App {
                 ui.label(
                     egui::RichText::new(format!("{:02X} {}", idx + 1, inst.name))
                         .strong()
-                        .size(15.0),
+                        .size(crate::theme::ts::px(crate::theme::ts::LARGE)),
                 );
                 tag_pill(ui, tag);
                 // the same header as every other built-in: name, badge,
@@ -1230,7 +1230,7 @@ impl App {
             ui.label(
                 egui::RichText::new(format!("{:02X} {}", idx + 1, inst.name))
                     .strong()
-                    .size(15.0),
+                    .size(crate::theme::ts::px(crate::theme::ts::LARGE)),
             );
             tag_pill(ui, tag);
             self.preset_menu(ui, &inst, &mut cx);
@@ -1672,7 +1672,11 @@ impl App {
                 egui::StrokeKind::Inside,
             );
             let g = ui.fonts_mut(|f| {
-                f.layout_no_wrap(c.name.clone(), egui::FontId::proportional(12.0), t.ink)
+                f.layout_no_wrap(
+                    c.name.clone(),
+                    crate::theme::prop(crate::theme::ts::COMPACT),
+                    t.ink,
+                )
             });
             let pos = Pos2::new(r.center().x - g.size().y / 2.0, r.top() + 12.0 + g.size().x);
             p.add(
@@ -1778,7 +1782,7 @@ impl App {
                 Pos2::new(head.left() + 18.0, cy),
                 egui::Align2::LEFT_CENTER,
                 c.name.to_uppercase(),
-                egui::FontId::proportional(11.5),
+                crate::theme::prop(crate::theme::ts::LABEL),
                 if hr.hovered() { t.accent } else { t.ink },
             );
             if !c.note.is_empty() {
@@ -1786,7 +1790,7 @@ impl App {
                     Pos2::new(head.right() - 8.0, cy),
                     egui::Align2::RIGHT_CENTER,
                     &c.note,
-                    egui::FontId::proportional(10.5),
+                    crate::theme::prop(crate::theme::ts::SMALL),
                     t.ink2,
                 );
             }

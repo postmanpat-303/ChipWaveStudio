@@ -922,7 +922,7 @@ impl App {
             };
             let mut job = egui::text::LayoutJob::simple(
                 label,
-                FontId::proportional(if is_back { 12.0 } else { 13.0 }),
+                crate::theme::prop(if is_back { 12.0 } else { 13.0 }),
                 ink.gamma_multiply(ks),
                 (chord * 0.86).min(118.0),
             );
@@ -944,10 +944,10 @@ impl App {
             c - egui::vec2(0.0, 9.0),
             egui::Align2::CENTER_CENTER,
             top,
-            FontId::proportional(10.0),
+            crate::theme::prop(crate::theme::ts::TINY),
             pl.disc_ink2.gamma_multiply(fade),
         );
-        let f = FontId::proportional(12.5);
+        let f = crate::theme::prop(crate::theme::ts::COMPACT);
         let nm = super::pattern::fit(painter, &sub, &f, 2.0 * rr - 12.0);
         painter.text(
             c + egui::vec2(0.0, 8.0),
@@ -967,7 +967,12 @@ impl App {
 
 /// a hover hint outside the ring, away from it along `dir`
 fn ring_tip(p: &egui::Painter, pl: &Pal, text: &str, at: Pos2, dir: Vec2, screen: Rect) {
-    let g = p.layout(text.to_string(), FontId::proportional(11.5), pl.ink, 260.0);
+    let g = p.layout(
+        text.to_string(),
+        crate::theme::prop(crate::theme::ts::LABEL),
+        pl.ink,
+        260.0,
+    );
     let size = g.size() + egui::vec2(14.0, 10.0);
     let x = if dir.x > 0.35 {
         at.x

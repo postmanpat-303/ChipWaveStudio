@@ -141,7 +141,7 @@ impl App {
             full.max.x = pr.left() - 6.0;
             self.adv_docked(ui, pr);
         }
-        let font = FontId::monospace(14.0);
+        let font = crate::theme::mono(crate::theme::ts::LARGE);
         let cw = ui.fonts_mut(|f| f.glyph_width(&font, '0'));
         let chan_w = cw * 15.0 + 10.0; // "C-4 01 40 0C20" + gap
         let x0_of = |r: Rect| r.left() + 10.0 + cw * 3.0 + 8.0;
@@ -194,7 +194,7 @@ impl App {
                     (first_ch + max_ch_vis).min(channels),
                     channels
                 ),
-                FontId::proportional(11.0),
+                crate::theme::prop(crate::theme::ts::SMALL),
                 Color32::WHITE,
             );
         }
@@ -322,7 +322,7 @@ impl App {
                         r.center(),
                         egui::Align2::CENTER_CENTER,
                         label,
-                        FontId::proportional(10.0),
+                        crate::theme::prop(crate::theme::ts::TINY),
                         if on { Color32::BLACK } else { Color32::WHITE },
                     );
                 }
@@ -356,7 +356,7 @@ impl App {
             let nx = ir.right() + 4.0;
             let name_w = rp.left() - nx - 3.0;
             let name = format!("{} {}", ch + 1, names.get(ch).cloned().unwrap_or_default());
-            let f1 = FontId::proportional(12.5);
+            let f1 = crate::theme::prop(crate::theme::ts::COMPACT);
             let head = Rect::from_min_max(hr.min, Pos2::new(rp.left() - 2.0, hr.bottom()));
             let hresp = ui
                 .interact(head, egui::Id::unique(("chhdr", ch, "head")), Sense::click())
@@ -385,7 +385,7 @@ impl App {
                     Color32::WHITE,
                 );
             }
-            let f2 = FontId::proportional(10.5);
+            let f2 = crate::theme::prop(crate::theme::ts::SMALL);
             let inst = &hdr.instruments[ch];
             painter.text(
                 Pos2::new(hr.left() + 6.0, hr.bottom() - 8.0),

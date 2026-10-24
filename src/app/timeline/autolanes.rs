@@ -607,7 +607,7 @@ pub(crate) fn lanes_ui(
                             Pos2::new(sr.right() - 4.0, yy),
                             egui::Align2::RIGHT_CENTER,
                             lab,
-                            FontId::monospace(9.0),
+                            crate::theme::mono(crate::theme::ts::TINY),
                             t.ink2,
                         );
                     }
@@ -653,7 +653,7 @@ pub(crate) fn lanes_ui(
                     Pos2::new(g.lanes.left() + 8.0, row.center().y),
                     egui::Align2::LEFT_CENTER,
                     "no track lane: click to start one (clip lanes play inside their clips)",
-                    FontId::proportional(10.0),
+                    crate::theme::prop(crate::theme::ts::TINY),
                     t.ink2.gamma_multiply(0.7),
                 );
             }
@@ -870,7 +870,7 @@ pub(crate) fn lanes_ui(
                     Pos2::new(hr.left() + 8.0, hr.top() + 11.0),
                     egui::Align2::LEFT_CENTER,
                     label_of(song, c, tr, tgt),
-                    FontId::proportional(11.5),
+                    crate::theme::prop(crate::theme::ts::LABEL),
                     if enabled { t.ink } else { t.ink2 },
                 );
                 // the value that plays at the playhead / play marker
@@ -901,7 +901,7 @@ pub(crate) fn lanes_ui(
                             ""
                         }
                     ),
-                    FontId::monospace(10.0),
+                    crate::theme::mono(crate::theme::ts::TINY),
                     t.ink2,
                 );
                 // on/off and remove
@@ -950,7 +950,7 @@ pub(crate) fn lanes_ui(
                             r.center(),
                             egui::Align2::CENTER_CENTER,
                             label,
-                            FontId::proportional(11.0),
+                            crate::theme::prop(crate::theme::ts::SMALL),
                             t.ink2,
                         );
                     }

@@ -280,7 +280,7 @@ impl Radial {
                 at + egui::vec2(0.0, label_y),
                 egui::Align2::CENTER_CENTER,
                 &it.label,
-                FontId::proportional(if it.label.len() > 9 { 9.5 } else { 10.5 }),
+                crate::theme::prop(if it.label.len() > 9 { 9.5 } else { 10.5 }),
                 col,
             );
             // the outer ring
@@ -317,7 +317,7 @@ impl Radial {
                         pos,
                         egui::Align2::CENTER_CENTER,
                         ch,
-                        FontId::proportional(fs),
+                        crate::theme::prop(fs),
                         if hot { Color32::WHITE } else { ink },
                     );
                 }
@@ -342,14 +342,14 @@ impl Radial {
             c - egui::vec2(0.0, 6.0),
             egui::Align2::CENTER_CENTER,
             &self.title,
-            FontId::proportional(11.5),
+            crate::theme::prop(crate::theme::ts::LABEL),
             ink,
         );
         p.text(
             c + egui::vec2(0.0, 8.0),
             egui::Align2::CENTER_CENTER,
             &self.sub,
-            FontId::proportional(8.5),
+            crate::theme::prop(crate::theme::ts::TINY),
             t.ink2,
         );
         p.circle_stroke(c, R_MID, Stroke::new(1.0, Color32::from_white_alpha(36)));
