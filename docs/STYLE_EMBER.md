@@ -8,7 +8,7 @@
 - `src/app/mixstrip.rs`: the mixer strips (insert slots, sends, pan, duck, fader with its dB scale, dot meters with peak hold, LCD readout, M / S) and the Master section (limiter, Gain / Ceiling / Release knobs, LEVEL / REDUCTION dot rows, loudness, target).
 - The instrument card (`instpanel/instcard.rs`: pic-1 macro knobs, bevelled sections with screws, glowing graphs), the Devices cards (`devices.rs`, `devcards.rs`), the knob widget (`knob.rs`: pic-2 knob, glowing card graphs), the Clip Arranger's Master panel, the piano roll (light grey notes, selected notes orange with a white rim and a bloom), the Timeline playhead and the lower-panel tabs.
 - Paint and interaction only: songs, audio and the mixer data are unchanged; old songs render bit-identically. The mixer fader uses a console taper on screen (0 dB at 72 % of the travel); the stored gain is the same 0..2 value as before.
-- **Fonts** (SIL OFL 1.1, embedded with `include_bytes!`): Inter Regular, Barlow Semi Condensed SemiBold and Geist Mono SemiBold in `assets/fonts/`, licences in `LICENSES/`, credited in Help › About › Credits, the README and `THIRD_PARTY_LICENSES.txt`. The two families `label` and `num` are registered in every theme; Inter becomes the body font in Slate only.
+- **Fonts** (SIL OFL 1.1, embedded with `include_bytes!`): Atkinson Hyperlegible Next Regular / SemiBold and Atkinson Hyperlegible Mono Medium / SemiBold in `assets/fonts/`, with Inter Regular as the fallback for symbols, Greek and Cyrillic; licences in `LICENSES/`, credited in Help › About › Credits and the README. The same families (`label`, `num`, proportional, monospace) are used in every theme; sizes come from the type scale `theme::ts` (docs/UI_SCALING.md).
 - **One knob and meter painter for every theme** (`src/theme.rs`): `knob_face` (every rotary control: instrument and Devices knobs, generator and fill macros, the mixer's send / pan knobs), `knob_hero` (the instrument macros and the Master knobs) and `meter` / `meter_peak` (every level meter). Each draws the Slate look when the theme is Slate and the existing Polished / Flat look in Dark Circuit and Amiga, so the widgets themselves (interaction, accessibility labels, undo) are shared, not duplicated. The Slate mixer strips (`mixstrip.rs`) reuse the same painters and the existing mixer data and learn targets.
 - Flat mode (*Settings › Look › Flat*) turns the bevels' shadows and the bloom off. *Reduce motion* is unchanged: Slate adds no animation (the meters' 1.5 s peak hold is a reading, not motion). The app has no high-contrast setting yet; Slate keeps the keyboard focus ring and the accessible names / roles / values of every control (the UI tests find them by label).
 - The save prompt (*Save changes to "Song"?*) uses the outlined buttons; **Save**, the default, is lit orange.
@@ -18,7 +18,7 @@
 - No **R** (record arm) button on strips: ChipWave has no per-track record arm yet.
 - The Timeline header, the transport and the view bar keep their current widgets (reworked on `focus-timeline`); they take the Slate palette and fonts.
 - The LED-selector and square-toggle widgets from the style guide are not used yet: the existing radio rows, checkboxes and dropdowns take the Slate visuals instead.
-- The classic sidebar instrument editor is wider than its panel in Slate (Inter is a little wider), so long rows run under its scroll bar, as some already did in Dark.
+- The classic sidebar instrument editor can be wider than its panel at large Text sizes, so long rows run under its scroll bar.
 
 The design guide (from the mockup stage) follows.
 
@@ -99,7 +99,7 @@ The layouts are unchanged from the approved mockups (main window, instrument car
 
 **Displays** (waveform, filter, ADSR, EQ, spectrum, timeline lanes, piano roll) are recessed wells: a `disp0` › `disp1` gradient with an inset shadow.
 
-**LCD readouts:** a near-black well, Geist Mono Semibold in `acc-hot` with a glow, and units in uppercase `ink3`. Used for transport, BPM, Speed and mixer dB.
+**LCD readouts:** a near-black well, Atkinson Hyperlegible Mono SemiBold in `acc-hot` with a glow, and units in uppercase `ink3`. Used for transport, BPM, Speed and mixer dB.
 
 ## 3. Knobs
 **Pic-1 knob** (big controls: macros, main effect controls, Master, Threshold/Mix, EQ Output). It is drawn in a 100-unit box, over 270° from 135°.
@@ -116,20 +116,20 @@ The layouts are unchanged from the approved mockups (main window, instrument car
    - A disc r 25 with a radial fill (knob well warmed toward `acc` at the top) and a dark rim.
    - A 0.8 px `acc` rim at 32 %, and a faint gloss.
 6. **Readout:**
-   - Geist Mono Bold in `acc-hot` with a glow.
-   - Size is 17 for 2 characters, 15 for 3, 12.5 for 4 and 10.5 for more.
+   - Atkinson Hyperlegible Mono SemiBold in `acc-hot` with a glow.
+   - The size steps down with the character count (`shrink_to_fit`), never below 10 pt.
    - A zero or disabled readout is `ink3` with no glow.
 
 **Pic-2 knob** (section, Devices and mixer controls, sends, pan):
 - A dark knurled cap: a radial gradient and a serrated ring at r 32 (dash 1.3/1.5).
 - An inner face r 25, and an `acc-hot` pointer line from r 14 to r 29 with a slight glow.
 - **Tick ring:** 11 short ticks at r 39–46 in `ink3`, with the nearest tick in `acc-hot`.
-- **Scale variant:** 5 to 8 value labels at the tick points (Barlow 16 units). The nearest label is `acc-hot` with a glow and an `acc` tick. Use it where exact values matter: compressor times and ratio, EQ freq/gain/Q, filter cutoff.
+- **Scale variant:** 5 to 8 value labels at the tick points (Atkinson Hyperlegible Next, 16 units). The nearest label is `acc-hot` with a glow and an `acc` tick. Use it where exact values matter: compressor times and ratio, EQ freq/gain/Q, filter cutoff.
 - There is no LED arc and no dot ring on pic-2 knobs.
 
 **Labels:**
-- Knob names are uppercase Barlow Semi Condensed SemiBold in `ink2`.
-- Values sit under small knobs in Geist Mono.
+- Knob names are uppercase Atkinson Hyperlegible Next SemiBold in `ink2`; a long name shrinks to 10 pt before it is elided.
+- Values sit under small knobs in Atkinson Hyperlegible Mono.
 
 ## 4. Buttons and selectors (pic 2 / pic 1)
 - **Outlined button:**
@@ -160,10 +160,11 @@ The layouts are unchanged from the approved mockups (main window, instrument car
 - **Glow budget:** about 3 strong glows per card, always in the accent family.
 
 ## 6. Typography
-- UI text is **Inter** 12 px.
-- Labels, headings, knob names and buttons are **Barlow Semi Condensed** SemiBold/Bold. They are uppercase where pic 2 is, with 0.05–0.09 em tracking.
-- Numbers are **Geist Mono**, tabular.
-- All three fonts are SIL OFL, so they can be bundled. They **must be credited** in About › Credits and in the licence list.
+- UI text is **Atkinson Hyperlegible Next** (`ts::BODY` 13 pt; nothing below 10 pt).
+- Labels, headings, knob names and buttons are Atkinson Hyperlegible Next SemiBold, uppercase where pic 2 is.
+- Numbers are **Atkinson Hyperlegible Mono**, tabular.
+- Text colour follows the surface (`theme::on` / `on2`, at least 4.5 : 1).
+- All fonts are SIL OFL, so they can be bundled. They **must be credited** in About › Credits and in the licence list.
 
 ## 7. Mapping to egui
 - **Theme:** add `EMBER_SLATE` and `EMBER_SLATE_DARK` to `THEMES` in `src/theme.rs`.
@@ -197,8 +198,7 @@ The layouts are unchanged from the approved mockups (main window, instrument car
 - **Meters:** add `dot_meter(painter, rect, frac, n, vertical, peak)` (`circle_filled` plus a glow pass on lit dots) in place of `theme::meter`.
 - **Glow helpers:** extend `theme::glow` into `glow_line` and `glow_dot`. Use them only for curves, spectrum, meters, the playhead, selected notes, LED arcs/readouts and the tab underline.
 - **Fonts:** `ctx.set_fonts` with `include_bytes!`.
-  - Proportional = Inter.
-  - A named `FontFamily::Name("label")` = Barlow Semi Condensed.
-  - Monospace = Geist Mono.
+  - Proportional and `FontFamily::Name("label")` = Atkinson Hyperlegible Next (Inter as fallback).
+  - Monospace and `FontFamily::Name("num")` = Atkinson Hyperlegible Mono.
 - **Settings › Look:** the theme choices become Ember Slate and Ember Slate Dark. Flat mode turns off bevels and bloom.
 - **This is a paint-only change.** Audio, songs and layout are untouched, so old songs still render bit-identically.
