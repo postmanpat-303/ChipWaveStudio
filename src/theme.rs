@@ -475,10 +475,14 @@ pub mod ts {
         };
         SCALE.store(k.to_bits(), Ordering::Relaxed);
     }
-    /// a type-scale size → the points to render: at least [`MIN`], times
-    /// the Text size
+    /// a type-scale size → the points to render: times the Text size, and
+    /// never below [`MIN`] (a 90 % Text size keeps the smallest role at 10 pt)
     pub fn px(size: f32) -> f32 {
-        size.max(MIN) * text_scale()
+        px_at(size, text_scale())
+    }
+    /// [`px`] at a given Text size
+    pub fn px_at(size: f32, text: f32) -> f32 {
+        (size * text).max(MIN)
     }
 }
 
@@ -1257,17 +1261,20 @@ mod type_tests {
             assert!(s >= 10.0, "{name} is {s} pt");
         }
         // a stray literal below the floor still renders at the floor
-        assert!(ts::px(7.0) >= 10.0 * ts::TEXT_MIN - 1e-3);
+        assert!(ts::px(7.0) >= 10.0);
+        let small = ts::px_at(ts::TINY, ts::TEXT_MIN);
+        assert!(small >= 10.0, "TINY at the smallest Text size is {small}");
     }
 
     #[test]
     fn theme_text_reads_on_its_surfaces() {
+        // the panels, cards and pills text sits on (the window backdrop
+        // `bg_*` only shows between panels)
         for t in THEMES {
             for (what, bg) in [
                 ("cart_top", t.cart_top),
                 ("cart_bot", t.cart_bot),
-                ("bg_top", t.bg_top),
-                ("bg_bot", t.bg_bot),
+                ("pill", t.pill),
             ] {
                 let c = contrast(t.ink, bg);
                 assert!(c >= 4.5, "{}: ink on {what} {c:.2}", t.name);
