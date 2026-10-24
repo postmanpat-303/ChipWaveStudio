@@ -1212,6 +1212,13 @@ impl App {
         let pol = theme::polished();
         let mut glows: Vec<Rect> = vec![];
         let cur_tr = self.tl_cur_track();
+        // one gradient over the whole track area (not one per clip): a clip's
+        // shade comes from its y in the visible tracks, so it flows top to
+        // bottom across every track. Anchored to the viewport (the tracks when
+        // they all fit), so it reads the same at any scroll and track count.
+        let g_top = lanes.top();
+        let g_h = (total_h - sy).min(lanes.height()).max(lane_h);
+        let g_tone = move |y: f32| 0.08 - 0.26 * ((y - g_top) / g_h).clamp(0.0, 1.0);
         for tr in first_tr..last_tr {
             let lr = lane_rect(tr);
             if tr == cur_tr {
@@ -1329,19 +1336,20 @@ impl App {
                 if pol {
                     // rounded body with a gentle gradient, header rounded on top,
                     // a 1 px darker border; selected: a soft glow + outline
+                    let tn = |c: Color32, y: f32, lift: f32| theme::tone(c, g_tone(y) + lift);
                     theme::round_mesh(
                         &mut bodies,
                         r,
                         [3.0; 4],
-                        theme::tone(body_c, 0.06),
-                        theme::tone(body_c, -0.14),
+                        tn(body_c, r.top(), 0.0),
+                        tn(body_c, r.bottom(), 0.0),
                     );
                     theme::round_mesh(
                         &mut bodies,
                         hr,
                         [3.0, 3.0, 0.0, 0.0],
-                        theme::tone(head_c, 0.08),
-                        theme::tone(head_c, -0.04),
+                        tn(head_c, hr.top(), 0.04),
+                        tn(head_c, hr.bottom(), 0.04),
                     );
                     if sel {
                         glows.push(r);
