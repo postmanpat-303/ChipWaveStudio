@@ -2241,7 +2241,9 @@ impl App {
                     rz = None;
                     head_ops.push(HeadOp::Height(tr, 0.0));
                 } else if eresp.drag_started() {
-                    if let Some(y) = py {
+                    // from where it was pressed (the drag starts a few px later)
+                    let y0 = ui.ctx().input(|i| i.pointer.press_origin()).map(|p| p.y);
+                    if let Some(y) = y0.or(py) {
                         rz = Some((tr, lay.h(tr), y, lay.h(tr)));
                     }
                 } else if let (Some(r), Some(y)) = (rz.as_mut(), py) {

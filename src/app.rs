@@ -156,6 +156,8 @@ mod trackpie_tests;
 mod trackring;
 #[cfg(test)]
 mod trackring_tests;
+#[cfg(test)]
+mod tracksize_tests;
 mod transpose;
 mod typing;
 #[cfg(test)]
