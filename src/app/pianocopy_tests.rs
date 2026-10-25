@@ -242,9 +242,25 @@ fn the_roll_without_the_keyboard_leaves_its_notes_alone() {
     key(&mut h, Key::A, CMD);
     key(&mut h, Key::C, CMD);
     h.state_mut().pr.focus = false;
+    let n = h
+        .state()
+        .with(|s| s.song.timeline.as_ref().unwrap().clips.len());
     key(&mut h, Key::V, CMD);
     assert_eq!(clip_notes(&h, data), vec![(0, 60)]);
-    assert_eq!(h.state().status, super::keys::CLIPBOARD_ELSEWHERE);
+    // the Timeline has the keyboard: its (empty) clip clipboard
+    if h.state().view == View::Timeline {
+        assert!(
+            h.state().status.starts_with("Nothing copied"),
+            "{}",
+            h.state().status
+        );
+        let now = h
+            .state()
+            .with(|s| s.song.timeline.as_ref().unwrap().clips.len());
+        assert_eq!(now, n, "no clips pasted");
+    } else {
+        assert_eq!(h.state().status, super::keys::CLIPBOARD_ELSEWHERE);
+    }
 }
 
 #[test]

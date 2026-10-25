@@ -3,7 +3,7 @@ use super::*;
 
 /// status line for Ctrl+C / Ctrl+X / Ctrl+V outside the Tracker views
 pub(super) const CLIPBOARD_ELSEWHERE: &str =
-    "Cut, copy and paste work in the piano roll (click into it), the Tracker and the Order list (on the Timeline: Ctrl+D duplicates, Alt-drag copies)";
+    "Cut, copy and paste work on the Timeline (clips), in the piano roll (click into it), the Tracker and the Order list";
 
 impl App {
     pub(super) fn handle_keys(&mut self, ctx: &egui::Context) {
@@ -40,6 +40,15 @@ impl App {
                 }
                 continue;
             }
+            // the Timeline: its clips (Ctrl+Shift+V pastes linked copies)
+            if self.view == View::Timeline {
+                match a {
+                    input::ClipAction::Copy => self.tl_copy(false),
+                    input::ClipAction::Cut => self.tl_copy(true),
+                    input::ClipAction::Paste(_) => self.tl_paste(None, self.mods.shift),
+                }
+                continue;
+            }
             if !tracker_view {
                 self.status = CLIPBOARD_ELSEWHERE.into();
                 continue;
@@ -50,6 +59,11 @@ impl App {
                 input::Routed::Pattern(input::ClipAction::Paste(t)) => self.paste(t),
                 input::Routed::Arranger(a, t) => self.arranger_action_text(a, t, ctx),
             }
+        }
+        // a Timeline clip copy (keys or its pie) also fills the system
+        // clipboard, so the next Ctrl+V arrives even when it held no text
+        if let Some(t) = self.tlv.clip_os.take() {
+            ctx.copy_text(t);
         }
         let arr_visible =
             self.view == View::Arranger || (self.view == View::Pattern && self.arr_docked());

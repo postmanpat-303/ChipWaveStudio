@@ -336,7 +336,7 @@ impl App {
                 if let Some(g) =
                     super::drumkitview::starter_groove(k).filter(|_| d.notes.is_empty())
                 {
-                    d.notes = g.notes(0);
+                    d.notes = g.notes(slot);
                     d.len = g.len();
                     d.name = g.name.to_string();
                     d.drum = Some(crate::drumkit::DrumMeta { swing: g.swing });

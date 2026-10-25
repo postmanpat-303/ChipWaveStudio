@@ -66,6 +66,8 @@ pub(super) enum Tr {
     Start,
     /// Record: a filled circle
     Record,
+    /// Loop: two curved arrows chasing each other round
+    Loop,
 }
 
 pub(super) fn transport_button(
@@ -109,8 +111,42 @@ pub(super) fn transport_button(
             }
             p.circle_filled(c, 5.5, col);
         }
+        Tr::Loop => paint_loop(p, c, col),
     }
     resp.clicked()
+}
+
+/// the loop icon: an upper arc running right and a lower arc running
+/// left, each ending in an arrowhead (as big as Play / Record)
+pub(super) fn paint_loop(p: &egui::Painter, c: Pos2, col: Color32) {
+    let (rx, ry) = (7.0f32, 4.5f32);
+    let pt = |a: f32| c + egui::vec2(rx * a.cos(), ry * a.sin());
+    let stroke = Stroke::new(1.7, col);
+    // (screen y grows down: angles from π+0.35 to 2π-0.5 are the top arc,
+    // left to right; 0.35 to π-0.5 the bottom one, right to left)
+    for (a0, a1) in [
+        (std::f32::consts::PI + 0.35, std::f32::consts::TAU - 0.5),
+        (0.35, std::f32::consts::PI - 0.5),
+    ] {
+        let n = 10;
+        let pts: Vec<Pos2> = (0..=n)
+            .map(|i| pt(a0 + (a1 - a0) * i as f32 / n as f32))
+            .collect();
+        p.add(egui::Shape::line(pts, stroke));
+        // the arrowhead at the arc's end, along its direction of travel
+        let tip = pt(a1 + 0.42);
+        let dir = (tip - pt(a1 - 0.05)).normalized();
+        let side = egui::vec2(-dir.y, dir.x);
+        p.add(egui::Shape::convex_polygon(
+            vec![
+                tip + dir * 1.0,
+                tip - dir * 3.6 + side * 3.0,
+                tip - dir * 3.6 - side * 3.0,
+            ],
+            col,
+            Stroke::NONE,
+        ));
+    }
 }
 
 impl App {

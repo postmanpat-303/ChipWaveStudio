@@ -1521,6 +1521,15 @@ impl App {
     pub(super) fn piano_view(&mut self, ui: &mut egui::Ui) {
         let t = th();
         let full = ui.max_rect();
+        // a press outside the roll gives the keys back, also while it is
+        // empty (opened from the view bar, no clip yet): the clip clicked
+        // next keeps Ctrl+C / Ctrl+V for the Timeline
+        if let Some(p) = ui.input(|i| i.pointer.press_origin().filter(|_| i.pointer.any_pressed()))
+        {
+            if !full.contains(p) {
+                self.pr.focus = false;
+            }
+        }
         let Some(target) = self.pr_target() else {
             self.pr.target = None;
             ui.add_space(24.0);

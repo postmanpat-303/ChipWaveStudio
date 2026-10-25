@@ -116,7 +116,17 @@ fn cut_copy_paste_outside_the_tracker_leave_the_blocks_alone() {
             before,
             "{v:?}: a hidden Tracker block was edited"
         );
-        assert_eq!(h.state().status, super::keys::CLIPBOARD_ELSEWHERE);
+        if v == View::Timeline {
+            // the Timeline has its own clip clipboard (nothing selected or
+            // copied here: it says so and changes nothing)
+            assert!(
+                h.state().status.starts_with("Nothing copied"),
+                "{}",
+                h.state().status
+            );
+        } else {
+            assert_eq!(h.state().status, super::keys::CLIPBOARD_ELSEWHERE);
+        }
     }
     assert!(!h.state().dirty);
     // in the Tracker they still work

@@ -62,7 +62,7 @@ fn the_editor_opens_on_a_drum_kit_and_a_step_click_adds_and_removes_a_hit() {
     assert_eq!(n.len(), 1, "{n:?}");
     assert_eq!(n[0].key, key);
     assert_eq!(dk::step_of(n[0].start), k);
-    assert_eq!(n[0].instr, 0, "the track's own kit");
+    assert_eq!(n[0].instr, slot, "stamped with the track's own kit");
     let drum = {
         let s = h.state().shared.clone();
         let g = audio::lock(&s);
@@ -448,7 +448,10 @@ fn kits_on_an_empty_manual_clip_loads_the_kit_and_its_groove() {
     let g = starter_groove("Chip Kit").unwrap();
     let n = notes(&h, id);
     assert_eq!(n.len(), g.hits(), "the starter groove {}", g.name);
-    assert!(n.iter().all(|x| x.instr == 0), "on the track's own kit");
+    assert!(
+        n.iter().all(|x| x.instr == slot),
+        "stamped with the track's own kit"
+    );
     assert!(
         h.state().status.contains("Chip Kit"),
         "{}",

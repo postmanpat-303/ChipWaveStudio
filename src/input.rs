@@ -92,6 +92,11 @@ pub fn clipboard_actions(events: &[Event]) -> Vec<ClipAction> {
                 ev = true;
                 out.push(ClipAction::Paste(Some(t.clone())))
             }
+            // Ctrl+V with only a picture on the system clipboard
+            Event::PasteImage(_) => {
+                ev = true;
+                out.push(ClipAction::Paste(None))
+            }
             _ => {}
         }
     }

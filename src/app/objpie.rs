@@ -16,6 +16,8 @@ pub(crate) enum PieFor {
     Clip(u32),
     /// a Clip Arranger launcher clip
     Launch(u32),
+    /// empty space on a Timeline track lane: (track, tick clicked)
+    Lane { track: usize, at: tl::Tick },
     /// the Drum Kit step grid: the pattern clip, its notes and a pad lane
     Drum {
         clip: u32,
@@ -60,6 +62,8 @@ pub(crate) fn clip_items(block: bool, tracker: bool) -> Vec<RadialItem> {
     let mut v = vec![
         RadialItem::new("Edit", Some(RIcon::Edit), edit),
         RadialItem::new("Split…", Some(RIcon::Select), vec![]),
+        RadialItem::new("Copy", None, vec![]),
+        RadialItem::new("Cut", None, vec![]),
         RadialItem::new(
             "Duplicate",
             Some(RIcon::Add),
@@ -102,6 +106,36 @@ pub(crate) fn var_item(n: usize) -> RadialItem {
         ch.push("Order…".to_string());
     }
     RadialItem::new("Variations", Some(RIcon::Generate), ch)
+}
+
+/// empty Timeline lane pie wedges: Paste here (greyed "Nothing copied"
+/// while the clip clipboard is empty), new clips, import, marker
+pub(crate) fn lane_items(can_paste: bool, tracker: bool, capture: bool) -> Vec<RadialItem> {
+    let mut v = vec![if can_paste {
+        RadialItem::new(
+            "Paste here",
+            Some(RIcon::Add),
+            vec!["Independent copy".into(), "Linked copy".into()],
+        )
+    } else {
+        RadialItem::new("Nothing copied", Some(RIcon::Add), vec![]).dimmed()
+    }];
+    v.push(RadialItem::new(
+        "New clip",
+        Some(RIcon::Notes),
+        if tracker {
+            vec!["Note clip".into(), "Tracker clip".into()]
+        } else {
+            vec![]
+        },
+    ));
+    if capture {
+        v.push(RadialItem::new("Capture MIDI", Some(RIcon::Play), vec![]));
+    }
+    v.push(RadialItem::new("Import audio…", Some(RIcon::More), vec![]));
+    v.push(RadialItem::new("Add marker", Some(RIcon::Type), vec![]));
+    v.push(RadialItem::new("Select all", Some(RIcon::Select), vec![]));
+    v
 }
 
 /// launcher clip pie wedges
@@ -200,6 +234,30 @@ impl App {
                 }
                 (items, c.1, format!("launcher · track {:02}", c.0 + 1))
             }
+            PieFor::Lane { track, at } => {
+                let (name, place) = self.with(|s| {
+                    let t = s.song.timeline.as_deref();
+                    let name = t
+                        .and_then(|t| t.tracks.get(track))
+                        .map(|x| x.name.clone())
+                        .filter(|n| !n.is_empty())
+                        .unwrap_or_else(|| format!("Track {:02}", track + 1));
+                    let p = t.map(|t| t.bar_pos(at));
+                    (
+                        name,
+                        p.map_or(String::new(), |p| format!("bar {}.{}", p.bar, p.beat)),
+                    )
+                });
+                (
+                    lane_items(
+                        !self.tlv.clipboard.is_empty(),
+                        self.tracker_on(),
+                        !self.noterec.recent.is_empty(),
+                    ),
+                    name,
+                    format!("track {:02} · {place}", track + 1),
+                )
+            }
             PieFor::Drum { pad, .. } => (
                 drum_items(),
                 "PATTERN".to_string(),
@@ -219,6 +277,15 @@ impl App {
         if let Some((mut pie, on)) = self.opie.take() {
             match pie.show(ctx) {
                 RadialEv::Cancel => {}
+                RadialEv::Pick(i, _) if pie.items.get(i).is_some_and(|x| x.dim) => {
+                    // greyed: stays open, says why
+                    self.status = "Nothing copied: select clips and press Ctrl+C (or Copy in a clip's pie) first".into();
+                    self.opie = Some((pie, on));
+                }
+                RadialEv::Hover(i, _) if pie.items.get(i).is_some_and(|x| x.dim) => {
+                    self.status = "Nothing copied: select clips and press Ctrl+C (or Copy in a clip's pie) first".into();
+                    self.opie = Some((pie, on));
+                }
                 RadialEv::Pick(i, c) => {
                     let label = pie
                         .items
@@ -255,6 +322,7 @@ impl App {
         match on {
             PieFor::Clip(id) => self.clip_pie_pick(id, label, child),
             PieFor::Launch(id) => self.launch_pie_pick(id, label, child),
+            PieFor::Lane { track, at } => self.lane_pie_pick(track, at, label, child),
             PieFor::Drum {
                 clip,
                 data,
@@ -285,6 +353,8 @@ impl App {
                 self.timeline_open_roll();
             }
             ("Split…", _) => self.tl_apply(TlOp::SplitArm),
+            ("Copy", _) => self.tl_copy(false),
+            ("Cut", _) => self.tl_copy(true),
             ("Duplicate", Some("Independent copy")) => {
                 self.snapshot();
                 self.undo_hold += 1;
@@ -345,6 +415,29 @@ impl App {
             }
             Some(_) => self.var_add(data, seed),
             None => self.status = "Variations: choose from the outer ring".into(),
+        }
+    }
+
+    fn lane_pie_pick(&mut self, track: usize, at: tl::Tick, label: &str, child: Option<&str>) {
+        let bar = self.with(|s| {
+            s.song
+                .timeline
+                .as_deref()
+                .map_or(4 * tl::PPQ, |t| t.sig_at(0).bar_ticks())
+        });
+        let on_bar = at / bar * bar;
+        match (label, child) {
+            ("Paste here", c) => self.tl_paste(Some((track, at)), c == Some("Linked copy")),
+            ("New clip", Some("Tracker clip")) => self.tl_apply(TlOp::NewClip(track, on_bar)),
+            ("New clip", _) => self.tl_apply(TlOp::NewNotes(track, on_bar)),
+            ("Capture MIDI", _) => self.tl_apply(TlOp::Capture(track, on_bar)),
+            ("Import audio…", _) => self.audio_op(super::timeline::audioclip::AudioOp::Import(
+                track,
+                tl::snap(at, tl::ROW),
+            )),
+            ("Add marker", _) => self.tl_apply(TlOp::AddMarker(tl::snap(at, tl::ROW))),
+            ("Select all", _) => self.tl_apply(TlOp::SelectAll),
+            _ => {}
         }
     }
 

@@ -7,19 +7,25 @@
 //! Esc / Backspace / ‹ Back / a click on the dimmed pie step back one ring.
 use super::radial::{slot_angle, slot_arc, slot_at, strip_mesh};
 use super::trackpie::{
-    ease_out, hit, pal, seg_angle, Builtin, Hit, Pal, Pie, PieAct, Seg, TrackClass, TrackInfo,
-    AIM_SETTLE_S, HOVER_S, MARGIN, R_IN, R_OUT, SEGS, SUB_S,
+    ease_out, hit, pal, r_in, r_out, seg_angle, Builtin, Hit, Pal, Pie, PieAct, Seg, TrackClass,
+    TrackInfo, AIM_SETTLE_S, HOVER_S, MARGIN, SEGS, SUB_S,
 };
 use super::*;
 use egui::{Shape, Vec2};
 use std::f32::consts::TAU;
 
 /// inner and outer radius of the rings
-pub(crate) const R1: f32 = R_OUT + 10.0;
-pub(crate) const R2: f32 = R_OUT + 112.0;
+pub(crate) fn r1() -> f32 {
+    r_out() + 10.0 * super::piesize::k()
+}
+pub(crate) fn r2() -> f32 {
+    r_out() + 112.0 * super::piesize::k()
+}
 /// the pie's centre keeps this far from the window's edges, so every ring
 /// fits on screen (1366x768 too) without moving the pie under the pointer
-pub(crate) const R_FIT: f32 = R2 + 4.0 + MARGIN;
+pub(crate) fn r_fit() -> f32 {
+    r2() + 4.0 * super::piesize::k() + MARGIN
+}
 const SLOT_GAP: f32 = 0.008;
 const SLOT_STEPS: usize = 24;
 /// resting this long on a › slot during a right-drag opens its ring
@@ -190,7 +196,14 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
         )
     };
     let tail = || {
-        vec![
+        let paste = (i.paste && i.timeline).then(|| {
+            slot(
+                "Paste at playhead",
+                Some(Go::Act(PieAct::PasteHere)),
+                "the copied clips onto this track at the play marker (on the snap grid), as independent copies",
+            )
+        });
+        paste.into_iter().chain([
             Slot {
                 on: i.mute,
                 ..slot(
@@ -229,7 +242,7 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
                 Some(Go::Act(PieAct::Devices)),
                 "this track's instrument and effects in the Rack",
             ),
-        ]
+        ])
     };
     Some(match level {
         Level::Add => {
@@ -609,13 +622,13 @@ pub(crate) enum RingHit {
 pub(crate) fn ring_hit(c: Pos2, a0: f32, n: usize, p: Pos2) -> RingHit {
     let d = p - c;
     let r = d.length();
-    if r <= R_OUT + 6.0 {
+    if r <= r_out() + 6.0 {
         return match hit(c, p) {
             Hit::Seg(i) => RingHit::Inner(i),
             _ => RingHit::Centre,
         };
     }
-    if r <= R2 + 8.0 {
+    if r <= r2() + 8.0 {
         return RingHit::Slot(slot_at(a0, n, d.y.atan2(d.x)));
     }
     RingHit::Outside
@@ -765,7 +778,7 @@ impl App {
                     // another segment: the ring stays while the pointer
                     // only grazes it on the way out (near the rim, moving)
                     let d = inp.ptr.map_or(0.0, |q| (q - c).length());
-                    if d < R_OUT * 0.75 || rested {
+                    if d < r_out() * 0.75 || rested {
                         leave_for = Some(i);
                     } else {
                         ctx.request_repaint_after(std::time::Duration::from_secs_f64(AIM_SETTLE_S));
@@ -854,12 +867,13 @@ impl App {
         if deep {
             painter.circle_filled(
                 c,
-                R_OUT + 6.0,
+                r_out() + 6.0,
                 Color32::from_black_alpha((110.0 * ks) as u8),
             );
         }
         let sc = 0.92 + 0.08 * ks;
-        let (r1, r2) = (R1 + (R2 - R1) * (1.0 - sc), R2 * sc);
+        let (r_lo, r_hi) = (r1(), r2());
+        let (r1, r2) = (r_lo + (r_hi - r_lo) * (1.0 - sc), r_hi * sc);
         for (dr, a) in [(10.0, 18u8), (5.0, 28), (2.0, 34)] {
             painter.circle_stroke(
                 c + egui::vec2(0.0, 4.0),
@@ -922,9 +936,9 @@ impl App {
             };
             let mut job = egui::text::LayoutJob::simple(
                 label,
-                crate::theme::prop(if is_back { 12.0 } else { 13.0 }),
+                crate::theme::prop(super::piesize::k().sqrt() * if is_back { 12.0 } else { 13.0 }),
                 ink.gamma_multiply(ks),
-                (chord * 0.86).min(118.0),
+                (chord * 0.86).min(118.0 * super::piesize::k()),
             );
             job.halign = egui::Align::Center;
             job.wrap.max_rows = 3;
@@ -936,21 +950,22 @@ impl App {
             }
         }
         // the centre disc names the ring
-        let rr = R_IN - 4.0;
+        let rr = r_in() - 4.0;
         painter.circle_filled(c, rr, pl.disc.gamma_multiply(fade));
         painter.circle_stroke(c, rr, Stroke::new(1.0, pl.edge.gamma_multiply(fade)));
         let (top, sub) = titles(level, &p.name, p.empty);
+        let pk = super::piesize::k();
         painter.text(
-            c - egui::vec2(0.0, 9.0),
+            c - egui::vec2(0.0, 9.0 * pk),
             egui::Align2::CENTER_CENTER,
             top,
-            crate::theme::prop(crate::theme::ts::TINY),
+            crate::theme::prop(crate::theme::ts::TINY * pk.sqrt()),
             pl.disc_ink2.gamma_multiply(fade),
         );
-        let f = crate::theme::prop(crate::theme::ts::COMPACT);
+        let f = crate::theme::prop(crate::theme::ts::COMPACT * pk.sqrt());
         let nm = super::pattern::fit(painter, &sub, &f, 2.0 * rr - 12.0);
         painter.text(
-            c + egui::vec2(0.0, 8.0),
+            c + egui::vec2(0.0, 8.0 * pk),
             egui::Align2::CENTER_CENTER,
             nm,
             f,
@@ -958,7 +973,7 @@ impl App {
         );
         if let Some((s, dir)) = tip {
             if ks > 0.9 {
-                ring_tip(painter, &pl, &s, c + dir * (R2 + 10.0), dir, screen);
+                ring_tip(painter, &pl, &s, c + dir * (r_hi + 10.0), dir, screen);
             }
         }
         animating

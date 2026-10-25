@@ -37,12 +37,18 @@ mod chordview;
 mod cliparr;
 #[cfg(test)]
 mod cliparr_tests;
+#[cfg(test)]
+mod clipcopy_tests;
+#[cfg(test)]
+mod dblloop_tests;
 mod devcards;
 mod devices;
 #[cfg(test)]
 mod devices_tests;
 mod dialogs;
 mod dropplan;
+#[cfg(test)]
+mod drumbind_tests;
 mod drumkitview;
 mod drumpat;
 #[cfg(test)]
@@ -81,6 +87,8 @@ mod lcd;
 #[cfg(test)]
 mod lcd_tests;
 mod library;
+#[cfg(test)]
+mod looptransport_tests;
 mod metroicon;
 mod midiimport;
 mod midiview;
@@ -108,6 +116,7 @@ mod piano_tests;
 #[cfg(test)]
 mod pianocopy_tests;
 mod pianoview;
+mod piesize;
 mod pluginview;
 mod plugsetup;
 mod prlanes;
@@ -1166,7 +1175,8 @@ impl eframe::App for App {
                 egui::Event::Key { .. }
                 | egui::Event::Copy
                 | egui::Event::Cut
-                | egui::Event::Paste(_) => self.pending.push(e),
+                | egui::Event::Paste(_)
+                | egui::Event::PasteImage(_) => self.pending.push(e),
                 egui::Event::Text(_) => {}
                 other => keep.push(other),
             }
@@ -1176,6 +1186,10 @@ impl eframe::App for App {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.shot_frame(ui.ctx());
+        piesize::set(
+            piesize::of_setting(self.extra.pie_size),
+            ui.ctx().content_rect(),
+        );
         self.poll_save();
         self.load_warnings_window(ui.ctx());
         self.too_new_window(ui.ctx());

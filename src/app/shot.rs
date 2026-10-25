@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 123] = [
+pub const VIEWS: [&str; 125] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -124,6 +124,8 @@ pub const VIEWS: [&str; 123] = [
     "drop-ask",
     "cliparranger-launcher",
     "clip-pie",
+    "lane-pie",
+    "clip-pasted",
     "launcher-pie",
     "drum-pie",
     "chooser",
@@ -565,6 +567,8 @@ impl App {
             | "drop-ask"
             | "cliparranger-launcher"
             | "clip-pie"
+            | "lane-pie"
+            | "clip-pasted"
             | "launcher-pie"
             | "drum-pie" => {
                 // a new song: a take on track 01 at bars 1 and 5, a Drum Kit
@@ -1437,7 +1441,10 @@ impl App {
         if view == "cliparranger-notes" && f == CAPTURE_AT - 6 {
             self.ca_scene(0);
         }
-        if matches!(view.as_str(), "clip-pie" | "launcher-pie" | "drum-pie") {
+        if matches!(
+            view.as_str(),
+            "clip-pie" | "launcher-pie" | "drum-pie" | "lane-pie" | "clip-pasted"
+        ) {
             self.shot_obj_pie(&view, f);
         }
         if view == "cliparranger-launcher" && f == SETUP_AT + 16 {
@@ -1540,9 +1547,14 @@ impl App {
             }
         }
 
+        if f == SETUP_AT + 12 || f == SETUP_AT + 24 {
+            self.shot_dbl_loop(f == SETUP_AT + 12);
+        }
         if f == SETUP_AT + 12 {
             self.shot_keys();
             self.shot_lcd();
+            self.shot_loop();
+            self.shot_kit_after(ctx);
         }
         if view == "split-preview" && f == SETUP_AT + 12 {
             self.shot_split();
@@ -2377,6 +2389,29 @@ impl App {
                     self.set_lower(1);
                 }
             }
+            // CHIPWAVE_SHOT_LINKED=1: the take duplicated twice and named
+            // "Take 1" (three linked clips, 'Take 1 ×3')
+            ("clip-pie", x)
+                if x == SETUP_AT + 16 && std::env::var_os("CHIPWAVE_SHOT_LINKED").is_some() =>
+            {
+                if let Some((id, _)) = clip_on(self, 0) {
+                    self.tlv.sel = Some(id);
+                    self.tlv.sels = vec![id];
+                    for _ in 0..2 {
+                        self.tl_apply(super::timeline::TlOp::Duplicate);
+                    }
+                    self.with(|s| {
+                        if let Some(c) = s
+                            .song
+                            .timeline
+                            .as_deref_mut()
+                            .and_then(|t| t.clips.iter_mut().find(|c| c.id == id))
+                        {
+                            c.name = Some("Take 1".into());
+                        }
+                    });
+                }
+            }
             ("clip-pie", x) if x == SETUP_AT + 20 => {
                 if let (Some((id, _)), Some((_, row))) = (clip_on(self, 0), self.tlv.track_rects(0))
                 {
@@ -2385,6 +2420,25 @@ impl App {
                     let p = Pos2::new(self.tlv.x_of(2 * crate::timeline::PPQ), row.center().y);
                     self.opie_req = Some((PieFor::Clip(id), p));
                 }
+            }
+            // the Verse copied (Ctrl+C); lane-pie: the empty lane on track
+            // 01 after the Hook; clip-pasted: pasted there just before the shot
+            ("lane-pie" | "clip-pasted", x) if x == SETUP_AT + 20 => {
+                if let Some((id, _)) = clip_on(self, 0) {
+                    self.tlv.sel = Some(id);
+                    self.tlv.sels = vec![id];
+                    self.tl_copy(false);
+                }
+            }
+            ("lane-pie", x) if x == SETUP_AT + 24 => {
+                let at = 8 * 4 * crate::timeline::PPQ;
+                if let Some((_, row)) = self.tlv.track_rects(0) {
+                    let p = Pos2::new(self.tlv.x_of(at + crate::timeline::PPQ), row.center().y);
+                    self.opie_req = Some((PieFor::Lane { track: 0, at }, p));
+                }
+            }
+            ("clip-pasted", x) if x == CAPTURE_AT - 3 => {
+                self.tl_paste(Some((0, 8 * 4 * crate::timeline::PPQ)), false);
             }
             ("launcher-pie", x) if x == SETUP_AT + 24 => {
                 let lid = self.with(|s| {
@@ -2418,12 +2472,24 @@ impl App {
             // the outer ring of one wedge, as when the mouse is on it
             (v, x) if x == SETUP_AT + 30 => {
                 let want = match v {
-                    "clip-pie" => "Duplicate",
+                    "clip-pie" => "Copy",
+                    "lane-pie" => "Paste here",
+                    "clip-pasted" => return,
                     "launcher-pie" => "Place",
                     _ => "Fill",
                 };
                 if let Some((pie, _)) = &mut self.opie {
                     pie.hover = pie.items.iter().position(|x| x.label == want);
+                    // and the pointer on it, so it stays lit
+                    if let Some(i) = pie.hover {
+                        let c = pie.wedge_centre(
+                            i,
+                            (super::radial::r_in() + super::radial::r_mid()) / 2.0,
+                        );
+                        if let Some(sh) = &mut self.shot {
+                            sh.script = vec![(x + 2, egui::Event::PointerMoved(c))];
+                        }
+                    }
                 }
             }
             _ => {}
@@ -2609,6 +2675,95 @@ impl App {
             }
         });
         self.lcd.shot_lit = true;
+    }
+
+    /// CHIPWAVE_SHOT_LOOP=on | off: the transport's Loop with bars 1–4 set,
+    /// on or off (the pointer on it: its tip)
+    fn shot_loop(&mut self) {
+        let Ok(m) = std::env::var("CHIPWAVE_SHOT_LOOP") else {
+            return;
+        };
+        self.with(|s| {
+            if let Some(t) = s.song.timeline.as_deref_mut() {
+                t.loop_range = Some((0, 4 * t.sig_at(0).bar_ticks()));
+                t.loop_on = m == "on";
+            }
+        });
+    }
+
+    /// CHIPWAVE_SHOT_DBLLOOP=1: a block clip on screen double-clicked: the
+    /// loop exactly around it (the ruler band, the lane tint, the status)
+    fn shot_dbl_loop(&mut self, first: bool) {
+        if std::env::var("CHIPWAVE_SHOT_DBLLOOP").is_err() {
+            return;
+        }
+        if first {
+            // the song in timeline mode first (the double-click loops there)
+            self.with(|s| {
+                if s.song.timeline.is_none() {
+                    crate::timeline::enter_timeline_mode(&mut s.song);
+                }
+            });
+            return;
+        }
+        let pick = self.tlv.cache.as_ref().and_then(|c| {
+            c.tl.clips
+                .iter()
+                .filter(|cl| cl.start > 0 && cl.block().is_some())
+                .find(|cl| {
+                    self.tlv
+                        .clip_rect(cl.id)
+                        .is_some_and(|r| self.tlv.lanes.contains(r.center()))
+                })
+                .map(|cl| cl.id)
+        });
+        if let Some(id) = pick {
+            self.tlv.sels = vec![id];
+            self.tlv.sel = Some(id);
+            self.tl_apply(super::timeline::TlOp::LoopClip(id));
+        }
+    }
+
+    /// CHIPWAVE_SHOT_KITAFTER=1 (with timeline-new): a StringWave on track
+    /// 01 with a clip, then Drum kit › 909 here on track 02 (its starter
+    /// groove), shown in the step sequencer
+    fn shot_kit_after(&mut self, ctx: &egui::Context) {
+        use super::trackpie::{Builtin, PieAct};
+        use crate::timeline as tl;
+        if std::env::var_os("CHIPWAVE_SHOT_KITAFTER").is_none() {
+            return;
+        }
+        self.enter_timeline();
+        self.view = View::Timeline;
+        if !(self.track_add(0) && self.track_add(1)) {
+            return;
+        }
+        self.track_new_instrument(0, Builtin::StringWave);
+        self.with(|s| {
+            if let Some(id) = tl::new_note_clip(&mut s.song, 0, 0) {
+                let t = s.song.timeline.as_deref_mut().unwrap();
+                if let Some(d) = t.clips.iter().find(|c| c.id == id).and_then(|c| c.notes()) {
+                    t.notes[d].make_mut().notes.push(tl::Note {
+                        key: 49,
+                        len: 4 * tl::ROW,
+                        instr: 1,
+                        ..Default::default()
+                    });
+                }
+            }
+        });
+        self.pie_apply(1, PieAct::DrumKitHere("909 Kit"), ctx);
+        let id = self.with(|s| {
+            let t = s.song.timeline.as_deref()?;
+            t.clips.iter().find(|c| c.track == 1).map(|c| c.id)
+        });
+        if let Some(id) = id {
+            self.tlv.sel = Some(id);
+            self.tlv.sels = vec![id];
+            self.ch = 1;
+            self.instr = self.track_instr(1);
+            self.set_lower(1);
+        }
     }
 
     fn shot_tracksize(&mut self) {

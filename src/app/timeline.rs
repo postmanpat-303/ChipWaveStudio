@@ -141,6 +141,10 @@ pub(crate) enum TlOp {
     SplitArm,
     /// split exactly this clip at a tick (the split preview's click)
     SplitClip(u32, Tick),
+    /// the selected clips to the clip clipboard (`App::tl_copy`)
+    Copy,
+    /// copied, then deleted (one undo step)
+    Cut,
     Duplicate,
     Delete,
     Mute,
@@ -151,6 +155,9 @@ pub(crate) enum TlOp {
     Glue,
     LoopFromSelection,
     ToggleLoop,
+    /// a clip's double-click: the loop exactly around it, on; off when it
+    /// already is the loop
+    LoopClip(u32),
     AddMarker(Tick),
     NewClip(usize, Tick),
     /// a new note clip (piano roll) on (track, tick)
@@ -168,6 +175,14 @@ pub(crate) enum TlOp {
         track: u8,
         at: Tick,
     },
+    /// the clipboard's clips (`TimelineUi::clipboard`): the earliest on
+    /// `track` at `at` (already on the grid), the others at their distances;
+    /// independent copies unless `linked`
+    Paste {
+        track: u8,
+        at: Tick,
+        linked: bool,
+    },
     /// a dropped clip (docs/unified/PLAN.md Stage 4a): `src` on `track` at
     /// `at`, linked or (`unique`) independent; `fit` says what happens to
     /// clips in the way (`grid`: where Place after it lands)
@@ -180,6 +195,9 @@ pub(crate) enum TlOp {
         grid: Tick,
     },
 }
+
+/// seconds the just-pasted clips glow
+const PASTE_GLOW: f32 = 1.8;
 
 pub(crate) struct TimelineUi {
     pub(crate) cache: Option<Cache>,
@@ -255,6 +273,17 @@ pub(crate) struct TimelineUi {
     /// a clip just added (Drum Kit "Add to track"): (id, start time; NaN =
     /// starts on the next frame); its outline pulses briefly
     pub(crate) flash: Option<(u32, f64)>,
+    /// clips just pasted (Ctrl+V, Paste here): (ids, start time; NaN =
+    /// starts on the next frame); they glow briefly, then fade
+    pub(crate) pasted: Option<(Vec<u32>, f64)>,
+    /// the clip clipboard (Ctrl+C / Ctrl+X); empty = nothing copied.
+    /// Cleared when another song is opened (its notes play this song's
+    /// instruments)
+    pub(crate) clipboard: tl::ClipBoard,
+    /// a line for the system clipboard after a clip copy (handed over next
+    /// frame): the window system only sends Ctrl+V when that clipboard
+    /// holds text, so an empty one would swallow the paste
+    pub(crate) clip_os: Option<String>,
     /// scroll so this (track, tick) is in view on the next frame (a clip
     /// just added from the Drum Kit editor)
     pub(crate) reveal: Option<(usize, Tick)>,
@@ -310,6 +339,9 @@ impl Default for TimelineUi {
             follow_touch: false,
             last_touch: None,
             flash: None,
+            pasted: None,
+            clipboard: tl::ClipBoard::default(),
+            clip_os: None,
             reveal: None,
             song_sel: None,
         }
@@ -325,6 +357,8 @@ impl TimelineUi {
         self.drag = None;
         self.rename = None;
         self.cue = 0;
+        self.clipboard = tl::ClipBoard::default();
+        self.pasted = None;
     }
 
     /// File > New: a fresh layout (zoomed to show a few dozen bars)
@@ -337,6 +371,8 @@ impl TimelineUi {
         self.sels.clear();
         self.cue = 0;
         self.drag = None;
+        self.clipboard = tl::ClipBoard::default();
+        self.pasted = None;
     }
 
     /// snap grid in ticks at pixels-per-tick `ppt` (`fine`: Shift = rows)
@@ -820,9 +856,9 @@ impl App {
                 "This song is arranged here: clips on tracks (track = mixer channel). \
                  Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
                  S split (line, click to cut, Esc cancels), Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
-                 Ctrl+Shift+D make unique. Double-click a clip to edit it in the piano roll \
-                 (Alt+double-click or Enter: the Tracker; Settings can swap them), \
-                 empty space to write a new block. Song › Back to tracker mode… turns it back."
+                 Ctrl+Shift+D make unique. Double-click a clip to loop it (again: loop off); \
+                 Alt+double-click or Enter opens it (piano roll or Tracker, as set in Settings), \
+                 double-click empty space to write a new block. Song › Back to tracker mode… turns it back."
             } else {
                 "This tracker-mode song's order list, shown as clips per track."
             });
@@ -1213,26 +1249,56 @@ impl App {
             let (xa, xb) = (x_of(a as f64), x_of(b as f64));
             if xb > ruler.left() && xa < ruler.right() {
                 let on = c.tl.loop_on && mode;
-                let lc = if on { t.accent } else { crt_ink };
-                rp.rect_filled(
-                    Rect::from_min_max(
-                        Pos2::new(xa, ruler.bottom() - 6.0),
-                        Pos2::new(xb, ruler.bottom()),
-                    ),
-                    1,
-                    lc.gamma_multiply(if on { 0.85 } else { 0.35 }),
+                // the accent, lifted where it is close to the ruler's own
+                // colour (Amiga: blue on blue)
+                let acc = if (lum(t.accent) - lum(t.crt_top)).abs() < 0.25 {
+                    crate::theme::mix(t.accent, Color32::WHITE, 0.55)
+                } else {
+                    t.accent
+                };
+                let lc = if on { acc } else { crt_ink };
+                // on: an accent band over the lower half of the ruler with a
+                // solid top edge and a handle at each end (reads on every
+                // theme: Slate, Dark, Amiga, Ember); off: a dim strip
+                let band = Rect::from_min_max(
+                    Pos2::new(xa, ruler.bottom() - if on { 11.0 } else { 6.0 }),
+                    Pos2::new(xb, ruler.bottom()),
                 );
+                rp.rect_filled(band, 1, lc.gamma_multiply(if on { 0.45 } else { 0.35 }));
                 if on {
+                    rp.hline(band.x_range(), band.top(), Stroke::new(2.0, lc));
+                    for (x, d) in [(xa, 1.0), (xb, -1.0)] {
+                        // a handle: a solid bar the ruler's height, a notch
+                        // pointing into the loop
+                        let h = Rect::from_min_max(
+                            Pos2::new(x.min(x + 4.0 * d), ruler.top() + 2.0),
+                            Pos2::new(x.max(x + 4.0 * d), ruler.bottom()),
+                        );
+                        rp.rect_filled(h, 1, lc);
+                        rp.add(egui::Shape::convex_polygon(
+                            vec![
+                                Pos2::new(x + 4.0 * d, ruler.top() + 2.0),
+                                Pos2::new(x + 10.0 * d, ruler.top() + 2.0),
+                                Pos2::new(x + 4.0 * d, ruler.top() + 8.0),
+                            ],
+                            lc,
+                            Stroke::NONE,
+                        ));
+                    }
                     lp.rect_filled(
                         Rect::from_min_max(
                             Pos2::new(xa, lanes.top()),
                             Pos2::new(xb, lanes.bottom()),
                         ),
                         0,
-                        lc.gamma_multiply(0.05),
+                        lc.gamma_multiply(0.09),
                     );
                     for x in [xa, xb] {
-                        lp.vline(x, lanes.y_range(), Stroke::new(1.0, lc.gamma_multiply(0.5)));
+                        lp.vline(
+                            x,
+                            lanes.y_range(),
+                            Stroke::new(1.5, lc.gamma_multiply(0.75)),
+                        );
                     }
                 }
             }
@@ -1246,6 +1312,7 @@ impl App {
         let mut outlines: Vec<(Rect, Stroke)> = vec![];
         let pol = theme::polished();
         let mut glows: Vec<Rect> = vec![];
+        let mut paste_fill: Vec<(Rect, Color32)> = vec![];
         let cur_tr = self.tl_cur_track();
         // one gradient over the whole track area (not one per clip): a clip's
         // shade comes from its y in the visible tracks, so it flows top to
@@ -1363,6 +1430,30 @@ impl App {
                         ui.ctx().request_repaint();
                     } else {
                         self.tlv.flash = None;
+                    }
+                }
+                let glow = self
+                    .tlv
+                    .pasted
+                    .as_ref()
+                    .filter(|p| p.0.contains(&clip.id))
+                    .map(|p| p.1);
+                if let Some(t0) = glow {
+                    // just pasted: a soft glow and outline that fade out
+                    let now = ui.input(|i| i.time);
+                    let t0 = if t0.is_nan() { now } else { t0 };
+                    let e = (now - t0) as f32;
+                    if e < PASTE_GLOW {
+                        if let Some(p) = self.tlv.pasted.as_mut() {
+                            p.1 = t0;
+                        }
+                        let a = 1.0 - e / PASTE_GLOW;
+                        outlines
+                            .push((r.expand(2.0), Stroke::new(3.0, t.accent.gamma_multiply(a))));
+                        paste_fill.push((r, t.accent.gamma_multiply(0.30 * a)));
+                        ui.ctx().request_repaint();
+                    } else {
+                        self.tlv.pasted = None;
                     }
                 }
                 let hot = hover_clip == Some(i);
@@ -1714,6 +1805,9 @@ impl App {
             theme::glow(&lp, r, 3, t.selection_outline);
         }
         let orad: u8 = if pol { 3 } else { 2 };
+        for (r, c) in paste_fill {
+            lp.rect_filled(r, orad, c);
+        }
         for (r, s) in outlines {
             lp.rect_stroke(r, orad, s, egui::StrokeKind::Inside);
         }
@@ -3072,6 +3166,14 @@ impl App {
                         c.map.entry_at(tk).0
                     };
                     open = match hit.map(|i| &c.tl.clips[i]) {
+                        // a clip (timeline mode): loop exactly it, or, when
+                        // it already is the loop, loop off (Del, 25 Oct
+                        // 2026). Alt+double-click, Enter and the pie's
+                        // Edit / Notes open it.
+                        Some(cl) if mode && !mods.alt => {
+                            ops.push(TlOp::LoopClip(cl.id));
+                            None
+                        }
                         Some(cl) if cl.audio().is_some() => None,
                         Some(cl) if cl.block().is_none() => {
                             open_roll = true;
@@ -3083,8 +3185,12 @@ impl App {
                             None
                         }
                         // block clips: the piano roll or the pattern editor,
-                        // as set in Settings (Alt: the other one)
-                        Some(_) if self.extra.dblclick_roll != mods.alt => {
+                        // as set in Settings (Alt: the other one; timeline
+                        // mode: Alt+double-click opens the set one)
+                        Some(_)
+                            if (mode && !self.tracker_on())
+                                || self.extra.dblclick_roll != (mods.alt && !mode) =>
+                        {
                             open_roll = true;
                             None
                         }
@@ -3112,6 +3218,7 @@ impl App {
         }
         // right-click: the clip menu (also offers to switch in tracker mode)
         let mut pie_open: Option<(u32, Pos2)> = None;
+        let mut lane_pie: Option<(usize, Tick, Pos2)> = None;
         if !armed && cresp.secondary_clicked() {
             if let Some(p) = cresp.interact_pointer_pos() {
                 let tk = tick_of(p.x).max(0.0) as Tick;
@@ -3140,6 +3247,18 @@ impl App {
                 if let Some(id) = pie_clip {
                     pie_open = Some((id, p));
                 }
+                // empty space on a track lane: its pie (Paste here, new
+                // clips, ...), unless Settings › Clip menus › List
+                let lane = lay.part_at(p.y - lanes.top() + sy).and_then(|(tr, auto)| {
+                    let kind = c.tl.tracks.get(tr).map(|t| t.kind);
+                    (auto.is_none()
+                        && kind.is_some_and(|k| k != tl::TrackKind::Master)
+                        && tr < self.with(|s| s.song.channels.min(crate::model::MAX_CHANNELS)))
+                    .then_some(tr)
+                });
+                if let (Some(tr), None, true) = (lane, id, mode && !self.extra.clip_list_menu) {
+                    lane_pie = Some((tr, tk, p));
+                }
             }
         }
         let n_sel = self.tlv.sels.len();
@@ -3166,16 +3285,25 @@ impl App {
         if let Some((id, p)) = pie_open {
             self.opie_req = Some((super::objpie::PieFor::Clip(id), p));
         }
-        let menu_resp =
-            if armed || pie_open.is_some() || add_pie_at.is_some() || self.opie.is_some() {
-                ui.interact(
-                    Rect::NOTHING,
-                    ui.scope_id().with("tl_no_menu"),
-                    Sense::hover(),
-                )
-            } else {
-                cresp.clone()
-            };
+        if let Some((track, at, p)) = lane_pie {
+            self.opie_req = Some((super::objpie::PieFor::Lane { track, at }, p));
+        }
+        let paste_grid = self.tlv.snap_grid();
+        let can_paste = !self.tlv.clipboard.is_empty();
+        let menu_resp = if armed
+            || pie_open.is_some()
+            || lane_pie.is_some()
+            || add_pie_at.is_some()
+            || self.opie.is_some()
+        {
+            ui.interact(
+                Rect::NOTHING,
+                ui.scope_id().with("tl_no_menu"),
+                Sense::hover(),
+            )
+        } else {
+            cresp.clone()
+        };
         menu_resp.context_menu(|ui| {
             let snap_at = menu_at.map_or(0, |m| tl::snap(m.1, ROW));
             if !mode {
@@ -3198,14 +3326,14 @@ impl App {
                     if self.tracker_on()
                         && menu_open.is_some()
                         && ui
-                        .add(egui::Button::new("Open in Tracker").shortcut_text(if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" }))
+                        .add(egui::Button::new("Open in Tracker").shortcut_text(if !mode { if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" } } else if self.extra.dblclick_roll { "Enter" } else { "Enter / Alt+double-click" }))
                         .clicked()
                     {
                         menu_open_now = true;
                         ui.close();
                     }
                     if ui
-                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if !self.tracker_on() { "Enter / double-click" } else if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
+                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if mode { if !self.tracker_on() { "Enter / Alt+double-click" } else if self.extra.dblclick_roll { "Alt+double-click" } else { "" } } else if !self.tracker_on() { "Enter / double-click" } else if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
                         .clicked()
                     {
                         open_roll = true;
@@ -3213,7 +3341,9 @@ impl App {
                     }
                 }
                 ui.separator();
-                let items: [(&str, &str, TlOp); 6] = [
+                let items: [(&str, &str, TlOp); 8] = [
+                    ("Copy", "Ctrl+C", TlOp::Copy),
+                    ("Cut", "Ctrl+X", TlOp::Cut),
                     ("Split…", "S", TlOp::SplitArm),
                     ("Duplicate", "Ctrl+D", TlOp::Duplicate),
                     ("Make unique", "Ctrl+Shift+D", TlOp::MakeUnique),
@@ -3261,6 +3391,19 @@ impl App {
                 }
             } else if let Some((tr, tk)) = menu_at {
                 let tracker = self.tracker_on();
+                let paste = ui
+                    .add_enabled(can_paste, egui::Button::new("Paste here").shortcut_text("Ctrl+V"))
+                    .on_hover_text("the copied clips, starting here (on the snap grid)")
+                    .on_disabled_hover_text("Nothing copied: select clips and press Ctrl+C");
+                if paste.clicked() {
+                    ops.push(TlOp::Paste {
+                        track: tr.min(u8::MAX as usize) as u8,
+                        at: tk / paste_grid * paste_grid,
+                        linked: false,
+                    });
+                    ui.close();
+                }
+                ui.separator();
                 if !tracker
                     && ui
                         .add(egui::Button::new("New clip here").shortcut_text("double-click"))
@@ -3345,8 +3488,13 @@ impl App {
                     "double-click: Tracker (Alt: piano roll)"
                 };
                 let how = if mode {
+                    let open = if !self.tracker_on() || self.extra.dblclick_roll {
+                        "piano roll"
+                    } else {
+                        "Tracker"
+                    };
                     format!(
-                        "drag: move (Alt: copy) · edges: trim / loop · {dbl} · right-click: more"
+                        "drag: move (Alt: copy) · edges: trim / loop · double-click: loop this clip (again: off) · Alt+double-click / Enter: {open} · right-click: more"
                     )
                 } else {
                     dbl.to_string()

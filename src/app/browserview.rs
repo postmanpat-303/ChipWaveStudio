@@ -597,7 +597,17 @@ impl App {
                 return;
             }
         };
-        let n = self.with(|s| crate::chanops::assign_track_instrument(&mut s.song, tr, slot));
+        let n = self.with(|s| {
+            // a default track name follows the instrument (as the track
+            // pie's Drum kit › does), so the header and its subtitle agree
+            if let Some(t) = s.song.channel_names.get_mut(tr) {
+                let k = t.trim();
+                if k.is_empty() || k.starts_with("Track ") {
+                    *t = name.chars().take(24).collect();
+                }
+            }
+            crate::chanops::assign_track_instrument(&mut s.song, tr, slot)
+        });
         self.undo_hold -= 1;
         // the track is lit (not a stale Song / Master) and plays it
         self.tl_select_track(tr, false);

@@ -357,7 +357,7 @@ fn the_colour_panel_sits_beside_its_segment() {
         c.x.clamp(r.left(), r.right()),
         c.y.clamp(r.top(), r.bottom()),
     );
-    assert!((q - c).length() >= super::trackpie::R_OUT + 9.0, "{r:?}");
+    assert!((q - c).length() >= super::trackpie::r_out() + 9.0, "{r:?}");
 }
 
 /// leaving the way to the panel for another segment switches at once;
