@@ -1063,6 +1063,7 @@ impl App {
                         ui.label(rec_txt)
                             .on_hover_text("recording: R or the Record button stops it");
                     }
+                    self.loop_toggle(ui);
                     self.metronome_toggle(ui);
                 }
                 let left = self.with(|s| s.engine.count_in_left());
@@ -1552,6 +1553,42 @@ impl App {
 }
 
 impl App {
+    /// the transport's Loop toggle (Del, 25 Oct 2026: "we need a playloop
+    /// symbol"): the Timeline's loop, the same switch as L, the LCD's LOOP
+    /// pill and the Timeline toolbar's Loop; accent-lit while on
+    fn loop_toggle(&mut self, ui: &mut egui::Ui) {
+        let (on, range) = self.with(|s| {
+            s.song.timeline.as_deref().map_or((false, None), |t| {
+                (
+                    t.loop_on && t.loop_range.is_some(),
+                    t.loop_range
+                        .map(|(a, b)| (t.bar_pos(a).bar, t.bar_pos((b - 1).max(a)).bar)),
+                )
+            })
+        });
+        let t = th();
+        let tip = match range {
+            Some((a, b)) if a == b => format!(
+                "Loop (L): {} · bar {a}",
+                if on { "on" } else { "off" }
+            ),
+            Some((a, b)) => format!(
+                "Loop (L): {} · bars {a}–{b}",
+                if on { "on" } else { "off" }
+            ),
+            None => "Loop (L): no loop region yet - Shift-drag the ruler, or select clips and press Ctrl+L"
+                .to_string(),
+        };
+        let col = if on {
+            t.accent
+        } else {
+            hdr_text().gamma_multiply(0.55)
+        };
+        if super::viewbar::transport_button(ui, super::viewbar::Tr::Loop, on, col, &tip) {
+            self.tl_apply(super::timeline::TlOp::ToggleLoop);
+        }
+    }
+
     /// the toolbar's Metronome toggle: click on every beat while playing;
     /// right-click (or the arrow beside it) for the record count-in
     fn metronome_toggle(&mut self, ui: &mut egui::Ui) {
