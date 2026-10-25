@@ -3,7 +3,7 @@ use super::*;
 
 /// status line for Ctrl+C / Ctrl+X / Ctrl+V outside the Tracker views
 pub(super) const CLIPBOARD_ELSEWHERE: &str =
-    "Cut, copy and paste work in the piano roll (click into it), the Tracker and the Order list (on the Timeline: Ctrl+D duplicates, Alt-drag copies)";
+    "Cut, copy and paste work on the Timeline (clips), in the piano roll (click into it), the Tracker and the Order list";
 
 impl App {
     pub(super) fn handle_keys(&mut self, ctx: &egui::Context) {
@@ -37,6 +37,15 @@ impl App {
                     input::ClipAction::Copy => self.pr_copy(false, ctx),
                     input::ClipAction::Cut => self.pr_copy(true, ctx),
                     input::ClipAction::Paste(t) => self.pr_paste(t),
+                }
+                continue;
+            }
+            // the Timeline: its clips (Ctrl+Shift+V pastes linked copies)
+            if self.view == View::Timeline {
+                match a {
+                    input::ClipAction::Copy => self.tl_copy(false),
+                    input::ClipAction::Cut => self.tl_copy(true),
+                    input::ClipAction::Paste(_) => self.tl_paste(None, self.mods.shift),
                 }
                 continue;
             }

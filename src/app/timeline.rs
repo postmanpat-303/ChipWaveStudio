@@ -141,6 +141,10 @@ pub(crate) enum TlOp {
     SplitArm,
     /// split exactly this clip at a tick (the split preview's click)
     SplitClip(u32, Tick),
+    /// the selected clips to the clip clipboard (`App::tl_copy`)
+    Copy,
+    /// copied, then deleted (one undo step)
+    Cut,
     Duplicate,
     Delete,
     Mute,
@@ -168,6 +172,14 @@ pub(crate) enum TlOp {
         track: u8,
         at: Tick,
     },
+    /// the clipboard's clips (`TimelineUi::clipboard`): the earliest on
+    /// `track` at `at` (already on the grid), the others at their distances;
+    /// independent copies unless `linked`
+    Paste {
+        track: u8,
+        at: Tick,
+        linked: bool,
+    },
     /// a dropped clip (docs/unified/PLAN.md Stage 4a): `src` on `track` at
     /// `at`, linked or (`unique`) independent; `fit` says what happens to
     /// clips in the way (`grid`: where Place after it lands)
@@ -180,6 +192,9 @@ pub(crate) enum TlOp {
         grid: Tick,
     },
 }
+
+/// seconds the just-pasted clips glow
+const PASTE_GLOW: f32 = 1.8;
 
 pub(crate) struct TimelineUi {
     pub(crate) cache: Option<Cache>,
@@ -255,6 +270,13 @@ pub(crate) struct TimelineUi {
     /// a clip just added (Drum Kit "Add to track"): (id, start time; NaN =
     /// starts on the next frame); its outline pulses briefly
     pub(crate) flash: Option<(u32, f64)>,
+    /// clips just pasted (Ctrl+V, Paste here): (ids, start time; NaN =
+    /// starts on the next frame); they glow briefly, then fade
+    pub(crate) pasted: Option<(Vec<u32>, f64)>,
+    /// the clip clipboard (Ctrl+C / Ctrl+X); empty = nothing copied.
+    /// Cleared when another song is opened (its notes play this song's
+    /// instruments)
+    pub(crate) clipboard: tl::ClipBoard,
     /// scroll so this (track, tick) is in view on the next frame (a clip
     /// just added from the Drum Kit editor)
     pub(crate) reveal: Option<(usize, Tick)>,
@@ -310,6 +332,8 @@ impl Default for TimelineUi {
             follow_touch: false,
             last_touch: None,
             flash: None,
+            pasted: None,
+            clipboard: tl::ClipBoard::default(),
             reveal: None,
             song_sel: None,
         }
@@ -325,6 +349,8 @@ impl TimelineUi {
         self.drag = None;
         self.rename = None;
         self.cue = 0;
+        self.clipboard = tl::ClipBoard::default();
+        self.pasted = None;
     }
 
     /// File > New: a fresh layout (zoomed to show a few dozen bars)
@@ -337,6 +363,8 @@ impl TimelineUi {
         self.sels.clear();
         self.cue = 0;
         self.drag = None;
+        self.clipboard = tl::ClipBoard::default();
+        self.pasted = None;
     }
 
     /// snap grid in ticks at pixels-per-tick `ppt` (`fine`: Shift = rows)
@@ -1246,6 +1274,7 @@ impl App {
         let mut outlines: Vec<(Rect, Stroke)> = vec![];
         let pol = theme::polished();
         let mut glows: Vec<Rect> = vec![];
+        let mut paste_fill: Vec<(Rect, Color32)> = vec![];
         let cur_tr = self.tl_cur_track();
         // one gradient over the whole track area (not one per clip): a clip's
         // shade comes from its y in the visible tracks, so it flows top to
@@ -1363,6 +1392,30 @@ impl App {
                         ui.ctx().request_repaint();
                     } else {
                         self.tlv.flash = None;
+                    }
+                }
+                let glow = self
+                    .tlv
+                    .pasted
+                    .as_ref()
+                    .filter(|p| p.0.contains(&clip.id))
+                    .map(|p| p.1);
+                if let Some(t0) = glow {
+                    // just pasted: a soft glow and outline that fade out
+                    let now = ui.input(|i| i.time);
+                    let t0 = if t0.is_nan() { now } else { t0 };
+                    let e = (now - t0) as f32;
+                    if e < PASTE_GLOW {
+                        if let Some(p) = self.tlv.pasted.as_mut() {
+                            p.1 = t0;
+                        }
+                        let a = 1.0 - e / PASTE_GLOW;
+                        outlines
+                            .push((r.expand(2.0), Stroke::new(3.0, t.accent.gamma_multiply(a))));
+                        paste_fill.push((r, t.accent.gamma_multiply(0.30 * a)));
+                        ui.ctx().request_repaint();
+                    } else {
+                        self.tlv.pasted = None;
                     }
                 }
                 let hot = hover_clip == Some(i);
@@ -1714,6 +1767,9 @@ impl App {
             theme::glow(&lp, r, 3, t.selection_outline);
         }
         let orad: u8 = if pol { 3 } else { 2 };
+        for (r, c) in paste_fill {
+            lp.rect_filled(r, orad, c);
+        }
         for (r, s) in outlines {
             lp.rect_stroke(r, orad, s, egui::StrokeKind::Inside);
         }
@@ -3112,6 +3168,7 @@ impl App {
         }
         // right-click: the clip menu (also offers to switch in tracker mode)
         let mut pie_open: Option<(u32, Pos2)> = None;
+        let mut lane_pie: Option<(usize, Tick, Pos2)> = None;
         if !armed && cresp.secondary_clicked() {
             if let Some(p) = cresp.interact_pointer_pos() {
                 let tk = tick_of(p.x).max(0.0) as Tick;
@@ -3140,6 +3197,18 @@ impl App {
                 if let Some(id) = pie_clip {
                     pie_open = Some((id, p));
                 }
+                // empty space on a track lane: its pie (Paste here, new
+                // clips, ...), unless Settings › Clip menus › List
+                let lane = lay.part_at(p.y - lanes.top() + sy).and_then(|(tr, auto)| {
+                    let kind = c.tl.tracks.get(tr).map(|t| t.kind);
+                    (auto.is_none()
+                        && kind.is_some_and(|k| k != tl::TrackKind::Master)
+                        && tr < self.with(|s| s.song.channels.min(crate::model::MAX_CHANNELS)))
+                    .then_some(tr)
+                });
+                if let (Some(tr), None, true) = (lane, id, mode && !self.extra.clip_list_menu) {
+                    lane_pie = Some((tr, tk, p));
+                }
             }
         }
         let n_sel = self.tlv.sels.len();
@@ -3166,16 +3235,25 @@ impl App {
         if let Some((id, p)) = pie_open {
             self.opie_req = Some((super::objpie::PieFor::Clip(id), p));
         }
-        let menu_resp =
-            if armed || pie_open.is_some() || add_pie_at.is_some() || self.opie.is_some() {
-                ui.interact(
-                    Rect::NOTHING,
-                    ui.scope_id().with("tl_no_menu"),
-                    Sense::hover(),
-                )
-            } else {
-                cresp.clone()
-            };
+        if let Some((track, at, p)) = lane_pie {
+            self.opie_req = Some((super::objpie::PieFor::Lane { track, at }, p));
+        }
+        let paste_grid = self.tlv.snap_grid();
+        let can_paste = !self.tlv.clipboard.is_empty();
+        let menu_resp = if armed
+            || pie_open.is_some()
+            || lane_pie.is_some()
+            || add_pie_at.is_some()
+            || self.opie.is_some()
+        {
+            ui.interact(
+                Rect::NOTHING,
+                ui.scope_id().with("tl_no_menu"),
+                Sense::hover(),
+            )
+        } else {
+            cresp.clone()
+        };
         menu_resp.context_menu(|ui| {
             let snap_at = menu_at.map_or(0, |m| tl::snap(m.1, ROW));
             if !mode {
@@ -3213,7 +3291,9 @@ impl App {
                     }
                 }
                 ui.separator();
-                let items: [(&str, &str, TlOp); 6] = [
+                let items: [(&str, &str, TlOp); 8] = [
+                    ("Copy", "Ctrl+C", TlOp::Copy),
+                    ("Cut", "Ctrl+X", TlOp::Cut),
                     ("Split…", "S", TlOp::SplitArm),
                     ("Duplicate", "Ctrl+D", TlOp::Duplicate),
                     ("Make unique", "Ctrl+Shift+D", TlOp::MakeUnique),
@@ -3261,6 +3341,19 @@ impl App {
                 }
             } else if let Some((tr, tk)) = menu_at {
                 let tracker = self.tracker_on();
+                let paste = ui
+                    .add_enabled(can_paste, egui::Button::new("Paste here").shortcut_text("Ctrl+V"))
+                    .on_hover_text("the copied clips, starting here (on the snap grid)")
+                    .on_disabled_hover_text("Nothing copied: select clips and press Ctrl+C");
+                if paste.clicked() {
+                    ops.push(TlOp::Paste {
+                        track: tr.min(u8::MAX as usize) as u8,
+                        at: tk / paste_grid * paste_grid,
+                        linked: false,
+                    });
+                    ui.close();
+                }
+                ui.separator();
                 if !tracker
                     && ui
                         .add(egui::Button::new("New clip here").shortcut_text("double-click"))

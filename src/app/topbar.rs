@@ -498,6 +498,45 @@ impl App {
                     self.request_delete_instrument(self.instr);
                 }
                 ui.separator();
+                if self.view == View::Timeline && !self.pr_active() {
+                    // the Timeline's clips (the piano roll keeps its notes'
+                    // Cut / Copy / Paste while it has the keyboard)
+                    let sel = !self.tlv.sels.is_empty();
+                    let full = !self.tlv.clipboard.is_empty();
+                    let clip_item = |ui: &mut egui::Ui, on: bool, label: &str, sc: &str| {
+                        ui.add_enabled(on, egui::Button::new(label).shortcut_text(sc))
+                            .clicked()
+                    };
+                    if clip_item(ui, sel, "Cut clips", "Ctrl+X") {
+                        self.tl_copy(true);
+                    }
+                    if clip_item(ui, sel, "Copy clips", "Ctrl+C") {
+                        self.tl_copy(false);
+                    }
+                    let paste = ui
+                        .add_enabled(full, egui::Button::new("Paste clips").shortcut_text("Ctrl+V"))
+                        .on_hover_text("at the play marker on the selected track, on the snap grid")
+                        .on_disabled_hover_text("Nothing copied");
+                    if paste.clicked() {
+                        self.tl_paste(None, false);
+                    }
+                    let linked = ui
+                        .add_enabled(full, egui::Button::new("Paste linked").shortcut_text("Ctrl+Shift+V"))
+                        .on_hover_text("copies that play the same notes and blocks (edit one, all change)")
+                        .on_disabled_hover_text("Nothing copied");
+                    if linked.clicked() {
+                        self.tl_paste(None, true);
+                    }
+                    if clip_item(ui, sel, "Duplicate clips", "Ctrl+D") {
+                        self.tl_apply(super::timeline::TlOp::Duplicate);
+                    }
+                    if clip_item(ui, sel, "Delete clips", "Del") {
+                        self.tl_apply(super::timeline::TlOp::Delete);
+                    }
+                    if item(ui, "Select all", "Ctrl+A") {
+                        self.synth_key(&ctx, Key::A, cmd);
+                    }
+                } else {
                 if item(ui, "Cut", "Ctrl+X") {
                     self.pending.push(egui::Event::Cut);
                 }
@@ -509,6 +548,7 @@ impl App {
                 }
                 if item(ui, "Select all", "Ctrl+A") {
                     self.synth_key(&ctx, Key::A, cmd);
+                }
                 }
                 ui.menu_button("Transpose", |ui| self.transpose_menu(ui));
                 ui.separator();

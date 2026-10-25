@@ -146,6 +146,9 @@ impl App {
     /// Run a timeline edit. In tracker mode it asks to switch first (the
     /// edit runs after the switch).
     pub(crate) fn tl_apply(&mut self, op: TlOp) {
+        if matches!(op, TlOp::Copy | TlOp::Cut) {
+            return self.tl_copy(op == TlOp::Cut);
+        }
         // an edit of the selection with nothing selected says so, in either
         // mode (in tracker mode it used to ask to switch modes first)
         let sels = self.tlv.sels.clone();
@@ -189,6 +192,12 @@ impl App {
             TlOp::Capture(..) => self.capture_notes(),
             _ => vec![],
         };
+        let board = if matches!(op, TlOp::Paste { .. }) {
+            self.tlv.clipboard.clone()
+        } else {
+            tl::ClipBoard::default()
+        };
+        let mut pasted: Option<(Vec<u32>, usize, Tick)> = None;
         let ready = if op == TlOp::PlaceAudio {
             std::mem::take(&mut self.tlv.ready_audio)
         } else {
@@ -217,7 +226,7 @@ impl App {
                         )
                     }
                 }
-                TlOp::SplitArm => String::new(),
+                TlOp::SplitArm | TlOp::Copy | TlOp::Cut => String::new(),
                 TlOp::Duplicate => {
                     let t = song.timeline.as_deref_mut().unwrap();
                     let ids = tl::duplicate(t, &sels);
@@ -424,6 +433,16 @@ impl App {
                     }
                     msg
                 }
+                TlOp::Paste { track, at, linked } => {
+                    let r = tl::paste_clips(song, &board, track as usize, at, linked);
+                    let t = song.timeline.as_deref().unwrap();
+                    let msg = paste_note(t, &r, at, linked);
+                    if !r.ids.is_empty() {
+                        pasted = Some((r.ids.clone(), r.track, at));
+                        new_sel = Some(r.ids);
+                    }
+                    msg
+                }
                 TlOp::SelectAll => {
                     let t = song.timeline.as_deref().unwrap();
                     new_sel = Some(t.clips.iter().map(|c| c.id).collect());
@@ -437,6 +456,10 @@ impl App {
         if let Some(ids) = new_sel {
             self.tlv.sel = ids.last().copied();
             self.tlv.sels = ids;
+        }
+        if let Some((ids, tr, at)) = pasted {
+            self.tlv.pasted = Some((ids, f64::NAN));
+            self.tlv.reveal = Some((tr, at));
         }
         if let Some(i) = rename {
             let name = self.with(|s| {
@@ -842,4 +865,117 @@ fn over_note(t: &tl::Timeline, over: &[u32]) -> String {
             "both play"
         }
     )
+}
+
+/// the status line after a paste: "Pasted 3 clips at bar 9 on track 02"
+fn paste_note(t: &tl::Timeline, r: &tl::Pasted, at: Tick, linked: bool) -> String {
+    let n = r.ids.len();
+    if n == 0 {
+        return if r.left_out > 0 {
+            "Nothing pasted: audio clips go on audio tracks, note and Tracker clips on the others"
+                .into()
+        } else {
+            "Nothing pasted".into()
+        };
+    }
+    let p = t.bar_pos(at);
+    let place = if p.beat <= 1 && p.tick == 0 {
+        format!("bar {}", p.bar)
+    } else {
+        format!("bar {}.{}", p.bar, p.beat)
+    };
+    let mut msg = format!(
+        "Pasted {n} clip{} at {place} on track {:02}{}",
+        plural(n),
+        r.track + 1,
+        if linked {
+            " (linked: same notes and blocks)"
+        } else {
+            ""
+        }
+    );
+    if r.left_out > 0 {
+        msg += &format!(
+            " · {} left out (audio clips go on audio tracks, the others on note tracks)",
+            r.left_out
+        );
+    }
+    if r.linked > 0 {
+        msg += &format!(
+            " · {} play their original block (no room for more blocks)",
+            r.linked
+        );
+    }
+    let over = tl::covered(t, &r.ids);
+    if !over.is_empty() {
+        msg += &over_note(t, &over);
+    }
+    msg
+}
+
+impl App {
+    /// Ctrl+C / Ctrl+X on the Timeline: the selected clips to the clip
+    /// clipboard (`cut`: then removed, one undo step)
+    pub(crate) fn tl_copy(&mut self, cut: bool) {
+        let sels = self.tlv.sels.clone();
+        let what = if cut { "cut" } else { "copy" };
+        if sels.is_empty() {
+            self.status = format!(
+                "Select clips to {what} first (click one; Ctrl-click or drag a box for more)"
+            );
+            return;
+        }
+        let cb = self.with(|s| tl::copy_clips(&s.song, &sels));
+        if cb.is_empty() {
+            self.status = format!("Nothing to {what}: no clips selected on the timeline");
+            return;
+        }
+        let n = cb.len();
+        self.tlv.clipboard = cb;
+        if cut {
+            self.tl_apply(TlOp::Delete);
+            self.status = format!(
+                "Cut {n} clip{} (Ctrl+V pastes them at the play marker · Ctrl+Z puts them back)",
+                plural(n)
+            );
+        } else {
+            self.status = format!(
+                "Copied {n} clip{} (Ctrl+V pastes at the play marker on the selected track)",
+                plural(n)
+            );
+        }
+    }
+
+    /// where a paste lands: the clicked (track, tick), else the selected
+    /// track at the playhead (the play marker when stopped), on the grid
+    pub(crate) fn tl_paste_spot(&self, at: Option<(usize, Tick)>) -> (usize, Tick) {
+        let grid = self.tlv.snap_grid();
+        let (tr, t) = match at {
+            Some(x) => x,
+            None => {
+                let head = self
+                    .tlv
+                    .head_drawn
+                    .map_or(self.tlv.cue, |h| h.max(0.0) as Tick);
+                (self.ch, head)
+            }
+        };
+        (tr, t.max(0) / grid * grid)
+    }
+
+    /// Ctrl+V / Paste here: the clipboard's clips as independent copies
+    /// (`linked`: playing the same notes and blocks), one undo step
+    pub(crate) fn tl_paste(&mut self, at: Option<(usize, Tick)>, linked: bool) {
+        if self.tlv.clipboard.is_empty() {
+            self.status =
+                "Nothing copied: select clips and press Ctrl+C (or Copy in their pie)".into();
+            return;
+        }
+        let (tr, t) = self.tl_paste_spot(at);
+        self.tl_apply(TlOp::Paste {
+            track: tr.min(u8::MAX as usize) as u8,
+            at: t,
+            linked,
+        });
+    }
 }
