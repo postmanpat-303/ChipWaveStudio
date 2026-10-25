@@ -328,6 +328,7 @@ impl Chan {
 mod audioclips;
 pub mod launch;
 mod layers;
+mod livearp;
 pub mod metro;
 mod notes;
 pub mod patprev;
@@ -491,6 +492,8 @@ pub struct Engine {
     pub test_tone: u32,
     tone_ph: f32,
     live: Live,
+    /// the Arp on live keys (src/engine/livearp.rs)
+    larp: livearp::LiveArp,
     /// master true-peak limiter and loudness meter (src/master.rs)
     lim: crate::master::Limiter,
     meter: crate::master::Loudness,
@@ -619,6 +622,7 @@ impl Engine {
             test_tone: 0,
             tone_ph: 0.0,
             live: Live::new(),
+            larp: livearp::LiveArp::new(),
             plugins: crate::plugin::Rack::new(),
             strings: crate::strings::rack::Rack::new(sr),
             fx_plugins: crate::plugin::fxrack::FxRack::new(),
@@ -698,8 +702,16 @@ impl Engine {
         }
     }
 
-    /// Apply one live MIDI event (allocation-free).
+    /// Apply one live MIDI event (allocation-free): keys on an instrument
+    /// with an Arp go to the Arp.
     pub fn live_event(&mut self, song: &Song, ev: crate::midi::LiveEv) {
+        if !self.larp_take(song, ev) {
+            self.live_event_raw(song, ev);
+        }
+    }
+
+    /// one live event, straight to the instruments
+    fn live_event_raw(&mut self, song: &Song, ev: crate::midi::LiveEv) {
         use crate::midi::LiveEv;
         if let LiveEv::On {
             key,
@@ -1383,6 +1395,7 @@ impl Engine {
         for v in &mut self.live.v {
             v.active = false;
         }
+        self.larp.reset();
         self.nv.silence();
         self.av.silence();
         self.plugins.panic();
@@ -2494,7 +2507,7 @@ impl Engine {
             }
             self.live.rx = Some(rx);
         }
-        let live_on = self.live.v.iter().any(|v| v.active);
+        let live_on = self.live.v.iter().any(|v| v.active) || self.larp.active;
         // drum-pattern preview: aligned with the transport once per callback
         let pp_on = self.patprev.is_some();
         let pp_rate = self.pp_begin(song);
@@ -2561,6 +2574,9 @@ impl Engine {
                 stgt = self.send_targets(song);
             }
             self.auto.countdown -= 1;
+            if self.larp.active {
+                self.larp_tick(song);
+            }
             if self.playing {
                 // a tick lands on the first sample at or after its exact time
                 // (f64 accumulator: no drift, at most 1 sample of rounding)

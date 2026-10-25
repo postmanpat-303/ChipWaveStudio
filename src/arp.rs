@@ -426,6 +426,14 @@ impl Stepper {
         self.last = t - 1e-6;
     }
 
+    /// the clock jumped (live keys): the held notes start again at `t`
+    pub fn rebase(&mut self, t: f64) {
+        for h in &mut self.held[..self.n] {
+            h.start = t;
+        }
+        self.last = t - 1e-6;
+    }
+
     /// notes that ended by `t` let go (Latch keeps them, marked up)
     pub fn expire(&mut self, t: f64, latch: bool) {
         let mut k = 0;
