@@ -43,7 +43,7 @@ impl Tab {
     pub fn name(self) -> &'static str {
         match self {
             Tab::Grid => "Grid",
-            Tab::Synth => crate::poly::POLY_DISPLAY_NAME,
+            Tab::Synth => "Synth",
             Tab::Main => "Main",
             Tab::Modulation => "Modulation",
             Tab::Fx => "FX",
