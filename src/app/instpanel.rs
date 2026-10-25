@@ -1392,7 +1392,8 @@ impl App {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 6.0;
                         ui.add_space(2.0);
-                        for c in cards {
+                        // WaveForge's slot pickers: the Movement card shows them
+                        for c in cards.into_iter().filter(|c| c.name != "Mod routes") {
                             self.card_ui(ui, &layout, c, &mut inst, &mut cx);
                         }
                     });
@@ -1674,7 +1675,7 @@ fn custom_size(c: Custom, card_h: f32) -> (f32, f32) {
         Custom::GridCanvas => (210.0, 40.0),
         Custom::PolyPanel => (210.0, 40.0),
         Custom::Modulators => (300.0, card_h - HEAD_H - 10.0),
-        Custom::Routings => (330.0, card_h - HEAD_H - 10.0),
+        Custom::Movement => (330.0, card_h - HEAD_H - 10.0),
     }
 }
 
@@ -2286,8 +2287,11 @@ impl App {
                         );
                     });
             }
-            (Custom::Routings, _) => {
-                super::modview::routings(ui, &mut cx.modm, idx, &cx.labels, &mut cx.mod_out);
+            (Custom::Movement, _) => {
+                egui::ScrollArea::vertical()
+                    .id_salt(("movement_scroll", idx))
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| self.movement_list(ui, inst, cx, false));
             }
             (Custom::Vowels, InstrumentKind::Voice(v)) => {
                 cx.changed |= super::voiceview::vowels_ui(ui, v);
@@ -2683,7 +2687,9 @@ pub(super) fn help_button(ui: &mut egui::Ui) -> egui::Response {
         egui::FontId::proportional(crate::theme::ts::px(crate::theme::ts::SMALL)),
         if resp.hovered() { t.ink } else { t.ink2 },
     );
-    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Help: knobs and keys"));
+    resp.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::Role::Button, true, "Help: knobs and keys")
+    });
     resp.on_hover_ui(|ui| {
         ui.label(egui::RichText::new("Knobs").strong());
         ui.label("Drag to turn · Ctrl-drag for fine steps");

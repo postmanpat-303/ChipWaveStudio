@@ -15,15 +15,15 @@ use crate::strings::*;
 /// the sub-tabs: (name, columns of sections)
 pub(in crate::app) const TABS: [(&str, &[&[usize]]); 3] = [
     ("Layers", &[&[0, 1, 2], &[3, 4, 14]]),
-    ("Filter & Mod", &[&[5, 6], &[7, 8, 9]]),
+    ("Filter & Mod", &[&[5, 6, 15], &[7, 8, 9]]),
     ("FX & Master", &[&[10, 11, 12], &[13, 14]]),
 ];
 
 /// the full view: every section in two columns
-const FULL: &[&[usize]] = &[&[0, 1, 2, 3, 5, 6, 10, 14], &[4, 7, 8, 9, 11, 12, 13]];
+const FULL: &[&[usize]] = &[&[0, 1, 2, 3, 5, 6, 10, 14], &[4, 7, 8, 9, 15, 11, 12, 13]];
 
 /// how many sections there are
-const NSEC: usize = 15;
+const NSEC: usize = 16;
 
 /// the text sizes offered (percent)
 pub(in crate::app) const TEXT_SIZES: [u16; 4] = [100, 125, 150, 200];
@@ -101,6 +101,8 @@ struct Sec {
     hint: bool,
     /// the voices meter in the middle column
     meter: bool,
+    /// the Movement list (what moves which knob)
+    movement: bool,
 }
 
 impl Sec {
@@ -116,6 +118,7 @@ impl Sec {
             knobs,
             hint: false,
             meter: false,
+            movement: false,
         }
     }
 }
@@ -242,6 +245,10 @@ fn sections() -> Vec<Sec> {
     let mut s = Sec::new("Perform", vec![]);
     s.hint = true;
     v.push(s);
+    // what moves which knob (the LFOs, the mod env, song-level sources)
+    let mut s = Sec::new("Movement", vec![]);
+    s.movement = true;
+    v.push(s);
     debug_assert_eq!(v.len(), NSEC);
     v
 }
@@ -264,6 +271,9 @@ const COL_GAP: f32 = 8.0;
 fn sec_size(sc: &Sec) -> egui::Vec2 {
     if sc.hint {
         return egui::vec2(310.0, HINT_H);
+    }
+    if sc.movement {
+        return egui::vec2(330.0, STRIP_H);
     }
     let mid = !sc.leds.is_empty() || !sc.ctls.is_empty() || sc.meter;
     let w = PADL + LB + if mid { MC + 6.0 } else { 0.0 } + sc.knobs.len() as f32 * CELL.x + PADR;
@@ -693,6 +703,22 @@ impl App {
             c.set_clip_rect(r.intersect(clip));
             c
         };
+        if sc.movement {
+            let mut c = child(
+                ui,
+                Rect::from_min_max(
+                    Pos2::new(rect.left() + PADL, rect.top() + 19.0),
+                    rect.max - egui::vec2(PADR, 3.0),
+                ),
+                egui::Layout::top_down(egui::Align::Min),
+            );
+            c.spacing_mut().item_spacing.y = 1.0;
+            egui::ScrollArea::vertical()
+                .id_salt(("sw_movement", cx.idx))
+                .auto_shrink([false, false])
+                .show(&mut c, |ui| self.movement_list(ui, inst, cx, false));
+            return;
+        }
         if sc.hint {
             let mut c = child(
                 ui,

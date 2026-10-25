@@ -84,7 +84,7 @@ pub(crate) enum Custom {
     /// the poly synth's editor (drawn over the whole tab)
     PolyPanel,
     /// drag-to-modulate: every routing with its depth
-    Routings,
+    Movement,
 }
 
 pub(crate) enum Ctl {
@@ -702,14 +702,14 @@ pub(crate) fn build(inst: &Instrument, idx: usize, kit_sel: usize) -> Layout {
 /// (`Target::Patch`) so they can be modulated and automated
 fn modulation(b: &mut B, inst: &Instrument, idx: usize) {
     let n0 = b.l.cards.len();
+    b.card(Tab::Modulation, "Movement");
+    b.custom("mod.movement", "Movement", Custom::Movement)
+        .tip("everything that moves this instrument's knobs: source → knob · amount");
     b.card(Tab::Modulation, "Modulators").note = "drag a chip onto a knob".into();
     b.custom("mod.modulators", "Modulators", Custom::Modulators)
         .tip(
             "LFOs, envelopes, random, velocity, keytrack, mod wheel and macros of this instrument",
         );
-    b.card(Tab::Modulation, "Routings");
-    b.custom("mod.routings", "Routings", Custom::Routings)
-        .tip("modulator > parameter connections with their depth");
     let ours: Vec<Card> = b.l.cards.drain(n0..).collect();
     let at =
         b.l.cards

@@ -193,7 +193,11 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
                 p.circle_stroke(dp, 3.4, Stroke::new(1.0, Color32::from_black_alpha(140)));
             }
             None => {
-                let c = if hot { t.accent } else { t.ink2.gamma_multiply(0.55) };
+                let c = if hot {
+                    t.accent
+                } else {
+                    t.ink2.gamma_multiply(0.55)
+                };
                 if hot {
                     p.circle_filled(dp, 4.2, t.accent.gamma_multiply(0.35));
                 }

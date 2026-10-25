@@ -50,7 +50,14 @@ fn shape_icon(ui: &mut egui::Ui, s: LfoShape, on: bool) -> egui::Response {
     p.rect_stroke(
         r,
         4.0,
-        Stroke::new(1.0, if on { t.accent } else { t.ink2.gamma_multiply(0.5) }),
+        Stroke::new(
+            1.0,
+            if on {
+                t.accent
+            } else {
+                t.ink2.gamma_multiply(0.5)
+            },
+        ),
         egui::StrokeKind::Inside,
     );
     let ir = r.shrink2(egui::vec2(6.0, 6.0));
@@ -59,10 +66,16 @@ fn shape_icon(ui: &mut egui::Ui, s: LfoShape, on: bool) -> egui::Response {
             let ph = i as f32 / 24.0;
             // the square's edges as steps
             let y = s.at(ph.min(0.9999));
-            Pos2::new(ir.left() + ph * ir.width(), ir.center().y - y * ir.height() * 0.5)
+            Pos2::new(
+                ir.left() + ph * ir.width(),
+                ir.center().y - y * ir.height() * 0.5,
+            )
         })
         .collect();
-    p.add(egui::Shape::line(pts, Stroke::new(1.5, if on { t.ink } else { t.ink2 })));
+    p.add(egui::Shape::line(
+        pts,
+        Stroke::new(1.5, if on { t.ink } else { t.ink2 }),
+    ));
     let nm = s.name();
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, nm));
     resp.on_hover_text(nm)
@@ -235,7 +248,9 @@ impl App {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_width(w);
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new(format!("Modulate {} with…", q.name)).strong());
+                        ui.label(
+                            egui::RichText::new(format!("Modulate {} with…", q.name)).strong(),
+                        );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.small_button("×").on_hover_text("close (Esc)").clicked() {
                                 close = true;
@@ -247,14 +262,22 @@ impl App {
                         let Some(row) = rows.iter().find(|r| r.id == e) else {
                             return;
                         };
-                        let col = row.modk.map(super::super::modview::mod_colour).unwrap_or(t.accent);
+                        let col = row
+                            .modk
+                            .map(super::super::modview::mod_colour)
+                            .unwrap_or(t.accent);
                         ui.horizontal(|ui| {
-                            let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), Sense::hover());
+                            let (r, _) =
+                                ui.allocate_exact_size(egui::vec2(10.0, 10.0), Sense::hover());
                             ui.painter().circle_filled(r.center(), 4.5, col);
                             ui.label(format!("{} → {}", row.source, row.target));
                         });
                         if row.per_note {
-                            ui.label(egui::RichText::new("per note: every voice moves on its own").small().color(t.ink2));
+                            ui.label(
+                                egui::RichText::new("per note: every voice moves on its own")
+                                    .small()
+                                    .color(t.ink2),
+                            );
                         }
                         // a song-level LFO / random: its shape and rate
                         if let (RowId::Song(_), Some(k)) = (row.id, row.modk) {
@@ -271,11 +294,21 @@ impl App {
                                     }
                                 });
                             }
-                            if matches!(md.kind, crate::modulation::ModKind::Lfo | crate::modulation::ModKind::Random) {
+                            if matches!(
+                                md.kind,
+                                crate::modulation::ModKind::Lfo
+                                    | crate::modulation::ModKind::Random
+                            ) {
                                 rate_ui(ui, &mut md.sync, &mut md.rate);
                             }
                             if shared > 1 {
-                                ui.label(egui::RichText::new(format!("shape and rate are shared by {shared} knobs")).small().color(t.ink2));
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "shape and rate are shared by {shared} knobs"
+                                    ))
+                                    .small()
+                                    .color(t.ink2),
+                                );
                             }
                         }
                         let mut a = row.amount;
@@ -289,20 +322,30 @@ impl App {
                         ui.label(egui::RichText::new(row.text.clone()).small().color(t.value));
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
-                            if ui.button("Remove").on_hover_text("stop this movement").clicked() {
+                            if ui
+                                .button("Remove")
+                                .on_hover_text("stop this movement")
+                                .clicked()
+                            {
                                 remove = Some(row.id);
                             }
                             if q.target.is_some()
-                                && ui.button("+ Add another").on_hover_text("move this knob with a second source too").clicked()
+                                && ui
+                                    .button("+ Add another")
+                                    .on_hover_text("move this knob with a second source too")
+                                    .clicked()
                             {
                                 q.edit = None;
                                 q.msg = None;
                             }
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.button("Done").clicked() {
-                                    close = true;
-                                }
-                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui.button("Done").clicked() {
+                                        close = true;
+                                    }
+                                },
+                            );
                         });
                         return;
                     }
@@ -311,7 +354,10 @@ impl App {
                         ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
                         for s in Source::ALL {
                             let on = q.spec.source == s;
-                            let b = ui.add(egui::Button::selectable(on, s.name()).min_size(egui::vec2(52.0, 22.0)));
+                            let b = ui.add(
+                                egui::Button::selectable(on, s.name())
+                                    .min_size(egui::vec2(52.0, 22.0)),
+                            );
                             if b.clicked() {
                                 q.spec.source = s;
                                 q.msg = None;
@@ -349,12 +395,19 @@ impl App {
                                 (Some(n), _) => n.clone(),
                                 (None, RowId::Native(_)) => format!(
                                     "uses {}'s own modulation",
-                                    qm::engine(&inst.kind).map(|e| e.engine()).unwrap_or("the instrument")
+                                    qm::engine(&inst.kind)
+                                        .map(|e| e.engine())
+                                        .unwrap_or("the instrument")
                                 ),
                                 (None, RowId::Song(_)) => String::new(),
                             };
                             if !txt.is_empty() {
-                                ui.add(egui::Label::new(egui::RichText::new(txt).small().color(t.ink2)).wrap());
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(txt).small().color(t.ink2),
+                                    )
+                                    .wrap(),
+                                );
                             }
                         }
                         _ => {}
@@ -429,21 +482,32 @@ impl App {
     }
 
     /// the Movement list of the instrument being edited
-    pub(super) fn movement_list(&mut self, ui: &mut egui::Ui, inst: &mut Instrument, cx: &mut Cx) {
+    pub(super) fn movement_list(
+        &mut self,
+        ui: &mut egui::Ui,
+        inst: &mut Instrument,
+        cx: &mut Cx,
+        head: bool,
+    ) {
         let t = th();
         let rows = self.quick_rows(inst, cx);
         let now = ui.input(|i| i.time);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Movement").strong());
+            if head {
+                ui.label(egui::RichText::new("Movement").strong());
+            }
             if !rows.is_empty() {
-                ui.label(egui::RichText::new(format!("{} active", rows.len())).small().color(t.ink2));
+                ui.label(
+                    egui::RichText::new(format!("{} active", rows.len()))
+                        .small()
+                        .color(t.ink2),
+                );
             }
         });
         if rows.is_empty() {
             ui.add(
                 egui::Label::new(
-                    egui::RichText::new("Click the dot on any knob to add movement")
-                        .color(t.ink2),
+                    egui::RichText::new("Click the dot on any knob to add movement").color(t.ink2),
                 )
                 .wrap(),
             );
@@ -466,7 +530,9 @@ impl App {
                     let (dr, dresp) = ui.allocate_exact_size(egui::vec2(12.0, 18.0), Sense::drag());
                     ui.painter().circle_filled(dr.center(), 4.5, col);
                     if let (Some(k), true) = (row.modk, dresp.dragged()) {
-                        dresp.dnd_set_drag_payload(super::super::modview::ModDrag(cx.modm.mods[k].id));
+                        dresp.dnd_set_drag_payload(super::super::modview::ModDrag(
+                            cx.modm.mods[k].id,
+                        ));
                     }
                     let lw = (ui.available_width() - 110.0).max(80.0);
                     let txt = format!(
@@ -478,7 +544,9 @@ impl App {
                     let lr = ui
                         .add_sized(
                             egui::vec2(lw, 18.0),
-                            egui::Label::new(egui::RichText::new(&txt)).truncate().sense(Sense::click()),
+                            egui::Label::new(egui::RichText::new(&txt))
+                                .truncate()
+                                .sense(Sense::click()),
                         )
                         .on_hover_text(format!("{txt}  {}\nclick to edit", row.text));
                     if lr.clicked() {
