@@ -190,7 +190,14 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
         )
     };
     let tail = || {
-        vec![
+        let paste = (i.paste && i.timeline).then(|| {
+            slot(
+                "Paste at playhead",
+                Some(Go::Act(PieAct::PasteHere)),
+                "the copied clips onto this track at the play marker (on the snap grid), as independent copies",
+            )
+        });
+        paste.into_iter().chain([
             Slot {
                 on: i.mute,
                 ..slot(
@@ -229,7 +236,7 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
                 Some(Go::Act(PieAct::Devices)),
                 "this track's instrument and effects in the Rack",
             ),
-        ]
+        ])
     };
     Some(match level {
         Level::Add => {

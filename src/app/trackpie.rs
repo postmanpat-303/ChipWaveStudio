@@ -166,6 +166,8 @@ pub(crate) enum PieAct {
     MoreKitsHere,
     /// an empty 1-bar pattern on this track at the play marker
     NewPattern,
+    /// the copied clips onto this track at the play marker (on the grid)
+    PasteHere,
     /// a drum track: Dice kit on its Drum Kit (as the kit's Dice kit)
     DiceKit,
     /// a melodic track: its instrument becomes preset `k` of
@@ -388,6 +390,8 @@ pub(crate) struct TrackInfo {
     pub(crate) sounds: Vec<String>,
     /// the preset its sound is now, if any
     pub(crate) sound: Option<String>,
+    /// the Timeline's clip clipboard has clips (offer Paste at playhead)
+    pub(crate) paste: bool,
     /// the empty-area pie (right-click below the tracks): every choice
     /// makes a NEW track at the end; the track pie never does (but Duplicate)
     pub(crate) new: bool,
@@ -969,6 +973,7 @@ impl App {
             .map(|(_, l, on)| (l, on))
             .collect();
         let lanes_shown = self.track_lanes_shown(tr);
+        let paste = !self.tlv.clipboard.is_empty();
         self.with(|s| {
             let t = s.song.timeline.as_deref().and_then(|t| t.tracks.get(tr));
             let mx = s.song.mixer.channels.get(tr);
@@ -989,6 +994,7 @@ impl App {
                 kit,
                 sounds,
                 sound,
+                paste,
                 new: false,
             }
         })
@@ -1801,6 +1807,10 @@ impl App {
                     }
                     None => "Can't add a pattern there".into(),
                 };
+            }
+            PieAct::PasteHere => {
+                let spot = self.tl_paste_spot(None);
+                self.tl_paste(Some((tr, spot.1)), false);
             }
             PieAct::Mute | PieAct::Solo => {
                 let on = self.with(|s| {

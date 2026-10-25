@@ -29,6 +29,9 @@ pub(crate) struct RadialItem {
     pub icon: Option<RIcon>,
     /// the outer ring's labels (empty: none)
     pub children: Vec<String>,
+    /// shown greyed: hovering lights nothing, picking it does nothing
+    /// (the pie's owner says why on the status line)
+    pub dim: bool,
 }
 
 impl RadialItem {
@@ -41,7 +44,14 @@ impl RadialItem {
             label: label.into(),
             icon,
             children,
+            dim: false,
         }
+    }
+
+    /// greyed (see `dim`)
+    pub(crate) fn dimmed(mut self) -> Self {
+        self.dim = true;
+        self
     }
 }
 
@@ -236,7 +246,7 @@ impl Radial {
         let w = self.wedge();
         for (i, it) in self.items.iter().enumerate() {
             let a0 = self.angle_of(i) - w / 2.0;
-            let on = self.hover == Some(i);
+            let on = self.hover == Some(i) && !it.dim;
             if on {
                 sector(&p, c, R_IN, R_MID, a0, a0 + w, accent.gamma_multiply(0.28));
                 arc(
@@ -263,6 +273,8 @@ impl Radial {
                 } else {
                     Color32::WHITE
                 }
+            } else if it.dim {
+                ink.gamma_multiply(0.42)
             } else {
                 ink
             };
