@@ -2875,6 +2875,7 @@ pub(crate) mod tests {
 
     fn inst(kind: InstrumentKind) -> Instrument {
         Instrument {
+            arp: None,
             name: "t".into(),
             volume: 0.8,
             transpose: 0,

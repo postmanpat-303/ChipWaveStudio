@@ -32,6 +32,7 @@ pub(crate) fn song_with_rack() -> Song {
     a.fx = vec![split];
     let data: Vec<f32> = (0..4800).map(|k| ((k as f32) * 0.05).sin() * 0.5).collect();
     let b = Instrument {
+        arp: None,
         name: "Blip".into(),
         volume: 0.7,
         transpose: 0,
@@ -48,6 +49,7 @@ pub(crate) fn song_with_rack() -> Song {
     l2.level_db = -4.0;
     l2.pan = 0.3;
     let rack = Instrument {
+        arp: None,
         name: "Glass Keys".into(),
         volume: 0.9,
         transpose: 0,

@@ -14,6 +14,7 @@ fn frames(h: &mut Harness<'static, App>, n: usize) {
 
 fn strings_inst() -> Instrument {
     Instrument {
+        arp: None,
         name: "Strings".into(),
         volume: 0.8,
         transpose: 0,

@@ -296,6 +296,7 @@ fn stringwave_demo() {
     let pre = crate::strings::presets::presets();
     let get = |n: &str| pre.iter().find(|p| p.0.ends_with(n)).unwrap().2.clone();
     let mk = |name: &str, vol: f32| crate::model::Instrument {
+        arp: None,
         name: concat!(crate::strings_name!(), " ").to_string() + name,
         volume: vol,
         transpose: 0,

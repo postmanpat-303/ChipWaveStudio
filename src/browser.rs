@@ -1144,6 +1144,7 @@ pub fn sample_instrument(path: &Path) -> Result<Instrument, String> {
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "Sample".into());
     Ok(Instrument {
+        arp: None,
         name,
         volume: 1.0,
         transpose: 0,
@@ -1182,6 +1183,7 @@ pub fn wave_instrument(
     }
     g.base.name = name.into();
     Instrument {
+        arp: None,
         name: name.into(),
         volume: 0.8,
         transpose: 0,
@@ -1193,6 +1195,7 @@ pub fn wave_instrument(
 /// the instrument an item stands for (not plugins, songs, effects, MIDI)
 pub fn instrument_of(it: &Item, song: &Song) -> Result<Instrument, String> {
     let plain = |name: &str, kind| Instrument {
+        arp: None,
         name: name.into(),
         volume: 0.8,
         transpose: 0,

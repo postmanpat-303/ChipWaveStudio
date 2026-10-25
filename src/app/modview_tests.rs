@@ -25,6 +25,7 @@ fn rect_of(h: &Harness<'static, App>, role: Role, label: &str) -> Rect {
 fn synth_with_lfo() -> (Harness<'static, App>, usize) {
     let mut song = crate::fileio::demo_song();
     song.instruments.push(Instrument {
+        arp: None,
         name: "Lead".into(),
         volume: 0.8,
         transpose: 0,

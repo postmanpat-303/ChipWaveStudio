@@ -5,6 +5,7 @@ use crate::model::{Instrument, InstrumentKind};
 
 fn inst(kind: InstrumentKind) -> Instrument {
     Instrument {
+        arp: None,
         name: "T".into(),
         volume: 0.8,
         transpose: 0,

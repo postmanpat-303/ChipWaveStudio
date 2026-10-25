@@ -3233,6 +3233,7 @@ mod tests {
             song.channels = 1;
             song.patterns = vec![Pattern::new("b", ROWS, 1)];
             song.instruments = vec![Instrument {
+                arp: None,
                 name: "s".into(),
                 volume: 1.0,
                 transpose: 0,

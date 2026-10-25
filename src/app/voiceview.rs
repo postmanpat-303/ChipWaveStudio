@@ -494,6 +494,7 @@ impl App {
                 return None;
             }
             s.song.instruments.push(Instrument {
+                arp: None,
                 name: name.into(),
                 volume: 0.8,
                 transpose: 0,

@@ -775,6 +775,7 @@ mod tests {
     fn sample_pcm_is_shared_not_copied() {
         let mut s = song();
         s.instruments.push(Instrument {
+            arp: None,
             name: "smp".into(),
             volume: 1.0,
             transpose: 0,
@@ -822,6 +823,7 @@ mod tests {
         // memory cap: big sample edits
         let mut s = song();
         s.instruments.push(Instrument {
+            arp: None,
             name: "big".into(),
             volume: 1.0,
             transpose: 0,

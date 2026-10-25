@@ -320,6 +320,7 @@ pub fn scan(dir: &Path) -> Vec<Entry> {
 /// Make the instrument an entry stands for.
 pub fn instantiate(e: &Entry) -> Result<Instrument, String> {
     let synth = |name: &str, p: crate::synth::Patch, fx| Instrument {
+        arp: None,
         name: name.into(),
         volume: 1.0,
         transpose: 0,
@@ -348,6 +349,7 @@ pub fn instantiate(e: &Entry) -> Result<Instrument, String> {
             let mut vp = crate::voice::preset(v).ok_or("unknown voice preset")?;
             vp.base.name = v.clone();
             Ok(Instrument {
+                arp: None,
                 name: v.clone(),
                 volume: 1.0,
                 transpose: 0,
@@ -358,6 +360,7 @@ pub fn instantiate(e: &Entry) -> Result<Instrument, String> {
         Source::Gen(g) => {
             let gp = crate::gen::preset(g).ok_or("unknown generator preset")?;
             Ok(Instrument {
+                arp: None,
                 name: g.clone(),
                 volume: 1.0,
                 transpose: 0,
@@ -465,6 +468,7 @@ mod tests {
         }
         let wav: Vec<f32> = (0..2000).map(|i| (i as f32 * 0.05).sin() * 0.5).collect();
         insts.push(Instrument {
+            arp: None,
             name: "Saw/sample: odd*name".into(),
             volume: 0.7,
             transpose: -3,

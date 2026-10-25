@@ -71,6 +71,7 @@ pub fn plugin_song() -> Song {
     let mut s = crate::fileio::demo_song();
     s.automation.clear();
     s.instruments[0] = Instrument {
+        arp: None,
         name: "Test Synth".into(),
         volume: 1.0,
         transpose: 0,

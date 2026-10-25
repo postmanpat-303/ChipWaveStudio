@@ -325,6 +325,7 @@ mod tests {
     fn filter_fx_cutoff_family() {
         let mut s = song();
         s.instruments.push(Instrument {
+            arp: None,
             name: "Bass".into(),
             volume: 1.0,
             transpose: 0,

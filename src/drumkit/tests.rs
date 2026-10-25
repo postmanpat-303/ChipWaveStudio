@@ -256,6 +256,7 @@ fn a_drum_kit_song_and_cwi_round_trip_and_need_reader_5() {
         k.add_pad(Some(0));
     }
     let inst = Instrument {
+        arp: None,
         name: "909 Kit".into(),
         volume: 0.8,
         transpose: 0,

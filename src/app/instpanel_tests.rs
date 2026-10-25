@@ -116,6 +116,7 @@ fn ctrl_i_opens_the_instrument_editor_and_every_type_and_tab_draws_its_parameter
 
 fn analog() -> Instrument {
     Instrument {
+        arp: None,
         name: "Bass".into(),
         volume: 0.8,
         transpose: 0,
@@ -534,6 +535,7 @@ fn grid_of(h: &Harness<'static, App>) -> crate::grid::GridP {
 #[test]
 fn grid_canvas_adds_modules_unplugs_and_patches_cables_with_undo() {
     let inst = Instrument {
+        arp: None,
         name: "Grid".into(),
         volume: 0.8,
         transpose: 0,
@@ -664,6 +666,7 @@ fn a_space_macro_without_a_reverb_adds_one_and_ctrl_f_opens_the_full_editor() {
 #[test]
 fn a_grid_simple_card_has_its_macros_and_opens_the_patch() {
     let inst = Instrument {
+        arp: None,
         name: "Grid".into(),
         volume: 0.8,
         transpose: 0,
@@ -708,6 +711,7 @@ fn poly_of(h: &Harness<'static, App>) -> crate::poly::PolyP {
 fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
     use crate::poly::*;
     let inst = Instrument {
+        arp: None,
         name: "Lead".into(),
         volume: 0.8,
         transpose: 0,
@@ -780,6 +784,7 @@ fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
 #[test]
 fn stringwave_panel_and_advanced_fit_a_laptop() {
     let inst = Instrument {
+        arp: None,
         name: "Strings".into(),
         volume: 0.8,
         transpose: 0,

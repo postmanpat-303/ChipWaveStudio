@@ -1631,6 +1631,7 @@ impl App {
                     return false;
                 };
                 Instrument {
+                    arp: None,
                     name,
                     volume: 0.8,
                     transpose: 0,
