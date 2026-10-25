@@ -318,3 +318,132 @@ fn clip_pie_copies_and_the_empty_lane_pie_pastes_here() {
     let slots = super::trackring::ring_slots(super::trackring::Level::Add, &i);
     assert!(slots.iter().any(|s| s.label == "Paste at playhead"));
 }
+
+/// what the window system sends: Ctrl+C / Ctrl+X arrive as Copy / Cut
+/// events (no key event), Ctrl+V as Paste(system clipboard text), or
+/// nothing at all when that clipboard holds no text
+fn os_copy(h: &mut Harness<'static, App>) -> Option<String> {
+    h.input_mut().events.push(egui::Event::Copy);
+    super::ui_tests::frame(h);
+    let text = h
+        .output()
+        .platform_output
+        .commands
+        .iter()
+        .find_map(|c| match c {
+            egui::OutputCommand::CopyText(t) => Some(t.clone()),
+            _ => None,
+        });
+    frames(h, 1);
+    text
+}
+
+/// Del (25 Oct 2026): "the hot ctrl-c and ctrl-v do not function" — a
+/// real run: click into the piano roll, then click a clip with the mouse,
+/// and the window system's Copy / Paste events (not key presses) copy
+/// and paste it; the copy fills the system clipboard so a Ctrl+V on an
+/// empty one still arrives; a picture on it still pastes the clips
+#[test]
+fn clicked_clip_copies_and_pastes_with_the_window_systems_events() {
+    use super::objpie_tests::press;
+    let (mut h, a) = song4();
+    h.state_mut().tlv.sels.clear();
+    h.state_mut().tlv.sel = None;
+    // the piano roll had the keyboard (clicked into last)
+    h.state_mut().pr.open = true;
+    h.state_mut().pr.focus = true;
+    frames(&mut h, 2);
+    let p = at(&h, 0, BAR / 2);
+    press(&mut h, p, egui::PointerButton::Primary, true);
+    press(&mut h, p, egui::PointerButton::Primary, false);
+    frames(&mut h, 2);
+    assert_eq!(h.state().tlv.sels, vec![a], "the click selects the clip");
+    assert!(
+        !h.state().pr_active(),
+        "the Timeline has the keyboard again"
+    );
+    let text = os_copy(&mut h);
+    assert!(
+        h.state().status.starts_with("Copied 1 clip"),
+        "{}",
+        h.state().status
+    );
+    let text = text.expect("the copy fills the system clipboard");
+    assert!(text.starts_with("ChipWave: 1 timeline clip"), "{text}");
+    // Ctrl+V: Paste(that text)
+    let n = clips(&h).len();
+    h.state_mut().ch = 2;
+    h.state_mut().tlv.cue = 4 * BAR;
+    h.state_mut().tlv.head_drawn = None;
+    h.input_mut().events.push(egui::Event::Paste(text));
+    frames(&mut h, 2);
+    let all = clips(&h);
+    assert_eq!(all.len(), n + 1, "{}", h.state().status);
+    assert!(all.iter().any(|c| c.track == 2 && c.start == 4 * BAR));
+    // a picture on the system clipboard: PasteImage still pastes clips
+    h.state_mut().tlv.cue = 6 * BAR;
+    h.input_mut()
+        .events
+        .push(egui::Event::PasteImage(std::sync::Arc::new(
+            egui::ColorImage::filled([1, 1], egui::Color32::BLACK),
+        )));
+    frames(&mut h, 2);
+    let all = clips(&h);
+    assert_eq!(all.len(), n + 2, "{}", h.state().status);
+    assert!(all.iter().any(|c| c.track == 2 && c.start == 6 * BAR));
+    // Ctrl+X: Cut
+    let id = h.state().tlv.sels[0];
+    h.input_mut().events.push(egui::Event::Cut);
+    frames(&mut h, 2);
+    assert!(clips(&h).iter().all(|c| c.id != id), "cut");
+}
+
+/// "there is no copy in the menu pie": a linked clip ("Take 1 ×3") has
+/// Copy and Cut in its pie, and Copy then Ctrl+V pastes it
+#[test]
+fn a_linked_clips_pie_has_copy_and_cut() {
+    let (mut h, a) = song4();
+    select(&mut h, &[a]);
+    for _ in 0..2 {
+        h.state_mut().tl_apply(super::timeline::TlOp::Duplicate);
+        frames(&mut h, 1);
+    }
+    h.state().with(|s| {
+        let t = s.song.timeline.as_deref_mut().unwrap();
+        t.clips.iter_mut().find(|c| c.id == a).unwrap().name = Some("Take 1".into());
+    });
+    let d = clip(&h, a).notes().unwrap();
+    let (x, y) = h
+        .state()
+        .with(|s| tl::linked(s.song.timeline.as_deref().unwrap(), d));
+    assert_eq!(x + y, 3, "three clips share the notes");
+    frames(&mut h, 2);
+    let p = at(&h, 0, BAR / 2);
+    super::objpie_tests::right_click(&mut h, p);
+    assert_eq!(h.state().opie.as_ref().map(|x| x.1), Some(PieFor::Clip(a)));
+    let labels: Vec<String> = h
+        .state()
+        .opie
+        .as_ref()
+        .unwrap()
+        .0
+        .items
+        .iter()
+        .map(|x| x.label.clone())
+        .collect();
+    for want in ["Copy", "Cut"] {
+        assert!(labels.iter().any(|x| x == want), "{want} in {labels:?}");
+    }
+    pick(&mut h, "Copy", None);
+    assert!(
+        h.state().status.starts_with("Copied 1 clip"),
+        "{}",
+        h.state().status
+    );
+    let n = clips(&h).len();
+    h.state_mut().ch = 3;
+    h.state_mut().tlv.cue = 6 * BAR;
+    h.state_mut().tlv.head_drawn = None;
+    key(&mut h, Key::V, CMD);
+    assert_eq!(clips(&h).len(), n + 1, "{}", h.state().status);
+}
