@@ -1528,7 +1528,9 @@ mod migrate;
 pub use migrate::{ensure_master_track, migrate_song_lanes};
 mod plan;
 pub mod rr;
-pub use rr::{Cond, Order};
+pub use rr::Cond;
+#[allow(unused_imports)]
+pub use rr::Order;
 pub mod roll;
 pub use autoplan::*;
 pub use edit::*;

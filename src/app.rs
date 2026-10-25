@@ -108,6 +108,7 @@ mod pianocopy_tests;
 mod pianoview;
 mod pluginview;
 mod plugsetup;
+mod prlanes;
 #[cfg(test)]
 mod prollpan_tests;
 #[cfg(test)]
@@ -124,6 +125,8 @@ mod rackview_tests;
 mod radial;
 #[cfg(test)]
 mod record_tests;
+#[cfg(test)]
+mod rrlane_tests;
 mod sampleview;
 #[cfg(test)]
 mod scenario_tests;

@@ -54,6 +54,21 @@ impl App {
         let arr_visible =
             self.view == View::Arranger || (self.view == View::Pattern && self.arr_docked());
         for ev in events {
+            // a piano-roll lane popover open: Esc closes it, nothing else
+            if (self.pr.cond_pop.is_some() || self.pr.lane_menu.is_some())
+                && matches!(
+                    &ev,
+                    egui::Event::Key {
+                        key: Key::Escape,
+                        pressed: true,
+                        ..
+                    }
+                )
+            {
+                self.pr.cond_pop = None;
+                self.pr.lane_menu = None;
+                continue;
+            }
             // the Fill to length dialog owns plain keys while it is open
             if self.fill.is_some() && self.prompt.is_none() {
                 if let egui::Event::Key {
