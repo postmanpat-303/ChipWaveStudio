@@ -2,6 +2,14 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## Unreleased (test build): Round Robin
+
+- **Step conditions:** notes can play every X of Y passes, only the first time, never the first time, only in fills or never in fills, next to their Chance. New Conditions and Chance lanes in the piano roll, a **Play this note…** popover, striped notes and a live **Fill** toggle.
+- **Clip Variations:** up to four takes (A–D) per note clip, one per loop pass, in order, random, random no repeat, ping-pong or every N.
+- **Drum pad Round Robin:** up to four sounds per pad taking turns, with per-hit drift of pitch, level, tone, decay, timing and pan, a seed and a "Next 8 hits" preview.
+- **Follow actions:** launcher clips can move on after N loops (X % Next / Again / Other / First / Last / Any / Stop), with a » badge, a "From here" preview and **Capture to timeline**.
+- All of it is deterministic (seed + pass/hit), off by default and not saved when unused; old songs render bit-identically. See ROUND_ROBIN.md.
+
 ## 0.2.13.0: live recording, quick modulation and a backlit LCD
 
 Released 2026-10-25. Highlights:
