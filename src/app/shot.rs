@@ -1381,6 +1381,9 @@ impl App {
         if view.starts_with("tracks-") && view.contains("pie") && f == SETUP_AT + 12 {
             self.shot_tracks_pie(ctx, &view);
         }
+        if view == "timeline" && f == SETUP_AT + 12 {
+            self.shot_tracksize();
+        }
         if view == "split-preview" && f == SETUP_AT + 12 {
             self.shot_split();
         }
@@ -2407,6 +2410,52 @@ impl App {
                     )
                 })
                 .collect();
+        }
+    }
+}
+
+impl App {
+    /// `--view timeline` with CHIPWAVE_SHOT_TRACKS=resize (track 02 taller,
+    /// track 04 shorter) or reorder (track 03's header dragged up between
+    /// tracks 01 and 02, held: the insertion line)
+    fn shot_tracksize(&mut self) {
+        let Ok(m) = std::env::var("CHIPWAVE_SHOT_TRACKS") else {
+            return;
+        };
+        match m.as_str() {
+            "resize" => {
+                self.set_track_height(1, 104.0);
+                self.set_track_height(3, 36.0);
+            }
+            "reorder" => {
+                let (Some((h2, _)), Some((h0, _))) =
+                    (self.tlv.track_rects(2), self.tlv.track_rects(0))
+                else {
+                    return;
+                };
+                let from = Pos2::new(h2.left() + 70.0, h2.center().y);
+                let to = Pos2::new(h0.left() + 90.0, h0.bottom() + 6.0);
+                let mut sc = vec![
+                    (SETUP_AT + 30, egui::Event::PointerMoved(from)),
+                    (
+                        SETUP_AT + 32,
+                        egui::Event::PointerButton {
+                            pos: from,
+                            button: egui::PointerButton::Primary,
+                            pressed: true,
+                            modifiers: Default::default(),
+                        },
+                    ),
+                ];
+                for i in 1..=10u32 {
+                    let p = from + (to - from) * (i as f32 / 10.0);
+                    sc.push((SETUP_AT + 34 + i * 2, egui::Event::PointerMoved(p)));
+                }
+                if let Some(sh) = &mut self.shot {
+                    sh.script = sc;
+                }
+            }
+            _ => {}
         }
     }
 }
