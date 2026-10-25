@@ -103,6 +103,7 @@ pub fn is_fill(
 /// Robin).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[allow(clippy::enum_variant_names)] // "in_order" is the saved name
 pub enum Order {
     /// A B C D A B C D…
     InOrder,
@@ -202,7 +203,7 @@ pub fn pick(order: Order, n: usize, seed: u32, salt: u32, k: u32) -> usize {
         }
         Order::EveryN { n: every, which } => {
             let every = every.max(1) as u32;
-            if (k + 1) % every == 0 {
+            if (k + 1).is_multiple_of(every) {
                 (which as usize).min(n - 1)
             } else {
                 0

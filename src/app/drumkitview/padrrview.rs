@@ -126,7 +126,7 @@ impl App {
                         )
                         .clicked()
                 {
-                    let last = r.alts.last().unwrap_or(&pad.drum).clone();
+                    let last = *r.alts.last().unwrap_or(&pad.drum);
                     let n = last.kind.models().len().max(1) as u8;
                     let mut d = DrumP::new(last.kind, (last.model + 1) % n, &[]);
                     d.macros = last.macros;

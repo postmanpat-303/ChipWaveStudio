@@ -1385,6 +1385,10 @@ impl App {
                     hdr_dim(),
                 );
                 let meter = self.midi_press_meter();
+                // the hover card is custom UI, so name the light for screen
+                // readers as its plain tip did
+                let name = format!("{midi_tip}\nclick: MIDI settings");
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
                 if resp
                     .on_hover_ui(|ui| {
                         ui.label(&midi_tip);
