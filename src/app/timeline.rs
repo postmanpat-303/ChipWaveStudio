@@ -1319,6 +1319,13 @@ impl App {
             }
         }
         let px_row = ROW as f32 * ppt as f32;
+        // the live Record block (or the take settling into a clip)
+        let lv = self.rec_live_view(live.head);
+        if lv.as_ref().is_some_and(|l| l.animating) {
+            ui.ctx().request_repaint();
+        }
+        let rec_red = theme::mix(t.brick, Color32::from_rgb(0xE0, 0x30, 0x2A), 0.6);
+        let mut rec_dots: Vec<(Rect, Pos2, Color32)> = Vec::new();
         for tr in first_tr..last_tr {
             let lr = lane_rect(tr);
             let col = track_colour_in(&c.tl, tr);
@@ -1329,12 +1336,20 @@ impl App {
                 .unwrap_or(true);
             for i in c.idx.visible(&c.tl, tr, v0, v1) {
                 let clip = &c.tl.clips[i];
+                let lvc = lv.as_ref().filter(|l| l.clip == clip.id);
+                // the live block's drawn end follows the playhead
+                let c_end = lvc.map_or(clip.end(), |l| (l.end.ceil() as Tick).max(clip.start + 1));
                 let x0 = x_of(clip.start as f64);
-                let x1 = x_of(clip.end() as f64);
-                let r = Rect::from_min_max(
+                let x1 = lvc.map_or(x_of(clip.end() as f64), |l| x_of(l.end));
+                let mut r = Rect::from_min_max(
                     Pos2::new(x0 + 0.5, lr.top() + 2.0),
                     Pos2::new((x1 - 0.5).max(x0 + 1.5), lr.bottom() - 2.0),
                 );
+                if let Some(l) = lvc {
+                    // opening: eases in from 85 % height
+                    let sc = 0.85 + 0.15 * l.fade;
+                    r = Rect::from_center_size(r.center(), egui::vec2(r.width(), r.height() * sc));
+                }
                 let sel = self.tlv.sels.contains(&clip.id);
                 if let Some((fid, t0)) = self.tlv.flash.filter(|f| f.0 == clip.id) {
                     let now = ui.input(|i| i.time);
@@ -1357,17 +1372,26 @@ impl App {
                     0.35
                 } else {
                     1.0
-                };
+                } * lvc.map_or(1.0, |l| l.fade);
                 // solid title bar in the track colour over a softer body
                 // (the musical data keeps the saturation; 0.2.4 polish)
                 // the clip's own colour (5.4), else the track's
                 let col = clip.colour.map_or(col, |x| hex(x & 0xFF_FFFF));
-                let body_c = theme::mix(t.crt_bot, col, if t.ember { 0.46 } else { 0.34 } * k);
-                let head_c = theme::mix(
+                let mut body_c = theme::mix(t.crt_bot, col, if t.ember { 0.46 } else { 0.34 } * k);
+                let mut head_c = theme::mix(
                     t.crt_bot,
                     if hot { theme::tone(col, 0.10) } else { col },
                     k.max(0.3),
                 );
+                if let Some(l) = lvc {
+                    // REC style: a red tint (fading as the take settles)
+                    let fr = l.fade * l.rec;
+                    body_c = theme::mix(body_c, rec_red, 0.22 * fr);
+                    head_c = theme::mix(head_c, rec_red, 0.7 * fr);
+                    if l.fade < 1.0 {
+                        head_c = theme::mix(t.crt_bot, head_c, l.fade);
+                    }
+                }
                 let hh = (lr.height() * 0.32).clamp(10.0, 16.0);
                 let hr = Rect::from_min_max(r.min, Pos2::new(r.right(), r.top() + hh));
                 if pol {
@@ -1405,6 +1429,28 @@ impl App {
                     );
                     if sel {
                         outlines.push((r, Stroke::new(2.0, t.selection_outline)));
+                    }
+                }
+                if let Some(l) = lvc.filter(|l| l.rec > 0.0) {
+                    let fr = l.fade * l.rec;
+                    outlines.push((r, Stroke::new(1.5, rec_red.gamma_multiply(fr))));
+                    if l.live {
+                        // the leading edge at the playhead, pulsing
+                        let gw = 16.0f32.min(r.width());
+                        let gr = Rect::from_min_max(Pos2::new(r.right() - gw, r.top()), r.max);
+                        let edge = rec_red.gamma_multiply((0.22 + 0.3 * l.pulse) * l.fade);
+                        let i0 = bodies.vertices.len() as u32;
+                        bodies.colored_vertex(gr.left_top(), Color32::TRANSPARENT);
+                        bodies.colored_vertex(gr.right_top(), edge);
+                        bodies.colored_vertex(gr.right_bottom(), edge);
+                        bodies.colored_vertex(gr.left_bottom(), Color32::TRANSPARENT);
+                        bodies.add_triangle(i0, i0 + 1, i0 + 2);
+                        bodies.add_triangle(i0, i0 + 2, i0 + 3);
+                        quad(
+                            &mut bodies,
+                            Rect::from_min_max(Pos2::new(r.right() - 2.0, r.top()), r.max),
+                            rec_red.gamma_multiply((0.65 + 0.35 * l.pulse) * l.fade),
+                        );
                     }
                 }
                 // loop notches in the header
@@ -1498,8 +1544,21 @@ impl App {
                     let Some(d) = c.tl.notes.get(data as usize) else {
                         continue;
                     };
-                    if r.width() > 26.0 {
-                        let vis_l = r.left().max(lanes.left()) + 4.0;
+                    let rec_on = lvc.is_some_and(|l| l.rec > 0.5);
+                    if r.width() > 26.0 || rec_on {
+                        let mut vis_l = r.left().max(lanes.left()) + 4.0;
+                        if rec_on {
+                            // "● REC" (a drawn dot: the UI font has no ●)
+                            let ink = title_ink(head_c);
+                            rec_dots.push((r, Pos2::new(vis_l + 3.5, hr.center().y), ink));
+                            texts.push((
+                                r,
+                                Pos2::new(vis_l + 9.0, hr.center().y),
+                                "REC".into(),
+                                ink,
+                            ));
+                            vis_l += 36.0;
+                        }
                         let mut name = clip
                             .name
                             .clone()
@@ -1542,7 +1601,8 @@ impl App {
                     let sel_c = super::pianoview::sel_note_colours(&t, 1.0).0;
                     let l = clip.loop_len.unwrap_or(Tick::MAX / 4);
                     let p0 = clip.pass_at(clip.start.max(v0));
-                    let p1 = clip.pass_at((clip.end() - 1).min(v1));
+                    let p1 = clip.pass_at((c_end - 1).min(v1));
+                    let head_t = live.head.unwrap_or(0.0).ceil() as Tick;
                     for pass in p0..=p1.min(p0 + 10_000) {
                         let base = clip.start - clip.offset + pass as Tick * l;
                         for (ni, n) in d.notes.iter().enumerate() {
@@ -1550,9 +1610,13 @@ impl App {
                                 continue;
                             }
                             let a = base + n.start;
-                            let e = (a + n.len).min(base + l).min(clip.end());
-                            if e <= clip.start.max(v0) || a >= clip.end().min(v1) || a < clip.start
-                            {
+                            let mut e = a + n.len;
+                            // a held note grows with the playhead
+                            if lvc.is_some_and(|lv| lv.held.contains(&ni)) {
+                                e = e.max(head_t);
+                            }
+                            let e = e.min(base + l).min(c_end);
+                            if e <= clip.start.max(v0) || a >= c_end.min(v1) || a < clip.start {
                                 continue;
                             }
                             let xa = x_of(a as f64).max(body.left());
@@ -1565,10 +1629,16 @@ impl App {
                                     Pos2::new(xa, y - nh * 0.5),
                                     Pos2::new(xe - 0.5, y + nh * 0.5),
                                 ),
-                                if roll_sel.contains(&ni) {
-                                    sel_c
-                                } else {
-                                    note_c
+                                match lvc
+                                    .and_then(|lv| lv.landed.iter().find(|x| x.0 == ni))
+                                    .map(|x| x.1)
+                                {
+                                    // just played: fades in from a bright flash
+                                    Some(f) if f < 1.0 => {
+                                        theme::mix(Color32::WHITE, note_c, f).gamma_multiply(f)
+                                    }
+                                    _ if roll_sel.contains(&ni) => sel_c,
+                                    _ => note_c,
                                 },
                             );
                         }
@@ -1646,6 +1716,10 @@ impl App {
         let orad: u8 = if pol { 3 } else { 2 };
         for (r, s) in outlines {
             lp.rect_stroke(r, orad, s, egui::StrokeKind::Inside);
+        }
+        for (r, p, colr) in rec_dots {
+            lp.with_clip_rect(r.intersect(lanes))
+                .circle_filled(p, 3.0, colr);
         }
         for (r, p, txt, colr) in texts {
             let tp = lp.with_clip_rect(r.intersect(lanes).shrink(1.0));

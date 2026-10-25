@@ -10,6 +10,18 @@
 //! overlapping notes as played - into the note clip under the playhead or a
 //! new one. A take is one undo step. Step input (one note after the other)
 //! is the piano roll's own "Step input" toggle, off by default.
+//!
+//! The live block: as soon as Record is rolling (after the count-in) the
+//! take's clip opens on the track's lane - a new clip from the playhead's
+//! bar (the loop's start when loop recording), or the note clip already
+//! under the playhead. It fades in, wears the REC style (red tint and
+//! outline, a pulsing leading edge, "● REC") and grows with the playhead
+//! with no length limit, the notes appearing as they are played (held ones
+//! grow too). On stop it settles into a normal clip ending on the bar line
+//! after the last note or the stop point, whichever is later (an existing
+//! clip never shrinks). Nothing played: a new clip is dropped again (no
+//! undo step). Loop recording overdubs in place: the block covers the loop
+//! and every pass lands in it. Reduce motion skips the fades and the pulse.
 use super::*;
 use crate::timeline::{self as tl, Tick, PPQ, ROW};
 use std::collections::VecDeque;
@@ -51,9 +63,73 @@ pub(crate) struct Session {
     pub(crate) notes: usize,
 }
 
+/// the live block of a Record take: its clip, drawn growing with the
+/// playhead
+#[derive(Clone, Debug)]
+pub(crate) struct LiveBlock {
+    pub(crate) clip: u32,
+    pub(crate) start: Tick,
+    /// where the clip ended when the take began (its start for a new clip)
+    base_end: Tick,
+    /// the furthest the playhead got (ticks)
+    pub(crate) reach: f64,
+    /// made by this take (an empty take drops it again)
+    created: bool,
+    /// the timeline's next id before (an empty take puts it back)
+    next_id: u32,
+    opened: Instant,
+    /// recorded notes (index in the clip's data) and when they landed
+    landed: Vec<(usize, Instant)>,
+}
+
+/// a stopped take settling into a normal clip
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Settle {
+    clip: u32,
+    from: f64,
+    to: Tick,
+    at: Instant,
+}
+
+/// the open / settle fade (seconds)
+const LIVE_FADE: f32 = 0.2;
+const SETTLE_FADE: f32 = 0.25;
+
+/// how the timeline draws the live block this frame
+pub(crate) struct LiveView {
+    pub(crate) clip: u32,
+    /// the drawn end (ticks)
+    pub(crate) end: f64,
+    /// the open fade, 0..1
+    pub(crate) fade: f32,
+    /// the REC style, 1 while recording, falling while it settles
+    pub(crate) rec: f32,
+    /// recording (the leading edge pulses)
+    pub(crate) live: bool,
+    /// the leading edge's pulse, 0..1
+    pub(crate) pulse: f32,
+    /// held notes (index in the data): drawn up to the playhead
+    pub(crate) held: Vec<usize>,
+    /// landed notes and their fade-in, 0..1
+    pub(crate) landed: Vec<(usize, f32)>,
+    /// still animating: repaint
+    pub(crate) animating: bool,
+}
+
+fn ease(x: f32) -> f32 {
+    let x = x.clamp(0.0, 1.0);
+    1.0 - (1.0 - x).powi(3)
+}
+
 #[derive(Default)]
 pub(crate) struct NoteRec {
     take: Option<Take>,
+    /// the live block (Record rolling)
+    pub(crate) live: Option<LiveBlock>,
+    /// the take just stopped, settling
+    pub(crate) settle: Option<Settle>,
+    /// screenshots: the animations frozen this many seconds in
+    pub(crate) anim_at: Option<f32>,
     /// Record is on (the undo hold is taken while it is)
     pub(crate) session: Option<Session>,
     /// the last notes played (for Capture)
@@ -148,6 +224,10 @@ impl App {
         if session.is_some() && self.with(|s| s.engine.counting_in()) {
             return true;
         }
+        // Record rolling: the live block is open before the first note
+        if session.is_some() {
+            self.rec_live_open();
+        }
         let lat = self.audio.as_ref().map_or(0.0, |a| a.latency_ms() / 1000.0) as f64;
         let back = at.elapsed().as_secs_f64() + lat;
         let Some((now, tps, nch)) = self.with(|s| {
@@ -166,6 +246,10 @@ impl App {
         if self.extra.rec_quantise {
             let g = self.pr_grid_now().max(1);
             t = (t + g / 2).div_euclid(g) * g;
+        }
+        // (a note played as the block opened: latency would put it before)
+        if let Some(lb) = &self.noterec.live {
+            t = t.max(lb.start);
         }
         let track = session.as_ref().map_or(self.ch, |s| s.track).min(nch - 1);
         let vel16 = if ms.velocity {
@@ -266,6 +350,12 @@ impl App {
         let Some((take, id)) = res else {
             return false;
         };
+        if let Some(lb) = self.noterec.live.as_mut().filter(|lb| lb.clip == id) {
+            if let Some(&(_, idx)) = take.held.last() {
+                lb.landed.push((idx, Instant::now()));
+            }
+            lb.reach = lb.reach.max(now);
+        }
         self.noterec.take = Some(take);
         if let Some(s) = self.noterec.session.as_mut() {
             s.notes += 1;
@@ -505,6 +595,7 @@ impl App {
     /// Record off (playback goes on): held notes get their length, the
     /// take becomes one undo step
     pub(super) fn rec_stop(&mut self) {
+        self.rec_live_grow();
         let held: Vec<u8> = self
             .noterec
             .take
@@ -514,16 +605,279 @@ impl App {
             self.rec_note_off(k);
         }
         self.noterec.take = None;
+        let kept = self.rec_live_settle();
         if let Some(s) = self.noterec.session.take() {
             self.undo_hold = self.undo_hold.saturating_sub(1);
             self.snapshot();
-            self.status = format!(
-                "Recorded {} note{} on track {:02}",
-                s.notes,
-                if s.notes == 1 { "" } else { "s" },
-                s.track + 1
-            );
+            self.status = if kept == Some(false) {
+                format!(
+                    "Recording stopped: nothing was played on track {:02}, so no clip was kept",
+                    s.track + 1
+                )
+            } else {
+                format!(
+                    "Recorded {} note{} on track {:02}",
+                    s.notes,
+                    if s.notes == 1 { "" } else { "s" },
+                    s.track + 1
+                )
+            };
         }
+    }
+
+    /// Record is rolling (after the count-in): open the live block - the
+    /// note clip under the playhead on the recording track, else a new one
+    /// from the playhead's bar (the loop's start when loop recording)
+    pub(super) fn rec_live_open(&mut self) {
+        if self.noterec.live.is_some() {
+            return;
+        }
+        let Some(track) = self.noterec.session.as_ref().map(|s| s.track) else {
+            return;
+        };
+        let res = self.with(|s| {
+            if s.engine.counting_in() {
+                return None;
+            }
+            let head = s.engine.tl_ticks()?;
+            let t = head.max(0.0).floor() as Tick;
+            let t_l = s.song.timeline.as_deref_mut()?;
+            let next_id = t_l.next_id;
+            let under = t_l.clips.iter().find_map(|c| match c.kind {
+                tl::ClipKind::Notes { data }
+                    if c.track as usize == track
+                        && c.loop_len.is_none()
+                        && t >= c.start
+                        && t < c.end() =>
+                {
+                    Some((c.id, data as usize, c.start, c.end()))
+                }
+                _ => None,
+            });
+            let (id, data, start, base_end, created) = match under {
+                Some((id, data, start, end)) => (id, data, start, end, false),
+                None => {
+                    let lp = t_l
+                        .loop_range
+                        .filter(|&(a, b)| t_l.loop_on && t >= a && t < b)
+                        .map(|(a, _)| a);
+                    let bar = t_l.sig_at(t).bar_ticks().max(1);
+                    let start = lp.unwrap_or(t).div_euclid(bar) * bar;
+                    let id = tl::new_note_clip(&mut s.song, track, start)?;
+                    let t_l = s.song.timeline.as_deref_mut()?;
+                    let c = t_l.clips.iter_mut().find(|c| c.id == id)?;
+                    let tl::ClipKind::Notes { data } = c.kind else {
+                        return None;
+                    };
+                    // a bar plus headroom for now: it grows with the playhead
+                    let len = (t - start + bar - 1).div_euclid(bar).max(1) * bar + 2 * bar;
+                    c.len = len;
+                    let d = t_l.notes[data as usize].make_mut();
+                    d.name = format!("Take {}", data + 1);
+                    d.len = len;
+                    (id, data as usize, start, start, true)
+                }
+            };
+            let audio::Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
+            Some((
+                LiveBlock {
+                    clip: id,
+                    start,
+                    base_end,
+                    reach: head,
+                    created,
+                    next_id,
+                    opened: Instant::now(),
+                    landed: vec![],
+                },
+                data,
+            ))
+        });
+        let Some((lb, data)) = res else {
+            return;
+        };
+        let id = lb.clip;
+        self.noterec.take = Some(Take {
+            clip: id,
+            data,
+            held: vec![],
+        });
+        self.noterec.live = Some(lb);
+        self.noterec.settle = None;
+        self.tlv.sel = Some(id);
+        self.tlv.sels = vec![id];
+    }
+
+    /// the live block follows the playhead: its clip grows bar by bar, kept
+    /// two bars ahead (the drawing follows the playhead itself), with no
+    /// length limit
+    fn rec_live_grow(&mut self) {
+        let Some((clip, start, old)) = self
+            .noterec
+            .live
+            .as_ref()
+            .map(|l| (l.clip, l.start, l.reach))
+        else {
+            return;
+        };
+        let reach = self
+            .with(|s| s.engine.tl_ticks())
+            .map_or(old, |h| old.max(h));
+        if let Some(lb) = self.noterec.live.as_mut() {
+            lb.reach = reach;
+        }
+        self.with(|s| {
+            let Some(t_l) = s.song.timeline.as_deref_mut() else {
+                return;
+            };
+            let bar = t_l.sig_at(start).bar_ticks().max(1);
+            // two bars of headroom past the playhead, so playback never
+            // wraps at the song's end (the drawn edge follows the playhead;
+            // the stop trims it to the bar)
+            let need =
+                ((reach.ceil() as Tick - start).max(1) + bar - 1).div_euclid(bar) * bar + 2 * bar;
+            let Some(c) = t_l.clips.iter_mut().find(|c| c.id == clip) else {
+                return;
+            };
+            let tl::ClipKind::Notes { data } = c.kind else {
+                return;
+            };
+            let need_c = need - (c.start - start);
+            if c.len >= need_c {
+                return;
+            }
+            c.len = need_c;
+            let off = c.offset;
+            if let Some(d) = t_l.notes.get_mut(data as usize) {
+                let d = d.make_mut();
+                d.len = d.len.max(need_c + off);
+            }
+            let audio::Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
+        });
+    }
+
+    /// the take stopped: the live block settles into a normal clip ending
+    /// on the bar line after the last note or the stop point (an existing
+    /// clip never shrinks); an empty new block is dropped. Some(kept) when
+    /// there was a block.
+    fn rec_live_settle(&mut self) -> Option<bool> {
+        let lb = self.noterec.live.take()?;
+        let out = self.with(|s| {
+            let t_l = s.song.timeline.as_deref_mut()?;
+            let ci = t_l.clips.iter().position(|c| c.id == lb.clip)?;
+            let tl::ClipKind::Notes { data } = t_l.clips[ci].kind else {
+                return None;
+            };
+            let data = data as usize;
+            let off = t_l.clips[ci].offset;
+            let notes = &t_l.notes.get(data)?.notes;
+            if lb.created && notes.is_empty() {
+                t_l.clips.remove(ci);
+                let shared = t_l.clips.iter().any(
+                    |c| matches!(c.kind, tl::ClipKind::Notes { data: d } if d as usize == data),
+                );
+                if data + 1 == t_l.notes.len() && !shared {
+                    t_l.notes.pop();
+                }
+                t_l.next_id = lb.next_id;
+                let audio::Shared { song, engine, .. } = s;
+                engine.ensure_plan(song);
+                return Some(None);
+            }
+            let last = notes
+                .iter()
+                .map(|n| n.start + n.len - off)
+                .max()
+                .unwrap_or(0);
+            let bar = t_l.sig_at(lb.start).bar_ticks().max(1);
+            let end = (lb.reach.ceil() as Tick - lb.start).max(last).max(1);
+            let mut len = (end + bar - 1).div_euclid(bar) * bar;
+            if !lb.created {
+                len = len.max(lb.base_end - lb.start);
+            }
+            let c = &mut t_l.clips[ci];
+            c.len = len;
+            let d = t_l.notes[data].make_mut();
+            d.len = if lb.created {
+                len + off
+            } else {
+                d.len.max(len + off)
+            };
+            let audio::Shared { song, engine, .. } = s;
+            engine.ensure_plan(song);
+            Some(Some(lb.start + len))
+        });
+        match out {
+            Some(None) => {
+                self.tlv.sel = None;
+                self.tlv.sels.clear();
+                Some(false)
+            }
+            Some(Some(to)) => {
+                if !self.extra.reduce_motion {
+                    self.noterec.settle = Some(Settle {
+                        clip: lb.clip,
+                        from: lb.reach.max(lb.base_end as f64),
+                        to,
+                        at: Instant::now(),
+                    });
+                }
+                Some(true)
+            }
+            None => None,
+        }
+    }
+
+    /// what the timeline draws for the live (or settling) block
+    pub(crate) fn rec_live_view(&self, head: Option<f64>) -> Option<LiveView> {
+        let calm = self.extra.reduce_motion;
+        let age = |at: Instant| self.noterec.anim_at.unwrap_or(at.elapsed().as_secs_f32());
+        if let Some(lb) = &self.noterec.live {
+            let el = age(lb.opened);
+            let fade = if calm { 1.0 } else { ease(el / LIVE_FADE) };
+            let head = head.unwrap_or(lb.reach).max(lb.start as f64);
+            let held = self
+                .noterec
+                .take
+                .as_ref()
+                .filter(|t| t.clip == lb.clip)
+                .map_or(vec![], |t| t.held.iter().map(|h| h.1).collect());
+            let landed = lb
+                .landed
+                .iter()
+                .map(|&(i, at)| (i, if calm { 1.0 } else { ease(age(at) / 0.18) }))
+                .collect();
+            return Some(LiveView {
+                clip: lb.clip,
+                end: head.max(lb.base_end as f64).max(lb.start as f64 + 1.0),
+                fade,
+                rec: 1.0,
+                live: true,
+                pulse: if calm {
+                    0.5
+                } else {
+                    0.5 + 0.5 * (el * std::f32::consts::TAU / 1.2).sin()
+                },
+                held,
+                landed,
+                animating: true,
+            });
+        }
+        let st = self.noterec.settle?;
+        let k = ease(age(st.at) / SETTLE_FADE);
+        Some(LiveView {
+            clip: st.clip,
+            end: st.from + (st.to as f64 - st.from) * k as f64,
+            fade: 1.0,
+            rec: 1.0 - k,
+            live: false,
+            pulse: 0.0,
+            held: vec![],
+            landed: vec![],
+            animating: k < 1.0,
+        })
     }
 
     /// the ● button / R
@@ -561,6 +915,18 @@ impl App {
         });
         if (self.noterec.take.is_some() || self.noterec.session.is_some()) && stopped {
             self.rec_stop();
+        }
+        if self.noterec.session.is_some() {
+            self.rec_live_open();
+            self.rec_live_grow();
+        }
+        if self
+            .noterec
+            .settle
+            .is_some_and(|st| st.at.elapsed().as_secs_f32() > SETTLE_FADE + 0.1)
+            && self.noterec.anim_at.is_none()
+        {
+            self.noterec.settle = None;
         }
         let r = &mut self.noterec.recent;
         while r.front().is_some_and(|p| p.on.elapsed().as_secs() > 600) {
@@ -684,6 +1050,12 @@ impl App {
 impl App {
     pub(super) fn noterec_take_done(&self) -> bool {
         self.noterec.take.is_none() && self.noterec.session.is_none()
+    }
+    pub(super) fn noterec_live(&self) -> Option<(u32, Tick, f64)> {
+        self.noterec
+            .live
+            .as_ref()
+            .map(|l| (l.clip, l.start, l.reach))
     }
 }
 
