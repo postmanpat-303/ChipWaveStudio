@@ -1,6 +1,6 @@
 # Round Robin: patterns that change each time they play
 
-Round Robin is a set of small, deterministic tools that make a loop sound a
+*New in 0.2.14.0.* Round Robin is a set of small, deterministic tools that make a loop sound a
 little different on each pass or each hit, without giving up exact, repeatable
 renders. Everything is **off by default**, nothing is written to a song file
 until you use it, and songs that don't use it play and render exactly as

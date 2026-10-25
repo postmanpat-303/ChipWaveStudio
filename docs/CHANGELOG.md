@@ -2,7 +2,9 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
-## Unreleased (test build): Round Robin
+## 0.2.14.0: Round Robin, key pressure, clip copy and paste
+
+Released 2026-10-25. Highlights:
 
 - **Step conditions:** notes can play every X of Y passes, only the first time, never the first time, only in fills or never in fills, next to their Chance. New Conditions and Chance lanes in the piano roll, a **Play this note…** popover, striped notes and a live **Fill** toggle.
 - **Clip Variations:** up to four takes (A–D) per note clip, one per loop pass, in order, random, random no repeat, ping-pong or every N.
@@ -10,7 +12,22 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 - **Follow actions:** launcher clips can move on after N loops (X % Next / Again / Other / First / Last / Any / Stop), with a » badge, a "From here" preview and **Capture to timeline**.
 - **MIDI key pressure (aftertouch):** poly and channel pressure from your keyboard drive a new **Pressure** modulator (quick-mod popover and Movement list), with a live meter in the MIDI light's tooltip. Recorded notes keep their pressure curves, which play back exactly; the piano roll's new **Pressure** lane shows, draws and clears them, and pressed notes get a shaded foot. See MIDI.md.
 - **.mid import:** MIDI files from the browser become a note clip (notes, velocities and pressure), on the cursor track or dropped onto one.
-- All of it is deterministic (seed + pass/hit), off by default and not saved when unused; old songs render bit-identically. See ROUND_ROBIN.md.
+- All of it is deterministic (seed + pass/hit), off by default and not saved when unused; old songs render bit-identically. See [ROUND_ROBIN.md](ROUND_ROBIN.md) and [MIDI.md](MIDI.md).
+- **Clip copy and paste on the Timeline:** Ctrl+C / Ctrl+X / Ctrl+V (and the Edit menu) copy, cut and paste clips, snapped to the grid, with a short highlight on what was pasted. The clip pie has **Copy** and **Cut**; right-click an empty lane for **Paste here** (an independent or a linked copy; greyed "Nothing copied" while the clipboard is empty), and the track pie has **Paste at playhead**. A copy also fills the system clipboard, so Ctrl+V always arrives.
+- **Drum kit fix:** step hits and starter grooves are stamped with the track's kit slot, so a kit added to a track after StringWave or WaveForge plays the kit (by every path), and a kit loaded onto a default-named track names the track.
+- **Transport Loop button:** a Loop toggle (two curved arrows) beside the metronome, the same switch as **L** and the LCD's Loop pill, with the loop's bars in its tooltip.
+- **Double-click a clip to loop it:** the loop is set to exactly that clip (double-click again: loop off), one undo step. Alt+double-click or Enter opens the clip. In Amiga the ruler's loop band is lifted so it shows.
+- **Bigger pies:** pie menus are 30 % bigger (radii, labels, icons, titles) and trimmed to fit the window; Settings › Look › **Pie menus** sets Small, Normal or Large.
+- **Amiga ⏮ fix:** the go-to-start and Loop buttons are drawn in the metronome's dimmed ink when off, so they're legible on Amiga's white buttons.
+- The piano roll gives the keyboard back when you click outside it or it's hidden.
+- Old songs save, play and render exactly as in 0.2.13.0 (checked against its renders).
+
+### Known limits
+- Pressure modulates per instrument, not per voice: live it follows the hardest-pressed held key of that instrument.
+- .mid import ignores tempo changes, controllers and program changes, and puts every track and channel into one clip.
+- Fill is a toggle, not a key you hold. Launcher clips with Variations unroll 16 passes. Tracker and live drum hit counters restart with play rather than following a seek. Timing drift only moves hits later; tone drift moves one macro per drum kind.
+- Follow actions work on note clips; Capture always goes after the arrangement's end.
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
 
 ## 0.2.13.0: live recording, quick modulation and a backlit LCD
 
