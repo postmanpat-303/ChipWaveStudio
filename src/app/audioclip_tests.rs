@@ -33,7 +33,11 @@ fn tone_file(name: &str) -> std::path::PathBuf {
 /// a point in the lanes on `track`, at tick `t`
 fn lane_point(h: &Harness<'static, App>, track: usize, t: tl::Tick) -> Pos2 {
     let tv = &h.state().tlv;
-    let th = if tv.track_h > 0.0 { tv.track_h } else { 46.0 };
+    let th = if tv.track_h > 0.0 {
+        tv.track_h
+    } else {
+        super::timeline::DEFAULT_TRACK_H
+    };
     Pos2::new(tv.x_of(t) + 3.0, tv.lanes.top() + (track as f32 + 0.5) * th)
 }
 

@@ -178,7 +178,10 @@ pub(crate) const MASTER_GAP: f32 = 34.0;
 pub(crate) struct Layout {
     /// content y of each track's top; one more entry: the total height
     pub(crate) top: Vec<f32>,
+    /// the default clip row height (tracks without their own)
     pub(crate) clip_h: f32,
+    /// each track's clip row height (its own, or `clip_h`)
+    pub(crate) hs: Vec<f32>,
     /// lane targets shown under each track (empty and folded: none)
     pub(crate) lanes: Vec<Vec<String>>,
     pub(crate) open: Vec<bool>,
@@ -209,21 +212,28 @@ pub(crate) fn track_targets(t: &tl::Timeline, tr: usize) -> Vec<String> {
 }
 
 impl Layout {
-    pub(crate) fn build(t: &tl::Timeline, mode: bool, clip_h: f32) -> Self {
+    /// `own[tr]`: track `tr`'s own clip row height (0 or missing: `clip_h`)
+    pub(crate) fn build(t: &tl::Timeline, mode: bool, clip_h: f32, own: &[f32]) -> Self {
         let n = t.tracks.len();
+        let hs: Vec<f32> = (0..n)
+            .map(|tr| match own.get(tr).copied().unwrap_or(0.0) {
+                h if h > 0.0 => h,
+                _ => clip_h,
+            })
+            .collect();
         let mut top = Vec::with_capacity(n + 1);
         let mut lanes = Vec::with_capacity(n);
         let mut open = Vec::with_capacity(n);
         let mut y = 0.0;
         let master = (n > 0 && t.tracks[n - 1].kind == tl::TrackKind::Master).then_some(n - 1);
-        for tr in 0..n {
+        for (tr, &h) in hs.iter().enumerate() {
             if Some(tr) == master {
                 y += MASTER_GAP;
             }
             top.push(y);
             let o = mode && tr < 64 && t.view.auto_open >> tr & 1 == 1;
             let l = if o { track_targets(t, tr) } else { vec![] };
-            y += clip_h;
+            y += h;
             if o {
                 y += l.len() as f32 * AUTO_H + ADD_H;
             }
@@ -235,6 +245,7 @@ impl Layout {
         Layout {
             top,
             clip_h,
+            hs,
             lanes,
             open,
             master,
@@ -310,15 +321,20 @@ impl Layout {
         }
         let tr = self.track_at(y);
         let dy = y - self.top[tr];
-        if dy < self.clip_h {
+        let h = self.h(tr);
+        if dy < h {
             return Some((tr, None));
         }
-        let k = ((dy - self.clip_h) / AUTO_H).floor().max(0.0) as usize;
+        let k = ((dy - h) / AUTO_H).floor().max(0.0) as usize;
         Some((tr, Some(k.min(self.lanes[tr].len()))))
     }
     /// content y of lane row `k` of track `tr` (k = len: the strip)
     pub(crate) fn lane_top(&self, tr: usize, k: usize) -> f32 {
-        self.top[tr] + self.clip_h + k as f32 * AUTO_H
+        self.top[tr] + self.h(tr) + k as f32 * AUTO_H
+    }
+    /// track `tr`'s clip row height
+    pub(crate) fn h(&self, tr: usize) -> f32 {
+        self.hs.get(tr).copied().unwrap_or(self.clip_h)
     }
 }
 

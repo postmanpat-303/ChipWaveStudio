@@ -23,7 +23,11 @@ const MARK_H: f32 = 18.0;
 const RULER_H: f32 = 20.0;
 const OVERVIEW_H: f32 = 18.0;
 const VBAR_W: f32 = 10.0;
-const DEFAULT_TRACK_H: f32 = 46.0;
+/// a track row's height when it has none of its own (was 46 before 0.2.12)
+pub(crate) const DEFAULT_TRACK_H: f32 = 60.0;
+/// track row height limits (drag a header's bottom edge, Alt+wheel)
+pub(crate) const MIN_TRACK_H: f32 = 28.0;
+pub(crate) const MAX_TRACK_H: f32 = 200.0;
 /// zoom limits in pixels per beat
 const MIN_ZOOM: f32 = 0.5;
 const MAX_ZOOM: f32 = 480.0;
@@ -238,6 +242,12 @@ pub(crate) struct TimelineUi {
     pub(crate) lane_menu: Option<(std::time::Instant, super::lanes::LaneMenu)>,
     /// a track header being dragged (reorder): the track
     pub(crate) head_drag: Option<usize>,
+    /// a header's bottom edge being dragged: (track, height at the press,
+    /// pointer y at the press, height now); the song gets it on release
+    pub(crate) resize: Option<(usize, f32, f32, f32)>,
+    /// tracker mode (no timeline in the song): each track's own height for
+    /// this session (0 = the default); timeline mode keeps it in the song
+    pub(crate) heights: Vec<f32>,
     /// follow last-touched knob (design A §3.4): open/show its lane
     pub(crate) follow_touch: bool,
     /// last automatable target the user moved (instrument/FX/mixer knob)
@@ -295,6 +305,8 @@ impl Default for TimelineUi {
             auto_menu: None,
             lane_menu: None,
             head_drag: None,
+            resize: None,
+            heights: vec![],
             follow_touch: false,
             last_touch: None,
             flash: None,
@@ -342,6 +354,23 @@ impl TimelineUi {
                 .unwrap_or(bar * 4),
         }
     }
+    /// each track's own row height (0 = the default): the song's in
+    /// timeline mode, this session's in tracker mode, and the one being
+    /// dragged on top
+    pub(crate) fn own_heights(&self) -> Vec<f32> {
+        let mut v: Vec<f32> = match self.cache.as_ref() {
+            Some(c) if c.mode => c.tl.tracks.iter().map(|x| x.height).collect(),
+            _ => self.heights.clone(),
+        };
+        if let Some((tr, _, _, h)) = self.resize {
+            if v.len() <= tr {
+                v.resize(tr + 1, 0.0);
+            }
+            v[tr] = h;
+        }
+        v
+    }
+
     /// a track row's height in points
     pub(crate) fn track_h_pts(&self) -> f32 {
         self.th()
@@ -415,6 +444,7 @@ fn fingerprint(song: &Song) -> u64 {
         put(t.view.auto_open);
         for x in &t.tracks {
             put(x.colour.map_or(u64::MAX, |c| c as u64) ^ (x.instr as u64) << 40);
+            put(x.height.to_bits() as u64);
         }
         for l in t
             .tracks
@@ -979,7 +1009,9 @@ impl App {
             self.tlv.scroll = 0.0;
         }
         let lane_h = self.tlv.th();
-        let mut lay = autolanes::Layout::build(&self.tlv.cache.as_ref().unwrap().tl, mode, lane_h);
+        let own = self.tlv.own_heights();
+        let mut lay =
+            autolanes::Layout::build(&self.tlv.cache.as_ref().unwrap().tl, mode, lane_h, &own);
         let total_h = lay.total();
         let max_sy = (total_h - lanes.height()).max(0.0);
         // ---- wheel: tracks / Shift: time / Ctrl: zoom at the mouse / Alt: track height
@@ -1004,14 +1036,17 @@ impl App {
                 })
                 .sum();
             if lines != 0.0 || dx != 0.0 {
-                if m.command {
+                if m.command && !heads.contains(p) {
                     let n = input::take_notches(&mut self.tlv.wheel, lines);
                     if n != 0 {
                         self.tlv.zoom_by(1.2f32.powi(n), Some(p.x - lanes.left()));
                     }
-                } else if m.alt {
+                } else if m.alt || (m.command && heads.contains(p)) {
+                    // every track's height at once (own heights scale too)
                     let n = input::take_notches(&mut self.tlv.wheel, lines);
-                    self.tlv.track_h = (lane_h * 1.15f32.powi(n)).clamp(24.0, 140.0);
+                    if n != 0 {
+                        self.resize_all_tracks(1.15f32.powi(n));
+                    }
                 } else if m.shift || max_sy <= 0.0 || ruler.contains(p) || overview.contains(p) {
                     self.tlv.scroll -= (lines * 40.0) as f64 * PPQ as f64 / self.tlv.zoom as f64;
                 } else {
@@ -1040,7 +1075,7 @@ impl App {
             // waits until the track has a row (a track made this frame)
             if let Some(&top) = self.tlv.layout.top.get(tr) {
                 self.tlv.reveal = None;
-                let h = self.tlv.layout.clip_h.max(1.0);
+                let h = self.tlv.layout.h(tr).max(1.0);
                 let sy = self.tlv.scroll_y;
                 // the docked Song / Master footer covers the bottom of the view
                 let is_m = self.tlv.layout.master == Some(tr) && self.tlv.layout.docked;
@@ -1079,7 +1114,7 @@ impl App {
             let y = lanes.top() + lay.top[tr] - sy;
             Rect::from_min_max(
                 Pos2::new(lanes.left(), y),
-                Pos2::new(lanes.right(), y + lane_h),
+                Pos2::new(lanes.right(), y + lay.h(tr)),
             )
         };
         let (song_lanes, units, song_for_lanes) = if lay.open.iter().any(|o| *o) {
@@ -1222,8 +1257,10 @@ impl App {
         for tr in first_tr..last_tr {
             let lr = lane_rect(tr);
             if tr == cur_tr {
-                // the selected track's lane, as its header
-                quad(&mut bodies, lr, t.sel.gamma_multiply(0.12));
+                // the selected track's lane: an accent tint and outline
+                // (over the clips) matching its header
+                quad(&mut bodies, lr, sel_tint(&t));
+                outlines.push((lr.shrink(0.75), Stroke::new(1.5, sel_lane(&t))));
             } else if tr % 2 == 1 {
                 quad(&mut bodies, lr, Color32::from_white_alpha(4));
             }
@@ -1331,7 +1368,7 @@ impl App {
                     if hot { theme::tone(col, 0.10) } else { col },
                     k.max(0.3),
                 );
-                let hh = (lane_h * 0.32).clamp(10.0, 16.0);
+                let hh = (lr.height() * 0.32).clamp(10.0, 16.0);
                 let hr = Rect::from_min_max(r.min, Pos2::new(r.right(), r.top() + hh));
                 if pol {
                     // rounded body with a gentle gradient, header rounded on top,
@@ -1818,6 +1855,7 @@ impl App {
         // right-click on the empty area (no track there): the Add pie
         let mut add_pie_at: Option<(Pos2, bool)> = None;
         let mut hd = self.tlv.head_drag;
+        let mut rz = self.tlv.resize;
         // the subtitle: the instrument the track mostly plays, else the one
         // it was given (Browser drop, Add track with instrument)
         let given: Vec<String> = {
@@ -1858,7 +1896,7 @@ impl App {
             let y = heads.top() + lay.top[tr] - sy;
             let hr = Rect::from_min_max(
                 Pos2::new(heads.left(), y + 1.0),
-                Pos2::new(heads.right(), y + lane_h - 1.0),
+                Pos2::new(heads.right(), y + lay.h(tr) - 1.0),
             );
             // mixer tracks scroll under the docked Song / Master footer
             let clip = match dock_y {
@@ -1878,26 +1916,43 @@ impl App {
                 hr,
                 3,
                 if cur {
-                    t.sel.gamma_multiply(0.35)
+                    // the selected track: tinted toward the accent
+                    crate::theme::mix(t.cart_top, t.accent, if t.light { 0.22 } else { 0.30 })
                 } else if tr % 2 == 1 {
                     t.cart_top.gamma_multiply(0.9)
                 } else {
                     t.cart_top.gamma_multiply(0.75)
                 },
             );
-            hp.rect_filled(
-                Rect::from_min_max(hr.min, Pos2::new(hr.left() + 3.0, hr.bottom())),
-                2,
-                colr,
-            );
+            if cur {
+                // a wide accent bar, the track colour beside it, an outline
+                hp.rect_filled(
+                    Rect::from_min_max(hr.min, Pos2::new(hr.left() + 5.0, hr.bottom())),
+                    2,
+                    t.accent,
+                );
+                hp.rect_filled(
+                    Rect::from_min_max(
+                        Pos2::new(hr.left() + 5.0, hr.top()),
+                        Pos2::new(hr.left() + 8.0, hr.bottom()),
+                    ),
+                    0,
+                    colr,
+                );
+                hp.rect_stroke(hr, 3, Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
+            } else {
+                hp.rect_filled(
+                    Rect::from_min_max(hr.min, Pos2::new(hr.left() + 3.0, hr.bottom())),
+                    2,
+                    colr,
+                );
+            }
+            // tall rows: the two text lines and buttons sit in the middle
+            let top = hr.top() + ((hr.height() - 42.0) / 2.0).max(0.0);
             let m = live.mix.get(tr).copied().unwrap_or_default();
             let name = &c.tl.tracks[tr].name;
-            let one_line = lane_h < 36.0;
-            let ty = if one_line {
-                hr.center().y
-            } else {
-                hr.top() + 12.0
-            };
+            let one_line = hr.height() < 34.0;
+            let ty = if one_line { hr.center().y } else { top + 12.0 };
             // icon tile: the instrument type's glyph on the track colour
             let ts = if one_line {
                 (hr.height() - 6.0).clamp(12.0, 22.0)
@@ -1905,7 +1960,10 @@ impl App {
                 (hr.height() - 10.0).clamp(18.0, 28.0)
             };
             let tile_r = Rect::from_min_size(
-                Pos2::new(hr.left() + 7.0, hr.center().y - ts / 2.0),
+                Pos2::new(
+                    hr.left() + if cur { 11.0 } else { 7.0 },
+                    hr.center().y - ts / 2.0,
+                ),
                 egui::vec2(ts, ts),
             );
             let kind = match c.tl.tracks[tr].kind {
@@ -1953,15 +2011,19 @@ impl App {
                     Pos2::new(tx + nw + 5.0, ty),
                     egui::Align2::LEFT_CENTER,
                     name,
-                    crate::theme::prop(crate::theme::ts::BODY),
-                    t.ink,
+                    if cur {
+                        crate::theme::label_font(crate::theme::ts::BODY)
+                    } else {
+                        crate::theme::prop(crate::theme::ts::BODY)
+                    },
+                    if cur { sel_ink(&t) } else { t.ink },
                     hr.right() - 135.0 - (tx + nw + 5.0),
                 );
             }
             if !one_line {
                 crate::theme::text_fit(
                     &np,
-                    Pos2::new(tx, hr.top() + 28.0),
+                    Pos2::new(tx, top + 28.0),
                     egui::Align2::LEFT_CENTER,
                     &sub(tr),
                     crate::theme::prop(crate::theme::ts::SMALL),
@@ -1974,7 +2036,7 @@ impl App {
             let by = if one_line {
                 hr.center().y - bs / 2.0
             } else {
-                hr.top() + 4.0
+                top + 4.0
             };
             let mr = Rect::from_min_size(Pos2::new(hr.right() - 108.0, by), egui::vec2(bs, bs));
             let sr = Rect::from_min_size(Pos2::new(mr.right() + 3.0, by), egui::vec2(bs, bs));
@@ -2158,6 +2220,42 @@ impl App {
                     let to = if ins > tr { ins - 1 } else { ins };
                     if to != tr {
                         head_ops.push(HeadOp::Move(tr, to));
+                    }
+                }
+            }
+            // the bottom edge: drag for this track's height, double-click
+            // for the default (made last, so it wins over the header)
+            if !is_master {
+                let er = Rect::from_min_max(
+                    Pos2::new(heads.left(), hr.bottom() - 3.0),
+                    Pos2::new(heads.right(), hr.bottom() + 3.0),
+                );
+                let eresp = ui
+                    .interact(er, ui.scope_id().with(("tl_resize", tr)), Sense::click_and_drag())
+                    .on_hover_text("drag: this track's height · double-click: the default height · Alt+wheel or Ctrl+wheel here: every track");
+                if eresp.hovered() || eresp.dragged() || rz.is_some_and(|r| r.0 == tr) {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                }
+                let py = ui.ctx().input(|i| i.pointer.latest_pos()).map(|p| p.y);
+                if eresp.double_clicked() {
+                    rz = None;
+                    head_ops.push(HeadOp::Height(tr, 0.0));
+                } else if eresp.drag_started() {
+                    // from where it was pressed (the drag starts a few px later)
+                    let y0 = ui.ctx().input(|i| i.pointer.press_origin()).map(|p| p.y);
+                    if let Some(y) = y0.or(py) {
+                        rz = Some((tr, lay.h(tr), y, lay.h(tr)));
+                    }
+                } else if let (Some(r), Some(y)) = (rz.as_mut(), py) {
+                    if r.0 == tr && eresp.dragged() {
+                        r.3 = (r.1 + y - r.2).clamp(MIN_TRACK_H, MAX_TRACK_H).round();
+                    }
+                }
+                if eresp.drag_stopped() {
+                    if let Some(r) = rz.take().filter(|r| r.0 == tr) {
+                        if (r.3 - r.1).abs() >= 1.0 {
+                            head_ops.push(HeadOp::Height(tr, r.3));
+                        }
                     }
                 }
             }
@@ -2579,7 +2677,7 @@ impl App {
                     Pos2::new(x0 + 0.5, lr.top() + 2.0),
                     Pos2::new((x1 - 0.5).max(x0 + 1.5), lr.bottom() - 2.0),
                 );
-                let hh = (lane_h * 0.3).clamp(9.0, 15.0);
+                let hh = (lr.height() * 0.3).clamp(9.0, 15.0);
                 match audioclip::fade_handle_at(p, r, hh, cl, &x_of) {
                     Some(true) => return 3,
                     Some(false) => return 4,
@@ -3284,6 +3382,15 @@ impl App {
         }
         self.timeline_rename(ui.ctx());
         self.tlv.head_drag = hd;
+        // a lost release (the pointer let go elsewhere) keeps no drag
+        if rz.is_some() && !ui.ctx().input(|i| i.pointer.primary_down()) {
+            if let Some(r) = rz.take() {
+                if (r.3 - r.1).abs() >= 1.0 {
+                    head_ops.push(HeadOp::Height(r.0, r.3));
+                }
+            }
+        }
+        self.tlv.resize = rz;
         for op in head_ops {
             self.timeline_head_op(op);
         }
@@ -3379,6 +3486,7 @@ impl App {
                 | HeadOp::Pick(_)
                 | HeadOp::Speed(..)
                 | HeadOp::Move(..)
+                | HeadOp::Height(..)
                 | HeadOp::Add(_)
                 | HeadOp::AddWith(_) => {}
             }
@@ -3386,6 +3494,10 @@ impl App {
         match op {
             HeadOp::Move(from, to) => {
                 self.track_move(from, to);
+                return;
+            }
+            HeadOp::Height(tr, h) => {
+                self.set_track_height(tr, h);
                 return;
             }
             HeadOp::Add(at) => {
@@ -3628,10 +3740,118 @@ enum HeadOp {
     Speed(usize, u8),
     /// drag reorder: track, new index
     Move(usize, usize),
+    /// a header's bottom edge: track, height (0 = the default)
+    Height(usize, f32),
     /// an empty track at this index
     Add(usize),
     /// a track at this index with the instrument picked in the Browser
     AddWith(usize),
+}
+
+/// the selected track's lane colour: the accent, lifted where it would
+/// sink into a dark lane area (a light theme's dark-blue screen)
+fn sel_lane(t: &crate::theme::Theme) -> Color32 {
+    let l = |c: Color32| 0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32;
+    if l(t.accent) - l(t.crt_bot) < 90.0 {
+        crate::theme::tone(t.accent, 0.45)
+    } else {
+        t.accent
+    }
+}
+
+/// the selected track's lane tint (under its clips)
+fn sel_tint(t: &crate::theme::Theme) -> Color32 {
+    sel_lane(t).gamma_multiply(0.14)
+}
+
+/// the selected track's name: the strongest ink of the theme
+fn sel_ink(t: &crate::theme::Theme) -> Color32 {
+    if t.light {
+        crate::theme::tone(t.ink, -0.5)
+    } else {
+        crate::theme::tone(t.ink, 0.5)
+    }
+}
+
+impl App {
+    /// a track's own row height (0 = the default). Timeline mode keeps it in
+    /// the song (undoable, saved with it); tracker mode for this session.
+    pub(super) fn set_track_height(&mut self, tr: usize, h: f32) {
+        let h = if h > 0.0 {
+            h.clamp(MIN_TRACK_H, MAX_TRACK_H).round()
+        } else {
+            0.0
+        };
+        let mode = self.with(|s| s.song.timeline.is_some());
+        if mode {
+            let same = self.with(|s| {
+                s.song
+                    .timeline
+                    .as_ref()
+                    .and_then(|t| t.tracks.get(tr))
+                    .is_none_or(|x| x.height == h)
+            });
+            if same {
+                return;
+            }
+            self.snapshot();
+            self.with(|s| {
+                if let Some(x) = s
+                    .song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|t| t.tracks.get_mut(tr))
+                {
+                    x.height = h;
+                }
+            });
+            self.dirty = true;
+        } else {
+            let v = &mut self.tlv.heights;
+            if v.len() <= tr {
+                v.resize(tr + 1, 0.0);
+            }
+            v[tr] = h;
+        }
+        self.status = if h > 0.0 {
+            format!("Track {:02} height {}", tr + 1, h as i32)
+        } else {
+            format!("Track {:02} height: the default", tr + 1)
+        };
+    }
+
+    /// every track taller / shorter by `k` (Alt+wheel, Ctrl+wheel over the
+    /// headers): the default height (kept in the settings) and the tracks
+    /// with their own height, in proportion. A view change: no undo step.
+    pub(super) fn resize_all_tracks(&mut self, k: f32) {
+        let old = self.tlv.th();
+        let new = (old * k).clamp(MIN_TRACK_H, MAX_TRACK_H).round();
+        if new == old {
+            return;
+        }
+        let f = new / old;
+        let scale = |h: &mut f32| {
+            if *h > 0.0 {
+                *h = (*h * f).clamp(MIN_TRACK_H, MAX_TRACK_H).round();
+            }
+        };
+        self.tlv.heights.iter_mut().for_each(scale);
+        let changed = self.with(|s| {
+            let Some(t) = s.song.timeline.as_deref_mut() else {
+                return false;
+            };
+            let any = t.tracks.iter().any(|x| x.height > 0.0);
+            t.tracks.iter_mut().for_each(|x| scale(&mut x.height));
+            any
+        });
+        if changed {
+            self.dirty = true;
+        }
+        self.tlv.track_h = new;
+        self.extra.track_h = new;
+        self.save_settings();
+        self.status = format!("Track height {}", new as i32);
+    }
 }
 
 /// the gap (0..=tracks) nearest content y, for the reorder insertion line
@@ -3643,7 +3863,7 @@ fn insert_index(lay: &autolanes::Layout, y: f32) -> usize {
     };
     (0..n)
         .filter(|&k| {
-            let mid = (lay.top[k] + lay.top[k + 1].min(lay.top[k] + lay.clip_h)) / 2.0;
+            let mid = (lay.top[k] + lay.top[k + 1].min(lay.top[k] + lay.h(k))) / 2.0;
             mid < y
         })
         .count()
@@ -3717,7 +3937,7 @@ impl TimelineUi {
             - self.scroll_y;
         Some(Rect::from_min_max(
             Pos2::new(x(cl.start), y + 2.0),
-            Pos2::new(x(cl.end()), y + self.th() - 2.0),
+            Pos2::new(x(cl.end()), y + self.layout.h(cl.track as usize) - 2.0),
         ))
     }
 
@@ -3752,7 +3972,7 @@ impl TimelineUi {
     pub(crate) fn track_rects(&self, tr: usize) -> Option<(Rect, Rect)> {
         let top = *self.layout.top.get(tr)?;
         let y = self.heads.top() + top - self.scroll_y;
-        let h = self.layout.clip_h;
+        let h = self.layout.h(tr);
         let hr = Rect::from_min_max(
             Pos2::new(self.heads.left(), y),
             Pos2::new(self.heads.right(), y + h),

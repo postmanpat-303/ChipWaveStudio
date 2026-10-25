@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.12.0" date="2026-10-25">
+      <description><p>Bigger, resizable and movable Timeline tracks: taller rows by default; drag a track's bottom edge to resize it (double-click resets), Ctrl+wheel over the track headers or Alt+wheel resizes every track; drag a track header up or down, or use the track pie's Move up / Move down, to reorder tracks with their clips, sound and mix; a much stronger selected-track highlight in every theme.</p></description>
+    </release>
     <release version="0.2.11.0" date="2026-10-24">
       <description><p>Easier-to-read text: the bundled Atkinson Hyperlegible Next and Mono fonts and one type scale with nothing under 10 pt; Settings › Look has UI scale and Text size (90 to 150 %), and the OS display scale is respected on Windows, Wayland and X11; layouts fit at 1366 × 768 and at 150 %; higher text contrast in Dark; an imported instrument becomes the active one; Timeline clips share one gradient across all tracks.</p></description>
     </release>

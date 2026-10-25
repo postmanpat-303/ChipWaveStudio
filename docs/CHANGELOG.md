@@ -2,6 +2,23 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.12.0: bigger, resizable and movable tracks
+
+Released 2026-10-25. Highlights:
+- **Taller tracks:** Timeline rows are 60 pt high by default (were 46 pt), and a tall row centres its name and buttons.
+- **Resize a track:** drag the bottom edge of a track's header (the cursor changes to a resize arrow). Heights go from 28 to 200 pt, each resize is one undo step, and heights are saved with the song. **Double-click** the edge to reset the track to the default height.
+- **Resize every track:** **Ctrl+wheel over the track headers**, or **Alt+wheel** anywhere on the Timeline, makes all tracks taller or shorter. The new default height is kept in the settings. Ctrl+wheel over the clips still zooms time.
+- **Move tracks up and down:** drag a track's header up or down (a line shows where it lands), or use **Move up / Move down** in the track pie. The clips, instrument, colour, name and mix move with the track, and Undo puts it back.
+- **Selected track stands out:** the selected track's header gets an accent-tinted fill, a wide accent bar and an accent outline, with its name in bold, and its lane gets an accent tint and outline, in every theme (in Amiga the outline is lightened so it shows on the blue lanes).
+- Old songs save, play and render exactly as in 0.2.11.0 (checked against its renders). A song only stores heights for tracks you resized.
+
+### Known limits
+- In tracker mode (a song without a Timeline) track heights last for the session only and don't follow inserted or deleted tracks.
+- The Song / Master row can't be resized.
+- Resizing every track isn't an undo step.
+- At 1366 × 768 with the lower panel open, about 3.8 tracks fit at the new default height; Ctrl+wheel over the headers makes them shorter.
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
+
 ## 0.2.11.0: easier-to-read text, UI scale and Text size
 
 Released 2026-10-24. Highlights (details below):
