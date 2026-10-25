@@ -44,6 +44,8 @@ mod devices;
 mod devices_tests;
 mod dialogs;
 mod dropplan;
+#[cfg(test)]
+mod drumbind_tests;
 mod drumkitview;
 mod drumpat;
 #[cfg(test)]
