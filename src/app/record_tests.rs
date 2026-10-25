@@ -404,9 +404,16 @@ fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
     );
     key(&mut h, Key::K, egui::Modifiers::COMMAND);
     assert!(h.state().typing.on, "Ctrl+K: musical typing on");
+    assert_eq!(
+        h.query_all_by_label("Keys → Notes").count(),
+        2,
+        "the toolbar's is an icon button, still named Keys → Notes"
+    );
     assert!(
-        h.query_by_label_contains("Keys → Notes · C4").is_some(),
-        "the toolbar shows it with its octave"
+        super::topbar::keys_tip(true, &h.state().typing_label())
+            .0
+            .contains("C4 · vel 102"),
+        "its hover shows the octave and velocity"
     );
     // S would split the selected clip: now it is a note
     let n0 = h
@@ -467,6 +474,11 @@ fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
     // Ctrl+K again: off, and S splits again
     key(&mut h, Key::K, egui::Modifiers::COMMAND);
     assert!(!h.state().typing.on);
+    assert_eq!(
+        h.state().extra.keys_notes,
+        Some(false),
+        "the choice is kept"
+    );
     assert!(super::typing::typed_note(4, 0) == Some(49));
     assert!(super::typing::typed_note(-2, 0).is_none());
 }
@@ -1032,4 +1044,42 @@ fn piano_roll_playhead_follows_the_timeline_through_the_clip_start_and_loop() {
         "in view: {s} .. {src}"
     );
     h.state().with(|s| s.engine.stop());
+}
+
+/// Keys → Notes at start: on with no MIDI keyboard, off with one, and the
+/// user's saved choice wins either way
+#[test]
+fn keys_to_notes_defaults_from_midi_and_the_saved_choice() {
+    use super::typing::{keys_default, midi_keyboards};
+    let none: Vec<String> = vec![];
+    let through = vec!["Midi Through:Midi Through Port-0 14:0".to_string()];
+    let kb = vec!["Arturia KeyStep 32".to_string()];
+    assert!(keys_default(None, &none), "no MIDI device: on");
+    assert!(keys_default(None, &through), "a loopback is not a keyboard");
+    assert_eq!(midi_keyboards(&through), 0);
+    assert!(!keys_default(None, &kb), "a MIDI keyboard: off");
+    assert!(
+        keys_default(Some(true), &kb),
+        "saved on wins over a keyboard"
+    );
+    assert!(
+        !keys_default(Some(false), &none),
+        "saved off wins with none"
+    );
+    // the app: start-up applies it, a click saves the choice
+    let mut h = new_song(1);
+    h.state_mut().typing_startup(&none);
+    assert!(h.state().typing.on);
+    h.state_mut().typing_startup(&kb);
+    assert!(!h.state().typing.on);
+    h.state_mut().typing_toggle();
+    assert_eq!(h.state().extra.keys_notes, Some(true));
+    h.state_mut().typing_startup(&kb);
+    assert!(
+        h.state().typing.on,
+        "the saved choice wins over the keyboard"
+    );
+    // a saved choice also stops the hot-plug follow
+    frames(&mut h, 2);
+    assert!(h.state().typing.on);
 }

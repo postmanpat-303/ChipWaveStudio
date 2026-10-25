@@ -1196,64 +1196,80 @@ impl App {
                     ui.label(egui::RichText::new(txt).small().monospace().color(col))
                         .on_hover_text(audio_tip(a));
                 }
-                // Keys → Notes (musical typing): lit with its octave and
-                // velocity while on, a small keyboard icon just left of it
-                // (laid out right to left, so it is added after the button)
+                // Keys → Notes (musical typing): one icon button, a drawn
+                // piano keyboard, lit while on; the hover says what it does
+                // with its octave, velocity and keys
                 let on = self.typing.on;
-                let txt = if on {
-                    format!("Keys → Notes · {}", self.typing_label())
-                } else {
-                    "Keys → Notes".to_string()
-                };
-                // lit: the selection's own text colour (ember themes draw
-                // their own lit look; accent on the selection fill was
-                // unreadable in Amiga Workbench)
-                let col = if on {
-                    ui.visuals().selection.stroke.color
-                } else {
-                    hdr_dim()
-                };
-                let resp = crate::ember::toggle(
-                    ui,
-                    on,
-                    egui::RichText::new(txt.clone()).small().color(col),
-                    &txt,
-                );
-                let (ir, iresp) =
-                    ui.allocate_exact_size(egui::vec2(14.0, 16.0), egui::Sense::click());
-                // the Browser's MIDI keyboard icon, redrawn finer for 14 px:
-                // four white keys and two black ones
+                let h = ui.spacing().interact_size.y.max(18.0);
+                let (ir, resp) = ui.allocate_exact_size(egui::vec2(h * 1.6, h), Sense::click());
+                resp.widget_info(|| {
+                    egui::WidgetInfo::selected(
+                        egui::Role::Button,
+                        ui.is_enabled(),
+                        on,
+                        "Keys → Notes",
+                    )
+                });
+                self.kb_rect = ir;
                 {
+                    let sel = ui.visuals().selection;
+                    let v = ui.style().interact_selectable(&resp, on);
                     let p = ui.painter();
-                    let r = egui::Rect::from_center_size(ir.center(), egui::vec2(13.0, 9.0));
-                    p.rect_stroke(r, 1, egui::Stroke::new(1.0, col), egui::StrokeKind::Inside);
-                    let w = r.width() / 4.0;
-                    for k in 1..4 {
-                        let x = (r.left() + w * k as f32).round() + 0.5;
-                        p.line_segment(
-                            [egui::pos2(x, r.top()), egui::pos2(x, r.bottom())],
-                            egui::Stroke::new(1.0, col),
+                    let col = if on {
+                        sel.stroke.color
+                    } else if resp.hovered() {
+                        v.fg_stroke.color
+                    } else {
+                        hdr_dim()
+                    };
+                    if on {
+                        p.rect(
+                            ir,
+                            4,
+                            sel.bg_fill,
+                            egui::Stroke::new(1.0, sel.stroke.color.gamma_multiply(0.6)),
+                            egui::StrokeKind::Inside,
                         );
+                    } else if resp.hovered() {
+                        p.rect_filled(ir, 4, v.weak_bg_fill);
                     }
-                    for k in [1, 3] {
+                    // the Browser's MIDI keyboard icon: five white keys and
+                    // three black ones, scaled to the button
+                    let kh = (ir.height() * 0.62).round();
+                    let kw = (kh * 1.75).round();
+                    let r = egui::Rect::from_center_size(ir.center(), egui::vec2(kw, kh));
+                    let r = egui::Rect::from_min_size(r.min.round(), r.size());
+                    let st = egui::Stroke::new(1.0, col);
+                    p.rect_stroke(r, 1, st, egui::StrokeKind::Inside);
+                    let w = r.width() / 5.0;
+                    for k in 1..5 {
+                        let x = (r.left() + w * k as f32).round() + 0.5;
+                        p.line_segment([egui::pos2(x, r.top()), egui::pos2(x, r.bottom())], st);
+                    }
+                    let bw = (w * 0.6).max(2.0);
+                    for k in [1, 2, 4] {
                         let x = (r.left() + w * k as f32).round() + 0.5;
                         p.rect_filled(
                             egui::Rect::from_min_size(
-                                egui::pos2(x - 1.5, r.top()),
-                                egui::vec2(3.0, r.height() * 0.55),
+                                egui::pos2(x - bw / 2.0, r.top()),
+                                egui::vec2(bw, (r.height() * 0.58).round()),
                             ),
                             0,
                             col,
                         );
                     }
                 }
-                let resp = resp | iresp;
-                if resp
-                    .on_hover_text(
-                        "Keys → Notes (Ctrl+K): play notes on your computer keyboard. A S D F G H J K L ; white keys, W E T Y U O P black keys, Z / X octave, C / V velocity. Off: those keys are normal shortcuts again.",
-                    )
-                    .clicked()
-                {
+                let tip = keys_tip(on, &self.typing_label());
+                let resp = resp.on_hover_ui(|ui| {
+                    ui.label(
+                        egui::RichText::new(tip.0)
+                            .strong()
+                            .color(ui.visuals().selection.stroke.color)
+                            .background_color(ui.visuals().selection.bg_fill),
+                    );
+                    ui.label(egui::RichText::new(tip.1).small());
+                });
+                if resp.clicked() {
                     self.typing_toggle();
                 }
                 let tracker_rec = self.tracker_on();
@@ -1596,4 +1612,15 @@ impl App {
                 .weak(),
         );
     }
+}
+
+/// the Keys → Notes button's hover: (highlighted line, the keys)
+pub(super) fn keys_tip(on: bool, label: &str) -> (String, String) {
+    (
+        format!(
+            "Computer keys play notes · {label} · {} — click or Ctrl+K",
+            if on { "on" } else { "off" }
+        ),
+        "A–; white keys, W E T Y U O P black · Z / X octave, C / V velocity (while on)".into(),
+    )
 }

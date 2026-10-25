@@ -194,6 +194,10 @@ pub struct Extra {
     /// the timeline's default track height in points (0 = the built-in one)
     #[serde(default)]
     pub track_h: f32,
+    /// Keys → Notes (musical typing) as last switched by the user; None:
+    /// never switched, so it starts on when no MIDI input is found
+    #[serde(default)]
+    pub keys_notes: Option<bool>,
     /// the Clip Arranger replaces the left Instruments list on the Timeline
     /// (Ctrl+8, View menu; docs/CLIP_ARRANGER.md)
     #[serde(default = "yes")]
@@ -333,6 +337,7 @@ impl Default for Extra {
             adv_edit_float: false,
             gen_pos: None,
             track_h: 0.0,
+            keys_notes: None,
             clip_arranger: true,
             side_hidden: false,
             show_tracker: false,

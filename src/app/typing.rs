@@ -1,6 +1,8 @@
 //! Musical typing ("Keys → Notes" in the UI): the computer keyboard as a
 //! little MIDI keyboard (Ctrl+K, the toolbar's Keys → Notes button or the
-//! piano roll's). Off by default. While
+//! piano roll's). At start it is on when no MIDI input is found and off
+//! when one is (`keys_default`), unless the user switched it before: that
+//! choice is saved and wins. While
 //! on, A S D F G H J K L ; are the white keys from C, W E T Y U O P the
 //! black ones, Z / X an octave down / up and C / V velocity down / up -
 //! those keys play notes instead of their shortcuts. A typed note plays the
@@ -41,6 +43,8 @@ pub(crate) struct Typing {
     pub(crate) vel: f32,
     /// keys down: (key, id sent, note)
     pub(super) held: Vec<(Key, u8, u8)>,
+    /// a MIDI input was connected when last looked (None: not yet)
+    pub(super) auto_midi: Option<bool>,
 }
 
 impl Default for Typing {
@@ -50,6 +54,7 @@ impl Default for Typing {
             octave: 4,
             vel: 0.8,
             held: vec![],
+            auto_midi: None,
         }
     }
 }
@@ -61,16 +66,66 @@ pub(crate) fn typed_note(oct: i32, off: i32) -> Option<u8> {
     (1..=120).contains(&n).then_some(n as u8)
 }
 
+/// MIDI input ports that are a real keyboard / controller: not the
+/// system's always-there loopbacks (ALSA "Midi Through")
+pub(crate) fn midi_keyboards(ports: &[String]) -> usize {
+    ports
+        .iter()
+        .filter(|p| !p.to_ascii_lowercase().contains("midi through"))
+        .count()
+}
+
+/// Keys → Notes at start: the user's saved choice, else on exactly when
+/// no MIDI keyboard is plugged in
+pub(crate) fn keys_default(saved: Option<bool>, ports: &[String]) -> bool {
+    saved.unwrap_or(midi_keyboards(ports) == 0)
+}
+
 fn is_typing_key(k: Key) -> bool {
     NOTE_KEYS.iter().any(|(x, _)| *x == k) || matches!(k, Key::Z | Key::X | Key::C | Key::V)
 }
 
 impl App {
+    /// at start (not in tests or screenshots): Keys → Notes from the
+    /// saved choice or the MIDI inputs found (`keys_default`)
+    pub(super) fn typing_startup(&mut self, ports: &[String]) {
+        self.typing.on = keys_default(self.extra.keys_notes, ports);
+    }
+
+    /// never switched by the user: follows a MIDI keyboard connecting
+    /// (off) or going away (on). Uses the hot-plug rescan MIDI already
+    /// does while an input is selected; nothing extra is polled.
+    pub(super) fn typing_follow_midi(&mut self) {
+        if self.extra.keys_notes.is_some() {
+            return;
+        }
+        let has = !self.midi.hub.connected().is_empty();
+        // the first look only notes it: start-up decided already
+        let was = self.typing.auto_midi.replace(has);
+        if was.is_none_or(|w| w == has) {
+            return;
+        }
+        if has == self.typing.on {
+            self.typing.on = !has;
+            if !self.typing.on {
+                self.typing_release_all();
+            }
+            self.status = if has {
+                "MIDI keyboard connected: Keys → Notes off (Ctrl+K: on)".into()
+            } else {
+                "MIDI keyboard gone: Keys → Notes on (Ctrl+K: off)".into()
+            };
+        }
+    }
+
     pub(super) fn typing_toggle(&mut self) {
         self.typing.on = !self.typing.on;
         if !self.typing.on {
             self.typing_release_all();
         }
+        // the user's choice: saved, and it wins over the MIDI default
+        self.extra.keys_notes = Some(self.typing.on);
+        self.save_settings();
         self.status = if self.typing.on {
             format!(
                 "Keys → Notes on ({}): A-; white keys, W E T Y U O P black, Z/X octave, C/V velocity - Ctrl+K: off",

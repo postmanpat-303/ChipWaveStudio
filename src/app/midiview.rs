@@ -166,6 +166,7 @@ impl App {
         if self.extra.midi.auto_connect {
             self.midi.hub.poll();
         }
+        self.typing_follow_midi();
         let n = cfg.activity.load(Relaxed);
         if n != self.midi.seen {
             self.midi.seen = n;
