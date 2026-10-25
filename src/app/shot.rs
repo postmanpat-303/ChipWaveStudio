@@ -1384,6 +1384,9 @@ impl App {
         if view == "timeline" && f == SETUP_AT + 12 {
             self.shot_tracksize();
         }
+        if f == SETUP_AT + 12 {
+            self.shot_keys();
+        }
         if view == "split-preview" && f == SETUP_AT + 12 {
             self.shot_split();
         }
@@ -2418,6 +2421,24 @@ impl App {
     /// `--view timeline` with CHIPWAVE_SHOT_TRACKS=resize (track 02 taller,
     /// track 04 shorter) or reorder (track 03's header dragged up between
     /// tracks 01 and 02, held: the insertion line)
+    /// CHIPWAVE_SHOT_KEYS=on|off|hover: the toolbar's Keys → Notes button
+    /// on, off, or on with the pointer over it (its hover)
+    fn shot_keys(&mut self) {
+        let Ok(m) = std::env::var("CHIPWAVE_SHOT_KEYS") else {
+            return;
+        };
+        self.typing.on = m != "off";
+        if m == "hover" {
+            let c = self.kb_rect.center();
+            if let Some(sh) = &mut self.shot {
+                sh.script = vec![
+                    (SETUP_AT + 30, egui::Event::PointerMoved(c)),
+                    (SETUP_AT + 40, egui::Event::PointerMoved(c)),
+                ];
+            }
+        }
+    }
+
     fn shot_tracksize(&mut self) {
         let Ok(m) = std::env::var("CHIPWAVE_SHOT_TRACKS") else {
             return;
