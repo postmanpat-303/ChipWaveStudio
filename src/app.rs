@@ -84,6 +84,8 @@ mod lcd;
 #[cfg(test)]
 mod lcd_tests;
 mod library;
+#[cfg(test)]
+mod looptransport_tests;
 mod metroicon;
 mod midiview;
 mod mixer;
