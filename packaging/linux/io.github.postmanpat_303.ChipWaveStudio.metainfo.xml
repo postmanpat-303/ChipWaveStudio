@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.15.0" date="2026-10-25">
+      <description><p>The Chords, Melody and Bass generators rebuilt: Write to timeline always writes notes, to this track, a new track below it or the open clip, at the loop start or the play marker, as one undo step, and says where it went. It works with no clip open, on an empty song and from a new Chords… button beside Add track. Chords, Melody and Bass only appear on pitched sounds: they are hidden on drum kits, drum generators and drum-named sounds such as a synth kick, and a new generator track never copies a drum sound.</p></description>
+    </release>
     <release version="0.2.14.0" date="2026-10-25">
       <description><p>Round Robin: step conditions on notes (every X of Y, first pass, fills, chance), up to four clip variations that take turns each loop, drum pad round robin with per-hit drift, and Clip Arranger follow actions with Capture to timeline, all deterministic from a seed. MIDI key pressure (aftertouch) as a modulation source, recorded with notes and edited in a Pressure lane, and .mid file import. Clip copy and paste on the Timeline, a transport Loop button, double-click a clip to loop it, bigger pie menus with a size setting, and a drum kit fix.</p></description>
     </release>
