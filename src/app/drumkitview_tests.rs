@@ -547,3 +547,40 @@ fn every_kit_has_a_starter_groove() {
         assert!(g.hits() > 0);
     }
 }
+
+/// the Round Robin tab: off by default, On adds the settings, + Sound adds
+/// sounds that the Next 8 hits row then rotates through; undo steps back
+#[test]
+fn the_round_robin_tab_turns_on_adds_sounds_and_undoes() {
+    let (mut h, slot, _) = kit_harness();
+    let sel = h.state().dk.sel;
+    assert!(
+        h.with_kit(slot, |k| k.pads[sel].rr.is_none()),
+        "off by default"
+    );
+    h.state_mut().dk.tab = 3;
+    frames(&mut h, 2);
+    h.get_by_label("On").click();
+    frames(&mut h, 2);
+    assert!(h.with_kit(slot, |k| k.pads[sel].rr.is_some()));
+    for _ in 0..2 {
+        h.get_by_label("+ Sound").click();
+        frames(&mut h, 2);
+    }
+    assert_eq!(
+        h.with_kit(slot, |k| k.pads[sel].rr.as_ref().unwrap().sounds()),
+        3
+    );
+    assert!(h.query_by_label("Next 8 hits").is_some());
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(
+        h.with_kit(slot, |k| k.pads[sel].rr.as_ref().map(|r| r.sounds())),
+        Some(2),
+        "one undo step per edit"
+    );
+    // off again: nothing left behind
+    h.get_by_label("On").click();
+    frames(&mut h, 2);
+    assert!(h.with_kit(slot, |k| k.pads[sel].rr.is_none()));
+}

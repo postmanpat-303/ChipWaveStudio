@@ -723,6 +723,37 @@ impl App {
                 if dkv == "sound" {
                     self.dk.tab = 1;
                 }
+                // "rr": the Round Robin tab, on, with three sounds
+                if dkv == "rr" {
+                    self.dk.tab = 3;
+                    self.dk.rr_sel = 1;
+                    let (inst, sel) = (self.dk.inst, self.dk.sel);
+                    self.with(|s| {
+                        if let Some(crate::model::InstrumentKind::Gen(g)) =
+                            s.song.instruments.get_mut(inst).map(|i| &mut i.kind)
+                        {
+                            if let crate::gen::GenEngine::Drums(k) = &mut g.engine {
+                                if let Some(p) = k.pads.get_mut(sel) {
+                                    let mut r = crate::drumkit::padrr::PadRr {
+                                        variation: 0.4,
+                                        ..Default::default()
+                                    };
+                                    let n = p.drum.kind.models().len().max(1) as u8;
+                                    for m in 1..3u8 {
+                                        let mut d = crate::gen::DrumP::new(
+                                            p.drum.kind,
+                                            (p.drum.model + m) % n,
+                                            &[],
+                                        );
+                                        d.macros = p.drum.macros;
+                                        r.alts.push(d);
+                                    }
+                                    p.rr = Some(r);
+                                }
+                            }
+                        }
+                    });
+                }
                 if dkv == "generate" || dkv == "added" {
                     self.dk.tab = 2;
                     self.dk.gen.result = Some(crate::drumkit::generate(1, 7, 0.7, 1, 0));

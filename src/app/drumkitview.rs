@@ -10,6 +10,8 @@ use crate::gen::{DrumKind, DrumP, GenEngine, MacroDef};
 use crate::theme::ts;
 use crate::timeline::{self as tl, Note, Tick, ROW};
 
+mod padrrview;
+
 /// editor state that is not part of the song
 #[derive(Default)]
 pub(crate) struct DkUi {
@@ -21,8 +23,10 @@ pub(crate) struct DkUi {
     pub page: usize,
     /// a lane for every pad (else the used ones)
     pub all_lanes: bool,
-    /// lower tab: 0 Sound, 1 Generate
+    /// lower tab: 0 Pads (compact), 1 Sound, 2 Generate, 3 Round Robin
     pub tab: u8,
+    /// the Round Robin tab's selected sound (0 = the pad's own)
+    pub rr_sel: usize,
     /// the clip the sequencer edits
     pub clip: Option<u32>,
     /// drag-paint: the state the first cell was set to
@@ -443,7 +447,12 @@ impl App {
         );
         area(ui, tabs_r, |ui| {
             ui.horizontal_centered(|ui| {
-                for (i, t) in [(0u8, "Pads"), (1, "Sound"), (2, "Generate")] {
+                for (i, t) in [
+                    (0u8, "Pads"),
+                    (1, "Sound"),
+                    (2, "Generate"),
+                    (3, "Round Robin"),
+                ] {
                     if crate::ember::tab(ui, self.dk.tab == i, t).clicked() {
                         self.dk.tab = i;
                     }
@@ -464,6 +473,7 @@ impl App {
                 .show(ui, |ui| match tab {
                     0 => self.dk_pads(ui, kit, ch, Some(body_r.height())),
                     1 => self.dk_sound(ui, kit, true),
+                    3 => self.dk_rr(ui, kit, true),
                     _ => self.dk_generate(ui, kit, cur, slot, true),
                 });
         });
@@ -2017,7 +2027,7 @@ impl App {
     fn dk_lower(&mut self, ui: &mut egui::Ui, kit: &mut DrumKitP, cur: Option<&Cur>, slot: u8) {
         ui.horizontal(|ui| {
             ui.add_space(8.0);
-            for (i, t) in [(1u8, "Sound"), (2, "Generate")] {
+            for (i, t) in [(1u8, "Sound"), (2, "Generate"), (3, "Round Robin")] {
                 let on = self.dk.tab == i || (i == 1 && self.dk.tab == 0);
                 if crate::ember::tab(ui, on, t).clicked() {
                     self.dk.tab = i;
@@ -2027,6 +2037,8 @@ impl App {
         ui.add_space(4.0);
         if self.dk.tab == 2 {
             self.dk_generate(ui, kit, cur, slot, false);
+        } else if self.dk.tab == 3 {
+            self.dk_rr(ui, kit, false);
         } else {
             self.dk_sound(ui, kit, false);
         }
