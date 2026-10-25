@@ -115,6 +115,25 @@ impl Engine {
             }
             self.nv.lmask |= b;
             self.nv.lp[tr] = super::notes::LPlay::new(id, origin);
+            // follow actions count their decisions from this launch
+            self.nv.fk[tr] = 0;
+        }
+    }
+
+    /// render thread, after the note events: tracks a follow action
+    /// stopped are held silent, as the Stop button does
+    pub(super) fn follow_stops(&mut self) {
+        let s = std::mem::take(&mut self.nv.stops);
+        if s == 0 {
+            return;
+        }
+        self.held |= s;
+        self.nv.lmask &= !s;
+        self.nv.release_where(&mut self.plugins, s);
+        for (i, ch) in self.chans.iter_mut().enumerate().take(MAX_CHANNELS) {
+            if s & (1u64 << i) != 0 {
+                ch.synth.amp.release();
+            }
         }
     }
 

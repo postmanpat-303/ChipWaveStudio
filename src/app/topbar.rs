@@ -498,6 +498,45 @@ impl App {
                     self.request_delete_instrument(self.instr);
                 }
                 ui.separator();
+                if self.view == View::Timeline && !self.pr_active() {
+                    // the Timeline's clips (the piano roll keeps its notes'
+                    // Cut / Copy / Paste while it has the keyboard)
+                    let sel = !self.tlv.sels.is_empty();
+                    let full = !self.tlv.clipboard.is_empty();
+                    let clip_item = |ui: &mut egui::Ui, on: bool, label: &str, sc: &str| {
+                        ui.add_enabled(on, egui::Button::new(label).shortcut_text(sc))
+                            .clicked()
+                    };
+                    if clip_item(ui, sel, "Cut clips", "Ctrl+X") {
+                        self.tl_copy(true);
+                    }
+                    if clip_item(ui, sel, "Copy clips", "Ctrl+C") {
+                        self.tl_copy(false);
+                    }
+                    let paste = ui
+                        .add_enabled(full, egui::Button::new("Paste clips").shortcut_text("Ctrl+V"))
+                        .on_hover_text("at the play marker on the selected track, on the snap grid")
+                        .on_disabled_hover_text("Nothing copied");
+                    if paste.clicked() {
+                        self.tl_paste(None, false);
+                    }
+                    let linked = ui
+                        .add_enabled(full, egui::Button::new("Paste linked").shortcut_text("Ctrl+Shift+V"))
+                        .on_hover_text("copies that play the same notes and blocks (edit one, all change)")
+                        .on_disabled_hover_text("Nothing copied");
+                    if linked.clicked() {
+                        self.tl_paste(None, true);
+                    }
+                    if clip_item(ui, sel, "Duplicate clips", "Ctrl+D") {
+                        self.tl_apply(super::timeline::TlOp::Duplicate);
+                    }
+                    if clip_item(ui, sel, "Delete clips", "Del") {
+                        self.tl_apply(super::timeline::TlOp::Delete);
+                    }
+                    if item(ui, "Select all", "Ctrl+A") {
+                        self.synth_key(&ctx, Key::A, cmd);
+                    }
+                } else {
                 if item(ui, "Cut", "Ctrl+X") {
                     self.pending.push(egui::Event::Cut);
                 }
@@ -509,6 +548,7 @@ impl App {
                 }
                 if item(ui, "Select all", "Ctrl+A") {
                     self.synth_key(&ctx, Key::A, cmd);
+                }
                 }
                 ui.menu_button("Transpose", |ui| self.transpose_menu(ui));
                 ui.separator();
@@ -916,7 +956,9 @@ impl App {
                     ui,
                     super::viewbar::Tr::Start,
                     false,
-                    hdr_text(),
+                    // the Loop button's off ink (the header's text is white
+                    // on Amiga's white buttons)
+                    th().ink2.gamma_multiply(0.75),
                     "play marker to the start",
                 ) {
                     if tl_mode {
@@ -1023,6 +1065,7 @@ impl App {
                         ui.label(rec_txt)
                             .on_hover_text("recording: R or the Record button stops it");
                     }
+                    self.loop_toggle(ui);
                     self.metronome_toggle(ui);
                 }
                 let left = self.with(|s| s.engine.count_in_left());
@@ -1341,8 +1384,36 @@ impl App {
                     crate::theme::prop(crate::theme::ts::SMALL),
                     hdr_dim(),
                 );
+                let meter = self.midi_press_meter();
+                // the hover card is custom UI, so name the light for screen
+                // readers as its plain tip did
+                let name = format!("{midi_tip}\nclick: MIDI settings");
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
                 if resp
-                    .on_hover_text(format!("{midi_tip}\nclick: MIDI settings"))
+                    .on_hover_ui(|ui| {
+                        ui.label(&midi_tip);
+                        // the live pressure meter (aftertouch keyboards)
+                        if let Some((v, txt)) = &meter {
+                            ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+                            ui.horizontal(|ui| {
+                                let (r, _) =
+                                    ui.allocate_exact_size(egui::vec2(90.0, 10.0), Sense::hover());
+                                let vis = ui.visuals();
+                                ui.painter().rect_filled(r, 2.0, vis.extreme_bg_color);
+                                let mut f = r;
+                                f.set_width(r.width() * v.clamp(0.0, 1.0));
+                                ui.painter().rect_filled(f, 2.0, vis.selection.bg_fill);
+                                ui.painter().rect_stroke(
+                                    r,
+                                    2.0,
+                                    vis.widgets.noninteractive.bg_stroke,
+                                    egui::StrokeKind::Inside,
+                                );
+                                ui.label(txt);
+                            });
+                        }
+                        ui.label("click: MIDI settings");
+                    })
                     .clicked()
                 {
                     self.view = View::Settings;
@@ -1512,6 +1583,44 @@ impl App {
 }
 
 impl App {
+    /// the transport's Loop toggle (Del, 25 Oct 2026: "we need a playloop
+    /// symbol"): the Timeline's loop, the same switch as L, the LCD's LOOP
+    /// pill and the Timeline toolbar's Loop; accent-lit while on
+    fn loop_toggle(&mut self, ui: &mut egui::Ui) {
+        let (on, range) = self.with(|s| {
+            s.song.timeline.as_deref().map_or((false, None), |t| {
+                (
+                    t.loop_on && t.loop_range.is_some(),
+                    t.loop_range
+                        .map(|(a, b)| (t.bar_pos(a).bar, t.bar_pos((b - 1).max(a)).bar)),
+                )
+            })
+        });
+        let t = th();
+        let tip = match range {
+            Some((a, b)) if a == b => format!(
+                "Loop (L): {} · bar {a}",
+                if on { "on" } else { "off" }
+            ),
+            Some((a, b)) => format!(
+                "Loop (L): {} · bars {a}–{b}",
+                if on { "on" } else { "off" }
+            ),
+            None => "Loop (L): no loop region yet - Shift-drag the ruler, or select clips and press Ctrl+L"
+                .to_string(),
+        };
+        let col = if on {
+            t.accent
+        } else {
+            // dimmed as the metronome's off symbol (the header's text is
+            // white on Amiga's white buttons)
+            t.ink2.gamma_multiply(0.75)
+        };
+        if super::viewbar::transport_button(ui, super::viewbar::Tr::Loop, on, col, &tip) {
+            self.tl_apply(super::timeline::TlOp::ToggleLoop);
+        }
+    }
+
     /// the toolbar's Metronome toggle: click on every beat while playing;
     /// right-click (or the arrow beside it) for the record count-in
     fn metronome_toggle(&mut self, ui: &mut egui::Ui) {

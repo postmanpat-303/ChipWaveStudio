@@ -1,12 +1,12 @@
 // ChipWave Studio - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-/// Display version (Cargo: 0.2.13+fix.0 -> "0.2.13.0"; the updater compares it part by part).
-pub const VERSION: &str = "0.2.13.0";
+/// Display version (Cargo: 0.2.14+fix.0 -> "0.2.14.0"; the updater compares it part by part).
+pub const VERSION: &str = "0.2.14.0";
 
 /// The version as shown (About, window title): a test build (the pack
 /// scripts set CW_BUILD, e.g. "combo2 8bdf40c") reads
-/// "0.2.13.0 · test build (combo2 8bdf40c)"; a release build just "0.2.13.0".
+/// "0.2.13.0 · test build (combo2 8bdf40c)"; a release build just "0.2.14.0".
 pub fn version_label() -> String {
     version_label_for(option_env!("CW_BUILD"))
 }
@@ -78,6 +78,7 @@ mod render_hashes_gen;
 mod sample;
 mod settings;
 mod showcase;
+mod smf;
 mod speech;
 mod strings;
 mod synth;
@@ -1160,6 +1161,12 @@ fn midi_monitor(secs: u64) -> i32 {
                 }
                 midi::UiEv::Off { key } => println!("  note off key {key:3}"),
                 midi::UiEv::Cc { cc, val } => println!("  CC {cc:3} = {val}"),
+                midi::UiEv::Pressure { key, val } if key == midi::ALL_KEYS => {
+                    println!("  channel pressure {:.0} %", val * 100.0)
+                }
+                midi::UiEv::Pressure { key, val } => {
+                    println!("  key pressure key {key:3} = {:.0} %", val * 100.0)
+                }
             }
         }
         while let Ok(e) = audio.pop() {

@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.14.0" date="2026-10-25">
+      <description><p>Round Robin: step conditions on notes (every X of Y, first pass, fills, chance), up to four clip variations that take turns each loop, drum pad round robin with per-hit drift, and Clip Arranger follow actions with Capture to timeline, all deterministic from a seed. MIDI key pressure (aftertouch) as a modulation source, recorded with notes and edited in a Pressure lane, and .mid file import. Clip copy and paste on the Timeline, a transport Loop button, double-click a clip to loop it, bigger pie menus with a size setting, and a drum kit fix.</p></description>
+    </release>
     <release version="0.2.13.0" date="2026-10-25">
       <description><p>Live recording: pressing Record opens a REC block at once that grows with the playhead with no length limit, draws notes as you play with a fade-in, and settles into a normal clip on Stop. Quick modulation on every knob: a dot opens a popover with LFO, Envelope, Random, Velocity and Mod wheel, plain-word Speed, Length and Attack sliders, Sync to tempo, a live shape preview and one Movement list per instrument. A tidier instrument header, a backlit mint LCD, and a keyboard icon for computer-keys-to-notes that is on by default without a MIDI keyboard.</p></description>
     </release>

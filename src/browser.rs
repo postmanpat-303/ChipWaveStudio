@@ -28,7 +28,7 @@ pub enum Fmt {
     Mod,
     Wavetable,
     Grid,
-    /// .mid (import planned)
+    /// .mid (imports as a note clip: src/smf.rs)
     Midi,
     /// a built-in drum pattern (Drum Patterns tab; not in the legend)
     Pattern,
@@ -79,7 +79,7 @@ impl Fmt {
             Fmt::Mod => "MOD/MED*",
             Fmt::Wavetable => "wavetable",
             Fmt::Grid => "Grid patch",
-            Fmt::Midi => "MIDI*",
+            Fmt::Midi => "MIDI",
             Fmt::Pattern => "drum pattern",
             Fmt::Fx => "effect",
         }
@@ -110,7 +110,7 @@ impl Fmt {
     }
     /// can't be loaded yet (shown, marked "import planned")
     pub fn planned(self) -> bool {
-        matches!(self, Fmt::Mod | Fmt::Midi)
+        matches!(self, Fmt::Mod)
     }
 }
 

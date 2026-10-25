@@ -397,6 +397,7 @@ pub fn block_col_to_notes(song: &mut Song, pattern: usize, col: usize) -> Option
         notes,
         chords: vec![],
         drum: None,
+        var: None,
     };
     let tl = song.timeline.as_deref_mut()?;
     let n = tl.notes.len();
@@ -426,6 +427,7 @@ pub fn new_note_clip(song: &mut Song, track: usize, start: Tick) -> Option<u32> 
         notes: vec![],
         chords: vec![],
         drum: None,
+        var: None,
     }));
     let id = tl.new_id();
     tl.clips.push(Clip {

@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.13.0-00d0ff" alt="Version 0.2.13.0">
+  <img src="https://img.shields.io/badge/version-0.2.14.0-00d0ff" alt="Version 0.2.14.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.13.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.14.0</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -51,7 +51,34 @@
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.13.0: live recording, quick modulation and a backlit LCD
+## New in 0.2.14.0: Round Robin, key pressure and clip copy and paste
+
+- **Round Robin** ([ROUND_ROBIN.md](docs/ROUND_ROBIN.md)): loops that sound a little different each pass, but render the same every time (everything comes from a seed plus the pass or hit number).
+  - **Step conditions**: a note can play every X of Y passes, only the first time, never the first time, only in fills or never in fills, next to its **Chance**. Conditions and Chance lanes in the piano roll, a **Play this note…** popover, striped notes and a **Fill** toggle.
+  - **Clip Variations**: up to four takes (A–D) per note clip, one per loop pass: in order, random, random no repeat, ping-pong or every N.
+  - **Drum pad Round Robin**: up to four sounds per pad take turns, with per-hit drift of pitch, level, tone, decay, timing and pan, and a "Next 8 hits" preview.
+  - **Follow actions**: launcher clips move on after N loops (X % Next / Again / Other / First / Last / Any / Stop), and **Capture** writes the performance to the timeline.
+- **MIDI key pressure and .mid import** ([MIDI.md](docs/MIDI.md)): poly and channel aftertouch drive a new **Pressure** modulator, recorded notes keep their pressure curves, and the piano roll's **Pressure** lane draws and clears them. MIDI files from the browser import as one note clip with velocities and pressure.
+- **Clip copy and paste**: Ctrl+C / X / V on the Timeline, Copy / Cut in the clip pie, **Paste here** (independent or linked) on an empty lane, Paste at playhead in the track pie.
+- **Transport Loop button** beside the metronome, and **double-click a clip** to loop exactly it (again: loop off).
+- **Bigger pies** (30 %), with Settings › Look › Pie menus Small / Normal / Large.
+- **Fixes**: a drum kit added after StringWave or WaveForge plays the kit; the go-to-start button is legible in Amiga.
+
+Every song saves, plays and renders exactly as in 0.2.13.0. Known limits and details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/rr-variations-slate.png" alt="The piano roll with take tabs A, B and C and the Variations popover: Each time the clip loops, it plays one of these takes; Order set to Random no repeat, a seed, and the first 16 passes as coloured letters"><br><b>Clip Variations</b>: a take per loop pass.</td>
+    <td width="50%"><img src="docs/screenshots/rr-pad-amiga.png" alt="The drum kit's Round Robin tab in the Amiga theme: pad 4 on, the next 8 hits as numbered chips, two sounds and their drift sliders"><br><b>Drum pad Round Robin</b> (Amiga).</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/pressure-lane-slate.png" alt="The piano roll with its lower lane set to Press: each note has a filled pressure curve that rises, swells or fades"><br><b>Pressure lane</b>: recorded aftertouch, drawn and editable.</td>
+    <td width="50%"><img src="docs/screenshots/dblclick-loop-slate.png" alt="The Timeline after a double-click on a clip: the loop band covers bars 13 to 16 and the LCD reads LOOP 13-16"><br><b>Double-click a clip</b> to loop it.</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.13.0: live recording, quick modulation and a backlit LCD</b></summary>
+
 
 - **Live recording block**: press Record and a REC block opens at once on the track and grows with the playhead, with no length limit. Notes appear as you play them and fade in; on Stop it becomes a normal clip, rounded to the bar. The take is one undo step, an empty take is dropped, and loop recording overdubs in place.
 - **Quick modulation on every knob**: click the small dot on a knob (or right-click › Modulate with…) and pick **LFO**, **Envelope**, **Random**, **Velocity** or **Mod wheel**. Clear sliders set **Speed** ("1 beat (1/4 note)", "2 bars" or Hz, with **Sync to tempo**), **Length** and **Attack** for envelopes, **Smooth** for Random and **Amount** for all, with a live preview of the shape. One **Movement** list per instrument shows everything that moves ("LFO 1 sine · 1 beat → Cutoff · +25 %").
@@ -71,6 +98,8 @@ Every song saves, plays and renders exactly as in 0.2.12.0. Known limits and det
     <td width="50%"><img src="docs/screenshots/lcd-mint-keys.png" alt="The backlit mint LCD toolbar and the lit keyboard icon with its tooltip: Computer keys play notes, C4, velocity 102, on"><br><b>Mint LCD</b> and the <b>Keys → Notes</b> keyboard icon.</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.12.0: bigger, resizable and movable tracks</b></summary>
 

@@ -48,6 +48,30 @@ pub struct NoteSpan {
     pub instr: u8,
     /// detune in semitones
     pub tune: f32,
+    /// this key's hit number on the track (0 = its first): drum pad
+    /// Round Robin turns on it, so a seek plays the same hit as a full play
+    pub hit: u32,
+}
+
+/// One step of a recorded key pressure curve, placed on the timeline: from
+/// tick `at` the Pressure modulators of the note's instrument read `val`.
+/// A curve ends with a 0 at its note's end.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PressPt {
+    pub at: Tick,
+    /// instrument slot (1-based, 0 = the track's current one)
+    pub instr: u8,
+    pub val: f32,
+}
+
+/// number each span's hit per key, in order (`v` sorted by start)
+pub fn number_hits(v: &mut [NoteSpan]) {
+    let mut seen = [0u32; 128];
+    for n in v {
+        let k = (n.key as usize).min(127);
+        n.hit = seen[k];
+        seen[k] = seen[k].wrapping_add(1);
+    }
 }
 
 /// One audio clip, placed on the timeline (M4). The file plays at its own
@@ -118,6 +142,9 @@ pub struct Plan {
     /// launcher clips (Stage 4b; empty without them, so other songs play
     /// exactly as before)
     pub launch: Vec<LaunchNotes>,
+    /// recorded key pressure per track, sorted (empty without pressure
+    /// curves, so other songs play exactly as before)
+    pub press: Vec<Vec<PressPt>>,
 }
 
 /// A launcher clip as the engine plays it: its notes from tick 0, looping
@@ -128,6 +155,12 @@ pub struct LaunchNotes {
     pub track: usize,
     pub len: Tick,
     pub notes: Vec<NoteSpan>,
+    /// its scene row, seed, one loop of the clip (the cycle above may hold
+    /// several) and follow action
+    pub scene: u16,
+    pub seed: u32,
+    pub loop_len: Tick,
+    pub follow: Option<super::follow::Follow>,
 }
 
 impl Plan {
@@ -185,6 +218,14 @@ pub fn play_end(tl: &Timeline) -> Tick {
     }
 }
 
+/// [`plan_key`] of a live plan built with the Fill key `fill` held
+pub fn plan_key_live(song: &Song, tl: &Timeline, fill: bool) -> u64 {
+    // the Fill key only changes clips with step conditions: without any,
+    // holding it doesn't rebuild (and re-seek) the plan
+    let fill = fill && tl.notes.iter().any(|d| d.has_conds());
+    plan_key(song, tl) ^ if fill { 0xF111_F111_F111_F111 } else { 0 }
+}
+
 /// Cheap fingerprint of everything the [`Plan`] depends on (no allocation).
 pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -214,6 +255,7 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
                 (1u8, data as usize, c.seed).hash(&mut h);
                 if let Some(d) = tl.notes.get(data as usize) {
                     d.len.hash(&mut h);
+                    hash_var(d, &mut h);
                     for n in &d.notes {
                         (
                             n.start,
@@ -223,8 +265,15 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
                             n.instr,
                             n.chance,
                             n.tune.to_bits(),
+                            n.cond,
                         )
                             .hash(&mut h);
+                        // pressure curves (none: the key stays as before)
+                        if let Some(p) = n.pressure() {
+                            for &(t, v) in p {
+                                (t, v.to_bits()).hash(&mut h);
+                            }
+                        }
                     }
                 }
             }
@@ -241,7 +290,13 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
     for l in &tl.launcher {
         let c = &l.clip;
         (c.id, c.track, c.len, c.offset, c.loop_len, c.seed).hash(&mut h);
+        // the scene row and follow action steer follow actions
+        l.scene.hash(&mut h);
+        if let Some(f) = l.follow {
+            (f.after, f.a as u8, f.b as u8, f.chance).hash(&mut h);
+        }
         if let Some(d) = c.notes().and_then(|k| tl.notes.get(k)) {
+            hash_var(d, &mut h);
             for n in &d.notes {
                 (
                     n.start,
@@ -251,18 +306,52 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
                     n.instr,
                     n.chance,
                     n.tune.to_bits(),
+                    n.cond,
                 )
                     .hash(&mut h);
             }
         }
     }
+    // markers decide which passes are fills (only matters with conditions)
+    for m in &tl.markers {
+        (m.tick, m.track).hash(&mut h);
+    }
     h.finish()
+}
+
+/// the variations' takes and order (nothing without them, so other keys
+/// stay the same)
+fn hash_var(d: &NoteClipData, h: &mut impl Hasher) {
+    let Some(v) = &d.var else { return };
+    (0x7A55u16, v.order, v.seed, v.cur, v.takes.len()).hash(h);
+    for t in &v.takes {
+        t.len().hash(h);
+        for n in t {
+            (
+                n.start,
+                n.len,
+                n.key,
+                n.vel,
+                n.instr,
+                n.chance,
+                n.tune.to_bits(),
+                n.cond,
+            )
+                .hash(h);
+        }
+    }
 }
 
 /// Resolve the clips into per-track segments. Overlaps: the clip that
 /// starts later wins (the same rule as [`consolidate`]); muted and piano-roll
 /// clips play nothing yet.
 pub fn build_plan(song: &Song, tl: &Timeline) -> Plan {
+    build_plan_live(song, tl, false)
+}
+
+/// [`build_plan`], with `fill` = the Fill key is held (live playback only:
+/// every pass counts as a fill; renders and exports always pass false).
+pub fn build_plan_live(song: &Song, tl: &Timeline, fill: bool) -> Plan {
     let nch = song.channels.min(MAX_CHANNELS);
     let mut per: Vec<Vec<&Clip>> = vec![vec![]; nch];
     for c in &tl.clips {
@@ -318,13 +407,14 @@ pub fn build_plan(song: &Song, tl: &Timeline) -> Plan {
         tracks.push(segs);
     }
     let end = row_of(play_end(tl));
+    let (notes, press) = note_press_spans(tl, nch, fill);
     let loop_rows = tl
         .loop_range
         .filter(|_| tl.loop_on)
         .map(|(a, b)| (row_of(a), row_of(b)))
         .filter(|(a, b)| b > a);
     Plan {
-        key: plan_key(song, tl),
+        key: plan_key_live(song, tl, fill),
         tracks,
         end,
         loop_rows,
@@ -332,12 +422,13 @@ pub fn build_plan(song: &Song, tl: &Timeline) -> Plan {
             .map(|i| tl.tracks.get(i).map_or(0, |t| t.speed))
             .collect(),
         tempo_changes: tl.tempo.iter().any(|p| p.tick > 0),
-        notes: note_spans(tl, nch),
+        notes,
         audio: audio_spans(song, tl, nch),
         pcm: tl.audio.iter().map(|a| a.pcm.clone()).collect(),
         tempo: tl.tempo.clone(),
         bpm: song.bpm,
         launch: launch_plan(tl),
+        press,
     }
 }
 
@@ -389,22 +480,57 @@ pub fn audio_spans(song: &Song, tl: &Timeline, nch: usize) -> Vec<Vec<AudioSpan>
 /// (and at the end of their loop pass). `chance` draws from
 /// `ClipRng::new(seed, pass)`, so every play, seek and export is the same.
 pub fn note_spans(tl: &Timeline, nch: usize) -> Vec<Vec<NoteSpan>> {
+    note_spans_live(tl, nch, false)
+}
+
+/// [`note_spans`] with the live Fill key `fill` (see [`build_plan_live`])
+pub fn note_spans_live(tl: &Timeline, nch: usize, fill: bool) -> Vec<Vec<NoteSpan>> {
+    note_press_spans(tl, nch, fill).0
+}
+
+/// [`note_spans_live`] and the recorded pressure of the notes that play
+/// (a note a chance or condition skips takes its curve with it)
+pub fn note_press_spans(
+    tl: &Timeline,
+    nch: usize,
+    fill: bool,
+) -> (Vec<Vec<NoteSpan>>, Vec<Vec<PressPt>>) {
     let mut out: Vec<Vec<NoteSpan>> = vec![vec![]; nch];
+    let mut press: Vec<Vec<PressPt>> = vec![vec![]; nch];
     for c in &tl.clips {
         if c.notes().is_none() || c.len <= 0 || c.muted || c.track as usize >= nch {
             continue;
         }
-        clip_note_spans(tl, c, &mut out[c.track as usize]);
+        let t = c.track as usize;
+        clip_spans(tl, c, &mut out[t], &mut press[t], fill);
     }
     for v in &mut out {
         v.sort_by_key(|n| (n.start, n.key));
+        number_hits(v);
     }
-    out
+    for p in &mut press {
+        // a curve's closing 0 before the next note's first value
+        p.sort_by_key(|q| (q.at, q.val > 0.0));
+    }
+    (out, press)
 }
 
 /// The notes note clip `c` plays, in timeline ticks, appended to `v`
 /// (unsorted; see [`note_spans`]).
 pub(crate) fn clip_note_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>) {
+    clip_note_spans_live(tl, c, v, false)
+}
+
+/// [`clip_note_spans`] with the live Fill key `fill`. Per pass k: the
+/// chance draws come from `ClipRng::new(seed, k)` exactly as before (a
+/// note's condition is tested after its draw, so conditions never move
+/// another note's randomness).
+pub(crate) fn clip_note_spans_live(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>, fill: bool) {
+    clip_spans(tl, c, v, &mut vec![], fill)
+}
+
+/// [`clip_note_spans_live`] plus the played notes' pressure into `pv`
+fn clip_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>, pv: &mut Vec<PressPt>, fill: bool) {
     let ClipKind::Notes { data } = c.kind else {
         return;
     };
@@ -414,8 +540,18 @@ pub(crate) fn clip_note_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>) {
     let Some(d) = tl.notes.get(data as usize) else {
         return;
     };
-    let push = |v: &mut Vec<NoteSpan>, n: &Note, u: Tick, cap: Tick, rng: &mut ClipRng| {
+    let push = |v: &mut Vec<NoteSpan>,
+                pv: &mut Vec<PressPt>,
+                n: &Note,
+                u: Tick,
+                cap: Tick,
+                rng: &mut ClipRng,
+                pass: u32,
+                is_fill: bool| {
         if n.chance > 0 && n.chance < 100 && rng.next_f32() * 100.0 >= n.chance as f32 {
+            return;
+        }
+        if !n.cond.plays(pass, is_fill) {
             return;
         }
         if u < 0 || u >= c.len {
@@ -432,8 +568,24 @@ pub(crate) fn clip_note_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>) {
             vel: n.vel as f32 / 65535.0,
             instr: n.instr,
             tune: n.tune,
+            hit: 0,
         });
+        if let Some(p) = n.pressure() {
+            for &(r, val) in p.iter().filter(|q| u + q.0.max(0) < end) {
+                pv.push(PressPt {
+                    at: c.start + u + r.max(0),
+                    instr: n.instr,
+                    val: val.clamp(0.0, 1.0),
+                });
+            }
+            pv.push(PressPt {
+                at: c.start + end,
+                instr: n.instr,
+                val: 0.0,
+            });
+        }
     };
+    let conds = d.has_conds();
     match c.loop_len.filter(|l| *l > 0) {
         Some(l) => {
             // pass k plays source [k*l, (k+1)*l) at clip time k*l - offset
@@ -442,15 +594,17 @@ pub(crate) fn clip_note_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>) {
             for k in 0..passes.min(100_000) {
                 let mut rng = ClipRng::new(c.seed, k as u32);
                 let base = k * l - off;
-                for n in d.notes.iter().filter(|n| n.start >= 0 && n.start < l) {
-                    push(v, n, base + n.start, base + l, &mut rng);
+                let f = conds && rr::is_fill(tl, c, k, passes, base, l, fill);
+                let notes = d.var_notes(c.seed, k as u32);
+                for n in notes.iter().filter(|n| n.start >= 0 && n.start < l) {
+                    push(v, pv, n, base + n.start, base + l, &mut rng, k as u32, f);
                 }
             }
         }
         None => {
             let mut rng = ClipRng::new(c.seed, 0);
-            for n in &d.notes {
-                push(v, n, n.start - c.offset, Tick::MAX, &mut rng);
+            for n in d.var_notes(c.seed, 0) {
+                push(v, pv, n, n.start - c.offset, Tick::MAX, &mut rng, 0, fill);
             }
         }
     }
@@ -462,13 +616,44 @@ pub fn launch_plan(tl: &Timeline) -> Vec<LaunchNotes> {
     tl.launcher
         .iter()
         .filter(|l| l.clip.len > 0)
-        .map(|l| LaunchNotes {
-            id: l.clip.id,
-            track: l.clip.track as usize,
-            len: l.clip.len,
-            notes: launch_spans(tl, &l.clip),
+        .map(|l| {
+            let (len, notes) = launch_cycle(tl, &l.clip);
+            LaunchNotes {
+                id: l.clip.id,
+                track: l.clip.track as usize,
+                len,
+                notes,
+                scene: l.scene,
+                seed: l.clip.seed,
+                loop_len: l.clip.len,
+                follow: l.follow,
+            }
         })
         .collect()
+}
+
+/// passes a launched clip with variations is unrolled to (the engine
+/// loops the whole cycle, so each pass still picks its own take)
+pub const LAUNCH_PASSES: Tick = 16;
+
+/// A launcher clip's loop as the engine plays it: (cycle length, notes).
+/// Without variations this is the clip as before; with them, 16 passes
+/// unrolled so every pass picks its take from (seed, pass).
+pub fn launch_cycle(tl: &Timeline, c: &Clip) -> (Tick, Vec<NoteSpan>) {
+    let vars = c
+        .notes()
+        .and_then(|k| tl.notes.get(k))
+        .is_some_and(|d| d.var.is_some());
+    let (len, mut v) = if !vars || c.len <= 0 {
+        (c.len, launch_spans(tl, c))
+    } else {
+        let mut one = c.clone();
+        one.loop_len = Some(c.loop_len.filter(|l| *l > 0).unwrap_or(c.len));
+        one.len = c.len * LAUNCH_PASSES;
+        (one.len, launch_spans(tl, &one))
+    };
+    number_hits(&mut v);
+    (len, v)
 }
 
 /// The cell track `tr` plays at timeline row `row`, given the segment `s`

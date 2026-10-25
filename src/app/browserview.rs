@@ -597,7 +597,17 @@ impl App {
                 return;
             }
         };
-        let n = self.with(|s| crate::chanops::assign_track_instrument(&mut s.song, tr, slot));
+        let n = self.with(|s| {
+            // a default track name follows the instrument (as the track
+            // pie's Drum kit › does), so the header and its subtitle agree
+            if let Some(t) = s.song.channel_names.get_mut(tr) {
+                let k = t.trim();
+                if k.is_empty() || k.starts_with("Track ") {
+                    *t = name.chars().take(24).collect();
+                }
+            }
+            crate::chanops::assign_track_instrument(&mut s.song, tr, slot)
+        });
         self.undo_hold -= 1;
         // the track is lit (not a stale Song / Master) and plays it
         self.tl_select_track(tr, false);
@@ -766,6 +776,10 @@ impl App {
             Src::Demo(i) => self.request(crate::prompt::Pending::Demo(*i), ctx),
             Src::File(p) if it.fmt == Fmt::Song => {
                 self.request(crate::prompt::Pending::OpenPath(p.clone()), ctx)
+            }
+            Src::File(p) if it.fmt == Fmt::Midi => {
+                let (ch, cue) = (self.ch, self.tlv.cue);
+                self.import_midi(p.clone(), ch, cue);
             }
             Src::File(p) if it.fmt.is_sample() && self.view == View::Timeline => {
                 let (ch, cue) = (self.ch, self.tlv.cue);
@@ -1154,6 +1168,9 @@ impl App {
             DropAt::Track(tr, Some(_)) if it.fmt.is_sample() && matches!(it.src, Src::File(_)) => {
                 format!("Audio clip on track {:02}", tr + 1)
             }
+            DropAt::Track(tr, _) if it.fmt == Fmt::Midi => {
+                format!("Note clip on track {:02} (from the MIDI file)", tr + 1)
+            }
             DropAt::Track(tr, _) if inst => format!("Track {:02} plays {}", tr + 1, it.name),
             DropAt::Track(tr, _) if it.is_effect() => {
                 format!("Add to track {:02}'s instrument FX chain", tr + 1)
@@ -1220,6 +1237,12 @@ impl App {
                 self.br_effect_at(it, s, i)
             }
             DropAt::Slot(s) if it.is_effect() => self.br_effect(it, s),
+            DropAt::Track(tr, at) if it.fmt == Fmt::Midi => {
+                if let Src::File(p) = &it.src {
+                    let at = at.unwrap_or(self.tlv.cue);
+                    self.import_midi(p.clone(), tr, at);
+                }
+            }
             DropAt::Track(tr, Some(tick)) if it.fmt.is_sample() => {
                 if let Src::File(p) = &it.src {
                     self.import_audio(p.clone(), tr, tick);

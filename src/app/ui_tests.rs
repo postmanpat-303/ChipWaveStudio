@@ -118,7 +118,7 @@ pub(super) fn click_at(h: &mut Harness<'static, App>, p: Pos2) {
     click_with(h, p, egui::PointerButton::Primary);
 }
 
-fn click_with(h: &mut Harness<'static, App>, p: Pos2, button: egui::PointerButton) {
+pub(super) fn click_with(h: &mut Harness<'static, App>, p: Pos2, button: egui::PointerButton) {
     h.input_mut().events.push(egui::Event::PointerMoved(p));
     frame(h);
     for pressed in [true, false] {

@@ -28,6 +28,7 @@ mod browser_tests;
 mod browsera_tests;
 mod browserpanel;
 mod browserview;
+mod cafollow;
 mod chains;
 #[cfg(test)]
 mod chains_tests;
@@ -36,12 +37,18 @@ mod chordview;
 mod cliparr;
 #[cfg(test)]
 mod cliparr_tests;
+#[cfg(test)]
+mod clipcopy_tests;
+#[cfg(test)]
+mod dblloop_tests;
 mod devcards;
 mod devices;
 #[cfg(test)]
 mod devices_tests;
 mod dialogs;
 mod dropplan;
+#[cfg(test)]
+mod drumbind_tests;
 mod drumkitview;
 mod drumpat;
 #[cfg(test)]
@@ -80,7 +87,10 @@ mod lcd;
 #[cfg(test)]
 mod lcd_tests;
 mod library;
+#[cfg(test)]
+mod looptransport_tests;
 mod metroicon;
+mod midiimport;
 mod midiview;
 mod mixer;
 mod mixstrip;
@@ -106,12 +116,19 @@ mod piano_tests;
 #[cfg(test)]
 mod pianocopy_tests;
 mod pianoview;
+mod piesize;
 mod pluginview;
 mod plugsetup;
+mod prlanes;
 #[cfg(test)]
 mod prollpan_tests;
 #[cfg(test)]
+mod prpress_tests;
+#[cfg(test)]
 mod prruler_tests;
+mod prvars;
+#[cfg(test)]
+mod prvars_tests;
 #[cfg(test)]
 mod rack_sweep_tests;
 #[cfg(test)]
@@ -124,6 +141,8 @@ mod rackview_tests;
 mod radial;
 #[cfg(test)]
 mod record_tests;
+#[cfg(test)]
+mod rrlane_tests;
 mod sampleview;
 #[cfg(test)]
 mod scenario_tests;
@@ -309,6 +328,8 @@ pub struct App {
     clip_rename: Option<objpie::ClipRename>,
     /// a pie to open at the next `obj_pie_frame`
     opie_req: Option<(objpie::PieFor, Pos2)>,
+    /// where the last object pie was (popovers it opens appear there)
+    opie_at: Option<Pos2>,
     /// recovery copies put off with "Later" (archived on a clean exit)
     orphans_later: Vec<PathBuf>,
     allow_close: bool,
@@ -698,6 +719,7 @@ impl App {
             opie: None,
             clip_rename: None,
             opie_req: None,
+            opie_at: None,
             orphans_later: Vec::new(),
             allow_close: false,
             arr_flash: None,
@@ -1153,7 +1175,8 @@ impl eframe::App for App {
                 egui::Event::Key { .. }
                 | egui::Event::Copy
                 | egui::Event::Cut
-                | egui::Event::Paste(_) => self.pending.push(e),
+                | egui::Event::Paste(_)
+                | egui::Event::PasteImage(_) => self.pending.push(e),
                 egui::Event::Text(_) => {}
                 other => keep.push(other),
             }
@@ -1163,6 +1186,10 @@ impl eframe::App for App {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.shot_frame(ui.ctx());
+        piesize::set(
+            piesize::of_setting(self.extra.pie_size),
+            ui.ctx().content_rect(),
+        );
         self.poll_save();
         self.load_warnings_window(ui.ctx());
         self.too_new_window(ui.ctx());

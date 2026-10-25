@@ -42,6 +42,8 @@ pub(super) struct Layers {
     /// some layer voice is sounding
     pub(super) any: bool,
     age: u32,
+    /// drum pad Round Robin hit numbers per key
+    hits: crate::drumkit::padrr::HitCount,
 }
 
 /// the song has a rack instrument
@@ -120,6 +122,7 @@ impl Layers {
             let mut vol = gain * li.volume;
             let mut synth = SynthVoice::new();
             if let Some(kit) = crate::drumkit::kit_of(li) {
+                synth.gen.hit = self.hits.next(n);
                 vol = gain * li.volume * crate::drumkit::hit(kit, freq, vel).0 / vel.max(1e-6);
             }
             if notes::poly_patch(li).is_some() {

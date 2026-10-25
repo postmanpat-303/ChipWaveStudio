@@ -41,6 +41,9 @@ pub(crate) struct RNote {
     pub(crate) no_vel: bool,
     pub(crate) instr: u8,
     pub(crate) fx: Option<(u8, u8)>,
+    /// step condition and chance (note clips; Round Robin)
+    pub(crate) cond: tl::Cond,
+    pub(crate) chance: u8,
 }
 
 /// the target's contents, read once per frame
@@ -252,6 +255,18 @@ pub(crate) struct PianoUi {
     /// the first copied note in that target (a source tick); it moves to the
     /// end of each paste so Ctrl+V again lays copies end to end
     pub(crate) marker: Option<(Target, Tick)>,
+    /// the lower lane: Velocity, Conditions or Chance (Round Robin)
+    pub(crate) lane: super::prlanes::Lane,
+    /// the lane menu is open (where)
+    pub(crate) lane_menu: Option<Pos2>,
+    /// the "Play this note…" popover
+    pub(crate) cond_pop: Option<super::prlanes::CondPop>,
+    /// the Variations popover (Clip Variations)
+    pub(crate) var_pop: Option<super::prvars::VarPop>,
+    /// the Clip Arranger's Follow action popover
+    pub(crate) follow_pop: Option<super::cafollow::FollowPop>,
+    /// live Fill on (mirrors `Engine::fill_live`)
+    pub(crate) fill: bool,
 }
 
 impl PianoUi {
@@ -310,6 +325,12 @@ impl Default for PianoUi {
             clip_text: String::new(),
             paste_next: None,
             marker: None,
+            lane: Default::default(),
+            lane_menu: None,
+            cond_pop: None,
+            var_pop: None,
+            follow_pop: None,
+            fill: false,
         }
     }
 }
@@ -324,7 +345,7 @@ impl PianoUi {
     pub(crate) fn y_of(&self, key: u8) -> f32 {
         self.grid_rect.top() + (120 - key as i32) as f32 * self.key_h - self.scroll_y
     }
-    fn tick_at(&self, x: f32) -> f64 {
+    pub(crate) fn tick_at(&self, x: f32) -> f64 {
         self.scroll_x + ((x - self.grid_rect.left()) as f64 / self.ppt())
     }
     fn key_at(&self, y: f32) -> i32 {
@@ -352,6 +373,8 @@ fn source_notes(src: &Source) -> (Vec<RNote>, Tick) {
                     no_vel: false,
                     instr: n.instr,
                     fx: n.fx,
+                    cond: n.cond,
+                    chance: n.chance,
                 })
                 .collect(),
             d.len.max(1),
@@ -373,6 +396,8 @@ fn block_notes(p: &Pattern, col: usize) -> Vec<RNote> {
                 no_vel: n.vol == 0,
                 instr: n.instr,
                 fx: (c.fx != 0 || c.fxp != 0).then_some((c.fx, c.fxp)),
+                cond: tl::Cond::Always,
+                chance: 0,
             }
         })
         .collect()
@@ -1465,6 +1490,16 @@ impl App {
             Key::Num2 if !m.command => self.pr.tool = PrTool::Select,
             Key::Num3 if !m.command => self.pr.tool = PrTool::Pencil,
             Key::F if !m.command => self.pr.fit = true,
+            Key::Escape
+                if self.pr.cond_pop.is_some()
+                    || self.pr.lane_menu.is_some()
+                    || self.pr.var_pop.is_some() =>
+            {
+                // a lane popover open: Esc closes it first
+                self.pr.cond_pop = None;
+                self.pr.lane_menu = None;
+                self.pr.var_pop = None;
+            }
             Key::Escape => {
                 if self.pr.sel.is_empty() {
                     self.pr.focus = false;
@@ -1486,6 +1521,15 @@ impl App {
     pub(super) fn piano_view(&mut self, ui: &mut egui::Ui) {
         let t = th();
         let full = ui.max_rect();
+        // a press outside the roll gives the keys back, also while it is
+        // empty (opened from the view bar, no clip yet): the clip clicked
+        // next keeps Ctrl+C / Ctrl+V for the Timeline
+        if let Some(p) = ui.input(|i| i.pointer.press_origin().filter(|_| i.pointer.any_pressed()))
+        {
+            if !full.contains(p) {
+                self.pr.focus = false;
+            }
+        }
         let Some(target) = self.pr_target() else {
             self.pr.target = None;
             ui.add_space(24.0);
@@ -1650,6 +1694,8 @@ impl App {
                         }
                     }
                 }
+                // Clip Variations: the take tabs
+                self.pr_var_tabs(ui, target, &src);
                 if pr_btn(ui, "ALL", false, true, "select every note (Ctrl+A)").clicked() {
                     self.pr.sel = notes.iter().map(|n| n.id).collect();
                     self.pr.focus = true;
@@ -2085,6 +2131,14 @@ impl App {
                 fill
             };
             notes_p.rect_filled(r, 2.0, fill);
+            if super::prlanes::conditional(n) {
+                // plays on some passes only (step condition / chance)
+                super::prlanes::stripes(&notes_p, r.shrink(1.0), ink.gamma_multiply(0.28));
+            }
+            if let Some(c) = super::prlanes::press_of(&src, n.id) {
+                // a recorded pressure curve: shaded along the note's foot
+                super::prlanes::press_shade(&notes_p, r, n.len, c, ink);
+            }
             notes_p.rect_stroke(
                 r,
                 2.0,
@@ -2119,8 +2173,9 @@ impl App {
         if !self.pr.smoke.is_empty() {
             ui.ctx().request_repaint();
         }
-        // ---- velocity lane
-        for n in &notes {
+        // ---- velocity lane (or Conditions / Chance)
+        let lane_drawn = self.pr_lane_draw(ui, vel_r, &notes, base, &src);
+        for n in notes.iter().filter(|_| !lane_drawn) {
             let x = self.pr.x_of(n.start);
             if x < vel_r.left() - 2.0 || x > vel_r.right() {
                 continue;
@@ -2140,12 +2195,13 @@ impl App {
             );
             p.circle_filled(Pos2::new(x + 1.0, top), 2.5, c);
         }
-        p.text(
-            Pos2::new(full.left() + 4.0, vel_r.center().y),
-            egui::Align2::LEFT_CENTER,
-            "Vel",
-            crate::theme::prop(crate::theme::ts::TINY),
-            t.ink2,
+        self.pr_lane_label(
+            ui,
+            Rect::from_min_max(
+                Pos2::new(full.left(), vel_r.top()),
+                Pos2::new(vel_r.left(), vel_r.bottom()),
+            ),
+            target,
         );
         // playhead: the Timeline's own (the transport while it plays, the
         // play marker when stopped), mapped through the clip's start, trim
@@ -2665,7 +2721,8 @@ impl App {
                 Sense::click_and_drag()
             },
         );
-        if vresp.is_pointer_button_down_on() {
+        if self.pr_lane_input(&vresp, vel_r, &notes, target, &src) {
+        } else if vresp.is_pointer_button_down_on() {
             if let Some(pos) = vresp.interact_pointer_pos() {
                 let v = ((vel_r.bottom() - 2.0 - pos.y) / (vel_r.height() - 4.0)).clamp(0.0, 1.0);
                 let ids: Vec<usize> = notes
@@ -2694,6 +2751,7 @@ impl App {
         // pies, list menu, Generate dialog
         if let Target::Notes { .. } = target {
             self.chord_popups(ui.ctx(), target);
+            self.pr_cond_popover(ui.ctx());
         }
     }
 

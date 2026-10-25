@@ -48,6 +48,8 @@ struct Chan {
     /// glide target frequency (0 = none) and per-sample log step
     glide_to: f32,
     glide_k: f32,
+    /// drum pad Round Robin hit numbers per key
+    hits: crate::drumkit::padrr::HitCount,
 }
 
 #[derive(Clone)]
@@ -299,6 +301,7 @@ impl Chan {
             gate: false,
             glide_to: 0.0,
             glide_k: 0.0,
+            hits: Default::default(),
             instr: usize::MAX,
             note: 0,
             freq: 0.0,
@@ -366,6 +369,10 @@ struct Live {
     age: u32,
     /// the last note's frequency (poly synth glide)
     last_f: f32,
+    /// key pressure 0..1 per raw MIDI key (reset by its note-on)
+    press: [f32; 128],
+    /// drum pad Round Robin hit numbers per key
+    hits: crate::drumkit::padrr::HitCount,
 }
 
 impl Live {
@@ -392,6 +399,8 @@ impl Live {
             bend: 1.0,
             age: 0,
             last_f: 0.0,
+            press: [0.0; 128],
+            hits: Default::default(),
         }
     }
 }
@@ -439,6 +448,9 @@ const PEND_CAP: usize = 512;
 pub struct Engine {
     pub sr: f32,
     pub playing: bool,
+    /// the Fill key is held (Round Robin step conditions): live playback
+    /// treats every loop pass as a fill. Never set in renders or exports.
+    pub fill_live: bool,
     /// play only the current pattern (loop) instead of the order list
     pub loop_pattern: bool,
     pub order_pos: usize,
@@ -573,6 +585,7 @@ impl Engine {
         Self {
             sr,
             playing: false,
+            fill_live: false,
             loop_pattern: false,
             order_pos: 0,
             row: 0,
@@ -660,16 +673,50 @@ impl Engine {
         self.live.v.iter().filter(|v| v.active).count()
     }
 
+    /// Live key pressure: held key `key` (or every held key for
+    /// [`crate::midi::ALL_KEYS`]) presses `val`. The Pressure modulator of
+    /// instrument slot `instr` follows the hardest-pressed held key of it
+    /// (modulators are per instrument, not per voice).
+    fn live_pressure(&mut self, key: u8, val: f32, instr: u8) {
+        let val = val.clamp(0.0, 1.0);
+        let lv = &mut self.live;
+        if key == crate::midi::ALL_KEYS {
+            lv.press = [val; 128];
+        } else {
+            lv.press[key as usize & 127] = val;
+        }
+        let i = (instr as usize).wrapping_sub(1);
+        let mut top: Option<f32> = None;
+        for v in lv.v.iter().filter(|v| v.active && v.down && v.instr == i) {
+            let p = lv.press[v.key as usize & 127];
+            top = Some(top.map_or(p, |t: f32| t.max(p)));
+        }
+        if let Some(f) = self.mods.feed.press.get_mut(i) {
+            // no live voice of it (plugin, StringWave, or the key is up):
+            // the message itself
+            *f = top.unwrap_or(val);
+        }
+    }
+
     /// Apply one live MIDI event (allocation-free).
     pub fn live_event(&mut self, song: &Song, ev: crate::midi::LiveEv) {
         use crate::midi::LiveEv;
         if let LiveEv::On {
-            note, vel, instr, ..
+            key,
+            note,
+            vel,
+            instr,
+            ..
         } = ev
         {
             self.mods
                 .feed
                 .note_on((instr as usize).wrapping_sub(1), note, vel);
+            self.live.press[key as usize & 127] = 0.0;
+        }
+        if let LiveEv::Pressure { key, val, instr } = ev {
+            self.live_pressure(key, val, instr);
+            return;
         }
         if !self.plugins.is_empty() {
             match ev {
@@ -744,6 +791,8 @@ impl Engine {
             LiveEv::Sustain(on) => self.strings.sustain(on),
             LiveEv::Bend(semi) => self.strings.bend(semi),
             LiveEv::AllOff => self.strings.all_off(),
+            // (handled above)
+            LiveEv::Pressure { .. } => return,
             // mod wheel / expression: StringWave only (live, never saved)
             LiveEv::Cc { cc, val } => {
                 let v = val as f32 / 127.0;
@@ -845,6 +894,7 @@ impl Engine {
                         notes::poly_voice(vel, from, lv.age.wrapping_mul(0x85EB_CA6B))
                     } else {
                         let mut sv = SynthVoice::new();
+                        sv.gen.hit = lv.hits.next(n);
                         if let InstrumentKind::Voice(vp) = &inst.kind {
                             if let Some(w) = vp.words.first() {
                                 sv.vox.speak(w);
@@ -896,7 +946,7 @@ impl Engine {
                     v.synth.fenv.release();
                 }
             }
-            LiveEv::Cc { .. } => {}
+            LiveEv::Cc { .. } | LiveEv::Pressure { .. } => {}
         }
     }
 
@@ -1060,9 +1110,12 @@ impl Engine {
                     self.tl.auto_v = vec![f32::NAN; n];
                     self.tl.auto_raw = vec![f32::NAN; n];
                 }
-                let key = crate::timeline::plan_key(song, tl);
+                let fill = self.fill_live && self.playing;
+                let key = crate::timeline::plan_key_live(song, tl, fill);
                 if self.tl.plan.as_ref().is_none_or(|p| p.key != key) {
-                    self.tl.plan = Some(std::sync::Arc::new(crate::timeline::build_plan(song, tl)));
+                    self.tl.plan = Some(std::sync::Arc::new(crate::timeline::build_plan_live(
+                        song, tl, fill,
+                    )));
                     // cursors are re-found against the new segments
                     let row = self.tl.row;
                     self.tl_cursors(row);
@@ -1539,6 +1592,7 @@ impl Engine {
                 .wrapping_mul(1_664_525)
                 .wrapping_add(1_013_904_223);
             c.synth = SynthVoice::seeded(self.seed);
+            c.synth.gen.hit = c.hits.next(cell.note);
             c.pos = 0.0;
             c.active = true;
             // Voice words: each note speaks the next word, 3Exx picks one
@@ -2530,6 +2584,9 @@ impl Engine {
                             t,
                             lc,
                         );
+                        if self.nv.stops != 0 {
+                            self.follow_stops();
+                        }
                     }
                 }
                 if let Some(p) = audio_plan.as_deref() {

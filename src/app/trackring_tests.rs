@@ -53,7 +53,7 @@ pub(super) fn ring_pos(h: &Harness<'static, App>, k: usize) -> Pos2 {
     let (_, _, a0, slots) = h.state().ring_now().expect("a ring");
     let c = h.state().pie.as_ref().unwrap().centre;
     let a = slot_angle(a0, slots.len(), k);
-    c + egui::vec2(a.cos(), a.sin()) * ((R1 + R2) / 2.0)
+    c + egui::vec2(a.cos(), a.sin()) * ((r1() + r2()) / 2.0)
 }
 
 fn info() -> TrackInfo {
@@ -885,7 +885,7 @@ fn rings_fit_at_1366x768() {
     for x in [0.0, 5.0, 300.0, 683.0, 1100.0, 1360.0, 1366.0] {
         for y in [0.0, 5.0, 200.0, 384.0, 600.0, 760.0, 768.0] {
             let c = clamp_centre(Pos2::new(x, y), sc);
-            let disc = Rect::from_center_size(c, egui::Vec2::splat(2.0 * (R2 + 4.0)));
+            let disc = Rect::from_center_size(c, egui::Vec2::splat(2.0 * (r2() + 4.0)));
             assert!(sc.contains_rect(disc), "({x},{y}) -> {c:?}");
         }
     }

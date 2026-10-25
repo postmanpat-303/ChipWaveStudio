@@ -470,6 +470,48 @@ impl App {
         }
     }
 
+    /// key pressure during a take: a point on the pressure curve of the held
+    /// recorded note of `key` (every held one for channel pressure), at the
+    /// time it was heard. No plan rebuild per message: the engine plays the
+    /// live pressure already, and the curve is in the plan from the next
+    /// note on or off.
+    pub(super) fn rec_pressure(&mut self, key: u8, val: f32) {
+        let Some(take) = self.noterec.take.as_ref() else {
+            return;
+        };
+        let idx: Vec<usize> = take
+            .held
+            .iter()
+            .filter(|h| key == crate::midi::ALL_KEYS || h.0 == key)
+            .map(|h| h.1)
+            .collect();
+        if idx.is_empty() {
+            return;
+        }
+        let (clip, data) = (take.clip, take.data);
+        let lat = self.audio.as_ref().map_or(0.0, |a| a.latency_ms() / 1000.0) as f64;
+        let done = self.with(|s| {
+            let e = &s.engine;
+            let now = e.tl_ticks()?;
+            let tps = ROW as f64 / e.row_secs().max(1e-4) as f64;
+            let t = (now - lat * tps).round() as Tick;
+            let t_l = s.song.timeline.as_deref_mut()?;
+            let c = t_l.clips.iter().find(|c| c.id == clip)?;
+            let rel = t - c.start + c.offset;
+            let d = t_l.notes.get_mut(data)?.make_mut();
+            for i in idx {
+                if let Some(n) = d.notes.get_mut(i) {
+                    let r = rel - n.start;
+                    n.press_push(r, val);
+                }
+            }
+            Some(())
+        });
+        if done.is_some() {
+            self.dirty = true;
+        }
+    }
+
     /// key released: the recorded note gets its length
     pub(super) fn rec_note_off(&mut self, key: u8) {
         let Some(take) = self.noterec.take.as_mut() else {

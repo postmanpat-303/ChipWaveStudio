@@ -79,6 +79,9 @@ fn kind_tip(k: ModKind) -> &'static str {
         ModKind::Velocity => "the velocity of this instrument's latest note",
         ModKind::Keytrack => "the pitch of this instrument's latest note (C-4 = centre)",
         ModKind::ModWheel => "the MIDI mod wheel (CC 1)",
+        ModKind::Pressure => {
+            "how hard you press the keys after striking them (MIDI aftertouch), or a recorded pressure curve"
+        }
         ModKind::Macro => "a knob of its own: one move, many parameters",
         ModKind::InstrumentLfo => "this instrument's own synth LFO (its shape, rate and sync)",
     }
@@ -350,7 +353,7 @@ pub(super) fn editor(
                 sl(ui, "Sustain", &mut x.s, 0.0, 1.0, false, "");
                 sl(ui, "Release", &mut x.r, 0.001, 10.0, true, " s");
             }
-            ModKind::Velocity | ModKind::Keytrack | ModKind::ModWheel => {
+            ModKind::Velocity | ModKind::Keytrack | ModKind::ModWheel | ModKind::Pressure => {
                 sl(ui, "Smooth", &mut x.smooth, 0.0, 1.0, false, " s");
             }
             ModKind::Macro => {

@@ -175,6 +175,8 @@ pub(super) struct NoteState {
     pub(super) v: Vec<NoteVoice>,
     /// per track: the next span to start
     cur: [usize; MAX_CHANNELS],
+    /// per track: the next recorded pressure point (`Plan::press`)
+    pcur: [usize; MAX_CHANNELS],
     /// timeline position (ticks) at the last sample
     pub(super) clock: f64,
     age: u32,
@@ -186,6 +188,12 @@ pub(super) struct NoteState {
     /// track; 0 = none, and then nothing below runs)
     pub(super) lmask: u64,
     pub(super) lp: [LPlay; MAX_CHANNELS],
+    /// per track: follow-action decisions since the launch (the k of
+    /// `follow::decide`)
+    pub(super) fk: [u32; MAX_CHANNELS],
+    /// tracks a follow action stopped (the engine stops them after the
+    /// events)
+    pub(super) stops: u64,
     /// rack layers (empty until a song has a rack)
     pub(super) layers: super::layers::Layers,
 }
@@ -195,12 +203,15 @@ impl NoteState {
         Self {
             v: vec![NoteVoice::new(); MAX_CHANNELS * NOTE_VOICES],
             cur: [0; MAX_CHANNELS],
+            pcur: [0; MAX_CHANNELS],
             clock: 0.0,
             age: 0,
             any: false,
             last_f: [0.0; MAX_CHANNELS],
             lmask: 0,
             lp: [LPlay::default(); MAX_CHANNELS],
+            fk: [0; MAX_CHANNELS],
+            stops: 0,
             layers: Default::default(),
         }
     }
@@ -212,6 +223,11 @@ impl NoteState {
                 .notes
                 .get(ch)
                 .map_or(0, |v| v.partition_point(|n| (n.start as f64) < t));
+            // the last pressure step before `t` applies again (a seek into
+            // a pressed note hears its pressure)
+            self.pcur[ch] = plan.press.get(ch).map_or(0, |v| {
+                v.partition_point(|p| (p.at as f64) < t).saturating_sub(1)
+            });
         }
         self.clock = t;
         self.last_f = [0.0; MAX_CHANNELS];
@@ -483,6 +499,7 @@ pub(super) fn note_on(
     v.freq = note_freq(key) * 2f32.powf(n.tune / 12.0);
     v.vol = vol;
     v.synth = SynthVoice::new();
+    v.synth.gen.hit = n.hit;
     if poly.is_some() {
         // velocity goes to the synth (Vel > amp), not the voice volume
         v.vol = inst.volume;
@@ -555,6 +572,27 @@ pub(super) fn note_events(
                 note_on(st, feed, song, chans, plugins, ch, n);
             }
         }
+        // recorded key pressure: the Pressure modulators of the note's
+        // instrument follow it (empty for almost every song)
+        if let Some(ps) = plan.press.get(ch) {
+            while let Some(p) = ps.get(st.pcur[ch]) {
+                if p.at as f64 > t {
+                    break;
+                }
+                st.pcur[ch] += 1;
+                let c = &chans[ch];
+                let idx = if p.instr > 0 {
+                    p.instr as usize - 1
+                } else if c.instr != usize::MAX {
+                    c.instr
+                } else {
+                    0
+                };
+                if let Some(f) = feed.press.get_mut(idx) {
+                    *f = p.val;
+                }
+            }
+        }
     }
 }
 
@@ -572,20 +610,48 @@ fn launch_events(
     lc: f64,
 ) {
     let mut lp = st.lp[ch];
-    let idx = match plan.launch.get(lp.idx) {
-        Some(x) if x.id == lp.id => lp.idx,
-        _ => match plan.launch.iter().position(|x| x.id == lp.id) {
-            Some(i) => i,
-            None => return,
-        },
+    // a follow action may hand over to another clip (or several, when
+    // their loops are short); each hand-over moves the origin forward, so
+    // this ends
+    let (ln, rel) = loop {
+        let idx = match plan.launch.get(lp.idx) {
+            Some(x) if x.id == lp.id => lp.idx,
+            _ => match plan.launch.iter().position(|x| x.id == lp.id) {
+                Some(i) => i,
+                None => return,
+            },
+        };
+        lp.idx = idx;
+        let ln = &plan.launch[idx];
+        let rel = lc - lp.origin as f64;
+        if ln.len <= 0 || rel < 0.0 {
+            st.lp[ch] = lp;
+            return;
+        }
+        let Some(f) = ln.follow else {
+            break (ln, rel);
+        };
+        let span = ln.loop_len * f.after.max(1) as Tick;
+        if span <= 0 || rel < span as f64 {
+            break (ln, rel);
+        }
+        let k = st.fk[ch];
+        st.fk[ch] = k.wrapping_add(1);
+        let (act, draw) = crate::timeline::follow::decide(&f, ln.seed, k);
+        let slots = plan
+            .launch
+            .iter()
+            .filter(|x| x.track == ln.track)
+            .map(|x| (x.id, x.scene));
+        match crate::timeline::follow::target(act, ln.id, ln.scene, slots, draw) {
+            Some(id) => lp = LPlay::new(id, lp.origin + span),
+            None => {
+                st.stops |= 1u64 << ch;
+                st.lp[ch] = lp;
+                return;
+            }
+        }
     };
-    lp.idx = idx;
-    let ln = &plan.launch[idx];
-    let rel = lc - lp.origin as f64;
-    if ln.len <= 0 || rel < 0.0 {
-        st.lp[ch] = lp;
-        return;
-    }
     let pass = (rel / ln.len as f64).floor() as i64;
     if pass != lp.pass {
         lp.pass = pass;
@@ -599,9 +665,12 @@ fn launch_events(
         }
         lp.cur += 1;
         if (n.end as f64) > local {
+            // the hit number keeps counting across the cycle's repeats
+            let per = ln.notes.iter().filter(|x| x.key == n.key).count() as u32;
             let m = NoteSpan {
                 start: base + n.start,
                 end: base + n.end,
+                hit: n.hit.wrapping_add((pass as u32).wrapping_mul(per)),
                 ..*n
             };
             note_on(st, feed, song, chans, plugins, ch, &m);

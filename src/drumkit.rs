@@ -58,6 +58,9 @@ pub struct Pad {
     pub choke: u8,
     pub mute: bool,
     pub solo: bool,
+    /// Round Robin: more sounds and per-hit drift (None = off, not saved)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rr: Option<padrr::PadRr>,
 }
 
 impl Default for Pad {
@@ -75,6 +78,7 @@ impl Default for Pad {
             choke: 0,
             mute: false,
             solo: false,
+            rr: None,
         }
     }
 }
@@ -105,6 +109,9 @@ impl Pad {
         self.choke = self.choke.min(8);
         self.key = self.key.clamp(1, 120);
         self.colour &= 0xFF_FFFF;
+        if let Some(r) = self.rr.as_mut() {
+            r.fix();
+        }
     }
 }
 
@@ -560,6 +567,10 @@ pub fn generate(
 pub fn decay_macro(k: DrumKind) -> Option<usize> {
     k.macros().iter().position(|m| m.name == "Decay")
 }
+
+pub mod padrr;
+#[cfg(test)]
+mod padrr_tests;
 
 #[cfg(test)]
 mod tests;

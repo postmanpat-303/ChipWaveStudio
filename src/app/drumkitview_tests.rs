@@ -62,7 +62,7 @@ fn the_editor_opens_on_a_drum_kit_and_a_step_click_adds_and_removes_a_hit() {
     assert_eq!(n.len(), 1, "{n:?}");
     assert_eq!(n[0].key, key);
     assert_eq!(dk::step_of(n[0].start), k);
-    assert_eq!(n[0].instr, 0, "the track's own kit");
+    assert_eq!(n[0].instr, slot, "stamped with the track's own kit");
     let drum = {
         let s = h.state().shared.clone();
         let g = audio::lock(&s);
@@ -448,7 +448,10 @@ fn kits_on_an_empty_manual_clip_loads_the_kit_and_its_groove() {
     let g = starter_groove("Chip Kit").unwrap();
     let n = notes(&h, id);
     assert_eq!(n.len(), g.hits(), "the starter groove {}", g.name);
-    assert!(n.iter().all(|x| x.instr == 0), "on the track's own kit");
+    assert!(
+        n.iter().all(|x| x.instr == slot),
+        "stamped with the track's own kit"
+    );
     assert!(
         h.state().status.contains("Chip Kit"),
         "{}",
@@ -546,4 +549,41 @@ fn every_kit_has_a_starter_groove() {
         assert_eq!(g.kit, n);
         assert!(g.hits() > 0);
     }
+}
+
+/// the Round Robin tab: off by default, On adds the settings, + Sound adds
+/// sounds that the Next 8 hits row then rotates through; undo steps back
+#[test]
+fn the_round_robin_tab_turns_on_adds_sounds_and_undoes() {
+    let (mut h, slot, _) = kit_harness();
+    let sel = h.state().dk.sel;
+    assert!(
+        h.with_kit(slot, |k| k.pads[sel].rr.is_none()),
+        "off by default"
+    );
+    h.state_mut().dk.tab = 3;
+    frames(&mut h, 2);
+    h.get_by_label("On").click();
+    frames(&mut h, 2);
+    assert!(h.with_kit(slot, |k| k.pads[sel].rr.is_some()));
+    for _ in 0..2 {
+        h.get_by_label("+ Sound").click();
+        frames(&mut h, 2);
+    }
+    assert_eq!(
+        h.with_kit(slot, |k| k.pads[sel].rr.as_ref().unwrap().sounds()),
+        3
+    );
+    assert!(h.query_by_label("Next 8 hits").is_some());
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(
+        h.with_kit(slot, |k| k.pads[sel].rr.as_ref().map(|r| r.sounds())),
+        Some(2),
+        "one undo step per edit"
+    );
+    // off again: nothing left behind
+    h.get_by_label("On").click();
+    frames(&mut h, 2);
+    assert!(h.with_kit(slot, |k| k.pads[sel].rr.is_none()));
 }

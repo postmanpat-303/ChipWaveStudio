@@ -16,6 +16,8 @@ pub(crate) enum PieFor {
     Clip(u32),
     /// a Clip Arranger launcher clip
     Launch(u32),
+    /// empty space on a Timeline track lane: (track, tick clicked)
+    Lane { track: usize, at: tl::Tick },
     /// the Drum Kit step grid: the pattern clip, its notes and a pad lane
     Drum {
         clip: u32,
@@ -60,6 +62,8 @@ pub(crate) fn clip_items(block: bool, tracker: bool) -> Vec<RadialItem> {
     let mut v = vec![
         RadialItem::new("Edit", Some(RIcon::Edit), edit),
         RadialItem::new("Split…", Some(RIcon::Select), vec![]),
+        RadialItem::new("Copy", None, vec![]),
+        RadialItem::new("Cut", None, vec![]),
         RadialItem::new(
             "Duplicate",
             Some(RIcon::Add),
@@ -91,6 +95,49 @@ pub(crate) fn clip_items(block: bool, tracker: bool) -> Vec<RadialItem> {
     v
 }
 
+/// the Variations wedge (note clips): its ring depends on how many takes
+/// the clip has
+pub(crate) fn var_item(n: usize) -> RadialItem {
+    let mut ch = vec![];
+    if n < crate::timeline::rr::MAX_VARS {
+        ch.push("Add variation".to_string());
+    }
+    if n > 1 {
+        ch.push("Order…".to_string());
+    }
+    RadialItem::new("Variations", Some(RIcon::Generate), ch)
+}
+
+/// empty Timeline lane pie wedges: Paste here (greyed "Nothing copied"
+/// while the clip clipboard is empty), new clips, import, marker
+pub(crate) fn lane_items(can_paste: bool, tracker: bool, capture: bool) -> Vec<RadialItem> {
+    let mut v = vec![if can_paste {
+        RadialItem::new(
+            "Paste here",
+            Some(RIcon::Add),
+            vec!["Independent copy".into(), "Linked copy".into()],
+        )
+    } else {
+        RadialItem::new("Nothing copied", Some(RIcon::Add), vec![]).dimmed()
+    }];
+    v.push(RadialItem::new(
+        "New clip",
+        Some(RIcon::Notes),
+        if tracker {
+            vec!["Note clip".into(), "Tracker clip".into()]
+        } else {
+            vec![]
+        },
+    ));
+    if capture {
+        v.push(RadialItem::new("Capture MIDI", Some(RIcon::Play), vec![]));
+    }
+    v.push(RadialItem::new("Import audio…", Some(RIcon::More), vec![]));
+    v.push(RadialItem::new("Add marker", Some(RIcon::Type), vec![]));
+    v.push(RadialItem::new("Select all", Some(RIcon::Select), vec![]));
+    v
+}
+
 /// launcher clip pie wedges
 pub(crate) fn launch_items() -> Vec<RadialItem> {
     vec![
@@ -99,6 +146,7 @@ pub(crate) fn launch_items() -> Vec<RadialItem> {
         RadialItem::new("Edit notes", Some(RIcon::Edit), vec![]),
         RadialItem::new("Instrument", Some(RIcon::Bulb), vec![]),
         RadialItem::new("Variation", Some(RIcon::Add), vec![]),
+        RadialItem::new("Follow action…", Some(RIcon::Play), vec![]),
         RadialItem::new(
             "Place",
             Some(RIcon::Notes),
@@ -164,11 +212,11 @@ impl App {
                 } else {
                     format!("track {:02}", c.track + 1)
                 };
-                (
-                    clip_items(c.block().is_some(), self.tracker_on()),
-                    name,
-                    sub,
-                )
+                let mut items = clip_items(c.block().is_some(), self.tracker_on());
+                if let Some(d) = c.notes() {
+                    items.push(var_item(self.var_count(d)));
+                }
+                (items, name, sub)
             }
             PieFor::Launch(id) => {
                 let Some(c) = self.with(|s| {
@@ -180,10 +228,34 @@ impl App {
                 }) else {
                     return;
                 };
+                let mut items = launch_items();
+                if let Some(d) = self.launch_data(id) {
+                    items.push(var_item(self.var_count(d)));
+                }
+                (items, c.1, format!("launcher · track {:02}", c.0 + 1))
+            }
+            PieFor::Lane { track, at } => {
+                let (name, place) = self.with(|s| {
+                    let t = s.song.timeline.as_deref();
+                    let name = t
+                        .and_then(|t| t.tracks.get(track))
+                        .map(|x| x.name.clone())
+                        .filter(|n| !n.is_empty())
+                        .unwrap_or_else(|| format!("Track {:02}", track + 1));
+                    let p = t.map(|t| t.bar_pos(at));
+                    (
+                        name,
+                        p.map_or(String::new(), |p| format!("bar {}.{}", p.bar, p.beat)),
+                    )
+                });
                 (
-                    launch_items(),
-                    c.1,
-                    format!("launcher · track {:02}", c.0 + 1),
+                    lane_items(
+                        !self.tlv.clipboard.is_empty(),
+                        self.tracker_on(),
+                        !self.noterec.recent.is_empty(),
+                    ),
+                    name,
+                    format!("track {:02} · {place}", track + 1),
                 )
             }
             PieFor::Drum { pad, .. } => (
@@ -205,6 +277,15 @@ impl App {
         if let Some((mut pie, on)) = self.opie.take() {
             match pie.show(ctx) {
                 RadialEv::Cancel => {}
+                RadialEv::Pick(i, _) if pie.items.get(i).is_some_and(|x| x.dim) => {
+                    // greyed: stays open, says why
+                    self.status = "Nothing copied: select clips and press Ctrl+C (or Copy in a clip's pie) first".into();
+                    self.opie = Some((pie, on));
+                }
+                RadialEv::Hover(i, _) if pie.items.get(i).is_some_and(|x| x.dim) => {
+                    self.status = "Nothing copied: select clips and press Ctrl+C (or Copy in a clip's pie) first".into();
+                    self.opie = Some((pie, on));
+                }
                 RadialEv::Pick(i, c) => {
                     let label = pie
                         .items
@@ -212,12 +293,17 @@ impl App {
                         .map(|x| x.label.clone())
                         .unwrap_or_default();
                     let child = c.and_then(|c| pie.items.get(i)?.children.get(c).cloned());
+                    self.opie_at = Some(pie.at);
                     self.obj_pie_pick(on, &label, child.as_deref());
                 }
                 _ => self.opie = Some((pie, on)),
             }
         }
         self.clip_rename_window(ctx);
+        // Clip Variations (from the roll's tabs or the Variations wedge)
+        self.var_popover(ctx);
+        // Follow actions (the launcher clip pie's Follow action wedge)
+        self.follow_popover(ctx);
     }
 
     /// Esc while a pie or the Rename window is open (`modal_key`)
@@ -236,6 +322,7 @@ impl App {
         match on {
             PieFor::Clip(id) => self.clip_pie_pick(id, label, child),
             PieFor::Launch(id) => self.launch_pie_pick(id, label, child),
+            PieFor::Lane { track, at } => self.lane_pie_pick(track, at, label, child),
             PieFor::Drum {
                 clip,
                 data,
@@ -266,6 +353,8 @@ impl App {
                 self.timeline_open_roll();
             }
             ("Split…", _) => self.tl_apply(TlOp::SplitArm),
+            ("Copy", _) => self.tl_copy(false),
+            ("Cut", _) => self.tl_copy(true),
             ("Duplicate", Some("Independent copy")) => {
                 self.snapshot();
                 self.undo_hold += 1;
@@ -295,6 +384,59 @@ impl App {
             ("Notes", Some("Loop around")) => self.tl_apply(TlOp::LoopFromSelection),
             ("Notes", Some(_)) => self.tl_apply(TlOp::UseTrackInstr),
             ("Notes", None) => self.status = "Notes: choose from the outer ring".into(),
+            ("Variations", c) => self.var_pie_pick(Some(id), c),
+            _ => {}
+        }
+    }
+
+    /// note data of launcher clip `id`
+    fn launch_data(&self, id: u32) -> Option<usize> {
+        self.with(|s| s.song.timeline.as_deref()?.launch_clip(id)?.clip.notes())
+    }
+
+    /// the Variations wedge on clip `id` (timeline or launcher)
+    pub(super) fn var_pie_pick(&mut self, id: Option<u32>, child: Option<&str>) {
+        let Some((data, seed)) = id.and_then(|id| {
+            self.with(|s| {
+                let c = s.song.timeline.as_deref()?.any_clip(id)?;
+                Some((c.notes()?, c.seed))
+            })
+        }) else {
+            return;
+        };
+        match child {
+            Some("Order…") => {
+                let at = self.opie_at.unwrap_or(Pos2::new(200.0, 200.0));
+                self.pr.var_pop = Some(super::prvars::VarPop {
+                    data,
+                    clip_seed: seed,
+                    at,
+                });
+            }
+            Some(_) => self.var_add(data, seed),
+            None => self.status = "Variations: choose from the outer ring".into(),
+        }
+    }
+
+    fn lane_pie_pick(&mut self, track: usize, at: tl::Tick, label: &str, child: Option<&str>) {
+        let bar = self.with(|s| {
+            s.song
+                .timeline
+                .as_deref()
+                .map_or(4 * tl::PPQ, |t| t.sig_at(0).bar_ticks())
+        });
+        let on_bar = at / bar * bar;
+        match (label, child) {
+            ("Paste here", c) => self.tl_paste(Some((track, at)), c == Some("Linked copy")),
+            ("New clip", Some("Tracker clip")) => self.tl_apply(TlOp::NewClip(track, on_bar)),
+            ("New clip", _) => self.tl_apply(TlOp::NewNotes(track, on_bar)),
+            ("Capture MIDI", _) => self.tl_apply(TlOp::Capture(track, on_bar)),
+            ("Import audio…", _) => self.audio_op(super::timeline::audioclip::AudioOp::Import(
+                track,
+                tl::snap(at, tl::ROW),
+            )),
+            ("Add marker", _) => self.tl_apply(TlOp::AddMarker(tl::snap(at, tl::ROW))),
+            ("Select all", _) => self.tl_apply(TlOp::SelectAll),
             _ => {}
         }
     }
@@ -320,10 +462,15 @@ impl App {
                 self.show_instrument_editor();
             }
             ("Variation", _) => self.ca_variation(id),
+            ("Follow action…", _) => {
+                let at = self.opie_at.unwrap_or(Pos2::new(200.0, 200.0));
+                self.follow_open(id, at);
+            }
             ("Place", w) => self.launch_place(id, w.unwrap_or("At the play marker")),
             ("Rename", _) => self.start_clip_rename(id),
             ("Colour", c) => self.set_clip_colour(&[id], c),
             ("Delete", _) => self.ca_delete(id),
+            ("Variations", c) => self.var_pie_pick(Some(id), c),
             _ => {}
         }
     }

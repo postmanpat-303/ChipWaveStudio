@@ -39,6 +39,8 @@ pub struct PatPreview {
     voices: Vec<PVoice>,
     age: u32,
     seed: u32,
+    /// drum pad Round Robin hit numbers per key
+    hits: crate::drumkit::padrr::HitCount,
 }
 
 impl PatPreview {
@@ -79,6 +81,7 @@ impl PatPreview {
                 .collect(),
             age: 0,
             seed: 0x51F1_5EED,
+            hits: Default::default(),
         }
     }
 
@@ -170,6 +173,7 @@ impl PatPreview {
             });
         let v = &mut self.voices[slot];
         v.synth = SynthVoice::seeded(self.seed);
+        v.synth.gen.hit = self.hits.next(key);
         v.freq = note_freq(key);
         v.vol = 0.85 * g;
         v.key = key;

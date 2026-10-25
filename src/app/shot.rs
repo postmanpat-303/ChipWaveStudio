@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 123] = [
+pub const VIEWS: [&str; 125] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -124,6 +124,8 @@ pub const VIEWS: [&str; 123] = [
     "drop-ask",
     "cliparranger-launcher",
     "clip-pie",
+    "lane-pie",
+    "clip-pasted",
     "launcher-pie",
     "drum-pie",
     "chooser",
@@ -565,6 +567,8 @@ impl App {
             | "drop-ask"
             | "cliparranger-launcher"
             | "clip-pie"
+            | "lane-pie"
+            | "clip-pasted"
             | "launcher-pie"
             | "drum-pie" => {
                 // a new song: a take on track 01 at bars 1 and 5, a Drum Kit
@@ -723,6 +727,37 @@ impl App {
                 if dkv == "sound" {
                     self.dk.tab = 1;
                 }
+                // "rr": the Round Robin tab, on, with three sounds
+                if dkv == "rr" {
+                    self.dk.tab = 3;
+                    self.dk.rr_sel = 1;
+                    let (inst, sel) = (self.dk.inst, self.dk.sel);
+                    self.with(|s| {
+                        if let Some(crate::model::InstrumentKind::Gen(g)) =
+                            s.song.instruments.get_mut(inst).map(|i| &mut i.kind)
+                        {
+                            if let crate::gen::GenEngine::Drums(k) = &mut g.engine {
+                                if let Some(p) = k.pads.get_mut(sel) {
+                                    let mut r = crate::drumkit::padrr::PadRr {
+                                        variation: 0.4,
+                                        ..Default::default()
+                                    };
+                                    let n = p.drum.kind.models().len().max(1) as u8;
+                                    for m in 1..3u8 {
+                                        let mut d = crate::gen::DrumP::new(
+                                            p.drum.kind,
+                                            (p.drum.model + m) % n,
+                                            &[],
+                                        );
+                                        d.macros = p.drum.macros;
+                                        r.alts.push(d);
+                                    }
+                                    p.rr = Some(r);
+                                }
+                            }
+                        }
+                    });
+                }
                 if dkv == "generate" || dkv == "added" {
                     self.dk.tab = 2;
                     self.dk.gen.result = Some(crate::drumkit::generate(1, 7, 0.7, 1, 0));
@@ -743,6 +778,7 @@ impl App {
                             notes,
                             chords: vec![],
                             drum: Some(crate::drumkit::DrumMeta { swing }),
+                            var: None,
                         };
                         self.dk_add_to_track(self.instr, None, super::drumkitview::AddSrc::New(d));
                     }
@@ -1405,7 +1441,10 @@ impl App {
         if view == "cliparranger-notes" && f == CAPTURE_AT - 6 {
             self.ca_scene(0);
         }
-        if matches!(view.as_str(), "clip-pie" | "launcher-pie" | "drum-pie") {
+        if matches!(
+            view.as_str(),
+            "clip-pie" | "launcher-pie" | "drum-pie" | "lane-pie" | "clip-pasted"
+        ) {
             self.shot_obj_pie(&view, f);
         }
         if view == "cliparranger-launcher" && f == SETUP_AT + 16 {
@@ -1414,6 +1453,46 @@ impl App {
         }
         if view == "cliparranger-launcher" && f == SETUP_AT + 20 {
             self.ca_scene(0);
+        }
+        // CHIPWAVE_SHOT_FOLLOW=1: follow actions on track 01's launcher
+        // clips and the Follow action popover open on the first
+        if view == "cliparranger-launcher"
+            && f == SETUP_AT + 24
+            && std::env::var("CHIPWAVE_SHOT_FOLLOW").is_ok()
+        {
+            use crate::timeline::follow::{Act, Follow};
+            let first = self.with(|s| {
+                let t = s.song.timeline.as_deref_mut()?;
+                let mut first = None;
+                for l in t.launcher.iter_mut().filter(|l| l.clip.track == 0) {
+                    l.follow = Some(if l.scene == 0 {
+                        first = Some(l.clip.id);
+                        Follow {
+                            after: 2,
+                            a: Act::Next,
+                            b: Act::Again,
+                            chance: 75,
+                        }
+                    } else {
+                        Follow {
+                            after: 1,
+                            a: Act::First,
+                            b: Act::Other,
+                            chance: 60,
+                        }
+                    });
+                }
+                first
+            });
+            let r = self
+                .ca
+                .slot_rects
+                .iter()
+                .find(|x| x.0 == 0 && x.1 == 0)
+                .map(|x| x.3);
+            if let (Some(id), Some(r)) = (first, r) {
+                self.follow_open(id, r.right_top() + egui::vec2(8.0, 0.0));
+            }
         }
         if view == "cliparranger" && f == CAPTURE_AT - 6 {
             // queued for the next bar: Pad 1 plays block 04, Kick stops
@@ -1460,9 +1539,22 @@ impl App {
         if view == "timeline" && f == SETUP_AT + 12 {
             self.shot_tracksize();
         }
+        // CHIPWAVE_SHOT_RR=cond | vars | press: Round Robin in the piano roll, on the
+        // first note clip (made from a short riff when the song has none)
+        if view == "timeline-layout" && (f == SETUP_AT + 14 || f == SETUP_AT + 20) {
+            if let Ok(m) = std::env::var("CHIPWAVE_SHOT_RR") {
+                self.shot_rr(&m, f == SETUP_AT + 20);
+            }
+        }
+
+        if f == SETUP_AT + 12 || f == SETUP_AT + 24 {
+            self.shot_dbl_loop(f == SETUP_AT + 12);
+        }
         if f == SETUP_AT + 12 {
             self.shot_keys();
             self.shot_lcd();
+            self.shot_loop();
+            self.shot_kit_after(ctx);
         }
         if view == "split-preview" && f == SETUP_AT + 12 {
             self.shot_split();
@@ -2297,6 +2389,29 @@ impl App {
                     self.set_lower(1);
                 }
             }
+            // CHIPWAVE_SHOT_LINKED=1: the take duplicated twice and named
+            // "Take 1" (three linked clips, 'Take 1 ×3')
+            ("clip-pie", x)
+                if x == SETUP_AT + 16 && std::env::var_os("CHIPWAVE_SHOT_LINKED").is_some() =>
+            {
+                if let Some((id, _)) = clip_on(self, 0) {
+                    self.tlv.sel = Some(id);
+                    self.tlv.sels = vec![id];
+                    for _ in 0..2 {
+                        self.tl_apply(super::timeline::TlOp::Duplicate);
+                    }
+                    self.with(|s| {
+                        if let Some(c) = s
+                            .song
+                            .timeline
+                            .as_deref_mut()
+                            .and_then(|t| t.clips.iter_mut().find(|c| c.id == id))
+                        {
+                            c.name = Some("Take 1".into());
+                        }
+                    });
+                }
+            }
             ("clip-pie", x) if x == SETUP_AT + 20 => {
                 if let (Some((id, _)), Some((_, row))) = (clip_on(self, 0), self.tlv.track_rects(0))
                 {
@@ -2305,6 +2420,25 @@ impl App {
                     let p = Pos2::new(self.tlv.x_of(2 * crate::timeline::PPQ), row.center().y);
                     self.opie_req = Some((PieFor::Clip(id), p));
                 }
+            }
+            // the Verse copied (Ctrl+C); lane-pie: the empty lane on track
+            // 01 after the Hook; clip-pasted: pasted there just before the shot
+            ("lane-pie" | "clip-pasted", x) if x == SETUP_AT + 20 => {
+                if let Some((id, _)) = clip_on(self, 0) {
+                    self.tlv.sel = Some(id);
+                    self.tlv.sels = vec![id];
+                    self.tl_copy(false);
+                }
+            }
+            ("lane-pie", x) if x == SETUP_AT + 24 => {
+                let at = 8 * 4 * crate::timeline::PPQ;
+                if let Some((_, row)) = self.tlv.track_rects(0) {
+                    let p = Pos2::new(self.tlv.x_of(at + crate::timeline::PPQ), row.center().y);
+                    self.opie_req = Some((PieFor::Lane { track: 0, at }, p));
+                }
+            }
+            ("clip-pasted", x) if x == CAPTURE_AT - 3 => {
+                self.tl_paste(Some((0, 8 * 4 * crate::timeline::PPQ)), false);
             }
             ("launcher-pie", x) if x == SETUP_AT + 24 => {
                 let lid = self.with(|s| {
@@ -2338,12 +2472,24 @@ impl App {
             // the outer ring of one wedge, as when the mouse is on it
             (v, x) if x == SETUP_AT + 30 => {
                 let want = match v {
-                    "clip-pie" => "Duplicate",
+                    "clip-pie" => "Copy",
+                    "lane-pie" => "Paste here",
+                    "clip-pasted" => return,
                     "launcher-pie" => "Place",
                     _ => "Fill",
                 };
                 if let Some((pie, _)) = &mut self.opie {
                     pie.hover = pie.items.iter().position(|x| x.label == want);
+                    // and the pointer on it, so it stays lit
+                    if let Some(i) = pie.hover {
+                        let c = pie.wedge_centre(
+                            i,
+                            (super::radial::r_in() + super::radial::r_mid()) / 2.0,
+                        );
+                        if let Some(sh) = &mut self.shot {
+                            sh.script = vec![(x + 2, egui::Event::PointerMoved(c))];
+                        }
+                    }
                 }
             }
             _ => {}
@@ -2529,6 +2675,95 @@ impl App {
             }
         });
         self.lcd.shot_lit = true;
+    }
+
+    /// CHIPWAVE_SHOT_LOOP=on | off: the transport's Loop with bars 1–4 set,
+    /// on or off (the pointer on it: its tip)
+    fn shot_loop(&mut self) {
+        let Ok(m) = std::env::var("CHIPWAVE_SHOT_LOOP") else {
+            return;
+        };
+        self.with(|s| {
+            if let Some(t) = s.song.timeline.as_deref_mut() {
+                t.loop_range = Some((0, 4 * t.sig_at(0).bar_ticks()));
+                t.loop_on = m == "on";
+            }
+        });
+    }
+
+    /// CHIPWAVE_SHOT_DBLLOOP=1: a block clip on screen double-clicked: the
+    /// loop exactly around it (the ruler band, the lane tint, the status)
+    fn shot_dbl_loop(&mut self, first: bool) {
+        if std::env::var("CHIPWAVE_SHOT_DBLLOOP").is_err() {
+            return;
+        }
+        if first {
+            // the song in timeline mode first (the double-click loops there)
+            self.with(|s| {
+                if s.song.timeline.is_none() {
+                    crate::timeline::enter_timeline_mode(&mut s.song);
+                }
+            });
+            return;
+        }
+        let pick = self.tlv.cache.as_ref().and_then(|c| {
+            c.tl.clips
+                .iter()
+                .filter(|cl| cl.start > 0 && cl.block().is_some())
+                .find(|cl| {
+                    self.tlv
+                        .clip_rect(cl.id)
+                        .is_some_and(|r| self.tlv.lanes.contains(r.center()))
+                })
+                .map(|cl| cl.id)
+        });
+        if let Some(id) = pick {
+            self.tlv.sels = vec![id];
+            self.tlv.sel = Some(id);
+            self.tl_apply(super::timeline::TlOp::LoopClip(id));
+        }
+    }
+
+    /// CHIPWAVE_SHOT_KITAFTER=1 (with timeline-new): a StringWave on track
+    /// 01 with a clip, then Drum kit › 909 here on track 02 (its starter
+    /// groove), shown in the step sequencer
+    fn shot_kit_after(&mut self, ctx: &egui::Context) {
+        use super::trackpie::{Builtin, PieAct};
+        use crate::timeline as tl;
+        if std::env::var_os("CHIPWAVE_SHOT_KITAFTER").is_none() {
+            return;
+        }
+        self.enter_timeline();
+        self.view = View::Timeline;
+        if !(self.track_add(0) && self.track_add(1)) {
+            return;
+        }
+        self.track_new_instrument(0, Builtin::StringWave);
+        self.with(|s| {
+            if let Some(id) = tl::new_note_clip(&mut s.song, 0, 0) {
+                let t = s.song.timeline.as_deref_mut().unwrap();
+                if let Some(d) = t.clips.iter().find(|c| c.id == id).and_then(|c| c.notes()) {
+                    t.notes[d].make_mut().notes.push(tl::Note {
+                        key: 49,
+                        len: 4 * tl::ROW,
+                        instr: 1,
+                        ..Default::default()
+                    });
+                }
+            }
+        });
+        self.pie_apply(1, PieAct::DrumKitHere("909 Kit"), ctx);
+        let id = self.with(|s| {
+            let t = s.song.timeline.as_deref()?;
+            t.clips.iter().find(|c| c.track == 1).map(|c| c.id)
+        });
+        if let Some(id) = id {
+            self.tlv.sel = Some(id);
+            self.tlv.sels = vec![id];
+            self.ch = 1;
+            self.instr = self.track_instr(1);
+            self.set_lower(1);
+        }
     }
 
     fn shot_tracksize(&mut self) {
@@ -2896,5 +3131,156 @@ impl App {
             _ => None,
         };
         self.dirty = false;
+    }
+}
+
+impl App {
+    /// CHIPWAVE_SHOT_RR (Round Robin screenshots): "cond" shows the
+    /// Conditions lane with a few conditions and the "Play this note…"
+    /// popover; "vars" three Variations with the Order popover; "press"
+    /// recorded key pressure curves in the Pressure lane
+    fn shot_rr(&mut self, m: &str, open: bool) {
+        use crate::timeline::{self as tl, Cond};
+        const R: tl::Tick = tl::ROW;
+        // the first note clip with some notes, else a new riff after the end
+        let found = self.with(|s| {
+            let t = s.song.timeline.as_deref()?;
+            t.clips.iter().find_map(|c| match c.kind {
+                tl::ClipKind::Notes { data }
+                    if t.notes
+                        .get(data as usize)
+                        .is_some_and(|d| d.notes.len() >= 6) =>
+                {
+                    Some((c.id, data as usize, c.track as usize, c.seed))
+                }
+                _ => None,
+            })
+        });
+        let found = found.or_else(|| {
+            self.with(|s| {
+                let at = s.song.timeline.as_deref().map_or(0, |t| t.end());
+                let at = (at + 4 * tl::PPQ - 1) / (4 * tl::PPQ) * (4 * tl::PPQ);
+                let id = tl::new_note_clip(&mut s.song, 0, at)?;
+                let t = s.song.timeline.as_deref_mut()?;
+                let data = t.notes.len() - 1;
+                let keys = [
+                    60u8, 63, 67, 70, 72, 70, 67, 63, 58, 62, 65, 67, 70, 67, 65, 62,
+                ];
+                t.notes[data].make_mut().notes = keys
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &key)| tl::Note {
+                        start: i as tl::Tick * 4 * R,
+                        len: 3 * R,
+                        key,
+                        vel: 0xB000,
+                        ..Default::default()
+                    })
+                    .collect();
+                let seed = t.clips.iter().find(|c| c.id == id).map_or(0, |c| c.seed);
+                Some((id, data, 0, seed))
+            })
+        });
+        let Some((id, data, track, seed)) = found else {
+            return;
+        };
+        self.ch = track;
+        self.tlv.sel = Some(id);
+        self.set_lower(3);
+        self.pr.focus = true;
+        if open {
+            if m == "press" {
+                self.pr.lane = super::prlanes::Lane::Pressure;
+            } else if m == "cond" {
+                self.pr.lane = super::prlanes::Lane::Cond;
+                let x = self.pr.x_of(4 * R) + 2.0;
+                let y = self.pr.vel_rect.top() - 6.0;
+                self.pr.cond_pop = Some(super::prlanes::CondPop {
+                    target: super::pianoview::Target::Notes {
+                        data,
+                        clip: Some(id),
+                    },
+                    ids: vec![1],
+                    at: Pos2::new(x.max(self.pr.vel_rect.left() + 40.0), y.max(80.0)),
+                });
+            } else {
+                let at = Pos2::new(self.pr.vel_rect.center().x, self.pr.vel_rect.top() - 220.0);
+                self.pr.var_pop = Some(super::prvars::VarPop {
+                    data,
+                    clip_seed: seed,
+                    at: Pos2::new(at.x, at.y.max(80.0)),
+                });
+            }
+            return;
+        }
+        if m == "cond" {
+            self.with(|s| {
+                if let Some(d) = s
+                    .song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|t| t.notes.get_mut(data))
+                {
+                    let d = d.make_mut();
+                    for (i, n) in d.notes.iter_mut().enumerate() {
+                        match i % 8 {
+                            1 => n.cond = Cond::Every { a: 2, b: 4 },
+                            3 => n.chance = 50,
+                            5 => n.cond = Cond::First,
+                            6 => n.cond = Cond::NotFirst,
+                            7 => n.cond = Cond::Fill,
+                            _ => {}
+                        }
+                    }
+                }
+            });
+            self.pr.lane = super::prlanes::Lane::Cond;
+        } else if m == "press" {
+            // swells and fades, like a played keyboard's aftertouch
+            self.with(|s| {
+                if let Some(d) = s
+                    .song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|t| t.notes.get_mut(data))
+                {
+                    let d = d.make_mut();
+                    for (i, n) in d.notes.iter_mut().enumerate().filter(|(i, _)| i % 4 != 3) {
+                        let steps = (n.len / (R / 4)).max(1);
+                        for k in 0..steps {
+                            let x = k as f32 / steps as f32;
+                            let v = match i % 4 {
+                                0 => x,
+                                1 => (std::f32::consts::PI * x).sin(),
+                                _ => 1.0 - 0.7 * x,
+                            };
+                            n.press_push(k * (R / 4), 0.1 + 0.85 * v);
+                        }
+                    }
+                }
+                let crate::audio::Shared { song, engine, .. } = s;
+                engine.ensure_plan(song);
+            });
+            self.pr.lane = super::prlanes::Lane::Pressure;
+            self.pr.sel = vec![1];
+        } else {
+            self.var_add(data, seed);
+            self.var_add(data, seed);
+            // take C: the riff an octave lower in its second half
+            self.with(|s| {
+                if let Some(d) = s
+                    .song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|t| t.notes.get_mut(data))
+                {
+                    let d = d.make_mut();
+                    let half = d.len / 2;
+                    for n in d.notes.iter_mut().filter(|n| n.start >= half) {
+                        n.key = n.key.saturating_sub(12);
+                    }
+                }
+            });
+        }
     }
 }

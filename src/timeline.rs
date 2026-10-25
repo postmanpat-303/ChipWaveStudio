@@ -186,6 +186,10 @@ pub struct Timeline {
 pub struct LaunchClip {
     pub scene: u16,
     pub clip: Clip,
+    /// after N loops, move on by itself (docs/ROUND_ROBIN.md); saved only
+    /// when set
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follow: Option<follow::Follow>,
 }
 
 /// A launcher scene row.
@@ -655,6 +659,19 @@ pub struct NoteClipData {
     /// None, so other note clips save as before.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub drum: Option<crate::drumkit::DrumMeta>,
+    /// Clip Variations (Round Robin): other takes of the notes, one per
+    /// loop pass. Not written when None, so other clips save as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub var: Option<rr::VarSet>,
+}
+
+impl NoteClipData {
+    /// some note has a step condition
+    pub fn has_conds(&self) -> bool {
+        self.var_all()
+            .iter()
+            .any(|v| v.iter().any(|n| n.cond != Cond::Always))
+    }
 }
 
 /// One piano-roll note. Velocity is 16-bit (MIDI 2.0); tracker volumes and
@@ -684,6 +701,10 @@ pub struct Note {
     /// percent chance to play, 0 = always (drawn from the clip's ClipRng)
     #[serde(skip_serializing_if = "is_default")]
     pub chance: u8,
+    /// step condition (Round Robin): which loop passes the note plays on,
+    /// on top of `chance`. Always = not written, so files stay as before.
+    #[serde(skip_serializing_if = "is_default")]
+    pub cond: Cond,
     /// per-note expression lanes (empty for almost every note)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub expr: Vec<NoteExpr>,
@@ -701,7 +722,75 @@ impl Default for Note {
             fx: None,
             tune: 0.0,
             chance: 0,
+            cond: Cond::Always,
             expr: vec![],
+        }
+    }
+}
+
+impl Note {
+    /// the recorded key pressure curve (tick from the note start, 0..1),
+    /// if the note has one
+    pub fn pressure(&self) -> Option<&[(Tick, f32)]> {
+        self.expr
+            .iter()
+            .find(|e| e.kind == ExprKind::Pressure && !e.points.is_empty())
+            .map(|e| e.points.as_slice())
+    }
+    /// the pressure curve, made when missing
+    pub fn pressure_mut(&mut self) -> &mut Vec<(Tick, f32)> {
+        let i = match self.expr.iter().position(|e| e.kind == ExprKind::Pressure) {
+            Some(i) => i,
+            None => {
+                self.expr.push(NoteExpr {
+                    kind: ExprKind::Pressure,
+                    points: vec![],
+                });
+                self.expr.len() - 1
+            }
+        };
+        &mut self.expr[i].points
+    }
+    /// append a pressure point at `rel` ticks from the note start (the
+    /// recorder): a point on the same tick replaces the last one, and an
+    /// unchanged value adds nothing, so a steady press stays one point
+    pub fn press_push(&mut self, rel: Tick, val: f32) {
+        let rel = rel.max(0);
+        let val = val.clamp(0.0, 1.0);
+        let p = self.pressure_mut();
+        match p.last_mut() {
+            Some(l) if l.0 >= rel => l.1 = val,
+            Some(l) if (l.1 - val).abs() < 0.5 / 127.0 => {}
+            _ => p.push((rel, val)),
+        }
+    }
+    /// set the pressure at `rel` ticks from the note start (the piano
+    /// roll's Pressure lane): replaces a point on that tick, else inserts
+    /// one in order
+    pub fn press_set(&mut self, rel: Tick, val: f32) {
+        let rel = rel.max(0);
+        let val = val.clamp(0.0, 1.0);
+        let p = self.pressure_mut();
+        match p.binary_search_by_key(&rel, |q| q.0) {
+            Ok(i) => p[i].1 = val,
+            Err(i) => p.insert(i, (rel, val)),
+        }
+    }
+    /// drop the pressure curve (and the lane when it is empty)
+    pub fn clear_pressure(&mut self) {
+        self.expr.retain(|e| e.kind != ExprKind::Pressure);
+    }
+    /// pressure at `rel` ticks from the note start (steps: each point
+    /// holds until the next), 0 before the first point
+    pub fn pressure_at(&self, rel: Tick) -> f32 {
+        let Some(p) = self.pressure() else {
+            return 0.0;
+        };
+        let i = p.partition_point(|q| q.0 <= rel);
+        if i == 0 {
+            0.0
+        } else {
+            p[i - 1].1
         }
     }
 }
@@ -1509,17 +1598,26 @@ pub fn from_toml(text: &str) -> Result<Timeline, String> {
 }
 
 mod autoplan;
+mod clipboard;
+pub use clipboard::*;
 mod edit;
 mod launcher;
 pub use launcher::*;
 mod migrate;
 pub use migrate::{ensure_master_track, migrate_song_lanes};
+pub mod follow;
 mod plan;
+pub mod rr;
+pub use rr::Cond;
+#[allow(unused_imports)]
+pub use rr::Order;
 pub mod roll;
 pub use autoplan::*;
 pub use edit::*;
 pub use plan::*;
 
+#[cfg(test)]
+mod follow_tests;
 #[cfg(test)]
 mod launcher_tests;
 #[cfg(test)]
@@ -1530,5 +1628,9 @@ mod m3_tests;
 mod m4_tests;
 #[cfg(test)]
 mod m5_tests;
+#[cfg(test)]
+mod press_tests;
+#[cfg(test)]
+mod rr_tests;
 #[cfg(test)]
 mod tests;
