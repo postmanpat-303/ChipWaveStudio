@@ -339,7 +339,7 @@ pub struct Held {
     pub id: u8,
     /// let go, kept by Latch
     pub up: bool,
-    ord: u32,
+    pub ord: u32,
 }
 
 /// one note the stepper plays

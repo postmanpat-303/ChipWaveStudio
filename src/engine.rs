@@ -1126,6 +1126,9 @@ impl Engine {
                             (row as i64 * crate::timeline::ROW) as f64
                         };
                         self.nv.seek(&p, t);
+                        let nch = song.channels.min(MAX_CHANNELS);
+                        let jump = !self.playing;
+                        notes::arp_resync(&mut self.nv, &p, song, &mut self.chans, nch, t, jump);
                         // audio voices of unchanged clips play on; new
                         // clips under the playhead start (not while
                         // `start` sets up: it seeks right after)
@@ -1898,6 +1901,7 @@ impl Engine {
                 self.song_ended = true;
             }
             self.tl.row = next;
+            self.arp_cap();
             if jump {
                 self.tl_cursors(next);
                 self.notes_jump(song, next, false);
