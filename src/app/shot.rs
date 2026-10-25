@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 123] = [
+pub const VIEWS: [&str; 125] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -124,6 +124,8 @@ pub const VIEWS: [&str; 123] = [
     "drop-ask",
     "cliparranger-launcher",
     "clip-pie",
+    "lane-pie",
+    "clip-pasted",
     "launcher-pie",
     "drum-pie",
     "chooser",
@@ -565,6 +567,8 @@ impl App {
             | "drop-ask"
             | "cliparranger-launcher"
             | "clip-pie"
+            | "lane-pie"
+            | "clip-pasted"
             | "launcher-pie"
             | "drum-pie" => {
                 // a new song: a take on track 01 at bars 1 and 5, a Drum Kit
@@ -1405,7 +1409,10 @@ impl App {
         if view == "cliparranger-notes" && f == CAPTURE_AT - 6 {
             self.ca_scene(0);
         }
-        if matches!(view.as_str(), "clip-pie" | "launcher-pie" | "drum-pie") {
+        if matches!(
+            view.as_str(),
+            "clip-pie" | "launcher-pie" | "drum-pie" | "lane-pie" | "clip-pasted"
+        ) {
             self.shot_obj_pie(&view, f);
         }
         if view == "cliparranger-launcher" && f == SETUP_AT + 16 {
@@ -2306,6 +2313,25 @@ impl App {
                     self.opie_req = Some((PieFor::Clip(id), p));
                 }
             }
+            // the Verse copied (Ctrl+C); lane-pie: the empty lane on track
+            // 01 after the Hook; clip-pasted: pasted there just before the shot
+            ("lane-pie" | "clip-pasted", x) if x == SETUP_AT + 20 => {
+                if let Some((id, _)) = clip_on(self, 0) {
+                    self.tlv.sel = Some(id);
+                    self.tlv.sels = vec![id];
+                    self.tl_copy(false);
+                }
+            }
+            ("lane-pie", x) if x == SETUP_AT + 24 => {
+                let at = 8 * 4 * crate::timeline::PPQ;
+                if let Some((_, row)) = self.tlv.track_rects(0) {
+                    let p = Pos2::new(self.tlv.x_of(at + crate::timeline::PPQ), row.center().y);
+                    self.opie_req = Some((PieFor::Lane { track: 0, at }, p));
+                }
+            }
+            ("clip-pasted", x) if x == CAPTURE_AT - 3 => {
+                self.tl_paste(Some((0, 8 * 4 * crate::timeline::PPQ)), false);
+            }
             ("launcher-pie", x) if x == SETUP_AT + 24 => {
                 let lid = self.with(|s| {
                     let t = s.song.timeline.as_deref()?;
@@ -2338,12 +2364,22 @@ impl App {
             // the outer ring of one wedge, as when the mouse is on it
             (v, x) if x == SETUP_AT + 30 => {
                 let want = match v {
-                    "clip-pie" => "Duplicate",
+                    "clip-pie" => "Copy",
+                    "lane-pie" => "Paste here",
+                    "clip-pasted" => return,
                     "launcher-pie" => "Place",
                     _ => "Fill",
                 };
                 if let Some((pie, _)) = &mut self.opie {
                     pie.hover = pie.items.iter().position(|x| x.label == want);
+                    // and the pointer on it, so it stays lit
+                    if let Some(i) = pie.hover {
+                        let c =
+                            pie.wedge_centre(i, (super::radial::R_IN + super::radial::R_MID) / 2.0);
+                        if let Some(sh) = &mut self.shot {
+                            sh.script = vec![(x + 2, egui::Event::PointerMoved(c))];
+                        }
+                    }
                 }
             }
             _ => {}
