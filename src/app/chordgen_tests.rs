@@ -165,7 +165,7 @@ fn assert_notes_fit(c: &C) {
     );
 }
 
-/// 1. the track pie's Chords… on a melodic track with no clips, the play
+/// Scenario 1: the track pie's Chords… on a melodic track with no clips, the play
 /// marker inside bar 5: Write makes an 8-bar clip of notes there
 #[test]
 fn chords_on_a_melodic_track_write_at_the_play_marker() {
@@ -204,7 +204,7 @@ fn chords_on_a_melodic_track_write_at_the_play_marker() {
     assert_eq!(clips(&h), before);
 }
 
-/// 2. no track selected (the Song / Master track): the timeline's
+/// Scenario 2: no track selected (the Song / Master track): the timeline's
 /// Chords… button, Write adds a new "Chords" track with a synth
 #[test]
 fn chords_with_no_track_selected_make_a_new_track() {
@@ -245,7 +245,7 @@ fn chords_with_no_track_selected_make_a_new_track() {
     assert_eq!(clips(&h), before);
 }
 
-/// 3. a new empty song: the Chords… button still writes chords
+/// Scenario 3: a new empty song: the Chords… button still writes chords
 #[test]
 fn chords_in_an_empty_song() {
     let mut h = empty_song();
@@ -263,7 +263,7 @@ fn chords_in_an_empty_song() {
     assert_eq!(counts(&h), (0, 0, 0));
 }
 
-/// 4. Chords… on a drum track: the chords go on a new track below it
+/// Scenario 4: Chords… on a drum track: the chords go on a new track below it
 /// with a melodic synth, the drums stay as they were
 #[test]
 fn chords_on_a_drum_track_get_a_new_melodic_track() {
@@ -289,7 +289,7 @@ fn chords_on_a_drum_track_get_a_new_melodic_track() {
     assert_eq!(clips(&h), drums);
 }
 
-/// 5. the loop is on over bars 9–12: the clip starts at the loop start
+/// Scenario 5: the loop is on over bars 9–12: the clip starts at the loop start
 /// whatever the play marker says
 #[test]
 fn chords_go_to_the_loop_start() {
@@ -310,7 +310,7 @@ fn chords_go_to_the_loop_start() {
     assert!(status(&h).contains("song bars 9–12"), "{}", status(&h));
 }
 
-/// 6. the track already has a clip in those bars: a new track below it
+/// Scenario 6: the track already has a clip in those bars: a new track below it
 /// takes the chords (a copy of the track's sound), the clip is untouched
 #[test]
 fn chords_over_a_busy_track_go_on_a_new_track() {
@@ -354,7 +354,7 @@ fn chords_over_a_busy_track_go_on_a_new_track() {
     assert_eq!(counts(&h), n0);
 }
 
-/// 7. the roll's Generate on a clip: Write puts notes (not just markers)
+/// Scenario 7: the roll's Generate on a clip: Write puts notes (not just markers)
 /// into that clip, and a 1-bar clip grows to show all 8 bars
 #[test]
 fn chords_into_the_open_clip_write_notes_and_grow_it() {
@@ -401,7 +401,7 @@ fn chords_into_the_open_clip_write_notes_and_grow_it() {
     assert_eq!(clips(&h), before);
 }
 
-/// 8. a trimmed or looped clip grows to show what was written
+/// Scenario 8: a trimmed or looped clip grows to show what was written
 #[test]
 fn show_upto_grows_trimmed_and_looped_clips() {
     let base = tl::Clip {
@@ -442,7 +442,7 @@ fn show_upto_grows_trimmed_and_looped_clips() {
     assert_eq!(c.len, 16 * BAR);
 }
 
-/// 9. the same seed writes the same chords and notes; another seed (or
+/// Scenario 9: the same seed writes the same chords and notes; another seed (or
 /// Reroll) gives another progression
 #[test]
 fn the_same_seed_writes_the_same_notes() {
@@ -465,7 +465,7 @@ fn the_same_seed_writes_the_same_notes() {
     assert!((12..20).map(run).any(|b| b != a), "other seeds differ");
 }
 
-/// 10. the cards' text: the target is named, the song bars shown, no
+/// Scenario 10: the cards' text: the target is named, the song bars shown, no
 /// "Bars bars", and everything fits at 1366 x 768
 #[test]
 fn card_text_names_the_target_and_bars() {
@@ -506,7 +506,7 @@ fn card_text_names_the_target_and_bars() {
     }
 }
 
-/// 11. Melody and Bass from the track pie on a track with no clip: a new
+/// Scenario 11: Melody and Bass from the track pie on a track with no clip: a new
 /// track at the play marker's bar, one undo
 #[test]
 fn melody_and_bass_without_a_clip_make_a_new_track() {
@@ -539,7 +539,7 @@ fn melody_and_bass_without_a_clip_make_a_new_track() {
     }
 }
 
-/// 12. a drum track's Bass from the pie: a new Bass track with a synth
+/// Scenario 12: a drum track's Bass from the pie: a new Bass track with a synth
 #[test]
 fn bass_on_the_drum_track_makes_a_bass_track() {
     let mut h = song3();
@@ -553,7 +553,7 @@ fn bass_on_the_drum_track_makes_a_bass_track() {
     assert!(h.state().gen_sound(3).is_some());
 }
 
-/// 13. Preview plays on a melodic track: the one Write goes to, else the
+/// Scenario 13: Preview plays on a melodic track: the one Write goes to, else the
 /// song's first melodic track (not the selected drum kit), else nothing
 #[test]
 fn preview_plays_on_a_melodic_track() {

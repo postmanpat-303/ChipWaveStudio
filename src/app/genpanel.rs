@@ -580,7 +580,7 @@ impl App {
         let drum = self.with(|s| {
             let tl = s.song.timeline.as_deref()?;
             tl.clips.iter().find(|c| c.id == id)?;
-            Some(tl.notes.get(data as usize)?.drum.is_some())
+            Some(tl.notes.get(data)?.drum.is_some())
         })?;
         (!drum).then_some(t)
     }
