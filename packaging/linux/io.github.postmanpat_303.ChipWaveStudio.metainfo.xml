@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.13.0" date="2026-10-25">
+      <description><p>Live recording: pressing Record opens a REC block at once that grows with the playhead with no length limit, draws notes as you play with a fade-in, and settles into a normal clip on Stop. Quick modulation on every knob: a dot opens a popover with LFO, Envelope, Random, Velocity and Mod wheel, plain-word Speed, Length and Attack sliders, Sync to tempo, a live shape preview and one Movement list per instrument. A tidier instrument header, a backlit mint LCD, and a keyboard icon for computer-keys-to-notes that is on by default without a MIDI keyboard.</p></description>
+    </release>
     <release version="0.2.12.0" date="2026-10-25">
       <description><p>Bigger, resizable and movable Timeline tracks: taller rows by default; drag a track's bottom edge to resize it (double-click resets), Ctrl+wheel over the track headers or Alt+wheel resizes every track; drag a track header up or down, or use the track pie's Move up / Move down, to reorder tracks with their clips, sound and mix; a much stronger selected-track highlight in every theme.</p></description>
     </release>

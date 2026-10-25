@@ -9,6 +9,7 @@ use super::*;
 pub(super) mod gridcanvas;
 pub(super) mod instcard;
 pub(super) mod polyview;
+pub(super) mod quickview;
 pub(super) mod stringsview;
 
 /// lower-panel switch bar height
@@ -46,6 +47,14 @@ pub(super) struct InstUi {
     pub collapse_pending: bool,
     /// the selected modulator (its depth is what Alt-drag edits)
     pub mod_sel: Option<u32>,
+    /// the quick-mod popover ("Modulate <param> with…")
+    pub quick: Option<quickview::Quick>,
+    /// screenshots: open the popover on the knob with this name
+    pub quick_req: Option<String>,
+    /// screenshots: the source that popover starts on
+    pub quick_src: Option<crate::quickmod::Source>,
+    /// screenshots: the preview's dot frozen at this many seconds in
+    pub quick_dot: Option<f64>,
     /// the Grid canvas (cable being dragged, add position)
     grid: gridcanvas::GridUi,
     /// the poly synth editor (section shown, Revert snapshot)
@@ -929,28 +938,38 @@ impl App {
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(4.0);
-                if ui
-                    .button("Full-height view  F11")
-                    .on_hover_text("hide the lower panel; F11 or Ctrl+I bring it back")
-                    .clicked()
+                let rack = cur == 4 || cur == 1;
+                if rack {
+                    let mr = bar_icon(ui, BarIcon::More, "More: save rack…");
+                    egui::Popup::menu(&mr).show(|ui| {
+                        ui.set_min_width(160.0);
+                        let root = self.chains_root();
+                        if ui
+                            .add_enabled(root.is_some(), egui::Button::new("Save rack…"))
+                            .on_hover_text(
+                                "the instrument (or rack) with its effects and every setting, into My Racks",
+                            )
+                            .clicked()
+                        {
+                            if let Some(root) = root {
+                                self.open_save_rack(root);
+                            }
+                            ui.close();
+                        }
+                    });
+                }
+                if bar_icon(
+                    ui,
+                    BarIcon::Full,
+                    "Full-height view (F11): hide the lower panel; F11 or Ctrl+I bring it back",
+                )
+                .clicked()
                 {
                     self.toggle_full_height();
                 }
-                if cur == 4 || cur == 1 {
-                    let root = self.chains_root();
-                    if ui
-                        .add_enabled(root.is_some(), egui::Button::new("Save rack…"))
-                        .on_hover_text(
-                            "the instrument (or rack) with its effects and every setting, into My Racks",
-                        )
-                        .clicked()
-                    {
-                        if let Some(root) = root {
-                            self.open_save_rack(root);
-                        }
-                    }
-                }
-                if cur == 1 || cur == 3 || cur == 4 {
+                // the instrument's own header names it; the Notes view
+                // still says which clip it is editing
+                if cur == 3 {
                     if let Some(txt) = self.lower_breadcrumb() {
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                             ui.add_space(6.0);
@@ -965,6 +984,49 @@ impl App {
             });
         });
     }
+}
+
+#[derive(Clone, Copy)]
+enum BarIcon {
+    /// full-height view (four corners)
+    Full,
+    /// ⋯ more
+    More,
+}
+
+/// a small painted icon button on the lower panel's bar
+fn bar_icon(ui: &mut egui::Ui, ic: BarIcon, tip: &str) -> egui::Response {
+    let t = th();
+    let (r, resp) = ui.allocate_exact_size(egui::vec2(26.0, 22.0), Sense::click());
+    let p = ui.painter();
+    if resp.hovered() {
+        p.rect_filled(r, 4.0, t.ink2.gamma_multiply(0.18));
+    }
+    p.rect_stroke(r, 4.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    let col = if resp.hovered() { t.ink } else { t.ink2 };
+    let c = r.center();
+    match ic {
+        BarIcon::Full => {
+            let (h, l) = (5.5, 3.5);
+            let st = Stroke::new(1.5, col);
+            for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                let k = Pos2::new(c.x + sx * h, c.y + sy * h);
+                p.line_segment([k, Pos2::new(k.x - sx * l, k.y)], st);
+                p.line_segment([k, Pos2::new(k.x, k.y - sy * l)], st);
+            }
+        }
+        BarIcon::More => {
+            for dx in [-5.0, 0.0, 5.0] {
+                p.circle_filled(Pos2::new(c.x + dx, c.y), 1.7, col);
+            }
+        }
+    }
+    let name = match ic {
+        BarIcon::Full => "Full-height view",
+        BarIcon::More => "More",
+    };
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, name));
+    resp.on_hover_text(tip)
 }
 
 /// a two-way segmented toggle (Notes | Rack); the clicked index
@@ -1283,60 +1345,41 @@ impl App {
         }
         ui.horizontal(|ui| {
             ui.add_space(4.0);
+            let moving = !self.quick_rows(&inst, &cx).is_empty();
             for tb in Tab::ALL {
                 if !layout.tab_has(tb) {
                     continue;
                 }
-                let n = layout
-                    .params
-                    .iter()
-                    .filter(|p| p.tab == tb && p.custom().is_none())
-                    .count();
                 let hits = layout
                     .params
                     .iter()
                     .filter(|p| p.tab == tb && matches(&cx.words, p))
                     .count();
-                let mut txt = egui::RichText::new(if n > 0 {
-                    format!("{}  {n}", tb.name())
-                } else {
-                    tb.name().to_string()
-                });
+                let mut txt = egui::RichText::new(tb.name());
                 if hits > 0 {
                     txt = txt.color(t.fx);
                 }
-                if ui.selectable_label(tab == tb, txt).clicked() {
+                let r = ui.selectable_label(tab == tb, txt);
+                if tb == Tab::Modulation && moving {
+                    // something is moving: a dot after the name
+                    let c = Pos2::new(r.rect.right() - 3.0, r.rect.center().y - 4.0);
+                    ui.painter().circle_filled(c, 3.0, th().sage);
+                }
+                let r = if tb == Tab::Modulation && moving {
+                    r.on_hover_text("something on this instrument is moving")
+                } else {
+                    r
+                };
+                if r.clicked() {
                     tab = tb;
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
-                ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(
-                            "drag · Ctrl-drag fine · double-click default · right-click automate / MIDI learn",
-                        )
-                        .small()
-                        .color(t.ink2),
-                    )
-                    .truncate(),
-                );
+                help_button(ui);
             });
         });
         self.ip.tab = tab;
-        // ---- modulators: drag a chip onto a knob ----
-        if super::modview::strip(
-            ui,
-            &mut cx.modm,
-            idx,
-            inst.kind.patch().is_some(),
-            &cx.live,
-            &mut self.ip.mod_sel,
-            &mut cx.mod_out,
-        ) {
-            // a new modulator: show it on the Modulation tab
-            self.ip.tab = Tab::Modulation;
-        }
         // ---- cards ----
         let avail = ui.available_height();
         cx.card_h = (avail - 14.0).max(90.0);
@@ -1355,7 +1398,8 @@ impl App {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 6.0;
                         ui.add_space(2.0);
-                        for c in cards {
+                        // WaveForge's slot pickers: the Movement card shows them
+                        for c in cards.into_iter().filter(|c| c.name != "Mod routes") {
                             self.card_ui(ui, &layout, c, &mut inst, &mut cx);
                         }
                     });
@@ -1546,7 +1590,7 @@ impl App {
         let r = ui.add(
             egui::TextEdit::singleline(&mut self.ip.query)
                 .id(egui::Id::unique("param_search"))
-                .hint_text("Search parameters…  Ctrl+F")
+                .hint_text("Search parameters…")
                 .text_color(t.note)
                 .desired_width(ui.available_width().clamp(90.0, 210.0)),
         );
@@ -1637,7 +1681,7 @@ fn custom_size(c: Custom, card_h: f32) -> (f32, f32) {
         Custom::GridCanvas => (210.0, 40.0),
         Custom::PolyPanel => (210.0, 40.0),
         Custom::Modulators => (300.0, card_h - HEAD_H - 10.0),
-        Custom::Routings => (330.0, card_h - HEAD_H - 10.0),
+        Custom::Movement => (330.0, card_h - HEAD_H - 10.0),
     }
 }
 
@@ -1891,10 +1935,32 @@ impl App {
             .target
             .filter(|t| crate::automation::modulatable(*t))
             .map(|t| t.id());
-        let rings = tid
+        let mut rings = tid
             .as_deref()
             .map(|id| super::modview::rings(&cx.modm, id, self.ip.mod_sel))
             .unwrap_or_default();
+        // the engine's own routes (WaveForge slots, StringWave LFOs, the
+        // synth LFO) as rings too
+        let native: Vec<crate::quickmod::Row> = match (tid.as_ref(), p.target) {
+            (Some(_), Some(tg)) => crate::quickmod::engine(&inst.kind)
+                .map(|e| e.rows(cx.idx))
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
+                .filter(|(_, r)| r.knobs.contains(&tg))
+                .map(|(j, r)| {
+                    rings.push(super::modview::Ring {
+                        route: quickview::NATIVE_BASE + j,
+                        amount: r.amount,
+                        col: quickview::native_colour(j),
+                        selected: false,
+                    });
+                    r
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let mod_dot = tid.as_ref().map(|_| rings.first().map(|r| r.col));
         let live = tid
             .as_deref()
             .map(|id| super::modview::live_pos(&cx.modm, id, n, &cx.live));
@@ -1917,11 +1983,30 @@ impl App {
                 rings: &rings,
                 live,
                 auto_led,
+                mod_dot,
             },
         );
         if let Some(id) = &tid {
             self.knob_modulation(ui, &out, id, cx);
         }
+        if let Some((route, d)) = out.ring_drag.filter(|r| r.0 >= quickview::NATIVE_BASE) {
+            let j = route - quickview::NATIVE_BASE;
+            if let Some(row) = crate::quickmod::engine(&inst.kind)
+                .map(|e| e.rows(cx.idx))
+                .and_then(|v| v.into_iter().nth(j))
+            {
+                crate::quickmod::set_amount(inst, &mut cx.modm, row.id, row.amount + d);
+                cx.changed = true;
+            }
+        }
+        let _ = native;
+        let now = ui.input(|i| i.time);
+        let req = self.ip.quick_req.as_deref() == Some(p.name.as_str());
+        if out.dot_clicked || req {
+            self.ip.quick_req = None;
+            self.quick_open(p, inst, cx, now);
+        }
+        self.quick_popover(ui, &p.key, out.resp.rect, inst, cx);
         if out.changed {
             let mut v = params::from_norm(n, lo, hi, log);
             if step > 0.0 {
@@ -1964,7 +2049,7 @@ impl App {
                     "Modulation routed: drag the dot on the knob's ring to set the depth".into();
             }
         }
-        if let Some((route, d)) = out.ring_drag {
+        if let Some((route, d)) = out.ring_drag.filter(|r| r.0 < quickview::NATIVE_BASE) {
             if let Some(rt) = cx.modm.routes.get_mut(route) {
                 rt.amount = (rt.amount + d).clamp(-1.0, 1.0);
             }
@@ -1998,6 +2083,17 @@ impl App {
             let waiting = self.midi.learn.as_deref() == Some(id.as_str());
             (tg, id, waiting)
         });
+        let is_knob = matches!(p.ctl, Ctl::Knob { .. });
+        let mut quick = false;
+        let mut remove = None;
+        let moving: Vec<crate::quickmod::Row> = match p.target {
+            Some(tg) if is_knob && (r.secondary_clicked() || r.context_menu_opened()) => self
+                .quick_rows(inst, cx)
+                .into_iter()
+                .filter(|row| row.knobs.contains(&tg))
+                .collect(),
+            _ => Vec::new(),
+        };
         r.context_menu(|ui| {
             ui.label(egui::RichText::new(&p.name).strong());
             if let Some(d) = def {
@@ -2028,7 +2124,26 @@ impl App {
                 }
                 ui.separator();
                 self.learn_items(ui, id, *waiting);
-                if crate::automation::modulatable(*tg) {
+                if crate::automation::modulatable(*tg) && is_knob {
+                    ui.separator();
+                    if ui
+                        .button("Modulate with…")
+                        .on_hover_text("an LFO, envelope, random, velocity or the mod wheel (or click the knob's dot)")
+                        .clicked()
+                    {
+                        quick = true;
+                        ui.close();
+                    }
+                    for row in moving.iter() {
+                        if ui
+                            .button(format!("Remove {} ({:+.0} %)", row.source, row.amount * 100.0))
+                            .clicked()
+                        {
+                            remove = Some(row.id);
+                            ui.close();
+                        }
+                    }
+                } else if crate::automation::modulatable(*tg) {
                     ui.separator();
                     super::modview::menu_items(
                         ui,
@@ -2049,6 +2164,19 @@ impl App {
         });
         if learn.as_ref().is_some_and(|l| l.2) {
             super::midiview::ui_ring(&r.ctx, r.rect);
+        }
+        if quick {
+            let now = r.ctx.input(|i| i.time);
+            self.quick_open(p, inst, cx, now);
+        }
+        match remove {
+            Some(crate::quickmod::RowId::Native(n)) => {
+                self.snapshot();
+                crate::quickmod::remove_native(inst, n);
+                cx.changed = true;
+            }
+            Some(crate::quickmod::RowId::Song(k)) => cx.mod_out.remove_route = Some(k),
+            None => {}
         }
     }
 
@@ -2153,10 +2281,23 @@ impl App {
         let sel = self.gen_ui.sel;
         match (k, &mut inst.kind) {
             (Custom::Modulators, _) => {
+                let has_patch = inst.kind.patch().is_some();
                 egui::ScrollArea::vertical()
                     .id_salt(("mod_ed_scroll", idx))
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
+                        // the instrument-wide sources: select one to edit
+                        // it, drag it onto a knob, or add one
+                        super::modview::strip(
+                            ui,
+                            &mut cx.modm,
+                            idx,
+                            has_patch,
+                            &cx.live,
+                            &mut self.ip.mod_sel,
+                            &mut cx.mod_out,
+                        );
+                        ui.separator();
                         super::modview::editor(
                             ui,
                             &mut cx.modm,
@@ -2167,8 +2308,11 @@ impl App {
                         );
                     });
             }
-            (Custom::Routings, _) => {
-                super::modview::routings(ui, &mut cx.modm, idx, &cx.labels, &mut cx.mod_out);
+            (Custom::Movement, _) => {
+                egui::ScrollArea::vertical()
+                    .id_salt(("movement_scroll", idx))
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| self.movement_list(ui, inst, cx, true));
             }
             (Custom::Vowels, InstrumentKind::Voice(v)) => {
                 cx.changed |= super::voiceview::vowels_ui(ui, v);
@@ -2407,6 +2551,7 @@ impl App {
                             rings: &[],
                             live: None,
                             auto_led: self.lane_led(Target::Macro(i, k)),
+                            mod_dot: None,
                         },
                     );
                     if out.changed {
@@ -2544,4 +2689,34 @@ impl App {
                 .find_map(|c| c.viz.as_ref().map(|f| f(inst)))
         })
     }
+}
+
+/// the "?" at the end of the tab row: how the knobs work and the keys
+pub(super) fn help_button(ui: &mut egui::Ui) -> egui::Response {
+    let t = th();
+    let (r, resp) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), Sense::hover());
+    let p = ui.painter();
+    p.circle_stroke(
+        r.center(),
+        8.0,
+        Stroke::new(1.0, if resp.hovered() { t.accent } else { t.ink2 }),
+    );
+    p.text(
+        r.center(),
+        egui::Align2::CENTER_CENTER,
+        "?",
+        crate::theme::prop(crate::theme::ts::SMALL),
+        if resp.hovered() { t.ink } else { t.ink2 },
+    );
+    resp.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::Role::Button, true, "Help: knobs and keys")
+    });
+    resp.on_hover_ui(|ui| {
+        ui.label(egui::RichText::new("Knobs").strong());
+        ui.label("Drag to turn · Ctrl-drag for fine steps");
+        ui.label("Double-click: back to default");
+        ui.label("Right-click: automate, MIDI learn, modulate");
+        ui.label("The dot on a knob: make it move (LFO, envelope…)");
+        ui.label("F11 full-height view · Ctrl+F search");
+    })
 }

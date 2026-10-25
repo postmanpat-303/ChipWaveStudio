@@ -402,6 +402,8 @@ pub struct App {
     pub(crate) noterec: noterec::NoteRec,
     /// musical typing (app/typing.rs; Ctrl+K)
     pub(crate) typing: typing::Typing,
+    /// the toolbar's Keys → Notes button (screenshots hover it)
+    kb_rect: egui::Rect,
     /// "made with a newer ChipWave Studio" message (open refused)
     too_new: Option<String>,
     /// the left Inspector (I; app/inspector.rs)
@@ -504,6 +506,14 @@ fn run_with(open: Option<PathBuf>, shot: Option<(shot::Shot, [f32; 2])>) -> Resu
     let mut app = App::new(shared, audio, audio_err, open, status, session, orphans);
     // the default workspace on start: Timeline on top, piano roll below
     if shot.is_none() {
+        // Keys → Notes: on with no MIDI keyboard, off with one (or as the
+        // user last switched it); the MIDI hub scanned already if it connected
+        let ports = if app.midi.hub.ports.is_empty() {
+            crate::midi::list_ports().unwrap_or_default()
+        } else {
+            app.midi.hub.ports.clone()
+        };
+        app.typing_startup(&ports);
         app.default_layout();
         if app.path.is_none() {
             // nothing opened: the same clean song as File > New
@@ -745,6 +755,7 @@ impl App {
             cl: Default::default(),
             noterec: Default::default(),
             typing: Default::default(),
+            kb_rect: egui::Rect::NOTHING,
             too_new: None,
             insp: Default::default(),
             pie: None,

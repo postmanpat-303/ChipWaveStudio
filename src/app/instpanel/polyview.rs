@@ -369,7 +369,7 @@ impl App {
     ) -> f32 {
         let t = th();
         let title = if s == ROUTES {
-            "Mod routes"
+            "Movement"
         } else {
             secs[s].title
         };
@@ -405,7 +405,7 @@ impl App {
             |ui| {
                 ui.set_clip_rect(inner.intersect(ui.clip_rect()));
                 if s == ROUTES {
-                    self.poly_routes(ui, layout, inst, cx);
+                    self.poly_routes(ui, inst, cx);
                     return;
                 }
                 let sc = &secs[s];
@@ -450,30 +450,13 @@ impl App {
     }
 
     /// the eight routes (two rows of four): source, destination, amount
-    fn poly_routes(
-        &mut self,
-        ui: &mut egui::Ui,
-        layout: &Layout,
-        inst: &mut Instrument,
-        cx: &mut Cx,
-    ) {
-        for half in [0..4, 4..MOD_SLOTS] {
-            ui.horizontal_top(|ui| {
-                for s in half.clone() {
-                    ui.vertical(|ui| {
-                        ui.set_width(CTL_W);
-                        for key in [format!("ps.src{s}"), format!("ps.dst{s}")] {
-                            if let Some(p) = find(layout, &key) {
-                                self.ctl_ui(ui, p, inst, cx);
-                            }
-                        }
-                        if let Some(p) = find(layout, &format!("ps.{}", MOD_AMT + s)) {
-                            self.knob_ui(ui, p, inst, cx);
-                        }
-                    });
-                }
-            });
-        }
+    /// the routes section: the Movement list (the slot pickers stay
+    /// parameters, for search, automation and MIDI learn)
+    fn poly_routes(&mut self, ui: &mut egui::Ui, inst: &mut Instrument, cx: &mut Cx) {
+        egui::ScrollArea::vertical()
+            .id_salt(("poly_movement", cx.idx))
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.movement_list(ui, inst, cx, true));
     }
 }
 

@@ -5,6 +5,44 @@ sources), and you **drag one onto any knob** to make it move that parameter. Eac
 is a **routing** with a bipolar **depth**, drawn as a coloured ring on the knob. This is item
 §5.4 of [DAW_TIMELINE_PLAN.md](DAW_TIMELINE_PLAN.md).
 
+## Quick modulation (0.2.13.0)
+
+The quickest way to make a knob move. Every modulatable knob has a small **dot**; click it
+(or right-click › **Modulate with…**) to open **"Modulate <knob> with…"**:
+
+| Source | Controls |
+|---|---|
+| **LFO** | Shape (song-level LFOs), **Speed**, Amount |
+| **Envelope** | **Length**, **Attack**, Amount |
+| **Random** | **Speed**, **Smooth**, Amount |
+| **Velocity**, **Mod wheel** | Amount only |
+
+- **Speed** is a labelled slider that reads in plain words: "1/16 note", "1/8 note",
+  "1 beat (1/4 note)", "2 beats (1/2 note)", "1 bar", "2 bars", "4 bars", "8 bars". Untick
+  **Sync to tempo** for free speed from 0.02 to 20 Hz ("3.2 Hz"); switching keeps the speed.
+- **Length** is how long the envelope takes to fall to its sustain (ms / s, or beats and bars
+  with Sync to tempo); **Attack** is how long it takes to rise.
+- **Amount** ("+25 %") is how far it moves the knob, as a share of its whole travel, ±.
+- Every slider: drag, **Ctrl+drag** for fine steps, **double-click** to reset; hover for what
+  it does ("How fast it moves", "How long the envelope lasts", "How far it moves the knob").
+- A small **preview** draws the shape (two LFO cycles, the random steps or the envelope), and
+  a dot moves along it at the real speed while the song plays (not with reduced motion).
+
+**Where it lands:** in the engine's own modulation first (WaveForge's eight per-note slots,
+StringWave's two LFOs and mod envelope, the ChipWave synth's LFO), otherwise a song-level
+modulator and routing as described below. Nothing new is written to the song file.
+
+**The Movement list** (one per instrument, replacing the Routings card, the chip row and
+WaveForge's Src / Dst pickers; StringWave has a Movement strip) lists everything that moves,
+such as "LFO 1 sine · 1 beat → Cutoff · +25 %", with its amount and a remove button. Click a
+row, or the knob's dot, to edit it with the same controls. When a song-level LFO drives several
+knobs the popover says so, because its speed and shape are shared.
+
+**Limits:** a synced Length (and StringWave's synced LFO speed) is stored in seconds / Hz at the
+current tempo, so it doesn't follow later tempo changes; the ChipWave synth's LFO syncs up to
+2 bars (slower speeds use a song-level LFO); WaveForge's Envelope uses its own filter envelope
+knobs for its length; the preview dot isn't locked to the song position.
+
 ## 1. Modulators
 
 **+ Modulator** (in the strip above the instrument editor's cards, and in the FX view header)

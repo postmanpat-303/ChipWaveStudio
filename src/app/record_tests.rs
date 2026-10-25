@@ -161,7 +161,8 @@ fn record_takes_notes_at_their_played_time_length_and_velocity() {
     assert_eq!(clips.len(), 1, "one take clip");
     let (c, n) = &clips[0];
     assert_eq!(c.track, 1, "on the selected track");
-    assert_eq!(c.start, 4 * PPQ, "from the bar the take started in");
+    // the live block opened as Record started (before the first note)
+    assert_eq!(c.start, 0, "from the bar Record started in");
     assert_eq!(n.len(), 4);
     let start = t0.round() as tl::Tick - c.start;
     for x in &n[..3] {
@@ -183,6 +184,125 @@ fn record_takes_notes_at_their_played_time_length_and_velocity() {
     h.state_mut().do_undo(false);
     frames(&mut h, 2);
     assert!(note_clips(&h).is_empty(), "one undo removes the whole take");
+}
+
+fn bar() -> tl::Tick {
+    4 * PPQ
+}
+
+/// Record with no count-in on track 1 of a fresh song, the loop off
+fn live_song() -> Harness<'static, App> {
+    let mut h = new_song(1);
+    h.state_mut().extra.set_count_in_bars(0);
+    h.state().with(|s| {
+        if let Some(t) = s.song.timeline.as_deref_mut() {
+            t.loop_on = false;
+        }
+    });
+    frames(&mut h, 2);
+    h
+}
+
+#[test]
+fn live_block_opens_at_record_and_grows_past_any_length_limit() {
+    let mut h = live_song();
+    let undo0 = h.state().hist.len();
+    key(&mut h, Key::R, egui::Modifiers::NONE);
+    frames(&mut h, 2);
+    // the block is there at once, before a note is played
+    let clips = note_clips(&h);
+    assert_eq!(clips.len(), 1, "the live block opens on Record");
+    assert_eq!(clips[0].0.start, 0);
+    assert!(clips[0].1.is_empty());
+    assert!(h.state().noterec_live().is_some());
+    let v = h.state().rec_live_view(tl_tick(&h)).unwrap();
+    assert!(v.live && v.rec == 1.0);
+    play_rows(&mut h, 8);
+    h.state_mut()
+        .midi_note_on(60, 49, 1.0, std::time::Instant::now());
+    play_rows(&mut h, 4);
+    h.state_mut().midi_note_off(60);
+    // 40 bars on: far past the 4-bar default clip and any loop
+    for _ in 0..80 {
+        play_rows(&mut h, 8);
+        frames(&mut h, 1);
+    }
+    let (c, n) = note_clips(&h).remove(0);
+    assert_eq!(n.len(), 1);
+    assert!(c.len >= 40 * bar(), "not capped: {} bars", c.len / bar());
+    assert_eq!(c.len % bar(), 0);
+    // stop half way through a bar: it settles on that bar's end
+    play_rows(&mut h, 8);
+    let reach = tl_tick(&h).unwrap();
+    key(&mut h, Key::R, egui::Modifiers::NONE);
+    frames(&mut h, 2);
+    assert!(h.state().noterec_live().is_none());
+    let (c, _) = note_clips(&h).remove(0);
+    let want = (reach.ceil() as tl::Tick + bar() - 1) / bar() * bar();
+    assert_eq!(c.len, want, "rounded up to the bar end");
+    assert!(c.len > 41 * bar());
+    // one undo step for the whole take
+    assert_eq!(h.state().hist.len(), undo0 + 1);
+    h.state().with(|s| s.engine.stop());
+    h.state_mut().do_undo(false);
+    frames(&mut h, 2);
+    assert!(note_clips(&h).is_empty(), "one undo removes the take");
+}
+
+#[test]
+fn live_block_with_nothing_played_is_dropped() {
+    let mut h = live_song();
+    let undo0 = h.state().hist.len();
+    let next0 = h
+        .state()
+        .with(|s| s.song.timeline.as_deref().unwrap().next_id);
+    key(&mut h, Key::R, egui::Modifiers::NONE);
+    frames(&mut h, 2);
+    for _ in 0..6 {
+        play_rows(&mut h, 8);
+        frames(&mut h, 1);
+    }
+    assert_eq!(note_clips(&h).len(), 1, "open while recording");
+    key(&mut h, Key::R, egui::Modifiers::NONE);
+    frames(&mut h, 2);
+    assert!(note_clips(&h).is_empty(), "no empty clip kept");
+    assert!(
+        h.state().status.contains("nothing was played"),
+        "{}",
+        h.state().status
+    );
+    assert_eq!(h.state().hist.len(), undo0, "no undo step");
+    assert_eq!(
+        h.state()
+            .with(|s| s.song.timeline.as_deref().unwrap().next_id),
+        next0
+    );
+    h.state().with(|s| s.engine.stop());
+}
+
+#[test]
+fn live_block_short_take_settles_to_one_bar_and_fades_with_reduce_motion_off() {
+    let mut h = live_song();
+    h.state_mut().extra.reduce_motion = false;
+    key(&mut h, Key::R, egui::Modifiers::NONE);
+    frames(&mut h, 2);
+    // opening: frozen 0.1 s in, mid fade
+    h.state_mut().noterec.anim_at = Some(0.1);
+    let v = h.state().rec_live_view(tl_tick(&h)).unwrap();
+    assert!(v.fade > 0.2 && v.fade < 1.0, "{}", v.fade);
+    h.state_mut().noterec.anim_at = None;
+    play_rows(&mut h, 2);
+    h.state_mut()
+        .midi_note_on(64, 53, 1.0, std::time::Instant::now());
+    play_rows(&mut h, 2);
+    h.state_mut().midi_note_off(64);
+    key(&mut h, Key::R, egui::Modifiers::NONE);
+    let (c, n) = note_clips(&h).remove(0);
+    assert_eq!((c.start, c.len, n.len()), (0, bar(), 1));
+    // settling into a normal clip
+    let v = h.state().rec_live_view(None).unwrap();
+    assert!(!v.live);
+    h.state().with(|s| s.engine.stop());
 }
 
 #[test]
@@ -404,9 +524,16 @@ fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
     );
     key(&mut h, Key::K, egui::Modifiers::COMMAND);
     assert!(h.state().typing.on, "Ctrl+K: musical typing on");
+    assert_eq!(
+        h.query_all_by_label("Keys → Notes").count(),
+        2,
+        "the toolbar's is an icon button, still named Keys → Notes"
+    );
     assert!(
-        h.query_by_label_contains("Keys → Notes · C4").is_some(),
-        "the toolbar shows it with its octave"
+        super::topbar::keys_tip(true, &h.state().typing_label())
+            .0
+            .contains("C4 · vel 102"),
+        "its hover shows the octave and velocity"
     );
     // S would split the selected clip: now it is a note
     let n0 = h
@@ -467,6 +594,11 @@ fn musical_typing_plays_and_records_and_takes_the_letter_keys() {
     // Ctrl+K again: off, and S splits again
     key(&mut h, Key::K, egui::Modifiers::COMMAND);
     assert!(!h.state().typing.on);
+    assert_eq!(
+        h.state().extra.keys_notes,
+        Some(false),
+        "the choice is kept"
+    );
     assert!(super::typing::typed_note(4, 0) == Some(49));
     assert!(super::typing::typed_note(-2, 0).is_none());
 }
@@ -1032,4 +1164,42 @@ fn piano_roll_playhead_follows_the_timeline_through_the_clip_start_and_loop() {
         "in view: {s} .. {src}"
     );
     h.state().with(|s| s.engine.stop());
+}
+
+/// Keys → Notes at start: on with no MIDI keyboard, off with one, and the
+/// user's saved choice wins either way
+#[test]
+fn keys_to_notes_defaults_from_midi_and_the_saved_choice() {
+    use super::typing::{keys_default, midi_keyboards};
+    let none: Vec<String> = vec![];
+    let through = vec!["Midi Through:Midi Through Port-0 14:0".to_string()];
+    let kb = vec!["Arturia KeyStep 32".to_string()];
+    assert!(keys_default(None, &none), "no MIDI device: on");
+    assert!(keys_default(None, &through), "a loopback is not a keyboard");
+    assert_eq!(midi_keyboards(&through), 0);
+    assert!(!keys_default(None, &kb), "a MIDI keyboard: off");
+    assert!(
+        keys_default(Some(true), &kb),
+        "saved on wins over a keyboard"
+    );
+    assert!(
+        !keys_default(Some(false), &none),
+        "saved off wins with none"
+    );
+    // the app: start-up applies it, a click saves the choice
+    let mut h = new_song(1);
+    h.state_mut().typing_startup(&none);
+    assert!(h.state().typing.on);
+    h.state_mut().typing_startup(&kb);
+    assert!(!h.state().typing.on);
+    h.state_mut().typing_toggle();
+    assert_eq!(h.state().extra.keys_notes, Some(true));
+    h.state_mut().typing_startup(&kb);
+    assert!(
+        h.state().typing.on,
+        "the saved choice wins over the keyboard"
+    );
+    // a saved choice also stops the hot-plug follow
+    frames(&mut h, 2);
+    assert!(h.state().typing.on);
 }

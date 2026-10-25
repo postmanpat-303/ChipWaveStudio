@@ -2,6 +2,30 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.13.0: live recording, quick modulation and a backlit LCD
+
+Released 2026-10-25. Highlights:
+- **Live recording block:** pressing Record opens a REC block on the recording track straight away. It grows with the playhead with no length limit (it stays about two bars ahead, even past the song's end), draws each note as you play it with a short fade-in (about 200 ms), and has a red tint, a red outline, a pulsing edge and a "● REC" label. On Stop it settles into a normal clip whose length is rounded up to the bar. The whole take is one undo step; a take with no notes is dropped with a status message. Loop recording overdubs into the same block in place, and Follow keeps the playhead in view. With Motion set to reduced there is no pulse or fade.
+- **Quick modulation on every knob:** a small dot on each modulatable knob (or right-click › **Modulate with…**) opens a **"Modulate <knob> with…"** popover with **LFO**, **Envelope**, **Random**, **Velocity** and **Mod wheel**. It uses the engine's own modulation where it has some (WaveForge's per-note slots, StringWave's two LFOs and mod envelope, the ChipWave synth's LFO), otherwise a song-level modulator; songs keep their format.
+  - **Speed** (LFO, Random) is a labelled slider in plain words: "1/16 note", "1 beat (1/4 note)", "2 bars" up to "8 bars" with **Sync to tempo**, or 0.02 to 20 Hz free ("3.2 Hz"). Drag it, Ctrl+drag for fine steps, double-click to reset.
+  - **Length** and **Attack** (Envelope) are sliders in ms / s, or beats and bars with Sync to tempo. **Smooth** (Random) glides between steps. **Amount** ("+25 %") is the only control for Velocity and Mod wheel.
+  - A **live preview** draws the shape (two LFO cycles, the random steps or the envelope) with a dot moving at the real speed while the song plays.
+  - Tooltips: Speed "How fast it moves", Length "How long the envelope lasts", Amount "How far it moves the knob".
+  - Clicking a movement edits it with the same controls. One **Movement** list per instrument replaces the Routings card, the modulator chip row and WaveForge's Src / Dst pickers, with rows such as "LFO 1 sine · 1 beat → Cutoff · +25 %". StringWave gets a Movement strip. The engines' own routes show as rings on the knobs.
+- **Tidier instrument header:** no tab counts, a Modulation dot on the tab, the "Synth" tab name, hints in a **?** tooltip, an F11 icon for full view, Save rack in a **⋯** menu, and no duplicate breadcrumb.
+- **Backlit mint LCD:** the top display is now light, backlit glass with Atkinson Mono digits, toggle pills for Loop / Click / Rec / Follow, and DSP and BUF meters. **Mint** is the new default; Cyan, Amber, Green, Red and Ice are now backlight tints (saved choices keep working) and text stays at 4.5:1 contrast.
+- **Keys → Notes keyboard icon:** the toolbar button that lets the computer keyboard play notes is now a keyboard icon, lit while it's on, with octave and velocity in its tooltip. It starts **on when no MIDI keyboard is connected** (system loopbacks don't count) and off when one is; once you switch it yourself, your choice is saved.
+- Old songs save, play and render exactly as in 0.2.12.0 (checked against its renders); the song format is unchanged.
+
+### Known limits
+- A synced envelope **Length** is stored in seconds at the tempo it was set at, so it doesn't follow later tempo changes. StringWave's LFOs only run in Hz, so their synced speed is converted at the current tempo too.
+- The ChipWave synth's own LFO syncs up to 2 bars; slower speeds use a song-level LFO when you add one.
+- On WaveForge the **Envelope** uses its own filter envelope, so the popover shows no Length slider there; its Attack and Decay knobs set the length.
+- The LFO shape can be changed in the popover only for song-level LFOs; engine LFOs keep the shape set on their own card.
+- The preview dot runs at the real speed but isn't locked to the song position.
+- The popover's source buttons can wrap "Mod wheel" onto a second row.
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
+
 ## 0.2.12.0: bigger, resizable and movable tracks
 
 Released 2026-10-25. Highlights:

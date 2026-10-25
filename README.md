@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.12.0-00d0ff" alt="Version 0.2.12.0">
+  <img src="https://img.shields.io/badge/version-0.2.13.0-00d0ff" alt="Version 0.2.13.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.12.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.13.0</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -51,7 +51,28 @@
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.12.0: bigger, resizable and movable tracks
+## New in 0.2.13.0: live recording, quick modulation and a backlit LCD
+
+- **Live recording block**: press Record and a REC block opens at once on the track and grows with the playhead, with no length limit. Notes appear as you play them and fade in; on Stop it becomes a normal clip, rounded to the bar. The take is one undo step, an empty take is dropped, and loop recording overdubs in place.
+- **Quick modulation on every knob**: click the small dot on a knob (or right-click › Modulate with…) and pick **LFO**, **Envelope**, **Random**, **Velocity** or **Mod wheel**. Clear sliders set **Speed** ("1 beat (1/4 note)", "2 bars" or Hz, with **Sync to tempo**), **Length** and **Attack** for envelopes, **Smooth** for Random and **Amount** for all, with a live preview of the shape. One **Movement** list per instrument shows everything that moves ("LFO 1 sine · 1 beat → Cutoff · +25 %").
+- **A tidier instrument header**: no tab counts, a Modulation dot, a "Synth" tab, hints in a **?** tooltip, an F11 icon and Save rack in the **⋯** menu.
+- **Backlit mint LCD**: the top display is now light, backlit glass with Atkinson Mono digits, toggle pills and DSP / BUF meters. Mint is the default; Cyan, Amber, Green, Red and Ice are backlight tints.
+- **Keyboard icon for Keys → Notes**: the computer keyboard plays notes from a lit keyboard icon in the toolbar (hover for octave and velocity). It's on by default when no MIDI keyboard is connected, and your own choice is remembered.
+
+Every song saves, plays and renders exactly as in 0.2.12.0. Known limits and details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/record-live-block.png" alt="Recording on the Timeline: a red-tinted block labelled REC Take 1 grows with the playhead on track 02, with the recorded notes drawn inside it"><br><b>Live recording block</b>: it opens at once and grows as you play.</td>
+    <td width="50%"><img src="docs/screenshots/quickmod-speed-slate.png" alt="The Modulate Resonance with… popover on StringWave with LFO selected: shape buttons, a Speed slider reading 1 beat (1/4 note), Sync to tempo ticked, a sine preview with a moving dot and an Amount of +25 %; the Movement list below"><br><b>Quick modulation</b>: Speed in plain words, with a live preview.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/quickmod-envelope-amiga.png" alt="The same popover in the Amiga theme with Envelope selected: Length 600 ms and Attack 10 ms sliders, Sync to tempo and the envelope's curve"><br><b>Envelope</b>: Length and Attack sliders (Amiga).</td>
+    <td width="50%"><img src="docs/screenshots/lcd-mint-keys.png" alt="The backlit mint LCD toolbar and the lit keyboard icon with its tooltip: Computer keys play notes, C4, velocity 102, on"><br><b>Mint LCD</b> and the <b>Keys → Notes</b> keyboard icon.</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.12.0: bigger, resizable and movable tracks</b></summary>
 
 - **Taller tracks** by default on the Timeline.
 - **Resize a track**: drag the bottom edge of its header (28 to 200 pt, one undo step, saved with the song). **Double-click** the edge to reset it.
@@ -71,6 +92,8 @@ Every song saves, plays and renders exactly as in 0.2.11.0. Known limits and det
     <td width="50%"><img src="docs/screenshots/timeline-selected-amiga.png" alt="The selected track in the Amiga theme with a light outline around its lane"><br><b>Selected track</b> in Amiga.</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.11.0: easier-to-read text, UI scale and Text size</b></summary>
 
@@ -100,7 +123,7 @@ Every song saves, plays and renders exactly as in 0.2.10.0. Known limits and det
 
 - **Generators: Chords | Melody | Bass.** One panel with three tabs and one Write card. The **Melody** tab writes a seeded tune over your chords (rhythm, contour, motif, density, range); the **Bass** tab follows the chord roots in six styles (Root, Octave pump, Walking, Acid, Syncopated, Euclid). Drag the **⠿ GENERATORS** grip to move the panel anywhere.
 - **A big Preview pad**: Preview, Dice and Another one sit in one large rounded pad, and **Write to timeline** gives the new track a copy of your track's instrument, so it sounds like the preview.
-- **LCD toolbar**: tempo, position, time, signature and load on a display in Cyan, Amber, Green, Red, Ice or your own colour, with a compact Master meter that opens the Master panel. Settings › Top display brings back the classic toolbar.
+- **LCD toolbar**: tempo, position, time, signature and load on a display in Cyan, Amber, Green, Red, Ice or your own colour (since 0.2.13.0 a backlit mint display, with those colours as backlight tints), with a compact Master meter that opens the Master panel. Settings › Top display brings back the classic toolbar.
 - **Context-aware pies**: right-click a track and the first ring fits it (drum tracks get kits, patterns and Dice kit; melodic tracks get instruments, Sounds, Chords…, Melody… and Bass…). Right-click under the tracks for a New track pie.
 - **Tracks and the Rack**: Song / Master sits at the bottom, a new empty track has no instrument until you give it one, a new built-in instrument opens as its compact Rack card with a **Drag an effect here** box beside it, and a double-click on a side tab collapses or expands a card.
 - **Clip Arranger**: ▶ becomes ■ on a playing slot to stop it, and the **Arranger** button hides the panel for room.

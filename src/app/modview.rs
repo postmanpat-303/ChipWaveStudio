@@ -97,7 +97,7 @@ pub(super) fn strip(
 ) -> bool {
     let t = th();
     let mut changed = false;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space(4.0);
         ui.label(egui::RichText::new("Modulators").small().color(t.ink2))
             .on_hover_text(
@@ -209,7 +209,7 @@ fn chip(
 }
 
 /// note values for the sync menu: (beats per cycle, name)
-const SYNCS: [(f32, &str); 9] = [
+pub(super) const SYNCS: [(f32, &str); 9] = [
     (0.0, "Free (Hz)"),
     (0.25, "1/16"),
     (0.5, "1/8"),
@@ -250,7 +250,7 @@ pub(super) fn editor(
         ui.add(
             egui::Label::new(
                 egui::RichText::new(
-                    "No modulators yet. + Modulator (above the cards) adds an LFO, envelope, random, velocity, keytrack, mod wheel or macro; drag its chip onto any knob.",
+                    "No instrument-wide sources yet. Click the dot on any knob to add movement; its LFO or envelope then shows here.",
                 )
                 .small()
                 .color(t.ink2),
@@ -425,107 +425,6 @@ pub(super) fn target_label(song: &Song, target: &str) -> String {
         Target::Ret(b, p) => format!("Return {} p{}", if b == 0 { "A" } else { "B" }, p + 1),
         _ => t.param_name().to_string(),
     }
-}
-
-/// a route belongs to an instrument's list: its modulator or its target
-pub(super) fn route_shown(m: &Modulation, r: usize, owner: usize) -> bool {
-    let rt = &m.routes[r];
-    m.find(rt.src).is_some_and(|k| m.mods[k].owner == owner)
-        || crate::model::lane_instrument(&rt.target) == Some(owner)
-}
-
-/// the Routings card: every route of the instrument with its depth
-pub(super) fn routings(
-    ui: &mut egui::Ui,
-    m: &mut Modulation,
-    owner: usize,
-    labels: &[String],
-    out: &mut ModOut,
-) -> bool {
-    let t = th();
-    let mut changed = false;
-    let shown: Vec<usize> = (0..m.routes.len())
-        .filter(|r| route_shown(m, *r, owner))
-        .collect();
-    if shown.is_empty() {
-        ui.add(
-            egui::Label::new(
-                egui::RichText::new(
-                    "No routings. Drag a modulator chip onto a knob (synth, generator, FX) to connect it.",
-                )
-                .small()
-                .color(t.ink2),
-            )
-            .wrap(),
-        );
-        return false;
-    }
-    egui::ScrollArea::vertical()
-        .id_salt(("mod_routes", owner))
-        .auto_shrink([false, true])
-        .show(ui, |ui| {
-            for r in shown {
-                let Some(k) = m.find(m.routes[r].src) else {
-                    continue;
-                };
-                let title = m.title(k);
-                let col = mod_colour(k);
-                let label = labels.get(r).cloned().unwrap_or_default();
-                let row = ui.horizontal(|ui| {
-                    let (rr, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), Sense::hover());
-                    ui.painter().circle_filled(rr.center(), 4.0, col);
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(format!("{title} > {label}")).small(),
-                        )
-                        .truncate(),
-                    )
-                    .on_hover_text(format!("{title} > {label} ({})", m.routes[r].target));
-                });
-                ui.horizontal(|ui| {
-                    ui.add_space(12.0);
-                    let mut pct = m.routes[r].amount * 100.0;
-                    let dv = ui
-                        .add(
-                            egui::DragValue::new(&mut pct)
-                                .range(-100.0..=100.0)
-                                .speed(0.5)
-                                .suffix(" %")
-                                .max_decimals(1),
-                        )
-                        .on_hover_text("depth: how far the modulator moves the parameter (of its whole range, ±)");
-                    if dv.changed() {
-                        m.routes[r].amount = (pct / 100.0).clamp(-1.0, 1.0);
-                        changed = true;
-                    }
-                    if ui
-                        .small_button("×")
-                        .on_hover_text("remove this routing")
-                        .clicked()
-                    {
-                        out.remove_route = Some(r);
-                    }
-                    if ui
-                        .small_button("Lane")
-                        .on_hover_text("add an automation lane for this depth")
-                        .clicked()
-                    {
-                        out.lane = Some(r);
-                    }
-                });
-                row.response.context_menu(|ui| {
-                    if ui.button("Remove routing").clicked() {
-                        out.remove_route = Some(r);
-                        ui.close();
-                    }
-                    if ui.button("Add automation lane (depth)").clicked() {
-                        out.lane = Some(r);
-                        ui.close();
-                    }
-                });
-            }
-        });
-    changed
 }
 
 /// "Modulate with" entries of a parameter's right-click menu: connect one
