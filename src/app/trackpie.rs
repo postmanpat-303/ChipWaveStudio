@@ -373,6 +373,73 @@ pub(crate) fn is_drum_kind(k: &InstrumentKind) -> bool {
     matches!(k, InstrumentKind::Gen(g) if matches!(g.engine, G::Drum(_) | G::Kit(_) | G::Drums(_)))
 }
 
+/// words in a sound's name that make it a drum (one per word, a plural
+/// `s` dropped): "Trance Kick", "Open Hats", "Perc Loop", "909 Kit"
+const DRUM_WORDS: &[&str] = &[
+    "kick",
+    "snare",
+    "hat",
+    "hihat",
+    "clap",
+    "tom",
+    "perc",
+    "percussion",
+    "cymbal",
+    "crash",
+    "rim",
+    "rimshot",
+    "drum",
+    "shaker",
+    "conga",
+    "bongo",
+    "cowbell",
+];
+
+/// a percussive (unpitched) instrument: what gets no Chords…, Melody… or
+/// Bass…, and what a new Chords / Melody / Bass track never copies. A drum
+/// engine (`is_drum_kind`, the Drum Kit), a plugin the Browser files under
+/// Drums, else a drum word in its name, its patch's or its sample's
+/// ("Trance Kick" is a synth patch, but a kick); "808 Kit" / "909 Kit"
+/// are drums, an "808 Bass" is not
+pub(crate) fn is_percussive(i: &crate::model::Instrument) -> bool {
+    if is_drum_kind(&i.kind) || crate::drumkit::kit_of(i).is_some() {
+        return true;
+    }
+    let mut names = vec![i.name.as_str()];
+    match &i.kind {
+        InstrumentKind::Synth(p) => names.push(&p.name),
+        InstrumentKind::Gen(g) => names.push(&g.base.name),
+        InstrumentKind::Voice(v) => names.push(&v.base.name),
+        InstrumentKind::Sample { file, .. } => names.push(file),
+        InstrumentKind::Plugin(p) => {
+            if crate::browser::catalogue::lookup(&p.id, &p.name).is_some_and(|e| {
+                e.category == "Drums" || e.tags.iter().any(|t| *t == "Drums" || *t == "Percussion")
+            }) {
+                return true;
+            }
+            names.push(&p.name);
+        }
+        InstrumentKind::Rack(_) => {}
+    }
+    names.iter().any(|n| name_is_drum(n))
+}
+
+/// a drum word in `name` (see `DRUM_WORDS`), or 808 / 909 with "kit"
+pub(crate) fn name_is_drum(name: &str) -> bool {
+    let low = name.to_lowercase();
+    let words: Vec<&str> = low
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    let kit = words.iter().any(|w| *w == "kit" || *w == "kits");
+    words.iter().any(|w| {
+        let one = w.strip_suffix('s').filter(|x| x.len() > 2).unwrap_or(w);
+        DRUM_WORDS.contains(w)
+            || DRUM_WORDS.contains(&one)
+            || (kit && (w.contains("808") || w.contains("909")))
+    })
+}
+
 /// what the pie needs to know about its track
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct TrackInfo {
@@ -392,6 +459,9 @@ pub(crate) struct TrackInfo {
     pub(crate) solo: bool,
     /// what the track plays: no instrument, drums or a melodic one
     pub(crate) class: TrackClass,
+    /// its sound is percussive (`is_percussive`, e.g. a synth kick):
+    /// no Chords…, Melody… or Bass…
+    pub(crate) percussive: bool,
     /// it plays a Drum Kit (Dice kit)
     pub(crate) kit: bool,
     /// its instrument's presets (Sounds ›), the first `MAX_SOUNDS`
@@ -964,6 +1034,7 @@ impl App {
         let kit = inst
             .as_ref()
             .is_some_and(|i| crate::drumkit::kit_of(i).is_some());
+        let percussive = inst.as_ref().is_some_and(is_percussive);
         let (sounds, sound) = match (&inst, class) {
             (Some(i), TrackClass::Melodic) => {
                 let list = super::instpanel::instcard::preset_list(i);
@@ -1001,6 +1072,7 @@ impl App {
                 mute: mx.is_some_and(|m| m.mute),
                 solo: mx.is_some_and(|m| m.solo),
                 class,
+                percussive,
                 kit,
                 sounds,
                 sound,

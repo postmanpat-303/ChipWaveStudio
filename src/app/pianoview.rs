@@ -642,6 +642,11 @@ impl App {
     /// play several keys at once for `ms` (chords from the chord lane)
     pub(super) fn pr_audition_keys(&mut self, keys: &[u8], ms: u64) {
         let chu = self.pr_channel();
+        self.audition_keys_on(chu, keys, ms);
+    }
+
+    /// as [`Self::pr_audition_keys`], on track `chu`'s instrument
+    pub(super) fn audition_keys_on(&mut self, chu: usize, keys: &[u8], ms: u64) {
         if self.track_needs_instrument(chu) {
             return;
         }
@@ -1574,7 +1579,8 @@ impl App {
             egui::vec2(full.width(), if two_rows { 2.0 * TOOL_H } else { TOOL_H }),
         );
         // the chord lane (note clips, Chords on)
-        let lane_h = if matches!(target, Target::Notes { .. }) && !self.cl.hidden {
+        let pitched = !self.target_percussive(target);
+        let lane_h = if matches!(target, Target::Notes { .. }) && !self.cl.hidden && pitched {
             super::chordlane::LANE_H
         } else {
             0.0
@@ -1778,7 +1784,8 @@ impl App {
                         }
                     }
                 }
-                if let Target::Notes { .. } = target {
+                // (a percussive track's clip: no chords or generators)
+                if let (Target::Notes { .. }, true) = (target, pitched) {
                     let on = !self.cl.hidden;
                     if pr_btn(ui, "Chords", on, true, "show the chord lane above the notes").clicked() {
                         self.cl.hidden = on;

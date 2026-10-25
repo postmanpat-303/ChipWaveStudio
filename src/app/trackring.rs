@@ -291,7 +291,8 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
                         "the Browser, on Drum Kits: the one you pick plays this track",
                     ),
                 ],
-                TrackClass::Melodic => vec![
+                TrackClass::Melodic => {
+                    let mut v = vec![
                     instrument(
                         "Instrument",
                         "another melodic instrument for THIS track (WaveForge, FM-4, Strings … or Browse). Next: pick it",
@@ -313,17 +314,17 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
                     slot(
                         "Chords…",
                         tl(PieAct::Chords),
-                        tl_tip("the chord generator on this track's first pattern (a new one if it has none)"),
+                        tl_tip("the chord generator: Write puts a new chord clip on this track (or a new one) at the loop start, else the play marker"),
                     ),
                     slot(
                         "Melody…",
                         tl(PieAct::Melody),
-                        tl_tip("the melody generator over this track's first pattern's chords (writes a new Melody track or this one)"),
+                        tl_tip("the melody generator over this track's first pattern's chords, if any (writes a new Melody track or that pattern)"),
                     ),
                     slot(
                         "Bass…",
                         tl(PieAct::Bass),
-                        tl_tip("the bass generator over this track's first pattern's chords (writes a new Bass track or this one)"),
+                        tl_tip("the bass generator over this track's first pattern's chords, if any (writes a new Bass track or that pattern)"),
                     ),
                     automation(),
                     slot(
@@ -331,7 +332,14 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
                         Some(Go::Act(PieAct::ChangeInstrument)),
                         "the Browser's Instruments (your Favourites first): the one you pick plays this track",
                     ),
-                ],
+                    ];
+                    // pitched generators only on a pitched sound (a synth
+                    // kick plays no chords)
+                    if i.percussive {
+                        v.retain(|s| !matches!(s.label.as_str(), "Chords…" | "Melody…" | "Bass…"));
+                    }
+                    v
+                }
             };
             v.extend(tail());
             v

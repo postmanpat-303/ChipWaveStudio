@@ -494,62 +494,45 @@ impl App {
         self.status = format!("Track {:02}: {name}", tr + 1);
     }
 
-    /// the track pie's Chords… on a melodic track: its first pattern (a new
-    /// empty 1-bar one when it has none) opens in the piano roll with the
-    /// chord generator on its first bar
+    /// the track pie's Chords… on a melodic track: the Generators panel
+    /// on Chords for this track; Write puts a new clip on it at the loop
+    /// start, else the play marker's bar
     pub(crate) fn track_chords(&mut self, tr: usize) {
-        if self.track_gen(tr) {
-            self.status = format!("Track {:02}: the chord generator", tr + 1);
-        }
+        self.track_gen(tr, super::genpanel::GenTab::Chords);
+        self.status = format!("Track {:02}: the chord generator", tr + 1);
     }
 
     /// the track pie's Melody…: as [`Self::track_chords`], on the
-    /// Generators panel's Melody tab
+    /// Generators panel's Melody tab (over the track's first pattern's
+    /// chords when it has a pattern with chords)
     pub(crate) fn track_melody(&mut self, tr: usize) {
-        if self.track_gen(tr) {
-            let at = self.cl.gen.opts.start_bar as i64 * super::chordlane::BAR;
-            self.gen_open_melody(at);
-            self.status = format!("Track {:02}: the melody generator", tr + 1);
-        }
+        self.track_gen(tr, super::genpanel::GenTab::Melody);
+        self.status = format!("Track {:02}: the melody generator", tr + 1);
     }
 
-    /// the track pie's Bass…: as [`Self::track_chords`], on the
-    /// Generators panel's Bass tab
+    /// the track pie's Bass…: as [`Self::track_melody`], on the Bass tab
     pub(crate) fn track_bass(&mut self, tr: usize) {
-        if self.track_gen(tr) {
-            let at = self.cl.gen.opts.start_bar as i64 * super::chordlane::BAR;
-            self.gen_open_bass(at);
-            self.status = format!("Track {:02}: the bass generator", tr + 1);
-        }
+        self.track_gen(tr, super::genpanel::GenTab::Bass);
+        self.status = format!("Track {:02}: the bass generator", tr + 1);
     }
 
-    /// open the track's first pattern (a new one if it has none) with the
-    /// Generators panel on its Chords tab; false: no pattern
-    fn track_gen(&mut self, tr: usize) -> bool {
-        let (id, at) = match self.track_first_note_clip(tr) {
-            Some(c) => c,
+    /// select track `tr` (its first pattern in the piano roll when it has
+    /// one) and open the Generators panel on `tab` for it. Nothing is
+    /// added until Write.
+    fn track_gen(&mut self, tr: usize, tab: super::genpanel::GenTab) {
+        match self.track_first_note_clip(tr) {
+            Some((id, _)) => self.track_open_pattern(tr, id),
             None => {
-                self.snapshot();
-                self.undo_hold += 1;
-                let r = self.track_add_empty_pattern(tr);
-                self.undo_hold -= 1;
-                let Some((id, _)) = r else {
-                    self.status = "Can't add a pattern there".into();
-                    return false;
-                };
-                let at = self.with(|s| {
-                    s.song
-                        .timeline
-                        .as_deref()
-                        .and_then(|t| t.clips.iter().find(|c| c.id == id))
-                        .map_or(0, |c| c.start)
-                });
-                (id, at)
+                self.tl_select_track(tr, false);
+                self.tlv.sel = None;
+                self.tlv.sels.clear();
+                // the roll below, where Write's new clip shows
+                if self.view == View::Timeline {
+                    self.set_lower(3);
+                }
             }
-        };
-        self.track_open_pattern(tr, id);
-        self.cl_open_gen_at(at);
-        true
+        }
+        self.gen_open_for(Some(tr), tab);
     }
 
     /// the earliest note clip on track `tr`: (id, start)
