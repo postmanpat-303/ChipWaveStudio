@@ -40,6 +40,18 @@ fn clip_setup() -> Harness<'static, App> {
                 return None;
             };
             t.notes[data as usize].make_mut().len = 8 * tl::PPQ;
+            // the chord lane and the generators are for pitched sounds:
+            // track 03 (the demo's Hats, a synth hat, so percussive)
+            // plays a copy of the Arp's synth here
+            let slot = t.tracks.get(2).map_or(0, |k| k.instr as usize);
+            let arp = s
+                .song
+                .instruments
+                .iter()
+                .find(|i| i.name == "Offbeat Arp")
+                .cloned()?;
+            let slot = if slot > 0 { slot } else { 3 };
+            s.song.instruments[slot - 1] = arp;
             let crate::audio::Shared { song, engine, .. } = s;
             engine.ensure_plan(song);
             Some(id)
