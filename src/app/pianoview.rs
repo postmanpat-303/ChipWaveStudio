@@ -642,6 +642,11 @@ impl App {
     /// play several keys at once for `ms` (chords from the chord lane)
     pub(super) fn pr_audition_keys(&mut self, keys: &[u8], ms: u64) {
         let chu = self.pr_channel();
+        self.audition_keys_on(chu, keys, ms);
+    }
+
+    /// as [`Self::pr_audition_keys`], on track `chu`'s instrument
+    pub(super) fn audition_keys_on(&mut self, chu: usize, keys: &[u8], ms: u64) {
         if self.track_needs_instrument(chu) {
             return;
         }

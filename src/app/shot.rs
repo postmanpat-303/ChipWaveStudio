@@ -1082,7 +1082,7 @@ impl App {
                 // CHIPWAVE_SHOT_GEN=chords|melody|bass: the Generators panel
                 // open on that clip
                 if let Ok(g) = std::env::var("CHIPWAVE_SHOT_GEN") {
-                    self.cl_open_gen_at(self.tlv.cue.max(0) as crate::timeline::Tick);
+                    self.cl_open_gen_at(0);
                     self.cl.gen.tab = match g.as_str() {
                         "melody" => super::genpanel::GenTab::Melody,
                         "bass" => super::genpanel::GenTab::Bass,

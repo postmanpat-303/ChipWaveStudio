@@ -32,6 +32,8 @@ mod cafollow;
 mod chains;
 #[cfg(test)]
 mod chains_tests;
+#[cfg(test)]
+mod chordgen_tests;
 mod chordlane;
 mod chordview;
 mod cliparr;
@@ -1199,6 +1201,11 @@ impl eframe::App for App {
         self.instr_delete_dialog(ui.ctx());
         self.block_len_dialog(ui.ctx());
         self.chord_window(ui.ctx());
+        // the Generators panel (over any view: it needs no open clip),
+        // its chord previews and the replace-notes confirm
+        self.cl_tick(ui.ctx());
+        self.gen_panel(ui.ctx());
+        self.cl_confirm_window(ui.ctx());
         self.pr_release(!self.pr.open);
         self.rec_frame();
         if !self.pr.open {

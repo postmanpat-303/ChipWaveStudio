@@ -42,7 +42,15 @@ struct LDrag {
 pub(crate) struct GenDlg {
     pub(crate) open: bool,
     pub(crate) opts: GenOpts,
+    /// Chords into the open clip: write notes (off: chord markers only)
     pub(crate) write: bool,
+    /// where Chords' Write puts them (`super::genpanel::ChordDest`)
+    pub(crate) dest: super::genpanel::ChordDest,
+    /// a new clip's song tick (the loop start, else the play marker's bar)
+    pub(crate) at: Tick,
+    /// the track the panel was opened for (a new clip goes there, or a
+    /// new track goes below it)
+    pub(crate) track: Option<usize>,
     pub(crate) voicing: Voicing,
     pub(crate) octave: u8,
     /// written notes go on top of the clip's notes; off (the default):
@@ -123,12 +131,31 @@ pub(crate) fn replace_plan(
     (gone, out)
 }
 
+/// clip `c` grows so what was written up to data tick `end` is heard: an
+/// untrimmed clip with its data (`old_len` → `new_len`), a trimmed one to
+/// `end`, a looped one's loop to take in `end` (whole bars)
+pub(crate) fn show_upto(c: &mut tl::Clip, end: Tick, old_len: Tick, new_len: Tick) {
+    let need = ((end - c.offset).max(0) + BAR - 1) / BAR * BAR;
+    match c.loop_len {
+        Some(l) if need > l => {
+            c.loop_len = Some(need);
+            c.len = c.len.max(need);
+        }
+        Some(_) => {}
+        None if c.len == old_len && new_len > old_len => c.len = new_len,
+        None => c.len = c.len.max(need),
+    }
+}
+
 impl Default for GenDlg {
     fn default() -> Self {
         Self {
             open: false,
             opts: GenOpts::default(),
-            write: false,
+            write: true,
+            dest: Default::default(),
+            at: 0,
+            track: None,
             voicing: Voicing::Full,
             octave: 4,
             on_top: false,
@@ -282,29 +309,24 @@ impl App {
         }
         let new_len = d.len;
         self.pr_write(t, Source::Notes(d));
-        if new_len > old_len {
-            if let Target::Notes { clip: Some(id), .. } = t {
-                self.with(|s| {
-                    if let Some(c) = s
-                        .song
-                        .timeline
-                        .as_deref_mut()
-                        .and_then(|tl| tl.clips.iter_mut().find(|c| c.id == id))
-                    {
-                        // an untrimmed, unlooped clip grows with its data
-                        if c.loop_len.is_none() && c.len == old_len {
-                            c.len = new_len;
-                        }
-                    }
-                    let crate::audio::Shared { song, engine, .. } = s;
-                    engine.ensure_plan(song);
-                });
-            }
+        if let Target::Notes { clip: Some(id), .. } = t {
+            self.with(|s| {
+                if let Some(c) = s
+                    .song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|tl| tl.clips.iter_mut().find(|c| c.id == id))
+                {
+                    show_upto(c, end, old_len, new_len);
+                }
+                let crate::audio::Shared { song, engine, .. } = s;
+                engine.ensure_plan(song);
+            });
         }
     }
 
     /// notes of `marks` in the dialog's voicing / octave
-    fn cl_notes(&self, marks: &[ChordMark], v: Voicing, octave: u8) -> Vec<tl::Note> {
+    pub(super) fn cl_notes(&self, marks: &[ChordMark], v: Voicing, octave: u8) -> Vec<tl::Note> {
         cg::voice(marks, v, octave)
             .into_iter()
             .map(|(start, len, key)| tl::Note {
@@ -541,6 +563,12 @@ impl App {
 
     /// play chords one after another at the song tempo (max 8)
     pub(super) fn cl_play_seq(&mut self, marks: &[ChordMark]) {
+        self.cl_play_seq_as(marks, Voicing::Full, 4);
+    }
+
+    /// hear the first 8 chords of `marks` as `voicing` from `octave`
+    /// (what Write would put down)
+    pub(super) fn cl_play_seq_as(&mut self, marks: &[ChordMark], voicing: Voicing, octave: u8) {
         let bpm = self.with(|s| s.song.bpm).max(20.0) as f64;
         let spt = 60.0 / (bpm * PPQ as f64);
         let t0 = marks.first().map_or(0, |m| m.start);
@@ -548,7 +576,7 @@ impl App {
             .iter()
             .take(8)
             .map(|m| {
-                let keys = cg::voice(std::slice::from_ref(m), Voicing::Full, 4)
+                let keys = cg::voice(std::slice::from_ref(m), voicing, octave)
                     .into_iter()
                     .map(|x| x.2)
                     .collect();
@@ -574,7 +602,16 @@ impl App {
         let now = t0.elapsed().as_secs_f64();
         while self.cl.preview.first().is_some_and(|p| p.0 <= now) {
             let (_, keys, dur) = self.cl.preview.remove(0);
-            self.pr_audition_keys(&keys, (dur * 1000.0) as u64);
+            let ms = (dur * 1000.0) as u64;
+            if self.cl.gen.open {
+                // the Generators panel: on the track Write goes to (a
+                // melodic one), not a drum kit that happens to be selected
+                if let Some(ch) = self.gen_preview_ch() {
+                    self.audition_keys_on(ch, &keys, ms);
+                }
+            } else {
+                self.pr_audition_keys(&keys, ms);
+            }
         }
         if self.cl.preview.is_empty() {
             self.cl.t0 = None;
@@ -946,7 +983,6 @@ impl App {
 
     /// the pies, the list menu, the edit window and the Generate dialog
     pub(super) fn chord_popups(&mut self, ctx: &egui::Context, t: Target) {
-        self.cl_tick(ctx);
         let key = self.song_key_or_c();
         if let Some((mut pie, on)) = self.cl.pie.take() {
             let ev = pie.show(ctx);
@@ -1117,8 +1153,6 @@ impl App {
             }
         }
         self.cl_edit_window(ctx, t);
-        self.gen_panel(ctx, t);
-        self.cl_confirm_window(ctx);
     }
 
     /// a pie progression at `at` with the dialog's remembered options
@@ -1167,12 +1201,35 @@ impl App {
         }
     }
 
+    /// open the Generators panel from the piano roll (its Generate button,
+    /// the chord lane's pie): Chords go into the open clip from clip tick
+    /// `at`
     fn cl_open_gen(&mut self, style: Option<usize>, at: Tick) {
         let key = self.song_key_or_c();
+        let pos = self.gen_play_pos();
+        let tgt = self.gen_target();
+        let track = tgt
+            .and_then(|t| self.gen_dest(Some(t)).track)
+            .or(Some(self.ch));
+        // the clip's first heard bar at the earliest (a trimmed clip's
+        // hidden head is no place for new chords)
+        let first = match tgt {
+            Some(Target::Notes { clip: Some(id), .. }) => self.with(|s| {
+                s.song
+                    .timeline
+                    .as_deref()
+                    .and_then(|t| t.clips.iter().find(|c| c.id == id))
+                    .map_or(0, |c| (c.offset.max(0) + BAR - 1) / BAR)
+            }),
+            _ => 0,
+        };
         let g = &mut self.cl.gen;
         g.open = true;
+        g.dest = super::genpanel::ChordDest::Clip;
+        g.at = pos;
+        g.track = track;
         g.tab = super::genpanel::GenTab::Chords;
-        g.opts.start_bar = (at / BAR) as u32;
+        g.opts.start_bar = (at / BAR).max(first).max(0) as u32;
         g.opts.root = key.root;
         g.opts.prog = None;
         if let Some(s) = style {
