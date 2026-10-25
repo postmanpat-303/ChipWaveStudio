@@ -16,6 +16,8 @@ mod acceptance_tests;
 mod advedit;
 #[cfg(test)]
 mod advedit_tests;
+#[cfg(test)]
+mod arp_tests;
 mod arpcard;
 mod arranger;
 #[cfg(test)]
@@ -48,8 +50,6 @@ mod devcards;
 mod devices;
 #[cfg(test)]
 mod devices_tests;
-#[cfg(test)]
-mod arp_tests;
 mod dialogs;
 mod dropplan;
 #[cfg(test)]

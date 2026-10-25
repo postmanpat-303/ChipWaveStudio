@@ -120,12 +120,7 @@ impl App {
 
     fn arp_edit(&mut self, idx: usize, f: impl FnOnce(&mut Arp)) {
         self.with(|s| {
-            if let Some(a) = s
-                .song
-                .instruments
-                .get_mut(idx)
-                .and_then(|i| i.arp.as_mut())
-            {
+            if let Some(a) = s.song.instruments.get_mut(idx).and_then(|i| i.arp.as_mut()) {
                 if a.steps.len() < MAX_STEPS {
                     a.steps.resize(MAX_STEPS, Default::default());
                 }
@@ -136,13 +131,22 @@ impl App {
 
     /// the Arp's place in the Rack row: the card, or a slim "+ Arp" strip
     /// (None: this instrument has none, e.g. a Rack's layer)
-    pub(super) fn devices_arp_card(&mut self, ui: &mut egui::Ui, h: f32, idx: usize) -> Option<Rect> {
+    pub(super) fn devices_arp_card(
+        &mut self,
+        ui: &mut egui::Ui,
+        h: f32,
+        idx: usize,
+    ) -> Option<Rect> {
         let (arp, kit) = arp_state(self, idx)?;
         let t = th();
         let Some(a) = arp else {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(SLIM, h), Sense::hover());
             let resp = ui
-                .interact(rect, ui.make_persistent_id(("arp_add", idx)), Sense::click())
+                .interact(
+                    rect,
+                    ui.make_persistent_id(("arp_add", idx)),
+                    Sense::click(),
+                )
                 .on_hover_text(if kit {
                     "Add Note repeat: held pads repeat at a rate, with ratchets"
                 } else {
@@ -150,7 +154,15 @@ impl App {
                 });
             let p = ui.painter_at(rect);
             let hot = resp.hovered();
-            p.rect_filled(rect, 6, if hot { t.cart_top } else { t.cart_top.gamma_multiply(0.6) });
+            p.rect_filled(
+                rect,
+                6,
+                if hot {
+                    t.cart_top
+                } else {
+                    t.cart_top.gamma_multiply(0.6)
+                },
+            );
             p.rect_stroke(
                 rect,
                 6,
@@ -164,12 +176,14 @@ impl App {
                 if hot { t.accent } else { t.ink2 },
             );
             let w = g.size();
-            p.add(egui::epaint::TextShape::new(
-                Pos2::new(rect.center().x - w.y / 2.0, rect.top() + 14.0 + w.x),
-                g,
-                t.ink2,
-            )
-            .with_angle(-std::f32::consts::FRAC_PI_2));
+            p.add(
+                egui::epaint::TextShape::new(
+                    Pos2::new(rect.center().x - w.y / 2.0, rect.top() + 14.0 + w.x),
+                    g,
+                    t.ink2,
+                )
+                .with_angle(-std::f32::consts::FRAC_PI_2),
+            );
             self.dev.arp_card = rect;
             self.dev.arp_rows = [Rect::NOTHING; 7];
             if resp.clicked() {
@@ -217,8 +231,12 @@ impl App {
             t.ink,
             rr.width() - 12.0,
         );
-        ui.interact(rr, ui.make_persistent_id(("arp_words", idx)), Sense::hover())
-            .on_hover_text(&words);
+        ui.interact(
+            rr,
+            ui.make_persistent_id(("arp_words", idx)),
+            Sense::hover(),
+        )
+        .on_hover_text(&words);
         let body = Rect::from_min_max(
             Pos2::new(rect.left() + PAD, rr.bottom() + 4.0),
             Pos2::new(rect.right() - PAD, rect.bottom() - 4.0),
@@ -562,7 +580,11 @@ impl App {
                 p.circle_filled(cr.center(), 1.5, dim(t.ink2));
             }
             if ui
-                .interact(cr, ui.make_persistent_id(("arp_acc", idx, k)), Sense::click())
+                .interact(
+                    cr,
+                    ui.make_persistent_id(("arp_acc", idx, k)),
+                    Sense::click(),
+                )
                 .on_hover_text("accent: louder")
                 .clicked()
                 && used
@@ -589,7 +611,11 @@ impl App {
                 );
             }
             if ui
-                .interact(cr, ui.make_persistent_id(("arp_kind", idx, k)), Sense::click())
+                .interact(
+                    cr,
+                    ui.make_persistent_id(("arp_kind", idx, k)),
+                    Sense::click(),
+                )
                 .on_hover_text("click: play → rest → tie (holds the note before on)")
                 .clicked()
                 && used
@@ -611,8 +637,14 @@ impl App {
                 dim(if s.ratchet > 1 { t.ink } else { t.ink2 }),
             );
             let resp = ui
-                .interact(cr, ui.make_persistent_id(("arp_rat", idx, k)), Sense::click())
-                .on_hover_text("ratchet: 1-4 quick hits in the step (click; right-click goes back)");
+                .interact(
+                    cr,
+                    ui.make_persistent_id(("arp_rat", idx, k)),
+                    Sense::click(),
+                )
+                .on_hover_text(
+                    "ratchet: 1-4 quick hits in the step (click; right-click goes back)",
+                );
             if used && resp.clicked() {
                 edits.push((k, StepEdit::Ratchet(1)));
             }
@@ -622,7 +654,15 @@ impl App {
             // transpose (melodic only)
             if !kit {
                 let cr = col(c, rows[6]);
-                p.rect_filled(cr, 2, if s.transpose != 0 { t.acc_deep } else { t.crt_top });
+                p.rect_filled(
+                    cr,
+                    2,
+                    if s.transpose != 0 {
+                        t.acc_deep
+                    } else {
+                        t.crt_top
+                    },
+                );
                 let txt = if s.transpose > 0 {
                     format!("+{}", s.transpose)
                 } else {

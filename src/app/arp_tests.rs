@@ -86,7 +86,9 @@ fn bake_arp_writes_the_steps_as_notes_and_switches_the_arp_off() {
     {
         let t = song.timeline.as_deref_mut().unwrap();
         let c = t.clips.iter().find(|c| c.id == id).unwrap();
-        let tl::ClipKind::Notes { data } = c.kind else { unreachable!() };
+        let tl::ClipKind::Notes { data } = c.kind else {
+            unreachable!()
+        };
         let d = t.notes[data as usize].make_mut();
         for key in [60u8, 64, 67] {
             d.notes.push(tl::Note {
@@ -113,10 +115,15 @@ fn bake_arp_writes_the_steps_as_notes_and_switches_the_arp_off() {
         let g = audio::lock(&s);
         let t = g.song.timeline.as_deref().unwrap();
         let c = t.clips.iter().find(|c| c.id == id).unwrap();
-        let tl::ClipKind::Notes { data } = c.kind else { unreachable!() };
+        let tl::ClipKind::Notes { data } = c.kind else {
+            unreachable!()
+        };
         t.notes[data as usize].notes.len()
     };
-    assert!(arp(&h, slot as usize).is_none(), "the Arp is off after a bake");
+    assert!(
+        arp(&h, slot as usize).is_none(),
+        "the Arp is off after a bake"
+    );
     assert!(notes(&h) > 0);
     // a bar of 1/16 steps over the chord: 16 notes, not the 3 held
     assert_eq!(notes(&h), 16, "the clip now holds the Arp's steps");
@@ -170,7 +177,9 @@ fn write_the_arp_demo_song() {
         let t = song.timeline.as_deref_mut().unwrap();
         let c = t.clips.iter_mut().find(|c| c.id == id).unwrap();
         c.len = 8 * bar;
-        let tl::ClipKind::Notes { data } = c.kind else { unreachable!() };
+        let tl::ClipKind::Notes { data } = c.kind else {
+            unreachable!()
+        };
         let d = t.notes[data as usize].make_mut();
         d.len = 8 * bar;
         for (k, chord) in [[57u8, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]]

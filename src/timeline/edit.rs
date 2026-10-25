@@ -828,7 +828,11 @@ pub fn arp_slots(song: &Song, id: u32) -> Vec<u8> {
     };
     let own = assigned_instr(song, tl.clips[i].track as usize);
     let mut out: Vec<u8> = vec![];
-    for n in tl.notes.get(data as usize).map_or(&[][..], |d| &d.notes[..]) {
+    for n in tl
+        .notes
+        .get(data as usize)
+        .map_or(&[][..], |d| &d.notes[..])
+    {
         let k = if n.instr > 0 { n.instr } else { own };
         let has = song
             .instruments
@@ -892,11 +896,7 @@ pub fn bake_arp(song: &mut Song, slot: u8) -> Option<(crate::arp::Arp, usize, us
                 )
             })
             .collect();
-        let instr = d
-            .notes
-            .iter()
-            .find(|n| plays(n))
-            .map_or(0, |n| n.instr);
+        let instr = d.notes.iter().find(|n| plays(n)).map_or(0, |n| n.instr);
         let until = d.len.max(1) as f64;
         let baked = crate::arp::bake(&a, kit, origin, &held, until);
         d.notes.retain(|n| !plays(n));

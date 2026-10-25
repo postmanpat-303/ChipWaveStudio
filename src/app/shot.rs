@@ -727,7 +727,10 @@ impl App {
             // Note repeat on a Drum Kit track (Ratchet fill), playing
             "devices-repeat" => {
                 self.enter_timeline();
-                if let Some(i) = crate::drumpat::PATTERNS.iter().position(|p| p.name == "Full-on Drive") {
+                if let Some(i) = crate::drumpat::PATTERNS
+                    .iter()
+                    .position(|p| p.name == "Full-on Drive")
+                {
                     self.pat_place_now(i, u8::MAX, 0);
                 }
                 self.enter_timeline();
