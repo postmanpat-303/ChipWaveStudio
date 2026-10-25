@@ -2545,6 +2545,9 @@ impl Engine {
                             t,
                             lc,
                         );
+                        if self.nv.stops != 0 {
+                            self.follow_stops();
+                        }
                     }
                 }
                 if let Some(p) = audio_plan.as_deref() {

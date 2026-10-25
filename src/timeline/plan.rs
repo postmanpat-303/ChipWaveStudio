@@ -141,6 +141,12 @@ pub struct LaunchNotes {
     pub track: usize,
     pub len: Tick,
     pub notes: Vec<NoteSpan>,
+    /// its scene row, seed, one loop of the clip (the cycle above may hold
+    /// several) and follow action
+    pub scene: u16,
+    pub seed: u32,
+    pub loop_len: Tick,
+    pub follow: Option<super::follow::Follow>,
 }
 
 impl Plan {
@@ -554,6 +560,10 @@ pub fn launch_plan(tl: &Timeline) -> Vec<LaunchNotes> {
                 track: l.clip.track as usize,
                 len,
                 notes,
+                scene: l.scene,
+                seed: l.clip.seed,
+                loop_len: l.clip.len,
+                follow: l.follow,
             }
         })
         .collect()

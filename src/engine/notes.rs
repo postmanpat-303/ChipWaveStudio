@@ -186,6 +186,12 @@ pub(super) struct NoteState {
     /// track; 0 = none, and then nothing below runs)
     pub(super) lmask: u64,
     pub(super) lp: [LPlay; MAX_CHANNELS],
+    /// per track: follow-action decisions since the launch (the k of
+    /// `follow::decide`)
+    pub(super) fk: [u32; MAX_CHANNELS],
+    /// tracks a follow action stopped (the engine stops them after the
+    /// events)
+    pub(super) stops: u64,
     /// rack layers (empty until a song has a rack)
     pub(super) layers: super::layers::Layers,
 }
@@ -201,6 +207,8 @@ impl NoteState {
             last_f: [0.0; MAX_CHANNELS],
             lmask: 0,
             lp: [LPlay::default(); MAX_CHANNELS],
+            fk: [0; MAX_CHANNELS],
+            stops: 0,
             layers: Default::default(),
         }
     }
@@ -573,20 +581,48 @@ fn launch_events(
     lc: f64,
 ) {
     let mut lp = st.lp[ch];
-    let idx = match plan.launch.get(lp.idx) {
-        Some(x) if x.id == lp.id => lp.idx,
-        _ => match plan.launch.iter().position(|x| x.id == lp.id) {
-            Some(i) => i,
-            None => return,
-        },
+    // a follow action may hand over to another clip (or several, when
+    // their loops are short); each hand-over moves the origin forward, so
+    // this ends
+    let (ln, rel) = loop {
+        let idx = match plan.launch.get(lp.idx) {
+            Some(x) if x.id == lp.id => lp.idx,
+            _ => match plan.launch.iter().position(|x| x.id == lp.id) {
+                Some(i) => i,
+                None => return,
+            },
+        };
+        lp.idx = idx;
+        let ln = &plan.launch[idx];
+        let rel = lc - lp.origin as f64;
+        if ln.len <= 0 || rel < 0.0 {
+            st.lp[ch] = lp;
+            return;
+        }
+        let Some(f) = ln.follow else {
+            break (ln, rel);
+        };
+        let span = ln.loop_len * f.after.max(1) as Tick;
+        if span <= 0 || rel < span as f64 {
+            break (ln, rel);
+        }
+        let k = st.fk[ch];
+        st.fk[ch] = k.wrapping_add(1);
+        let (act, draw) = crate::timeline::follow::decide(&f, ln.seed, k);
+        let slots = plan
+            .launch
+            .iter()
+            .filter(|x| x.track == ln.track)
+            .map(|x| (x.id, x.scene));
+        match crate::timeline::follow::target(act, ln.id, ln.scene, slots, draw) {
+            Some(id) => lp = LPlay::new(id, lp.origin + span),
+            None => {
+                st.stops |= 1u64 << ch;
+                st.lp[ch] = lp;
+                return;
+            }
+        }
     };
-    lp.idx = idx;
-    let ln = &plan.launch[idx];
-    let rel = lc - lp.origin as f64;
-    if ln.len <= 0 || rel < 0.0 {
-        st.lp[ch] = lp;
-        return;
-    }
     let pass = (rel / ln.len as f64).floor() as i64;
     if pass != lp.pass {
         lp.pass = pass;

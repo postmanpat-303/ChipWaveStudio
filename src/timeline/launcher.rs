@@ -49,6 +49,7 @@ pub fn launch_new(tl: &mut Timeline, track: usize, scene: usize, len: Tick) -> u
             seed: seed_for(id),
             ..Default::default()
         },
+        follow: None,
     });
     id
 }
@@ -88,6 +89,7 @@ pub fn launch_copy(
     tl.launcher.push(LaunchClip {
         scene: scene as u16,
         clip: n,
+        follow: None,
     });
     Some(id)
 }

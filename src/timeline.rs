@@ -186,6 +186,10 @@ pub struct Timeline {
 pub struct LaunchClip {
     pub scene: u16,
     pub clip: Clip,
+    /// after N loops, move on by itself (docs/ROUND_ROBIN.md); saved only
+    /// when set
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follow: Option<follow::Follow>,
 }
 
 /// A launcher scene row.
@@ -1532,6 +1536,7 @@ mod launcher;
 pub use launcher::*;
 mod migrate;
 pub use migrate::{ensure_master_track, migrate_song_lanes};
+pub mod follow;
 mod plan;
 pub mod rr;
 pub use rr::Cond;
@@ -1542,6 +1547,8 @@ pub use autoplan::*;
 pub use edit::*;
 pub use plan::*;
 
+#[cfg(test)]
+mod follow_tests;
 #[cfg(test)]
 mod launcher_tests;
 #[cfg(test)]
