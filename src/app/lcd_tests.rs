@@ -42,10 +42,10 @@ fn tap_tempo_is_the_mean_of_the_gaps() {
 
 #[test]
 fn the_colour_setting_is_a_preset_name_or_hex() {
-    let cyan = colour_of("");
-    assert_eq!(cyan, colour_of("Cyan"));
-    assert_eq!(cyan, colour_of("nonsense"));
-    assert_eq!(cyan, colour_of("#12345")); // too short
+    let mint = colour_of("");
+    assert_eq!(mint, colour_of("Mint"));
+    assert_eq!(mint, colour_of("nonsense"));
+    assert_eq!(mint, colour_of("#12345")); // too short
     for (n, c) in PRESETS {
         let want = Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8);
         assert_eq!(colour_of(n), want, "{n}");
@@ -54,6 +54,36 @@ fn the_colour_setting_is_a_preset_name_or_hex() {
     let c = Color32::from_rgb(0x12, 0xAB, 0xFE);
     assert_eq!(colour_setting(c), "#12ABFE");
     assert_eq!(colour_of(&colour_setting(c)), c);
+}
+
+#[test]
+fn every_backlight_keeps_the_text_readable() {
+    use super::lcd::{contrast, pal};
+    let mut tints: Vec<Color32> = PRESETS.iter().map(|p| colour_of(p.0)).collect();
+    // custom colours, dark and saturated ones too (they are lightened)
+    for c in [
+        0x000000, 0xFFFFFF, 0x0000FF, 0xFF0000, 0x00FF00, 0x7FE3FF, 0x203040, 0xFFA23A,
+    ] {
+        tints.push(colour_of(&format!("#{c:06X}")));
+    }
+    for c in tints {
+        let pl = pal(c);
+        for (what, fg) in [
+            ("digits", pl.lit),
+            ("captions", pl.label),
+            ("off pills", pl.off_fg),
+        ] {
+            let k = contrast(fg, pl.bg_bot).min(contrast(fg, pl.bg_top));
+            assert!(k >= 4.5, "{what} on {c:?}: {k:.2}");
+        }
+        // an on pill: the glass colour on the dark fill; REC: white on red
+        assert!(contrast(pl.bg_top, pl.lit) >= 4.5, "on pill on {c:?}");
+        assert!(contrast(Color32::WHITE, pl.rec) >= 4.5);
+    }
+    // the default is the mockup's mint, with near-black digits
+    let m = pal(colour_of(""));
+    assert_eq!(m.bg_top, Color32::from_rgb(0xC9, 0xED, 0xE0));
+    assert!(contrast(m.lit, m.bg_bot) >= 10.0);
 }
 
 #[test]
@@ -234,7 +264,7 @@ fn a_swatch_sets_the_display_colour() {
     frames(&mut h, 2);
     assert_eq!(h.state().extra.lcd_colour, "Amber");
     assert_eq!(colour_of(&h.state().extra.lcd_colour), colour_of("amber"));
-    h.get_by_label("Cyan").click();
+    h.get_by_label("Mint").click();
     frames(&mut h, 2);
     assert_eq!(h.state().extra.lcd_colour, "", "the default saves as empty");
 }

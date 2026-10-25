@@ -12,20 +12,22 @@
 use super::*;
 use std::sync::atomic::Ordering;
 
-/// the display height (the toolbar groups are 32)
-const H: f32 = 42.0;
+// (the display height is `lcd_h`)
 
-/// the colour presets: (name, colour); the first is the default
-pub(super) const PRESETS: [(&str, u32); 5] = [
-    ("Cyan", 0x7FE3FF),
-    ("Amber", 0xFFA23A),
-    ("Green", 0x8CFF7A),
-    ("Red", 0xFF6450),
-    ("Ice", 0xDDEEFF),
+/// the backlight presets: (name, glass colour); the first is the default.
+/// (Until 0.2.12 these were digit colours on dark glass; the same names
+/// are now tints of the light glass, so saved settings keep working.)
+pub(super) const PRESETS: [(&str, u32); 6] = [
+    ("Mint", 0xC9EDE0),
+    ("Cyan", 0xC4E9F3),
+    ("Amber", 0xF6DDB2),
+    ("Green", 0xD3EFC2),
+    ("Red", 0xF6D0C8),
+    ("Ice", 0xE3EAF3),
 ];
 
 /// the colour for a saved setting: a preset name or "#RRGGBB"; anything
-/// else (or "") is the default cyan
+/// else (or "") is the default mint
 pub(super) fn colour_of(setting: &str) -> Color32 {
     let custom = setting
         .strip_prefix('#')
@@ -75,6 +77,8 @@ pub(super) struct LcdUi {
     pub rect: Rect,
     pub master_rect: Rect,
     pub pop_rect: Rect,
+    /// screenshots only: the LOOP and REC pills show lit (CHIPWAVE_SHOT_LCD=on)
+    pub shot_lit: bool,
 }
 
 impl Default for LcdUi {
@@ -88,19 +92,35 @@ impl Default for LcdUi {
             rect: Rect::NOTHING,
             master_rect: Rect::NOTHING,
             pop_rect: Rect::NOTHING,
+            shot_lit: false,
         }
     }
 }
 
 pub(super) struct Pal {
-    bg_top: Color32,
-    bg_bot: Color32,
+    /// the backlit glass, top and bottom of its gradient
+    pub bg_top: Color32,
+    pub bg_bot: Color32,
+    /// the digits: near-black, tinted by the backlight
     pub lit: Color32,
+    /// the digits while typing / tapping (as dark)
     hot: Color32,
-    ghost: Color32,
-    label: Color32,
-    rec: Color32,
+    /// captions above the values
+    pub label: Color32,
+    /// the thin lines between the cells
+    div: Color32,
+    /// an off pill: its text and outline
+    pub off_fg: Color32,
+    off_bd: Color32,
+    /// meters: an unlit segment and a lit one
+    track: Color32,
+    meter: Color32,
+    /// REC (the red pill, the meters' top) and its text; warnings (amber)
+    pub rec: Color32,
+    rec_fg: Color32,
     warn: Color32,
+    /// the glass's frame in this theme
+    pub edge: Color32,
 }
 
 fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
@@ -108,237 +128,194 @@ fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
     Color32::from_rgb(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()))
 }
 
-/// the display's palette from its colour: dark glass tinted by it, the
-/// lit segments, a brighter "hot" (playing), faint ghost segments and
-/// dimmer captions; REC and warnings keep red / yellow
+/// WCAG relative luminance
+pub(super) fn luminance(c: Color32) -> f32 {
+    let f = |v: u8| {
+        let v = v as f32 / 255.0;
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * f(c.r()) + 0.7152 * f(c.g()) + 0.0722 * f(c.b())
+}
+
+/// WCAG contrast ratio (1..21)
+pub(super) fn contrast(a: Color32, b: Color32) -> f32 {
+    let (x, y) = (luminance(a), luminance(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+}
+
+/// the display's palette from its backlight colour: light glass (any
+/// colour is lightened until it is a backlight), near-black digits and
+/// darker-tinted captions, each kept at 4.5:1 or more against the glass's
+/// darker edge; REC is a red pill, warnings amber
 pub(super) fn pal(c: Color32) -> Pal {
-    let glass = hex(0x0A1116);
+    let mut top = c;
+    for _ in 0..24 {
+        if luminance(top) >= 0.62 {
+            break;
+        }
+        top = mix(top, Color32::WHITE, 0.12);
+    }
+    let bot = mix(top, Color32::BLACK, 0.12);
+    let ink = |t: f32| mix(top, Color32::BLACK, t);
+    // darker until readable (4.5:1 on the glass's darker end)
+    let readable = |mut x: Color32| {
+        for _ in 0..20 {
+            if contrast(x, bot) >= 4.5 {
+                break;
+            }
+            x = mix(x, Color32::BLACK, 0.12);
+        }
+        x
+    };
+    let edge = if th().light {
+        hex(0x3E4652)
+    } else {
+        hex(0x08090A)
+    };
     Pal {
-        bg_top: mix(glass, c, 0.07),
-        bg_bot: mix(hex(0x04080A), c, 0.025),
-        lit: c,
-        hot: mix(c, Color32::WHITE, 0.6),
-        ghost: Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), 26),
-        label: mix(glass, c, 0.66),
-        rec: hex(0xFF5A4A),
-        warn: hex(0xFFD04A),
+        bg_top: top,
+        bg_bot: bot,
+        lit: readable(ink(0.9)),
+        hot: readable(ink(0.9)),
+        label: readable(ink(0.66)),
+        div: ink(0.3),
+        off_fg: readable(ink(0.62)),
+        off_bd: ink(0.45),
+        track: ink(0.24),
+        meter: readable(ink(0.64)),
+        rec: hex(0xB3261E),
+        rec_fg: Color32::WHITE,
+        warn: readable(hex(0x9A5B00)),
+        edge,
     }
 }
 
-// ---- 7-segment digits ----
-// segments a b c d e f g (bit 0 = a)
-fn segs(c: char) -> u8 {
-    match c {
-        '0' => 0b0111111,
-        '1' => 0b0000110,
-        '2' => 0b1011011,
-        '3' => 0b1001111,
-        '4' => 0b1100110,
-        '5' => 0b1101101,
-        '6' => 0b1111101,
-        '7' => 0b0000111,
-        '8' => 0b1111111,
-        '9' => 0b1101111,
-        '-' => 0b1000000,
-        _ => 0,
-    }
+/// the captions (11 pt, the 10 pt floor and the Text size via `px`)
+const CAP: f32 = crate::theme::ts::SMALL;
+/// BPM and the position; SIG / SPD / TIME
+const BIG: f32 = 21.0;
+const MID: f32 = 15.0;
+
+/// the display's height: a caption row and a big value row (follows the
+/// Text size; 42 at 100 %)
+pub(super) fn lcd_h() -> f32 {
+    let px = crate::theme::ts::px;
+    (px(CAP) * 1.25 + px(BIG) * 1.0 + 7.0).max(42.0).round()
 }
 
-fn seg_shapes(p: &egui::Painter, o: Pos2, h: f32, on: u8, col: Color32, ghost: Color32) {
-    let w = h * 0.50;
-    let t = (h * 0.15).max(2.0);
-    let sl = h * 0.10; // italic slant
-    let hh = h / 2.0;
-    let pt = |x: f32, y: f32| Pos2::new(o.x + x + sl * (1.0 - y / h), o.y + y);
-    // (horizontal?, x, y)
-    let def: [(bool, f32, f32); 7] = [
-        (true, 0.0, 0.0),
-        (false, w, 0.0),
-        (false, w, hh),
-        (true, 0.0, h),
-        (false, 0.0, hh),
-        (false, 0.0, 0.0),
-        (true, 0.0, hh),
-    ];
-    for (k, (hor, x, y)) in def.iter().enumerate() {
-        let c = if on >> k & 1 == 1 { col } else { ghost };
-        let g = t * 0.55;
-        let pts = if *hor {
-            let (x0, x1) = (x + g, x + w - g);
-            vec![
-                pt(x0, *y),
-                pt(x0 + t / 2.0, y - t / 2.0),
-                pt(x1 - t / 2.0, y - t / 2.0),
-                pt(x1, *y),
-                pt(x1 - t / 2.0, y + t / 2.0),
-                pt(x0 + t / 2.0, y + t / 2.0),
-            ]
-        } else {
-            let (y0, y1) = (y + g, y + hh - g);
-            vec![
-                pt(*x, y0),
-                pt(x + t / 2.0, y0 + t / 2.0),
-                pt(x + t / 2.0, y1 - t / 2.0),
-                pt(*x, y1),
-                pt(x - t / 2.0, y1 - t / 2.0),
-                pt(x - t / 2.0, y0 + t / 2.0),
-            ]
-        };
-        p.add(egui::Shape::convex_polygon(pts, c, Stroke::NONE));
-    }
+/// the width of `s` in the display's digits (Atkinson Hyperlegible Mono)
+fn num_w(p: &egui::Painter, s: &str, size: f32) -> f32 {
+    p.layout_no_wrap(s.to_string(), theme::num_font(size), Color32::WHITE)
+        .size()
+        .x
 }
 
-/// (digit width, gap between digits, '.' slot, ':' slot)
-fn seg_metrics(h: f32) -> (f32, f32, f32, f32) {
-    (h * 0.50, h * 0.36, h * 0.30, h * 0.40)
+/// a value: its baseline sits `bottom` (the galley's foot), from `x`
+/// (`right`: right-aligned there); returns its width
+fn num(
+    p: &egui::Painter,
+    x: f32,
+    bottom: f32,
+    s: &str,
+    size: f32,
+    col: Color32,
+    right: bool,
+) -> f32 {
+    let g = p.layout_no_wrap(s.to_string(), theme::num_font(size), col);
+    let sz = g.size();
+    // the font's descent is empty for digits: sit them on the cell's foot
+    let at = Pos2::new(
+        if right { x - sz.x } else { x },
+        bottom - sz.y + crate::theme::ts::px(size) * 0.16,
+    );
+    p.galley(at.round(), g, col);
+    sz.x
 }
-
-/// draw `s` in segments, digits `h` tall (space: an unlit digit); returns
-/// the width
-fn seg_text(p: &egui::Painter, at: Pos2, s: &str, h: f32, col: Color32, ghost: Color32) -> f32 {
-    let mut x = at.x;
-    let (w, gap, dot_slot, colon_slot) = seg_metrics(h);
-    let t = (h * 0.15).max(2.0);
-    let mut first = true;
-    for c in s.chars() {
-        match c {
-            '.' => {
-                let r = Rect::from_min_size(
-                    Pos2::new(x + gap * 0.3, at.y + h - t * 0.6),
-                    egui::vec2(t, t),
-                );
-                p.rect_filled(r, 0.8, col);
-                x += dot_slot;
-                continue;
-            }
-            ':' => {
-                for fy in [0.30, 0.74] {
-                    let sl = h * 0.10 * (1.0 - fy);
-                    let r = Rect::from_min_size(
-                        Pos2::new(x + gap * 0.45 + sl, at.y + h * fy - t * 0.5),
-                        egui::vec2(t, t),
-                    );
-                    p.rect_filled(r, 0.8, col);
-                }
-                x += colon_slot;
-                continue;
-            }
-            _ => {}
-        }
-        if !first {
-            x += gap;
-        }
-        first = false;
-        if c == '/' {
-            p.line_segment(
-                [
-                    Pos2::new(x + w * 0.95, at.y + 1.0),
-                    Pos2::new(x + w * 0.05, at.y + h - 1.0),
-                ],
-                Stroke::new(t * 0.9, col),
-            );
-        } else {
-            seg_shapes(p, Pos2::new(x, at.y), h, segs(c), col, ghost);
-        }
-        x += w;
-    }
-    x - at.x
-}
-
-fn seg_w(s: &str, h: f32) -> f32 {
-    let (w, gap, dot_slot, colon_slot) = seg_metrics(h);
-    let mut x = 0.0;
-    let mut first = true;
-    for c in s.chars() {
-        match c {
-            '.' => x += dot_slot,
-            ':' => x += colon_slot,
-            _ => {
-                if !first {
-                    x += gap;
-                }
-                first = false;
-                x += w;
-            }
-        }
-    }
-    x
-}
-
-const BIG: f32 = 18.0;
-const MID: f32 = 13.0;
 
 fn lab(p: &egui::Painter, at: Pos2, s: &str, col: Color32) -> f32 {
-    let g = p.layout_no_wrap(
-        s.to_string(),
-        theme::label_font(crate::theme::ts::TINY),
-        col,
-    );
+    let g = p.layout_no_wrap(s.to_string(), theme::label_font(CAP), col);
     let w = g.size().x;
     p.galley(at, g, col);
     w
 }
 
-/// one status lamp: a small LED and its caption
-fn lamp(p: &egui::Painter, at: Pos2, s: &str, on: bool, col: Color32, pl: &Pal) -> f32 {
-    let c = at + egui::vec2(3.0, 6.0);
-    if on {
-        p.circle_filled(c, 5.0, col.gamma_multiply(0.18));
-        p.circle_filled(c, 2.6, col);
-    } else {
-        p.circle_filled(c, 2.6, pl.ghost.gamma_multiply(2.2));
-    }
-    let cap = if on {
-        col
-    } else {
-        pl.label.gamma_multiply(0.7)
-    };
-    9.0 + lab(p, at + egui::vec2(9.0, 0.0), s, cap)
+fn lab_w(p: &egui::Painter, s: &str) -> f32 {
+    p.layout_no_wrap(s.to_string(), theme::label_font(CAP), Color32::WHITE)
+        .size()
+        .x
 }
 
-/// recessed dark glass: outer bevel, gradient, top sheen. The glass stays
-/// dark in every theme; light themes (Amiga) get a light bevel so it sits
-/// in the grey bar.
-fn glass(p: &egui::Painter, r: Rect, pl: &Pal, hot: bool) {
-    let light = th().light;
-    let bevel = if light {
-        Color32::from_white_alpha(170)
+/// one toggle pill: filled dark with a light dot when on (REC: red),
+/// an outline with a hollow dot when off
+fn pill(p: &egui::Painter, r: Rect, s: &str, on: bool, red: bool, flash: bool, pl: &Pal) {
+    let rad = r.height() / 2.0;
+    let dot = Pos2::new(r.left() + rad + 1.0, r.center().y);
+    let fg = if on {
+        let (bg, fg) = if red {
+            (pl.rec, pl.rec_fg)
+        } else if flash {
+            (pl.meter, pl.bg_top)
+        } else {
+            (pl.lit, pl.bg_top)
+        };
+        p.rect_filled(r, rad, bg);
+        p.circle_filled(dot, 2.6, fg);
+        fg
     } else {
-        Color32::from_white_alpha(16)
+        p.rect_stroke(
+            r,
+            rad,
+            Stroke::new(1.0, pl.off_bd),
+            egui::StrokeKind::Inside,
+        );
+        p.circle_stroke(dot, 2.3, Stroke::new(1.0, pl.off_bd));
+        pl.off_fg
     };
-    p.rect_filled(r.expand(1.5), 7, bevel);
-    p.rect_filled(
-        r.translate(egui::vec2(0.0, -1.0)),
-        6,
-        Color32::from_black_alpha(140),
+    p.text(
+        Pos2::new(dot.x + 6.0, r.center().y),
+        egui::Align2::LEFT_CENTER,
+        s,
+        theme::label_font(CAP),
+        fg,
     );
+}
+
+/// backlit glass: a dark frame (the theme's edge), the light gradient,
+/// an inner shadow along the top and a faint inner highlight
+fn glass(p: &egui::Painter, r: Rect, pl: &Pal, hot: bool) {
+    if th().light {
+        p.rect_filled(r.expand(1.5), 7, Color32::from_white_alpha(150));
+    }
+    p.rect_filled(r, 6, pl.edge);
+    let inner = r.shrink(2.0);
     let mut mesh = egui::Mesh::default();
-    theme::round_mesh(&mut mesh, r.shrink(1.0), [5.0; 4], pl.bg_top, pl.bg_bot);
+    theme::round_mesh(&mut mesh, inner, [4.5; 4], pl.bg_top, pl.bg_bot);
     p.add(egui::Shape::mesh(mesh));
-    let sheen = Rect::from_min_max(
-        r.min + egui::vec2(2.0, 2.0),
-        Pos2::new(r.right() - 2.0, r.top() + r.height() * 0.42),
-    );
+    let shade = Rect::from_min_max(inner.min, Pos2::new(inner.right(), inner.top() + 5.0));
     let mut sm = egui::Mesh::default();
     theme::round_mesh(
         &mut sm,
-        sheen,
-        [4.0, 4.0, 0.0, 0.0],
-        Color32::from_white_alpha(10),
-        Color32::from_white_alpha(1),
+        shade,
+        [4.5, 4.5, 0.0, 0.0],
+        Color32::from_rgba_unmultiplied(0, 40, 30, 60),
+        Color32::from_rgba_unmultiplied(0, 40, 30, 0),
     );
     p.add(egui::Shape::mesh(sm));
     p.rect_stroke(
-        r.shrink(0.5),
-        6,
-        Stroke::new(1.0, Color32::from_black_alpha(200)),
+        inner,
+        4.5,
+        Stroke::new(1.0, Color32::from_white_alpha(70)),
         egui::StrokeKind::Inside,
     );
     if hot {
         p.rect_stroke(
             r.expand(0.5),
             6.5,
-            Stroke::new(1.0, pl.lit.gamma_multiply(0.5)),
+            Stroke::new(1.5, pl.meter),
             egui::StrokeKind::Outside,
         );
     }
@@ -456,12 +433,12 @@ impl App {
             sig,
             pos,
             secs,
-            loop_on,
+            loop_on: loop_on || self.lcd.shot_lit,
             loop_bars,
             metro: self.extra.metronome,
             count_in_bars: self.extra.count_in_bars(),
             count_left: self.with(|s| s.engine.count_in_left()),
-            rec: self.recording(),
+            rec: self.recording() || self.lcd.shot_lit,
             armed,
             follow: self.follow,
             load,
@@ -492,31 +469,41 @@ impl App {
         let show_time = !show_spd;
         let narrow = self.lcd_narrow(ui.ctx());
         let show_sig = !narrow;
-        let w_bpm = seg_w("000.00", BIG) + 4.0;
+        let h = lcd_h();
+        let mp = ui.painter().clone();
+        let w_bpm = num_w(&mp, "000.00", BIG) + 4.0;
         let w_spd = if show_spd {
-            seg_w("00", BIG) + 6.0
+            num_w(&mp, "00", BIG) + 6.0
         } else {
             0.0
         };
         let w_sig = if show_sig {
-            seg_w("00/0", BIG).max(30.0)
+            num_w(&mp, "00/0", MID).max(lab_w(&mp, "SIG") + 4.0)
         } else {
             0.0
         };
         let w_pos = if st.tl_mode {
-            seg_w("000.0.0", BIG)
+            num_w(&mp, "000.0.0", BIG).max(lab_w(&mp, "BAR · BEAT · STEP"))
         } else {
-            seg_w("000.00", BIG)
+            num_w(&mp, "000.00", BIG).max(lab_w(&mp, "POS · ROW"))
         };
         let w_time = if show_time {
-            seg_w("00:00.00", MID).max(64.0)
+            num_w(&mp, "00:00.00", MID)
         } else {
             0.0
         };
-        let lamp_col = if narrow { 70.0 } else { 84.0 };
-        let w_state = lamp_col + 66.0;
-        let w_load = if narrow { 66.0 } else { 96.0 };
-        let gap = if narrow { 9.0 } else { 11.0 };
+        // the pills: two columns (LOOP / REC, CLICK / FOLLOW)
+        let ph = ((h - 11.0) / 2.0).floor();
+        let pill_w = |s: &str| lab_w(&mp, s) + ph + 8.0;
+        let col1 = pill_w(if narrow { "LOOP" } else { "LOOP 00–00" }).max(pill_w("ARMED"));
+        let col2 = pill_w("CLICK +0").max(pill_w("FOLLOW"));
+        let w_state = col1 + 4.0 + col2;
+        let w_load = if narrow {
+            lab_w(&mp, "BUF 000 MAX") + 4.0
+        } else {
+            lab_w(&mp, "BUF") + 34.0 + lab_w(&mp, "000 ms") + 10.0
+        };
+        let gap = if narrow { 9.0 } else { 13.0 };
         let cells = 3.0
             + [show_spd, show_sig, show_time]
                 .iter()
@@ -525,60 +512,57 @@ impl App {
         let w =
             10.0 + w_bpm + w_spd + w_sig + w_pos + w_time + w_state + w_load + gap * cells + 10.0;
         let id = ui.make_persistent_id("lcd_display");
-        let (r, resp) = ui.allocate_exact_size(egui::vec2(w, H), Sense::click());
+        let (r, resp) = ui.allocate_exact_size(egui::vec2(w, h), Sense::click());
         self.lcd.rect = r;
         let p = ui.painter_at(r.expand(3.0));
         glass(&p, r, &pl, false);
         let top = r.top() + 4.0;
-        let val_y = |h: f32| r.bottom() - 6.0 - h;
+        // the values sit on the display's foot
+        let foot = r.bottom() - 4.0;
         let mut x = r.left() + 10.0;
         let div = |p: &egui::Painter, x: f32| {
             p.vline(
                 x,
-                (r.top() + 6.0)..=(r.bottom() - 6.0),
-                Stroke::new(1.0, pl.label.gamma_multiply(0.3)),
+                (r.top() + 7.0)..=(r.bottom() - 7.0),
+                Stroke::new(1.0, pl.div),
             );
         };
+        let val = |x0: f32, x1: f32, size: f32| {
+            Rect::from_min_max(
+                Pos2::new(x0, foot - crate::theme::ts::px(size) * 0.9),
+                Pos2::new(x1, foot),
+            )
+        };
         // 1. tempo: drag up / down, double-click to type, TAP
-        let bpm_r = Rect::from_min_size(Pos2::new(x - 4.0, r.top()), egui::vec2(w_bpm + 8.0, H));
+        let bpm_r = Rect::from_min_size(Pos2::new(x - 4.0, r.top()), egui::vec2(w_bpm + 8.0, h));
         lab(&p, Pos2::new(x, top), "BPM", pl.label);
-        let tap_r = Rect::from_min_size(Pos2::new(x + w_bpm - 26.0, top), egui::vec2(26.0, 12.0));
-        let tapping = self.lcd.taps.last().is_some_and(|t0| time - t0 < 0.15);
-        p.rect_stroke(
-            tap_r,
-            2,
-            Stroke::new(
-                1.0,
-                if tapping {
-                    pl.hot
-                } else {
-                    pl.label.gamma_multiply(0.8)
-                },
-            ),
-            egui::StrokeKind::Inside,
+        let tw = lab_w(&mp, "TAP") + 10.0;
+        let tap_r = Rect::from_min_size(
+            Pos2::new(x + w_bpm - tw, top),
+            egui::vec2(tw, crate::theme::ts::px(CAP) + 2.0),
         );
+        let tapping = self.lcd.taps.last().is_some_and(|t0| time - t0 < 0.15);
+        if tapping {
+            p.rect_filled(tap_r, tap_r.height() / 2.0, pl.lit);
+        } else {
+            p.rect_stroke(
+                tap_r,
+                tap_r.height() / 2.0,
+                Stroke::new(1.0, pl.off_bd),
+                egui::StrokeKind::Inside,
+            );
+        }
         p.text(
             tap_r.center(),
             egui::Align2::CENTER_CENTER,
             "TAP",
-            theme::label_font(crate::theme::ts::TINY),
-            if tapping { pl.hot } else { pl.label },
+            theme::label_font(CAP),
+            if tapping { pl.bg_top } else { pl.off_fg },
         );
-        let bpm_val = Rect::from_min_max(
-            Pos2::new(x, val_y(BIG) - 2.0),
-            Pos2::new(x + w_bpm, r.bottom() - 4.0),
-        );
+        let bpm_val = val(x, x + w_bpm, BIG);
         if self.lcd.bpm_edit.is_none() {
             let bs = format!("{:6.2}", st.bpm);
-            let bw = seg_w(&bs, BIG);
-            seg_text(
-                &p,
-                Pos2::new(x + w_bpm - 4.0 - bw, val_y(BIG)),
-                &bs,
-                BIG,
-                pl.lit,
-                pl.ghost,
-            );
+            num(&p, x + w_bpm - 2.0, foot, bs.trim(), BIG, pl.lit, true);
         }
         x += w_bpm + gap / 2.0;
         div(&p, x);
@@ -587,20 +571,18 @@ impl App {
         let mut spd_r = Rect::NOTHING;
         let mut spd_val = Rect::NOTHING;
         if show_spd {
-            spd_r = Rect::from_min_size(Pos2::new(x - 4.0, r.top()), egui::vec2(w_spd + 8.0, H));
-            spd_val = Rect::from_min_max(
-                Pos2::new(x, val_y(BIG) - 2.0),
-                Pos2::new(x + w_spd, r.bottom() - 4.0),
-            );
+            spd_r = Rect::from_min_size(Pos2::new(x - 4.0, r.top()), egui::vec2(w_spd + 8.0, h));
+            spd_val = val(x, x + w_spd, BIG);
             lab(&p, Pos2::new(x, top), "SPD", pl.label);
             if self.lcd.spd_edit.is_none() {
-                seg_text(
+                num(
                     &p,
-                    Pos2::new(x, val_y(BIG)),
-                    &format!("{:>2}", st.speed),
+                    x + w_spd - 2.0,
+                    foot,
+                    &st.speed.to_string(),
                     BIG,
                     pl.lit,
-                    pl.ghost,
+                    true,
                 );
             }
             x += w_spd + gap / 2.0;
@@ -611,13 +593,13 @@ impl App {
         if show_sig {
             lab(&p, Pos2::new(x, top), "SIG", pl.label);
             let ss = format!("{}/{}", st.sig.0, st.sig.1);
-            seg_text(&p, Pos2::new(x, val_y(BIG)), &ss, BIG, pl.lit, pl.ghost);
+            num(&p, x, foot - 1.0, &ss, MID, pl.lit, false);
             x += w_sig + gap / 2.0;
             div(&p, x);
             x += gap / 2.0;
         }
         // 3. position (bar.beat.step; the Tracker: pos.row), or the count-in
-        let pos_r = Rect::from_min_size(Pos2::new(x - 4.0, r.top()), egui::vec2(w_pos + 8.0, H));
+        let pos_r = Rect::from_min_size(Pos2::new(x - 4.0, r.top()), egui::vec2(w_pos + 8.0, h));
         let pos_name = match st.count_left {
             Some(n) => format!("Count-in {n}"),
             None if st.tl_mode => format!("Position {}.{}.{}", st.pos.0, st.pos.1, st.pos.2),
@@ -631,46 +613,32 @@ impl App {
             };
             lab(&p, Pos2::new(x, top), "COUNT-IN", cap);
             let s = format!("{n}");
-            let cw = seg_w(&s, BIG);
-            seg_text(
-                &p,
-                Pos2::new(x + (w_pos - cw) / 2.0, val_y(BIG)),
-                &s,
-                BIG,
-                pl.rec,
-                pl.ghost,
-            );
+            let cw = num_w(&mp, &s, BIG);
+            num(&p, x + (w_pos - cw) / 2.0, foot, &s, BIG, pl.rec, false);
             // the count-in's beats as pips
             let total = (st.count_in_bars.max(1) as u32) * st.sig.0.max(1) as u32;
             let done = total.saturating_sub(n);
             let shown = total.min(8);
             for k in 0..shown {
-                let c = Pos2::new(x + w_pos - 4.0 - (shown - 1 - k) as f32 * 7.0, top + 5.0);
-                let col = if k < done {
-                    pl.rec
+                let c = Pos2::new(x + w_pos - 4.0 - (shown - 1 - k) as f32 * 7.0, top + 6.0);
+                if k < done {
+                    p.circle_filled(c, 2.4, pl.rec);
                 } else {
-                    pl.ghost.gamma_multiply(2.5)
-                };
-                p.circle_filled(c, 2.2, col);
+                    p.circle_stroke(c, 2.2, Stroke::new(1.0, pl.off_bd));
+                }
             }
         } else {
             let (cap, s) = if st.tl_mode {
                 (
                     "BAR · BEAT · STEP",
-                    format!("{:>3}.{}.{}", st.pos.0, st.pos.1, st.pos.2),
+                    format!("{}.{}.{}", st.pos.0, st.pos.1, st.pos.2),
                 )
             } else {
-                ("POS · ROW", format!("{:>3}.{:02}", st.pos.0, st.pos.1))
+                ("POS · ROW", format!("{}.{:02}", st.pos.0, st.pos.1))
             };
             lab(&p, Pos2::new(x, top), cap, pl.label);
-            let col = if st.rec {
-                pl.rec
-            } else if st.playing {
-                pl.hot
-            } else {
-                pl.lit
-            };
-            seg_text(&p, Pos2::new(x, val_y(BIG)), &s, BIG, col, pl.ghost);
+            let col = if st.rec { pl.rec } else { pl.lit };
+            num(&p, x, foot, &s, BIG, col, false);
         }
         x += w_pos + gap / 2.0;
         div(&p, x);
@@ -684,32 +652,26 @@ impl App {
             } else {
                 "--:--.--".to_string()
             };
-            seg_text(
-                &p,
-                Pos2::new(x, val_y(MID) - 2.0),
-                &ts,
-                MID,
-                pl.lit,
-                pl.ghost,
-            );
+            num(&p, x, foot - 1.0, &ts, MID, pl.lit, false);
             x += w_time + gap / 2.0;
             div(&p, x);
             x += gap / 2.0;
         }
-        // 5. lamps: LOOP (range), CLICK / count-in, REC / ARMED, FOLLOW
+        // 5. pills: LOOP (range), CLICK / count-in, REC / ARMED, FOLLOW
         let loop_txt = match st.loop_bars {
-            Some((a, b)) => format!("LOOP {a}–{b}"),
-            None => "LOOP".to_string(),
+            Some((a, b)) if !narrow => format!("LOOP {a}–{b}"),
+            _ => "LOOP".to_string(),
         };
-        let y1 = top + 1.0;
-        let y2 = r.bottom() - 17.0;
-        let lr_loop = Rect::from_min_size(Pos2::new(x - 2.0, y1 - 3.0), egui::vec2(lamp_col, 17.0));
-        lamp(&p, Pos2::new(x, y1), &loop_txt, st.loop_on, pl.lit, &pl);
+        let y1 = r.top() + 5.0;
+        let y2 = r.bottom() - 5.0 - ph;
+        let x2 = x + col1 + 4.0;
+        let lr_loop = Rect::from_min_size(Pos2::new(x, y1), egui::vec2(col1, ph));
+        pill(&p, lr_loop, &loop_txt, st.loop_on, false, false, &pl);
         let click_txt = match st.count_in_bars {
             0 => "CLICK".to_string(),
             n => format!("CLICK +{n}"),
         };
-        // the click lamp flashes on the beat (the transport's own beats)
+        // the click pill flashes on the beat (the transport's own beats)
         let on_beat = st.metro
             && st.playing
             && self.with(|s| {
@@ -722,16 +684,14 @@ impl App {
                         (bp.tick as f64 + tk.fract()) < sg.beat_ticks().max(1) as f64 * 0.25
                     })
             });
-        let lr_click = Rect::from_min_size(
-            Pos2::new(x + lamp_col - 2.0, y1 - 3.0),
-            egui::vec2(68.0, 17.0),
-        );
-        lamp(
+        let lr_click = Rect::from_min_size(Pos2::new(x2, y1), egui::vec2(col2, ph));
+        pill(
             &p,
-            Pos2::new(x + lamp_col, y1),
+            lr_click,
             &click_txt,
             st.metro || st.count_left.is_some(),
-            if on_beat { pl.hot } else { pl.lit },
+            false,
+            on_beat,
             &pl,
         );
         let (rec_txt, rec_on) = if st.count_left.is_some() {
@@ -743,74 +703,117 @@ impl App {
         } else {
             ("REC", false)
         };
-        lamp(&p, Pos2::new(x, y2), rec_txt, rec_on, pl.rec, &pl);
-        let lr_follow = Rect::from_min_size(
-            Pos2::new(x + lamp_col - 2.0, y2 - 3.0),
-            egui::vec2(68.0, 17.0),
-        );
-        lamp(
-            &p,
-            Pos2::new(x + lamp_col, y2),
-            "FOLLOW",
-            st.follow,
-            pl.lit,
-            &pl,
-        );
+        let rec_r = Rect::from_min_size(Pos2::new(x, y2), egui::vec2(col1, ph));
+        pill(&p, rec_r, rec_txt, rec_on, true, false, &pl);
+        let lr_follow = Rect::from_min_size(Pos2::new(x2, y2), egui::vec2(col2, ph));
+        pill(&p, lr_follow, "FOLLOW", st.follow, false, false, &pl);
         x += w_state + gap / 2.0;
         div(&p, x);
         x += gap / 2.0;
-        // 6. engine load and the audio buffer / underruns
-        lab(&p, Pos2::new(x, y1), "DSP", pl.label);
-        let bar = Rect::from_min_size(
-            Pos2::new(x + 24.0, y1 + 3.0),
-            egui::vec2(if narrow { 0.0 } else { 36.0 }, 6.0),
-        );
+        // 6. engine load and the audio buffer / underruns, each with a meter
         let (dsp, buf, xr, maxed) = st.load.unwrap_or((0.0, 0.0, 0, false));
-        let n = 9;
-        let segw = bar.width() / n as f32;
-        for k in 0..if narrow { 0 } else { n } {
-            let on = st.load.is_some() && (k as f32 + 0.5) / n as f32 <= dsp / 100.0;
-            let c = if !on {
-                pl.ghost.gamma_multiply(2.5)
-            } else if k >= 7 {
-                pl.rec
-            } else if k >= 5 {
-                pl.warn
-            } else {
-                pl.lit
-            };
-            let sr = Rect::from_min_size(
-                Pos2::new(bar.left() + k as f32 * segw, bar.top()),
-                egui::vec2(segw - 1.0, bar.height()),
+        let row = |y: f32| y + ph / 2.0;
+        let meter = |p: &egui::Painter, x0: f32, y: f32, frac: f32, warn_at: f32| {
+            let n = 8;
+            let mw = 32.0;
+            let segw = mw / n as f32;
+            for k in 0..n {
+                let on = st.load.is_some() && (k as f32 + 0.5) / n as f32 <= frac;
+                let c = if !on {
+                    pl.track
+                } else if (k as f32 + 1.0) / n as f32 > 0.85 {
+                    pl.rec
+                } else if (k as f32 + 1.0) / n as f32 > warn_at {
+                    pl.warn
+                } else {
+                    pl.meter
+                };
+                let sr = Rect::from_min_size(
+                    Pos2::new(x0 + k as f32 * segw, y - 3.0),
+                    egui::vec2(segw - 1.0, 6.0),
+                );
+                p.rect_filled(sr, 1.0, c);
+            }
+        };
+        let cap_l = lab_w(&mp, "BUF").max(lab_w(&mp, "DSP"));
+        let small = |p: &egui::Painter, y: f32, s: String, col: Color32| {
+            p.text(
+                Pos2::new(r.right() - 9.0, row(y)),
+                egui::Align2::RIGHT_CENTER,
+                s,
+                theme::num_font(CAP),
+                col,
             );
-            p.rect_filled(sr, 0.5, c);
+        };
+        if narrow {
+            let pct = match st.load {
+                Some(_) => format!("DSP {dsp:.0}%"),
+                None => "DSP --".into(),
+            };
+            p.text(
+                Pos2::new(x, row(y1)),
+                egui::Align2::LEFT_CENTER,
+                pct,
+                theme::label_font(CAP),
+                pl.label,
+            );
+            let bt = match st.load {
+                Some(_) if maxed => format!("BUF {buf:.0} MAX"),
+                Some(_) => format!("BUF {buf:.0}"),
+                None => "NO AUDIO".into(),
+            };
+            p.text(
+                Pos2::new(x, row(y2)),
+                egui::Align2::LEFT_CENTER,
+                bt,
+                theme::label_font(CAP),
+                if xr > 0 { pl.warn } else { pl.label },
+            );
+        } else {
+            p.text(
+                Pos2::new(x, row(y1)),
+                egui::Align2::LEFT_CENTER,
+                "DSP",
+                theme::label_font(CAP),
+                pl.label,
+            );
+            meter(&p, x + cap_l + 5.0, row(y1), dsp / 100.0, 0.6);
+            small(
+                &p,
+                y1,
+                if st.load.is_some() {
+                    format!("{dsp:.0}%")
+                } else {
+                    "--".into()
+                },
+                pl.lit,
+            );
+            p.text(
+                Pos2::new(x, row(y2)),
+                egui::Align2::LEFT_CENTER,
+                if st.load.is_some() { "BUF" } else { "NO AUDIO" },
+                theme::label_font(CAP),
+                pl.label,
+            );
+            if st.load.is_some() {
+                // the buffer against 100 ms; an underrun turns it amber
+                meter(&p, x + cap_l + 5.0, row(y2), (buf / 100.0).min(1.0), 0.7);
+                small(
+                    &p,
+                    y2,
+                    if maxed {
+                        format!("{buf:.0} MAX")
+                    } else {
+                        format!("{buf:.0} ms")
+                    },
+                    if xr > 0 { pl.warn } else { pl.lit },
+                );
+            }
         }
-        let pct = if st.load.is_some() {
-            format!("{dsp:.0}%")
-        } else {
-            "--".into()
-        };
-        p.text(
-            Pos2::new(r.right() - 9.0, y1),
-            egui::Align2::RIGHT_TOP,
-            pct,
-            theme::label_font(crate::theme::ts::TINY),
-            pl.lit,
-        );
-        let bt = match st.load {
-            Some(_) if maxed => format!("BUF {buf:.0} MAX"),
-            Some(_) if narrow => format!("BUF {buf:.0}"),
-            Some(_) => format!("BUF {buf:.0} ms"),
-            None => "NO AUDIO".into(),
-        };
-        lab(&p, Pos2::new(x, y2), &bt, pl.label);
-        // the underrun light: dim; amber after an underrun
-        let xc = Pos2::new(r.right() - 12.0, y2 + 6.0);
-        if xr > 0 {
-            p.circle_filled(xc, 5.0, pl.warn.gamma_multiply(0.2));
+        // the underrun light: amber after an underrun (by BUF's meter)
+        if xr > 0 && !narrow {
+            let xc = Pos2::new(x + cap_l + 41.0, row(y2));
             p.circle_filled(xc, 2.6, pl.warn);
-        } else {
-            p.circle_filled(xc, 2.6, pl.ghost.gamma_multiply(2.2));
         }
         let lr_load = Rect::from_min_max(Pos2::new(x - 2.0, r.top()), r.right_bottom());
 
@@ -994,8 +997,11 @@ impl App {
         ui.horizontal(|ui| {
             for (n, c) in PRESETS {
                 let (r, resp) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), Sense::click());
-                ui.painter().circle_filled(r.center(), 9.5, hex(0x0A1116));
-                ui.painter().circle_filled(r.center(), 6.5, hex(c));
+                // the swatch: the tinted glass in its frame, a digit-dark dot
+                let sp = pal(hex(c));
+                ui.painter().circle_filled(r.center(), 9.5, sp.edge);
+                ui.painter().circle_filled(r.center(), 7.5, sp.bg_top);
+                ui.painter().circle_filled(r.center(), 2.5, sp.lit);
                 if cur == hex(c) {
                     ui.painter().circle_stroke(
                         r.center(),
@@ -1034,9 +1040,9 @@ fn lcd_edit(ui: &mut egui::Ui, r: Rect, id: egui::Id, s: &mut String, pl: &Pal) 
         r,
         egui::TextEdit::singleline(s)
             .id(id)
-            .font(crate::theme::mono(crate::theme::ts::LARGE))
+            .font(theme::num_font(crate::theme::ts::LARGE))
             .text_color(pl.hot)
-            .background_color(pl.bg_bot)
+            .background_color(pl.bg_top)
             .align(egui::Align2::RIGHT_CENTER),
     );
     if !resp.has_focus() && !resp.lost_focus() {
@@ -1091,7 +1097,7 @@ impl App {
         } else {
             176.0
         };
-        let (r, resp) = ui.allocate_exact_size(egui::vec2(w, H), Sense::click());
+        let (r, resp) = ui.allocate_exact_size(egui::vec2(w, lcd_h()), Sense::click());
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Master meter"));
         self.lcd.master_rect = r;
         let mut open = self.lcd.master_open;
@@ -1104,7 +1110,7 @@ impl App {
                 r.left_top() + egui::vec2(8.0, 4.0),
                 egui::Align2::LEFT_TOP,
                 "MASTER",
-                theme::label_font(crate::theme::ts::TINY),
+                theme::label_font(CAP),
                 dim,
             );
             let db = if vol <= 0.0001 {
@@ -1116,7 +1122,7 @@ impl App {
                 Pos2::new(r.right() - 22.0, r.top() + 4.0),
                 egui::Align2::RIGHT_TOP,
                 "dB",
-                theme::label_font(crate::theme::ts::TINY),
+                theme::label_font(CAP),
                 dim,
             );
             if vol > 0.0001 {
@@ -1125,7 +1131,7 @@ impl App {
                     Pos2::new(r.right() - 40.0, r.top() + 3.0),
                     egui::Align2::RIGHT_TOP,
                     &db,
-                    crate::theme::mono(crate::theme::ts::SMALL),
+                    theme::num_font(crate::theme::ts::COMPACT),
                     pl.lit,
                 );
             } else {
@@ -1133,7 +1139,7 @@ impl App {
                     Pos2::new(r.right() - 40.0, r.top() + 4.0),
                     egui::Align2::RIGHT_TOP,
                     "-inf",
-                    theme::label_font(crate::theme::ts::TINY),
+                    theme::label_font(CAP),
                     pl.lit,
                 );
             }
@@ -1169,7 +1175,7 @@ impl App {
             let bar_r = r.right() - 34.0;
             let n = 26;
             let sw = (bar_r - bar_l) / n as f32;
-            for (k, (name, y)) in [("L", r.top() + 21.0), ("R", r.top() + 30.0)]
+            for (k, (name, y)) in [("L", r.bottom() - 21.0), ("R", r.bottom() - 12.0)]
                 .iter()
                 .enumerate()
             {
@@ -1177,7 +1183,7 @@ impl App {
                     Pos2::new(r.left() + 9.0, *y + 3.0),
                     egui::Align2::LEFT_CENTER,
                     *name,
-                    theme::label_font(crate::theme::ts::TINY),
+                    theme::label_font(CAP),
                     dim,
                 );
                 let lit = (frac(peaks[k]) * n as f32).round() as usize;
@@ -1192,34 +1198,26 @@ impl App {
                     } else if s >= n - 6 {
                         pl.warn
                     } else {
-                        pl.lit
+                        pl.meter
                     };
                     let on = s < lit || (hk > 0 && s + 1 == hk);
-                    p.rect_filled(
-                        sr,
-                        0.5,
-                        if on {
-                            zone
-                        } else {
-                            pl.ghost.gamma_multiply(2.0)
-                        },
-                    );
+                    p.rect_filled(sr, 0.5, if on { zone } else { pl.track });
                 }
             }
             // 0 dB tick
             let x0 = bar_l + (48.0 / 51.0) * (bar_r - bar_l);
             p.vline(
                 x0,
-                (r.top() + 18.5)..=(r.top() + 39.0),
-                Stroke::new(1.0, dim.gamma_multiply(0.6)),
+                (r.bottom() - 23.5)..=(r.bottom() - 3.0),
+                Stroke::new(1.0, pl.div),
             );
             // limiter reduction: a short bar growing down
             let gx = r.right() - 27.0;
             let gr_r = Rect::from_min_max(
-                Pos2::new(gx, r.top() + 20.0),
-                Pos2::new(gx + 5.0, r.top() + 36.0),
+                Pos2::new(gx, r.bottom() - 22.0),
+                Pos2::new(gx + 5.0, r.bottom() - 6.0),
             );
-            p.rect_filled(gr_r, 1, pl.ghost.gamma_multiply(2.0));
+            p.rect_filled(gr_r, 1, pl.track);
             let f = (-loud.gain_red / 12.0).clamp(0.0, 1.0);
             if f > 0.0 && lim.enabled {
                 p.rect_filled(
@@ -1230,14 +1228,14 @@ impl App {
             }
             // clip light: a true peak over 0 dBTP since Play (the GR bar and
             // the light have no captions: at a readable size they do not
-            // fit the 42 pt LCD; the tooltip names them)
+            // fit the LCD; the tooltip names them)
             let clip = loud.true_peak.is_finite() && loud.true_peak > 0.0;
-            let cc = Pos2::new(r.right() - 11.0, r.top() + 27.0);
+            let cc = Pos2::new(r.right() - 11.0, r.bottom() - 15.0);
             if clip {
                 p.circle_filled(cc, 6.0, pl.rec.gamma_multiply(0.25));
                 p.circle_filled(cc, 3.2, pl.rec);
             } else {
-                p.circle_filled(cc, 3.2, pl.ghost.gamma_multiply(2.4));
+                p.circle_stroke(cc, 3.0, Stroke::new(1.0, pl.off_bd));
             }
         }
         let resp = resp.on_hover_text(
