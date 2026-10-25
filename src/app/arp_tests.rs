@@ -127,3 +127,76 @@ fn bake_arp_writes_the_steps_as_notes_and_switches_the_arp_off() {
     assert_eq!(notes(&h), n0);
     assert!(arp(&h, slot as usize).is_some());
 }
+
+/// the MP3 demo's song (CHIPWAVE_ARP_DEMO=<out.cwt>, run with --ignored):
+/// the demo's first 8 bars, its pads replaced by a held Am-F-C-G clip that
+/// the Breakdown Pluck plays through the Arp (Gated trance, a ratchet, an
+/// octave step)
+#[test]
+#[ignore]
+fn write_the_arp_demo_song() {
+    let Some(out) = std::env::var_os("CHIPWAVE_ARP_DEMO") else {
+        return;
+    };
+    let mut song = fileio::demo_song();
+    let (t, _) = crate::timeline::from_order(&song);
+    song.timeline = Some(Box::new(t));
+    let bar = 4 * tl::PPQ;
+    let pads: Vec<usize> = {
+        let t = song.timeline.as_deref_mut().unwrap();
+        t.clips.retain(|c| c.start < 8 * bar);
+        for c in &mut t.clips {
+            c.len = c.len.min(8 * bar - c.start);
+        }
+        let pads: Vec<usize> = (0..t.tracks.len())
+            .filter(|&i| t.tracks[i].name.contains("Pad"))
+            .collect();
+        t.clips.retain(|c| !pads.contains(&(c.track as usize)));
+        // CHIPWAVE_ARP_SOLO: the Arp alone
+        if std::env::var_os("CHIPWAVE_ARP_SOLO").is_some() {
+            t.clips.clear();
+        }
+        pads
+    };
+    let tr = pads[0];
+    // a pluck, so each step is heard
+    let slot = 1 + song
+        .instruments
+        .iter()
+        .position(|i| i.name.contains("Pluck"))
+        .expect("the demo's pluck") as u8;
+    let id = tl::new_note_clip(&mut song, tr, 0).unwrap();
+    {
+        let t = song.timeline.as_deref_mut().unwrap();
+        let c = t.clips.iter_mut().find(|c| c.id == id).unwrap();
+        c.len = 8 * bar;
+        let tl::ClipKind::Notes { data } = c.kind else { unreachable!() };
+        let d = t.notes[data as usize].make_mut();
+        d.len = 8 * bar;
+        for (k, chord) in [[57u8, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]]
+            .iter()
+            .enumerate()
+        {
+            for key in chord {
+                d.notes.push(tl::Note {
+                    start: k as i64 * 2 * bar,
+                    len: 2 * bar,
+                    key: *key,
+                    vel: 0xD000,
+                    instr: slot,
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    let mut a = crate::arp::presets(false)
+        .into_iter()
+        .find(|p| p.0 == "Gated trance")
+        .map(|p| p.1)
+        .unwrap();
+    a.steps.resize(32, crate::arp::Step::default());
+    a.steps[6].ratchet = 3;
+    a.steps[14].transpose = 12;
+    song.instruments[slot as usize - 1].arp = Some(a);
+    fileio::save_cwt(&song, std::path::Path::new(&out)).unwrap();
+}
