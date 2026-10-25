@@ -156,7 +156,7 @@ fn waveforge_lfo_is_song_level() {
         r.iter().filter(|r| matches!(r.id, RowId::Song(_))).count(),
         2
     );
-    assert!(r[r.len() - 1].source.starts_with("LFO 1 sine 1/4"));
+    assert!(r[r.len() - 1].source.starts_with("LFO 1 sine · 1 beat"));
 }
 
 #[test]
@@ -395,4 +395,43 @@ fn movements_survive_save_and_load_unchanged() {
         .collect();
     assert_eq!(before, after);
     assert_eq!(song.modulation, back.modulation);
+}
+
+#[test]
+fn speed_and_length_read_in_plain_words() {
+    assert_eq!(speed_text(1.0, 2.0), "1 beat (1/4 note)");
+    assert_eq!(speed_text(8.0, 2.0), "2 bars");
+    assert_eq!(speed_text(0.25, 2.0), "1/16 note");
+    assert_eq!(speed_text(0.0, 3.2), "3.2 Hz");
+    assert_eq!(hz_text(0.5), "0.50 Hz");
+    assert_eq!(secs_text(0.25), "250 ms");
+    assert_eq!(secs_text(1.2), "1.2 s");
+    assert_eq!(beats_text(32.0), "8 bars");
+}
+
+#[test]
+fn song_level_timing_round_trips() {
+    let mut i = poly();
+    let mut m = Modulation::default();
+    let a = add(
+        &mut i,
+        2,
+        &mut m,
+        Target::Gen(2, 5),
+        &spec(Source::Lfo, 0.3),
+        120.0,
+    )
+    .unwrap();
+    let mut t = timing(&i, &m, a.row).unwrap();
+    assert_eq!(t.speed.map(|s| s.0), Some(1.0));
+    t.speed = Some((16.0, 1.0));
+    set_timing(&mut i, &mut m, a.row, &t, 120.0);
+    let back = timing(&i, &m, a.row).unwrap();
+    assert_eq!(back.speed.map(|s| s.0), Some(16.0));
+    let r = rows(&i, 2, &m, &lbl);
+    assert!(
+        r[r.len() - 1].source.contains("4 bars"),
+        "{}",
+        r[r.len() - 1].source
+    );
 }
