@@ -456,7 +456,7 @@ impl App {
         egui::ScrollArea::vertical()
             .id_salt(("poly_movement", cx.idx))
             .auto_shrink([false, false])
-            .show(ui, |ui| self.movement_list(ui, inst, cx, false));
+            .show(ui, |ui| self.movement_list(ui, inst, cx, true));
     }
 }
 

@@ -49,6 +49,8 @@ pub(super) struct InstUi {
     pub mod_sel: Option<u32>,
     /// the quick-mod popover ("Modulate <param> with…")
     pub quick: Option<quickview::Quick>,
+    /// screenshots: open the popover on the knob with this name
+    pub quick_req: Option<String>,
     /// the Grid canvas (cable being dragged, add position)
     grid: gridcanvas::GridUi,
     /// the poly synth editor (section shown, Revert snapshot)
@@ -1995,10 +1997,12 @@ impl App {
         }
         let _ = native;
         let now = ui.input(|i| i.time);
-        if out.dot_clicked {
+        let req = self.ip.quick_req.as_deref() == Some(p.name.as_str());
+        if out.dot_clicked || req {
+            self.ip.quick_req = None;
             self.quick_open(p, inst, cx, now);
         }
-        self.quick_popover(&ui.ctx().clone(), &p.key, out.resp.rect, inst, cx);
+        self.quick_popover(ui, &p.key, out.resp.rect, inst, cx);
         if out.changed {
             let mut v = params::from_norm(n, lo, hi, log);
             if step > 0.0 {
@@ -2304,7 +2308,7 @@ impl App {
                 egui::ScrollArea::vertical()
                     .id_salt(("movement_scroll", idx))
                     .auto_shrink([false, true])
-                    .show(ui, |ui| self.movement_list(ui, inst, cx, false));
+                    .show(ui, |ui| self.movement_list(ui, inst, cx, true));
             }
             (Custom::Vowels, InstrumentKind::Voice(v)) => {
                 cx.changed |= super::voiceview::vowels_ui(ui, v);

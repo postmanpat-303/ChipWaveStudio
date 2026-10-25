@@ -183,6 +183,7 @@ impl App {
         }
         if view.starts_with("stringwave-") {
             self.shot_stringwave(view);
+            self.shot_quickmod();
             return;
         }
         // "Drop 2" (block 08) of the Lumen Drift demo, looping
@@ -969,6 +970,7 @@ impl App {
             let len = self.with(|s| s.song.instruments.len()) as u8;
             self.instr = n.clamp(1, len.max(1));
         }
+        self.shot_quickmod();
         // drag-to-modulate: modulators with routes on the selected
         // instrument's knobs and FX (instrument 7 unless CHIPWAVE_SHOT_INSTR)
         if view == "modulate" || view == "modulate-fx" {
@@ -1184,6 +1186,67 @@ impl App {
     }
 
     /// recording mode: time-based changes (theme flips, instrument browsing)
+    /// quick-mod shots: CHIPWAVE_SHOT_ADV=1 the full editor,
+    /// CHIPWAVE_SHOT_TAB=modulation its Modulation tab, CHIPWAVE_SHOT_POLYSEC=<n>
+    /// WaveForge's section, CHIPWAVE_SHOT_MOVES=1 three movements on the
+    /// selected instrument, CHIPWAVE_SHOT_QUICK=<knob> that knob's
+    /// "Modulate … with…" popover open
+    fn shot_quickmod(&mut self) {
+        use crate::quickmod::{self as qm, Source, Spec};
+        if std::env::var_os("CHIPWAVE_SHOT_ADV").is_some() {
+            self.ip.advanced = true;
+        }
+        if std::env::var("CHIPWAVE_SHOT_TAB").as_deref() == Ok("modulation") {
+            self.ip.tab = super::params::Tab::Modulation;
+        }
+        if let Some(n) = std::env::var("CHIPWAVE_SHOT_POLYSEC")
+            .ok()
+            .and_then(|v| v.parse().ok())
+        {
+            self.ip.poly.sec = n;
+        }
+        if std::env::var_os("CHIPWAVE_SHOT_MOVES").is_some() {
+            let idx = (self.instr as usize).wrapping_sub(1);
+            self.with(|s| {
+                let bpm = s.song.bpm;
+                let Some(inst) = s.song.instruments.get_mut(idx) else {
+                    return;
+                };
+                let l = super::params::build(inst, idx, 0);
+                let picks = [
+                    (Source::Lfo, 0.35),
+                    (Source::Envelope, -0.25),
+                    (Source::Random, 0.2),
+                    (Source::Velocity, 0.4),
+                ];
+                let mut k = 0;
+                for want in ["Cutoff", "Detune", "Pan", "Level", "Width", "Resonance"] {
+                    let Some(tg) = l
+                        .params
+                        .iter()
+                        .find(|p| p.name == want)
+                        .and_then(|p| p.target)
+                    else {
+                        continue;
+                    };
+                    let Some(&(source, amount)) = picks.get(k) else {
+                        break;
+                    };
+                    let spec = Spec {
+                        source,
+                        amount,
+                        ..Spec::default()
+                    };
+                    if qm::add(inst, idx, &mut s.song.modulation, tg, &spec, bpm).is_ok() {
+                        k += 1;
+                    }
+                }
+            });
+        }
+        self.ip.quick_req = std::env::var("CHIPWAVE_SHOT_QUICK").ok();
+        self.dirty = false;
+    }
+
     /// modulators and routes for the "modulate" screenshots
     fn shot_modulation(&mut self) {
         use crate::modulation::{LfoShape, ModKind};

@@ -704,6 +704,16 @@ impl App {
             c
         };
         if sc.movement {
+            let n = self.quick_rows(inst, cx).len();
+            if n > 0 {
+                ui.painter().text(
+                    Pos2::new(rect.right() - PADR, rect.top() + 10.0),
+                    egui::Align2::RIGHT_CENTER,
+                    format!("{n} active"),
+                    crate::theme::prop(crate::theme::ts::SMALL),
+                    th().ink2,
+                );
+            }
             let mut c = child(
                 ui,
                 Rect::from_min_max(
@@ -713,6 +723,9 @@ impl App {
                 egui::Layout::top_down(egui::Align::Min),
             );
             c.spacing_mut().item_spacing.y = 1.0;
+            // compact rows: two fit in the strip
+            c.spacing_mut().interact_size.y = 16.0;
+            c.spacing_mut().button_padding.y = 0.0;
             egui::ScrollArea::vertical()
                 .id_salt(("sw_movement", cx.idx))
                 .auto_shrink([false, false])

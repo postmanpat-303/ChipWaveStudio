@@ -207,12 +207,18 @@ impl App {
     /// draw the popover under `anchor` when it belongs to this knob / row
     pub(super) fn quick_popover(
         &mut self,
-        ctx: &egui::Context,
+        ui: &egui::Ui,
         key: &str,
         anchor: Rect,
         inst: &mut Instrument,
         cx: &mut Cx,
     ) {
+        let ctx = &ui.ctx().clone();
+        // on screen (StringWave draws on a scaled, translated layer)
+        let anchor = match ctx.layer_transform_to_global(ui.layer_id()) {
+            Some(t) => t * anchor,
+            None => anchor,
+        };
         let frame = ctx.cumulative_pass_nr();
         let Some(q) = self.ip.quick.as_mut() else {
             return;
@@ -231,17 +237,22 @@ impl App {
         if q.edit.is_some_and(|e| !rows.iter().any(|r| r.id == e)) {
             q.edit = None;
         }
-        let w = 290.0;
+        let w = 340.0;
         let screen = ctx.content_rect();
+        let id = egui::Id::unique("quickmod_pop");
+        // its height as last drawn (250 before the first frame)
+        let h = ctx
+            .memory(|m| m.area_rect(id))
+            .map_or(250.0, |r| r.height());
         let mut pos = Pos2::new(anchor.left(), anchor.bottom() + 4.0);
-        if pos.y + 250.0 > screen.bottom() {
-            pos.y = (anchor.top() - 254.0).max(screen.top());
+        if pos.y + h > screen.bottom() {
+            pos.y = (anchor.top() - 4.0 - h).max(screen.top());
         }
         pos.x = pos.x.min(screen.right() - w - 16.0).max(screen.left());
         let mut close = false;
         let mut add = false;
         let mut remove = None;
-        let area = egui::Area::new(egui::Id::unique("quickmod_pop"))
+        let area = egui::Area::new(id)
             .order(egui::Order::Foreground)
             .fixed_pos(pos)
             .show(ctx, |ui| {
@@ -481,29 +492,26 @@ impl App {
         }
     }
 
-    /// the Movement list of the instrument being edited
+    /// the Movement list of the instrument being edited (`count`: an
+    /// "N active" line above the rows; StringWave's short strip puts it in
+    /// its title row instead)
     pub(super) fn movement_list(
         &mut self,
         ui: &mut egui::Ui,
         inst: &mut Instrument,
         cx: &mut Cx,
-        head: bool,
+        count: bool,
     ) {
         let t = th();
         let rows = self.quick_rows(inst, cx);
         let now = ui.input(|i| i.time);
-        ui.horizontal(|ui| {
-            if head {
-                ui.label(egui::RichText::new("Movement").strong());
-            }
-            if !rows.is_empty() {
-                ui.label(
-                    egui::RichText::new(format!("{} active", rows.len()))
-                        .small()
-                        .color(t.ink2),
-                );
-            }
-        });
+        if count && !rows.is_empty() {
+            ui.label(
+                egui::RichText::new(format!("{} active", rows.len()))
+                    .small()
+                    .color(t.ink2),
+            );
+        }
         if rows.is_empty() {
             ui.add(
                 egui::Label::new(
@@ -542,12 +550,19 @@ impl App {
                         if row.per_note { " (per note)" } else { "" }
                     );
                     let lr = ui
-                        .add_sized(
+                        .allocate_ui_with_layout(
                             egui::vec2(lw, 18.0),
-                            egui::Label::new(egui::RichText::new(&txt))
-                                .truncate()
-                                .sense(Sense::click()),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.set_min_width(lw);
+                                ui.add(
+                                    egui::Label::new(egui::RichText::new(&txt))
+                                        .truncate()
+                                        .sense(Sense::click()),
+                                )
+                            },
                         )
+                        .inner
                         .on_hover_text(format!("{txt}  {}\nclick to edit", row.text));
                     if lr.clicked() {
                         let tg = row.knobs.first().copied();
@@ -590,7 +605,7 @@ impl App {
                     }
                 })
                 .response;
-            self.quick_popover(&ui.ctx().clone(), &key, resp.rect, inst, cx);
+            self.quick_popover(ui, &key, resp.rect, inst, cx);
         }
     }
 }
