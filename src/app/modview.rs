@@ -97,7 +97,7 @@ pub(super) fn strip(
 ) -> bool {
     let t = th();
     let mut changed = false;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space(4.0);
         ui.label(egui::RichText::new("Modulators").small().color(t.ink2))
             .on_hover_text(

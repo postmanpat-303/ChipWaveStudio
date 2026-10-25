@@ -151,7 +151,16 @@ fn the_lower_panel_header_names_the_track_and_its_instrument() {
         txt.starts_with(&format!("Track 01 {name}  ›  {slot:02X} ")),
         "{txt}"
     );
+    // the instrument view names it in its own header: no second copy
+    // there; the Notes view (no such header) shows the breadcrumb
+    assert!(
+        h.query_by_label(&txt).is_none(),
+        "no duplicate breadcrumb on the instrument view"
+    );
+    h.state_mut().set_lower(3);
+    frames(&mut h, 2);
     exact(&h, &txt);
+    h.state_mut().set_lower(1);
     // another instrument than the track's: only the instrument
     let other = if slot == 1 { 2 } else { 1 };
     h.state_mut().instr = other;

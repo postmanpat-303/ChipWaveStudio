@@ -2273,10 +2273,23 @@ impl App {
         let sel = self.gen_ui.sel;
         match (k, &mut inst.kind) {
             (Custom::Modulators, _) => {
+                let has_patch = inst.kind.patch().is_some();
                 egui::ScrollArea::vertical()
                     .id_salt(("mod_ed_scroll", idx))
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
+                        // the instrument-wide sources: select one to edit
+                        // it, drag it onto a knob, or add one
+                        super::modview::strip(
+                            ui,
+                            &mut cx.modm,
+                            idx,
+                            has_patch,
+                            &cx.live,
+                            &mut self.ip.mod_sel,
+                            &mut cx.mod_out,
+                        );
+                        ui.separator();
                         super::modview::editor(
                             ui,
                             &mut cx.modm,
@@ -2684,7 +2697,7 @@ pub(super) fn help_button(ui: &mut egui::Ui) -> egui::Response {
         r.center(),
         egui::Align2::CENTER_CENTER,
         "?",
-        egui::FontId::proportional(crate::theme::ts::px(crate::theme::ts::SMALL)),
+        crate::theme::prop(crate::theme::ts::SMALL),
         if resp.hovered() { t.ink } else { t.ink2 },
     );
     resp.widget_info(|| {

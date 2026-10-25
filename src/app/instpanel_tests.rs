@@ -76,7 +76,13 @@ fn ctrl_i_opens_the_instrument_editor_and_every_type_and_tab_draws_its_parameter
             }
             h.state_mut().ip.tab = tab;
             frames(&mut h, 2);
-            for p in l.params.iter().filter(|p| p.tab == tab) {
+            // (WaveForge's slot pickers stay parameters, but the Movement
+            // list shows them)
+            for p in l
+                .params
+                .iter()
+                .filter(|p| p.tab == tab && p.card != "Mod routes")
+            {
                 let role = match p.ctl {
                     Ctl::Knob { .. } => Role::Slider,
                     Ctl::Choice(_) => Role::ComboBox,
@@ -266,7 +272,7 @@ fn full_height_pattern_hides_the_lower_panel_and_restores_its_height() {
     assert!(h.state().extra.full_height);
     h.state_mut().toggle_full_height();
     frames(&mut h, 2);
-    let b = labelled_rect(&h, Role::Button, "Full-height view  F11").expect("switch-bar button");
+    let b = labelled_rect(&h, Role::Button, "Full-height view").expect("switch-bar button");
     let c = b.center();
     h.input_mut().events.push(egui::Event::PointerMoved(c));
     frame(&mut h);
@@ -717,7 +723,7 @@ fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
     h.state_mut().extra.lower_h = 640.0;
     frames(&mut h, 3);
     assert_eq!(h.state().ip.tab, Tab::Synth, "opens on its own editor");
-    assert_eq!(Tab::Synth.name(), POLY_DISPLAY_NAME);
+    assert_eq!(Tab::Synth.name(), "Synth");
     // the wide window: layout A, every section at once
     assert!(h.state().ip.poly.wide, "1920 px: layout A");
     for k in [
@@ -727,7 +733,6 @@ fn poly_synth_editor_opens_switches_layout_and_edits_with_revert() {
         "F.Attack",
         "A.Release",
         "Glide",
-        "Mod 8",
     ] {
         assert!(labelled_rect(&h, Role::Slider, k).is_some(), "{k} drawn");
     }
