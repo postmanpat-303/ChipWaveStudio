@@ -36,6 +36,8 @@ mod chordview;
 mod cliparr;
 #[cfg(test)]
 mod cliparr_tests;
+#[cfg(test)]
+mod clipcopy_tests;
 mod devcards;
 mod devices;
 #[cfg(test)]
