@@ -345,7 +345,7 @@ impl PianoUi {
     pub(crate) fn y_of(&self, key: u8) -> f32 {
         self.grid_rect.top() + (120 - key as i32) as f32 * self.key_h - self.scroll_y
     }
-    fn tick_at(&self, x: f32) -> f64 {
+    pub(crate) fn tick_at(&self, x: f32) -> f64 {
         self.scroll_x + ((x - self.grid_rect.left()) as f64 / self.ppt())
     }
     fn key_at(&self, y: f32) -> i32 {
@@ -2126,6 +2126,10 @@ impl App {
                 // plays on some passes only (step condition / chance)
                 super::prlanes::stripes(&notes_p, r.shrink(1.0), ink.gamma_multiply(0.28));
             }
+            if let Some(c) = super::prlanes::press_of(&src, n.id) {
+                // a recorded pressure curve: shaded along the note's foot
+                super::prlanes::press_shade(&notes_p, r, n.len, c, ink);
+            }
             notes_p.rect_stroke(
                 r,
                 2.0,
@@ -2161,7 +2165,7 @@ impl App {
             ui.ctx().request_repaint();
         }
         // ---- velocity lane (or Conditions / Chance)
-        let lane_drawn = self.pr_lane_draw(ui, vel_r, &notes, base);
+        let lane_drawn = self.pr_lane_draw(ui, vel_r, &notes, base, &src);
         for n in notes.iter().filter(|_| !lane_drawn) {
             let x = self.pr.x_of(n.start);
             if x < vel_r.left() - 2.0 || x > vel_r.right() {

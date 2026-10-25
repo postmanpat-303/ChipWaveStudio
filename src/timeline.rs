@@ -764,6 +764,18 @@ impl Note {
             _ => p.push((rel, val)),
         }
     }
+    /// set the pressure at `rel` ticks from the note start (the piano
+    /// roll's Pressure lane): replaces a point on that tick, else inserts
+    /// one in order
+    pub fn press_set(&mut self, rel: Tick, val: f32) {
+        let rel = rel.max(0);
+        let val = val.clamp(0.0, 1.0);
+        let p = self.pressure_mut();
+        match p.binary_search_by_key(&rel, |q| q.0) {
+            Ok(i) => p[i].1 = val,
+            Err(i) => p.insert(i, (rel, val)),
+        }
+    }
     /// drop the pressure curve (and the lane when it is empty)
     pub fn clear_pressure(&mut self) {
         self.expr.retain(|e| e.kind != ExprKind::Pressure);

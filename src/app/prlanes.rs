@@ -1,6 +1,6 @@
 //! The piano roll's lower lane (docs/ROUND_ROBIN.md): Velocity, Conditions
-//! (the "Play this note…" step conditions) and Chance, switched from the
-//! lane's label. Note clips only; Tracker blocks keep the velocity lane.
+//! (the "Play this note…" step conditions), Chance and Pressure (recorded
+//! MIDI key pressure, docs/MIDI.md), switched from the lane's label. Note clips only; Tracker blocks keep the velocity lane.
 use super::pianoview::{sel_note_colours, RNote, Source, Target};
 use super::*;
 use crate::timeline::{self as tl, Cond, Tick};
@@ -12,15 +12,17 @@ pub(crate) enum Lane {
     Vel,
     Cond,
     Chance,
+    Pressure,
 }
 
 impl Lane {
-    pub(crate) const ALL: [Lane; 3] = [Lane::Vel, Lane::Cond, Lane::Chance];
+    pub(crate) const ALL: [Lane; 4] = [Lane::Vel, Lane::Cond, Lane::Chance, Lane::Pressure];
     pub(crate) fn short(self) -> &'static str {
         match self {
             Lane::Vel => "Vel",
             Lane::Cond => "Cond",
             Lane::Chance => "Chance",
+            Lane::Pressure => "Press",
         }
     }
     pub(crate) fn name(self) -> &'static str {
@@ -28,6 +30,7 @@ impl Lane {
             Lane::Vel => "Velocity",
             Lane::Cond => "Conditions",
             Lane::Chance => "Chance",
+            Lane::Pressure => "Pressure",
         }
     }
     pub(crate) fn tip(self) -> &'static str {
@@ -40,6 +43,11 @@ impl Lane {
             Lane::Chance => {
                 "How likely each note is to play on a pass (100 % = always). The dice are the \
                  same every time you play or export, so a take you like stays."
+            }
+            Lane::Pressure => {
+                "How hard each key was pressed while it was held (MIDI aftertouch), recorded \
+                 from your keyboard. Drag along a note to draw it; right-click a note to clear \
+                 it. A Pressure modulator turns it into movement."
             }
         }
     }
@@ -221,7 +229,7 @@ impl App {
                 Stroke::NONE,
             ));
             let tip = format!(
-                "{}: {}\nClick to show Velocity, Conditions or Chance here.",
+                "{}: {}\nClick to show Velocity, Conditions, Chance or Pressure here.",
                 lane.name(),
                 lane.tip()
             );
@@ -234,7 +242,7 @@ impl App {
             let mut close = false;
             let area = egui::Area::new(egui::Id::unique("pr_lane_menu"))
                 .order(egui::Order::Foreground)
-                .fixed_pos(at - egui::vec2(0.0, 112.0))
+                .fixed_pos(at - egui::vec2(0.0, 136.0))
                 .show(ui.ctx(), |ui| {
                     egui::Frame::menu(ui.style()).show(ui, |ui| {
                         ui.set_min_width(150.0);
@@ -267,11 +275,56 @@ impl App {
         vel_r: Rect,
         notes: &[RNote],
         base: Color32,
+        src: &Source,
     ) -> bool {
         let t = th();
         let p = ui.painter_at(vel_r);
         match self.pr.lane {
             Lane::Vel => false,
+            Lane::Pressure => {
+                p.hline(
+                    vel_r.x_range(),
+                    vel_r.top() + 2.0,
+                    Stroke::new(0.5, t.ink2.gamma_multiply(0.5)),
+                );
+                let y_of = |v: f32| vel_r.bottom() - 2.0 - (vel_r.height() - 4.0) * v;
+                for n in notes {
+                    let (x0, x1) = (self.pr.x_of(n.start), self.pr.x_of(n.start + n.len));
+                    if x1 < vel_r.left() || x0 > vel_r.right() {
+                        continue;
+                    }
+                    let sel = self.pr.sel.contains(&n.id);
+                    let c = if sel {
+                        sel_note_colours(&t, 1.0).0
+                    } else {
+                        base
+                    };
+                    let foot = vel_r.bottom() - 2.0;
+                    // the note's span, so an unpressed note still shows
+                    p.hline(x0..=x1, foot, Stroke::new(1.0, c.gamma_multiply(0.45)));
+                    let Some(curve) = press_of(src, n.id) else {
+                        continue;
+                    };
+                    for (i, &(at, v)) in curve.iter().enumerate() {
+                        if at >= n.len {
+                            break;
+                        }
+                        let end = curve.get(i + 1).map_or(n.len, |q| q.0.min(n.len));
+                        let (a, b) = (self.pr.x_of(n.start + at), self.pr.x_of(n.start + end));
+                        let r = Rect::from_min_max(Pos2::new(a, y_of(v)), Pos2::new(b, foot));
+                        p.rect_filled(r, 0.0, c.gamma_multiply(0.3));
+                        p.hline(a..=b, y_of(v), Stroke::new(2.0, c));
+                        if let Some(&(_, nv)) = curve.get(i + 1).filter(|q| q.0 < n.len) {
+                            p.vline(
+                                b,
+                                y_of(v).min(y_of(nv))..=y_of(v).max(y_of(nv)),
+                                Stroke::new(1.0, c),
+                            );
+                        }
+                    }
+                }
+                true
+            }
             Lane::Chance => {
                 // 100 % guide
                 p.hline(
@@ -373,6 +426,52 @@ impl App {
     ) -> bool {
         match self.pr.lane {
             Lane::Vel => false,
+            Lane::Pressure => {
+                let Some(pos) = resp.interact_pointer_pos() else {
+                    return true;
+                };
+                let tk = self.pr.tick_at(pos.x).floor() as Tick;
+                let ids = covering(&self.pr.sel, notes, tk);
+                if ids.is_empty() {
+                    return true;
+                }
+                let (pressed, down) = resp
+                    .ctx
+                    .input(|i| (i.pointer.primary_pressed(), i.pointer.primary_down()));
+                let clear = resp.secondary_clicked();
+                if !(clear || (down && resp.is_pointer_button_down_on())) {
+                    return true;
+                }
+                if clear || pressed {
+                    self.snapshot();
+                }
+                let v = ((vel_r.bottom() - 2.0 - pos.y) / (vel_r.height() - 4.0)).clamp(0.0, 1.0);
+                // 1/16 of a beat: fine enough to draw, coarse enough to stay lean
+                let step = (tl::ROW / 4).max(1);
+                let mut s2 = self.pr_read(target).unwrap_or(src.clone());
+                if let Source::Notes(d) = &mut s2 {
+                    for id in &ids {
+                        if let Some(n) = d.notes.get_mut(*id) {
+                            if clear {
+                                n.clear_pressure();
+                            } else {
+                                let rel = ((tk - n.start) / step * step).clamp(0, n.len - 1);
+                                n.press_set(rel, v);
+                            }
+                        }
+                    }
+                }
+                self.pr_write(target, s2);
+                self.status = if clear {
+                    "Pressure cleared (Ctrl+Z undoes)".into()
+                } else {
+                    format!(
+                        "Pressure {} % (drag along the note to draw; right-click clears)",
+                        (v * 100.0).round()
+                    )
+                };
+                true
+            }
             Lane::Chance => {
                 if resp.is_pointer_button_down_on() {
                     if let Some(pos) = resp.interact_pointer_pos() {
@@ -614,6 +713,56 @@ impl App {
         if close || (outside && !in_lane) || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.pr.cond_pop = None;
         }
+    }
+}
+
+/// a note's recorded pressure curve (note clips only)
+pub(crate) fn press_of(src: &Source, id: usize) -> Option<&[(Tick, f32)]> {
+    match src {
+        Source::Notes(d) => d.notes.get(id).and_then(|n| n.pressure()),
+        Source::Block(_) => None,
+    }
+}
+
+/// pressure shading along the foot of a note: brighter where pressed harder
+pub(crate) fn press_shade(
+    p: &egui::Painter,
+    r: Rect,
+    len: Tick,
+    curve: &[(Tick, f32)],
+    c: Color32,
+) {
+    let len = len.max(1);
+    let h = (r.height() * 0.35).clamp(2.0, 4.0);
+    let x = |at: Tick| r.left() + r.width() * (at.clamp(0, len) as f32 / len as f32);
+    for (i, &(at, v)) in curve.iter().enumerate() {
+        if at >= len {
+            break;
+        }
+        let end = curve.get(i + 1).map_or(len, |q| q.0);
+        if v <= 0.0 {
+            continue;
+        }
+        let s = Rect::from_min_max(
+            Pos2::new(x(at), r.bottom() - 1.0 - h),
+            Pos2::new(x(end), r.bottom() - 1.0),
+        );
+        p.rect_filled(s, 0.0, c.gamma_multiply(0.25 + 0.6 * v));
+    }
+}
+
+/// the notes sounding at tick `tk` (the selected ones where some are)
+fn covering(sel: &[usize], notes: &[RNote], tk: Tick) -> Vec<usize> {
+    let at: Vec<usize> = notes
+        .iter()
+        .filter(|n| n.start <= tk && tk < n.start + n.len)
+        .map(|n| n.id)
+        .collect();
+    let s: Vec<usize> = at.iter().copied().filter(|i| sel.contains(i)).collect();
+    if s.is_empty() {
+        at
+    } else {
+        s
     }
 }
 
