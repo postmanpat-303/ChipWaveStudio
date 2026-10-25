@@ -51,6 +51,10 @@ pub(super) struct InstUi {
     pub quick: Option<quickview::Quick>,
     /// screenshots: open the popover on the knob with this name
     pub quick_req: Option<String>,
+    /// screenshots: the source that popover starts on
+    pub quick_src: Option<crate::quickmod::Source>,
+    /// screenshots: the preview's dot frozen at this many seconds in
+    pub quick_dot: Option<f64>,
     /// the Grid canvas (cable being dragged, add position)
     grid: gridcanvas::GridUi,
     /// the poly synth editor (section shown, Revert snapshot)
