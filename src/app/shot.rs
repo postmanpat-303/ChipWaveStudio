@@ -1085,7 +1085,8 @@ impl App {
                 // track; chords-written: that, after Write to timeline)
                 let g = std::env::var("CHIPWAVE_SHOT_GEN").unwrap_or_default();
                 if g.starts_with("chords-") {
-                    let tr = self.ch;
+                    // the track of the clip open in the roll
+                    let tr = self.gen_dest(self.pr_target()).track.unwrap_or(self.ch);
                     self.gen_open_for(Some(tr), super::genpanel::GenTab::Chords);
                     if g == "chords-written" {
                         let res = crate::chordgen::generate(&self.cl.gen.opts);
