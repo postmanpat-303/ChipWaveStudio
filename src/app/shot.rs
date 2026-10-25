@@ -1247,6 +1247,16 @@ impl App {
             });
         }
         self.ip.quick_req = std::env::var("CHIPWAVE_SHOT_QUICK").ok();
+        // CHIPWAVE_SHOT_QUICKDOT=<s>: the preview's running dot, frozen
+        self.ip.quick_dot = std::env::var("CHIPWAVE_SHOT_QUICKDOT")
+            .ok()
+            .and_then(|v| v.parse().ok());
+        // CHIPWAVE_SHOT_QUICKSRC=envelope|random|…: the popover's source
+        self.ip.quick_src = std::env::var("CHIPWAVE_SHOT_QUICKSRC").ok().and_then(|v| {
+            Source::ALL
+                .into_iter()
+                .find(|s| s.name().eq_ignore_ascii_case(&v.replace('-', " ")))
+        });
         self.dirty = false;
     }
 
