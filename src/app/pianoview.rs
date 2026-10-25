@@ -180,10 +180,6 @@ pub(crate) struct PianoUi {
     pub(crate) open: bool,
     /// keys go to the roll (clicked into it last)
     pub(crate) focus: bool,
-    /// the roll was drawn this frame: a roll that is not on screen gives
-    /// the keyboard back (else Ctrl+C / Ctrl+V on a clicked Timeline clip
-    /// went to notes nobody could see)
-    pub(crate) drawn: bool,
     /// pixels per row
     pub(crate) zoom: f32,
     pub(crate) key_h: f32,
@@ -277,7 +273,6 @@ impl Default for PianoUi {
         Self {
             open: false,
             focus: false,
-            drawn: false,
             zoom: 16.0,
             key_h: 10.0,
             scroll_x: 0.0,
@@ -1489,7 +1484,6 @@ impl App {
 
     /// the piano roll (lower panel)
     pub(super) fn piano_view(&mut self, ui: &mut egui::Ui) {
-        self.pr.drawn = true;
         let t = th();
         let full = ui.max_rect();
         // a press outside the roll gives the keys back, also while it is

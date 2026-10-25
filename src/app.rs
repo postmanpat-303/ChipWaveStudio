@@ -1276,10 +1276,6 @@ impl eframe::App for App {
         // the track pie takes the keys while it is open
         self.track_pie(&ctx);
         self.track_auto_menu(&ctx);
-        // (Del, 25 Oct 2026) the roll keeps the keyboard only while shown
-        if !std::mem::take(&mut self.pr.drawn) {
-            self.pr.focus = false;
-        }
         self.handle_keys(&ctx);
         self.tick_safety();
         self.tick_derived();
