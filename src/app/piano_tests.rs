@@ -393,6 +393,18 @@ fn clip_setup() -> Harness<'static, App> {
                 return None;
             };
             t.notes[data as usize].make_mut().len = 8 * PPQ_T;
+            // the chord lane and the generators are for pitched sounds:
+            // track 03 (the demo's Hats, a synth hat, so percussive)
+            // plays a copy of the Arp's synth here
+            let slot = t.tracks.get(2).map_or(0, |k| k.instr as usize);
+            let arp = s
+                .song
+                .instruments
+                .iter()
+                .find(|i| i.name == "Offbeat Arp")
+                .cloned()?;
+            let slot = if slot > 0 { slot } else { 3 };
+            s.song.instruments[slot - 1] = arp;
             let crate::audio::Shared { song, engine, .. } = s;
             engine.ensure_plan(song);
             Some(id)
@@ -933,7 +945,10 @@ fn chord_lane_adds_inserts_from_the_pie_and_undoes() {
         (m[0].start, m[0].len, m[0].root, m[0].q),
         (0, bar, 4, crate::chordgen::Quality::Min)
     );
-    // right-click at bar 2: the style pie; Pop's first progression
+    // right-click at bar 2: the style pie; Pop's first progression (with
+    // the panel's Write set to Markers only; notes are the default)
+    assert!(h.state().cl.gen.write, "Write notes is the default");
+    h.state_mut().cl.gen.write = false;
     let p = lane_at(&h, 2 * bar);
     with_mods(&mut h, egui::Modifiers::NONE, egui::Event::PointerMoved(p));
     for pressed in [true, false] {
@@ -971,7 +986,7 @@ fn chord_lane_adds_inserts_from_the_pie_and_undoes() {
     assert_eq!(
         note_data(&h).notes.len(),
         0,
-        "markers only (Write notes is off)"
+        "markers only (Write set to Markers only)"
     );
     // right-click a chord: its pie; Delete
     let p = lane_at(&h, 0);

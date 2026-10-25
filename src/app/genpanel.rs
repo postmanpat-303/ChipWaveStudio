@@ -21,6 +21,18 @@ use crate::melodygen::{self as mg, Contour, Locks, MNote, MelOpts, Motif, Rhythm
 use crate::timeline::{self as tl, Tick, PPQ};
 use std::time::Instant;
 
+/// where the Chords tab's Write goes
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ChordDest {
+    /// a new clip on the chosen melodic track (at `GenDlg::at`)
+    #[default]
+    Track,
+    /// a new "Chords" track below the chosen one, with a new clip there
+    NewTrack,
+    /// into the clip open in the piano roll
+    Clip,
+}
+
 /// the panel's tabs
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum GenTab {
@@ -367,6 +379,15 @@ fn bars_text(a: Tick, b: Tick) -> String {
     }
 }
 
+/// "2–9" / "3" (1-based bars of the note data, for a "Bars" label)
+fn bars_range(a: Tick, b: Tick) -> String {
+    if b > a + BAR {
+        format!("{}–{}", a / BAR + 1, (b - 1) / BAR + 1)
+    } else {
+        format!("{}", a / BAR + 1)
+    }
+}
+
 fn key_name(key: Key) -> String {
     format!(
         "{} {}",
@@ -433,14 +454,15 @@ fn gen_grip(ui: &mut egui::Ui) -> egui::Response {
     resp.on_hover_text("drag to move the panel · double-click to put it back at the top")
 }
 
-/// the open clip's track / instrument
-struct Dest {
-    track: Option<usize>,
-    inst: String,
+/// the track the panel writes for: the open clip's, else the one it was
+/// opened for (`track`) and its name (`inst`)
+pub(crate) struct Dest {
+    pub(crate) track: Option<usize>,
+    pub(crate) inst: String,
 }
 
 impl App {
-    /// open the panel on the Melody tab (track pie "Melody…")
+    /// open the panel on the Melody tab (over the open clip, if any)
     pub(crate) fn gen_open_melody(&mut self, at: Tick) {
         self.cl_open_gen_at(at);
         self.cl.gen.tab = GenTab::Melody;
@@ -448,7 +470,7 @@ impl App {
         self.cl.gen.mel.from = None;
     }
 
-    /// open the panel on the Bass tab (track pie "Bass…")
+    /// open the panel on the Bass tab (over the open clip, if any)
     pub(crate) fn gen_open_bass(&mut self, at: Tick) {
         self.cl_open_gen_at(at);
         self.cl.gen.tab = GenTab::Bass;
@@ -456,16 +478,179 @@ impl App {
         self.cl.gen.bass.from = None;
     }
 
-    fn gen_dest(&self, t: Target) -> Dest {
+    /// open the panel on `tab` for track `tr` (the track pie, the timeline;
+    /// None: no track, e.g. an empty song). Chords' Write makes a new clip
+    /// at the loop start, else the play marker's bar: on `tr` when it is a
+    /// melodic track with room there, else on a new "Chords" track.
+    pub(crate) fn gen_open_for(&mut self, tr: Option<usize>, tab: GenTab) {
+        self.cl_open_gen_at(0);
+        let tr = tr.filter(|&k| k < self.with(|s| s.song.channels));
+        let g = &mut self.cl.gen;
+        g.track = tr;
+        g.dest = ChordDest::Track;
+        g.tab = tab;
+        g.chords_seen = false;
+        g.mel.from = None;
+        g.bass.from = None;
+        if self.gen_target().is_none() {
+            // no clip to write into: Melody / Bass go on a new track
+            self.cl.gen.mel.new_track = true;
+            self.cl.gen.bass.new_track = true;
+        }
+    }
+
+    /// where a new clip goes: the loop start while a loop is on, else the
+    /// start of the play marker's bar
+    pub(crate) fn gen_play_pos(&self) -> Tick {
+        let cue = self.tlv.cue.max(0);
+        self.with(|s| {
+            let Some(t) = s.song.timeline.as_deref() else {
+                return 0;
+            };
+            if let (true, Some((a, _))) = (t.loop_on, t.loop_range) {
+                return a.max(0);
+            }
+            let sig = t.sig_at(cue);
+            let bar = sig.bar_ticks().max(1);
+            let from = if cue >= sig.tick { sig.tick } else { 0 };
+            from + (cue - from).max(0) / bar * bar
+        })
+    }
+
+    /// track `tr` is a track that takes chords: not drums (a track with
+    /// no instrument yet gets a synth when chords go on it)
+    pub(crate) fn gen_melodic(&self, tr: usize) -> bool {
+        tr < self.with(|s| s.song.channels)
+            && (self.track_needs_instrument(tr) || self.gen_sound(tr).is_some())
+    }
+
+    /// track `tr`'s melodic instrument (None: none, or drums)
+    pub(super) fn gen_sound(&self, tr: usize) -> Option<Instrument> {
+        if self.track_needs_instrument(tr) {
+            return None;
+        }
+        let slot = self.track_instr(tr);
+        self.with(|s| {
+            s.song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .filter(|i| !super::trackpie::is_percussive(i))
+                .cloned()
+        })
+    }
+
+    /// track `tr` plays a percussive sound (`is_percussive`: a drum kit,
+    /// a drum engine, a synth kick …): no Chords / Melody / Bass on it
+    pub(crate) fn track_percussive(&self, tr: usize) -> bool {
+        let Some(slot) = self.track_instrument(tr) else {
+            return false;
+        };
+        self.with(|s| {
+            s.song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .is_some_and(super::trackpie::is_percussive)
+        })
+    }
+
+    /// the roll's clip `t` is on a percussive track (its chord lane and
+    /// Generate stay hidden)
+    pub(crate) fn target_percussive(&self, t: Target) -> bool {
+        matches!(t, Target::Notes { clip: Some(_), .. })
+            && self
+                .gen_dest(Some(t))
+                .track
+                .is_some_and(|k| self.track_percussive(k))
+    }
+
+    /// the track the panel's Preview plays on: where Write goes when it
+    /// has a melodic sound, else the first track that has one (None: the
+    /// song has none yet, the preview stays silent)
+    pub(super) fn gen_preview_ch(&self) -> Option<usize> {
+        let tr = self.gen_dest(self.gen_target()).track;
+        let n = self.with(|s| s.song.channels);
+        tr.into_iter()
+            .chain(0..n)
+            .find(|&k| self.gen_sound(k).is_some())
+    }
+
+    /// a synth for chords on a track with no melodic sound
+    fn gen_synth() -> Option<Instrument> {
+        super::trackpie::Builtin::WaveForge
+            .make()
+            .map(|(name, kind)| Instrument {
+                name,
+                volume: 0.8,
+                transpose: 0,
+                fx: vec![],
+                kind,
+            })
+    }
+
+    /// the clip the panel can write into: the piano roll's open, melodic
+    /// note clip (None: the roll is closed or shows a drum pattern)
+    pub(crate) fn gen_target(&self) -> Option<Target> {
+        if !self.pr.open || self.view != View::Timeline || !self.lower_visible() {
+            return None;
+        }
+        let t = self.pr_target()?;
+        let Target::Notes {
+            clip: Some(id),
+            data,
+        } = t
+        else {
+            return None;
+        };
+        let drum = self.with(|s| {
+            let tl = s.song.timeline.as_deref()?;
+            tl.clips.iter().find(|c| c.id == id)?;
+            Some(tl.notes.get(data)?.drum.is_some())
+        })?;
+        (!drum).then_some(t)
+    }
+
+    /// where Chords' Write goes this frame for `len` ticks: the choice,
+    /// unless it can't be (no clip open; the track is drums or has clips
+    /// there: a new track)
+    pub(crate) fn gen_chord_dest(&self, t: Option<Target>, len: Tick) -> ChordDest {
+        let g = &self.cl.gen;
+        let clip_ok = t.is_some_and(|t| {
+            self.gen_dest(Some(t))
+                .track
+                .is_none_or(|k| self.gen_melodic(k))
+        });
+        match g.dest {
+            ChordDest::Clip if clip_ok => ChordDest::Clip,
+            ChordDest::NewTrack => ChordDest::NewTrack,
+            _ if self.gen_track_free(len) => ChordDest::Track,
+            _ => ChordDest::NewTrack,
+        }
+    }
+
+    /// the panel's track is melodic and has no clip over the new clip's bars
+    fn gen_track_free(&self, len: Tick) -> bool {
+        let Some(tr) = self.cl.gen.track.filter(|&k| self.gen_melodic(k)) else {
+            return false;
+        };
+        let at = self.cl.gen.at;
+        self.with(|s| {
+            s.song
+                .timeline
+                .as_deref()
+                .is_some_and(|t| tl::overlaps(t, tr, at, at + len.max(1), &[]).is_empty())
+        })
+    }
+
+    pub(super) fn gen_dest(&self, t: Option<Target>) -> Dest {
         let track = match t {
-            Target::Notes { clip: Some(id), .. } => self.with(|s| {
+            Some(Target::Notes { clip: Some(id), .. }) => self.with(|s| {
                 s.song
                     .timeline
                     .as_deref()
                     .and_then(|tl| tl.clips.iter().find(|x| x.id == id))
                     .map(|c| c.track as usize)
             }),
-            _ => None,
+            _ => self.cl.gen.track,
         };
         let inst = self.with(|s| {
             track
@@ -477,10 +662,12 @@ impl App {
     }
 
     /// the Generators panel (while `cl.gen.open`)
-    pub(super) fn gen_panel(&mut self, ctx: &egui::Context, t: Target) {
+    /// (drawn over every view: it needs no open clip)
+    pub(super) fn gen_panel(&mut self, ctx: &egui::Context) {
         if !self.cl.gen.open {
             return;
         }
+        let t = self.gen_target();
         let th = th();
         let scr = ctx.content_rect();
         let w = (scr.width() - 24.0).clamp(300.0, 1180.0);
@@ -612,7 +799,7 @@ impl App {
                                         self.gen_chords_card(ui, t, &res, &dest, card_w, &mut acts)
                                     }
                                     Some(m) => {
-                                        self.gen_melody_card(ui, m, &dest, card_w, &mut acts)
+                                        self.gen_melody_card(ui, m, t, &dest, card_w, &mut acts)
                                     }
                                 }
                             });
@@ -621,7 +808,7 @@ impl App {
                     if stacked {
                         match &mel {
                             None => self.gen_chords_card(ui, t, &res, &dest, card_w, &mut acts),
-                            Some(m) => self.gen_melody_card(ui, m, &dest, card_w, &mut acts),
+                            Some(m) => self.gen_melody_card(ui, m, t, &dest, card_w, &mut acts),
                         }
                     }
                 });
@@ -645,14 +832,10 @@ impl App {
         match &mel {
             None => {
                 if acts.preview {
-                    self.cl_play_seq(&res.marks);
+                    let (v, o) = (self.cl.gen.voicing, self.cl.gen.octave);
+                    self.cl_play_seq_as(&res.marks, v, o);
                 }
-                if acts.write {
-                    let (w, v, o) = (self.cl.gen.write, self.cl.gen.voicing, self.cl.gen.octave);
-                    if self.with(|s| s.song.info.key.is_none()) {
-                        self.with(|s| s.song.info.key = Some(res.key));
-                    }
-                    self.cl_insert(t, res.marks, w, v, o);
+                if acts.write && self.gen_write_chords(t, &res) {
                     self.cl.gen.open = false;
                 }
             }
@@ -660,8 +843,7 @@ impl App {
                 if acts.preview {
                     self.gen_play_notes(&m.notes);
                 }
-                if acts.write {
-                    self.gen_write_melody(t, m);
+                if acts.write && self.gen_write_melody(t, m) {
                     self.cl.gen.open = false;
                 }
             }
@@ -851,7 +1033,7 @@ impl App {
     fn gen_chords_card(
         &mut self,
         ui: &mut egui::Ui,
-        t: Target,
+        t: Option<Target>,
         res: &cg::GenResult,
         dest: &Dest,
         w: f32,
@@ -859,66 +1041,144 @@ impl App {
     ) {
         let th = th();
         let (a, b) = span_of(&res.marks);
-        let scope = self.cl_scope(t, a, b);
-        let tr = dest
-            .track
-            .map_or("this clip".to_string(), |k| format!("track {:02}", k + 1));
+        let len = ((b - a).max(BAR) + BAR - 1) / BAR * BAR;
+        let eff = self.gen_chord_dest(t, len);
+        let track_ok = self.gen_track_free(len);
+        let melodic = dest.track.is_some_and(|k| self.gen_melodic(k));
+        let at = self.cl.gen.at;
+        let (bar_a, bar_b) = self.with(|s| {
+            s.song
+                .timeline
+                .as_deref()
+                .map_or((at / BAR + 1, (at + len - 1) / BAR + 1), |tl| {
+                    (tl.bar_pos(at).bar, tl.bar_pos(at + len - 1).bar)
+                })
+        });
+        let looped = self.with(|s| {
+            s.song
+                .timeline
+                .as_deref()
+                .is_some_and(|tl| tl.loop_on && tl.loop_range.is_some())
+        });
+        let scope = t.map(|t| self.cl_scope(t, a, b)).unwrap_or_default();
+        let trk = |k: usize| format!("track {:02}", k + 1);
+        let below = dest.track.map_or("after the last track".to_string(), |k| {
+            format!("below {}", trk(k))
+        });
         card(ui, w, |ui| {
             let g = &mut self.cl.gen;
             card_title(ui);
-            ui.horizontal(|ui| {
-                cap(ui, "Target");
-                ui.label(
-                    egui::RichText::new(match dest.track {
-                        Some(k) => format!("Track {:02} · {}", k + 1, dest.inst),
-                        None => "this clip".into(),
-                    })
-                    .strong(),
-                );
-            });
-            ui.add(egui::Label::new(egui::RichText::new(&scope).color(th.ink2).small()).wrap());
-            ui.horizontal(|ui| {
-                cap(ui, "Bars");
-                ui.label(egui::RichText::new(format!("{}", g.opts.start_bar + 1)).strong());
-                if ui
-                    .small_button(" - ")
-                    .on_hover_text("start a bar earlier")
-                    .clicked()
-                {
-                    g.opts.start_bar = g.opts.start_bar.saturating_sub(1);
-                }
-                if ui
-                    .small_button(" + ")
-                    .on_hover_text("start a bar later")
-                    .clicked()
-                {
-                    g.opts.start_bar += 1;
-                }
-                cap(ui, "to");
-                ui.label(egui::RichText::new(format!("{}", (b - 1).max(a) / BAR + 1)).strong());
-                cap(ui, "(Length sets the end)");
-            });
-            cap(ui, "Write");
-            let mode = if !g.write {
-                0
-            } else if g.on_top {
-                2
-            } else {
-                1
+            cap(ui, "Target");
+            let this_track = match dest.track {
+                Some(k) => format!("Track {:02}", k + 1),
+                None => "A track".into(),
             };
-            let sw = ((w - 40.0) / 3.0).clamp(70.0, 110.0);
-            match seg(
-                ui,
-                &["Markers only", "Replace notes", "Notes on top"],
-                mode,
-                sw,
-            ) {
-                Some(0) => g.write = false,
-                Some(1) => (g.write, g.on_top) = (true, false),
-                Some(2) => (g.write, g.on_top) = (true, true),
-                _ => {}
+            let bw = ((w - 40.0) / 3.0).clamp(70.0, 110.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                let opts = [
+                    (ChordDest::Track, this_track.as_str(), track_ok, if melodic {
+                        "a new clip on this track (needs free bars there)"
+                    } else {
+                        "a new clip on this track (not on a drum track)"
+                    }),
+                    (ChordDest::NewTrack, "New track", true, "a new “Chords” track below, with a copy of this track's sound (a synth if it is drums or has none)"),
+                    (ChordDest::Clip, "This clip", t.is_some(), "into the clip open in the piano roll"),
+                ];
+                for (d, label, ok, tip) in opts {
+                    let r = ui.add_enabled(
+                        ok,
+                        egui::Button::new(label).selected(eff == d).min_size(egui::vec2(bw, 22.0)),
+                    );
+                    if r.on_hover_text(tip).on_disabled_hover_text(tip).clicked() {
+                        g.dest = d;
+                    }
+                }
+            });
+            let inst = &dest.inst;
+            ui.label(
+                egui::RichText::new(match (eff, dest.track) {
+                    (ChordDest::Clip, Some(k)) => format!("Track {:02} · {inst}: this clip", k + 1),
+                    (ChordDest::Clip, None) => "this clip".into(),
+                    (ChordDest::Track, Some(k)) => {
+                        format!("Track {:02} · {inst}: a new clip", k + 1)
+                    }
+                    _ => format!("a new track “Chords” {below}"),
+                })
+                .strong(),
+            );
+            if eff == ChordDest::Clip {
+                ui.add(egui::Label::new(egui::RichText::new(&scope).color(th.ink2).small()).wrap());
+                ui.horizontal(|ui| {
+                    cap(ui, "Bars");
+                    ui.label(egui::RichText::new(format!("{}", g.opts.start_bar + 1)).strong());
+                    if ui
+                        .small_button(" - ")
+                        .on_hover_text("start a bar earlier")
+                        .clicked()
+                    {
+                        g.opts.start_bar = g.opts.start_bar.saturating_sub(1);
+                    }
+                    if ui
+                        .small_button(" + ")
+                        .on_hover_text("start a bar later")
+                        .clicked()
+                    {
+                        g.opts.start_bar += 1;
+                    }
+                    cap(ui, "to");
+                    ui.label(egui::RichText::new(format!("{}", (b - 1).max(a) / BAR + 1)).strong());
+                    cap(ui, "(of the clip)");
+                });
+                cap(ui, "Write");
+                let mode = if !g.write {
+                    2
+                } else if g.on_top {
+                    1
+                } else {
+                    0
+                };
+                match seg(
+                    ui,
+                    &["Replace notes", "Notes on top", "Markers only"],
+                    mode,
+                    bw,
+                ) {
+                    Some(0) => (g.write, g.on_top) = (true, false),
+                    Some(1) => (g.write, g.on_top) = (true, true),
+                    Some(2) => g.write = false,
+                    _ => {}
+                }
+            } else {
+                ui.horizontal(|ui| {
+                    cap(ui, "Song bars");
+                    ui.label(egui::RichText::new(format!("{bar_a}–{bar_b}")).strong());
+                    if ui
+                        .small_button(" - ")
+                        .on_hover_text("a bar earlier")
+                        .clicked()
+                    {
+                        g.at = (g.at - BAR).max(0);
+                    }
+                    if ui
+                        .small_button(" + ")
+                        .on_hover_text("a bar later")
+                        .clicked()
+                    {
+                        g.at += BAR;
+                    }
+                });
+                cap(
+                    ui,
+                    if looped {
+                        "starts at the loop start (Length sets the end)"
+                    } else {
+                        "starts at the play marker's bar (Length sets the end)"
+                    },
+                );
             }
-            ui.add_enabled_ui(g.write, |ui| {
+            let notes = eff != ChordDest::Clip || g.write;
+            ui.add_enabled_ui(notes, |ui| {
                 ui.horizontal(|ui| {
                     cap(ui, "Voicing");
                     egui::ComboBox::from_id_salt("cl_voicing")
@@ -934,18 +1194,32 @@ impl App {
                 });
             });
             ui.add_space(2.0);
-            let bars = bars_text(a, b);
+            let n = res.marks.len();
+            let bars_n = len / BAR;
             warn(
                 ui,
-                &if !g.write {
-                    format!("writes chord markers only in {bars} on {tr} (notes untouched)")
-                } else if g.on_top {
-                    format!("adds notes on top in {bars} on {tr} (keeps the notes there)")
-                } else {
-                    format!(
-                        "replaces notes in {bars} on {tr} (inside each chord's span; asks first \
-                         if that deletes more than {CONFIRM_OVER})"
-                    )
+                &match eff {
+                    ChordDest::Track => format!(
+                        "adds a new {bars_n}-bar clip of {n} chords on {} at song bars {bar_a}–{bar_b}",
+                        dest.track.map_or("the track".into(), trk)
+                    ),
+                    ChordDest::NewTrack => format!(
+                        "adds a new track “Chords” {below} with a {bars_n}-bar clip of {n} chords at song bars {bar_a}–{bar_b}"
+                    ),
+                    ChordDest::Clip => {
+                        let tr = dest.track.map_or("this clip".into(), trk);
+                        let bars = bars_text(a, b);
+                        if !g.write {
+                            format!("writes chord markers only in {bars} on {tr} (notes untouched)")
+                        } else if g.on_top {
+                            format!("adds notes on top in {bars} on {tr} (keeps the notes there)")
+                        } else {
+                            format!(
+                                "replaces notes in {bars} on {tr} (inside each chord's span; asks first \
+                                 if that deletes more than {CONFIRM_OVER})"
+                            )
+                        }
+                    }
                 },
             );
             ui.add_space(4.0);
@@ -956,6 +1230,152 @@ impl App {
         });
     }
 
+    /// Chords' Write: into the open clip, or a new clip on the panel's
+    /// track or a new track (one undo); false: nothing was written
+    pub(crate) fn gen_write_chords(&mut self, t: Option<Target>, res: &cg::GenResult) -> bool {
+        if res.marks.is_empty() {
+            self.status = "No chords to write".into();
+            return false;
+        }
+        let (a, b) = span_of(&res.marks);
+        let len = ((b - a).max(BAR) + BAR - 1) / BAR * BAR;
+        let dest = self.gen_chord_dest(t, len);
+        let (w, v, o) = (self.cl.gen.write, self.cl.gen.voicing, self.cl.gen.octave);
+        if let (ChordDest::Clip, Some(t)) = (dest, t) {
+            // (cl_insert takes the undo snapshot, or asks first)
+            if self.with(|s| s.song.info.key.is_none()) {
+                self.with(|s| s.song.info.key = Some(res.key));
+            }
+            self.cl_insert(t, res.marks.clone(), w, v, o);
+            return true;
+        }
+        if self.with(|s| s.song.timeline.is_none()) {
+            self.status = "Chords need the timeline: switch to the timeline view first".into();
+            return false;
+        }
+        let src = self
+            .cl
+            .gen
+            .track
+            .filter(|&k| k < self.with(|s| s.song.channels));
+        let new_track = dest != ChordDest::Track || src.is_none();
+        if new_track && self.with(|s| s.song.channels) >= MAX_CHANNELS {
+            self.status = "All 32 tracks are used: pick a track with free bars".into();
+            return false;
+        }
+        // a new track's sound: a copy of the chosen track's melodic
+        // instrument, else a synth
+        // a new track's sound: a copy of the chosen track's melodic
+        // instrument, else a synth; the chosen track with no instrument
+        // yet gets the synth
+        let needs = new_track || src.is_some_and(|k| self.track_needs_instrument(k));
+        let inst = if needs {
+            let heard = if new_track {
+                src.and_then(|k| self.gen_sound(k))
+            } else {
+                None
+            };
+            match heard.or_else(Self::gen_synth) {
+                Some(i) => Some(i),
+                None => {
+                    self.status = "Couldn't make an instrument for the chords".into();
+                    return false;
+                }
+            }
+        } else {
+            None
+        };
+        if inst.is_some() && self.with(|s| s.song.instruments.len() >= 255) {
+            self.status = "All 255 instrument slots are used: pick a track for the chords".into();
+            return false;
+        }
+        let marks: Vec<ChordMark> = res
+            .marks
+            .iter()
+            .map(|m| ChordMark {
+                start: m.start - a,
+                ..m.clone()
+            })
+            .collect();
+        let at = self.cl.gen.at.max(0);
+        self.snapshot();
+        self.undo_hold += 1;
+        if self.with(|s| s.song.info.key.is_none()) {
+            self.with(|s| s.song.info.key = Some(res.key));
+        }
+        let tr = match (inst, src) {
+            (None, Some(k)) => Some(k),
+            (Some(inst), Some(k)) if !new_track => self.with(|s| {
+                let slot = s.song.add_instrument(inst)?;
+                crate::chanops::assign_track_instrument(&mut s.song, k, slot as u8 + 1);
+                Some(k)
+            }),
+            (Some(inst), _) => {
+                let k = src.map_or(self.with(|s| s.song.channels), |k| k + 1);
+                (self.track_insert(k, "Chords")
+                    && self
+                        .with(|s| {
+                            let slot = s.song.add_instrument(inst)?;
+                            crate::chanops::assign_track_instrument(&mut s.song, k, slot as u8 + 1);
+                            Some(())
+                        })
+                        .is_some())
+                .then_some(k)
+            }
+            (None, None) => None,
+        };
+        let id = tr.and_then(|tr| {
+            let slot = self.with(|s| s.song.timeline.as_deref().map_or(0, |t| t.track_instr(tr)));
+            let notes: Vec<tl::Note> = self
+                .cl_notes(&marks, v, o)
+                .into_iter()
+                .map(|n| tl::Note { instr: slot, ..n })
+                .collect();
+            self.with(|s| {
+                let id = tl::new_note_clip(&mut s.song, tr, at)?;
+                let tlm = s.song.timeline.as_deref_mut()?;
+                let c = tlm.clips.iter_mut().find(|c| c.id == id)?;
+                c.len = len;
+                c.name = Some("Chords".into());
+                let tl::ClipKind::Notes { data } = c.kind else {
+                    return None;
+                };
+                let d = tlm.notes[data as usize].make_mut();
+                d.name = "Chords".into();
+                d.len = len;
+                d.chords = marks.clone();
+                d.notes = notes;
+                let crate::audio::Shared { song, engine, .. } = s;
+                engine.ensure_plan(song);
+                Some(id)
+            })
+        });
+        self.undo_hold -= 1;
+        self.dirty = true;
+        crate::plugin::sync(&self.shared, None);
+        let (Some(tr), Some(id)) = (tr, id) else {
+            self.status = "Couldn't add the chords".into();
+            return false;
+        };
+        self.track_open_pattern(tr, id);
+        let (bar_a, bar_b, name) = self.with(|s| {
+            let tl = s.song.timeline.as_deref();
+            (
+                tl.map_or(at / BAR + 1, |t| t.bar_pos(at).bar),
+                tl.map_or((at + len - 1) / BAR + 1, |t| t.bar_pos(at + len - 1).bar),
+                s.song.channel_names.get(tr).cloned().unwrap_or_default(),
+            )
+        });
+        self.status = format!(
+            "Chords: {} chords in a new {}-bar clip on {}track {:02} “{name}”, song bars {bar_a}–{bar_b} · Ctrl+Z takes it back",
+            marks.len(),
+            len / BAR,
+            if new_track { "new " } else { "" },
+            tr + 1,
+        );
+        true
+    }
+
     // ------------------------------------------------------------ melody
 
     /// the chords a Melody / Bass goes over (`pref`: the tab's Over
@@ -963,11 +1383,11 @@ impl App {
     /// clip has chords of its own
     fn gen_source(
         &self,
-        t: Target,
+        t: Option<Target>,
         res: &cg::GenResult,
         pref: Option<MelFrom>,
     ) -> (Key, Vec<ChordMark>, MelFrom, bool) {
-        let clip_marks = self.cl_marks(t);
+        let clip_marks = t.map(|t| self.cl_marks(t)).unwrap_or_default();
         let g = &self.cl.gen;
         let from = pref.unwrap_or(if clip_marks.is_empty() || g.chords_seen {
             MelFrom::Chords
@@ -991,7 +1411,7 @@ impl App {
     }
 
     /// the melody's chords, key and span, and the melody itself
-    fn gen_melody(&mut self, t: Target, res: &cg::GenResult) -> MelView {
+    fn gen_melody(&mut self, t: Option<Target>, res: &cg::GenResult) -> MelView {
         let (key, marks, from, clip_has_chords) = self.gen_source(t, res, self.cl.gen.mel.from);
         let (start, end) = span_of(&marks);
         let m = &mut self.cl.gen.mel;
@@ -1009,7 +1429,7 @@ impl App {
     }
 
     /// the bass line over the same chords as the Melody tab
-    fn gen_bass(&mut self, t: Target, res: &cg::GenResult) -> MelView {
+    fn gen_bass(&mut self, t: Option<Target>, res: &cg::GenResult) -> MelView {
         let (key, marks, from, clip_has_chords) = self.gen_source(t, res, self.cl.gen.bass.from);
         let (start, end) = span_of(&marks);
         let b = &mut self.cl.gen.bass;
@@ -1395,12 +1815,21 @@ impl App {
         &mut self,
         ui: &mut egui::Ui,
         mv: &MelView,
+        t: Option<Target>,
         dest: &Dest,
         w: f32,
         acts: &mut Acts,
     ) {
         let th = th();
         let bars = bars_text(mv.start, mv.end.max(mv.start + BAR));
+        let at = self.cl.gen.at;
+        let song_bars = self.with(|s| {
+            let n = (mv.end - mv.start).max(BAR);
+            s.song.timeline.as_deref().map_or_else(
+                || bars_range(at, at + n),
+                |tl| format!("{}–{}", tl.bar_pos(at).bar, tl.bar_pos(at + n - 1).bar),
+            )
+        });
         let tr = dest
             .track
             .map_or("this clip".to_string(), |k| format!("track {:02}", k + 1));
@@ -1414,14 +1843,16 @@ impl App {
         card(ui, w, |ui| {
             card_title(ui);
             cap(ui, "Target");
-            let this = match dest.track {
-                Some(k) => format!("Track {:02} · {}", k + 1, dest.inst),
-                None => "This clip".into(),
+            let this = match (t, dest.track) {
+                (Some(_), Some(k)) => format!("Track {:02} · {}", k + 1, dest.inst),
+                _ => "This clip".into(),
             };
-            let can_new = dest.track.is_some();
-            if !can_new {
-                *new_track = false;
+            // no clip open (or a drum pattern): a new track it is
+            let can_clip = t.is_some();
+            if !can_clip {
+                *new_track = true;
             }
+            let can_new = true;
             ui.horizontal(|ui| {
                 ui.add_enabled_ui(can_new, |ui| {
                     if ui
@@ -1437,17 +1868,27 @@ impl App {
                     }
                 });
                 if ui
-                    .add(egui::Button::new(this.as_str()).selected(!*new_track))
+                    .add_enabled(can_clip, egui::Button::new(this.as_str()).selected(!*new_track))
                     .on_hover_text("into the open clip")
+                    .on_disabled_hover_text("open a melodic clip in the piano roll to write into it")
                     .clicked()
                 {
                     *new_track = false;
                 }
             });
             ui.horizontal(|ui| {
-                cap(ui, "Bars");
-                ui.label(egui::RichText::new(&bars).strong());
-                cap(ui, "(follows the chords)");
+                if can_clip {
+                    cap(ui, "Bars");
+                    ui.label(
+                        egui::RichText::new(bars_range(mv.start, mv.end.max(mv.start + BAR)))
+                            .strong(),
+                    );
+                    cap(ui, "(follows the chords)");
+                } else {
+                    cap(ui, "Song bars");
+                    ui.label(egui::RichText::new(&song_bars).strong());
+                    cap(ui, "(loop start, else the play marker)");
+                }
             });
             if !*new_track {
                 cap(ui, "Write");
@@ -1468,7 +1909,14 @@ impl App {
             ui.add_space(2.0);
             warn(
                 ui,
-                &if *new_track {
+                &if *new_track && !can_clip {
+                    let below = dest.track.map_or("after the last track".into(), |k| {
+                        format!("below track {:02}", k + 1)
+                    });
+                    format!(
+                        "adds a new track “{part}” {below} with a clip at song bars {song_bars} (nothing is replaced)"
+                    )
+                } else if *new_track {
                     format!(
                         "adds a new track “{part}” below {tr} with {bars} (nothing is replaced)"
                     )
@@ -1526,9 +1974,9 @@ impl App {
 
     /// Melody's / Bass's Write: a new "Melody" / "Bass" track or the open
     /// clip (one undo)
-    fn gen_write_melody(&mut self, t: Target, mv: &MelView) {
+    fn gen_write_melody(&mut self, t: Option<Target>, mv: &MelView) -> bool {
         if mv.notes.is_empty() {
-            return;
+            return false;
         }
         let n = mv.notes.len();
         let g = &self.cl.gen;
@@ -1538,9 +1986,12 @@ impl App {
             (g.mel.new_track, g.mel.on_top)
         };
         let what = g.tab.name().to_lowercase();
-        if new_track && self.gen_melody_track(t, mv) {
-            return;
+        if (new_track || t.is_none()) && self.gen_melody_track(t, mv) {
+            return true;
         }
+        let Some(t) = t else {
+            return false;
+        };
         // the open clip: replace the notes in the melody's span (asks
         // first when that deletes many), or on top; markers unchanged
         let marks = self.cl_marks(t);
@@ -1558,63 +2009,75 @@ impl App {
             format!("{what} of {n} note(s) written"),
             on_top,
         );
+        true
     }
 
     /// a new track "Melody" / "Bass" below the clip's track with a copy of
     /// the track's instrument (what Preview played) and a
     /// note clip where the source clip is; false: not possible (the caller
     /// writes into the clip instead)
-    fn gen_melody_track(&mut self, t: Target, mv: &MelView) -> bool {
-        let Target::Notes {
-            clip: Some(src), ..
-        } = t
-        else {
-            return false;
-        };
+    fn gen_melody_track(&mut self, t: Option<Target>, mv: &MelView) -> bool {
         let bass = self.cl.gen.tab == GenTab::Bass;
         let part = self.cl.gen.tab.name();
         let what = part.to_lowercase();
-        let Some((tr, start, offset, len)) = self.with(|s| {
-            let c = s
-                .song
-                .timeline
-                .as_deref()?
-                .clips
-                .iter()
-                .find(|c| c.id == src)?;
-            Some((c.track as usize, c.start, c.offset, c.len))
-        }) else {
-            return false;
+        // (track, clip start, offset, len, shift): where the source clip
+        // is; with no clip, at the panel's song position (the notes move
+        // so the first chord's bar starts the clip)
+        let src = match t {
+            Some(Target::Notes {
+                clip: Some(src), ..
+            }) => self.with(|s| {
+                let c = s
+                    .song
+                    .timeline
+                    .as_deref()?
+                    .clips
+                    .iter()
+                    .find(|c| c.id == src)?;
+                Some((Some(c.track as usize), c.start, c.offset, c.len, 0))
+            }),
+            _ => None,
+        };
+        let no_clip = src.is_none();
+        let (tr, start, offset, len, shift) = match src {
+            Some(x) => x,
+            None if self.with(|s| s.song.timeline.is_none()) => {
+                self.status =
+                    format!("The {what} needs the timeline: switch to the timeline view first");
+                return false;
+            }
+            None => {
+                let tr = self
+                    .cl
+                    .gen
+                    .track
+                    .filter(|&k| k < self.with(|s| s.song.channels));
+                (tr, self.cl.gen.at.max(0), 0, BAR, mv.start)
+            }
         };
         if self.with(|s| s.song.channels) >= MAX_CHANNELS {
             self.status = format!("All 32 tracks are used: the {what} goes into this clip");
-            return false;
+            return !no_clip;
         }
         if self.with(|s| s.song.instruments.len() >= 255) {
             self.status =
                 format!("All 255 instrument slots are used: the {what} goes into this clip");
-            return false;
+            return !no_clip;
         }
         // the sound Preview played: a copy of the clip's track instrument
         // (its patch, parameters and effects), so the written melody sounds
         // the same; a lead synth (Bass: a bass synth) only when the track
-        // has none or plays a drum kit
-        let heard = (!self.track_needs_instrument(tr))
-            .then(|| self.track_instr(tr))
+        // has none or plays a percussive sound (`is_percussive`)
+        let heard = tr
+            .filter(|&tr| !self.track_needs_instrument(tr))
+            .map(|tr| self.track_instr(tr))
             .and_then(|slot| {
                 self.with(|s| {
                     s.song
                         .instruments
                         .get((slot as usize).wrapping_sub(1))
-                        // a drum kit is no bass or lead (Bass: any drum
-                        // engine, as the track pie tells drums apart)
-                        .filter(|i| {
-                            if bass {
-                                !super::trackpie::is_drum_kind(&i.kind)
-                            } else {
-                                crate::drumkit::kit_of(i).is_none()
-                            }
-                        })
+                        // a kit or a kick is no bass or lead
+                        .filter(|i| !super::trackpie::is_percussive(i))
                         .cloned()
                 })
             });
@@ -1639,7 +2102,7 @@ impl App {
                 }
             }
         };
-        let at = tr + 1;
+        let at = tr.map_or(self.with(|s| s.song.channels), |k| k + 1);
         self.snapshot();
         self.undo_hold += 1;
         let slot = if self.track_insert(at, part) {
@@ -1651,16 +2114,20 @@ impl App {
         } else {
             None
         };
-        let notes = Self::mel_notes(&mv.notes, slot.unwrap_or(0));
+        let mut notes = Self::mel_notes(&mv.notes, slot.unwrap_or(0));
+        for n in &mut notes {
+            n.start -= shift;
+        }
+        let end = mv.end - shift;
         let id = slot.and_then(|_| {
             self.with(|s| {
                 let id = tl::new_note_clip(&mut s.song, at, start)?;
                 let tlm = s.song.timeline.as_deref_mut()?;
-                let need = mv.end.max(offset + len);
+                let need = end.max(offset + len);
                 let data_len = (need + BAR - 1) / BAR * BAR;
                 let c = tlm.clips.iter_mut().find(|c| c.id == id)?;
                 c.offset = offset;
-                c.len = len.max(mv.end - offset).max(BAR);
+                c.len = len.max(end - offset).max(BAR);
                 c.name = Some(part.into());
                 let tl::ClipKind::Notes { data } = c.kind else {
                     return None;
@@ -1686,7 +2153,21 @@ impl App {
             "New track {:02} “{part}”: {} note(s) in {} (Ctrl+Z undoes it all)",
             at + 1,
             mv.notes.len(),
-            bars_text(mv.start, mv.end)
+            if no_clip {
+                self.with(|s| {
+                    let n = (end - 1).max(0);
+                    s.song.timeline.as_deref().map_or_else(String::new, |tl| {
+                        let (a, b) = (tl.bar_pos(start).bar, tl.bar_pos(start + n).bar);
+                        if b > a {
+                            format!("song bars {a}–{b}")
+                        } else {
+                            format!("song bar {a}")
+                        }
+                    })
+                })
+            } else {
+                bars_text(mv.start, mv.end)
+            }
         );
         true
     }

@@ -1,6 +1,6 @@
 [package]
 name = "chipwave"
-version = "0.2.14+fix.0"
+version = "0.2.15+fix.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "ChipWave Studio - an OctaMED-inspired tracker with a built-in synth"

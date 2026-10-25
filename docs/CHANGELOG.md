@@ -2,6 +2,22 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.15.0: Chords that write to the timeline
+
+Released 2026-10-25. Highlights:
+
+- **Generators rebuilt (Chords, Melody, Bass):** the GENERATORS panel is drawn at the top level, not only inside the piano roll's chord lane, so **Write to timeline** works with no clip open, no track selected, an empty song or a drum track. It always writes notes onto a melodic track.
+- **WRITE card targets:** Chords writes to **this track**, a **new track** below it, or **this clip**. A new clip goes at the loop start, else at the play marker's bar; the card says where before you write and the status bar says where after (*4 chords in a new 8-bar clip on new track 06 "Chords", song bars 33–40*). Every write is one Ctrl+Z, and clips (also trimmed or looped ones) grow to show everything written. Melody and Bass without a clip make a track at the song position.
+- **Chords… on the Timeline:** a button beside **+ Add track** opens the Chords tab; with no track (or Master) selected it makes a new melodic track.
+- **Chords only on pitched sounds:** one check decides whether a track's sound is percussive: drum engines and kits, plugins in the Drums category or tagged Drums/Percussion, and drum words in the sound's name (kick, snare, hat, clap, tom, perc, cymbal, rim, shaker, 808/909 kit and so on), so a synth called "Trance Kick" counts as a drum. On such a track the track pie has no Chords…, Melody… or Bass…, the piano roll has no chord lane or Generate, and the Chords… button beside + Add track is hidden. A new Chords, Melody or Bass track never copies a percussive sound.
+- **Fixes:** the Write card's length no longer reads "Bars bars"; Preview plays on a melodic sound.
+- Tests: 18 end-to-end generator scenarios (write targets, undo, empty song, drum tracks, hidden options, new-track sounds).
+- Old songs save, play and render exactly as in 0.2.14.0 (checked against its renders).
+
+### Known limits
+- The percussive check is by engine, catalogue category and name: a pitched sound named after a drum (for example "Tom's Lead") is treated as a drum, and a drum sound with a neutral name on a plain synth is treated as pitched.
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
+
 ## 0.2.14.0: Round Robin, key pressure, clip copy and paste
 
 Released 2026-10-25. Highlights:

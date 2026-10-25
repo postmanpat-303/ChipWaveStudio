@@ -1081,8 +1081,43 @@ impl App {
                 self.shot_note_clip(row);
                 // CHIPWAVE_SHOT_GEN=chords|melody|bass: the Generators panel
                 // open on that clip
-                if let Ok(g) = std::env::var("CHIPWAVE_SHOT_GEN") {
-                    self.cl_open_gen_at(self.tlv.cue.max(0) as crate::timeline::Tick);
+                // (chords-track: from the track pie, a new clip on the
+                // track; chords-written: that, after Write to timeline)
+                let g = std::env::var("CHIPWAVE_SHOT_GEN").unwrap_or_default();
+                if !g.is_empty() {
+                    // the generators are for pitched sounds: open the first
+                    // melodic track's first note clip (not the kick's)
+                    let n = self.with(|s| s.song.channels);
+                    let mel = self.with(|s| {
+                        s.song.timeline.as_deref().map(|t| {
+                            t.clips
+                                .iter()
+                                .filter(|c| c.notes().is_some())
+                                .map(|c| (c.track as usize, c.id, c.start))
+                                .collect::<Vec<_>>()
+                        })
+                    });
+                    if let Some((tr, id, _)) =
+                        mel.unwrap_or_default().into_iter().find(|&(k, _, _)| {
+                            k < n && !self.track_percussive(k) && self.gen_sound(k).is_some()
+                        })
+                    {
+                        self.track_open_pattern(tr, id);
+                    }
+                }
+                if g.starts_with("chords-") {
+                    // the track of the clip open in the roll
+                    let tr = self.gen_dest(self.pr_target()).track.unwrap_or(self.ch);
+                    self.gen_open_for(Some(tr), super::genpanel::GenTab::Chords);
+                    if g == "chords-written" {
+                        let res = crate::chordgen::generate(&self.cl.gen.opts);
+                        let t = self.gen_target();
+                        if self.gen_write_chords(t, &res) {
+                            self.cl.gen.open = false;
+                        }
+                    }
+                } else if !g.is_empty() {
+                    self.cl_open_gen_at(0);
                     self.cl.gen.tab = match g.as_str() {
                         "melody" => super::genpanel::GenTab::Melody,
                         "bass" => super::genpanel::GenTab::Bass,
