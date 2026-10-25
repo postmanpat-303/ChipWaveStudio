@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.11.0-00d0ff" alt="Version 0.2.11.0">
+  <img src="https://img.shields.io/badge/version-0.2.12.0-00d0ff" alt="Version 0.2.12.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -20,7 +20,7 @@
 
 ```
  ┌──────────────────────────────────────────────────────────────────────────┐
- │  C H I P W A V E   S T U D I O            v0.2.11.0    BPM 140  SPD 06  │
+ │  C H I P W A V E   S T U D I O            v0.2.12.0    BPM 140  SPD 06  │
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
  │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ free music studio │
  │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ sequencer + synth │
@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.11.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.12.0</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -51,7 +51,28 @@
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.11.0: easier-to-read text, UI scale and Text size
+## New in 0.2.12.0: bigger, resizable and movable tracks
+
+- **Taller tracks** by default on the Timeline.
+- **Resize a track**: drag the bottom edge of its header (28 to 200 pt, one undo step, saved with the song). **Double-click** the edge to reset it.
+- **Resize every track**: **Ctrl+wheel over the track headers** or **Alt+wheel**; the new size is remembered.
+- **Move tracks up and down**: drag a header up or down (a line shows where it lands) or use **Move up / Move down** in the track pie. Clips, sound, colour and mix go with the track, and Undo works.
+- **The selected track stands out**: accent-tinted header with a wide accent bar and outline, bold name, and a tinted, outlined lane in every theme.
+
+Every song saves, plays and renders exactly as in 0.2.11.0. Known limits and details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/timeline-track-heights.png" alt="The Timeline in Slate with the Bass track resized taller than the others"><br><b>Resized tracks</b>: drag a header's bottom edge.</td>
+    <td width="50%"><img src="docs/screenshots/timeline-track-reorder.png" alt="Track 03 being dragged up, with a 'move track 03' label and a line between tracks 01 and 02"><br><b>Drag to reorder</b>: the line shows where the track lands.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/timeline-selected-slate.png" alt="The selected Kick track in Slate with an accent-tinted header, a wide accent bar and an outlined lane"><br><b>Selected track</b> in Slate.</td>
+    <td width="50%"><img src="docs/screenshots/timeline-selected-amiga.png" alt="The selected track in the Amiga theme with a light outline around its lane"><br><b>Selected track</b> in Amiga.</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.11.0: easier-to-read text, UI scale and Text size</b></summary>
 
 - **New fonts**: the bundled **Atkinson Hyperlegible Next** for text and **Atkinson Hyperlegible Mono** for numbers, the tracker and the LCD, in every theme. One type scale sets every size, and nothing is smaller than 10 pt.
 - **UI scale and Text size**: Settings › Look, each 90 to 150 % in 5 % steps (Ctrl+= / Ctrl+- / Ctrl+0 for the UI scale). ChipWave follows your Windows, Wayland or X11 display scale.
@@ -72,6 +93,8 @@ Every song saves, plays and renders exactly as in 0.2.10.0. Known limits and det
     <td width="50%"><img src="docs/screenshots/amiga-0.2.11.png" alt="The Amiga theme at 1920 by 1080 with the new fonts"><br><b>Amiga</b> with the new fonts.</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.10.0: Generators, the LCD toolbar and smarter pies</b></summary>
 
