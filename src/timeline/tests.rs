@@ -263,6 +263,7 @@ fn timeline_toml_round_trip_with_every_field_and_shared_notes() {
             fx: Some((0x0C, 0x20)),
             tune: -0.25,
             chance: 70,
+            cond: Cond::Every { a: 2, b: 3 },
             expr: vec![NoteExpr {
                 kind: ExprKind::Brightness,
                 points: vec![(0, 0.1), (ROW, 0.9)],

@@ -185,6 +185,14 @@ pub fn play_end(tl: &Timeline) -> Tick {
     }
 }
 
+/// [`plan_key`] of a live plan built with the Fill key `fill` held
+pub fn plan_key_live(song: &Song, tl: &Timeline, fill: bool) -> u64 {
+    // the Fill key only changes clips with step conditions: without any,
+    // holding it doesn't rebuild (and re-seek) the plan
+    let fill = fill && tl.notes.iter().any(|d| d.has_conds());
+    plan_key(song, tl) ^ if fill { 0xF111_F111_F111_F111 } else { 0 }
+}
+
 /// Cheap fingerprint of everything the [`Plan`] depends on (no allocation).
 pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -223,6 +231,7 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
                             n.instr,
                             n.chance,
                             n.tune.to_bits(),
+                            n.cond,
                         )
                             .hash(&mut h);
                     }
@@ -251,10 +260,15 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
                     n.instr,
                     n.chance,
                     n.tune.to_bits(),
+                    n.cond,
                 )
                     .hash(&mut h);
             }
         }
+    }
+    // markers decide which passes are fills (only matters with conditions)
+    for m in &tl.markers {
+        (m.tick, m.track).hash(&mut h);
     }
     h.finish()
 }
@@ -263,6 +277,12 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
 /// starts later wins (the same rule as [`consolidate`]); muted and piano-roll
 /// clips play nothing yet.
 pub fn build_plan(song: &Song, tl: &Timeline) -> Plan {
+    build_plan_live(song, tl, false)
+}
+
+/// [`build_plan`], with `fill` = the Fill key is held (live playback only:
+/// every pass counts as a fill; renders and exports always pass false).
+pub fn build_plan_live(song: &Song, tl: &Timeline, fill: bool) -> Plan {
     let nch = song.channels.min(MAX_CHANNELS);
     let mut per: Vec<Vec<&Clip>> = vec![vec![]; nch];
     for c in &tl.clips {
@@ -324,7 +344,7 @@ pub fn build_plan(song: &Song, tl: &Timeline) -> Plan {
         .map(|(a, b)| (row_of(a), row_of(b)))
         .filter(|(a, b)| b > a);
     Plan {
-        key: plan_key(song, tl),
+        key: plan_key_live(song, tl, fill),
         tracks,
         end,
         loop_rows,
@@ -332,7 +352,7 @@ pub fn build_plan(song: &Song, tl: &Timeline) -> Plan {
             .map(|i| tl.tracks.get(i).map_or(0, |t| t.speed))
             .collect(),
         tempo_changes: tl.tempo.iter().any(|p| p.tick > 0),
-        notes: note_spans(tl, nch),
+        notes: note_spans_live(tl, nch, fill),
         audio: audio_spans(song, tl, nch),
         pcm: tl.audio.iter().map(|a| a.pcm.clone()).collect(),
         tempo: tl.tempo.clone(),
@@ -389,12 +409,17 @@ pub fn audio_spans(song: &Song, tl: &Timeline, nch: usize) -> Vec<Vec<AudioSpan>
 /// (and at the end of their loop pass). `chance` draws from
 /// `ClipRng::new(seed, pass)`, so every play, seek and export is the same.
 pub fn note_spans(tl: &Timeline, nch: usize) -> Vec<Vec<NoteSpan>> {
+    note_spans_live(tl, nch, false)
+}
+
+/// [`note_spans`] with the live Fill key `fill` (see [`build_plan_live`])
+pub fn note_spans_live(tl: &Timeline, nch: usize, fill: bool) -> Vec<Vec<NoteSpan>> {
     let mut out: Vec<Vec<NoteSpan>> = vec![vec![]; nch];
     for c in &tl.clips {
         if c.notes().is_none() || c.len <= 0 || c.muted || c.track as usize >= nch {
             continue;
         }
-        clip_note_spans(tl, c, &mut out[c.track as usize]);
+        clip_note_spans_live(tl, c, &mut out[c.track as usize], fill);
     }
     for v in &mut out {
         v.sort_by_key(|n| (n.start, n.key));
@@ -405,6 +430,14 @@ pub fn note_spans(tl: &Timeline, nch: usize) -> Vec<Vec<NoteSpan>> {
 /// The notes note clip `c` plays, in timeline ticks, appended to `v`
 /// (unsorted; see [`note_spans`]).
 pub(crate) fn clip_note_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>) {
+    clip_note_spans_live(tl, c, v, false)
+}
+
+/// [`clip_note_spans`] with the live Fill key `fill`. Per pass k: the
+/// chance draws come from `ClipRng::new(seed, k)` exactly as before (a
+/// note's condition is tested after its draw, so conditions never move
+/// another note's randomness).
+pub(crate) fn clip_note_spans_live(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>, fill: bool) {
     let ClipKind::Notes { data } = c.kind else {
         return;
     };
@@ -414,8 +447,17 @@ pub(crate) fn clip_note_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>) {
     let Some(d) = tl.notes.get(data as usize) else {
         return;
     };
-    let push = |v: &mut Vec<NoteSpan>, n: &Note, u: Tick, cap: Tick, rng: &mut ClipRng| {
+    let push = |v: &mut Vec<NoteSpan>,
+                n: &Note,
+                u: Tick,
+                cap: Tick,
+                rng: &mut ClipRng,
+                pass: u32,
+                is_fill: bool| {
         if n.chance > 0 && n.chance < 100 && rng.next_f32() * 100.0 >= n.chance as f32 {
+            return;
+        }
+        if !n.cond.plays(pass, is_fill) {
             return;
         }
         if u < 0 || u >= c.len {
@@ -434,6 +476,7 @@ pub(crate) fn clip_note_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>) {
             tune: n.tune,
         });
     };
+    let conds = d.has_conds();
     match c.loop_len.filter(|l| *l > 0) {
         Some(l) => {
             // pass k plays source [k*l, (k+1)*l) at clip time k*l - offset
@@ -442,15 +485,16 @@ pub(crate) fn clip_note_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>) {
             for k in 0..passes.min(100_000) {
                 let mut rng = ClipRng::new(c.seed, k as u32);
                 let base = k * l - off;
+                let f = conds && rr::is_fill(tl, c, k, passes, base, l, fill);
                 for n in d.notes.iter().filter(|n| n.start >= 0 && n.start < l) {
-                    push(v, n, base + n.start, base + l, &mut rng);
+                    push(v, n, base + n.start, base + l, &mut rng, k as u32, f);
                 }
             }
         }
         None => {
             let mut rng = ClipRng::new(c.seed, 0);
             for n in &d.notes {
-                push(v, n, n.start - c.offset, Tick::MAX, &mut rng);
+                push(v, n, n.start - c.offset, Tick::MAX, &mut rng, 0, fill);
             }
         }
     }

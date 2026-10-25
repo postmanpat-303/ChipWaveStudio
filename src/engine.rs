@@ -439,6 +439,9 @@ const PEND_CAP: usize = 512;
 pub struct Engine {
     pub sr: f32,
     pub playing: bool,
+    /// the Fill key is held (Round Robin step conditions): live playback
+    /// treats every loop pass as a fill. Never set in renders or exports.
+    pub fill_live: bool,
     /// play only the current pattern (loop) instead of the order list
     pub loop_pattern: bool,
     pub order_pos: usize,
@@ -573,6 +576,7 @@ impl Engine {
         Self {
             sr,
             playing: false,
+            fill_live: false,
             loop_pattern: false,
             order_pos: 0,
             row: 0,
@@ -1060,9 +1064,12 @@ impl Engine {
                     self.tl.auto_v = vec![f32::NAN; n];
                     self.tl.auto_raw = vec![f32::NAN; n];
                 }
-                let key = crate::timeline::plan_key(song, tl);
+                let fill = self.fill_live && self.playing;
+                let key = crate::timeline::plan_key_live(song, tl, fill);
                 if self.tl.plan.as_ref().is_none_or(|p| p.key != key) {
-                    self.tl.plan = Some(std::sync::Arc::new(crate::timeline::build_plan(song, tl)));
+                    self.tl.plan = Some(std::sync::Arc::new(crate::timeline::build_plan_live(
+                        song, tl, fill,
+                    )));
                     // cursors are re-found against the new segments
                     let row = self.tl.row;
                     self.tl_cursors(row);

@@ -657,6 +657,13 @@ pub struct NoteClipData {
     pub drum: Option<crate::drumkit::DrumMeta>,
 }
 
+impl NoteClipData {
+    /// some note has a step condition
+    pub fn has_conds(&self) -> bool {
+        self.notes.iter().any(|n| n.cond != Cond::Always)
+    }
+}
+
 /// One piano-roll note. Velocity is 16-bit (MIDI 2.0); tracker volumes and
 /// MIDI 1.0 velocities convert with [`vel_from_7`] / [`vel_to_7`]
 /// (MIDI M2-115 bit scaling, exactly reversible).
@@ -684,6 +691,10 @@ pub struct Note {
     /// percent chance to play, 0 = always (drawn from the clip's ClipRng)
     #[serde(skip_serializing_if = "is_default")]
     pub chance: u8,
+    /// step condition (Round Robin): which loop passes the note plays on,
+    /// on top of `chance`. Always = not written, so files stay as before.
+    #[serde(skip_serializing_if = "is_default")]
+    pub cond: Cond,
     /// per-note expression lanes (empty for almost every note)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub expr: Vec<NoteExpr>,
@@ -701,6 +712,7 @@ impl Default for Note {
             fx: None,
             tune: 0.0,
             chance: 0,
+            cond: Cond::Always,
             expr: vec![],
         }
     }
@@ -1515,6 +1527,8 @@ pub use launcher::*;
 mod migrate;
 pub use migrate::{ensure_master_track, migrate_song_lanes};
 mod plan;
+pub mod rr;
+pub use rr::{Cond, Order};
 pub mod roll;
 pub use autoplan::*;
 pub use edit::*;
@@ -1530,5 +1544,7 @@ mod m3_tests;
 mod m4_tests;
 #[cfg(test)]
 mod m5_tests;
+#[cfg(test)]
+mod rr_tests;
 #[cfg(test)]
 mod tests;

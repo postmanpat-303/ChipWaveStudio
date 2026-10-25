@@ -381,6 +381,7 @@ fn roll_with_four_notes() -> (Harness<'static, App>, u32) {
                     fx: None,
                     tune: 0.0,
                     chance: 0,
+                    cond: tl::Cond::Always,
                     expr: vec![],
                 });
             }
