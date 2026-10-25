@@ -1084,6 +1084,27 @@ impl App {
                 // (chords-track: from the track pie, a new clip on the
                 // track; chords-written: that, after Write to timeline)
                 let g = std::env::var("CHIPWAVE_SHOT_GEN").unwrap_or_default();
+                if !g.is_empty() {
+                    // the generators are for pitched sounds: open the first
+                    // melodic track's first note clip (not the kick's)
+                    let n = self.with(|s| s.song.channels);
+                    let mel = self.with(|s| {
+                        s.song.timeline.as_deref().map(|t| {
+                            t.clips
+                                .iter()
+                                .filter(|c| c.notes().is_some())
+                                .map(|c| (c.track as usize, c.id, c.start))
+                                .collect::<Vec<_>>()
+                        })
+                    });
+                    if let Some((tr, id, _)) =
+                        mel.unwrap_or_default().into_iter().find(|&(k, _, _)| {
+                            k < n && !self.track_percussive(k) && self.gen_sound(k).is_some()
+                        })
+                    {
+                        self.track_open_pattern(tr, id);
+                    }
+                }
                 if g.starts_with("chords-") {
                     // the track of the clip open in the roll
                     let tr = self.gen_dest(self.pr_target()).track.unwrap_or(self.ch);
