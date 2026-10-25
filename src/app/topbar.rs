@@ -956,7 +956,9 @@ impl App {
                     ui,
                     super::viewbar::Tr::Start,
                     false,
-                    hdr_text(),
+                    // the Loop button's off ink (the header's text is white
+                    // on Amiga's white buttons)
+                    th().ink2.gamma_multiply(0.75),
                     "play marker to the start",
                 ) {
                     if tl_mode {
