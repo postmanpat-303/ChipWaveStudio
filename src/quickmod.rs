@@ -706,8 +706,7 @@ impl EngineMod for crate::synth::Patch {
             let s = CHIP_SYNC
                 .iter()
                 .copied()
-                .filter(|s| *s <= sync + 1e-4)
-                .last()
+                .rfind(|s| *s <= sync + 1e-4)
                 .unwrap_or(0.0);
             self.lfo.sync = if sync > 0.0 { s.max(0.25) } else { 0.0 };
             if sync <= 0.0 {
