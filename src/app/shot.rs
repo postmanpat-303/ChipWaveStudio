@@ -1532,7 +1532,7 @@ impl App {
         if view == "timeline" && f == SETUP_AT + 12 {
             self.shot_tracksize();
         }
-        // CHIPWAVE_SHOT_RR=cond | vars: Round Robin in the piano roll, on the
+        // CHIPWAVE_SHOT_RR=cond | vars | press: Round Robin in the piano roll, on the
         // first note clip (made from a short riff when the song has none)
         if view == "timeline-layout" && (f == SETUP_AT + 14 || f == SETUP_AT + 20) {
             if let Ok(m) = std::env::var("CHIPWAVE_SHOT_RR") {
@@ -2982,7 +2982,8 @@ impl App {
 impl App {
     /// CHIPWAVE_SHOT_RR (Round Robin screenshots): "cond" shows the
     /// Conditions lane with a few conditions and the "Play this note…"
-    /// popover; "vars" three Variations with the Order popover
+    /// popover; "vars" three Variations with the Order popover; "press"
+    /// recorded key pressure curves in the Pressure lane
     fn shot_rr(&mut self, m: &str, open: bool) {
         use crate::timeline::{self as tl, Cond};
         const R: tl::Tick = tl::ROW;
@@ -3033,7 +3034,9 @@ impl App {
         self.set_lower(3);
         self.pr.focus = true;
         if open {
-            if m == "cond" {
+            if m == "press" {
+                self.pr.lane = super::prlanes::Lane::Pressure;
+            } else if m == "cond" {
                 self.pr.lane = super::prlanes::Lane::Cond;
                 let x = self.pr.x_of(4 * R) + 2.0;
                 let y = self.pr.vel_rect.top() - 6.0;
@@ -3077,6 +3080,34 @@ impl App {
                 }
             });
             self.pr.lane = super::prlanes::Lane::Cond;
+        } else if m == "press" {
+            // swells and fades, like a played keyboard's aftertouch
+            self.with(|s| {
+                if let Some(d) = s
+                    .song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|t| t.notes.get_mut(data))
+                {
+                    let d = d.make_mut();
+                    for (i, n) in d.notes.iter_mut().enumerate().filter(|(i, _)| i % 4 != 3) {
+                        let steps = (n.len / (R / 4)).max(1);
+                        for k in 0..steps {
+                            let x = k as f32 / steps as f32;
+                            let v = match i % 4 {
+                                0 => x,
+                                1 => (std::f32::consts::PI * x).sin(),
+                                _ => 1.0 - 0.7 * x,
+                            };
+                            n.press_push(k * (R / 4), 0.1 + 0.85 * v);
+                        }
+                    }
+                }
+                let crate::audio::Shared { song, engine, .. } = s;
+                engine.ensure_plan(song);
+            });
+            self.pr.lane = super::prlanes::Lane::Pressure;
+            self.pr.sel = vec![1];
         } else {
             self.var_add(data, seed);
             self.var_add(data, seed);
