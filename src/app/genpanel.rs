@@ -584,6 +584,7 @@ impl App {
                 transpose: 0,
                 fx: vec![],
                 kind,
+                arp: None,
             })
     }
 

@@ -846,7 +846,7 @@ pub fn presets(kit: bool) -> Vec<(&'static str, Arp)> {
                 a.octaves = 2;
                 a.gate = 0.35;
                 for (k, s) in a.steps.iter_mut().enumerate() {
-                    if hash(7, k as i64) % 5 == 0 {
+                    if hash(7, k as i64).is_multiple_of(5) {
                         s.kind = StepKind::Rest;
                     }
                     s.vel = 0.5 + (hash(9, k as i64) % 50) as f32 / 100.0;

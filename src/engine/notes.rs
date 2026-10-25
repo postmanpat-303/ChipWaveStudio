@@ -537,6 +537,7 @@ pub(super) fn arp_resync(
     t: f64,
     restart: bool,
 ) {
+    #[allow(clippy::needless_range_loop)] // ch indexes st.cur, st.arp, plan.notes and chans
     for ch in 0..nch.min(MAX_CHANNELS) {
         if st.lmask >> ch & 1 == 1 {
             continue;
