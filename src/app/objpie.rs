@@ -91,6 +91,19 @@ pub(crate) fn clip_items(block: bool, tracker: bool) -> Vec<RadialItem> {
     v
 }
 
+/// the Variations wedge (note clips): its ring depends on how many takes
+/// the clip has
+pub(crate) fn var_item(n: usize) -> RadialItem {
+    let mut ch = vec![];
+    if n < crate::timeline::rr::MAX_VARS {
+        ch.push("Add variation".to_string());
+    }
+    if n > 1 {
+        ch.push("Order…".to_string());
+    }
+    RadialItem::new("Variations", Some(RIcon::Generate), ch)
+}
+
 /// launcher clip pie wedges
 pub(crate) fn launch_items() -> Vec<RadialItem> {
     vec![
@@ -164,11 +177,11 @@ impl App {
                 } else {
                     format!("track {:02}", c.track + 1)
                 };
-                (
-                    clip_items(c.block().is_some(), self.tracker_on()),
-                    name,
-                    sub,
-                )
+                let mut items = clip_items(c.block().is_some(), self.tracker_on());
+                if let Some(d) = c.notes() {
+                    items.push(var_item(self.var_count(d)));
+                }
+                (items, name, sub)
             }
             PieFor::Launch(id) => {
                 let Some(c) = self.with(|s| {
@@ -180,11 +193,11 @@ impl App {
                 }) else {
                     return;
                 };
-                (
-                    launch_items(),
-                    c.1,
-                    format!("launcher · track {:02}", c.0 + 1),
-                )
+                let mut items = launch_items();
+                if let Some(d) = self.launch_data(id) {
+                    items.push(var_item(self.var_count(d)));
+                }
+                (items, c.1, format!("launcher · track {:02}", c.0 + 1))
             }
             PieFor::Drum { pad, .. } => (
                 drum_items(),
@@ -212,12 +225,15 @@ impl App {
                         .map(|x| x.label.clone())
                         .unwrap_or_default();
                     let child = c.and_then(|c| pie.items.get(i)?.children.get(c).cloned());
+                    self.opie_at = Some(pie.at);
                     self.obj_pie_pick(on, &label, child.as_deref());
                 }
                 _ => self.opie = Some((pie, on)),
             }
         }
         self.clip_rename_window(ctx);
+        // Clip Variations (from the roll's tabs or the Variations wedge)
+        self.var_popover(ctx);
     }
 
     /// Esc while a pie or the Rename window is open (`modal_key`)
@@ -295,7 +311,37 @@ impl App {
             ("Notes", Some("Loop around")) => self.tl_apply(TlOp::LoopFromSelection),
             ("Notes", Some(_)) => self.tl_apply(TlOp::UseTrackInstr),
             ("Notes", None) => self.status = "Notes: choose from the outer ring".into(),
+            ("Variations", c) => self.var_pie_pick(Some(id), c),
             _ => {}
+        }
+    }
+
+    /// note data of launcher clip `id`
+    fn launch_data(&self, id: u32) -> Option<usize> {
+        self.with(|s| s.song.timeline.as_deref()?.launch_clip(id)?.clip.notes())
+    }
+
+    /// the Variations wedge on clip `id` (timeline or launcher)
+    pub(super) fn var_pie_pick(&mut self, id: Option<u32>, child: Option<&str>) {
+        let Some((data, seed)) = id.and_then(|id| {
+            self.with(|s| {
+                let c = s.song.timeline.as_deref()?.any_clip(id)?;
+                Some((c.notes()?, c.seed))
+            })
+        }) else {
+            return;
+        };
+        match child {
+            Some("Order…") => {
+                let at = self.opie_at.unwrap_or(Pos2::new(200.0, 200.0));
+                self.pr.var_pop = Some(super::prvars::VarPop {
+                    data,
+                    clip_seed: seed,
+                    at,
+                });
+            }
+            Some(_) => self.var_add(data, seed),
+            None => self.status = "Variations: choose from the outer ring".into(),
         }
     }
 
@@ -324,6 +370,7 @@ impl App {
             ("Rename", _) => self.start_clip_rename(id),
             ("Colour", c) => self.set_clip_colour(&[id], c),
             ("Delete", _) => self.ca_delete(id),
+            ("Variations", c) => self.var_pie_pick(Some(id), c),
             _ => {}
         }
     }

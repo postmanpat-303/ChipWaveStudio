@@ -261,6 +261,8 @@ pub(crate) struct PianoUi {
     pub(crate) lane_menu: Option<Pos2>,
     /// the "Play this note…" popover
     pub(crate) cond_pop: Option<super::prlanes::CondPop>,
+    /// the Variations popover (Clip Variations)
+    pub(crate) var_pop: Option<super::prvars::VarPop>,
     /// live Fill on (mirrors `Engine::fill_live`)
     pub(crate) fill: bool,
 }
@@ -324,6 +326,7 @@ impl Default for PianoUi {
             lane: Default::default(),
             lane_menu: None,
             cond_pop: None,
+            var_pop: None,
             fill: false,
         }
     }
@@ -1484,10 +1487,15 @@ impl App {
             Key::Num2 if !m.command => self.pr.tool = PrTool::Select,
             Key::Num3 if !m.command => self.pr.tool = PrTool::Pencil,
             Key::F if !m.command => self.pr.fit = true,
-            Key::Escape if self.pr.cond_pop.is_some() || self.pr.lane_menu.is_some() => {
+            Key::Escape
+                if self.pr.cond_pop.is_some()
+                    || self.pr.lane_menu.is_some()
+                    || self.pr.var_pop.is_some() =>
+            {
                 // a lane popover open: Esc closes it first
                 self.pr.cond_pop = None;
                 self.pr.lane_menu = None;
+                self.pr.var_pop = None;
             }
             Key::Escape => {
                 if self.pr.sel.is_empty() {
@@ -1674,6 +1682,8 @@ impl App {
                         }
                     }
                 }
+                // Clip Variations: the take tabs
+                self.pr_var_tabs(ui, target, &src);
                 if pr_btn(ui, "ALL", false, true, "select every note (Ctrl+A)").clicked() {
                     self.pr.sel = notes.iter().map(|n| n.id).collect();
                     self.pr.focus = true;

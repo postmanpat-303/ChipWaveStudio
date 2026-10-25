@@ -113,6 +113,9 @@ mod prlanes;
 mod prollpan_tests;
 #[cfg(test)]
 mod prruler_tests;
+mod prvars;
+#[cfg(test)]
+mod prvars_tests;
 #[cfg(test)]
 mod rack_sweep_tests;
 #[cfg(test)]
@@ -312,6 +315,8 @@ pub struct App {
     clip_rename: Option<objpie::ClipRename>,
     /// a pie to open at the next `obj_pie_frame`
     opie_req: Option<(objpie::PieFor, Pos2)>,
+    /// where the last object pie was (popovers it opens appear there)
+    opie_at: Option<Pos2>,
     /// recovery copies put off with "Later" (archived on a clean exit)
     orphans_later: Vec<PathBuf>,
     allow_close: bool,
@@ -701,6 +706,7 @@ impl App {
             opie: None,
             clip_rename: None,
             opie_req: None,
+            opie_at: None,
             orphans_later: Vec::new(),
             allow_close: false,
             arr_flash: None,

@@ -55,7 +55,9 @@ impl App {
             self.view == View::Arranger || (self.view == View::Pattern && self.arr_docked());
         for ev in events {
             // a piano-roll lane popover open: Esc closes it, nothing else
-            if (self.pr.cond_pop.is_some() || self.pr.lane_menu.is_some())
+            if (self.pr.cond_pop.is_some()
+                || self.pr.lane_menu.is_some()
+                || self.pr.var_pop.is_some())
                 && matches!(
                     &ev,
                     egui::Event::Key {
@@ -67,6 +69,7 @@ impl App {
             {
                 self.pr.cond_pop = None;
                 self.pr.lane_menu = None;
+                self.pr.var_pop = None;
                 continue;
             }
             // the Fill to length dialog owns plain keys while it is open
