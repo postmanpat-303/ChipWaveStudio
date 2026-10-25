@@ -1257,8 +1257,10 @@ impl App {
         for tr in first_tr..last_tr {
             let lr = lane_rect(tr);
             if tr == cur_tr {
-                // the selected track's lane, as its header
-                quad(&mut bodies, lr, t.sel.gamma_multiply(0.12));
+                // the selected track's lane: an accent tint and outline
+                // (over the clips) matching its header
+                quad(&mut bodies, lr, sel_tint(&t));
+                outlines.push((lr.shrink(0.75), Stroke::new(1.5, sel_lane(&t))));
             } else if tr % 2 == 1 {
                 quad(&mut bodies, lr, Color32::from_white_alpha(4));
             }
@@ -1914,18 +1916,37 @@ impl App {
                 hr,
                 3,
                 if cur {
-                    t.sel.gamma_multiply(0.35)
+                    // the selected track: tinted toward the accent
+                    crate::theme::mix(t.cart_top, t.accent, if t.light { 0.22 } else { 0.30 })
                 } else if tr % 2 == 1 {
                     t.cart_top.gamma_multiply(0.9)
                 } else {
                     t.cart_top.gamma_multiply(0.75)
                 },
             );
-            hp.rect_filled(
-                Rect::from_min_max(hr.min, Pos2::new(hr.left() + 3.0, hr.bottom())),
-                2,
-                colr,
-            );
+            if cur {
+                // a wide accent bar, the track colour beside it, an outline
+                hp.rect_filled(
+                    Rect::from_min_max(hr.min, Pos2::new(hr.left() + 5.0, hr.bottom())),
+                    2,
+                    t.accent,
+                );
+                hp.rect_filled(
+                    Rect::from_min_max(
+                        Pos2::new(hr.left() + 5.0, hr.top()),
+                        Pos2::new(hr.left() + 8.0, hr.bottom()),
+                    ),
+                    0,
+                    colr,
+                );
+                hp.rect_stroke(hr, 3, Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
+            } else {
+                hp.rect_filled(
+                    Rect::from_min_max(hr.min, Pos2::new(hr.left() + 3.0, hr.bottom())),
+                    2,
+                    colr,
+                );
+            }
             // tall rows: the two text lines and buttons sit in the middle
             let top = hr.top() + ((hr.height() - 42.0) / 2.0).max(0.0);
             let m = live.mix.get(tr).copied().unwrap_or_default();
@@ -1939,7 +1960,10 @@ impl App {
                 (hr.height() - 10.0).clamp(18.0, 28.0)
             };
             let tile_r = Rect::from_min_size(
-                Pos2::new(hr.left() + 7.0, hr.center().y - ts / 2.0),
+                Pos2::new(
+                    hr.left() + if cur { 11.0 } else { 7.0 },
+                    hr.center().y - ts / 2.0,
+                ),
                 egui::vec2(ts, ts),
             );
             let kind = match c.tl.tracks[tr].kind {
@@ -1987,8 +2011,12 @@ impl App {
                     Pos2::new(tx + nw + 5.0, ty),
                     egui::Align2::LEFT_CENTER,
                     name,
-                    crate::theme::prop(crate::theme::ts::BODY),
-                    t.ink,
+                    if cur {
+                        crate::theme::label_font(crate::theme::ts::BODY)
+                    } else {
+                        crate::theme::prop(crate::theme::ts::BODY)
+                    },
+                    if cur { sel_ink(&t) } else { t.ink },
                     hr.right() - 135.0 - (tx + nw + 5.0),
                 );
             }
@@ -3716,6 +3744,31 @@ enum HeadOp {
     Add(usize),
     /// a track at this index with the instrument picked in the Browser
     AddWith(usize),
+}
+
+/// the selected track's lane colour: the accent, lifted where it would
+/// sink into a dark lane area (a light theme's dark-blue screen)
+fn sel_lane(t: &crate::theme::Theme) -> Color32 {
+    let l = |c: Color32| 0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32;
+    if l(t.accent) - l(t.crt_bot) < 90.0 {
+        crate::theme::tone(t.accent, 0.45)
+    } else {
+        t.accent
+    }
+}
+
+/// the selected track's lane tint (under its clips)
+fn sel_tint(t: &crate::theme::Theme) -> Color32 {
+    sel_lane(t).gamma_multiply(0.14)
+}
+
+/// the selected track's name: the strongest ink of the theme
+fn sel_ink(t: &crate::theme::Theme) -> Color32 {
+    if t.light {
+        crate::theme::tone(t.ink, -0.5)
+    } else {
+        crate::theme::tone(t.ink, 0.5)
+    }
 }
 
 impl App {
