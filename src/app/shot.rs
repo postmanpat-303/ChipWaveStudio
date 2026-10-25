@@ -1081,7 +1081,20 @@ impl App {
                 self.shot_note_clip(row);
                 // CHIPWAVE_SHOT_GEN=chords|melody|bass: the Generators panel
                 // open on that clip
-                if let Ok(g) = std::env::var("CHIPWAVE_SHOT_GEN") {
+                // (chords-track: from the track pie, a new clip on the
+                // track; chords-written: that, after Write to timeline)
+                let g = std::env::var("CHIPWAVE_SHOT_GEN").unwrap_or_default();
+                if g.starts_with("chords-") {
+                    let tr = self.ch;
+                    self.gen_open_for(Some(tr), super::genpanel::GenTab::Chords);
+                    if g == "chords-written" {
+                        let res = crate::chordgen::generate(&self.cl.gen.opts);
+                        let t = self.gen_target();
+                        if self.gen_write_chords(t, &res) {
+                            self.cl.gen.open = false;
+                        }
+                    }
+                } else if !g.is_empty() {
                     self.cl_open_gen_at(0);
                     self.cl.gen.tab = match g.as_str() {
                         "melody" => super::genpanel::GenTab::Melody,
