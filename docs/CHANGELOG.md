@@ -8,6 +8,8 @@ Newest first. Older screenshots mentioned below live in `dist/`.
 - **Clip Variations:** up to four takes (A–D) per note clip, one per loop pass, in order, random, random no repeat, ping-pong or every N.
 - **Drum pad Round Robin:** up to four sounds per pad taking turns, with per-hit drift of pitch, level, tone, decay, timing and pan, a seed and a "Next 8 hits" preview.
 - **Follow actions:** launcher clips can move on after N loops (X % Next / Again / Other / First / Last / Any / Stop), with a » badge, a "From here" preview and **Capture to timeline**.
+- **MIDI key pressure (aftertouch):** poly and channel pressure from your keyboard drive a new **Pressure** modulator (quick-mod popover and Movement list), with a live meter in the MIDI light's tooltip. Recorded notes keep their pressure curves, which play back exactly; the piano roll's new **Pressure** lane shows, draws and clears them, and pressed notes get a shaded foot. See MIDI.md.
+- **.mid import:** MIDI files from the browser become a note clip (notes, velocities and pressure), on the cursor track or dropped onto one.
 - All of it is deterministic (seed + pass/hit), off by default and not saved when unused; old songs render bit-identically. See ROUND_ROBIN.md.
 
 ## 0.2.13.0: live recording, quick modulation and a backlit LCD
