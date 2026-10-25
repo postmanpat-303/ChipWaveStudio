@@ -571,3 +571,200 @@ fn preview_plays_on_a_melodic_track() {
     frames(&mut h, 2);
     assert_eq!(h.state().gen_preview_ch(), None);
 }
+
+/// Lead (WaveForge), a Drum Kit, a drum generator (Drum Synth) and a
+/// synth patch "Trance Kick" (a Synth, but a kick), each with a 1-bar
+/// pattern at bar 1 so the roll can open it
+fn song_perc() -> Harness<'static, App> {
+    let mut h = harness_with(fileio::demo_song());
+    h.set_size(egui::vec2(1366.0, 768.0));
+    {
+        let a = h.state_mut();
+        a.new_song();
+        for (k, n) in ["Lead", "Kit", "DrumGen", "Kick"].into_iter().enumerate() {
+            a.track_insert(k, n);
+        }
+        a.view = View::Timeline;
+        a.track_new_instrument(0, Builtin::WaveForge);
+        a.track_set_pattern_instrument(1, Builtin::DrumKit, Some("909 Kit"));
+        a.track_new_instrument(2, Builtin::DrumSynth);
+        a.track_new_instrument(3, Builtin::Synth);
+        let slot = a.track_instrument(3).expect("the Kick's synth") as usize;
+        a.with(|s| {
+            let i = &mut s.song.instruments[slot - 1];
+            i.name = "Trance Kick".into();
+            if let crate::model::InstrumentKind::Synth(p) = &mut i.kind {
+                p.name = "Trance Kick".into();
+            }
+        });
+        for k in [0, 2, 3] {
+            a.tlv.cue = 0;
+            a.track_add_empty_pattern(k).expect("a pattern");
+        }
+        a.undo_reset();
+    }
+    frames(&mut h, 3);
+    h
+}
+
+const PITCHED: [&str; 3] = ["Chords…", "Melody…", "Bass…"];
+
+fn ring_labels(h: &Harness<'static, App>, tr: usize) -> Vec<String> {
+    let i = h.state().pie_info(tr);
+    super::trackring::ring_slots(super::trackring::Level::Add, &i)
+        .into_iter()
+        .map(|s| s.label)
+        .collect()
+}
+
+fn clip_on(h: &Harness<'static, App>, tr: usize) -> u32 {
+    clips(h)
+        .into_iter()
+        .find(|c| c.track == tr)
+        .map(|c| c.id)
+        .expect("a clip on the track")
+}
+
+/// Scenario 14: the percussive check: drum engines, kits, drum names
+/// (a synth "Trance Kick"); melodic synths, an "808 Bass" are pitched
+#[test]
+fn percussive_sounds_are_told_from_pitched_ones() {
+    use super::trackpie::name_is_drum;
+    for n in [
+        "Trance Kick",
+        "Snare 2",
+        "Open Hats",
+        "Hi-Hat",
+        "Clap",
+        "Low Tom",
+        "Perc Loop",
+        "Crash Cymbal",
+        "Rimshot",
+        "909 Kit",
+        "808 kit",
+        "Drums",
+        "kick_01.wav",
+    ] {
+        assert!(name_is_drum(n), "{n} is a drum");
+    }
+    for n in [
+        "Saw Lead",
+        "808 Bass",
+        "Tomato Pad",
+        "Chat Pluck",
+        "Supersaw",
+        "Rolling Bass",
+        "",
+    ] {
+        assert!(!name_is_drum(n), "{n} is pitched");
+    }
+    let h = song_perc();
+    let a = h.state();
+    assert!(!a.track_percussive(0), "WaveForge");
+    for k in 1..4 {
+        assert!(a.track_percussive(k), "track {k}");
+        assert!(a.gen_sound(k).is_none(), "track {k} lends no sound");
+    }
+}
+
+/// Scenario 15: the track pie offers Chords… / Melody… / Bass… on a
+/// melodic synth only, not on a drum kit, a drum generator or a synth kick
+#[test]
+fn pitched_generators_hide_on_percussive_tracks_in_the_pie() {
+    let h = song_perc();
+    let lead = ring_labels(&h, 0);
+    for p in PITCHED {
+        assert!(lead.iter().any(|l| l == p), "{p} on the Lead: {lead:?}");
+    }
+    for k in 1..4 {
+        let l = ring_labels(&h, k);
+        for p in PITCHED {
+            assert!(!l.iter().any(|x| x == p), "no {p} on track {k}: {l:?}");
+        }
+    }
+}
+
+/// Scenario 16: the Chords… button beside + Add track hides while a
+/// percussive track is selected; it shows for a melodic one and for none
+#[test]
+fn chords_button_hides_for_a_percussive_track() {
+    let mut h = song_perc();
+    let shown = |h: &Harness<'static, App>| {
+        h.query_all_by(|n| n.label().as_deref() == Some("Chords…"))
+            .count()
+            > 0
+    };
+    for (k, want) in [(0, true), (1, false), (2, false), (3, false)] {
+        h.state_mut().tl_select_track(k, false);
+        frames(&mut h, 3);
+        assert_eq!(h.state().tl_cur_track(), k);
+        assert_eq!(shown(&h), want, "track {k}");
+    }
+    // the Master / no track: Chords… stays, for a new Chords track
+    let n = h.state().with(|s| s.song.channels);
+    h.state_mut().tl_select_track(n, false);
+    frames(&mut h, 3);
+    if h.state().tl_cur_track() >= n {
+        assert!(shown(&h), "no track: Chords… for a new track");
+    }
+}
+
+/// Scenario 17: the piano roll shows the chord lane and Generate on a
+/// melodic clip only (the synth kick's clip has neither)
+#[test]
+fn roll_hides_chords_and_generate_on_a_percussive_clip() {
+    let mut h = song_perc();
+    for (k, want) in [(0, true), (3, false)] {
+        let id = clip_on(&h, k);
+        h.state_mut().track_open_pattern(k, id);
+        frames(&mut h, 4);
+        assert!(
+            matches!(h.state().pr_target(), Some(Target::Notes { clip: Some(c), .. }) if c == id),
+            "track {k}'s clip in the roll"
+        );
+        let gen = h
+            .query_all_by(|n| n.label().as_deref() == Some("Generate"))
+            .count()
+            > 0;
+        assert_eq!(gen, want, "Generate on track {k}");
+        let t = h.state().pr_target().unwrap();
+        assert_eq!(h.state().target_percussive(t), !want);
+    }
+}
+
+/// Scenario 18: Chords / Melody / Bass written from a percussive track
+/// (reached through the panel itself) land on a new track with a pitched
+/// sound, never a copy of the kick
+#[test]
+fn a_new_generator_track_never_copies_a_percussive_sound() {
+    for tab in [GenTab::Chords, GenTab::Melody, GenTab::Bass] {
+        let mut h = song_perc();
+        let id = clip_on(&h, 3);
+        h.state_mut().track_open_pattern(3, id);
+        frames(&mut h, 2);
+        h.state_mut().gen_open_for(Some(3), tab);
+        plain(&mut h, 4, 3);
+        let (n0, _, _) = counts(&h);
+        let before = clips(&h);
+        if tab == GenTab::Chords {
+            click_write(&mut h);
+        } else {
+            h.state_mut().cl.gen.mel.new_track = true;
+            h.state_mut().cl.gen.bass.new_track = true;
+            click_write(&mut h);
+        }
+        let after = clips(&h);
+        let c = new_clip(&before, &after);
+        assert_eq!(counts(&h).0, n0 + 1, "{tab:?}: a new track");
+        assert_ne!(c.track, 3, "{tab:?}: not on the kick");
+        assert!(
+            !h.state().track_percussive(c.track),
+            "{tab:?}: a pitched sound"
+        );
+        assert!(h.state().gen_sound(c.track).is_some(), "{tab:?}");
+        assert!(
+            before.iter().all(|b| after.contains(b)),
+            "{tab:?}: the old clips are untouched"
+        );
+    }
+}
