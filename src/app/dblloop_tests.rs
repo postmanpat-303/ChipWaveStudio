@@ -17,7 +17,7 @@ fn frames(h: &mut Harness<'static, App>, n: usize) {
 fn loop_state(h: &Harness<'static, App>) -> (bool, Option<(i64, i64)>) {
     h.state().with(|s| {
         let t = s.song.timeline.as_deref().unwrap();
-        (t.loop_on, t.loop_range.map(|(a, b)| (a as i64, b as i64)))
+        (t.loop_on, t.loop_range)
     })
 }
 
@@ -55,7 +55,7 @@ fn double_click_loops_the_clip_and_again_turns_it_off() {
     let view = h.state().view;
     double_click(&mut h, p);
     frames(&mut h, 2);
-    assert_eq!(loop_state(&h), (true, Some((start as i64, end as i64))));
+    assert_eq!(loop_state(&h), (true, Some((start, end))));
     let st = h.state().status.clone();
     assert!(st.starts_with("Loop set to bar"), "{st}");
     assert_eq!(h.state().view, view, "a double-click no longer leaves");
@@ -64,7 +64,7 @@ fn double_click_loops_the_clip_and_again_turns_it_off() {
     // again: loop off, the region kept
     double_click(&mut h, p);
     frames(&mut h, 2);
-    assert_eq!(loop_state(&h), (false, Some((start as i64, end as i64))));
+    assert_eq!(loop_state(&h), (false, Some((start, end))));
     assert!(
         h.state().status.starts_with("Loop off"),
         "{}",
@@ -74,7 +74,7 @@ fn double_click_loops_the_clip_and_again_turns_it_off() {
     // L brings it back, the button follows
     key(&mut h, Key::L, egui::Modifiers::NONE);
     frames(&mut h, 2);
-    assert_eq!(loop_state(&h).0, true);
+    assert!(loop_state(&h).0);
     assert!(loop_label(&h).contains(": on"));
     // the button turns it off; a double-click turns it on again
     h.query_all_by(|n| n.label().is_some_and(|l| l.starts_with("Loop (L)")))
@@ -82,18 +82,18 @@ fn double_click_loops_the_clip_and_again_turns_it_off() {
         .unwrap()
         .click();
     frames(&mut h, 2);
-    assert_eq!(loop_state(&h).0, false);
+    assert!(!loop_state(&h).0);
     double_click(&mut h, p);
     frames(&mut h, 2);
-    assert_eq!(loop_state(&h), (true, Some((start as i64, end as i64))));
+    assert_eq!(loop_state(&h), (true, Some((start, end))));
     // one undo step each
     key(&mut h, Key::Z, egui::Modifiers::COMMAND);
     frames(&mut h, 2);
-    assert_eq!(loop_state(&h).0, false, "Ctrl+Z undoes the double-click");
+    assert!(!loop_state(&h).0, "Ctrl+Z undoes the double-click");
     // Alt+double-click still opens the clip
     double_click_with(&mut h, p, egui::Modifiers::ALT);
     frames(&mut h, 2);
-    assert_eq!(loop_state(&h).0, false, "Alt+double-click leaves the loop");
+    assert!(!loop_state(&h).0, "Alt+double-click leaves the loop");
     assert!(
         h.state().status.contains("Piano roll") || h.state().view == View::Pattern,
         "Alt+double-click opens the editor: {}",
@@ -114,7 +114,7 @@ fn a_double_click_on_another_clip_moves_the_loop_to_it() {
         c.tl.clips
             .iter()
             .filter(|cl| cl.block().is_some())
-            .map(|cl| (cl.id, cl.start as i64, cl.end() as i64))
+            .map(|cl| (cl.id, cl.start, cl.end()))
             .collect()
     };
     let a = clips[0];
