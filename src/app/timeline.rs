@@ -152,6 +152,9 @@ pub(crate) enum TlOp {
     /// "Use the track's instrument": the selected note clips' notes
     /// without an instrument get their track's assigned one
     UseTrackInstr,
+    /// "Bake Arp to notes": the selected note clips' Arp written out as
+    /// notes (every clip it plays), then the Arp off
+    BakeArp,
     Glue,
     LoopFromSelection,
     ToggleLoop,
@@ -2051,6 +2054,12 @@ impl App {
                 )
                 .collect()
         });
+        // the ARP badge per instrument slot (index 0 = none)
+        let arps: Vec<Option<&'static str>> = self.with(|s| {
+            std::iter::once(None)
+                .chain((0..s.song.instruments.len()).map(|i| super::arpcard::badge(&s.song, i)))
+                .collect()
+        });
         let sub = |tr: usize| -> String {
             // Master / Song tracks sit past mixer channels — c.instr is nch long
             if c.instr.get(tr).is_none_or(|s| s.is_empty()) {
@@ -2166,6 +2175,36 @@ impl App {
             );
             let nw = num.size().x;
             np.galley(Pos2::new(tx, ty - num.size().y / 2.0), num, t.ink2);
+            // the ARP badge: this track's notes go through an Arp
+            let arp = match c.tl.tracks[tr].kind {
+                tl::TrackKind::Note => arps
+                    .get(c.instr_ix.get(tr).copied().unwrap_or(0) as usize)
+                    .copied()
+                    .flatten(),
+                _ => None,
+            };
+            let arp_w = if let Some(label) = arp {
+                let g = hp.layout_no_wrap(
+                    label.to_string(),
+                    crate::theme::label_font(crate::theme::ts::TINY),
+                    t.ink,
+                );
+                let br = Rect::from_min_size(
+                    Pos2::new(hr.right() - 112.0 - g.size().x - 8.0, ty - 7.0),
+                    egui::vec2(g.size().x + 8.0, 14.0),
+                );
+                hp.rect_filled(br, 3, t.accent.gamma_multiply(0.85));
+                hp.galley(br.center() - g.size() * 0.5, g, t.ink);
+                ui.interact(br, ui.make_persistent_id(("arp_badge", tr)), Sense::hover())
+                    .on_hover_text(if label == "ARP" {
+                        "this track's notes play through its Arp (Rack tab)"
+                    } else {
+                        "this track's pads play through Note repeat (Rack tab)"
+                    });
+                br.width() + 4.0
+            } else {
+                0.0
+            };
             if self.track_rename.as_ref().is_some_and(|r| r.0 == tr) && !self.pie_open() {
                 rename_at = Some(Rect::from_min_max(
                     Pos2::new(tx + nw + 2.0, ty - 10.0),
@@ -2185,7 +2224,7 @@ impl App {
                         crate::theme::prop(crate::theme::ts::BODY)
                     },
                     if cur { sel_ink(&t) } else { t.ink },
-                    hr.right() - 135.0 - (tx + nw + 5.0),
+                    hr.right() - 135.0 - arp_w - (tx + nw + 5.0),
                 );
             }
             if !one_line {
@@ -3380,6 +3419,25 @@ impl App {
                         ops.push(TlOp::UseTrackInstr);
                         ui.close();
                     }
+                }
+                // "Bake Arp to notes": only when a selected clip plays
+                // through an Arp
+                let arp = self.with(|s| {
+                    self.tlv
+                        .sels
+                        .iter()
+                        .any(|&id| !tl::arp_slots(&s.song, id).is_empty())
+                });
+                if arp
+                    && ui
+                        .button("Bake Arp to notes")
+                        .on_hover_text(
+                            "write the notes the Arp plays into the clips (every clip of that instrument), then switch the Arp off: it sounds the same, and each note can be edited (one undo step)",
+                        )
+                        .clicked()
+                {
+                    ops.push(TlOp::BakeArp);
+                    ui.close();
                 }
                 ui.separator();
                 if ui

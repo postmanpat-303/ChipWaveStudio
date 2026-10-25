@@ -418,6 +418,7 @@ impl Stepper {
     pub fn is_empty(&self) -> bool {
         self.n == 0
     }
+    #[allow(dead_code)]
     pub fn held(&self) -> &[Held] {
         &self.held[..self.n]
     }

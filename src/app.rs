@@ -16,6 +16,7 @@ mod acceptance_tests;
 mod advedit;
 #[cfg(test)]
 mod advedit_tests;
+mod arpcard;
 mod arranger;
 #[cfg(test)]
 mod audioclip_tests;

@@ -82,6 +82,11 @@ pub(crate) struct DevUi {
     /// drawing a Rack card: its side tab has power, remove and "…", so
     /// the card's header leaves them out
     pub(crate) tabbed: bool,
+    /// an Arp switched off, per instrument: its settings for the next
+    /// switch-on (while ChipWave runs)
+    pub(crate) arp_stash: std::collections::HashMap<usize, crate::arp::Arp>,
+    /// the Arp grid shows steps 17-32
+    pub(crate) arp_page: u8,
 }
 
 impl Default for DevUi {
@@ -112,6 +117,8 @@ impl Default for DevUi {
             focus: false,
             tree: false,
             tabbed: false,
+            arp_stash: Default::default(),
+            arp_page: 0,
         }
     }
 }
@@ -358,8 +365,11 @@ impl App {
                 super::rackview::inst_card_w(self, idx)
             };
             let full = chain.len() - chain.iter().filter(|d| d.collapsed).count();
+            let aw = super::arpcard::arp_card_w(self, idx);
             let fixed = 16.0
                 + iw
+                + aw
+                + if aw > 0.0 { GAP } else { 0.0 }
                 + plus_w(chain.is_empty())
                 + GAP * (chain.len() + 1) as f32
                 + SLIM * slim as f32
@@ -383,6 +393,11 @@ impl App {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.add_space(4.0);
+                    // the Arp (or Note repeat) plays the notes into the
+                    // instrument, so it comes first
+                    if self.devices_arp_card(ui, h, idx).is_some() {
+                        chevron(ui, h);
+                    }
                     self.dev.tabbed = true;
                     let (tab, _) = ui.allocate_exact_size(egui::vec2(TAB_W, h), Sense::hover());
                     let r = self.devices_inst_card(ui, h, idx);

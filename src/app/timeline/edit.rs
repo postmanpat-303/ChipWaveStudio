@@ -145,6 +145,44 @@ impl App {
 
     /// Run a timeline edit. In tracker mode it asks to switch first (the
     /// edit runs after the switch).
+    /// "Bake Arp to notes" on the selected clips (one undo step)
+    pub(crate) fn tl_bake_arp(&mut self, sels: &[u32]) {
+        let slots: Vec<u8> = self.with(|s| {
+            let mut v: Vec<u8> = vec![];
+            for &id in sels {
+                for k in tl::arp_slots(&s.song, id) {
+                    if !v.contains(&k) {
+                        v.push(k);
+                    }
+                }
+            }
+            v
+        });
+        if slots.is_empty() {
+            self.status = "Bake Arp: the selected clips don't play through an Arp".into();
+            return;
+        }
+        let mut clips = 0;
+        let mut notes = 0;
+        for k in slots {
+            let r = self.with(|s| {
+                let r = tl::bake_arp(&mut s.song, k);
+                let Shared { song, engine, .. } = s;
+                engine.ensure_plan(song);
+                r
+            });
+            if let Some((a, c, n)) = r {
+                self.dev.arp_stash.insert(k as usize - 1, a);
+                clips += c;
+                notes += n;
+            }
+        }
+        self.status = format!(
+            "Baked the Arp into {clips} clip{}: {notes} notes you can edit; the Arp is off (its settings come back if you switch it on; Ctrl+Z undoes)",
+            if clips == 1 { "" } else { "s" }
+        );
+    }
+
     pub(crate) fn tl_apply(&mut self, op: TlOp) {
         if matches!(op, TlOp::Copy | TlOp::Cut) {
             return self.tl_copy(op == TlOp::Cut);
@@ -159,6 +197,7 @@ impl App {
                 | TlOp::Mute
                 | TlOp::MakeUnique
                 | TlOp::UseTrackInstr
+                | TlOp::BakeArp
                 | TlOp::Glue
                 | TlOp::LoopFromSelection
         );
@@ -171,6 +210,9 @@ impl App {
         if !mode {
             self.tlv.ask_switch = Some(Some(op));
             return;
+        }
+        if op == TlOp::BakeArp {
+            return self.tl_bake_arp(&sels);
         }
         if let TlOp::DrumPattern { pat, track, at } = op {
             self.pat_place_now(pat as usize, track, at);
@@ -236,7 +278,7 @@ impl App {
                         )
                     }
                 }
-                TlOp::SplitArm | TlOp::Copy | TlOp::Cut => String::new(),
+                TlOp::SplitArm | TlOp::Copy | TlOp::Cut | TlOp::BakeArp => String::new(),
                 TlOp::Duplicate => {
                     let t = song.timeline.as_deref_mut().unwrap();
                     let ids = tl::duplicate(t, &sels);

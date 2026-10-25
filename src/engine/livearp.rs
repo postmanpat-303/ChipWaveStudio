@@ -231,6 +231,7 @@ impl Engine {
     }
 
     /// the Arp holds live keys (the UI's readout; tests)
+    #[cfg(test)]
     pub fn live_arp_holding(&self) -> bool {
         self.larp.active && !self.larp.st.is_empty()
     }
