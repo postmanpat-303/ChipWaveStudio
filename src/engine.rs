@@ -369,6 +369,8 @@ struct Live {
     age: u32,
     /// the last note's frequency (poly synth glide)
     last_f: f32,
+    /// key pressure 0..1 per raw MIDI key (reset by its note-on)
+    press: [f32; 128],
     /// drum pad Round Robin hit numbers per key
     hits: crate::drumkit::padrr::HitCount,
 }
@@ -397,6 +399,7 @@ impl Live {
             bend: 1.0,
             age: 0,
             last_f: 0.0,
+            press: [0.0; 128],
             hits: Default::default(),
         }
     }
@@ -670,16 +673,50 @@ impl Engine {
         self.live.v.iter().filter(|v| v.active).count()
     }
 
+    /// Live key pressure: held key `key` (or every held key for
+    /// [`crate::midi::ALL_KEYS`]) presses `val`. The Pressure modulator of
+    /// instrument slot `instr` follows the hardest-pressed held key of it
+    /// (modulators are per instrument, not per voice).
+    fn live_pressure(&mut self, key: u8, val: f32, instr: u8) {
+        let val = val.clamp(0.0, 1.0);
+        let lv = &mut self.live;
+        if key == crate::midi::ALL_KEYS {
+            lv.press = [val; 128];
+        } else {
+            lv.press[key as usize & 127] = val;
+        }
+        let i = (instr as usize).wrapping_sub(1);
+        let mut top: Option<f32> = None;
+        for v in lv.v.iter().filter(|v| v.active && v.down && v.instr == i) {
+            let p = lv.press[v.key as usize & 127];
+            top = Some(top.map_or(p, |t: f32| t.max(p)));
+        }
+        if let Some(f) = self.mods.feed.press.get_mut(i) {
+            // no live voice of it (plugin, StringWave, or the key is up):
+            // the message itself
+            *f = top.unwrap_or(val);
+        }
+    }
+
     /// Apply one live MIDI event (allocation-free).
     pub fn live_event(&mut self, song: &Song, ev: crate::midi::LiveEv) {
         use crate::midi::LiveEv;
         if let LiveEv::On {
-            note, vel, instr, ..
+            key,
+            note,
+            vel,
+            instr,
+            ..
         } = ev
         {
             self.mods
                 .feed
                 .note_on((instr as usize).wrapping_sub(1), note, vel);
+            self.live.press[key as usize & 127] = 0.0;
+        }
+        if let LiveEv::Pressure { key, val, instr } = ev {
+            self.live_pressure(key, val, instr);
+            return;
         }
         if !self.plugins.is_empty() {
             match ev {
@@ -754,6 +791,8 @@ impl Engine {
             LiveEv::Sustain(on) => self.strings.sustain(on),
             LiveEv::Bend(semi) => self.strings.bend(semi),
             LiveEv::AllOff => self.strings.all_off(),
+            // (handled above)
+            LiveEv::Pressure { .. } => return,
             // mod wheel / expression: StringWave only (live, never saved)
             LiveEv::Cc { cc, val } => {
                 let v = val as f32 / 127.0;
@@ -907,7 +946,7 @@ impl Engine {
                     v.synth.fenv.release();
                 }
             }
-            LiveEv::Cc { .. } => {}
+            LiveEv::Cc { .. } | LiveEv::Pressure { .. } => {}
         }
     }
 

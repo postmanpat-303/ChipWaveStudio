@@ -173,16 +173,20 @@ pub enum ModKind {
     Macro,
     /// the instrument's own synth LFO (its shape, rate and sync)
     InstrumentLfo,
+    /// MIDI key pressure (aftertouch) of the owner's held notes (0..1);
+    /// recorded pressure curves play it back from note clips
+    Pressure,
 }
 
 impl ModKind {
-    pub const ALL: [ModKind; 8] = [
+    pub const ALL: [ModKind; 9] = [
         ModKind::Lfo,
         ModKind::Envelope,
         ModKind::Random,
         ModKind::Velocity,
         ModKind::Keytrack,
         ModKind::ModWheel,
+        ModKind::Pressure,
         ModKind::Macro,
         ModKind::InstrumentLfo,
     ];
@@ -196,6 +200,7 @@ impl ModKind {
             ModKind::ModWheel => "Mod wheel",
             ModKind::Macro => "Macro",
             ModKind::InstrumentLfo => "Instrument LFO",
+            ModKind::Pressure => "Pressure",
         }
     }
     /// output range is -1..1 (else 0..1)
@@ -537,6 +542,9 @@ pub struct NoteFeed {
     pub held: [bool; 256],
     /// MIDI mod wheel 0..1
     pub wheel: f32,
+    /// key pressure 0..1 per instrument: the latest live MIDI pressure
+    /// of its held keys, or a note clip's recorded pressure curve
+    pub press: [f32; 256],
 }
 
 impl Default for NoteFeed {
@@ -547,6 +555,7 @@ impl Default for NoteFeed {
             key: [0.0; 256],
             held: [false; 256],
             wheel: 0.0,
+            press: [0.0; 256],
         }
     }
 }
@@ -713,10 +722,11 @@ impl ModEngine {
                     }
                     rt.env
                 }
-                ModKind::Velocity | ModKind::Keytrack | ModKind::ModWheel => {
+                ModKind::Velocity | ModKind::Keytrack | ModKind::ModWheel | ModKind::Pressure => {
                     let x = match md.kind {
                         ModKind::Velocity => self.feed.vel[o],
                         ModKind::Keytrack => self.feed.key[o],
+                        ModKind::Pressure => self.feed.press[o],
                         _ => self.feed.wheel,
                     };
                     let g = md.smooth.clamp(0.0, 1.0);

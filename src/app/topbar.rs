@@ -1341,8 +1341,32 @@ impl App {
                     crate::theme::prop(crate::theme::ts::SMALL),
                     hdr_dim(),
                 );
+                let meter = self.midi_press_meter();
                 if resp
-                    .on_hover_text(format!("{midi_tip}\nclick: MIDI settings"))
+                    .on_hover_ui(|ui| {
+                        ui.label(&midi_tip);
+                        // the live pressure meter (aftertouch keyboards)
+                        if let Some((v, txt)) = &meter {
+                            ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+                            ui.horizontal(|ui| {
+                                let (r, _) =
+                                    ui.allocate_exact_size(egui::vec2(90.0, 10.0), Sense::hover());
+                                let vis = ui.visuals();
+                                ui.painter().rect_filled(r, 2.0, vis.extreme_bg_color);
+                                let mut f = r;
+                                f.set_width(r.width() * v.clamp(0.0, 1.0));
+                                ui.painter().rect_filled(f, 2.0, vis.selection.bg_fill);
+                                ui.painter().rect_stroke(
+                                    r,
+                                    2.0,
+                                    vis.widgets.noninteractive.bg_stroke,
+                                    egui::StrokeKind::Inside,
+                                );
+                                ui.label(txt);
+                            });
+                        }
+                        ui.label("click: MIDI settings");
+                    })
                     .clicked()
                 {
                     self.view = View::Settings;

@@ -53,6 +53,17 @@ pub struct NoteSpan {
     pub hit: u32,
 }
 
+/// One step of a recorded key pressure curve, placed on the timeline: from
+/// tick `at` the Pressure modulators of the note's instrument read `val`.
+/// A curve ends with a 0 at its note's end.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PressPt {
+    pub at: Tick,
+    /// instrument slot (1-based, 0 = the track's current one)
+    pub instr: u8,
+    pub val: f32,
+}
+
 /// number each span's hit per key, in order (`v` sorted by start)
 pub fn number_hits(v: &mut [NoteSpan]) {
     let mut seen = [0u32; 128];
@@ -131,6 +142,9 @@ pub struct Plan {
     /// launcher clips (Stage 4b; empty without them, so other songs play
     /// exactly as before)
     pub launch: Vec<LaunchNotes>,
+    /// recorded key pressure per track, sorted (empty without pressure
+    /// curves, so other songs play exactly as before)
+    pub press: Vec<Vec<PressPt>>,
 }
 
 /// A launcher clip as the engine plays it: its notes from tick 0, looping
@@ -254,6 +268,12 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
                             n.cond,
                         )
                             .hash(&mut h);
+                        // pressure curves (none: the key stays as before)
+                        if let Some(p) = n.pressure() {
+                            for &(t, v) in p {
+                                (t, v.to_bits()).hash(&mut h);
+                            }
+                        }
                     }
                 }
             }
@@ -387,6 +407,7 @@ pub fn build_plan_live(song: &Song, tl: &Timeline, fill: bool) -> Plan {
         tracks.push(segs);
     }
     let end = row_of(play_end(tl));
+    let (notes, press) = note_press_spans(tl, nch, fill);
     let loop_rows = tl
         .loop_range
         .filter(|_| tl.loop_on)
@@ -401,12 +422,13 @@ pub fn build_plan_live(song: &Song, tl: &Timeline, fill: bool) -> Plan {
             .map(|i| tl.tracks.get(i).map_or(0, |t| t.speed))
             .collect(),
         tempo_changes: tl.tempo.iter().any(|p| p.tick > 0),
-        notes: note_spans_live(tl, nch, fill),
+        notes,
         audio: audio_spans(song, tl, nch),
         pcm: tl.audio.iter().map(|a| a.pcm.clone()).collect(),
         tempo: tl.tempo.clone(),
         bpm: song.bpm,
         launch: launch_plan(tl),
+        press,
     }
 }
 
@@ -463,18 +485,34 @@ pub fn note_spans(tl: &Timeline, nch: usize) -> Vec<Vec<NoteSpan>> {
 
 /// [`note_spans`] with the live Fill key `fill` (see [`build_plan_live`])
 pub fn note_spans_live(tl: &Timeline, nch: usize, fill: bool) -> Vec<Vec<NoteSpan>> {
+    note_press_spans(tl, nch, fill).0
+}
+
+/// [`note_spans_live`] and the recorded pressure of the notes that play
+/// (a note a chance or condition skips takes its curve with it)
+pub fn note_press_spans(
+    tl: &Timeline,
+    nch: usize,
+    fill: bool,
+) -> (Vec<Vec<NoteSpan>>, Vec<Vec<PressPt>>) {
     let mut out: Vec<Vec<NoteSpan>> = vec![vec![]; nch];
+    let mut press: Vec<Vec<PressPt>> = vec![vec![]; nch];
     for c in &tl.clips {
         if c.notes().is_none() || c.len <= 0 || c.muted || c.track as usize >= nch {
             continue;
         }
-        clip_note_spans_live(tl, c, &mut out[c.track as usize], fill);
+        let t = c.track as usize;
+        clip_spans(tl, c, &mut out[t], &mut press[t], fill);
     }
     for v in &mut out {
         v.sort_by_key(|n| (n.start, n.key));
         number_hits(v);
     }
-    out
+    for p in &mut press {
+        // a curve's closing 0 before the next note's first value
+        p.sort_by_key(|q| (q.at, q.val > 0.0));
+    }
+    (out, press)
 }
 
 /// The notes note clip `c` plays, in timeline ticks, appended to `v`
@@ -488,6 +526,11 @@ pub(crate) fn clip_note_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>) {
 /// note's condition is tested after its draw, so conditions never move
 /// another note's randomness).
 pub(crate) fn clip_note_spans_live(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>, fill: bool) {
+    clip_spans(tl, c, v, &mut vec![], fill)
+}
+
+/// [`clip_note_spans_live`] plus the played notes' pressure into `pv`
+fn clip_spans(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan>, pv: &mut Vec<PressPt>, fill: bool) {
     let ClipKind::Notes { data } = c.kind else {
         return;
     };
@@ -498,6 +541,7 @@ pub(crate) fn clip_note_spans_live(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan
         return;
     };
     let push = |v: &mut Vec<NoteSpan>,
+                pv: &mut Vec<PressPt>,
                 n: &Note,
                 u: Tick,
                 cap: Tick,
@@ -526,6 +570,20 @@ pub(crate) fn clip_note_spans_live(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan
             tune: n.tune,
             hit: 0,
         });
+        if let Some(p) = n.pressure() {
+            for &(r, val) in p.iter().filter(|q| u + q.0.max(0) < end) {
+                pv.push(PressPt {
+                    at: c.start + u + r.max(0),
+                    instr: n.instr,
+                    val: val.clamp(0.0, 1.0),
+                });
+            }
+            pv.push(PressPt {
+                at: c.start + end,
+                instr: n.instr,
+                val: 0.0,
+            });
+        }
     };
     let conds = d.has_conds();
     match c.loop_len.filter(|l| *l > 0) {
@@ -539,14 +597,14 @@ pub(crate) fn clip_note_spans_live(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan
                 let f = conds && rr::is_fill(tl, c, k, passes, base, l, fill);
                 let notes = d.var_notes(c.seed, k as u32);
                 for n in notes.iter().filter(|n| n.start >= 0 && n.start < l) {
-                    push(v, n, base + n.start, base + l, &mut rng, k as u32, f);
+                    push(v, pv, n, base + n.start, base + l, &mut rng, k as u32, f);
                 }
             }
         }
         None => {
             let mut rng = ClipRng::new(c.seed, 0);
             for n in d.var_notes(c.seed, 0) {
-                push(v, n, n.start - c.offset, Tick::MAX, &mut rng, 0, fill);
+                push(v, pv, n, n.start - c.offset, Tick::MAX, &mut rng, 0, fill);
             }
         }
     }

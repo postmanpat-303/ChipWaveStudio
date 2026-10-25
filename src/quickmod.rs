@@ -20,15 +20,18 @@ pub enum Source {
     Random,
     Velocity,
     ModWheel,
+    /// MIDI key pressure (aftertouch)
+    Pressure,
 }
 
 impl Source {
-    pub const ALL: [Source; 5] = [
+    pub const ALL: [Source; 6] = [
         Source::Lfo,
         Source::Envelope,
         Source::Random,
         Source::Velocity,
         Source::ModWheel,
+        Source::Pressure,
     ];
     pub fn name(self) -> &'static str {
         match self {
@@ -37,6 +40,7 @@ impl Source {
             Source::Random => "Random",
             Source::Velocity => "Velocity",
             Source::ModWheel => "Mod wheel",
+            Source::Pressure => "Pressure",
         }
     }
     pub fn kind(self) -> ModKind {
@@ -46,6 +50,7 @@ impl Source {
             Source::Random => ModKind::Random,
             Source::Velocity => ModKind::Velocity,
             Source::ModWheel => ModKind::ModWheel,
+            Source::Pressure => ModKind::Pressure,
         }
     }
     /// shape and rate apply

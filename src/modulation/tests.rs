@@ -257,6 +257,7 @@ fn envelope_follows_the_owners_notes() {
         (ModKind::Velocity, 0.75),
         (ModKind::Keytrack, (61.0 - 49.0) / 60.0),
         (ModKind::ModWheel, 0.25),
+        (ModKind::Pressure, 0.375),
         (ModKind::Macro, 0.5),
     ] {
         let mut m = Modulation::default();
@@ -264,6 +265,7 @@ fn envelope_follows_the_owners_notes() {
         let mut e = ModEngine::default();
         e.feed.note_on(0, 61, 0.75);
         e.feed.wheel = 0.25;
+        e.feed.press[0] = 0.375;
         let v = stepped(&m, &s, &mut e, 0.01);
         assert!((v[0] - want).abs() < 1e-5, "{kind:?} {}", v[0]);
     }

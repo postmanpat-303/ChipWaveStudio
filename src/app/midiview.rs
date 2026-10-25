@@ -19,6 +19,11 @@ pub(super) struct MidiUi {
     /// activity counter seen and when it last changed (egui time)
     seen: u32,
     lit_at: f64,
+    /// the latest key pressure 0..1 and its key (midi::ALL_KEYS: channel
+    /// pressure), for the MIDI light's meter; `press_seen` once any came
+    pub(super) press: f32,
+    pub(super) press_key: u8,
+    pub(super) press_seen: bool,
 }
 
 impl MidiUi {
@@ -34,6 +39,9 @@ impl MidiUi {
                 learn: None,
                 seen: 0,
                 lit_at: -10.0,
+                press: 0.0,
+                press_key: 0,
+                press_seen: false,
             },
             rx,
         )
@@ -177,8 +185,24 @@ impl App {
                 UiEv::On { key, note, vel, at } => self.midi_note_on(key, note, vel, at),
                 UiEv::Off { key } => self.midi_note_off(key),
                 UiEv::Cc { cc, val } => self.midi_cc(cc, val),
+                UiEv::Pressure { key, val } => self.midi_pressure(key, val),
             }
         }
+    }
+
+    /// the MIDI light's pressure meter line: None until the keyboard sent
+    /// key or channel pressure
+    pub(super) fn midi_press_meter(&self) -> Option<(f32, String)> {
+        if !self.midi.press_seen {
+            return None;
+        }
+        let m = &self.midi;
+        let what = if m.press_key == midi::ALL_KEYS {
+            "Channel pressure".to_string()
+        } else {
+            format!("Key pressure (key {})", m.press_key)
+        };
+        Some((m.press, format!("{what} {:.0} %", m.press * 100.0)))
     }
 
     /// (lit, tooltip) for the toolbar light
@@ -301,6 +325,16 @@ impl App {
                 self.move_row(self.step as isize);
             }
         }
+    }
+
+    /// key pressure (aftertouch): the engine already plays it (Pressure
+    /// modulators); here it is metered for the MIDI light and recorded into
+    /// the held notes of a take
+    pub(super) fn midi_pressure(&mut self, key: u8, val: f32) {
+        self.midi.press = val.clamp(0.0, 1.0);
+        self.midi.press_key = key;
+        self.midi.press_seen = true;
+        self.rec_pressure(key, val);
     }
 
     pub(super) fn midi_cc(&mut self, cc: u8, val: u8) {

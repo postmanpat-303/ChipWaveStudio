@@ -175,6 +175,8 @@ pub(super) struct NoteState {
     pub(super) v: Vec<NoteVoice>,
     /// per track: the next span to start
     cur: [usize; MAX_CHANNELS],
+    /// per track: the next recorded pressure point (`Plan::press`)
+    pcur: [usize; MAX_CHANNELS],
     /// timeline position (ticks) at the last sample
     pub(super) clock: f64,
     age: u32,
@@ -201,6 +203,7 @@ impl NoteState {
         Self {
             v: vec![NoteVoice::new(); MAX_CHANNELS * NOTE_VOICES],
             cur: [0; MAX_CHANNELS],
+            pcur: [0; MAX_CHANNELS],
             clock: 0.0,
             age: 0,
             any: false,
@@ -220,6 +223,11 @@ impl NoteState {
                 .notes
                 .get(ch)
                 .map_or(0, |v| v.partition_point(|n| (n.start as f64) < t));
+            // the last pressure step before `t` applies again (a seek into
+            // a pressed note hears its pressure)
+            self.pcur[ch] = plan.press.get(ch).map_or(0, |v| {
+                v.partition_point(|p| (p.at as f64) < t).saturating_sub(1)
+            });
         }
         self.clock = t;
         self.last_f = [0.0; MAX_CHANNELS];
@@ -562,6 +570,27 @@ pub(super) fn note_events(
             st.cur[ch] += 1;
             if (n.end as f64) > t {
                 note_on(st, feed, song, chans, plugins, ch, n);
+            }
+        }
+        // recorded key pressure: the Pressure modulators of the note's
+        // instrument follow it (empty for almost every song)
+        if let Some(ps) = plan.press.get(ch) {
+            while let Some(p) = ps.get(st.pcur[ch]) {
+                if p.at as f64 > t {
+                    break;
+                }
+                st.pcur[ch] += 1;
+                let c = &chans[ch];
+                let idx = if p.instr > 0 {
+                    p.instr as usize - 1
+                } else if c.instr != usize::MAX {
+                    c.instr
+                } else {
+                    0
+                };
+                if let Some(f) = feed.press.get_mut(idx) {
+                    *f = p.val;
+                }
             }
         }
     }

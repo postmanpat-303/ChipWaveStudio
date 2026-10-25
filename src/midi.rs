@@ -32,10 +32,22 @@ pub enum Msg {
         ch: u8,
         value: i16,
     },
+    /// polyphonic key pressure (0xA0): how hard one held key is pressed
+    PolyPressure {
+        ch: u8,
+        key: u8,
+        val: u8,
+    },
+    /// channel pressure (0xD0): one value for every held key
+    ChanPressure {
+        ch: u8,
+        val: u8,
+    },
 }
 
 /// Parse one MIDI message. Note-on with velocity 0 is a note-off; system,
-/// clock, aftertouch and program change messages are ignored.
+/// clock and program change messages are ignored. Key pressure (0xA0) and
+/// channel pressure (0xD0) are kept (docs/MIDI.md, Pressure).
 pub fn parse(b: &[u8]) -> Option<Msg> {
     let (&status, data) = b.split_first()?;
     let ch = status & 0x0F;
@@ -55,6 +67,12 @@ pub fn parse(b: &[u8]) -> Option<Msg> {
             cc: d(0)?,
             val: d(1)?,
         }),
+        0xA0 => Some(Msg::PolyPressure {
+            ch,
+            key: d(0)?,
+            val: d(1)?,
+        }),
+        0xD0 => Some(Msg::ChanPressure { ch, val: d(0)? }),
         0xE0 => {
             let v = (d(0)? as i16) | ((d(1)? as i16) << 7);
             Some(Msg::Bend {
@@ -137,6 +155,14 @@ pub enum LiveEv {
     Sustain(bool),
     /// pitch bend in semitones
     Bend(f32),
+    /// key pressure 0..1 on held key `key` (the raw MIDI key, as `On`);
+    /// `key` = [`ALL_KEYS`]: channel pressure, every held key
+    Pressure {
+        key: u8,
+        val: f32,
+        /// the instrument slot it moves (1-based, as `On`)
+        instr: u8,
+    },
     /// a controller the engine plays live (1 mod wheel, 11 expression:
     /// StringWave); the UI gets it too (learn, modulators)
     Cc {
@@ -163,7 +189,15 @@ pub enum UiEv {
         cc: u8,
         val: u8,
     },
+    /// key pressure 0..1 (`key` = [`ALL_KEYS`]: channel pressure)
+    Pressure {
+        key: u8,
+        val: f32,
+    },
 }
+
+/// `LiveEv::Pressure` / `UiEv::Pressure` key for channel pressure (all held keys)
+pub const ALL_KEYS: u8 = 255;
 
 /// Settings read by the MIDI thread (written by the UI).
 pub struct Config {
@@ -222,7 +256,9 @@ impl Config {
             Msg::NoteOn { ch, .. }
             | Msg::NoteOff { ch, .. }
             | Msg::Cc { ch, .. }
-            | Msg::Bend { ch, .. } => ch,
+            | Msg::Bend { ch, .. }
+            | Msg::PolyPressure { ch, .. }
+            | Msg::ChanPressure { ch, .. } => ch,
         };
         if filt != 0 && ch + 1 != filt {
             return (None, None);
@@ -268,6 +304,22 @@ impl Config {
             Msg::Bend { value, .. } => {
                 let r = self.bend_range.load(Relaxed) as f32;
                 (Some(LiveEv::Bend(value as f32 / 8192.0 * r)), None)
+            }
+            Msg::PolyPressure { key, val, .. } => {
+                let val = val as f32 / 127.0;
+                let instr = self.instr.load(Relaxed);
+                (
+                    Some(LiveEv::Pressure { key, val, instr }),
+                    Some(UiEv::Pressure { key, val }),
+                )
+            }
+            Msg::ChanPressure { val, .. } => {
+                let (key, val) = (ALL_KEYS, val as f32 / 127.0);
+                let instr = self.instr.load(Relaxed);
+                (
+                    Some(LiveEv::Pressure { key, val, instr }),
+                    Some(UiEv::Pressure { key, val }),
+                )
             }
         }
     }
@@ -499,6 +551,56 @@ impl Hub {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pressure_messages_parse_and_translate() {
+        assert_eq!(
+            parse(&[0xA2, 60, 90]),
+            Some(Msg::PolyPressure {
+                ch: 2,
+                key: 60,
+                val: 90
+            })
+        );
+        assert_eq!(
+            parse(&[0xD0, 127]),
+            Some(Msg::ChanPressure { ch: 0, val: 127 })
+        );
+        assert_eq!(parse(&[0xD0]), None);
+        assert_eq!(parse(&[0xA0, 60]), None);
+        let c = Config::default();
+        let (l, u) = c.translate(Msg::PolyPressure {
+            ch: 0,
+            key: 64,
+            val: 127,
+        });
+        let instr = c.instr.load(Relaxed);
+        assert_eq!(
+            l,
+            Some(LiveEv::Pressure {
+                key: 64,
+                val: 1.0,
+                instr
+            })
+        );
+        assert_eq!(u, Some(UiEv::Pressure { key: 64, val: 1.0 }));
+        // channel pressure: all held keys
+        let (l, _) = c.translate(Msg::ChanPressure { ch: 0, val: 0 });
+        assert_eq!(
+            l,
+            Some(LiveEv::Pressure {
+                key: ALL_KEYS,
+                val: 0.0,
+                instr
+            })
+        );
+        // the channel filter applies
+        c.channel.store(2, Relaxed);
+        assert_eq!(
+            c.translate(Msg::ChanPressure { ch: 0, val: 9 }),
+            (None, None)
+        );
+    }
 
     #[test]
     fn parse_messages() {

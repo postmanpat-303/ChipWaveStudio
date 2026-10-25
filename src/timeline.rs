@@ -728,6 +728,61 @@ impl Default for Note {
     }
 }
 
+impl Note {
+    /// the recorded key pressure curve (tick from the note start, 0..1),
+    /// if the note has one
+    pub fn pressure(&self) -> Option<&[(Tick, f32)]> {
+        self.expr
+            .iter()
+            .find(|e| e.kind == ExprKind::Pressure && !e.points.is_empty())
+            .map(|e| e.points.as_slice())
+    }
+    /// the pressure curve, made when missing
+    pub fn pressure_mut(&mut self) -> &mut Vec<(Tick, f32)> {
+        let i = match self.expr.iter().position(|e| e.kind == ExprKind::Pressure) {
+            Some(i) => i,
+            None => {
+                self.expr.push(NoteExpr {
+                    kind: ExprKind::Pressure,
+                    points: vec![],
+                });
+                self.expr.len() - 1
+            }
+        };
+        &mut self.expr[i].points
+    }
+    /// append a pressure point at `rel` ticks from the note start (the
+    /// recorder): a point on the same tick replaces the last one, and an
+    /// unchanged value adds nothing, so a steady press stays one point
+    pub fn press_push(&mut self, rel: Tick, val: f32) {
+        let rel = rel.max(0);
+        let val = val.clamp(0.0, 1.0);
+        let p = self.pressure_mut();
+        match p.last_mut() {
+            Some(l) if l.0 >= rel => l.1 = val,
+            Some(l) if (l.1 - val).abs() < 0.5 / 127.0 => {}
+            _ => p.push((rel, val)),
+        }
+    }
+    /// drop the pressure curve (and the lane when it is empty)
+    pub fn clear_pressure(&mut self) {
+        self.expr.retain(|e| e.kind != ExprKind::Pressure);
+    }
+    /// pressure at `rel` ticks from the note start (steps: each point
+    /// holds until the next), 0 before the first point
+    pub fn pressure_at(&self, rel: Tick) -> f32 {
+        let Some(p) = self.pressure() else {
+            return 0.0;
+        };
+        let i = p.partition_point(|q| q.0 <= rel);
+        if i == 0 {
+            0.0
+        } else {
+            p[i - 1].1
+        }
+    }
+}
+
 /// Per-note expressions, numbered as CLAP's `CLAP_NOTE_EXPRESSION_*`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1559,6 +1614,8 @@ mod m3_tests;
 mod m4_tests;
 #[cfg(test)]
 mod m5_tests;
+#[cfg(test)]
+mod press_tests;
 #[cfg(test)]
 mod rr_tests;
 #[cfg(test)]

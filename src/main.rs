@@ -1160,6 +1160,12 @@ fn midi_monitor(secs: u64) -> i32 {
                 }
                 midi::UiEv::Off { key } => println!("  note off key {key:3}"),
                 midi::UiEv::Cc { cc, val } => println!("  CC {cc:3} = {val}"),
+                midi::UiEv::Pressure { key, val } if key == midi::ALL_KEYS => {
+                    println!("  channel pressure {:.0} %", val * 100.0)
+                }
+                midi::UiEv::Pressure { key, val } => {
+                    println!("  key pressure key {key:3} = {:.0} %", val * 100.0)
+                }
             }
         }
         while let Ok(e) = audio.pop() {
