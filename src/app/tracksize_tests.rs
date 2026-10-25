@@ -57,7 +57,7 @@ fn wheel(h: &mut Harness<'static, App>, at: Pos2, m: egui::Modifiers, dy: f32) {
 #[test]
 fn rows_are_taller_by_default() {
     let h = tl_demo(true);
-    assert!(DEFAULT_TRACK_H >= 46.0 * 1.25 && DEFAULT_TRACK_H <= 46.0 * 1.5);
+    const { assert!(DEFAULT_TRACK_H >= 46.0 * 1.25 && DEFAULT_TRACK_H <= 46.0 * 1.5) };
     let lay = &h.state().tlv.layout;
     assert_eq!(lay.h(0), DEFAULT_TRACK_H);
     assert_eq!(lay.top[1] - lay.top[0], DEFAULT_TRACK_H);

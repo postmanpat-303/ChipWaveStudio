@@ -226,14 +226,14 @@ impl Layout {
         let mut open = Vec::with_capacity(n);
         let mut y = 0.0;
         let master = (n > 0 && t.tracks[n - 1].kind == tl::TrackKind::Master).then_some(n - 1);
-        for tr in 0..n {
+        for (tr, &h) in hs.iter().enumerate() {
             if Some(tr) == master {
                 y += MASTER_GAP;
             }
             top.push(y);
             let o = mode && tr < 64 && t.view.auto_open >> tr & 1 == 1;
             let l = if o { track_targets(t, tr) } else { vec![] };
-            y += hs[tr];
+            y += h;
             if o {
                 y += l.len() as f32 * AUTO_H + ADD_H;
             }
