@@ -409,6 +409,20 @@ impl App {
                     )
                     .changed();
                 ui.end_row();
+                ui.label("Pie menus");
+                ui.horizontal(|ui| {
+                    for (v, name, tip) in [
+                        (1u8, "Small", "the pie menus at their old size"),
+                        (0, "Normal", "the pie menus a third bigger (default)"),
+                        (2, "Large", "the pie menus bigger still (smaller windows trim it to fit)"),
+                    ] {
+                        changed |= ui
+                            .selectable_value(&mut self.extra.pie_size, v, name)
+                            .on_hover_text(tip)
+                            .changed();
+                    }
+                });
+                ui.end_row();
                 ui.label("UI scale");
                 ui.horizontal(|ui| {
                     // the slider edits a pending value; the UI rescales only

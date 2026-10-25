@@ -130,6 +130,10 @@ pub struct Extra {
     /// and close without animation
     #[serde(default)]
     pub reduce_motion: bool,
+    /// Settings › Look › Pie menus: 0 Normal (30 % bigger than before 25
+    /// Oct 2026, the default), 1 Small (the old size), 2 Large
+    #[serde(default)]
+    pub pie_size: u8,
     /// Timeline: double-clicking a clip opens it in the piano roll (Del's
     /// choice, 19 Oct 2026). Off: the block in the pattern editor, as
     /// before. Alt+double-click does the other one; Enter always opens the
@@ -318,6 +322,7 @@ impl Default for Extra {
             new_in_timeline: true,
             open_in_timeline: true,
             reduce_motion: false,
+            pie_size: 0,
             dblclick_roll: true,
             flat_ui: false,
             chord_list_menu: false,

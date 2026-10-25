@@ -2399,8 +2399,10 @@ impl App {
                     pie.hover = pie.items.iter().position(|x| x.label == want);
                     // and the pointer on it, so it stays lit
                     if let Some(i) = pie.hover {
-                        let c =
-                            pie.wedge_centre(i, (super::radial::R_IN + super::radial::R_MID) / 2.0);
+                        let c = pie.wedge_centre(
+                            i,
+                            (super::radial::r_in() + super::radial::r_mid()) / 2.0,
+                        );
                         if let Some(sh) = &mut self.shot {
                             sh.script = vec![(x + 2, egui::Event::PointerMoved(c))];
                         }

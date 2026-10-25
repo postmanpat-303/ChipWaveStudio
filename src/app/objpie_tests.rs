@@ -32,7 +32,7 @@ pub(super) fn pick(h: &mut Harness<'static, App>, label: &str, child: Option<&st
         .iter()
         .position(|x| x.label == label)
         .unwrap_or_else(|| panic!("no wedge {label}"));
-    let w = pie.wedge_centre(i, (super::radial::R_IN + super::radial::R_MID) / 2.0);
+    let w = pie.wedge_centre(i, (super::radial::r_in() + super::radial::r_mid()) / 2.0);
     h.input_mut().events.push(egui::Event::PointerMoved(w));
     frames(h, 2);
     let p = match child {

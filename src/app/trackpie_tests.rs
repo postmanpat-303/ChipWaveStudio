@@ -147,7 +147,7 @@ fn easing_and_open_progress() {
 #[test]
 fn the_pie_stays_on_screen_and_hits_its_segments() {
     let screen = Rect::from_min_size(Pos2::ZERO, egui::vec2(1600.0, 900.0));
-    let r = R_OUT + MARGIN;
+    let r = r_out() + MARGIN;
     for p in [
         Pos2::new(0.0, 0.0),
         Pos2::new(1600.0, 900.0),
@@ -170,11 +170,11 @@ fn the_pie_stays_on_screen_and_hits_its_segments() {
     assert_eq!(hit(c, c), Hit::Centre);
     for (i, seg) in SEGS.iter().enumerate() {
         let a = seg_angle(i);
-        let p = c + egui::vec2(a.cos(), a.sin()) * (R_IN + R_OUT) / 2.0;
+        let p = c + egui::vec2(a.cos(), a.sin()) * (r_in() + r_out()) / 2.0;
         assert_eq!(hit(c, p), Hit::Seg(i), "{seg:?}");
     }
     assert_eq!(SEGS[0], Seg::Rename, "Rename on top");
-    assert_eq!(hit(c, c + egui::vec2(0.0, -(R_OUT + 20.0))), Hit::Outside);
+    assert_eq!(hit(c, c + egui::vec2(0.0, -(r_out() + 20.0))), Hit::Outside);
     // submenus land on screen, outside the ring
     let info = TrackInfo {
         timeline: true,
@@ -420,7 +420,7 @@ fn right_click_a_header_opens_it_and_drag_release_chooses() {
     let c = h.state().pie.as_ref().unwrap().centre;
     let dev = SEGS.iter().position(|s| *s == Seg::Devices).unwrap();
     let a = seg_angle(dev);
-    let on = c + egui::vec2(a.cos(), a.sin()) * (R_IN + R_OUT) / 2.0;
+    let on = c + egui::vec2(a.cos(), a.sin()) * (r_in() + r_out()) / 2.0;
     h.input_mut().events.push(egui::Event::PointerMoved(on));
     frames(&mut h, 2);
     assert_eq!(

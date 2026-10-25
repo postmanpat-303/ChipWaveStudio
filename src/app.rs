@@ -114,6 +114,7 @@ mod piano_tests;
 #[cfg(test)]
 mod pianocopy_tests;
 mod pianoview;
+mod piesize;
 mod pluginview;
 mod plugsetup;
 #[cfg(test)]
@@ -1172,6 +1173,10 @@ impl eframe::App for App {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.shot_frame(ui.ctx());
+        piesize::set(
+            piesize::of_setting(self.extra.pie_size),
+            ui.ctx().content_rect(),
+        );
         self.poll_save();
         self.load_warnings_window(ui.ctx());
         self.too_new_window(ui.ctx());

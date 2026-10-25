@@ -79,9 +79,20 @@ pub(crate) struct Radial {
     pub accent: Option<Color32>,
 }
 
-pub(crate) const R_IN: f32 = 40.0;
-pub(crate) const R_MID: f32 = 112.0;
-pub(crate) const R_OUT: f32 = 182.0;
+// the radii at Settings › Look › Pie menus › Small (the old size); the
+// pies draw them times piesize::k()
+const R_IN0: f32 = 40.0;
+const R_MID0: f32 = 112.0;
+const R_OUT0: f32 = 182.0;
+pub(crate) fn r_in() -> f32 {
+    R_IN0 * super::piesize::k()
+}
+pub(crate) fn r_mid() -> f32 {
+    R_MID0 * super::piesize::k()
+}
+pub(crate) fn r_out() -> f32 {
+    R_OUT0 * super::piesize::k()
+}
 
 impl Radial {
     pub(crate) fn new(
@@ -126,11 +137,11 @@ impl Radial {
     pub(crate) fn child_centre(&self, i: usize, k: usize) -> Pos2 {
         let (from, _, each) = self.ring_span(i);
         let a = from + (k as f32 + 0.5) * each;
-        self.at + egui::vec2(a.cos(), a.sin()) * ((R_MID + R_OUT) / 2.0)
+        self.at + egui::vec2(a.cos(), a.sin()) * ((r_mid() + r_out()) / 2.0)
     }
     /// keep the disc on screen
     pub(crate) fn clamp_to(&mut self, screen: Rect) {
-        let r = R_OUT + 4.0;
+        let r = r_out() + 4.0;
         self.at.x = self.at.x.clamp(
             screen.left() + r,
             (screen.right() - r).max(screen.left() + r),
@@ -145,12 +156,12 @@ impl Radial {
     pub(crate) fn hit(&self, p: Pos2) -> Option<(usize, Option<usize>)> {
         let d = p - self.at;
         let r = d.length();
-        if r < R_IN || r > R_OUT || self.items.is_empty() {
+        if r < r_in() || r > r_out() || self.items.is_empty() {
             return None;
         }
         let a = d.y.atan2(d.x);
         let norm = |x: f32| (x + PI).rem_euclid(TAU) - PI;
-        if r > R_MID {
+        if r > r_mid() {
             // the hovered wedge's ring first
             if let Some(i) = self.hover.filter(|&i| !self.items[i].children.is_empty()) {
                 let (from, _to, each) = self.ring_span(i);
@@ -192,8 +203,8 @@ impl Radial {
             let (hi, hc) = match h {
                 Some((i, c)) => (Some(i), c),
                 // in the ring gap or the centre: keep the wedge, drop the child
-                None if (p - self.at).length() > R_MID
-                    && (p - self.at).length() <= R_OUT + 30.0 =>
+                None if (p - self.at).length() > r_mid()
+                    && (p - self.at).length() <= r_out() + 30.0 =>
                 {
                     (self.hover, None)
                 }
@@ -236,23 +247,34 @@ impl Radial {
             Color32::from_rgba_unmultiplied(14, 26, 48, 232)
         };
         let ink = t.ink;
+        // Settings › Look › Pie menus: labels, icons and the title grow with
+        // the radii
+        let pk = super::piesize::k();
         // shadow + disc
         p.circle_filled(
             c + egui::vec2(0.0, 3.0),
-            R_MID + 3.0,
+            r_mid() + 3.0,
             Color32::from_black_alpha(70),
         );
-        p.circle_filled(c, R_MID, base);
+        p.circle_filled(c, r_mid(), base);
         let w = self.wedge();
         for (i, it) in self.items.iter().enumerate() {
             let a0 = self.angle_of(i) - w / 2.0;
             let on = self.hover == Some(i) && !it.dim;
             if on {
-                sector(&p, c, R_IN, R_MID, a0, a0 + w, accent.gamma_multiply(0.28));
+                sector(
+                    &p,
+                    c,
+                    r_in(),
+                    r_mid(),
+                    a0,
+                    a0 + w,
+                    accent.gamma_multiply(0.28),
+                );
                 arc(
                     &p,
                     c,
-                    R_MID - 2.0,
+                    r_mid() - 2.0,
                     a0 + 0.02,
                     a0 + w - 0.02,
                     Stroke::new(4.0, accent),
@@ -261,11 +283,11 @@ impl Radial {
             // separators
             let dir = egui::vec2(a0.cos(), a0.sin());
             p.line_segment(
-                [c + dir * R_IN, c + dir * R_MID],
+                [c + dir * r_in(), c + dir * r_mid()],
                 Stroke::new(1.0, Color32::from_white_alpha(28)),
             );
             let mid = self.angle_of(i);
-            let rc = (R_IN + R_MID) / 2.0 + 4.0;
+            let rc = (r_in() + r_mid()) / 2.0 + 4.0;
             let at = c + egui::vec2(mid.cos(), mid.sin()) * rc;
             let col = if on {
                 if t.light {
@@ -278,21 +300,21 @@ impl Radial {
             } else {
                 ink
             };
-            let label_y = if it.icon.is_some() { 11.0 } else { 0.0 };
+            let label_y = if it.icon.is_some() { 11.0 * pk } else { 0.0 };
             if let Some(ic) = it.icon {
                 // icons sit in a small round well
                 p.circle_filled(
-                    at - egui::vec2(0.0, 6.0),
-                    11.0,
+                    at - egui::vec2(0.0, 6.0 * pk),
+                    11.0 * pk,
                     Color32::from_white_alpha(if on { 30 } else { 14 }),
                 );
-                paint_ricon(&p, ic, at - egui::vec2(0.0, 6.0), col);
+                paint_ricon(&p, ic, at - egui::vec2(0.0, 6.0 * pk), col);
             }
             p.text(
                 at + egui::vec2(0.0, label_y),
                 egui::Align2::CENTER_CENTER,
                 &it.label,
-                crate::theme::prop(if it.label.len() > 9 { 9.5 } else { 10.5 }),
+                crate::theme::prop(pk * if it.label.len() > 9 { 9.5 } else { 10.5 }),
                 col,
             );
             // the outer ring
@@ -304,8 +326,8 @@ impl Radial {
                     sector(
                         &p,
                         c,
-                        R_MID + 4.0,
-                        R_OUT,
+                        r_mid() + 4.0,
+                        r_out(),
                         b0 + 0.006,
                         b0 + each - 0.006,
                         if hot {
@@ -315,7 +337,7 @@ impl Radial {
                         },
                     );
                     let am = b0 + each / 2.0;
-                    let rr = (R_MID + R_OUT) / 2.0 + 2.0;
+                    let rr = (r_mid() + r_out()) / 2.0 + 2.0;
                     let pos = c + egui::vec2(am.cos(), am.sin()) * rr;
                     // rotate long labels along the radius? keep them level and small
                     let fs = if ch.chars().count() > 10 {
@@ -329,7 +351,7 @@ impl Radial {
                         pos,
                         egui::Align2::CENTER_CENTER,
                         ch,
-                        crate::theme::prop(fs),
+                        crate::theme::prop(fs * pk),
                         if hot { Color32::WHITE } else { ink },
                     );
                 }
@@ -338,7 +360,7 @@ impl Radial {
         // centre
         p.circle_filled(
             c,
-            R_IN - 2.0,
+            r_in() - 2.0,
             if t.light {
                 Color32::from_gray(250)
             } else {
@@ -347,24 +369,24 @@ impl Radial {
         );
         p.circle_stroke(
             c,
-            R_IN - 2.0,
+            r_in() - 2.0,
             Stroke::new(1.0, Color32::from_white_alpha(40)),
         );
         p.text(
-            c - egui::vec2(0.0, 6.0),
+            c - egui::vec2(0.0, 6.0 * pk),
             egui::Align2::CENTER_CENTER,
             &self.title,
-            crate::theme::prop(crate::theme::ts::LABEL),
+            crate::theme::prop(crate::theme::ts::LABEL * pk),
             ink,
         );
         p.text(
-            c + egui::vec2(0.0, 8.0),
+            c + egui::vec2(0.0, 8.0 * pk),
             egui::Align2::CENTER_CENTER,
             &self.sub,
-            crate::theme::prop(crate::theme::ts::TINY),
+            crate::theme::prop(crate::theme::ts::TINY * pk),
             t.ink2,
         );
-        p.circle_stroke(c, R_MID, Stroke::new(1.0, Color32::from_white_alpha(36)));
+        p.circle_stroke(c, r_mid(), Stroke::new(1.0, Color32::from_white_alpha(36)));
     }
 }
 
@@ -403,8 +425,10 @@ pub(crate) fn arc(p: &egui::Painter, c: Pos2, r: f32, a0: f32, a1: f32, st: Stro
 }
 
 pub(crate) fn paint_ricon(p: &egui::Painter, ic: RIcon, c: Pos2, col: Color32) {
-    let st = Stroke::new(1.4, col);
-    let v = egui::vec2;
+    // Settings › Look › Pie menus: icons grow with the pie
+    let z = super::piesize::k();
+    let st = Stroke::new(1.4 * z, col);
+    let v = |x: f32, y: f32| egui::vec2(x * z, y * z);
     match ic {
         RIcon::Play => {
             p.add(egui::Shape::convex_polygon(
@@ -414,7 +438,10 @@ pub(crate) fn paint_ricon(p: &egui::Painter, ic: RIcon, c: Pos2, col: Color32) {
             ));
         }
         RIcon::Edit => {
-            p.line_segment([c + v(-5.0, 5.0), c + v(4.0, -4.0)], Stroke::new(2.2, col));
+            p.line_segment(
+                [c + v(-5.0, 5.0), c + v(4.0, -4.0)],
+                Stroke::new(2.2 * z, col),
+            );
             p.line_segment([c + v(-5.0, 5.0), c + v(-6.0, 6.0)], st);
         }
         RIcon::Transpose => {
@@ -424,13 +451,13 @@ pub(crate) fn paint_ricon(p: &egui::Painter, ic: RIcon, c: Pos2, col: Color32) {
             p.line_segment([c + v(3.0, 5.0), c + v(5.5, 2.5)], st);
         }
         RIcon::Type => {
-            p.circle_stroke(c + v(-2.0, 2.0), 3.5, st);
+            p.circle_stroke(c + v(-2.0, 2.0), 3.5 * z, st);
             p.line_segment([c + v(1.0, -1.0), c + v(5.0, -5.0)], st);
             p.line_segment([c + v(2.0, -5.0), c + v(5.0, -5.0)], st);
             p.line_segment([c + v(5.0, -5.0), c + v(5.0, -2.0)], st);
         }
         RIcon::Bulb => {
-            p.circle_stroke(c + v(0.0, -1.5), 4.0, st);
+            p.circle_stroke(c + v(0.0, -1.5), 4.0 * z, st);
             p.line_segment([c + v(-2.0, 4.5), c + v(2.0, 4.5)], st);
         }
         RIcon::Notes => {
@@ -481,12 +508,18 @@ pub(crate) fn paint_ricon(p: &egui::Painter, ic: RIcon, c: Pos2, col: Color32) {
             p.line_segment([c + v(-1.5, -5.5), c + v(1.5, -5.5)], st);
         }
         RIcon::Add => {
-            p.line_segment([c + v(0.0, -5.0), c + v(0.0, 5.0)], Stroke::new(1.8, col));
-            p.line_segment([c + v(-5.0, 0.0), c + v(5.0, 0.0)], Stroke::new(1.8, col));
+            p.line_segment(
+                [c + v(0.0, -5.0), c + v(0.0, 5.0)],
+                Stroke::new(1.8 * z, col),
+            );
+            p.line_segment(
+                [c + v(-5.0, 0.0), c + v(5.0, 0.0)],
+                Stroke::new(1.8 * z, col),
+            );
         }
         RIcon::More => {
             for k in -1..=1 {
-                p.circle_filled(c + v(k as f32 * 4.0, 0.0), 1.6, col);
+                p.circle_filled(c + v(k as f32 * 4.0, 0.0), 1.6 * z, col);
             }
         }
     }
@@ -579,12 +612,15 @@ mod tests {
             .collect();
         let mut r = Radial::new(Pos2::new(300.0, 300.0), "T", "", items);
         // top wedge is item 0, right is item 1 (clockwise)
-        assert_eq!(r.hit(Pos2::new(300.0, 220.0)), Some((0, None)));
-        assert_eq!(r.hit(Pos2::new(380.0, 300.0)), Some((1, None)));
+        // (at any Settings › Look › Pie menus size)
+        let wedge = (r_in() + r_mid()) / 2.0;
+        let ring = (r_mid() + r_out()) / 2.0;
+        assert_eq!(r.hit(Pos2::new(300.0, 300.0 - wedge)), Some((0, None)));
+        assert_eq!(r.hit(Pos2::new(300.0 + wedge, 300.0)), Some((1, None)));
         assert_eq!(r.hit(Pos2::new(300.0, 300.0)), None, "centre cancels");
         r.hover = Some(1);
         // the middle child of item 1 sits on its centre line, in the outer ring
-        assert_eq!(r.hit(Pos2::new(445.0, 300.0)), Some((1, Some(1))));
+        assert_eq!(r.hit(Pos2::new(300.0 + ring, 300.0)), Some((1, Some(1))));
     }
 
     #[test]

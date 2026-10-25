@@ -25,8 +25,16 @@ pub(crate) const CLOSE_S: f64 = 0.12;
 pub(crate) const HOVER_S: f32 = 0.08;
 pub(crate) const STAGGER_S: f64 = 0.012;
 pub(crate) const SUB_S: f64 = 0.12;
-pub(crate) const R_OUT: f32 = 148.0;
-pub(crate) const R_IN: f32 = 56.0;
+/// the pie's radii at Settings › Look › Pie menus › Small (the old size);
+/// drawn and hit-tested times piesize::k()
+const R_OUT0: f32 = 148.0;
+const R_IN0: f32 = 56.0;
+pub(crate) fn r_out() -> f32 {
+    R_OUT0 * super::piesize::k()
+}
+pub(crate) fn r_in() -> f32 {
+    R_IN0 * super::piesize::k()
+}
 /// room kept between the pie (with its rim arc) and the window edge
 pub(crate) const MARGIN: f32 = 10.0;
 /// a right-button drag longer than this, released on a segment, chooses it
@@ -575,7 +583,9 @@ fn rect_dist(r: Rect, c: Pos2) -> f32 {
 
 /// the panel keeps this far from the pie's centre (clear of the ring and
 /// its rim arc)
-const SUB_CLEAR: f32 = R_OUT + 10.0;
+fn sub_clear() -> f32 {
+    r_out() + 10.0
+}
 
 /// keep `r` on `screen` (4 px in)
 fn on_screen(mut r: Rect, screen: Rect) -> Rect {
@@ -604,12 +614,12 @@ pub(crate) fn sub_rect(centre: Pos2, seg: usize, size: Vec2, screen: Rect) -> Re
     let d = egui::vec2(a.cos(), a.sin());
     let right = d.x >= -0.2;
     let place = |dir: Vec2, right: bool| -> Rect {
-        let anchor = centre + dir * (R_OUT + 12.0);
+        let anchor = centre + dir * (r_out() + 12.0);
         let x = if right { anchor.x } else { anchor.x - size.x };
         let mut r = Rect::from_min_size(Pos2::new(x, anchor.y - size.y / 2.0), size);
         // out along the segment until it clears the ring
         let mut n = 0;
-        while rect_dist(r, centre) < SUB_CLEAR && n < 200 {
+        while rect_dist(r, centre) < sub_clear() && n < 200 {
             r = r.translate(dir * 2.0);
             n += 1;
         }
@@ -617,19 +627,19 @@ pub(crate) fn sub_rect(centre: Pos2, seg: usize, size: Vec2, screen: Rect) -> Re
         // the screen edge pushed it back over the ring: sideways out instead
         let side = egui::vec2(if right { 1.0 } else { -1.0 }, 0.0);
         let mut n = 0;
-        while rect_dist(r, centre) < SUB_CLEAR && n < 200 {
+        while rect_dist(r, centre) < sub_clear() && n < 200 {
             r = r.translate(side * 2.0);
             n += 1;
         }
         r
     };
     let r = place(d, right);
-    if screen.shrink(3.9).contains_rect(r) && rect_dist(r, centre) >= SUB_CLEAR - 0.5 {
+    if screen.shrink(3.9).contains_rect(r) && rect_dist(r, centre) >= sub_clear() - 0.5 {
         return r;
     }
     // no room on this side: the mirror side, else the first try on screen
     let m = place(egui::vec2(-d.x, d.y), !right);
-    if screen.shrink(3.9).contains_rect(m) && rect_dist(m, centre) >= SUB_CLEAR - 0.5 {
+    if screen.shrink(3.9).contains_rect(m) && rect_dist(m, centre) >= sub_clear() - 0.5 {
         return m;
     }
     on_screen(r, screen)
@@ -723,7 +733,7 @@ pub(crate) fn seg_angle(i: usize) -> f32 {
 /// the pie's centre for a click at `p`: moved in so the whole pie and its
 /// Add rings (with their rim arc and `MARGIN`) are inside `screen`
 pub(crate) fn clamp_centre(p: Pos2, screen: Rect) -> Pos2 {
-    super::radial::clamp_disc(p, screen, super::trackring::R_FIT)
+    super::radial::clamp_disc(p, screen, super::trackring::r_fit())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -737,10 +747,10 @@ pub(crate) enum Hit {
 pub(crate) fn hit(centre: Pos2, p: Pos2) -> Hit {
     let d = p - centre;
     let r = d.length();
-    if r < R_IN {
+    if r < r_in() {
         return Hit::Centre;
     }
-    if r > R_OUT + 6.0 {
+    if r > r_out() + 6.0 {
         return Hit::Outside;
     }
     let step = std::f32::consts::TAU / SEGS.len() as f32;
@@ -1333,7 +1343,7 @@ impl App {
         let k0 = disc_progress(elapsed, reduce) * fade;
         // a soft shadow under the ring
         if k0 > 0.0 {
-            let sr = R_OUT * scale_of(k0);
+            let sr = r_out() * scale_of(k0);
             for (dr, a) in [(10.0, 18u8), (5.0, 28), (2.0, 34)] {
                 painter.circle_filled(
                     centre + egui::vec2(0.0, 4.0),
@@ -1359,9 +1369,12 @@ impl App {
                 animating = true;
             }
             let sc = scale_of(k);
+            // Settings › Look › Pie menus (the radii carry it already)
+            let pk = super::piesize::k();
+            let fk = pk.sqrt();
             let dir = egui::vec2(seg_angle(i).cos(), seg_angle(i).sin());
             let c = centre + dir * (5.0 * hv);
-            let (ri, ro) = (R_IN * sc, R_OUT * sc);
+            let (ri, ro) = (r_in() * sc, r_out() * sc);
             let en = seg_enabled(*seg);
             let alpha = k;
             let base_in = crate::theme::mix(pl.ring, pl.hover, hv * 0.85);
@@ -1404,7 +1417,7 @@ impl App {
             }
             // icon disc + label
             let rm = (ri + ro) / 2.0;
-            let ic = c + dir * rm - egui::vec2(0.0, 7.0 * sc);
+            let ic = c + dir * rm - egui::vec2(0.0, 7.0 * sc * pk);
             let ink = if !en {
                 pl.ink2
             } else if *seg == Seg::Delete {
@@ -1416,13 +1429,13 @@ impl App {
             };
             painter.circle_filled(
                 ic,
-                13.0 * sc,
+                13.0 * sc * pk,
                 crate::theme::mix(pl.icon_bg, pl.accent, hv * 0.35 * en as u8 as f32)
                     .gamma_multiply(alpha),
             );
             glyphs::paint(
                 &painter,
-                Rect::from_center_size(ic, Vec2::splat(13.0 * sc)),
+                Rect::from_center_size(ic, Vec2::splat(13.0 * sc * pk)),
                 seg.glyph(),
                 ink.gamma_multiply(alpha),
             );
@@ -1432,17 +1445,19 @@ impl App {
                 seg.label().to_string()
             };
             painter.text(
-                ic + egui::vec2(0.0, 22.0 * sc),
+                ic + egui::vec2(0.0, 22.0 * sc * pk),
                 egui::Align2::CENTER_CENTER,
                 label,
-                crate::theme::prop(11.5 * sc.max(0.8)),
+                crate::theme::prop(11.5 * fk * sc.max(0.8)),
                 (if en { pl.ink } else { pl.ink2 }).gamma_multiply(alpha),
             );
         }
         // centre disc
         if k0 > 0.0 {
             let sc = scale_of(k0);
-            let rr = (R_IN - 4.0) * sc;
+            let pk = super::piesize::k();
+            let fk = pk.sqrt();
+            let rr = (r_in() - 4.0) * sc;
             let hc = if reduce {
                 (on_centre && open) as u8 as f32
             } else {
@@ -1459,16 +1474,16 @@ impl App {
             );
             painter.circle_stroke(centre, rr, Stroke::new(1.0, pl.edge.gamma_multiply(k0)));
             painter.text(
-                centre - egui::vec2(0.0, 9.0 * sc),
+                centre - egui::vec2(0.0, 9.0 * sc * pk),
                 egui::Align2::CENTER_CENTER,
                 if empty { "ADD" } else { "TRACK" },
-                crate::theme::prop(10.0 * sc.max(0.8)),
+                crate::theme::prop(10.0 * fk * sc.max(0.8)),
                 pl.disc_ink2.gamma_multiply(k0),
             );
-            let f = crate::theme::prop(12.5 * sc.max(0.8));
+            let f = crate::theme::prop(12.5 * fk * sc.max(0.8));
             let nm = super::pattern::fit(&painter, &name, &f, 2.0 * rr - 12.0);
             painter.text(
-                centre + egui::vec2(0.0, 8.0 * sc),
+                centre + egui::vec2(0.0, 8.0 * sc * pk),
                 egui::Align2::CENTER_CENTER,
                 nm,
                 f,
@@ -1486,7 +1501,7 @@ impl App {
                 animating = true;
             }
             let a = seg_angle(si);
-            let from = centre + egui::vec2(a.cos(), a.sin()) * R_OUT;
+            let from = centre + egui::vec2(a.cos(), a.sin()) * r_out();
             let sc = 0.85 + 0.15 * ks;
             let tf = |q: Pos2| from + (q - from) * sc;
             let rr = Rect::from_min_max(tf(r.min), tf(r.max));
@@ -1853,7 +1868,7 @@ impl App {
             }
             PieAct::Automation => {
                 let at = self.pie.as_ref().map_or(Pos2::new(200.0, 200.0), |p| {
-                    p.centre + egui::vec2(R_OUT + 12.0, -R_OUT)
+                    p.centre + egui::vec2(r_out() + 12.0, -r_out())
                 });
                 self.track_auto_open(tr, at);
             }
