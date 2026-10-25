@@ -313,17 +313,17 @@ fn this_track_slots(level: Level, i: &TrackInfo) -> Option<Vec<Slot>> {
                     slot(
                         "Chords…",
                         tl(PieAct::Chords),
-                        tl_tip("the chord generator on this track's first pattern (a new one if it has none)"),
+                        tl_tip("the chord generator: Write puts a new chord clip on this track (or a new one) at the loop start, else the play marker"),
                     ),
                     slot(
                         "Melody…",
                         tl(PieAct::Melody),
-                        tl_tip("the melody generator over this track's first pattern's chords (writes a new Melody track or this one)"),
+                        tl_tip("the melody generator over this track's first pattern's chords, if any (writes a new Melody track or that pattern)"),
                     ),
                     slot(
                         "Bass…",
                         tl(PieAct::Bass),
-                        tl_tip("the bass generator over this track's first pattern's chords (writes a new Bass track or this one)"),
+                        tl_tip("the bass generator over this track's first pattern's chords, if any (writes a new Bass track or that pattern)"),
                     ),
                     automation(),
                     slot(

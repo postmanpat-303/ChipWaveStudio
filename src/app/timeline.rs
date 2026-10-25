@@ -2563,6 +2563,26 @@ impl App {
                 if r.clicked() {
                     head_ops.push(HeadOp::Add(n));
                 }
+                // the chord generator (it works without a track or clip)
+                let gr =
+                    Rect::from_min_size(Pos2::new(br.right() + 6.0, y), egui::vec2(80.0, 20.0));
+                if gr.right() < heads.right() - 2.0 {
+                    let r = ui.put(
+                        gr,
+                        egui::Button::new(
+                            egui::RichText::new("Chords…")
+                                .size(crate::theme::ts::px(crate::theme::ts::LABEL)),
+                        )
+                        .small(),
+                    );
+                    add_btn = add_btn.union(r.rect);
+                    if r
+                        .on_hover_text("the chord generator: Write puts a new chord clip on the selected track (or a new one) at the loop start, else the play marker")
+                        .clicked()
+                    {
+                        head_ops.push(HeadOp::Chords);
+                    }
+                }
             }
         }
         // ---- right-click on the track list's empty space (below the last
@@ -3710,7 +3730,8 @@ impl App {
                 | HeadOp::Move(..)
                 | HeadOp::Height(..)
                 | HeadOp::Add(_)
-                | HeadOp::AddWith(_) => {}
+                | HeadOp::AddWith(_)
+                | HeadOp::Chords => {}
             }
         });
         match op {
@@ -3730,6 +3751,16 @@ impl App {
             }
             HeadOp::AddWith(at) => {
                 self.track_add_with(at);
+                return;
+            }
+            HeadOp::Chords => {
+                let n = self.with(|s| s.song.channels);
+                let tr = Some(self.tl_cur_track()).filter(|&k| k < n);
+                self.gen_open_for(tr, super::genpanel::GenTab::Chords);
+                self.status = match tr {
+                    Some(k) => format!("The chord generator for track {:02}", k + 1),
+                    None => "The chord generator: Write adds a new “Chords” track".into(),
+                };
                 return;
             }
             _ => {}
@@ -3968,6 +3999,9 @@ enum HeadOp {
     Add(usize),
     /// a track at this index with the instrument picked in the Browser
     AddWith(usize),
+    /// "Chords…" beside + Add track: the Generators panel for the
+    /// selected track (none: a new track)
+    Chords,
 }
 
 /// the selected track's lane colour: the accent, lifted where it would
