@@ -9,6 +9,7 @@ use super::*;
 pub(super) mod gridcanvas;
 pub(super) mod instcard;
 pub(super) mod polyview;
+pub(super) mod quickview;
 pub(super) mod stringsview;
 
 /// lower-panel switch bar height
@@ -46,6 +47,8 @@ pub(super) struct InstUi {
     pub collapse_pending: bool,
     /// the selected modulator (its depth is what Alt-drag edits)
     pub mod_sel: Option<u32>,
+    /// the quick-mod popover ("Modulate <param> with…")
+    pub quick: Option<quickview::Quick>,
     /// the Grid canvas (cable being dragged, add position)
     grid: gridcanvas::GridUi,
     /// the poly synth editor (section shown, Revert snapshot)
@@ -1891,10 +1894,32 @@ impl App {
             .target
             .filter(|t| crate::automation::modulatable(*t))
             .map(|t| t.id());
-        let rings = tid
+        let mut rings = tid
             .as_deref()
             .map(|id| super::modview::rings(&cx.modm, id, self.ip.mod_sel))
             .unwrap_or_default();
+        // the engine's own routes (WaveForge slots, StringWave LFOs, the
+        // synth LFO) as rings too
+        let native: Vec<crate::quickmod::Row> = match (tid.as_ref(), p.target) {
+            (Some(_), Some(tg)) => crate::quickmod::engine(&inst.kind)
+                .map(|e| e.rows(cx.idx))
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
+                .filter(|(_, r)| r.knobs.contains(&tg))
+                .map(|(j, r)| {
+                    rings.push(super::modview::Ring {
+                        route: quickview::NATIVE_BASE + j,
+                        amount: r.amount,
+                        col: quickview::native_colour(j),
+                        selected: false,
+                    });
+                    r
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let mod_dot = tid.as_ref().map(|_| rings.first().map(|r| r.col));
         let live = tid
             .as_deref()
             .map(|id| super::modview::live_pos(&cx.modm, id, n, &cx.live));
@@ -1917,11 +1942,28 @@ impl App {
                 rings: &rings,
                 live,
                 auto_led,
+                mod_dot,
             },
         );
         if let Some(id) = &tid {
             self.knob_modulation(ui, &out, id, cx);
         }
+        if let Some((route, d)) = out.ring_drag.filter(|r| r.0 >= quickview::NATIVE_BASE) {
+            let j = route - quickview::NATIVE_BASE;
+            if let Some(row) = crate::quickmod::engine(&inst.kind)
+                .map(|e| e.rows(cx.idx))
+                .and_then(|v| v.into_iter().nth(j))
+            {
+                crate::quickmod::set_amount(inst, &mut cx.modm, row.id, row.amount + d);
+                cx.changed = true;
+            }
+        }
+        let _ = native;
+        let now = ui.input(|i| i.time);
+        if out.dot_clicked {
+            self.quick_open(p, inst, cx, now);
+        }
+        self.quick_popover(&ui.ctx().clone(), &p.key, out.resp.rect, inst, cx);
         if out.changed {
             let mut v = params::from_norm(n, lo, hi, log);
             if step > 0.0 {
@@ -1964,7 +2006,7 @@ impl App {
                     "Modulation routed: drag the dot on the knob's ring to set the depth".into();
             }
         }
-        if let Some((route, d)) = out.ring_drag {
+        if let Some((route, d)) = out.ring_drag.filter(|r| r.0 < quickview::NATIVE_BASE) {
             if let Some(rt) = cx.modm.routes.get_mut(route) {
                 rt.amount = (rt.amount + d).clamp(-1.0, 1.0);
             }
@@ -2407,6 +2449,7 @@ impl App {
                             rings: &[],
                             live: None,
                             auto_led: self.lane_led(Target::Macro(i, k)),
+                            mod_dot: None,
                         },
                     );
                     if out.changed {

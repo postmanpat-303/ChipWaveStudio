@@ -209,7 +209,7 @@ fn chip(
 }
 
 /// note values for the sync menu: (beats per cycle, name)
-const SYNCS: [(f32, &str); 9] = [
+pub(super) const SYNCS: [(f32, &str); 9] = [
     (0.0, "Free (Hz)"),
     (0.25, "1/16"),
     (0.5, "1/8"),

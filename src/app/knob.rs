@@ -26,6 +26,8 @@ pub(super) struct KnobOut {
     pub ring_drag: Option<(usize, f32)>,
     /// Alt-drag on the knob: change of the selected modulator's depth
     pub alt_drag: Option<f32>,
+    /// the quick-mod dot was clicked
+    pub dot_clicked: bool,
 }
 
 pub(super) struct KnobArgs<'a> {
@@ -50,6 +52,9 @@ pub(super) struct KnobArgs<'a> {
     pub live: Option<f32>,
     /// automation LED (lane colour) when this parameter has a lane
     pub auto_led: Option<Color32>,
+    /// the quick-mod dot: None = none, Some(None) = hollow (add movement),
+    /// Some(Some(c)) = filled in the colour of what moves it
+    pub mod_dot: Option<Option<Color32>>,
 }
 
 /// A knob for a 0..1 position. Drag up/down (or left/right) to turn it,
@@ -165,6 +170,38 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         let lp = Pos2::new(kc.x + RAD - 1.0, kc.y - RAD + 2.0);
         p.circle_filled(lp, 3.6, led);
         p.circle_stroke(lp, 3.6, Stroke::new(1.0, Color32::from_black_alpha(160)));
+    }
+    // quick-mod: a small dot mirroring the LED (click: "Modulate … with")
+    let mut dot_clicked = false;
+    if let Some(dc) = a.mod_dot.filter(|_| a.enabled) {
+        let dp = Pos2::new(kc.x - RAD + 1.0, kc.y - RAD + 2.0);
+        let dr = ui
+            .interact(
+                Rect::from_center_size(dp, egui::vec2(12.0, 12.0)),
+                id.with("moddot"),
+                Sense::click(),
+            )
+            .on_hover_text(format!(
+                "Modulate {} with an LFO, envelope, velocity…",
+                a.name
+            ));
+        dot_clicked = dr.clicked();
+        let hot = dr.hovered();
+        match dc {
+            Some(c) => {
+                p.circle_filled(dp, if hot { 4.2 } else { 3.4 }, c);
+                p.circle_stroke(dp, 3.4, Stroke::new(1.0, Color32::from_black_alpha(140)));
+            }
+            None => {
+                let c = if hot { t.accent } else { t.ink2.gamma_multiply(0.55) };
+                if hot {
+                    p.circle_filled(dp, 4.2, t.accent.gamma_multiply(0.35));
+                }
+                p.circle_stroke(dp, 3.0, Stroke::new(1.2, c));
+            }
+        }
+        let dn = format!("Modulate {}", a.name);
+        dr.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &dn));
     }
     let (small, mono) = if t.ember {
         (
@@ -310,6 +347,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         lock_clicked,
         ring_drag,
         alt_drag,
+        dot_clicked,
     }
 }
 
