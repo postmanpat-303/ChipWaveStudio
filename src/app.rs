@@ -28,6 +28,7 @@ mod browser_tests;
 mod browsera_tests;
 mod browserpanel;
 mod browserview;
+mod cafollow;
 mod chains;
 #[cfg(test)]
 mod chains_tests;

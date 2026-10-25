@@ -1323,6 +1323,22 @@ impl App {
         } else {
             Default::default()
         };
+        // launcher clips with a follow action: their one-line summary
+        let follows: std::collections::HashMap<u32, String> = if launch {
+            self.with(|s| {
+                s.song
+                    .timeline
+                    .as_deref()
+                    .map_or_else(Default::default, |t| {
+                        t.launcher
+                            .iter()
+                            .filter_map(|l| Some((l.clip.id, l.follow?.describe())))
+                            .collect()
+                    })
+            })
+        } else {
+            Default::default()
+        };
         for tr in 0..nch {
             let Some((hr, _)) = self.tlv.track_rects(tr) else {
                 continue;
@@ -1445,6 +1461,12 @@ impl App {
                         self.clip_word()
                     )
                 };
+                let tip = match lid.and_then(|id| follows.get(&id)) {
+                    Some(f) => {
+                        format!("{tip}\n\nFollow action: {f} (right-click › Follow action…)")
+                    }
+                    None => tip,
+                };
                 let resp = resp.on_hover_text(tip);
                 if let (Some(id), false, true) =
                     (lid, self.extra.clip_list_menu, resp.secondary_clicked())
@@ -1462,6 +1484,14 @@ impl App {
                             .clicked()
                         {
                             slot_op = Some((id, 1));
+                            ui.close();
+                        }
+                        if ui
+                            .button("Follow action…")
+                            .on_hover_text("after some loops, move on to another clip by itself")
+                            .clicked()
+                        {
+                            slot_op = Some((id, 3));
                             ui.close();
                         }
                         if ui.button("Delete").clicked() {
@@ -1587,6 +1617,23 @@ impl App {
                     );
                     let br = Rect::from_min_size(
                         Pos2::new(sr.right() - g.size().x - 7.0, sr.top() + 2.0),
+                        g.size() + egui::vec2(5.0, 1.0),
+                    );
+                    pc.rect_filled(br, 3.0, Color32::from_black_alpha(150));
+                    pc.galley(br.min + egui::vec2(2.5, 0.5), g, t.ink);
+                }
+                // a follow action: » at the bottom right
+                if lid.is_some_and(|id| follows.contains_key(&id)) && sr.height() >= 14.0 {
+                    let g = pc.layout_no_wrap(
+                        "»".into(),
+                        crate::theme::prop(crate::theme::ts::SMALL),
+                        t.ink,
+                    );
+                    let br = Rect::from_min_size(
+                        Pos2::new(
+                            sr.right() - g.size().x - 7.0,
+                            sr.bottom() - g.size().y - 3.0,
+                        ),
                         g.size() + egui::vec2(5.0, 1.0),
                     );
                     pc.rect_filled(br, 3.0, Color32::from_black_alpha(150));
@@ -1801,6 +1848,10 @@ impl App {
         match slot_op {
             Some((id, 1)) => self.ca_variation(id),
             Some((id, 2)) => self.ca_delete(id),
+            Some((id, 3)) => {
+                let at = ui.ctx().pointer_latest_pos().unwrap_or(top.center());
+                self.follow_open(id, at);
+            }
             _ => {}
         }
         match act {

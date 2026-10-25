@@ -228,3 +228,53 @@ fn the_piano_roll_shows_linked_clips_and_makes_a_launcher_clip_unique() {
     frames(&mut h, 2);
     assert_eq!(launcher(&h)[0].clip.notes(), arr);
 }
+
+/// Follow actions: the launcher clip pie's "Follow action…" opens the
+/// popover; On sets one (one undo step); Capture to timeline writes the
+/// run after the arrangement's last clip
+#[test]
+fn the_follow_action_popover_sets_one_and_captures_to_the_timeline() {
+    let (mut h, _) = notes_song();
+    frames(&mut h, 2);
+    let r = super::ui_tests::exact(&h, "Capture");
+    click_at(&mut h, r.center());
+    frames(&mut h, 3);
+    let lid = launcher(&h)[0].clip.id;
+    assert_eq!(launcher(&h)[0].follow, None, "off by default");
+    let (_, sr) = slot(&h, 0, 0);
+    h.state_mut().follow_open(lid, sr.right_top());
+    frames(&mut h, 2);
+    assert!(h.query_by_label("Capture to timeline").is_some());
+    h.get_by_label("On").click();
+    frames(&mut h, 3);
+    let f = launcher(&h)[0].follow.expect("on");
+    assert_eq!(f, crate::timeline::follow::Follow::default());
+    h.state_mut().undo(false);
+    frames(&mut h, 2);
+    assert_eq!(launcher(&h)[0].follow, None, "Ctrl+Z turns it off again");
+    h.state_mut().follow_set(lid, Some(f));
+    let before = h
+        .state()
+        .with(|s| s.song.timeline.as_deref().unwrap().clips.len());
+    let end = h.state().with(|s| {
+        let t = s.song.timeline.as_deref().unwrap();
+        t.clips.iter().map(|c| c.end()).max().unwrap()
+    });
+    h.state_mut().follow_open(lid, sr.right_top());
+    frames(&mut h, 2);
+    h.get_by_label("Capture to timeline").click();
+    frames(&mut h, 3);
+    let (n, first) = h.state().with(|s| {
+        let t = s.song.timeline.as_deref().unwrap();
+        let new: Vec<_> = t.clips.iter().filter(|c| c.start >= end).collect();
+        (t.clips.len(), new.iter().map(|c| c.start).min())
+    });
+    assert!(n > before, "{}", h.state().status);
+    assert_eq!(
+        first,
+        Some((end + BAR - 1) / BAR * BAR),
+        "from the next bar line"
+    );
+    assert!(h.state().pr.follow_pop.is_none(), "closed");
+    assert!(h.state().status.starts_with("Captured 16 bars"));
+}

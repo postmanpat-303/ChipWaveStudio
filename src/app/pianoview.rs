@@ -263,6 +263,8 @@ pub(crate) struct PianoUi {
     pub(crate) cond_pop: Option<super::prlanes::CondPop>,
     /// the Variations popover (Clip Variations)
     pub(crate) var_pop: Option<super::prvars::VarPop>,
+    /// the Clip Arranger's Follow action popover
+    pub(crate) follow_pop: Option<super::cafollow::FollowPop>,
     /// live Fill on (mirrors `Engine::fill_live`)
     pub(crate) fill: bool,
 }
@@ -327,6 +329,7 @@ impl Default for PianoUi {
             lane_menu: None,
             cond_pop: None,
             var_pop: None,
+            follow_pop: None,
             fill: false,
         }
     }

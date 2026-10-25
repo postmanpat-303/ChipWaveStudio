@@ -270,6 +270,11 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
     for l in &tl.launcher {
         let c = &l.clip;
         (c.id, c.track, c.len, c.offset, c.loop_len, c.seed).hash(&mut h);
+        // the scene row and follow action steer follow actions
+        l.scene.hash(&mut h);
+        if let Some(f) = l.follow {
+            (f.after, f.a as u8, f.b as u8, f.chance).hash(&mut h);
+        }
         if let Some(d) = c.notes().and_then(|k| tl.notes.get(k)) {
             hash_var(d, &mut h);
             for n in &d.notes {

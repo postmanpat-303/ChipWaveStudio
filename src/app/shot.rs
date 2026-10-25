@@ -1447,6 +1447,46 @@ impl App {
         if view == "cliparranger-launcher" && f == SETUP_AT + 20 {
             self.ca_scene(0);
         }
+        // CHIPWAVE_SHOT_FOLLOW=1: follow actions on track 01's launcher
+        // clips and the Follow action popover open on the first
+        if view == "cliparranger-launcher"
+            && f == SETUP_AT + 24
+            && std::env::var("CHIPWAVE_SHOT_FOLLOW").is_ok()
+        {
+            use crate::timeline::follow::{Act, Follow};
+            let first = self.with(|s| {
+                let t = s.song.timeline.as_deref_mut()?;
+                let mut first = None;
+                for l in t.launcher.iter_mut().filter(|l| l.clip.track == 0) {
+                    l.follow = Some(if l.scene == 0 {
+                        first = Some(l.clip.id);
+                        Follow {
+                            after: 2,
+                            a: Act::Next,
+                            b: Act::Again,
+                            chance: 75,
+                        }
+                    } else {
+                        Follow {
+                            after: 1,
+                            a: Act::First,
+                            b: Act::Other,
+                            chance: 60,
+                        }
+                    });
+                }
+                first
+            });
+            let r = self
+                .ca
+                .slot_rects
+                .iter()
+                .find(|x| x.0 == 0 && x.1 == 0)
+                .map(|x| x.3);
+            if let (Some(id), Some(r)) = (first, r) {
+                self.follow_open(id, r.right_top() + egui::vec2(8.0, 0.0));
+            }
+        }
         if view == "cliparranger" && f == CAPTURE_AT - 6 {
             // queued for the next bar: Pad 1 plays block 04, Kick stops
             self.ca_slot(5, 4);

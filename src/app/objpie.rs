@@ -112,6 +112,7 @@ pub(crate) fn launch_items() -> Vec<RadialItem> {
         RadialItem::new("Edit notes", Some(RIcon::Edit), vec![]),
         RadialItem::new("Instrument", Some(RIcon::Bulb), vec![]),
         RadialItem::new("Variation", Some(RIcon::Add), vec![]),
+        RadialItem::new("Follow action…", Some(RIcon::Play), vec![]),
         RadialItem::new(
             "Place",
             Some(RIcon::Notes),
@@ -234,6 +235,8 @@ impl App {
         self.clip_rename_window(ctx);
         // Clip Variations (from the roll's tabs or the Variations wedge)
         self.var_popover(ctx);
+        // Follow actions (the launcher clip pie's Follow action wedge)
+        self.follow_popover(ctx);
     }
 
     /// Esc while a pie or the Rename window is open (`modal_key`)
@@ -366,6 +369,10 @@ impl App {
                 self.show_instrument_editor();
             }
             ("Variation", _) => self.ca_variation(id),
+            ("Follow action…", _) => {
+                let at = self.opie_at.unwrap_or(Pos2::new(200.0, 200.0));
+                self.follow_open(id, at);
+            }
             ("Place", w) => self.launch_place(id, w.unwrap_or("At the play marker")),
             ("Rename", _) => self.start_clip_rename(id),
             ("Colour", c) => self.set_clip_colour(&[id], c),
