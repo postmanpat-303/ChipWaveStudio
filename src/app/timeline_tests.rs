@@ -73,7 +73,7 @@ fn new_songs_open_on_the_timeline_unless_switched_off() {
     let lanes = h.state().tlv.lanes;
     let p = Pos2::new(
         h.state().tlv.x_of(rows_to_ticks(8)) + 2.0,
-        lanes.top() + 46.0 * 2.5,
+        lanes.top() + super::timeline::DEFAULT_TRACK_H * 2.5,
     );
     double_click(&mut h, p);
     assert_eq!(h.state().view, View::Pattern);
@@ -218,8 +218,10 @@ fn plain_keys_do_not_type_notes_and_zoom_keys_work() {
 fn header_mute_solo_and_volume_drive_the_mixer() {
     let mut h = on_timeline(fileio::demo_song());
     let heads = h.state().tlv.heads;
-    // M of track 2 sits 108 px from the header's right edge
-    let y = heads.top() + 46.0 + 1.0 + 4.0 + 8.5;
+    // M of track 2 sits 108 px from the header's right edge, 4 px below
+    // the (vertically centred) text block's top
+    let d = super::timeline::DEFAULT_TRACK_H;
+    let y = heads.top() + d + 1.0 + ((d - 2.0 - 42.0) / 2.0).max(0.0) + 4.0 + 8.5;
     click(&mut h, Pos2::new(heads.right() - 108.0 + 8.0, y));
     assert!(h.state().with(|s| s.song.mixer.channels[1].mute));
     click(&mut h, Pos2::new(heads.right() - 108.0 + 8.0, y));

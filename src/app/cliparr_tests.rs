@@ -26,6 +26,8 @@ fn tl_demo() -> Harness<'static, App> {
     crate::timeline::enter_timeline_mode(&mut s);
     let mut h = harness_with(s);
     h.state_mut().view = View::Timeline;
+    // the pre-0.2.12 row height: every demo track fits the test window
+    h.state_mut().tlv.track_h = 46.0;
     h.state_mut().extra.reduce_motion = true;
     frames(&mut h, 4);
     h

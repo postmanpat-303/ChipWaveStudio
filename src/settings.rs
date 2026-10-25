@@ -191,6 +191,9 @@ pub struct Extra {
     /// points); None: top-centre (docs/CHORDS.md)
     #[serde(default)]
     pub gen_pos: Option<[f32; 2]>,
+    /// the timeline's default track height in points (0 = the built-in one)
+    #[serde(default)]
+    pub track_h: f32,
     /// the Clip Arranger replaces the left Instruments list on the Timeline
     /// (Ctrl+8, View menu; docs/CLIP_ARRANGER.md)
     #[serde(default = "yes")]
@@ -329,6 +332,7 @@ impl Default for Extra {
             adv_edit_open: false,
             adv_edit_float: false,
             gen_pos: None,
+            track_h: 0.0,
             clip_arranger: true,
             side_hidden: false,
             show_tracker: false,

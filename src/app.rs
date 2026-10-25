@@ -752,6 +752,8 @@ impl App {
         };
         let connect = app.extra.midi.auto_connect && !app.extra.midi.device.is_empty();
         app.midi_apply(connect);
+        // the saved default track height (Alt+wheel / Ctrl+wheel over the headers)
+        app.tlv.track_h = app.extra.track_h;
         if cfg!(test) {
             // tests open the Browser themselves (layouts stay as they were)
             app.extra.browser_open = false;

@@ -50,6 +50,14 @@ impl App {
         if !ok {
             return;
         }
+        // tracker mode: this session's own track heights move too (timeline
+        // mode keeps them in the song's tracks, which move_channel moves)
+        let v = &mut self.tlv.heights;
+        if from < v.len() || to < v.len() {
+            v.resize(v.len().max(from + 1).max(to + 1), 0.0);
+            let h = v.remove(from);
+            v.insert(to, h);
+        }
         // the cursor channel follows the track it was on
         let c = self.ch;
         self.ch = if c == from {
