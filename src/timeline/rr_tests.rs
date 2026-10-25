@@ -273,3 +273,155 @@ fn orders_give_their_sequences() {
         assert_eq!(u.to_bits(), unit(5, SALT_DRIFT, k, 2).to_bits());
     }
 }
+
+/// a looped clip with takes A..: take i holds one note of key 40 + i
+fn varied(s: &mut Song, takes: usize, order: Order, passes: Tick) -> u32 {
+    let id = looped(s, vec![n(0, 40)], passes);
+    let d = tl(s).notes[0].make_mut();
+    for i in 1..takes {
+        assert_eq!(d.var_add(99), Some(i));
+        d.notes = vec![n(0, 40 + i as u8)];
+    }
+    d.var.as_mut().unwrap().order = order;
+    d.var_select(0);
+    id
+}
+
+/// which take (0 = A) plays on each pass, from the plan
+fn takes_played(s: &Song) -> Vec<usize> {
+    note_spans(s.timeline.as_deref().unwrap(), 2)[1]
+        .iter()
+        .map(|x| (x.key - 40) as usize)
+        .collect()
+}
+
+#[test]
+fn variations_add_select_and_remove_keep_every_take() {
+    let mut s = song();
+    varied(&mut s, 4, Order::InOrder, 8);
+    let d = tl(&mut s).notes[0].make_mut();
+    assert_eq!(d.var_count(), 4);
+    assert_eq!(d.var_add(1), None, "four at most");
+    assert_eq!(d.notes[0].key, 40);
+    // selecting moves a take into the roll and keeps the others
+    assert!(d.var_select(2));
+    assert_eq!(d.notes[0].key, 42);
+    let keys: Vec<u8> = d.var_all().iter().map(|t| t[0].key).collect();
+    assert_eq!(keys, vec![40, 41, 42, 43]);
+    // a new take starts as a copy of the one shown
+    let mut e = d.clone();
+    e.var_remove(3);
+    assert_eq!(e.var_count(), 3);
+    assert_eq!(e.var_add(1), Some(3));
+    assert_eq!(e.notes[0].key, 42);
+    // removing the shown one shows its neighbour; one left = off
+    assert!(d.var_remove(2));
+    assert_eq!(d.notes[0].key, 41);
+    let keys: Vec<u8> = d.var_all().iter().map(|t| t[0].key).collect();
+    assert_eq!(keys, vec![40, 41, 43]);
+    d.var_remove(0);
+    d.var_remove(0);
+    assert!(d.var.is_none());
+    assert_eq!(d.notes[0].key, 43);
+}
+
+#[test]
+fn variations_play_one_take_per_pass_in_each_order() {
+    let mut s = song();
+    varied(&mut s, 3, Order::InOrder, 8);
+    assert_eq!(takes_played(&s), vec![0, 1, 2, 0, 1, 2, 0, 1]);
+    for o in Order::ALL {
+        tl(&mut s).notes[0].make_mut().var.as_mut().unwrap().order = o;
+        let t = s.timeline.as_deref().unwrap();
+        let seed = t.notes[0].var.as_ref().unwrap().seed ^ t.clips.last().unwrap().seed;
+        let want: Vec<usize> = (0..8).map(|k| pick(o, 3, seed, SALT_VAR, k)).collect();
+        assert_eq!(takes_played(&s), want, "{o:?}");
+        // the take shown in the roll never changes what plays
+        tl(&mut s).notes[0].make_mut().var_select(2);
+        assert_eq!(takes_played(&s), want, "{o:?} after selecting C");
+        tl(&mut s).notes[0].make_mut().var_select(0);
+    }
+    // ping-pong over 3: A B C B A B C B
+    tl(&mut s).notes[0].make_mut().var.as_mut().unwrap().order = Order::PingPong;
+    assert_eq!(takes_played(&s), vec![0, 1, 2, 1, 0, 1, 2, 1]);
+    // a new seed gives a new random order, the same every time
+    tl(&mut s).notes[0].make_mut().var.as_mut().unwrap().order = Order::Random;
+    let a = takes_played(&s);
+    assert_eq!(takes_played(&s), a);
+    tl(&mut s).notes[0].make_mut().var.as_mut().unwrap().seed = 12345;
+    let t = s.timeline.as_deref().unwrap();
+    let k0 = plan_key(&s, t);
+    tl(&mut s).notes[0].make_mut().var.as_mut().unwrap().seed = 54321;
+    assert_ne!(plan_key(&s, s.timeline.as_deref().unwrap()), k0);
+}
+
+#[test]
+fn variations_are_the_same_from_any_seek_and_in_linked_clips() {
+    let mut s = song();
+    varied(&mut s, 4, Order::RandomNoRepeat, 32);
+    let t = s.timeline.as_deref().unwrap();
+    let p1 = build_plan(&s, t);
+    let p2 = build_plan(&s, t);
+    assert_eq!(p1.notes, p2.notes);
+    // no two passes in a row play the same take
+    let seq = takes_played(&s);
+    assert!(seq.windows(2).all(|w| w[0] != w[1]), "{seq:?}");
+    // seeking: the notes after a seek are the tail of the full list
+    let i = p1.note_seek(1, 10 * 4 * ROW);
+    assert_eq!(p1.notes[1][i].start, 10 * 4 * ROW);
+    // a linked copy (same notes) plays the same takes per pass
+    let t = tl(&mut s);
+    let mut c = t.clips.last().unwrap().clone();
+    c.id = t.new_id();
+    c.track = 0;
+    t.clips.push(c);
+    let sp = note_spans(s.timeline.as_deref().unwrap(), 2);
+    let a: Vec<u8> = sp[0].iter().map(|x| x.key).collect();
+    let b: Vec<u8> = sp[1].iter().map(|x| x.key).collect();
+    assert_eq!(a, b);
+}
+
+#[test]
+fn variations_save_and_load_and_are_omitted_when_unused() {
+    let mut s = song();
+    looped(&mut s, vec![n(0, 40)], 4);
+    let d = s.timeline.as_deref().unwrap().notes[0].clone();
+    let json = serde_json::to_string(&*d).unwrap();
+    assert!(!json.contains("var"), "{json}");
+    varied(&mut s, 3, Order::EveryN { n: 4, which: 2 }, 8);
+    let dir = std::env::temp_dir().join(format!("cw-rr-var-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = dir.join("v.cwt");
+    crate::fileio::save_cwt(&s, &p).unwrap();
+    let back = crate::fileio::load_cwt(&p).unwrap();
+    let (a, b) = (
+        s.timeline.as_deref().unwrap(),
+        back.timeline.as_deref().unwrap(),
+    );
+    let last = a.notes.len() - 1;
+    assert_eq!(*a.notes[last], *b.notes[last]);
+    assert_eq!(note_spans(a, 2), note_spans(b, 2));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn launched_clips_with_variations_unroll_their_passes() {
+    let mut s = song();
+    let t = tl(&mut s);
+    let id = launch_new(t, 1, 0, 4 * ROW);
+    let data = t.launch_clip(id).unwrap().clip.notes().unwrap();
+    let d = t.notes[data].make_mut();
+    d.notes = vec![n(0, 40)];
+    let before = launch_cycle(t, &t.launch_clip(id).unwrap().clip.clone());
+    assert_eq!(before.0, 4 * ROW, "no variations: the clip as before");
+    let d = t.notes[data].make_mut();
+    d.var_add(3);
+    d.notes = vec![n(0, 41)];
+    d.var.as_mut().unwrap().order = Order::InOrder;
+    let (len, notes) = launch_cycle(t, &t.launch_clip(id).unwrap().clip.clone());
+    assert_eq!(len, 4 * ROW * LAUNCH_PASSES);
+    let keys: Vec<u8> = notes.iter().map(|x| x.key).collect();
+    assert_eq!(keys.len(), LAUNCH_PASSES as usize);
+    assert_eq!(&keys[..4], &[40, 41, 40, 41]);
+    assert_eq!(launch_plan(t)[0].len, len);
+}

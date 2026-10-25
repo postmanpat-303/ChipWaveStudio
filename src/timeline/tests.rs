@@ -271,6 +271,7 @@ fn timeline_toml_round_trip_with_every_field_and_shared_notes() {
         }],
         chords: vec![],
         drum: None,
+        var: None,
     }));
     let id = tl.new_id();
     tl.clips.push(Clip {

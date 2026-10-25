@@ -743,6 +743,7 @@ impl App {
                             notes,
                             chords: vec![],
                             drum: Some(crate::drumkit::DrumMeta { swing }),
+                            var: None,
                         };
                         self.dk_add_to_track(self.instr, None, super::drumkitview::AddSrc::New(d));
                     }

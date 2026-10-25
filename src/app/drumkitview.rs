@@ -1031,6 +1031,7 @@ impl App {
                     notes: vec![],
                     chords: vec![],
                     drum: Some(DrumMeta::default()),
+                    var: None,
                 },
             };
             t.clips[k].len = d.len;
@@ -2360,6 +2361,7 @@ impl App {
                         notes,
                         chords: vec![],
                         drum: Some(DrumMeta { swing }),
+                        var: None,
                     };
                     let tr = cur.map(|c| c.track);
                     self.dk_gen_stop();

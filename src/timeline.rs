@@ -655,12 +655,18 @@ pub struct NoteClipData {
     /// None, so other note clips save as before.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub drum: Option<crate::drumkit::DrumMeta>,
+    /// Clip Variations (Round Robin): other takes of the notes, one per
+    /// loop pass. Not written when None, so other clips save as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub var: Option<rr::VarSet>,
 }
 
 impl NoteClipData {
     /// some note has a step condition
     pub fn has_conds(&self) -> bool {
-        self.notes.iter().any(|n| n.cond != Cond::Always)
+        self.var_all()
+            .iter()
+            .any(|v| v.iter().any(|n| n.cond != Cond::Always))
     }
 }
 

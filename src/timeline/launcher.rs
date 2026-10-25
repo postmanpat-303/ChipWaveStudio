@@ -33,6 +33,7 @@ pub fn launch_new(tl: &mut Timeline, track: usize, scene: usize, len: Tick) -> u
         notes: vec![],
         chords: vec![],
         drum: None,
+        var: None,
     }));
     let id = tl.new_id();
     tl.launcher

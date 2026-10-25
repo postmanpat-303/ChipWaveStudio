@@ -216,3 +216,122 @@ pub fn unit(seed: u32, salt: u32, k: u32, i: u32) -> f32 {
     let mut r = ClipRng::new(seed ^ salt ^ i.wrapping_mul(0x9E37_79B9), k);
     r.next_f32()
 }
+
+/// most variations a clip can have (A–D)
+pub const MAX_VARS: usize = 4;
+
+/// Clip Variations: up to four takes of a note clip's notes, one chosen
+/// per loop pass. The take being edited lives in `NoteClipData::notes`
+/// (so the piano roll, copy/paste and linked clips work unchanged); the
+/// others wait in `takes`, whose slot `cur` is kept empty.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VarSet {
+    pub order: Order,
+    pub seed: u32,
+    /// the take shown in the piano roll (0 = A)
+    pub cur: u8,
+    /// one slot per take (2..=4); slot `cur` is empty
+    pub takes: Vec<Vec<Note>>,
+}
+
+impl VarSet {
+    pub fn count(&self) -> usize {
+        self.takes.len().clamp(1, MAX_VARS)
+    }
+    /// the notes of take `i`, given the clip's current notes
+    pub fn take<'a>(&'a self, notes: &'a [Note], i: usize) -> &'a [Note] {
+        if i == self.cur as usize {
+            notes
+        } else {
+            self.takes.get(i).map_or(&[][..], |v| &v[..])
+        }
+    }
+    /// the take that plays on loop pass `k` (`clip_seed` = the clip's)
+    pub fn pick(&self, clip_seed: u32, k: u32) -> usize {
+        pick(self.order, self.count(), self.seed ^ clip_seed, SALT_VAR, k)
+    }
+}
+
+/// letter of take `i` ("A".."D")
+pub fn var_letter(i: usize) -> char {
+    (b'A' + (i.min(25) as u8)) as char
+}
+
+impl NoteClipData {
+    /// how many variations (1 = none)
+    pub fn var_count(&self) -> usize {
+        self.var.as_ref().map_or(1, |v| v.count())
+    }
+    /// the take that plays on loop pass `k` of a clip with seed `clip_seed`
+    pub fn var_notes(&self, clip_seed: u32, k: u32) -> &[Note] {
+        match &self.var {
+            Some(v) => v.take(&self.notes, v.pick(clip_seed, k)),
+            None => &self.notes,
+        }
+    }
+    /// show take `i` in the piano roll (its notes move into `notes`)
+    pub fn var_select(&mut self, i: usize) -> bool {
+        let Some(v) = self.var.as_mut() else {
+            return false;
+        };
+        let cur = v.cur as usize;
+        if i == cur || i >= v.takes.len() {
+            return false;
+        }
+        v.takes[cur] = std::mem::take(&mut self.notes);
+        self.notes = std::mem::take(&mut v.takes[i]);
+        v.cur = i as u8;
+        true
+    }
+    /// add a take copied from the current one and show it; its index, or
+    /// None when there are four already
+    pub fn var_add(&mut self, seed: u32) -> Option<usize> {
+        let v = self.var.get_or_insert_with(|| VarSet {
+            order: Order::default(),
+            seed,
+            cur: 0,
+            takes: vec![vec![]],
+        });
+        if v.takes.len() >= MAX_VARS {
+            return None;
+        }
+        v.takes.push(vec![]);
+        let i = v.takes.len() - 1;
+        let copy = self.notes.clone();
+        self.var_select(i);
+        self.notes = copy;
+        Some(i)
+    }
+    /// remove take `i`; the last one left turns Variations off
+    pub fn var_remove(&mut self, i: usize) -> bool {
+        let Some(v) = self.var.as_mut() else {
+            return false;
+        };
+        if i >= v.takes.len() {
+            return false;
+        }
+        let cur = v.cur as usize;
+        if i == cur {
+            // show the neighbour, then drop the one we left
+            let j = if i > 0 { i - 1 } else { 1 };
+            self.var_select(j);
+        }
+        let v = self.var.as_mut().expect("still set");
+        v.takes.remove(i);
+        if (v.cur as usize) > i {
+            v.cur -= 1;
+        }
+        if v.takes.len() <= 1 {
+            self.var = None;
+        }
+        true
+    }
+    /// every take's notes, A first (for hashing and previews)
+    pub fn var_all(&self) -> Vec<&[Note]> {
+        match &self.var {
+            Some(v) => (0..v.count()).map(|i| v.take(&self.notes, i)).collect(),
+            None => vec![&self.notes[..]],
+        }
+    }
+}

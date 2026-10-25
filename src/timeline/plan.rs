@@ -222,6 +222,7 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
                 (1u8, data as usize, c.seed).hash(&mut h);
                 if let Some(d) = tl.notes.get(data as usize) {
                     d.len.hash(&mut h);
+                    hash_var(d, &mut h);
                     for n in &d.notes {
                         (
                             n.start,
@@ -251,6 +252,7 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
         let c = &l.clip;
         (c.id, c.track, c.len, c.offset, c.loop_len, c.seed).hash(&mut h);
         if let Some(d) = c.notes().and_then(|k| tl.notes.get(k)) {
+            hash_var(d, &mut h);
             for n in &d.notes {
                 (
                     n.start,
@@ -271,6 +273,29 @@ pub fn plan_key(song: &Song, tl: &Timeline) -> u64 {
         (m.tick, m.track).hash(&mut h);
     }
     h.finish()
+}
+
+/// the variations' takes and order (nothing without them, so other keys
+/// stay the same)
+fn hash_var(d: &NoteClipData, h: &mut impl Hasher) {
+    let Some(v) = &d.var else { return };
+    (0x7A55u16, v.order, v.seed, v.cur, v.takes.len()).hash(h);
+    for t in &v.takes {
+        t.len().hash(h);
+        for n in t {
+            (
+                n.start,
+                n.len,
+                n.key,
+                n.vel,
+                n.instr,
+                n.chance,
+                n.tune.to_bits(),
+                n.cond,
+            )
+                .hash(h);
+        }
+    }
 }
 
 /// Resolve the clips into per-track segments. Overlaps: the clip that
@@ -486,14 +511,15 @@ pub(crate) fn clip_note_spans_live(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan
                 let mut rng = ClipRng::new(c.seed, k as u32);
                 let base = k * l - off;
                 let f = conds && rr::is_fill(tl, c, k, passes, base, l, fill);
-                for n in d.notes.iter().filter(|n| n.start >= 0 && n.start < l) {
+                let notes = d.var_notes(c.seed, k as u32);
+                for n in notes.iter().filter(|n| n.start >= 0 && n.start < l) {
                     push(v, n, base + n.start, base + l, &mut rng, k as u32, f);
                 }
             }
         }
         None => {
             let mut rng = ClipRng::new(c.seed, 0);
-            for n in &d.notes {
+            for n in d.var_notes(c.seed, 0) {
                 push(v, n, n.start - c.offset, Tick::MAX, &mut rng, 0, fill);
             }
         }
@@ -506,13 +532,37 @@ pub fn launch_plan(tl: &Timeline) -> Vec<LaunchNotes> {
     tl.launcher
         .iter()
         .filter(|l| l.clip.len > 0)
-        .map(|l| LaunchNotes {
-            id: l.clip.id,
-            track: l.clip.track as usize,
-            len: l.clip.len,
-            notes: launch_spans(tl, &l.clip),
+        .map(|l| {
+            let (len, notes) = launch_cycle(tl, &l.clip);
+            LaunchNotes {
+                id: l.clip.id,
+                track: l.clip.track as usize,
+                len,
+                notes,
+            }
         })
         .collect()
+}
+
+/// passes a launched clip with variations is unrolled to (the engine
+/// loops the whole cycle, so each pass still picks its own take)
+pub const LAUNCH_PASSES: Tick = 16;
+
+/// A launcher clip's loop as the engine plays it: (cycle length, notes).
+/// Without variations this is the clip as before; with them, 16 passes
+/// unrolled so every pass picks its take from (seed, pass).
+pub fn launch_cycle(tl: &Timeline, c: &Clip) -> (Tick, Vec<NoteSpan>) {
+    let vars = c
+        .notes()
+        .and_then(|k| tl.notes.get(k))
+        .is_some_and(|d| d.var.is_some());
+    if !vars || c.len <= 0 {
+        return (c.len, launch_spans(tl, c));
+    }
+    let mut one = c.clone();
+    one.loop_len = Some(c.loop_len.filter(|l| *l > 0).unwrap_or(c.len));
+    one.len = c.len * LAUNCH_PASSES;
+    (one.len, launch_spans(tl, &one))
 }
 
 /// The cell track `tr` plays at timeline row `row`, given the segment `s`
