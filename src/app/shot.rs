@@ -1532,6 +1532,14 @@ impl App {
         if view == "timeline" && f == SETUP_AT + 12 {
             self.shot_tracksize();
         }
+        // CHIPWAVE_SHOT_RR=cond | vars: Round Robin in the piano roll, on the
+        // first note clip (made from a short riff when the song has none)
+        if view == "timeline-layout" && (f == SETUP_AT + 14 || f == SETUP_AT + 20) {
+            if let Ok(m) = std::env::var("CHIPWAVE_SHOT_RR") {
+                self.shot_rr(&m, f == SETUP_AT + 20);
+            }
+        }
+
         if f == SETUP_AT + 12 {
             self.shot_keys();
             self.shot_lcd();
@@ -2968,5 +2976,125 @@ impl App {
             _ => None,
         };
         self.dirty = false;
+    }
+}
+
+impl App {
+    /// CHIPWAVE_SHOT_RR (Round Robin screenshots): "cond" shows the
+    /// Conditions lane with a few conditions and the "Play this note…"
+    /// popover; "vars" three Variations with the Order popover
+    fn shot_rr(&mut self, m: &str, open: bool) {
+        use crate::timeline::{self as tl, Cond};
+        const R: tl::Tick = tl::ROW;
+        // the first note clip with some notes, else a new riff after the end
+        let found = self.with(|s| {
+            let t = s.song.timeline.as_deref()?;
+            t.clips.iter().find_map(|c| match c.kind {
+                tl::ClipKind::Notes { data }
+                    if t.notes
+                        .get(data as usize)
+                        .is_some_and(|d| d.notes.len() >= 6) =>
+                {
+                    Some((c.id, data as usize, c.track as usize, c.seed))
+                }
+                _ => None,
+            })
+        });
+        let found = found.or_else(|| {
+            self.with(|s| {
+                let at = s.song.timeline.as_deref().map_or(0, |t| t.end());
+                let at = (at + 4 * tl::PPQ - 1) / (4 * tl::PPQ) * (4 * tl::PPQ);
+                let id = tl::new_note_clip(&mut s.song, 0, at)?;
+                let t = s.song.timeline.as_deref_mut()?;
+                let data = t.notes.len() - 1;
+                let keys = [
+                    60u8, 63, 67, 70, 72, 70, 67, 63, 58, 62, 65, 67, 70, 67, 65, 62,
+                ];
+                t.notes[data].make_mut().notes = keys
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &key)| tl::Note {
+                        start: i as tl::Tick * 4 * R,
+                        len: 3 * R,
+                        key,
+                        vel: 0xB000,
+                        ..Default::default()
+                    })
+                    .collect();
+                let seed = t.clips.iter().find(|c| c.id == id).map_or(0, |c| c.seed);
+                Some((id, data, 0, seed))
+            })
+        });
+        let Some((id, data, track, seed)) = found else {
+            return;
+        };
+        self.ch = track;
+        self.tlv.sel = Some(id);
+        self.set_lower(3);
+        self.pr.focus = true;
+        if open {
+            if m == "cond" {
+                self.pr.lane = super::prlanes::Lane::Cond;
+                let x = self.pr.x_of(4 * R) + 2.0;
+                let y = self.pr.vel_rect.top() - 6.0;
+                self.pr.cond_pop = Some(super::prlanes::CondPop {
+                    target: super::pianoview::Target::Notes {
+                        data,
+                        clip: Some(id),
+                    },
+                    ids: vec![1],
+                    at: Pos2::new(x.max(self.pr.vel_rect.left() + 40.0), y.max(80.0)),
+                });
+            } else {
+                let at = Pos2::new(self.pr.vel_rect.center().x, self.pr.vel_rect.top() - 220.0);
+                self.pr.var_pop = Some(super::prvars::VarPop {
+                    data,
+                    clip_seed: seed,
+                    at: Pos2::new(at.x, at.y.max(80.0)),
+                });
+            }
+            return;
+        }
+        if m == "cond" {
+            self.with(|s| {
+                if let Some(d) = s
+                    .song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|t| t.notes.get_mut(data))
+                {
+                    let d = d.make_mut();
+                    for (i, n) in d.notes.iter_mut().enumerate() {
+                        match i % 8 {
+                            1 => n.cond = Cond::Every { a: 2, b: 4 },
+                            3 => n.chance = 50,
+                            5 => n.cond = Cond::First,
+                            6 => n.cond = Cond::NotFirst,
+                            7 => n.cond = Cond::Fill,
+                            _ => {}
+                        }
+                    }
+                }
+            });
+            self.pr.lane = super::prlanes::Lane::Cond;
+        } else {
+            self.var_add(data, seed);
+            self.var_add(data, seed);
+            // take C: the riff an octave lower in its second half
+            self.with(|s| {
+                if let Some(d) = s
+                    .song
+                    .timeline
+                    .as_deref_mut()
+                    .and_then(|t| t.notes.get_mut(data))
+                {
+                    let d = d.make_mut();
+                    let half = d.len / 2;
+                    for n in d.notes.iter_mut().filter(|n| n.start >= half) {
+                        n.key = n.key.saturating_sub(12);
+                    }
+                }
+            });
+        }
     }
 }
