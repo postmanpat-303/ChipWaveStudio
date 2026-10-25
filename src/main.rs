@@ -78,6 +78,7 @@ mod render_hashes_gen;
 mod sample;
 mod settings;
 mod showcase;
+mod smf;
 mod speech;
 mod strings;
 mod synth;

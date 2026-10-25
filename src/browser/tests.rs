@@ -161,7 +161,7 @@ fn folder_scan_classifies_files_skips_hidden_and_bundles() {
     assert!(kick.tags.contains(&"Drums"));
     let song = items.iter().find(|i| i.name == "b").unwrap();
     assert_eq!(song.tab, Tab::Songs);
-    assert!(items
+    assert!(!items
         .iter()
         .find(|i| i.name == "c.mid")
         .unwrap()

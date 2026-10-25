@@ -82,6 +82,7 @@ mod lcd;
 mod lcd_tests;
 mod library;
 mod metroicon;
+mod midiimport;
 mod midiview;
 mod mixer;
 mod mixstrip;
