@@ -48,6 +48,19 @@ pub struct NoteSpan {
     pub instr: u8,
     /// detune in semitones
     pub tune: f32,
+    /// this key's hit number on the track (0 = its first): drum pad
+    /// Round Robin turns on it, so a seek plays the same hit as a full play
+    pub hit: u32,
+}
+
+/// number each span's hit per key, in order (`v` sorted by start)
+pub fn number_hits(v: &mut [NoteSpan]) {
+    let mut seen = [0u32; 128];
+    for n in v {
+        let k = (n.key as usize).min(127);
+        n.hit = seen[k];
+        seen[k] = seen[k].wrapping_add(1);
+    }
 }
 
 /// One audio clip, placed on the timeline (M4). The file plays at its own
@@ -448,6 +461,7 @@ pub fn note_spans_live(tl: &Timeline, nch: usize, fill: bool) -> Vec<Vec<NoteSpa
     }
     for v in &mut out {
         v.sort_by_key(|n| (n.start, n.key));
+        number_hits(v);
     }
     out
 }
@@ -499,6 +513,7 @@ pub(crate) fn clip_note_spans_live(tl: &Timeline, c: &Clip, v: &mut Vec<NoteSpan
             vel: n.vel as f32 / 65535.0,
             instr: n.instr,
             tune: n.tune,
+            hit: 0,
         });
     };
     let conds = d.has_conds();
@@ -556,13 +571,16 @@ pub fn launch_cycle(tl: &Timeline, c: &Clip) -> (Tick, Vec<NoteSpan>) {
         .notes()
         .and_then(|k| tl.notes.get(k))
         .is_some_and(|d| d.var.is_some());
-    if !vars || c.len <= 0 {
-        return (c.len, launch_spans(tl, c));
-    }
-    let mut one = c.clone();
-    one.loop_len = Some(c.loop_len.filter(|l| *l > 0).unwrap_or(c.len));
-    one.len = c.len * LAUNCH_PASSES;
-    (one.len, launch_spans(tl, &one))
+    let (len, mut v) = if !vars || c.len <= 0 {
+        (c.len, launch_spans(tl, c))
+    } else {
+        let mut one = c.clone();
+        one.loop_len = Some(c.loop_len.filter(|l| *l > 0).unwrap_or(c.len));
+        one.len = c.len * LAUNCH_PASSES;
+        (one.len, launch_spans(tl, &one))
+    };
+    number_hits(&mut v);
+    (len, v)
 }
 
 /// The cell track `tr` plays at timeline row `row`, given the segment `s`

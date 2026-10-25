@@ -1010,6 +1010,14 @@ pub struct GenState {
     off: f32,
     /// Drum Kit: the pad's Decay macro index (8 = none)
     dec_ix: u8,
+    /// Drum Kit Round Robin: this note's hit number (set at note-on), the
+    /// hit's sound and drift, and the samples still to wait (timing drift)
+    pub hit: u32,
+    rr: Option<crate::drumkit::padrr::HitMod>,
+    wait: f32,
+    /// this sample was spent waiting out a Round Robin timing drift: the
+    /// voice holds its envelopes so the late hit is the same hit, later
+    pub(crate) held: bool,
     pub done: bool,
     sfx: crate::chipfx::SfxState,
     an: crate::gen2::AnalogState,
@@ -1044,6 +1052,10 @@ impl Default for GenState {
             piece: 0,
             off: 0.0,
             dec_ix: 8,
+            hit: 0,
+            rr: None,
+            wait: 0.0,
+            held: false,
             sfx: crate::chipfx::SfxState::default(),
             an: Default::default(),
             fm: Default::default(),
@@ -1164,6 +1176,11 @@ impl GenState {
                 Some((p, o)) if k.audible(p) => {
                     self.piece = p;
                     self.off = o;
+                    self.rr = k.pads[p]
+                        .rr
+                        .as_ref()
+                        .map(|r| crate::drumkit::padrr::hit_mod(r, self.hit));
+                    self.wait = self.rr.map_or(0.0, |m| m.delay * sr);
                 }
                 _ => {
                     self.done = true;
@@ -1175,6 +1192,9 @@ impl GenState {
             self.done = true;
             return (0.0, 0.0, false);
         };
+        if let (Some(m), Some(r)) = (self.rr, pad.rr.as_ref()) {
+            return self.render_rr_pad(pad, r, m, ov, sr);
+        }
         if pad.decay != 1.0 {
             self.dec_ix = crate::drumkit::decay_macro(pad.drum.kind).map_or(8, |i| i as u8);
         }
@@ -1192,6 +1212,43 @@ impl GenState {
             st = true;
         }
         (l, r, st)
+    }
+
+    /// A Round Robin pad hit: the sound and drift `m` chose (see
+    /// `drumkit::padrr`). Pads without Round Robin never come here.
+    fn render_rr_pad(
+        &mut self,
+        pad: &crate::drumkit::Pad,
+        r: &crate::drumkit::padrr::PadRr,
+        m: crate::drumkit::padrr::HitMod,
+        ov: Ov,
+        sr: f32,
+    ) -> (f32, f32, bool) {
+        self.held = self.wait > 0.0;
+        if self.held {
+            self.wait -= 1.0;
+            return (0.0, 0.0, false);
+        }
+        let d = crate::drumkit::padrr::hit_drum(&pad.drum, r, &m);
+        let decay = pad.decay * m.decay;
+        if decay != 1.0 {
+            self.dec_ix = crate::drumkit::decay_macro(d.kind).map_or(8, |i| i as u8);
+        }
+        let t = self.t;
+        let ratio = 2f32.powf((self.off + pad.tune + m.semis) / 12.0);
+        let (mut l, mut r2, mut st) = self.render_drum(&d, ratio, self.piece * 8, ov, sr, decay);
+        if pad.attack > 0.0 && t < pad.attack {
+            let a = t / pad.attack;
+            (l, r2) = (l * a, r2 * a);
+        }
+        (l, r2) = (l * m.gain, r2 * m.gain);
+        let pan = (pad.pan + m.pan).clamp(-1.0, 1.0);
+        if pan != 0.0 {
+            l *= (1.0 - pan).min(1.0);
+            r2 *= (1.0 + pan).min(1.0);
+            st = true;
+        }
+        (l, r2, st)
     }
 
     /// One drum voice: `d` at pitch `ratio`, its macros automated by the

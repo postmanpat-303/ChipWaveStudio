@@ -483,6 +483,7 @@ pub(super) fn note_on(
     v.freq = note_freq(key) * 2f32.powf(n.tune / 12.0);
     v.vol = vol;
     v.synth = SynthVoice::new();
+    v.synth.gen.hit = n.hit;
     if poly.is_some() {
         // velocity goes to the synth (Vel > amp), not the voice volume
         v.vol = inst.volume;
@@ -599,9 +600,12 @@ fn launch_events(
         }
         lp.cur += 1;
         if (n.end as f64) > local {
+            // the hit number keeps counting across the cycle's repeats
+            let per = ln.notes.iter().filter(|x| x.key == n.key).count() as u32;
             let m = NoteSpan {
                 start: base + n.start,
                 end: base + n.end,
+                hit: n.hit.wrapping_add((pass as u32).wrapping_mul(per)),
                 ..*n
             };
             note_on(st, feed, song, chans, plugins, ch, &m);

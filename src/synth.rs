@@ -598,6 +598,9 @@ impl SynthVoice {
                 sr,
             )
         };
+        if self.gen.held {
+            return (0.0, 0.0);
+        }
         let fe = self.fenv.next(&p.fenv, dt_s);
         let (yl, yr) = if gp.filter_on || (fm_on && !ladder) {
             let base = if fm.cut_abs > 0.0 {

@@ -48,6 +48,8 @@ struct Chan {
     /// glide target frequency (0 = none) and per-sample log step
     glide_to: f32,
     glide_k: f32,
+    /// drum pad Round Robin hit numbers per key
+    hits: crate::drumkit::padrr::HitCount,
 }
 
 #[derive(Clone)]
@@ -299,6 +301,7 @@ impl Chan {
             gate: false,
             glide_to: 0.0,
             glide_k: 0.0,
+            hits: Default::default(),
             instr: usize::MAX,
             note: 0,
             freq: 0.0,
@@ -366,6 +369,8 @@ struct Live {
     age: u32,
     /// the last note's frequency (poly synth glide)
     last_f: f32,
+    /// drum pad Round Robin hit numbers per key
+    hits: crate::drumkit::padrr::HitCount,
 }
 
 impl Live {
@@ -392,6 +397,7 @@ impl Live {
             bend: 1.0,
             age: 0,
             last_f: 0.0,
+            hits: Default::default(),
         }
     }
 }
@@ -849,6 +855,7 @@ impl Engine {
                         notes::poly_voice(vel, from, lv.age.wrapping_mul(0x85EB_CA6B))
                     } else {
                         let mut sv = SynthVoice::new();
+                        sv.gen.hit = lv.hits.next(n);
                         if let InstrumentKind::Voice(vp) = &inst.kind {
                             if let Some(w) = vp.words.first() {
                                 sv.vox.speak(w);
@@ -1546,6 +1553,7 @@ impl Engine {
                 .wrapping_mul(1_664_525)
                 .wrapping_add(1_013_904_223);
             c.synth = SynthVoice::seeded(self.seed);
+            c.synth.gen.hit = c.hits.next(cell.note);
             c.pos = 0.0;
             c.active = true;
             // Voice words: each note speaks the next word, 3Exx picks one
