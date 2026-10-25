@@ -46,6 +46,8 @@ mod devcards;
 mod devices;
 #[cfg(test)]
 mod devices_tests;
+#[cfg(test)]
+mod arp_tests;
 mod dialogs;
 mod dropplan;
 #[cfg(test)]

@@ -22,9 +22,9 @@ pub(super) const SLIM: f32 = 30.0;
 /// the knob block: three columns of knobs
 const KNOBS_W: f32 = 3.0 * CELL.x;
 /// the grid's row names
-const LABEL_W: f32 = 56.0;
+pub(super) const LABEL_W: f32 = 56.0;
 /// one step column
-const COL_W: f32 = 22.0;
+pub(super) const COL_W: f32 = 22.0;
 /// steps shown at once
 const PAGE: usize = 16;
 const PAD: f32 = 8.0;
@@ -170,6 +170,8 @@ impl App {
                 t.ink2,
             )
             .with_angle(-std::f32::consts::FRAC_PI_2));
+            self.dev.arp_card = rect;
+            self.dev.arp_rows = [Rect::NOTHING; 7];
             if resp.clicked() {
                 self.arp_set_on(idx, true);
             }
@@ -177,6 +179,8 @@ impl App {
         };
         let w = card_w(&a);
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
+        self.dev.arp_card = rect;
+        self.dev.arp_rows = [Rect::NOTHING; 7];
         let p = ui.painter_at(rect.expand(2.0));
         p.rect_filled(rect, 8, t.cart_top);
         p.rect_stroke(
@@ -234,11 +238,9 @@ impl App {
         sub(ui, r, |ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             ui.spacing_mut().button_padding = egui::vec2(5.0, 1.0);
-            if ui
-                .add(egui::Button::new(egui::RichText::new("⏻").size(13.0)).selected(true))
-                .on_hover_text(format!("{} on: click to switch it off", arp_title(kit)))
-                .clicked()
-            {
+            let (pr, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), Sense::hover());
+            let id = ui.make_persistent_id(("arp_power", idx));
+            if super::devices::power(ui, &ui.painter_at(pr.expand(4.0)), pr, id, true) {
                 self.arp_set_on(idx, false);
             }
             ui.label(
@@ -474,6 +476,7 @@ impl App {
             }
             y += h + 3.0;
         }
+        self.dev.arp_rows = rows;
         let x0 = r.left() + LABEL_W;
         let tiny = crate::theme::prop(crate::theme::ts::TINY);
         let col = |k: usize, row: Rect| {

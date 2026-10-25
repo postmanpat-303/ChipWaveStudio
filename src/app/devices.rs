@@ -87,6 +87,10 @@ pub(crate) struct DevUi {
     pub(crate) arp_stash: std::collections::HashMap<usize, crate::arp::Arp>,
     /// the Arp grid shows steps 17-32
     pub(crate) arp_page: u8,
+    /// the Arp card (or its slim "+ ARP" strip) this frame, and its grid
+    /// rows (numbers, velocity, gate, accent, rest/tie, ratchet, transpose)
+    pub(crate) arp_card: Rect,
+    pub(crate) arp_rows: [Rect; 7],
 }
 
 impl Default for DevUi {
@@ -119,6 +123,8 @@ impl Default for DevUi {
             tabbed: false,
             arp_stash: Default::default(),
             arp_page: 0,
+            arp_card: Rect::NOTHING,
+            arp_rows: [Rect::NOTHING; 7],
         }
     }
 }
@@ -1702,7 +1708,7 @@ pub(crate) fn drop_index(vertical: bool, cards: &[Rect], p: Pos2) -> usize {
 }
 
 /// a power button; true when clicked
-fn power(ui: &egui::Ui, p: &egui::Painter, r: Rect, id: egui::Id, on: bool) -> bool {
+pub(super) fn power(ui: &egui::Ui, p: &egui::Painter, r: Rect, id: egui::Id, on: bool) -> bool {
     let t = th();
     let resp =
         ui.interact(r, id, Sense::click())
