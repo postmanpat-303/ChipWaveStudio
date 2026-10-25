@@ -1509,6 +1509,8 @@ pub fn from_toml(text: &str) -> Result<Timeline, String> {
 }
 
 mod autoplan;
+mod clipboard;
+pub use clipboard::*;
 mod edit;
 mod launcher;
 pub use launcher::*;
