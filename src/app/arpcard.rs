@@ -206,7 +206,7 @@ impl App {
             Pos2::new(rect.left() + PAD, head.bottom() + 2.0),
             egui::vec2(w - 2.0 * PAD, READ_H - 2.0),
         );
-        p.rect_filled(rr, 4, t.crt_top);
+        p.rect_filled(rr, 4, t.accent.gamma_multiply(0.14));
         let words = a.describe(kit);
         crate::theme::text_fit(
             &p,
@@ -214,7 +214,7 @@ impl App {
             egui::Align2::LEFT_CENTER,
             &words,
             crate::theme::prop(crate::theme::ts::SMALL),
-            t.value,
+            t.ink,
             rr.width() - 12.0,
         );
         ui.interact(rr, ui.make_persistent_id(("arp_words", idx)), Sense::hover())

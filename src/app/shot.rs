@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 125] = [
+pub const VIEWS: [&str; 127] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -94,6 +94,8 @@ pub const VIEWS: [&str; 125] = [
     "showcase-progress",
     "devices",
     "devices-drop",
+    "devices-arp",
+    "devices-repeat",
     "timeline-instrument",
     "timeline-drumkit",
     "trackpie",
@@ -396,6 +398,7 @@ impl App {
             }
             "devices"
             | "devices-drop"
+            | "devices-arp"
             | "timeline-instrument"
             | "instskin-waveforge"
             | "instskin-chains"
@@ -475,6 +478,12 @@ impl App {
                 self.extra.browser_open = std::env::var_os("CHIPWAVE_SHOT_NO_BROWSER").is_none();
                 self.br.filter.tab = crate::browser::Tab::Effects;
                 self.br_refresh();
+                if view == "devices-arp" {
+                    // the Arp on the pad (Gated trance, a ratchet and a
+                    // transposed step), playing
+                    self.extra.browser_open = false;
+                    self.shot_arp(ii, false, "Gated trance");
+                }
                 if view == "instskin-chains" {
                     self.extra.chains_cards = true;
                     self.extra.browser_open = false;
@@ -715,6 +724,22 @@ impl App {
             // the Drum Kit editor: a library pattern dropped on a new track
             // (CHIPWAVE_SHOT_PAT=<name>, default "Full-on Drive"); the
             // generator's result when CHIPWAVE_SHOT_DK=generate (=added: then Add to track; =sound: the Sound tab)
+            // Note repeat on a Drum Kit track (Ratchet fill), playing
+            "devices-repeat" => {
+                self.enter_timeline();
+                if let Some(i) = crate::drumpat::PATTERNS.iter().position(|p| p.name == "Full-on Drive") {
+                    self.pat_place_now(i, u8::MAX, 0);
+                }
+                self.enter_timeline();
+                self.default_layout();
+                self.dev.follow_ch = self.ch;
+                self.dev.tree = false;
+                self.set_lower(4);
+                self.extra.lower_h = 430.0;
+                self.extra.browser_open = false;
+                let ii = (self.instr as usize).saturating_sub(1);
+                self.shot_arp(ii, true, "Ratchet fill");
+            }
             "timeline-drumkit" => {
                 self.enter_timeline();
                 let name = std::env::var("CHIPWAVE_SHOT_PAT").unwrap_or("Full-on Drive".into());
@@ -1118,6 +1143,8 @@ impl App {
                 | "about"
                 | "library"
                 | "chords"
+                | "devices-arp"
+                | "devices-repeat"
                 | "slice"
                 | "timeline-new"
                 | "timeline-switch"
@@ -3282,5 +3309,29 @@ impl App {
                 }
             });
         }
+    }
+}
+
+impl App {
+    /// a starting pattern on instrument `ii`'s Arp (Note repeat on a kit)
+    /// for the screenshots, with a ratchet and (melodic) a transposed step
+    fn shot_arp(&mut self, ii: usize, kit: bool, preset: &str) {
+        let mut a = crate::arp::presets(kit)
+            .into_iter()
+            .find(|p| p.0 == preset)
+            .map(|p| p.1)
+            .unwrap_or_default();
+        a.show_steps = true;
+        a.steps.resize(32, crate::arp::Step::default());
+        a.steps[6].ratchet = 3;
+        if !kit {
+            a.steps[10].transpose = 12;
+            a.steps[14].transpose = 7;
+        }
+        self.with(|s| {
+            if let Some(i) = s.song.instruments.get_mut(ii) {
+                i.arp = Some(a);
+            }
+        });
     }
 }

@@ -2190,7 +2190,7 @@ impl App {
                     t.ink,
                 );
                 let br = Rect::from_min_size(
-                    Pos2::new(hr.right() - 112.0 - g.size().x - 8.0, ty - 7.0),
+                    Pos2::new(hr.right() - 138.0 - g.size().x - 8.0, ty - 7.0),
                     egui::vec2(g.size().x + 8.0, 14.0),
                 );
                 hp.rect_filled(br, 3, t.accent.gamma_multiply(0.85));
