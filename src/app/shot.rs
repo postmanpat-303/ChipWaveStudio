@@ -1386,6 +1386,7 @@ impl App {
         }
         if f == SETUP_AT + 12 {
             self.shot_keys();
+            self.shot_lcd();
         }
         if view == "split-preview" && f == SETUP_AT + 12 {
             self.shot_split();
@@ -2437,6 +2438,21 @@ impl App {
                 ];
             }
         }
+    }
+
+    /// CHIPWAVE_SHOT_LCD=on: the display's LOOP (bars 1–4 on a timeline) and
+    /// REC pills lit
+    fn shot_lcd(&mut self) {
+        if std::env::var("CHIPWAVE_SHOT_LCD").as_deref() != Ok("on") {
+            return;
+        }
+        self.with(|s| {
+            if let Some(t) = s.song.timeline.as_deref_mut() {
+                t.loop_range = Some((0, 4 * t.sig_at(0).bar_ticks()));
+                t.loop_on = true;
+            }
+        });
+        self.lcd.shot_lit = true;
     }
 
     fn shot_tracksize(&mut self) {
