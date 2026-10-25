@@ -60,6 +60,11 @@ impl App {
                 input::Routed::Arranger(a, t) => self.arranger_action_text(a, t, ctx),
             }
         }
+        // a Timeline clip copy (keys or its pie) also fills the system
+        // clipboard, so the next Ctrl+V arrives even when it held no text
+        if let Some(t) = self.tlv.clip_os.take() {
+            ctx.copy_text(t);
+        }
         let arr_visible =
             self.view == View::Arranger || (self.view == View::Pattern && self.arr_docked());
         for ev in events {

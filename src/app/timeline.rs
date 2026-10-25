@@ -277,6 +277,10 @@ pub(crate) struct TimelineUi {
     /// Cleared when another song is opened (its notes play this song's
     /// instruments)
     pub(crate) clipboard: tl::ClipBoard,
+    /// a line for the system clipboard after a clip copy (handed over next
+    /// frame): the window system only sends Ctrl+V when that clipboard
+    /// holds text, so an empty one would swallow the paste
+    pub(crate) clip_os: Option<String>,
     /// scroll so this (track, tick) is in view on the next frame (a clip
     /// just added from the Drum Kit editor)
     pub(crate) reveal: Option<(usize, Tick)>,
@@ -334,6 +338,7 @@ impl Default for TimelineUi {
             flash: None,
             pasted: None,
             clipboard: tl::ClipBoard::default(),
+            clip_os: None,
             reveal: None,
             song_sel: None,
         }

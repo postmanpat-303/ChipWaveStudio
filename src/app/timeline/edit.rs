@@ -932,6 +932,7 @@ impl App {
         }
         let n = cb.len();
         self.tlv.clipboard = cb;
+        self.tlv.clip_os = Some(format!("ChipWave: {n} timeline clip{}", plural(n)));
         if cut {
             self.tl_apply(TlOp::Delete);
             self.status = format!(
