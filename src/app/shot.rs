@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 120] = [
+pub const VIEWS: [&str; 123] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -132,6 +132,9 @@ pub const VIEWS: [&str; 120] = [
     "focus-prompt",
     "focus-window",
     "record-recording",
+    "record-live-open",
+    "record-live",
+    "record-live-stopped",
     "record-typing",
     "record-idle",
     "record-playing",
@@ -1465,7 +1468,7 @@ impl App {
             self.with(|s| {
                 let Shared { song, engine, .. } = s;
                 // the count-in shot holds its countdown
-                if engine.playing && view != "record-countin" {
+                if engine.playing && view != "record-countin" && view != "record-live-open" {
                     engine.render(song, &mut buf);
                 }
             });

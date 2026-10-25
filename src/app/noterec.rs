@@ -984,6 +984,81 @@ impl App {
                 }
                 self.set_lower(3);
             }
+            // the live block: just opening (frozen mid fade), recording
+            // with notes and its growing edge, and settled after the stop.
+            // CHIPWAVE_SHOT_LIVE_T=<s> freezes the animations that far in.
+            "record-live-open" | "record-live" | "record-live-stopped" => {
+                // a fresh song with three tracks, recording on the second,
+                // the timeline full height
+                self.new_song();
+                self.track_add(0);
+                self.track_add(1);
+                self.ch = 1;
+                self.extra.full_height = true;
+                self.extra.reduce_motion = false;
+                self.extra.set_count_in_bars(0);
+                self.rec_start();
+                self.rec_live_open();
+                let t = std::env::var("CHIPWAVE_SHOT_LIVE_T")
+                    .ok()
+                    .and_then(|v| v.parse::<f32>().ok());
+                let render = |a: &mut App, rows: u64| {
+                    for _ in 0..rows {
+                        a.with(|s| {
+                            let audio::Shared { song, engine, .. } = s;
+                            let target = engine.rows_played + 1;
+                            let mut buf = vec![0.0f32; 256];
+                            let mut guard = 0;
+                            while engine.rows_played < target && engine.playing && guard < 100_000 {
+                                engine.render(song, &mut buf);
+                                guard += 1;
+                            }
+                        });
+                        a.rec_live_grow();
+                    }
+                };
+                if view == "record-live-open" {
+                    // two bars in: the block appearing, frozen mid fade
+                    render(self, 32);
+                    self.noterec.anim_at = Some(t.unwrap_or(0.06));
+                    return;
+                }
+                let now = Instant::now;
+                let chords: [&[u8]; 6] = [
+                    &[57, 60, 64],
+                    &[53, 57, 60],
+                    &[48, 52, 55],
+                    &[55, 59, 62],
+                    &[57, 60, 64],
+                    &[53, 57, 60],
+                ];
+                for (i, c) in chords.iter().enumerate() {
+                    for (j, &k) in c.iter().enumerate() {
+                        self.midi_note_on(k, k - 11, 0.55 + 0.1 * j as f32, now());
+                    }
+                    render(self, 6);
+                    self.midi_note_on(72 + (i % 4) as u8, 61, 0.9, now());
+                    render(self, 4);
+                    for &k in c.iter() {
+                        self.midi_note_off(k);
+                    }
+                    if i < 5 {
+                        self.midi_note_off(72 + (i % 4) as u8);
+                    }
+                    render(self, 6);
+                }
+                render(self, 5);
+                if view == "record-live" {
+                    self.noterec.anim_at = Some(t.unwrap_or(2.7));
+                } else {
+                    self.rec_stop();
+                    self.with(|s| s.engine.stop());
+                    match t {
+                        Some(t) => self.noterec.anim_at = Some(t),
+                        None => self.noterec.settle = None,
+                    }
+                }
+            }
             // the toolbar: idle, playing (Stop lit), the Metronome's ▾ menu
             // open (topbar opens it), and a count-in under way
             "record-idle" | "record-metro-menu" => {}

@@ -1436,9 +1436,9 @@ impl App {
                     outlines.push((r, Stroke::new(1.5, rec_red.gamma_multiply(fr))));
                     if l.live {
                         // the leading edge at the playhead, pulsing
-                        let gw = 16.0f32.min(r.width());
+                        let gw = 24.0f32.min(r.width());
                         let gr = Rect::from_min_max(Pos2::new(r.right() - gw, r.top()), r.max);
-                        let edge = rec_red.gamma_multiply((0.22 + 0.3 * l.pulse) * l.fade);
+                        let edge = rec_red.gamma_multiply((0.3 + 0.35 * l.pulse) * l.fade);
                         let i0 = bodies.vertices.len() as u32;
                         bodies.colored_vertex(gr.left_top(), Color32::TRANSPARENT);
                         bodies.colored_vertex(gr.right_top(), edge);
