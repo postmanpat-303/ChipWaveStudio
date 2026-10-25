@@ -534,9 +534,33 @@ impl App {
             s.song
                 .instruments
                 .get((slot as usize).wrapping_sub(1))
-                .filter(|i| !super::trackpie::is_drum_kind(&i.kind))
+                .filter(|i| !super::trackpie::is_percussive(i))
                 .cloned()
         })
+    }
+
+    /// track `tr` plays a percussive sound (`is_percussive`: a drum kit,
+    /// a drum engine, a synth kick …): no Chords / Melody / Bass on it
+    pub(crate) fn track_percussive(&self, tr: usize) -> bool {
+        let Some(slot) = self.track_instrument(tr) else {
+            return false;
+        };
+        self.with(|s| {
+            s.song
+                .instruments
+                .get((slot as usize).wrapping_sub(1))
+                .is_some_and(super::trackpie::is_percussive)
+        })
+    }
+
+    /// the roll's clip `t` is on a percussive track (its chord lane and
+    /// Generate stay hidden)
+    pub(crate) fn target_percussive(&self, t: Target) -> bool {
+        matches!(t, Target::Notes { clip: Some(_), .. })
+            && self
+                .gen_dest(Some(t))
+                .track
+                .is_some_and(|k| self.track_percussive(k))
     }
 
     /// the track the panel's Preview plays on: where Write goes when it
@@ -2043,7 +2067,7 @@ impl App {
         // the sound Preview played: a copy of the clip's track instrument
         // (its patch, parameters and effects), so the written melody sounds
         // the same; a lead synth (Bass: a bass synth) only when the track
-        // has none or plays a drum kit
+        // has none or plays a percussive sound (`is_percussive`)
         let heard = tr
             .filter(|&tr| !self.track_needs_instrument(tr))
             .map(|tr| self.track_instr(tr))
@@ -2052,15 +2076,8 @@ impl App {
                     s.song
                         .instruments
                         .get((slot as usize).wrapping_sub(1))
-                        // a drum kit is no bass or lead (Bass: any drum
-                        // engine, as the track pie tells drums apart)
-                        .filter(|i| {
-                            if bass {
-                                !super::trackpie::is_drum_kind(&i.kind)
-                            } else {
-                                crate::drumkit::kit_of(i).is_none()
-                            }
-                        })
+                        // a kit or a kick is no bass or lead
+                        .filter(|i| !super::trackpie::is_percussive(i))
                         .cloned()
                 })
             });

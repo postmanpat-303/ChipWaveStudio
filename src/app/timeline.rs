@@ -2566,7 +2566,10 @@ impl App {
                 // the chord generator (it works without a track or clip)
                 let gr =
                     Rect::from_min_size(Pos2::new(br.right() + 6.0, y), egui::vec2(80.0, 20.0));
-                if gr.right() < heads.right() - 2.0 {
+                // (hidden while a percussive track is selected)
+                let cur = self.tl_cur_track();
+                let pitched = cur >= n || !self.track_percussive(cur);
+                if gr.right() < heads.right() - 2.0 && pitched {
                     let r = ui.put(
                         gr,
                         egui::Button::new(
