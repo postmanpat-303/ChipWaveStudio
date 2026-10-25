@@ -198,6 +198,16 @@ impl App {
             tl::ClipBoard::default()
         };
         let mut pasted: Option<(Vec<u32>, usize, Tick)> = None;
+        // a looped clip's name for the status line: " (Take 1)"
+        let loop_what = match op {
+            TlOp::LoopClip(id) => self
+                .tlv
+                .clip_label(id)
+                .map(|x| x.1)
+                .filter(|n| !n.is_empty())
+                .map_or(String::new(), |n| format!(" ({n})")),
+            _ => String::new(),
+        };
         let ready = if op == TlOp::PlaceAudio {
             std::mem::take(&mut self.tlv.ready_audio)
         } else {
@@ -339,6 +349,28 @@ impl App {
                     tl::set_loop(t, a, b);
                     let (pa, pb) = (t.bar_pos(a), t.bar_pos(b));
                     format!("Loop on: bar {}.{} to {}.{} (L toggles it)", pa.bar, pa.beat, pb.bar, pb.beat)
+                }
+                TlOp::LoopClip(id) => {
+                    let t = song.timeline.as_deref_mut().unwrap();
+                    match t.clips.iter().find(|c| c.id == id).map(|c| (c.start, c.end())) {
+                        None => String::new(),
+                        Some((a, b)) => {
+                            let what = &loop_what;
+                            if t.loop_on && t.loop_range == Some((a, b)) {
+                                t.loop_on = false;
+                                format!("Loop off{what} · double-click it again to loop it")
+                            } else {
+                                tl::set_loop(t, a, b);
+                                let (pa, pb) = (t.bar_pos(a).bar, t.bar_pos((b - 1).max(a)).bar);
+                                let bars = if pa == pb {
+                                    format!("bar {pa}")
+                                } else {
+                                    format!("bars {pa}-{pb}")
+                                };
+                                format!("Loop set to {bars}{what} · double-click again: loop off · Alt+double-click or Enter opens it")
+                            }
+                        }
+                    }
                 }
                 TlOp::ToggleLoop => {
                     let t = song.timeline.as_deref_mut().unwrap();

@@ -38,6 +38,8 @@ mod cliparr;
 mod cliparr_tests;
 #[cfg(test)]
 mod clipcopy_tests;
+#[cfg(test)]
+mod dblloop_tests;
 mod devcards;
 mod devices;
 #[cfg(test)]

@@ -155,6 +155,9 @@ pub(crate) enum TlOp {
     Glue,
     LoopFromSelection,
     ToggleLoop,
+    /// a clip's double-click: the loop exactly around it, on; off when it
+    /// already is the loop
+    LoopClip(u32),
     AddMarker(Tick),
     NewClip(usize, Tick),
     /// a new note clip (piano roll) on (track, tick)
@@ -853,9 +856,9 @@ impl App {
                 "This song is arranged here: clips on tracks (track = mixer channel). \
                  Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
                  S split (line, click to cut, Esc cancels), Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
-                 Ctrl+Shift+D make unique. Double-click a clip to edit it in the piano roll \
-                 (Alt+double-click or Enter: the Tracker; Settings can swap them), \
-                 empty space to write a new block. Song › Back to tracker mode… turns it back."
+                 Ctrl+Shift+D make unique. Double-click a clip to loop it (again: loop off); \
+                 Alt+double-click or Enter opens it (piano roll or Tracker, as set in Settings), \
+                 double-click empty space to write a new block. Song › Back to tracker mode… turns it back."
             } else {
                 "This tracker-mode song's order list, shown as clips per track."
             });
@@ -1247,25 +1250,48 @@ impl App {
             if xb > ruler.left() && xa < ruler.right() {
                 let on = c.tl.loop_on && mode;
                 let lc = if on { t.accent } else { crt_ink };
-                rp.rect_filled(
-                    Rect::from_min_max(
-                        Pos2::new(xa, ruler.bottom() - 6.0),
-                        Pos2::new(xb, ruler.bottom()),
-                    ),
-                    1,
-                    lc.gamma_multiply(if on { 0.85 } else { 0.35 }),
+                // on: an accent band over the lower half of the ruler with a
+                // solid top edge and a handle at each end (reads on every
+                // theme: Slate, Dark, Amiga, Ember); off: a dim strip
+                let band = Rect::from_min_max(
+                    Pos2::new(xa, ruler.bottom() - if on { 11.0 } else { 6.0 }),
+                    Pos2::new(xb, ruler.bottom()),
                 );
+                rp.rect_filled(band, 1, lc.gamma_multiply(if on { 0.45 } else { 0.35 }));
                 if on {
+                    rp.hline(band.x_range(), band.top(), Stroke::new(2.0, lc));
+                    for (x, d) in [(xa, 1.0), (xb, -1.0)] {
+                        // a handle: a solid bar the ruler's height, a notch
+                        // pointing into the loop
+                        let h = Rect::from_min_max(
+                            Pos2::new(x.min(x + 4.0 * d), ruler.top() + 2.0),
+                            Pos2::new(x.max(x + 4.0 * d), ruler.bottom()),
+                        );
+                        rp.rect_filled(h, 1, lc);
+                        rp.add(egui::Shape::convex_polygon(
+                            vec![
+                                Pos2::new(x + 4.0 * d, ruler.top() + 2.0),
+                                Pos2::new(x + 10.0 * d, ruler.top() + 2.0),
+                                Pos2::new(x + 4.0 * d, ruler.top() + 8.0),
+                            ],
+                            lc,
+                            Stroke::NONE,
+                        ));
+                    }
                     lp.rect_filled(
                         Rect::from_min_max(
                             Pos2::new(xa, lanes.top()),
                             Pos2::new(xb, lanes.bottom()),
                         ),
                         0,
-                        lc.gamma_multiply(0.05),
+                        lc.gamma_multiply(0.09),
                     );
                     for x in [xa, xb] {
-                        lp.vline(x, lanes.y_range(), Stroke::new(1.0, lc.gamma_multiply(0.5)));
+                        lp.vline(
+                            x,
+                            lanes.y_range(),
+                            Stroke::new(1.5, lc.gamma_multiply(0.75)),
+                        );
                     }
                 }
             }
@@ -3133,6 +3159,14 @@ impl App {
                         c.map.entry_at(tk).0
                     };
                     open = match hit.map(|i| &c.tl.clips[i]) {
+                        // a clip (timeline mode): loop exactly it, or, when
+                        // it already is the loop, loop off (Del, 25 Oct
+                        // 2026). Alt+double-click, Enter and the pie's
+                        // Edit / Notes open it.
+                        Some(cl) if mode && !mods.alt => {
+                            ops.push(TlOp::LoopClip(cl.id));
+                            None
+                        }
                         Some(cl) if cl.audio().is_some() => None,
                         Some(cl) if cl.block().is_none() => {
                             open_roll = true;
@@ -3144,8 +3178,12 @@ impl App {
                             None
                         }
                         // block clips: the piano roll or the pattern editor,
-                        // as set in Settings (Alt: the other one)
-                        Some(_) if self.extra.dblclick_roll != mods.alt => {
+                        // as set in Settings (Alt: the other one; timeline
+                        // mode: Alt+double-click opens the set one)
+                        Some(_)
+                            if (mode && !self.tracker_on())
+                                || self.extra.dblclick_roll != (mods.alt && !mode) =>
+                        {
                             open_roll = true;
                             None
                         }
@@ -3281,14 +3319,14 @@ impl App {
                     if self.tracker_on()
                         && menu_open.is_some()
                         && ui
-                        .add(egui::Button::new("Open in Tracker").shortcut_text(if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" }))
+                        .add(egui::Button::new("Open in Tracker").shortcut_text(if !mode { if self.extra.dblclick_roll { "Enter / Alt+double-click" } else { "Enter / double-click" } } else if self.extra.dblclick_roll { "Enter" } else { "Enter / Alt+double-click" }))
                         .clicked()
                     {
                         menu_open_now = true;
                         ui.close();
                     }
                     if ui
-                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if !self.tracker_on() { "Enter / double-click" } else if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
+                        .add(egui::Button::new("Open in the piano roll").shortcut_text(if mode { if !self.tracker_on() { "Enter / Alt+double-click" } else if self.extra.dblclick_roll { "Alt+double-click" } else { "" } } else if !self.tracker_on() { "Enter / double-click" } else if self.extra.dblclick_roll { "double-click" } else { "Alt+double-click" }))
                         .clicked()
                     {
                         open_roll = true;
@@ -3443,8 +3481,13 @@ impl App {
                     "double-click: Tracker (Alt: piano roll)"
                 };
                 let how = if mode {
+                    let open = if !self.tracker_on() || self.extra.dblclick_roll {
+                        "piano roll"
+                    } else {
+                        "Tracker"
+                    };
                     format!(
-                        "drag: move (Alt: copy) · edges: trim / loop · {dbl} · right-click: more"
+                        "drag: move (Alt: copy) · edges: trim / loop · double-click: loop this clip (again: off) · Alt+double-click / Enter: {open} · right-click: more"
                     )
                 } else {
                     dbl.to_string()
