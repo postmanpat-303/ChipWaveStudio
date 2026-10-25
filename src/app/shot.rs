@@ -1467,6 +1467,9 @@ impl App {
         if view == "timeline" && f == SETUP_AT + 12 {
             self.shot_tracksize();
         }
+        if f == SETUP_AT + 12 || f == SETUP_AT + 24 {
+            self.shot_dbl_loop(f == SETUP_AT + 12);
+        }
         if f == SETUP_AT + 12 {
             self.shot_keys();
             self.shot_lcd();
@@ -2606,6 +2609,39 @@ impl App {
                 t.loop_on = m == "on";
             }
         });
+    }
+
+    /// CHIPWAVE_SHOT_DBLLOOP=1: a block clip on screen double-clicked: the
+    /// loop exactly around it (the ruler band, the lane tint, the status)
+    fn shot_dbl_loop(&mut self, first: bool) {
+        if std::env::var("CHIPWAVE_SHOT_DBLLOOP").is_err() {
+            return;
+        }
+        if first {
+            // the song in timeline mode first (the double-click loops there)
+            self.with(|s| {
+                if s.song.timeline.is_none() {
+                    crate::timeline::enter_timeline_mode(&mut s.song);
+                }
+            });
+            return;
+        }
+        let pick = self.tlv.cache.as_ref().and_then(|c| {
+            c.tl.clips
+                .iter()
+                .filter(|cl| cl.start > 0 && cl.block().is_some())
+                .find(|cl| {
+                    self.tlv
+                        .clip_rect(cl.id)
+                        .is_some_and(|r| self.tlv.lanes.contains(r.center()))
+                })
+                .map(|cl| cl.id)
+        });
+        if let Some(id) = pick {
+            self.tlv.sels = vec![id];
+            self.tlv.sel = Some(id);
+            self.tl_apply(super::timeline::TlOp::LoopClip(id));
+        }
     }
 
     /// CHIPWAVE_SHOT_KITAFTER=1 (with timeline-new): a StringWave on track

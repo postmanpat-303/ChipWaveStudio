@@ -1249,7 +1249,14 @@ impl App {
             let (xa, xb) = (x_of(a as f64), x_of(b as f64));
             if xb > ruler.left() && xa < ruler.right() {
                 let on = c.tl.loop_on && mode;
-                let lc = if on { t.accent } else { crt_ink };
+                // the accent, lifted where it is close to the ruler's own
+                // colour (Amiga: blue on blue)
+                let acc = if (lum(t.accent) - lum(t.crt_top)).abs() < 0.25 {
+                    crate::theme::mix(t.accent, Color32::WHITE, 0.55)
+                } else {
+                    t.accent
+                };
+                let lc = if on { acc } else { crt_ink };
                 // on: an accent band over the lower half of the ruler with a
                 // solid top edge and a handle at each end (reads on every
                 // theme: Slate, Dark, Amiga, Ember); off: a dim strip
