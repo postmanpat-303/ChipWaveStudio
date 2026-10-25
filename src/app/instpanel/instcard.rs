@@ -1813,6 +1813,7 @@ impl App {
                                     rings: &[],
                                     live: None,
                                     auto_led: None,
+                                    mod_dot: None,
                                 },
                             );
                             if out.changed {

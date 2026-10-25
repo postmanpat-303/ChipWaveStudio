@@ -47,6 +47,12 @@ fn cwr(d: &Path) -> Vec<PathBuf> {
 }
 
 fn click(h: &mut Harness<'static, App>, label: &str) {
+    if label == "Save rack…" {
+        // it lives in the switch bar's ⋯ menu
+        let m = exact(h, "More");
+        click_at(h, m.center());
+        frames(h, 2);
+    }
     let r = exact(h, label);
     click_at(h, r.center());
     frames(h, 3);

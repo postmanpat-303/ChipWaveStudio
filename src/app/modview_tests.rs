@@ -42,6 +42,21 @@ fn synth_with_lfo() -> (Harness<'static, App>, usize) {
     (h, idx)
 }
 
+/// click a knob's mod dot, pick a source in the popover and Add
+fn quick_add(h: &mut Harness<'static, App>, knob: &str, source: &str) {
+    let dot = rect_of(h, Role::Button, &format!("Modulate {knob}"));
+    click_at(h, dot.center());
+    frames(h, 2);
+    assert!(h.state().ip.quick.is_some(), "the popover opened");
+    let s = rect_of(h, Role::Button, source);
+    click_at(h, s.center());
+    frames(h, 2);
+    let add = rect_of(h, Role::Button, "Add");
+    click_at(h, add.center());
+    frames(h, 2);
+    assert!(h.state().ip.quick.is_none(), "added and closed");
+}
+
 fn routes(h: &Harness<'static, App>) -> Vec<(String, f32)> {
     h.state().with(|s| {
         s.song
@@ -77,17 +92,17 @@ fn handle_pos(knob: Rect, n: f32, amount: f32) -> Pos2 {
 #[test]
 fn dropping_a_modulator_on_a_knob_routes_it_and_the_ring_sets_the_depth() {
     let (mut h, idx) = synth_with_lfo();
-    let chip = rect_of(&h, Role::Button, "LFO 1");
     let knob = rect_of(&h, Role::Slider, "Cutoff");
     let before = knob_norm(&h, idx, "cutoff");
-    drag(&mut h, chip.center(), knob.center());
-    frames(&mut h, 2);
+    // the knob's dot: "Modulate Cutoff with…" › Random › Add (the synth's
+    // own LFO only does sine-like waves, so this one is song-level)
+    quick_add(&mut h, "Cutoff", "Random");
     let tid = format!("instrument.{}.cutoff", idx + 1);
     assert_eq!(routes(&h), vec![(tid.clone(), 0.25)], "a route at 25 %");
     assert_eq!(
         knob_norm(&h, idx, "cutoff"),
         before,
-        "dropping does not turn the knob"
+        "adding does not turn the knob"
     );
     // drag the ring's handle: up/right deepens it
     let hp = handle_pos(knob, before, 0.25);
@@ -126,19 +141,23 @@ fn dropping_a_modulator_on_a_knob_routes_it_and_the_ring_sets_the_depth() {
 fn patch_knobs_are_targets_and_routings_card_removes_them() {
     let (mut h, idx) = synth_with_lfo();
     // Sustain (amp.s) has no target of its own: it is a patch target now
-    let knob = rect_of(&h, Role::Slider, "Sustain");
-    let chip = rect_of(&h, Role::Button, "LFO 1");
-    drag(&mut h, chip.center(), knob.center());
-    frames(&mut h, 2);
+    quick_add(&mut h, "Sustain", "LFO");
     let tid = format!("instrument.{}.patch.amp-s", idx + 1);
     assert_eq!(routes(&h), vec![(tid, 0.25)]);
-    // the Modulation tab lists it; × removes it
+    // the Modulation tab's Movement list shows it; × removes it
     h.state_mut().ip.tab = Tab::Modulation;
     frames(&mut h, 3);
-    let x = rect_of(&h, Role::Button, "×");
+    let x = h
+        .query_all_by(|n| {
+            n.role() == Role::Button && n.label().is_some_and(|l| l.starts_with("Remove LFO"))
+        })
+        .next()
+        .expect("the movement's ×")
+        .rect();
     click_at(&mut h, x.center());
     frames(&mut h, 2);
-    assert!(routes(&h).is_empty(), "removed from the Routings card");
+    assert!(routes(&h).is_empty(), "removed from the Movement list");
+    let n0 = h.state().with(|s| s.song.modulation.mods.len());
     // + Modulator adds one (and selects it)
     let plus = rect_of(&h, Role::Button, "+ Modulator");
     click_at(&mut h, plus.center());
@@ -149,11 +168,12 @@ fn patch_knobs_are_targets_and_routings_card_removes_them() {
     let kinds: Vec<ModKind> = h
         .state()
         .with(|s| s.song.modulation.mods.iter().map(|m| m.kind).collect());
-    assert_eq!(kinds, vec![ModKind::Lfo, ModKind::Envelope]);
+    assert_eq!(kinds.len(), n0 + 1);
+    assert_eq!(kinds.last(), Some(&ModKind::Envelope));
     let sel = h.state().ip.mod_sel;
     assert_eq!(
         sel,
-        h.state().with(|s| Some(s.song.modulation.mods[1].id)),
+        h.state().with(|s| Some(s.song.modulation.mods[n0].id)),
         "the new modulator is selected"
     );
 }

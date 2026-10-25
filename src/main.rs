@@ -68,6 +68,7 @@ mod plugin;
 mod poly;
 mod presets;
 mod prompt;
+mod quickmod;
 mod racks;
 mod recovery;
 #[cfg(test)]
