@@ -1582,7 +1582,9 @@ impl App {
         let col = if on {
             t.accent
         } else {
-            hdr_text().gamma_multiply(0.55)
+            // dimmed as the metronome's off symbol (the header's text is
+            // white on Amiga's white buttons)
+            t.ink2.gamma_multiply(0.75)
         };
         if super::viewbar::transport_button(ui, super::viewbar::Tr::Loop, on, col, &tip) {
             self.tl_apply(super::timeline::TlOp::ToggleLoop);
