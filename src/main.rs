@@ -58,6 +58,7 @@ mod grid;
 mod input;
 mod instfile;
 mod keymap;
+mod knobs;
 mod ladder;
 mod master;
 mod melodygen;

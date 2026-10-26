@@ -77,88 +77,22 @@ pub(super) fn default_cc_target(song: &crate::model::Song, instr: usize, cc: u8)
 }
 
 pub(super) fn apply_learned(s: &mut Shared, target: &str, n: f32) -> bool {
-    let Some(t) = Target::parse_in(target, &s.song) else {
+    // one knob list (crate::knobs) for MIDI learn, controller maps,
+    // automation and modulation
+    let Some(t) = crate::knobs::resolve(&s.song, target) else {
         return false;
     };
     let n = n.clamp(0.0, 1.0);
-    let real = t.to_real(n);
-    let song = &mut s.song;
     match t {
-        Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) => {
-            let Some(InstrumentKind::Synth(p)) = song.instruments.get_mut(i).map(|x| &mut x.kind)
-            else {
-                return false;
-            };
-            match t {
-                Target::Cutoff(_) => p.cutoff = real,
-                Target::Resonance(_) => p.resonance = real,
-                _ => p.drive = real,
-            }
-        }
-        Target::Level(i) => match song.instruments.get_mut(i) {
-            Some(x) => x.volume = n,
-            None => return false,
-        },
-        Target::ChanVolume(c) => match song.mixer.channels.get_mut(c) {
-            Some(m) => m.volume = real,
-            None => return false,
-        },
-        Target::ChanPan(c) => match song.mixer.channels.get_mut(c) {
-            Some(m) => m.pan = real,
-            None => return false,
-        },
-        Target::Send(c, b) => match song.mixer.channels.get_mut(c) {
-            Some(m) if b < 2 => m.send[b] = n,
-            _ => return false,
-        },
-        Target::Macro(i, k) => return crate::plugin::set_macro_norm(s, i, k, n),
-        Target::Gen(i, k) => match song.instruments.get_mut(i).map(|x| &mut x.kind) {
-            Some(InstrumentKind::Gen(g)) => return crate::gen::set_gen_knob_norm(g, k, n),
-            _ => return false,
-        },
-        Target::Master => song.mixer.master = real,
+        Target::Macro(i, k) => crate::plugin::set_macro_norm(s, i, k, n),
         Target::Tempo => {
-            song.bpm = real.round();
-            let (b, sp) = (song.bpm, song.speed);
+            crate::knobs::set_norm(&mut s.song, t, n);
+            let (b, sp) = (s.song.bpm, s.song.speed);
             s.engine.set_tempo(b, sp);
+            true
         }
-        Target::Fx(i, d, p) => {
-            match song
-                .instruments
-                .get_mut(i)
-                .and_then(|x| x.fx.get_mut(d))
-                .and_then(|dv| dv.params.get_mut(p))
-            {
-                Some(v) => *v = n,
-                None => return false,
-            }
-        }
-        Target::Ret(b, p) => {
-            match song
-                .mixer
-                .returns
-                .get_mut(b)
-                .and_then(|r| r.device.params.get_mut(p))
-            {
-                Some(v) => *v = n,
-                None => return false,
-            }
-        }
-        Target::Patch(i, k) => {
-            let (Some(p), Some(pp)) = (
-                song.instruments.get_mut(i).and_then(|x| x.kind.patch_mut()),
-                crate::modulation::PATCH_PARAMS.get(k),
-            ) else {
-                return false;
-            };
-            (pp.set)(p, real);
-        }
-        Target::ModAmount(k) => match song.modulation.routes.get_mut(k) {
-            Some(r) => r.amount = real,
-            None => return false,
-        },
+        _ => crate::knobs::set_norm(&mut s.song, t, n),
     }
-    true
 }
 
 impl App {
