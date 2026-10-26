@@ -93,6 +93,7 @@ mod lcd_tests;
 mod library;
 #[cfg(test)]
 mod looptransport_tests;
+mod manual;
 mod metroicon;
 mod midiimport;
 mod midiview;
@@ -398,6 +399,7 @@ pub struct App {
     show_help: bool,
     show_about: bool,
     about: about::AboutState,
+    manual: manual::ManualState,
     /// key events taken from egui before it can use them for focus navigation
     pending: Vec<egui::Event>,
     /// undo/redo keys pressed while a text field had focus: run next frame,
@@ -767,6 +769,7 @@ impl App {
             show_help: false,
             show_about: false,
             about: Default::default(),
+            manual: Default::default(),
             pending: vec![],
             deferred_keys: vec![],
             mouse_since_commit: false,

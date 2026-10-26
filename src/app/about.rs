@@ -84,14 +84,15 @@ fn notices_path() -> Option<PathBuf> {
     .find(|p| p.is_file())
 }
 
-fn open_file(p: &std::path::Path) {
+/// open a file with the system's default app (also the user manual PDF)
+pub(super) fn open_file(p: &std::path::Path) -> std::io::Result<()> {
     #[cfg(windows)]
     let cmd = "explorer";
     #[cfg(target_os = "macos")]
     let cmd = "open";
     #[cfg(all(unix, not(target_os = "macos")))]
     let cmd = "xdg-open";
-    let _ = std::process::Command::new(cmd).arg(p).spawn();
+    std::process::Command::new(cmd).arg(p).spawn().map(|_| ())
 }
 
 /// a link-coloured, clickable label that may wrap
@@ -265,7 +266,9 @@ impl App {
                 .clicked()
             {
                 match notices_path() {
-                    Some(p) => open_file(&p),
+                    Some(p) => {
+                        let _ = open_file(&p);
+                    }
                     None => {
                         self.about.msg = "Not found next to the app; it's in every download.".into()
                     }
@@ -408,6 +411,18 @@ impl App {
                         if ui.add(b).on_hover_text(url).clicked() {
                             ui.ctx().open_url(egui::OpenUrl::new_tab(url));
                         }
+                    }
+                    let b = egui::Button::new(
+                        egui::RichText::new("User manual (PDF)")
+                            .size(crate::theme::ts::px(crate::theme::ts::BODY)),
+                    )
+                    .min_size(egui::vec2(0.0, 30.0));
+                    if ui
+                        .add(b)
+                        .on_hover_text("Open the ChipWave Studio user manual (PDF, built in)")
+                        .clicked()
+                    {
+                        self.open_manual();
                     }
                 });
             });
