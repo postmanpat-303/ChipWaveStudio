@@ -450,6 +450,13 @@ impl App {
                     self.export_instrument(self.instr);
                 }
                 ui.separator();
+                if item(ui, "Save controller map…", "") {
+                    self.save_controller_map();
+                }
+                if item(ui, "Load controller map…", "") {
+                    self.load_controller_map();
+                }
+                ui.separator();
                 if item(ui, "Quit", "Ctrl+Q") {
                     self.request(crate::prompt::Pending::Quit, &ctx);
                 }
