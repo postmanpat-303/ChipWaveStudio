@@ -17,10 +17,14 @@ Unicode true
 
 !define APPNAME "ChipWave Studio"
 !define PUBLISHER "Del (postmanpat)"
-; Kept from ChipWave Tracker (up to 0.2.3.19) so an upgrade updates the same install, keeps one
-; Add/Remove Programs entry and Wave Hub finds it: the install folder, the registry key and the
-; uninstall key keep their old names. Only the display name and the shortcuts change (docs/RENAME.md).
-!define INSTFOLDER "ChipWave Tracker"
+; The install folder is "ChipWave Studio" now. It was "ChipWave Tracker" up to 0.2.3.19 and kept
+; that name for a while afterwards so upgrades landed in the same place: the setup now moves an old
+; default install out of the old folder, and leaves a junction at the old path so tools that still
+; look for "ChipWave Tracker\ChipWave.exe" (Wave Hub's published versions) keep working.
+; The registry and uninstall keys keep their old names: one Add/Remove Programs entry, and Wave Hub
+; finds the install through them.
+!define INSTFOLDER "ChipWave Studio"
+!define OLDFOLDER "ChipWave Tracker"
 !define REGKEY "Software\ChipWaveTracker"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\ChipWaveTracker"
 !define ICON "..\assets\icon\chipwave_studio.ico"
@@ -72,11 +76,52 @@ Function .onInit
     Abort
   ${EndIf}
   SetRegView 64
-  ; InstallDirRegKey ran before SetRegView 64, so read the 64-bit key again: update in place
+  ; InstallDirRegKey ran before SetRegView 64, so read the 64-bit key again.
+  ; If the previous install sits in the old "ChipWave Tracker" folder, move to the new name;
+  ; a custom folder the user picked is respected.
   ReadRegStr $0 HKLM "${REGKEY}" "InstallDir"
   ${If} $0 != ""
-    StrCpy $INSTDIR $0
+    ${If} $0 == "$PROGRAMFILES64\${OLDFOLDER}"
+      StrCpy $INSTDIR "$PROGRAMFILES64\${INSTFOLDER}"
+    ${Else}
+      StrCpy $INSTDIR $0
+    ${EndIf}
   ${EndIf}
+FunctionEnd
+
+; Delete the old "ChipWave Tracker" install once the new folder is written, so there is only one
+; copy of the app. Skipped when the user chose to install there anyway.
+Function RemoveOldFolder
+  StrCpy $0 "$PROGRAMFILES64\${OLDFOLDER}"
+  ${If} $0 == "$INSTDIR"
+    Return
+  ${EndIf}
+  ${IfNot} ${FileExists} "$0\ChipWave.exe"
+    Return
+  ${EndIf}
+  Delete "$0\ChipWave.exe"
+  Delete "$0\README.txt"
+  Delete "$0\LICENSE.txt"
+  Delete "$0\THIRD_PARTY_LICENSES.txt"
+  Delete "$0\chipwave_studio.ico"
+  Delete "$0\chipwave_tracker.ico"
+  Delete "$0\Uninstall.exe"
+  RMDir "$0"
+FunctionEnd
+
+; Leave a directory junction at the old path pointing at the new folder, so anything that still
+; looks for "ChipWave Tracker\ChipWave.exe" (Wave Hub's published versions) keeps finding the app.
+; Best effort: a failure here changes nothing for the user.
+Function CreateCompatJunction
+  StrCpy $0 "$PROGRAMFILES64\${OLDFOLDER}"
+  ${If} $0 == "$INSTDIR"
+    Return
+  ${EndIf}
+  ${If} ${FileExists} "$0\*.*"
+    Return
+  ${EndIf}
+  nsExec::ExecToLog 'cmd /c mklink /J "$0" "$INSTDIR"'
+  Pop $0
 FunctionEnd
 
 Function StartUnelevated
@@ -96,6 +141,7 @@ Function RemoveOldShortcuts
   Delete "$SMPROGRAMS\${OLDNAME}\Uninstall ${OLDNAME}.lnk"
   RMDir "$SMPROGRAMS\${OLDNAME}"
   Delete "$INSTDIR\chipwave_tracker.ico"
+  Delete "$PROGRAMFILES64\${OLDFOLDER}\chipwave_tracker.ico"
 FunctionEnd
 
 Section "ChipWave Studio (required)" SecCore
@@ -125,6 +171,8 @@ Section "ChipWave Studio (required)" SecCore
   WriteRegDWORD HKLM "${UNINSTKEY}" "NoModify" 1
   WriteRegDWORD HKLM "${UNINSTKEY}" "NoRepair" 1
   Call RemoveOldShortcuts
+  Call RemoveOldFolder
+  Call CreateCompatJunction
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
@@ -155,6 +203,10 @@ Section "Uninstall"
   Delete "$INSTDIR\chipwave_tracker.ico"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
+  ; the junction at the old name, if this install left one
+  ${If} "$PROGRAMFILES64\${OLDFOLDER}" != "$INSTDIR"
+    RMDir "$PROGRAMFILES64\${OLDFOLDER}"
+  ${EndIf}
   DeleteRegKey HKLM "${UNINSTKEY}"
   DeleteRegKey HKLM "${REGKEY}"
   ; songs, settings and %APPDATA%\ChipWave recovery files are left alone

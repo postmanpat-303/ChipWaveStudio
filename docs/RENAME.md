@@ -40,24 +40,32 @@ and the transpose buttons (2b3ad3f).
 | User-Agent | ChipWave-Tracker/<ver> | ChipWave-Studio/<ver> |
 | Song/instrument file `app` field, MP3 TSSE tag, CLAP host name | ChipWave Tracker <ver> | ChipWave Studio <ver> (readers never parse it; old files still load) |
 | Icon files | assets/icon/chipwave_tracker*.{png,ico} | assets/icon/chipwave_studio*.{png,ico} (same pixels) |
-| Windows installer | product, shortcuts and Add/Remove name "ChipWave Tracker" | "ChipWave Studio"; **kept**: folder `Program Files\ChipWave Tracker`, `ChipWave.exe`, uninstall key `…\Uninstall\ChipWaveTracker`, `HKLM\Software\ChipWaveTracker` (Wave Hub compatibility) |
+| Windows installer | product, shortcuts and Add/Remove name "ChipWave Tracker" | "ChipWave Studio"; install folder now `Program Files\ChipWave Studio` (the setup moves an old install, see below); **kept**: `ChipWave.exe`, uninstall key `…\Uninstall\ChipWaveTracker`, `HKLM\Software\ChipWaveTracker` (Wave Hub compatibility), plus a junction at the old folder path |
 | macOS | CFBundleDisplayName "ChipWave Tracker", CFBundleName "ChipWave" | both "ChipWave Studio"; bundle id **kept** `com.postmanpat303.chipwave` |
 | Linux | (no .desktop file) | `packaging/linux/` .desktop + AppStream metainfo, id `io.github.postmanpat_303.ChipWaveStudio` |
 
 ### Windows upgrade over an old install (silent with `/S` too)
 
-Wave Hub's published versions look for the install at `C:\Program Files\ChipWave Tracker\ChipWave.exe`
-and the uninstall key `ChipWaveTracker`, so those **keep their names** (only the display name changes):
+The installer (`installer/chipwave.nsi`) used to install into `Program Files\ChipWave Tracker`, the name
+it had before the rename, so that upgrades landed in the same place. It now installs into
+**`Program Files\ChipWave Studio`**:
 
-1. `.onInit` reads `HKLM\Software\ChipWaveTracker\InstallDir` from the 64-bit registry view and
-   installs into that folder (default `Program Files\ChipWave Tracker`). The old NSIS script only read
-   it from the 32-bit view (InstallDirRegKey runs before `SetRegView 64`), which happened to match the default.
-2. The same uninstall key `…\Uninstall\ChipWaveTracker` is rewritten with DisplayName
-   "ChipWave Studio" and the new version, so Add/Remove Programs shows **one** entry.
-3. The old Start-menu folder `ChipWave Tracker` (both shortcuts), the old desktop shortcut
-   `ChipWave Tracker.lnk` and the old `chipwave_tracker.ico` are removed; new "ChipWave Studio"
-   shortcuts are created (desktop only if that section is ticked, as before; on by default and in `/S`).
-4. User data (`%APPDATA%\ChipWave`, songs) is never touched. The uninstaller also removes any
+1. `.onInit` reads `HKLM\Software\ChipWaveTracker\InstallDir` from the 64-bit registry view. If that is
+   the old default folder, the setup switches to `Program Files\ChipWave Studio`; any other folder the
+   user picked is respected. The old NSIS script only read the key from the 32-bit view
+   (InstallDirRegKey runs before `SetRegView 64`), which happened to match the default.
+2. Once the new folder is written, the old `ChipWave Tracker` folder is emptied and removed, so there is
+   only one copy of the app.
+3. A directory junction is left at `Program Files\ChipWave Tracker` pointing at the new folder, so anything
+   that still looks for the old path (Wave Hub's published versions look for
+   `C:\Program Files\ChipWave Tracker\ChipWave.exe`) keeps finding `ChipWave.exe`.
+4. The same uninstall key `…\Uninstall\ChipWaveTracker` is rewritten with DisplayName "ChipWave Studio"
+   and the new version, so Add/Remove Programs shows **one** entry. The uninstaller removes the junction as
+   well as the install folder.
+5. The old Start-menu folder `ChipWave Tracker` (both shortcuts), the old desktop shortcut
+   `ChipWave Tracker.lnk` and the old `chipwave_tracker.ico` are removed; new "ChipWave Studio" shortcuts
+   are created (desktop only if that section is ticked, as before; on by default and in `/S`).
+6. User data (`%APPDATA%\ChipWave`, songs) is never touched. The uninstaller also removes any
    leftover old-name shortcuts.
 
 Tested in Wine (fresh prefix): v0.2.3.19 release installer `/S`, settings seeded, then the 0.2.4.0 setup `/S`.
