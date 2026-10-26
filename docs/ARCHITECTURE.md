@@ -57,7 +57,7 @@ and a `automation::Target` (the same knob as a small enum, used at run time).
   - a mixer value: `src/model.rs` (`Mixer`) plus a `Target` variant.
 - **The knob list** (`src/knobs.rs`) builds every knob of a song from those
   tables, gives each one a name and range, and writes a value into the song.
-  MIDI learn, automation lane names, modulation names and generator knob
+  MIDI learn, controller maps, automation lane names, modulation names and generator knob
   names all ask it. Its test (`knobs::tests`) fails if two knobs share an
   id or an id does not read back to its knob, and
   `params::tests::panel_knobs_agree_with_the_knob_list` fails if the
@@ -102,6 +102,9 @@ and a `automation::Target` (the same knob as a small enum, used at run time).
   edit: MIDI learn maps a CC number to a knob id
   (`MidiSettings::learn`, saved in `settings.toml`), then
   `knobs::set_norm` writes the value — the same write a dragged knob makes.
+- Controller maps (one small TOML file per controller) save and load those
+  learn lists; see `docs/MIDI.md`. They contain only knob ids, so they are
+  data, not code — no scripts.
 
 ## 5. Something that must be saved
 
