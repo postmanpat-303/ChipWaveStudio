@@ -466,6 +466,10 @@ pub struct Engine {
     duck_t: f32,
     chans: Vec<Chan>,
     pub song_ended: bool,
+    /// offline render / WAV export only: when the song ends, stop instead
+    /// of wrapping round and playing row 0 again (that row rang on through
+    /// the release tail). Live playback and looping never set it.
+    pub stop_at_end: bool,
     pub peak: f32,
     /// master peaks (left, right) with decay, for meters
     pub peak_lr: [f32; 2],
@@ -598,6 +602,7 @@ impl Engine {
             duck_t: 1e9,
             chans: (0..MAX_CHANNELS).map(|_| Chan::new(sr)).collect(),
             song_ended: false,
+            stop_at_end: false,
             peak: 0.0,
             peak_lr: [0.0; 2],
             chan_peak: [0.0; MAX_CHANNELS],
@@ -1893,9 +1898,13 @@ impl Engine {
                 }
             }
             if next >= end {
+                self.song_ended = true;
+                if self.stop_at_end {
+                    self.playing = false;
+                    return;
+                }
                 next = 0;
                 jump = true;
-                self.song_ended = true;
             }
             self.tl.row = next;
             if jump {
@@ -1922,6 +1931,10 @@ impl Engine {
                 if self.order_pos >= song.order.len() {
                     self.order_pos = 0;
                     self.song_ended = true;
+                    if self.stop_at_end {
+                        self.playing = false;
+                        return;
+                    }
                 }
                 self.pattern = song.order.get(self.order_pos).copied().unwrap_or(0);
             }
@@ -2992,6 +3005,7 @@ pub fn render_song(song: &Song, sr: u32) -> Vec<f32> {
     crate::plugin::prepare(&mut e.plugins, song, sr as f32);
     crate::strings::rack::prepare(&mut e.strings, song, sr as f32);
     crate::plugin::fxrack::prepare(&mut e.fx_plugins, song, sr as f32);
+    e.stop_at_end = true;
     e.start(song, 0, 0, false, 0);
     let mut out = Vec::new();
     let mut buf = vec![0.0f32; 1024];
