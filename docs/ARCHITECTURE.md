@@ -133,6 +133,24 @@ and a `automation::Target` (the same knob as a small enum, used at run time).
   song is compared with the last step and a new step is made if it changed.
   So **every edit is undoable without extra code**. Call `self.snapshot()`
   before a discrete edit so it becomes its own step.
+- **Name the edit** so the Edit menu reads "Undo: Move clip" instead of a
+  bare "Undo". The front door is `src/app/action.rs`:
+  - add a variant to `enum Action` and its text in `Action::label()`;
+  - a one-shot edit: `self.act(Action::RenameTrack, |s| ...)` (snapshot,
+    change, name: one named step);
+  - an edit that already calls `snapshot()`, or a drag that becomes one
+    step when the mouse is released: call `self.name_edit(Action::...)`
+    after the change (or on each frame of the drag).
+  - The name labels "the changes since the last step boundary". It only
+    names the step; what is stored and restored is still the snapshot. A
+    name whose edit changed nothing is dropped after a few idle frames, and
+    inside an `undo_hold` (several edits made one step) steps stay unnamed.
+- Named today: knob changes (drag and Reset to default), clip move / copy /
+  resize / fade / delete / duplicate / split / paste, piano-roll note add /
+  move / copy / resize / delete / erase / quantise / paste, Tracker cell
+  edits, clear / paste / transpose / insert / delete row, track add / delete
+  / move / rename. Everything else still undoes as a plain "Undo"; route it
+  through `Action` when you touch it.
 
 ## 7. The audio thread rules
 
