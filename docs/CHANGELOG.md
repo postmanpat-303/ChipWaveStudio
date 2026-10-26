@@ -2,11 +2,21 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
-## Unreleased
+## 0.2.17.0: built-in user manual, digital rain About, exports end cleanly
 
+Released 2026-10-26. Highlights:
+
+- **Built-in user manual:** **Help > User Manual** (top of the Help menu) and a **User manual (PDF)** button on the About page open the 38-page ChipWave Studio user manual. The PDF is embedded in the app (`src/app/manual.rs`), written once to the per-user `ChipWave/Manual` folder as `ChipWave-Studio-User-Manual-<version>.pdf` and opened in the system PDF viewer, so it works on every install type and offline; if that fails, a small window offers the manual on GitHub. Source (HTML, CSS, screenshots and `build.sh`) is in [docs/manual](manual/README.md). F1 stays the octave key.
+- **About opens with digital rain:** green code falls and reveals the About page as it goes, in about 1.5 s. Any key, click or scroll skips it, and Reduce motion turns it off.
+- **About opens straight away:** the About window used to come out a pixel taller than itself every frame, so it grew and crept up the screen for about five seconds. The body now takes exactly what the measured footer leaves, so it opens at its final size.
 - **Fix: render and export no longer replay row 0 after the song ends.** When a song reached its end, the engine wrapped round and played row 0 once more before the offline render loop noticed, so the first row rang on through the release tail of every WAV/MP3 export and offline render. Offline render and export now stop at the end (`Engine::stop_at_end`); live playback and looping are unchanged.
 - **Render fingerprints changed on purpose** (accepted for this fix only). All 8 `RENDER` lines of `render_hashes` have new hashes with the same lengths; the 82 `GEN` lines are unchanged. Old and new renders were compared sample by sample: every song is bit-identical up to the frame where it ends and differs only in the tail after it (the removed replay). New reference lines:
   - Lumen Drift and the 0.2.3.5 fixture `5bcc261a9f9536b6` (was `7d4908af1125b523`), Hollow Ritual and the 0.2.3.6 fixture `4f63838ba51b44cd` (was `58134955addcf972`), Velvet Mirrorball `4996701046244965` (was `ba62f01d99da8b95`), Chrome Throat `bf8039b39cd37fbb` (was `2d1b0bd7dc762506`), Oceans 11 `9a1be90f2c8879b8` (was `19d095eb5f80e71a`), StringWave Velvet Ensemble `730775ac065c5ab5` (was `b33bd8f7c1a862f4`). Tracker and timeline forms match each other as before.
+- Live playback, looping and the song format are unchanged; songs from 0.2.17.0 open in 0.2.16.0.
+
+### Known limits
+- The manual is in English only.
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
 
 ## 0.2.16.0: controller maps, named Undo, glow and shine display
 
