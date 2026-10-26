@@ -397,6 +397,51 @@ fn speed_and_edit_menu_undo() {
     assert_eq!(song(&mut h, |s| s.speed), sp0, "Edit > Undo");
 }
 
+/// named edits (app/action.rs) show their name in the Edit menu; an edit
+/// not routed through them stays a plain "Undo"
+#[test]
+fn edit_menu_names_the_step() {
+    let mut h = harness();
+    let n0 = song(&mut h, |s| s.channel_names[0].clone());
+    h.state_mut().rename_track(0, "Bass line");
+    frames(&mut h, 2);
+    let e = rects(&h, Role::Button, Some("Edit"))[0];
+    click_at(&mut h, e.center());
+    let u = rects(&h, Role::Button, Some("Undo: Rename track Ctrl+Z"));
+    assert_eq!(u.len(), 1, "the menu names the step");
+    click_at(&mut h, u[0].center());
+    assert_eq!(song(&mut h, |s| s.channel_names[0].clone()), n0);
+    assert_eq!(h.state().status, "Undo: Rename track");
+    let e = rects(&h, Role::Button, Some("Edit"))[0];
+    click_at(&mut h, e.center());
+    assert_eq!(
+        rects(&h, Role::Button, Some("Redo: Rename track Ctrl+Y")).len(),
+        1
+    );
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    // add and delete a track: each its own named step
+    let ch = song(&mut h, |s| s.channels);
+    assert!(h.state_mut().track_add(ch));
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo: Add track");
+    h.state_mut().track_delete(ch);
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo: Delete track");
+    ctrl_z(&mut h);
+    assert_eq!(h.state().status, "Undo: Delete track");
+    assert_eq!(song(&mut h, |s| s.channels), ch + 1);
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.channels), ch);
+    // a Tracker cell
+    h.state_mut().edit_cell(|c| c.note = 49);
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo: Edit cell");
+    // an edit with no name yet: plain "Undo"
+    h.state_mut().with(|s| s.song.bpm += 1.0);
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo");
+}
+
 /// several quick mouse edits in a row (well under a second apart), then
 /// Ctrl+Z once per edit: each must come back on its own
 #[test]

@@ -469,10 +469,17 @@ impl App {
                     self.hist.len(),
                     self.hist.bytes() as f64 / 1e6
                 );
+                // a named step reads "Undo: Move clip" (app/action.rs); the
+                // sample editor's own history stays plain
+                let (undo_t, redo_t) = if main {
+                    (self.undo_text(false), self.undo_text(true))
+                } else {
+                    ("Undo".to_string(), "Redo".to_string())
+                };
                 if ui
                     .add_enabled(
                         !main || self.hist.can_undo(),
-                        egui::Button::new("Undo").shortcut_text("Ctrl+Z"),
+                        egui::Button::new(undo_t).shortcut_text("Ctrl+Z"),
                     )
                     .on_hover_text(&info)
                     .clicked()
@@ -482,7 +489,7 @@ impl App {
                 if ui
                     .add_enabled(
                         !main || self.hist.can_redo(),
-                        egui::Button::new("Redo").shortcut_text("Ctrl+Y"),
+                        egui::Button::new(redo_t).shortcut_text("Ctrl+Y"),
                     )
                     .clicked()
                 {

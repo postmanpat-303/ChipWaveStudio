@@ -82,6 +82,7 @@ fn ctrl_drag_leaves_the_originals_and_drops_copies_as_one_undo_step() {
         "{}",
         h.state().status
     );
+    assert_eq!(h.state().undo_text(false), "Undo: Copy notes");
     undo(&mut h);
     assert_eq!(
         clip_notes(&h, data),

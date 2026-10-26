@@ -112,11 +112,13 @@ impl App {
         let last_r = (r0 + h - 1).min(self.rows() - 1);
         let last_c = (c0 + w - 1).min(self.with(|s| s.song.channels) - 1);
         self.sel = Some(((r0, c0), (last_r, last_c)));
+        self.name_edit(Action::PasteCells);
         self.status = format!("Pasted {h} rows x {w} channels");
     }
 
     pub(super) fn clear_sel(&mut self) {
         if self.for_sel(|c| *c = Cell::default()) {
+            self.name_edit(Action::ClearCells);
             self.status = "Cleared selection".into();
         }
     }
@@ -128,6 +130,7 @@ impl App {
             }
         };
         if self.for_sel(tr) {
+            self.name_edit(Action::Transpose);
             self.status = format!("Transposed selection by {semis:+} semitones");
             return;
         }
@@ -140,6 +143,7 @@ impl App {
                 }
             }
         });
+        self.name_edit(Action::Transpose);
         self.status = format!("Transposed channel {} by {semis:+} semitones", self.ch + 1);
     }
 
@@ -161,6 +165,11 @@ impl App {
                     p.cells[n - 1][ch] = Cell::default();
                 }
             }
+        });
+        self.name_edit(if insert {
+            Action::InsertRow
+        } else {
+            Action::DeleteRow
         });
         if !insert && self.row > 0 {
             self.row -= 1;
