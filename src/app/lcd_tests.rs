@@ -58,7 +58,7 @@ fn the_colour_setting_is_a_preset_name_or_hex() {
 
 #[test]
 fn every_backlight_keeps_the_text_readable() {
-    use super::lcd::{contrast, pal};
+    use super::lcd::{contrast, glow_col, luminance, pal};
     let mut tints: Vec<Color32> = PRESETS.iter().map(|p| colour_of(p.0)).collect();
     // custom colours, dark and saturated ones too (they are lightened)
     for c in [
@@ -75,6 +75,29 @@ fn every_backlight_keeps_the_text_readable() {
         ] {
             let k = contrast(fg, pl.bg_bot).min(contrast(fg, pl.bg_top));
             assert!(k >= 4.5, "{what} on {c:?}: {k:.2}");
+        }
+        // the brightest spot: the glow's middle under the shine (0.2.15)
+        let over = |dst: Color32, src: Color32| {
+            let k = 1.0 - src.a() as f32 / 255.0;
+            let o = |s: u8, d: u8| (s as f32 + d as f32 * k).round().min(255.0) as u8;
+            Color32::from_rgb(
+                o(src.r(), dst.r()),
+                o(src.g(), dst.g()),
+                o(src.b(), dst.b()),
+            )
+        };
+        let lit = over(over(pl.bg_top, glow_col(&pl, 170.0)), glow_col(&pl, 150.0));
+        assert!(
+            luminance(lit) >= luminance(pl.bg_top),
+            "glow lightens {c:?}"
+        );
+        for (what, fg) in [
+            ("digits", pl.lit),
+            ("captions", pl.label),
+            ("off pills", pl.off_fg),
+        ] {
+            let k = contrast(fg, lit);
+            assert!(k >= 4.5, "{what} on the glow of {c:?}: {k:.2}");
         }
         // an on pill: the glass colour on the dark fill; REC: white on red
         assert!(contrast(pl.bg_top, pl.lit) >= 4.5, "on pill on {c:?}");
