@@ -2,6 +2,12 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## Unreleased
+
+- **Fix: render and export no longer replay row 0 after the song ends.** When a song reached its end, the engine wrapped round and played row 0 once more before the offline render loop noticed, so the first row rang on through the release tail of every WAV/MP3 export and offline render. Offline render and export now stop at the end (`Engine::stop_at_end`); live playback and looping are unchanged.
+- **Render fingerprints changed on purpose** (accepted for this fix only). All 8 `RENDER` lines of `render_hashes` have new hashes with the same lengths; the 82 `GEN` lines are unchanged. Old and new renders were compared sample by sample: every song is bit-identical up to the frame where it ends and differs only in the tail after it (the removed replay). New reference lines:
+  - Lumen Drift and the 0.2.3.5 fixture `5bcc261a9f9536b6` (was `7d4908af1125b523`), Hollow Ritual and the 0.2.3.6 fixture `4f63838ba51b44cd` (was `58134955addcf972`), Velvet Mirrorball `4996701046244965` (was `ba62f01d99da8b95`), Chrome Throat `bf8039b39cd37fbb` (was `2d1b0bd7dc762506`), Oceans 11 `9a1be90f2c8879b8` (was `19d095eb5f80e71a`), StringWave Velvet Ensemble `730775ac065c5ab5` (was `b33bd8f7c1a862f4`). Tracker and timeline forms match each other as before.
+
 ## 0.2.16.0: controller maps, named Undo, glow and shine display
 
 Released 2026-10-26. Highlights:
