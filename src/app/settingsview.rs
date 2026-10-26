@@ -405,7 +405,7 @@ impl App {
                 changed |= ui
                     .checkbox(&mut self.extra.reduce_motion, "Reduce motion")
                     .on_hover_text(
-                        "menus such as the track pie appear and close at once, without animation",
+                        "menus such as the track pie appear and close at once, and About opens without its digital rain",
                     )
                     .changed();
                 ui.end_row();

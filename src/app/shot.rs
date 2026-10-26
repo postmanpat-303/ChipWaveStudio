@@ -887,6 +887,8 @@ impl App {
             }
             "about" => {
                 self.show_about = true;
+                // a still page for screenshots; CHIPWAVE_SHOT_ABOUT_RAIN=1 keeps the opening rain
+                self.about.still = std::env::var("CHIPWAVE_SHOT_ABOUT_RAIN").is_err();
                 // CHIPWAVE_SHOT_ABOUT_TAB=credits|licences, CHIPWAVE_SHOT_ABOUT_FILTER=<text>
                 self.about.tab = match std::env::var("CHIPWAVE_SHOT_ABOUT_TAB").as_deref() {
                     Ok("credits") => about::AboutTab::Credits,

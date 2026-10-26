@@ -1,5 +1,6 @@
 //! Help > About: header with the cicada, then About | Credits | Licences tabs.
 //! The credits come from `crate::credits::CREDITS` (one structured list).
+//! It opens with digital rain (`aboutrain`) unless Reduce motion is on.
 use super::topbar::{DONATE_URL, PAYPAL_URL, YOUTUBE_URL};
 use super::*;
 use crate::credits::{self, Credit, Group, CREDITS};
@@ -20,6 +21,10 @@ pub(super) enum AboutTab {
 
 #[derive(Default)]
 pub(super) struct AboutState {
+    /// the opening rain while it runs
+    pub(super) rain: Option<super::aboutrain::Rain>,
+    /// open without the rain (still screenshots)
+    pub(super) still: bool,
     /// height of the footer (separator + notices row) as last measured, so
     /// the scrolling body fills exactly the rest and the window never grows
     footer_h: f32,
@@ -181,9 +186,27 @@ impl App {
         self.about.logo.clone()
     }
 
+    /// any key, click or scroll skips the opening rain straight to the page;
+    /// called from the raw input hook, before the pattern editor takes the keys
+    pub(super) fn about_rain_skip(&mut self, raw: &egui::RawInput) {
+        if self.about.rain.is_some()
+            && raw.events.iter().any(|e| {
+                matches!(
+                    e,
+                    egui::Event::Key { pressed: true, .. }
+                        | egui::Event::PointerButton { pressed: true, .. }
+                        | egui::Event::MouseWheel { .. }
+                )
+            })
+        {
+            self.about.rain = None;
+        }
+    }
+
     pub(super) fn about_window(&mut self, ctx: &egui::Context) {
         if !self.show_about {
             self.about.was_open = false;
+            self.about.rain = None;
             return;
         }
         if !self.about.was_open {
@@ -192,6 +215,10 @@ impl App {
             self.about.was_open = true;
             self.about.centre_frames = 3;
             self.about.msg.clear();
+            self.about.rain = (!self.extra.reduce_motion && !self.about.still).then(|| {
+                let seed = ctx.input(|i| (i.time * 1000.0) as u32);
+                super::aboutrain::Rain::new(seed)
+            });
         }
         let id = egui::Id::unique("about_chipwave_studio");
         let mut win = egui::Window::new("About ChipWave Studio")
@@ -228,7 +255,9 @@ impl App {
         }
         let logo = self.about_logo(ctx);
         let mut open = true;
-        win.open(&mut open).show(ctx, |ui| {
+        let mut sizing = false;
+        let shown = win.open(&mut open).show(ctx, |ui| {
+            sizing = ui.is_sizing_pass();
             ui.set_min_size(DEFAULT_SIZE - egui::vec2(0.0, 30.0));
             self.about_header(ui, logo);
             ui.add_space(10.0);
@@ -261,9 +290,19 @@ impl App {
             ui.add_space(2.0);
             self.about.footer_h = (ui.min_rect().bottom() - foot_top).round();
         });
+        if let (Some(rain), Some(r)) = (&mut self.about.rain, &shown) {
+            if !sizing {
+                let now = ctx.input(|i| i.time);
+                let layer = egui::LayerId::new(egui::Order::Middle, id);
+                if !rain.paint(ctx, layer, r.response.rect, now) {
+                    self.about.rain = None;
+                }
+            }
+        }
         if !open {
             self.show_about = false;
             self.about.was_open = false;
+            self.about.rain = None;
         }
     }
 

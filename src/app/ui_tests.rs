@@ -1091,6 +1091,67 @@ fn about_window_settles_and_stops_growing() {
     about_centred(&h);
 }
 
+/// About opens with the digital rain, which ends by itself, and the page
+/// is laid out (and settled) underneath it the whole time
+#[test]
+fn about_opens_with_rain_that_ends() {
+    let mut h = harness();
+    h.state_mut().show_about = true;
+    frames(&mut h, 2);
+    assert!(h.state().about.rain.is_some(), "no rain on opening");
+    frames(&mut h, 12); // 3 s of 0.25 s steps: well past the 1.6 s rain
+    assert!(h.state().about.rain.is_none(), "rain never ended");
+    about_centred(&h);
+}
+
+/// any key press or click skips the rain straight to the page
+#[test]
+fn about_rain_skips_on_key_or_click() {
+    let mut h = harness();
+    h.state_mut().show_about = true;
+    frames(&mut h, 2);
+    assert!(h.state().about.rain.is_some());
+    key(&mut h, Key::F20, egui::Modifiers::NONE);
+    assert!(h.state().about.rain.is_none(), "key press did not skip");
+    assert!(h.state().show_about);
+    // reopen, then a click
+    h.state_mut().show_about = false;
+    frames(&mut h, 2);
+    h.state_mut().show_about = true;
+    frames(&mut h, 2);
+    assert!(h.state().about.rain.is_some());
+    let c = egui::AreaState::load(&h.ctx, egui::Id::unique("about_chipwave_studio"))
+        .unwrap()
+        .rect()
+        .center();
+    h.input_mut().events.push(egui::Event::PointerMoved(c));
+    h.input_mut().events.push(egui::Event::PointerButton {
+        pos: c,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.input_mut().events.push(egui::Event::PointerButton {
+        pos: c,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    frame(&mut h);
+    assert!(h.state().about.rain.is_none(), "click did not skip");
+}
+
+/// Reduce motion opens About at once, with no rain
+#[test]
+fn about_reduce_motion_has_no_rain() {
+    let mut h = harness();
+    h.state_mut().extra.reduce_motion = true;
+    h.state_mut().show_about = true;
+    frames(&mut h, 2);
+    assert!(h.state().about.rain.is_none());
+    about_centred(&h);
+}
+
 #[test]
 fn file_demo_songs_menu_and_help_load_demo_song() {
     let mut h = harness();
