@@ -1076,6 +1076,21 @@ fn about_window_is_centred_and_has_credit_tabs() {
     about_centred(&h);
 }
 
+/// the About window settles at once: it used to grow by a pixel every frame
+/// (and creep up the screen while re-centring) for seconds after opening
+#[test]
+fn about_window_settles_and_stops_growing() {
+    let mut h = harness();
+    h.state_mut().show_about = true;
+    frames(&mut h, 6);
+    let id = egui::Id::unique("about_chipwave_studio");
+    let first = egui::AreaState::load(&h.ctx, id).unwrap().rect();
+    frames(&mut h, 60);
+    let later = egui::AreaState::load(&h.ctx, id).unwrap().rect();
+    assert_eq!(first, later, "About window still moving or growing");
+    about_centred(&h);
+}
+
 #[test]
 fn file_demo_songs_menu_and_help_load_demo_song() {
     let mut h = harness();
