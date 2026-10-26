@@ -37,6 +37,7 @@ Other export routes stay as they are: **MOD/MMD** module export ([OCTAMED_SPEC.m
 ## 5. Offline render engine
 - It uses **the same engine** as playback (same `Song`, voices, synth, FX and Paula code), just driven by a render loop instead of the cpal callback, so the export sounds exactly like playback.
 - It runs **faster than real time** on a worker thread, in blocks of 512–4096 frames, without real-time throttling. Expect around 20–100× real time for typical songs; heavy synth patches are slower.
+- It stops where the song ends (`Engine::stop_at_end`, set only for offline render and export): the engine does not wrap round to row 0 before the tail, so the first row is not heard again in the release/reverb tail. Live playback keeps wrapping and looping as before.
 - Deterministic: random sources (noise, S&H LFOs) are seeded from the song, so two exports of the same song are identical. Golden-file tests rely on this.
 - Stems: one render pass with per-track buses tapped (faster than N passes). If master FX is chosen, each stem is rendered separately with the master chain.
 - Normalising or loudness targets need two passes: render to a temporary 32-bit float file, measure, then apply gain plus dither and encode. Single-pass is used when normalise is off.
