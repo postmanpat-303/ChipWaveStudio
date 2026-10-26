@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.16.0" date="2026-10-26">
+      <description><p>Controller maps: save the MIDI-learned knobs as a small file per controller and load them back, from the File menu or Settings, MIDI. The Edit menu now names what it will undo or redo, such as Undo: Move clip, for the common clip, note, tracker, track and knob edits. The top display gains a soft glow and a glassy shine in the chosen backlight colour. Every knob now comes from one shared list, and a new guide explains where each kind of feature goes.</p></description>
+    </release>
     <release version="0.2.15.0" date="2026-10-25">
       <description><p>The Chords, Melody and Bass generators rebuilt: Write to timeline always writes notes, to this track, a new track below it or the open clip, at the loop start or the play marker, as one undo step, and says where it went. It works with no clip open, on an empty song and from a new Chords… button beside Add track. Chords, Melody and Bass only appear on pitched sounds: they are hidden on drum kits, drum generators and drum-named sounds such as a synth kick, and a new generator track never copies a drum sound.</p></description>
     </release>

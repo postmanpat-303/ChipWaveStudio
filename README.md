@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.15.0-00d0ff" alt="Version 0.2.15.0">
+  <img src="https://img.shields.io/badge/version-0.2.16.0-00d0ff" alt="Version 0.2.16.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.15.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.16.0</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -51,7 +51,24 @@
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.15.0: Chords that write to the timeline
+## New in 0.2.16.0: controller maps, named Undo and a glowing display
+
+- **Save and load controller maps** ([MIDI.md](docs/MIDI.md#controller-maps)): **File > Save controller map…** keeps the knobs you've MIDI-learned as a small file for your keyboard or controller, and **File > Load controller map…** puts them back. The same two buttons sit under the learned list in Settings > MIDI.
+- **Undo says what it will undo**: the Edit menu now reads, for example, **Undo: Move clip** or **Redo: Add note** for the most common edits (clips, notes, tracker cells, tracks and knobs).
+- **Glow and shine display**: the top LCD has a soft backlight glow in the middle and a glassy shine across the top, in whichever display colour you pick (Mint, Amber, Ice and the rest). The text stays easy to read on every colour.
+- **Behind the scenes**: every knob now comes from one shared list, so automation, MIDI learn, modulation and controller maps all name knobs the same way, and a new [ARCHITECTURE.md](docs/ARCHITECTURE.md) guide says which files a new knob, effect, instrument or saved setting goes in.
+
+Every song saves, plays and renders exactly as in 0.2.15.0. Known limits and details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/lcd-glow-shine-slate.png" alt="The top display in Slate with the new glow and shine glass in three backlight colours: Mint, Amber and Ice"><br><b>Glow and shine</b> in Mint, Amber and Ice (Slate).</td>
+    <td width="50%"><img src="docs/screenshots/midi-controller-map-amiga.png" alt="Settings, MIDI card in the Amiga theme: three learned controls (filter cutoff, resonance and channel 1 volume) with Save controller map and Load controller map buttons under the list"><br><b>Controller maps</b>: save and load your learned knobs (Amiga).</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.15.0: Chords that write to the timeline</b></summary>
+
 
 - **Write to timeline always writes** ([CHORDS.md](docs/CHORDS.md#generators-panel-chords-melody-and-bass)): the Chords, Melody and Bass generators were rebuilt so **Write to timeline** puts real notes on a melodic track every time, as one **Ctrl+Z**.
   - Pick the target on the WRITE card: **this track**, a **new track** below it, or **this clip**. A new clip starts at the loop start (or the play marker's bar), and the card and the status bar say exactly where the notes went.
@@ -68,6 +85,8 @@ Every song saves, plays and renders exactly as in 0.2.14.0. Known limits and det
     <td width="50%"><img src="docs/screenshots/chords-written-slate.png" alt="The Timeline in Slate after Write to timeline: a new track 06 Chords with an 8-bar clip at bars 33 to 40, open in the piano roll with its chord lane, and the status line naming the track and bars"><br><b>Written</b>: a new Chords track with the notes, one Ctrl+Z.</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.14.0: Round Robin, key pressure and clip copy and paste</b></summary>
 
