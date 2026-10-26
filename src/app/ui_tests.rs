@@ -3313,4 +3313,3 @@ fn file_menu_has_controller_maps() {
         "a bad file changes nothing"
     );
 }
-
