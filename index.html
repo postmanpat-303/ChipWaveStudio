@@ -68,6 +68,11 @@ h1 small{display:block;font-size:.42em;letter-spacing:-.5px;color:var(--mut);fon
 .btn.primary{background:var(--grad);border:0;color:#060a18;box-shadow:0 0 30px rgba(34,227,255,.35)}
 .btn.primary:hover{box-shadow:0 0 45px rgba(255,63,180,.45)}
 .meta{margin-top:14px;font-size:13px;color:var(--mut)}
+.love{margin:18px auto 0;font-size:clamp(18px,2.4vw,22px);font-weight:700;color:var(--txt)}.love .h{color:var(--mg)}
+.kind{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:center;margin:12px auto 0;font-size:15px;color:var(--mut)}
+.btn.sm{padding:6px 14px;gap:6px;font-size:14px}
+.kind .pp{font-size:14px;font-weight:700}
+.foot-support .coffee-link{color:#ffd23f}
 .hero-shot{margin:48px auto 0;max-width:1072px;border-radius:16px 16px 0 0;overflow:hidden;border:1px solid var(--line);border-bottom:0;box-shadow:0 -10px 80px rgba(34,227,255,.18)}
 .hero-shot img{aspect-ratio:16/9;width:100%}
 .scan{position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--grad);opacity:.7}
@@ -160,6 +165,8 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;
     <img class="hero-logo" src="assets/icon-256.png" alt="ChipWave Studio logo: an engraved cicada on a branch sending out sound waves" width="128" height="128">
     <span class="eyebrow">100% FREE · OPEN SOURCE · GPL-3</span>
     <h1><small>ChipWave Studio</small>A <span class="g">free music sequencer</span><br>with a retro heart.</h1>
+    <p class="love"><span class="h" aria-hidden="true">♥</span> Free for everybody, forever. Made with love by Del (postmanpat). <span class="h" aria-hidden="true">♥</span></p>
+    <p class="kind">Free to use. If you enjoy it, please support the creator. <a class="btn coffee sm" href="https://buymeacoffee.com/postmanpat" target="_blank" rel="noopener">☕ Buy me a coffee</a> <a class="pp" href="https://paypal.me/derekh100" target="_blank" rel="noopener">PayPal</a></p>
     <p class="lead">Try ideas in the Clip Arranger, lay them out on the Timeline, write melodies in the piano roll and beats in the Drum Kit’s step sequencer. Shape every sound with WaveForge, FM-4, Chip FX and more, stack them into racks, then add effects, automation and a mix ready to export. For Windows, macOS and Linux.</p>
     <div class="cta">
       <a class="btn primary" id="dl-win" href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-setup-x64.exe">⬇ Download for Windows</a>
@@ -431,6 +438,7 @@ cargo run --release</pre></div>
 
 <footer><div class="wrap">
   <div>© 2026 Del (postmanpat) · ChipWave Studio · GPL-3.0 licence</div>
+  <div class="foot-support">Support the creator: <a class="coffee-link" href="https://buymeacoffee.com/postmanpat" target="_blank" rel="noopener">☕ Buy me a coffee</a> · <a href="https://paypal.me/derekh100" target="_blank" rel="noopener">PayPal</a></div>
   <div><a href="https://github.com/postmanpat-303/ChipWaveStudio">GitHub</a> · <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases">Releases</a> · <a href="https://github.com/postmanpat-303/ChipWaveStudio/blob/main/docs/CHANGELOG.md">Changelog</a> · <a href="https://github.com/postmanpat-303/ChipWaveStudio/issues">Issues</a></div>
 </div></footer>
 
