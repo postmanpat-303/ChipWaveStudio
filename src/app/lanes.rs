@@ -374,14 +374,8 @@ impl App {
                     format!("{} - Macro {} {pn}", iname(i), k + 1)
                 }
                 Target::Gen(i, k) => {
-                    let pn = match s.song.instruments.get(i).map(|x| &x.kind) {
-                        Some(InstrumentKind::Gen(g)) => crate::gen::gen_knobs(g)
-                            .into_iter()
-                            .find(|x| x.0 == k)
-                            .map(|x| x.1)
-                            .unwrap_or_else(|| format!("Knob {}", k + 1)),
-                        _ => format!("Knob {}", k + 1),
-                    };
+                    let pn =
+                        crate::knobs::name(&s.song, t).unwrap_or_else(|| format!("Knob {}", k + 1));
                     format!("{} - {pn}", iname(i))
                 }
                 Target::Send(c, r) => {
@@ -454,15 +448,15 @@ impl App {
                 s.song.automation.len(),
             )
         });
+        // generator knobs from the one knob list (crate::knobs)
         let gens: Vec<Vec<(usize, String)>> = self.with(|s| {
-            s.song
-                .instruments
-                .iter()
-                .map(|i| match &i.kind {
-                    InstrumentKind::Gen(g) => crate::gen::gen_knobs(g),
-                    _ => Vec::new(),
-                })
-                .collect()
+            let mut v = vec![Vec::new(); s.song.instruments.len()];
+            for k in crate::knobs::all(&s.song) {
+                if let crate::automation::Target::Gen(i, g) = k.target {
+                    v[i].push((g, k.name));
+                }
+            }
+            v
         });
         let plugs: Vec<bool> = self.with(|s| {
             s.song

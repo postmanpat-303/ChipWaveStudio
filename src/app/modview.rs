@@ -401,27 +401,15 @@ pub(super) fn target_label(song: &Song, target: &str) -> String {
                 "{} {} {}",
                 iname(i),
                 dev.title(),
-                crate::fx::params(dev.kind)
-                    .get(p)
-                    .map(|x| x.name)
-                    .unwrap_or("?")
+                crate::knobs::name(song, t).unwrap_or_else(|| "?".into())
             ),
             None => target.to_string(),
         },
-        Target::Gen(i, k) => {
-            let n = match song.instruments.get(i).map(|x| &x.kind) {
-                Some(crate::model::InstrumentKind::Gen(g)) => crate::gen::gen_knobs(g)
-                    .into_iter()
-                    .find(|x| x.0 == k)
-                    .map(|x| x.1),
-                _ => None,
-            };
-            format!(
-                "{} {}",
-                iname(i),
-                n.unwrap_or_else(|| format!("knob {}", k + 1))
-            )
-        }
+        Target::Gen(i, k) => format!(
+            "{} {}",
+            iname(i),
+            crate::knobs::name(song, t).unwrap_or_else(|| format!("knob {}", k + 1))
+        ),
         Target::ChanVolume(c) => format!("Track {} volume", c + 1),
         Target::ChanPan(c) => format!("Track {} pan", c + 1),
         Target::Send(c, b) => format!("Track {} send {}", c + 1, if b == 0 { "A" } else { "B" }),
