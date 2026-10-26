@@ -536,6 +536,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 ## Documentation
 
 - [ROADMAP.md](docs/ROADMAP.md) — things to add in the future, with good first picks; [CONTRIBUTING.md](CONTRIBUTING.md) — how to build, test and send a pull request
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — where does this go? Which files a new knob, effect, instrument, saved field or MIDI feature touches, and the audio-thread rules
 - [TRACKER.md](docs/TRACKER.md) — the core Tracker, keymap, 32 channels and all effect commands (00–43)
 - [PACKAGING.md](docs/PACKAGING.md) — Windows/Linux/macOS packages and CI
 - [MACOS.md](docs/MACOS.md): the universal Mac build, installing it, first launch, and building it
