@@ -1,0 +1,98 @@
+<section class="ch" id="ch4">
+<p class="kicker">CHAPTER 04</p>
+<h2>The Timeline and clips</h2>
+<p class="lead">The Timeline is where your song comes together. Tracks run down the screen, time runs from left to right, and each track holds <b>clips</b>: short pieces of music you can move, copy, loop and split.</p>
+
+<figure><img src="img/tlnew.png" alt="A new song"><figcaption>A new song (<span class="ui">File › New</span>): only the Song / Master track, with the hint "Drag an instrument from the Browser here, or + Add track".</figcaption></figure>
+
+<h3>Adding tracks</h3>
+<ul>
+<li><b>Drag an instrument</b> from the Browser (<kbd>Ctrl</kbd>+<kbd>B</kbd>) onto the empty Timeline. You get a new track that plays it.</li>
+<li>Click <span class="ui">+ Add track</span> under the tracks, or <span class="ui">Chords…</span> next to it to start with the chord generator.</li>
+<li><b>Right-click the empty space</b> under the tracks for the New track menu: Instrument track, Drum pattern, Audio track, Empty track or Browse….</li>
+</ul>
+
+<div class="row">
+<figure class="half"><img src="img/trackpie.png" alt="Track menu"><figcaption>Right-click a track header for the round <b>track menu</b>: Rename, Colour, Icon, Add, Edit, Devices, Routing, Organize and Delete.</figcaption></figure>
+<figure class="half"><img src="img/clippie.png" alt="Clip menu"><figcaption>Right-click a clip for the <b>clip menu</b>: Edit, Split…, Copy, Cut, Duplicate, Make unique, Colour, Rename, Mute, Delete, To launcher, Notes and Variations.</figcaption></figure>
+</div>
+<p>To use a round menu, point at a slice and click. You can also hold the right button, drag onto a choice and let go. Choices marked <b>›</b> open more options. <kbd>Esc</kbd> or a click in the middle closes it.</p>
+
+<h3>Making and editing clips</h3>
+<table class="wide">
+<tr><th style="width:28%">To do this</th><th>Do this</th></tr>
+<tr><td>Make a note clip</td><td><b>Shift+double-click</b> empty space on a track, or right-click › <span class="ui">New note clip here</span>.</td></tr>
+<tr><td>Open a clip</td><td>Click it: its notes appear in the piano roll below. Double-click (or <kbd>Enter</kbd>) to open it focused.</td></tr>
+<tr><td>Select</td><td>Click a clip. Ctrl-click or Shift-click adds more. Drag on empty space for a box. <kbd>Ctrl</kbd>+<kbd>A</kbd> selects all; <kbd>Esc</kbd> clears.</td></tr>
+<tr><td>Move</td><td>Drag it (across tracks too). It snaps to the grid.</td></tr>
+<tr><td>Copy</td><td><b>Alt-drag</b>, or <kbd>Ctrl</kbd>+<kbd>D</kbd> to duplicate right after itself. Copies are <b>linked</b>: edit one and they all change.</td></tr>
+<tr><td>Make unique</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> gives a copy its own notes.</td></tr>
+<tr><td>Loop / resize</td><td>Drag the <b>right edge</b>. Past its end the clip repeats.</td></tr>
+<tr><td>Trim the start</td><td>Drag the <b>left edge</b>.</td></tr>
+<tr><td>Split</td><td>Press <kbd>S</kbd>, then click where to cut. <kbd>Esc</kbd> cancels.</td></tr>
+<tr><td>Glue</td><td><kbd>Ctrl</kbd>+<kbd>J</kbd> joins the selected clips of one track into one.</td></tr>
+<tr><td>Mute</td><td><kbd>M</kbd> mutes or unmutes the selected clips.</td></tr>
+<tr><td>Delete</td><td><kbd>Del</kbd> or <kbd>Backspace</kbd>.</td></tr>
+</table>
+<div class="tip"><b class="l">UNDO</b> Every edit is one undo step. The <span class="ui">Edit</span> menu names it (<span class="ui">Undo: Move clip</span>, <span class="ui">Redo: Add note</span>…). <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes and <kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes.</div>
+
+<h3>Playing, looping and markers</h3>
+<ul>
+<li><kbd>Space</kbd> plays the song from the play marker and stops it. Click or drag in the ruler to move the play marker.</li>
+<li><b>Shift-drag the ruler</b> to set the loop region, or press <kbd>Ctrl</kbd>+<kbd>L</kbd> to loop around the selected clips. <kbd>L</kbd> (or <span class="ui">Loop</span>) turns looping on and off.</li>
+<li><span class="ui">+ Marker</span> or <kbd>Shift</kbd>+<kbd>M</kbd> adds a named marker (Intro, Chorus…). Click a marker to jump there, drag it to move it, and double-click to rename it.</li>
+<li>Zoom with <kbd>Ctrl</kbd>+mouse wheel or <kbd>+</kbd> / <kbd>−</kbd>. <span class="ui">Fit</span> (<kbd>F</kbd>) shows the whole song. <span class="ui">Snap</span> sets the grid.</li>
+<li><kbd>F11</kbd> hides the lower panel so the Timeline gets the whole height.</li>
+</ul>
+
+<h3>Recording from a keyboard</h3>
+<figure><img src="img/reclive.png" alt="Recording a take"><figcaption>Recording a take. The notes you play appear live in a new "Take" clip.</figcaption></figure>
+<p>Press <span class="ui">Record</span> (●) or <kbd>R</kbd> to record what you play on a MIDI keyboard, or on your computer keyboard with <b>Keys → Notes</b> (<kbd>Ctrl</kbd>+<kbd>K</kbd>), onto the armed or selected track. ChipWave counts in one bar first. You can set the count-in to Off, 1 bar or 2 bars with the arrow next to the Metronome, or by right-clicking it. Loop recording adds layers, and each take is one undo step.</p>
+<div class="note"><b class="l">KEYS → NOTES</b> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> are the white keys from C, and <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> <kbd>Y</kbd> <kbd>U</kbd> <kbd>O</kbd> <kbd>P</kbd> are the black keys. <kbd>Z</kbd> / <kbd>X</kbd> move an octave down / up, and <kbd>C</kbd> / <kbd>V</kbd> change velocity. While it's on, those letters play notes instead of their shortcuts.</div>
+
+<h3>Audio clips</h3>
+<p>Drag a sample from the Browser's <span class="ui">Samples</span> tab onto a track's lane to place it as an <b>audio clip</b>. In the Inspector you can set its gain and fades. ChipWave doesn't record audio yet.</p>
+
+<h3>The Clip Arranger</h3>
+<figure><img src="img/cliparr.png" alt="Clip Arranger"><figcaption>The Clip Arranger, to the left of the Timeline (<kbd>Ctrl</kbd>+<kbd>8</kbd> or <span class="ui">View › Clip Arranger</span>).</figcaption></figure>
+<p>This is a grid for jamming. Each <b>scene</b> (column header) is one section of the song, and each <b>slot</b> is one track's part of it.</p>
+<ul>
+<li>Click a scene to play it, looping, from the next bar. Click a slot's ▶ to play just that track.</li>
+<li>■ at the end of a row stops that track, and ■ in the header stops everything, at the next bar.</li>
+<li><span class="ui">Launch</span> sets when changes happen: 1 bar, ½ bar, Beat or Off.</li>
+<li>Drag a slot onto the Timeline to place it there as a clip.</li>
+</ul>
+</section>
+
+<section class="ch" id="ch5">
+<p class="kicker">CHAPTER 05</p>
+<h2>Notes: piano roll and Tracker</h2>
+<h3>The piano roll</h3>
+<p>The piano roll is the <span class="ui">Notes</span> side of the lower panel. It shows the notes of the clip you clicked. Piano keys run up the left side, time runs from left to right, and the <b>Vel</b> lane at the bottom sets how hard each note is played.</p>
+<table class="wide">
+<tr><th style="width:28%">To do this</th><th>Do this</th></tr>
+<tr><td>Draw a note</td><td>Click empty grid with the <b>Pointer</b> tool (<kbd>1</kbd>). The note is as long as the last one you drew, and dragging sets the length. The <b>Pencil</b> (<kbd>3</kbd>) paints a run of notes.</td></tr>
+<tr><td>Select</td><td>Click a note. Shift+click adds. Drag a box on empty space, or use the <b>Select</b> tool (<kbd>2</kbd>). <span class="ui">ALL</span> or <kbd>Ctrl</kbd>+<kbd>A</kbd> selects everything.</td></tr>
+<tr><td>Move / resize</td><td>Drag notes to move them in time and pitch, or drag a note's right edge. The arrow keys move by a semitone or a grid step, and <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> by an octave.</td></tr>
+<tr><td>Copy</td><td>Ctrl-drag, or <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd>. <kbd>Ctrl</kbd>+<kbd>D</kbd> repeats the selection right after itself.</td></tr>
+<tr><td>Delete</td><td><kbd>Del</kbd>. You can also <b>right-click</b> a note, or right-drag across several.</td></tr>
+<tr><td>Tidy timing</td><td><kbd>Q</kbd> (Quantize) snaps notes to the grid.</td></tr>
+<tr><td>See everything</td><td><kbd>F</kbd> (Fit) zooms to the notes. Hold the mouse on empty grid for a moment to pan.</td></tr>
+</table>
+<ul>
+<li><span class="ui">SCALE</span> highlights the notes of the song's key, and <span class="ui">Len</span> sets the length the next click draws.</li>
+<li><span class="ui">Chords</span> shows the chord lane above the notes, and <span class="ui">Generate</span> opens the Chords, Melody and Bass generators (chapter 7).</li>
+</ul>
+
+<h3>The Tracker (experimental)</h3>
+<figure><img src="img/pattern.png" alt="Tracker"><figcaption>The Tracker: rows run down the screen and channels go across (shown in the Amiga theme).</figcaption></figure>
+<p>ChipWave grew out of a music <b>tracker</b>, the row-by-row editor used for game and demo music. It's hidden by default. Turn on <span class="ui">Settings › Show Tracker (experimental)</span> to get the <span class="ui">ORDER</span> and <span class="ui">TRACKER</span> tabs (<kbd>Ctrl</kbd>+<kbd>2</kbd> and <kbd>Ctrl</kbd>+<kbd>1</kbd>).</p>
+<ul>
+<li>Each channel has Note, Instrument, Volume and effect columns. <kbd>Esc</kbd> turns edit mode on and off.</li>
+<li>Note keys: <kbd>Z</kbd> <kbd>S</kbd> <kbd>X</kbd> <kbd>D</kbd> <kbd>C</kbd> <kbd>V</kbd> <kbd>G</kbd> <kbd>B</kbd> <kbd>H</kbd> <kbd>N</kbd> <kbd>J</kbd> <kbd>M</kbd> play C to B, and <kbd>Q</kbd> <kbd>2</kbd> <kbd>W</kbd> <kbd>3</kbd> <kbd>E</kbd> … play the octave above.</li>
+<li>The <b>Order list</b> sets the order the blocks play in. <span class="ui">Song › Fill to length…</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>) can fill a song out to a set length.</li>
+<li>Block length: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>PgDn</kbd> doubles it and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>PgUp</kbd> halves it. <kbd>F9</kbd> / <kbd>F10</kbd> mute / solo the channel.</li>
+</ul>
+<figure class="mid"><img src="img/chords.png" alt="Chord helper" style="max-height:85mm;width:auto"><figcaption>The Chord helper (<span class="ui">Song › Chord helper…</span>) writes chords into Tracker blocks. It also has <b>Scale lock</b> and <span class="ui">Detect from song</span>.</figcaption></figure>
+<div class="tip"><b class="l">OLD SONGS</b> Songs made in the Tracker open on the Timeline in timeline mode and play the same.</div>
+</section>
