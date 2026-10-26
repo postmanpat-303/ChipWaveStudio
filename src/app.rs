@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod about;
+mod aboutrain;
 mod action;
 pub(crate) use action::Action;
 #[cfg(test)]
@@ -1135,6 +1136,7 @@ impl eframe::App for App {
 
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         self.shot_input(raw);
+        self.about_rain_skip(raw);
         // While no text field is being edited, the pattern editor owns the keyboard:
         // take key events away from egui (so Tab/arrows don't move widget focus).
         if let Some(log) = &mut self.key_log {
