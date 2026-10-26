@@ -81,8 +81,23 @@ impl App {
             engine.ensure_plan(song);
             what
         });
+        let mut named = None;
         if let Some(d) = self.tlv.drag.as_mut() {
             d.moved |= moved;
+            let n = sels.len().max(1);
+            named = match d.kind {
+                DragKind::Move { dup: false } => Some(Action::MoveClips(n)),
+                DragKind::Move { dup: true } => Some(Action::CopyClips(n)),
+                DragKind::End(_) | DragKind::Start(_) => Some(Action::ResizeClip),
+                DragKind::Fade(..) => Some(Action::FadeClip),
+                _ => None,
+            };
+        }
+        // the step this drag becomes on release is named (app/action.rs)
+        if moved {
+            if let Some(a) = named {
+                self.name_edit(a);
+            }
         }
         self.tlv.move_over = over;
         // the unsaved mark comes from the undo commit when the mouse is let
@@ -485,6 +500,18 @@ impl App {
             engine.ensure_plan(song);
             msg
         });
+        // name the step the end-of-frame commit makes (a refused edit
+        // changes nothing, and its name is dropped)
+        let named = match op {
+            TlOp::Delete => Some(Action::DeleteClips(sels.len())),
+            TlOp::Duplicate => Some(Action::DuplicateClips(sels.len())),
+            TlOp::SplitClip(..) => Some(Action::SplitClip),
+            TlOp::Paste { .. } => Some(Action::PasteClips),
+            _ => None,
+        };
+        if let Some(a) = named {
+            self.name_edit(a);
+        }
         if let Some(ids) = new_sel {
             self.tlv.sel = ids.last().copied();
             self.tlv.sels = ids;

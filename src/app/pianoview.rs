@@ -793,6 +793,14 @@ impl App {
         copy: bool,
     ) {
         let grid = self.pr_grid();
+        // the step this drag becomes (app/action.rs)
+        match d.kind {
+            DragK::Draw => self.name_edit(Action::AddNote),
+            DragK::Resize => self.name_edit_once(Action::ResizeNotes),
+            DragK::Move if copy => self.name_edit(Action::CopyNotes),
+            DragK::Move => self.name_edit(Action::MoveNotes),
+            _ => {}
+        }
         let mut src = d.origin.clone();
         match (&mut src, t) {
             (Source::Block(p), Target::Block { col, .. }) => {
@@ -932,6 +940,7 @@ impl App {
         }
         self.pr.sel.clear();
         self.pr_write(t, src);
+        self.name_edit(Action::DeleteNotes(n));
         self.status = format!("{n} note(s) deleted");
     }
 
@@ -951,6 +960,7 @@ impl App {
         if !add {
             self.pr.sel.clear();
         }
+        self.name_edit(Action::AddNote);
         match (s2, target) {
             (Source::Block(p), Target::Block { col, .. }) => {
                 let row = (start / ROW) as usize;
@@ -1019,6 +1029,7 @@ impl App {
         self.pr.erased += ids.len();
         self.pr.sel.clear();
         self.pr_write(t, src);
+        self.name_edit(Action::EraseNotes);
         self.status = format!("{} note(s) deleted", self.pr.erased);
         // the app's own setting, not the global (parallel tests flip that)
         if !self.extra.flat_ui {
@@ -1097,6 +1108,7 @@ impl App {
             _ => return false,
         }
         self.pr_write(t, src);
+        self.name_edit(Action::MoveNotes);
         true
     }
 
@@ -1137,6 +1149,7 @@ impl App {
         roll::quantise(&mut d.notes, &idx, g, 1.0, false);
         self.status = format!("{} note(s) quantised to {}", idx.len(), grid_name(g));
         self.pr_write(t, Source::Notes(d));
+        self.name_edit(Action::QuantiseNotes);
     }
 
     // ------------------------------------------------- clipboard (Ctrl+C X V D)
@@ -1352,6 +1365,7 @@ impl App {
         let n = sel.len();
         self.pr.sel = sel;
         self.pr_write(t, src);
+        self.name_edit(Action::PasteNotes);
         Some((n, dropped))
     }
 

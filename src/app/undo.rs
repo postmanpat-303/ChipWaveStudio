@@ -9,6 +9,11 @@
 //! fill-to-length accepts) without each edit site having to describe itself.
 //! Slider drags are committed when the mouse is released (one step), and runs
 //! of parameter-only changes close together in time are merged.
+//!
+//! Steps may carry a name ("Move clip") for the Edit menu: an edit made
+//! through the named-action front door (`app/action.rs`) names the changes
+//! since the last step boundary with `History::name`; other edits stay
+//! unnamed ("Undo"). The name never changes what is stored or restored.
 use crate::automation::Lane;
 use crate::model::{Instrument, Mixer, Pattern, Song, SongInfo};
 use std::collections::VecDeque;
@@ -158,6 +163,9 @@ pub struct State {
     timeline: Option<Arc<crate::timeline::Timeline>>,
     /// approximate size of what this state added (not shared with its predecessor)
     bytes: usize,
+    /// on the undo / redo stacks: the name of the step between this state
+    /// and the current one (None = unnamed); always None for `History::cur`
+    label: Option<String>,
 }
 
 fn same_timeline(
@@ -262,6 +270,7 @@ impl State {
             lanes: vec![],
             timeline: None,
             bytes: 0,
+            label: None,
         };
         empty.next(song).map(|(s, _)| s).unwrap_or(empty)
     }
@@ -324,6 +333,7 @@ impl State {
                 lanes,
                 timeline,
                 bytes,
+                label: None,
             },
             sig,
         ))
@@ -368,7 +378,13 @@ pub struct History {
     /// the song as it is on disk (opened, new or last saved; None = never
     /// saved, e.g. recovered): undo / redo back to it is not "unsaved"
     saved: Option<State>,
+    /// the name for the changes since the last boundary, and how many idle
+    /// commits it waits for them (`name`, `idle`)
+    pending: Option<(String, u8)>,
 }
+
+/// idle commits (nothing changed, mouse up) a step name waits for its edit
+const NAME_TTL: u8 = 3;
 
 impl History {
     pub fn new(song: &Song) -> Self {
@@ -380,7 +396,41 @@ impl History {
             redo: vec![],
             bytes: 0,
             last: None,
+            pending: None,
         }
+    }
+
+    /// Name the edit in progress: the changes since the last step boundary
+    /// (made already or still to come this gesture) undo as `label`.
+    pub fn name(&mut self, label: impl Into<String>) {
+        self.pending = Some((label.into(), NAME_TTL));
+    }
+
+    /// whether the edit in progress has a name already
+    pub fn is_named(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    /// A commit found nothing to record with the mouse up: a name whose edit
+    /// never changed the song is dropped after a few of these, so it can't
+    /// land on a later, unrelated edit.
+    pub fn idle(&mut self) {
+        if let Some((_, ttl)) = &mut self.pending {
+            *ttl = ttl.saturating_sub(1);
+            if *ttl == 0 {
+                self.pending = None;
+            }
+        }
+    }
+
+    /// the name of the step Undo would take back (None: unnamed or nothing)
+    pub fn undo_label(&self) -> Option<&str> {
+        self.undo.back().and_then(|s| s.label.as_deref())
+    }
+
+    /// the name of the step Redo would bring back
+    pub fn redo_label(&self) -> Option<&str> {
+        self.redo.last().and_then(|s| s.label.as_deref())
     }
 
     /// The song was saved as it is now: pending changes become a step,
@@ -431,11 +481,16 @@ impl History {
         let merge = may_merge
             && matches!(&self.last, Some((s, t)) if *s == sig && sig.mergeable()
             && now.duration_since(*t) < COALESCE);
-        let old = std::mem::replace(&mut self.cur, next);
+        let mut old = std::mem::replace(&mut self.cur, next);
+        let name = self.pending.take().map(|(l, _)| l);
         if merge {
             // the step's "before" state is already on the stack; drop the intermediate
             drop(old);
+            if let (Some(l), Some(b)) = (name, self.undo.back_mut()) {
+                b.label = Some(l);
+            }
         } else {
+            old.label = name;
             self.bytes += old.bytes;
             self.undo.push_back(old);
             self.evict();
@@ -457,6 +512,8 @@ impl History {
     pub fn boundary(&mut self, song: &Song, now: Instant) -> bool {
         let c = self.commit(song, now, false);
         self.last = None;
+        // a name is for the edit it was given in; the next one starts here
+        self.pending = None;
         c
     }
 
@@ -478,13 +535,17 @@ impl History {
     pub fn step(&mut self, song: &mut Song, redo: bool, now: Instant) -> bool {
         self.commit(song, now, false);
         self.last = None;
+        self.pending = None;
         let target = if redo {
             self.redo.pop()
         } else {
             self.undo.pop_back()
         };
-        let Some(t) = target else { return false };
-        let old = std::mem::replace(&mut self.cur, t);
+        let Some(mut t) = target else { return false };
+        // the step's name moves with it to the other stack
+        let name = t.label.take();
+        let mut old = std::mem::replace(&mut self.cur, t);
+        old.label = name;
         if redo {
             self.undo.push_back(old);
         } else {
@@ -524,6 +585,65 @@ mod tests {
         assert!(h.step(&mut s, true, later(t, 20)));
         assert_eq!(s.patterns[0].cells[3][1].note, 50);
         assert!(!h.step(&mut s, true, later(t, 30)));
+    }
+
+    #[test]
+    fn named_steps_keep_their_names_through_undo_and_redo() {
+        let mut s = song();
+        let mut h = History::new(&s);
+        let t = t0();
+        s.patterns[0].cells[0][0].note = 40;
+        h.name("Edit cell");
+        h.boundary(&s, t);
+        // an unnamed edit
+        s.bpm += 1.0;
+        h.boundary(&s, later(t, 1));
+        s.patterns[0].cells[1][0].note = 41;
+        h.name("Add note");
+        h.commit(&s, later(t, 2), false);
+        assert_eq!(h.undo_label(), Some("Add note"));
+        assert_eq!(h.redo_label(), None);
+        h.step(&mut s, false, later(t, 3));
+        assert_eq!(h.undo_label(), None, "the tempo change is unnamed");
+        assert_eq!(h.redo_label(), Some("Add note"));
+        h.step(&mut s, false, later(t, 4));
+        assert_eq!(h.undo_label(), Some("Edit cell"));
+        assert_eq!(h.redo_label(), None, "the tempo change is unnamed");
+        h.step(&mut s, false, later(t, 5));
+        assert_eq!(h.undo_label(), None, "nothing left to undo");
+        assert_eq!(h.redo_label(), Some("Edit cell"));
+        assert_eq!(
+            s.patterns[0].cells[0][0].note,
+            song().patterns[0].cells[0][0].note
+        );
+        h.step(&mut s, true, later(t, 6));
+        assert_eq!(h.undo_label(), Some("Edit cell"));
+        h.step(&mut s, true, later(t, 7));
+        h.step(&mut s, true, later(t, 8));
+        assert_eq!(h.undo_label(), Some("Add note"));
+        assert_eq!(s.patterns[0].cells[1][0].note, 41);
+    }
+
+    #[test]
+    fn a_name_without_a_change_does_not_land_on_a_later_edit() {
+        let mut s = song();
+        let mut h = History::new(&s);
+        let t = t0();
+        // e.g. a clip clicked but not moved
+        h.name("Move clip");
+        for k in 0..NAME_TTL {
+            assert!(!h.commit(&s, later(t, k as u64), false));
+            h.idle();
+        }
+        s.bpm += 1.0;
+        h.commit(&s, later(t, 10), false);
+        assert_eq!(h.undo_label(), None);
+        // a boundary ends a name too
+        h.name("Move clip");
+        h.boundary(&s, later(t, 11));
+        s.bpm += 1.0;
+        h.commit(&s, later(t, 12), false);
+        assert_eq!(h.undo_label(), None);
     }
 
     #[test]

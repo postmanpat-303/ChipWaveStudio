@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod about;
+mod action;
+pub(crate) use action::Action;
 #[cfg(test)]
 mod acceptance_tests;
 mod advedit;
@@ -833,9 +835,13 @@ impl App {
         if self.hist.commit(&s.song, std::time::Instant::now(), !mouse) {
             self.dirty = true;
             self.mouse_since_commit = false;
-        } else if mouse {
-            // e.g. a click that changes the song one frame later
-            self.mouse_since_commit = true;
+        } else {
+            // a step name whose edit never came is dropped (app/action.rs)
+            self.hist.idle();
+            if mouse {
+                // e.g. a click that changes the song one frame later
+                self.mouse_since_commit = true;
+            }
         }
     }
 
@@ -886,7 +892,12 @@ impl App {
                 self.hist.is_saved(&s.song)
             };
             self.dirty = !saved || self.plug.state_dirty;
-            self.status = if redo { "Redo".into() } else { "Undo".into() };
+            // the step just taken is now on the other stack: "Undo: Move clip"
+            self.status = if redo {
+                action::step_text("Redo", self.hist.undo_label())
+            } else {
+                action::step_text("Undo", self.hist.redo_label())
+            };
         } else {
             self.status = if redo {
                 "Nothing to redo".into()
@@ -937,6 +948,7 @@ impl App {
                 f(cell)
             }
         });
+        self.name_edit(Action::EditCell);
     }
 
     fn move_row(&mut self, d: isize) {

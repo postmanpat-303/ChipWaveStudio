@@ -2,6 +2,22 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.16.0: controller maps, named Undo, glow and shine display
+
+Released 2026-10-26. Highlights:
+
+- **Controller maps:** **File > Save controller map…** saves the MIDI-learned controls as a small TOML file per controller (by default in the settings folder under `Controllers`, named after the MIDI device); **File > Load controller map…** replaces the learned list with a saved one. The same two buttons sit under the learned list in Settings > MIDI. A map holds only CC numbers and knob ids (plain data, not a script); unknown ids are skipped and named in the status bar, and extra fields are ignored. See [MIDI.md](MIDI.md#controller-maps).
+- **Named Undo steps:** the common edits now go through one set of named actions, so the Edit menu reads **Undo: Move clip**, **Redo: Add note** and so on, for clips (move, copy, resize, fade, delete, duplicate, split, paste), notes, tracker cells and rows, tracks and knobs. Edits not named yet still undo as plain "Undo".
+- **Glow and shine display:** the top LCD has a soft backlight glow in the middle and a glassy shine across the top, tinted by the chosen backlight colour. The text keeps at least 4.5:1 contrast on the brightest spot for every backlight (new LCD tests). Paint only.
+- **One knob list:** `src/knobs.rs` builds every knob of a song (instrument, patch, generator, effect, mixer, modulation, tempo) with a name and range from the existing tables. MIDI learn, controller maps, automation lane names, modulation names and generator knob names all read it, with cross-check tests so the lists can't drift apart.
+- **Where does this go?** A new contributor guide, [ARCHITECTURE.md](ARCHITECTURE.md), says which files a new knob, effect, instrument, saved field, MIDI feature or named edit touches, and the audio-thread rules.
+- Old songs save, play and render exactly as in 0.2.15.0 (checked against its renders). The song format is unchanged.
+
+### Known limits
+- Controller maps hold MIDI CC learn only (no notes, pitch bend or pressure). Loading a map replaces the learned list rather than merging it.
+- Not every edit has a name yet; the rest undo as plain "Undo".
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
+
 ## 0.2.15.0: Chords that write to the timeline
 
 Released 2026-10-25. Highlights:

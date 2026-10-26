@@ -397,6 +397,51 @@ fn speed_and_edit_menu_undo() {
     assert_eq!(song(&mut h, |s| s.speed), sp0, "Edit > Undo");
 }
 
+/// named edits (app/action.rs) show their name in the Edit menu; an edit
+/// not routed through them stays a plain "Undo"
+#[test]
+fn edit_menu_names_the_step() {
+    let mut h = harness();
+    let n0 = song(&mut h, |s| s.channel_names[0].clone());
+    h.state_mut().rename_track(0, "Bass line");
+    frames(&mut h, 2);
+    let e = rects(&h, Role::Button, Some("Edit"))[0];
+    click_at(&mut h, e.center());
+    let u = rects(&h, Role::Button, Some("Undo: Rename track Ctrl+Z"));
+    assert_eq!(u.len(), 1, "the menu names the step");
+    click_at(&mut h, u[0].center());
+    assert_eq!(song(&mut h, |s| s.channel_names[0].clone()), n0);
+    assert_eq!(h.state().status, "Undo: Rename track");
+    let e = rects(&h, Role::Button, Some("Edit"))[0];
+    click_at(&mut h, e.center());
+    assert_eq!(
+        rects(&h, Role::Button, Some("Redo: Rename track Ctrl+Y")).len(),
+        1
+    );
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    // add and delete a track: each its own named step
+    let ch = song(&mut h, |s| s.channels);
+    assert!(h.state_mut().track_add(ch));
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo: Add track");
+    h.state_mut().track_delete(ch);
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo: Delete track");
+    ctrl_z(&mut h);
+    assert_eq!(h.state().status, "Undo: Delete track");
+    assert_eq!(song(&mut h, |s| s.channels), ch + 1);
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.channels), ch);
+    // a Tracker cell
+    h.state_mut().edit_cell(|c| c.note = 49);
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo: Edit cell");
+    // an edit with no name yet: plain "Undo"
+    h.state_mut().with(|s| s.song.bpm += 1.0);
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo");
+}
+
 /// several quick mouse edits in a row (well under a second apart), then
 /// Ctrl+Z once per edit: each must come back on its own
 #[test]
@@ -3269,4 +3314,47 @@ fn status_bar_tracker_readout_only_with_the_tracker() {
         .next()
         .is_some();
     assert!(both, "length and peak still there");
+}
+
+/// File > Save / Load controller map… are in the menu (on a 1366×768
+/// screen), and a loaded map replaces the MIDI learn list
+#[test]
+fn file_menu_has_controller_maps() {
+    let mut h = harness();
+    h.set_size(egui::vec2(1366.0, 768.0));
+    frames(&mut h, 2);
+    click_exact(&mut h, "File");
+    for name in ["Save controller map…", "Load controller map…"] {
+        let r = labelled(&h, name);
+        assert!(r.max.y <= 768.0 && r.max.x <= 1366.0, "{name} at {r:?}");
+        assert!(r.height() >= 13.0, "{name} too small: {r:?}");
+    }
+    h.state_mut().extra.midi.learn = vec![(1, "tempo".into())];
+    let text = crate::ctlmap::to_text(
+        "Desk",
+        &[
+            (74, "instrument.1.cutoff".into()),
+            (7, "mixer.ch.1.volume".into()),
+        ],
+    )
+    .unwrap();
+    let msg = h.state_mut().load_controller_text(&text);
+    assert!(
+        msg.contains("\"Desk\" loaded: 2 learned control(s)"),
+        "{msg}"
+    );
+    assert_eq!(
+        h.state().extra.midi.learn,
+        vec![
+            (74, "instrument.1.cutoff".to_string()),
+            (7, "mixer.ch.1.volume".to_string())
+        ]
+    );
+    let msg = h.state_mut().load_controller_text("name = 3");
+    assert!(msg.starts_with("Controller map not loaded"), "{msg}");
+    assert_eq!(
+        h.state().extra.midi.learn.len(),
+        2,
+        "a bad file changes nothing"
+    );
 }

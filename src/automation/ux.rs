@@ -103,17 +103,11 @@ impl Target {
                     Family::Mix
                 }
             }
-            Target::Gen(i, k) => {
-                let Some(crate::model::InstrumentKind::Gen(g)) =
-                    song.instruments.get(i).map(|x| &x.kind)
-                else {
+            Target::Gen(..) => {
+                let Some(name) = crate::knobs::name(song, self) else {
                     return Family::Other;
                 };
-                let name = crate::gen::gen_knobs(g)
-                    .into_iter()
-                    .find(|(id, _)| *id == k)
-                    .map(|(_, n)| n.to_ascii_lowercase())
-                    .unwrap_or_default();
+                let name = name.to_ascii_lowercase();
                 if name.contains("cutoff") || name.contains("filter") {
                     Family::Cutoff
                 } else if name.contains("res") {
@@ -211,14 +205,8 @@ impl Target {
             }
             Target::Macro(i, k) => (iname(i), format!("Macro {}", k + 1)),
             Target::Gen(i, k) => {
-                let pn = match song.instruments.get(i).map(|x| &x.kind) {
-                    Some(crate::model::InstrumentKind::Gen(g)) => crate::gen::gen_knobs(g)
-                        .into_iter()
-                        .find(|(id, _)| *id == k)
-                        .map(|(_, n)| n)
-                        .unwrap_or_else(|| format!("Knob {}", k + 1)),
-                    _ => format!("Knob {}", k + 1),
-                };
+                let pn =
+                    crate::knobs::name(song, self).unwrap_or_else(|| format!("Knob {}", k + 1));
                 (format!("{} · Generator", iname(i)), pn)
             }
             Target::Patch(i, k) => {

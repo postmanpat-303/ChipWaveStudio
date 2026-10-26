@@ -155,8 +155,12 @@ fn dragging_moves_by_snapped_bars_and_alt_drag_copies() {
     let t = timeline(&h);
     let moved = t.clips.iter().find(|c| c.id == cl.id).unwrap();
     assert_eq!(moved.start, cl.start + 4 * PPQ, "{}", h.state().status);
+    // the step is named (app/action.rs)
+    assert_eq!(h.state().undo_text(false), "Undo: Move clip");
     // one undo step for the whole drag
     key(&mut h, Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(h.state().status, "Undo: Move clip");
+    assert_eq!(h.state().undo_text(true), "Redo: Move clip");
     assert_eq!(
         timeline(&h)
             .clips
@@ -177,6 +181,7 @@ fn dragging_moves_by_snapped_bars_and_alt_drag_copies() {
     );
     let t = timeline(&h);
     assert_eq!(t.clips.len(), n + 1);
+    assert_eq!(h.state().undo_text(false), "Undo: Copy clip");
     assert_eq!(
         t.clips.iter().find(|c| c.id == cl.id).unwrap().start,
         cl.start
@@ -293,8 +298,10 @@ fn ctrl_d_duplicates_and_delete_removes_the_selection() {
     let copy = h.state().tlv.sels.clone();
     assert_eq!(copy.len(), 1);
     assert_ne!(copy[0], cl.id, "the copy is selected");
+    assert_eq!(h.state().undo_text(false), "Undo: Duplicate clip");
     key(&mut h, Key::Delete, egui::Modifiers::NONE);
     assert_eq!(timeline(&h).clips.len(), n);
+    assert_eq!(h.state().undo_text(false), "Undo: Delete clip");
     assert!(timeline(&h).clips.iter().any(|c| c.id == cl.id));
     // Ctrl+Shift+D: make unique (its own block)
     let p = mid(&h, cl.id);
