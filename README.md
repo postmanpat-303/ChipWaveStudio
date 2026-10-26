@@ -14,8 +14,8 @@
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/ygVueHcGakw"><img src="docs/screenshots/promo-studio.jpg" alt="Watch the ChipWave Studio promo on YouTube" width="640"></a>
-  <br><sub>▶ <a href="https://youtu.be/ygVueHcGakw">Watch the promo on YouTube</a> · <a href="https://youtu.be/I7ccA8p_Czc">Watch the Short</a> · more demos on <a href="https://www.youtube.com/@whatgoesaround1551">the channel</a></sub>
+  <a href="https://youtu.be/ahJ3aUv-KUk"><img src="docs/screenshots/promo-studio.jpg" alt="Watch the ChipWave Studio promo on YouTube" width="640"></a>
+  <br><sub>▶ <a href="https://youtu.be/ahJ3aUv-KUk">Watch the promo on YouTube</a> · <a href="https://youtu.be/acISpXINHEU">Watch the Short</a> · more demos on <a href="https://www.youtube.com/@whatgoesaround1551">the channel</a></sub>
 </p>
 
 ```
