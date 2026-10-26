@@ -3431,6 +3431,94 @@ mod tests {
         assert!(hi - lo <= 1, "row onsets jitter: {late:?}");
     }
 
+    /// a 64-row song (140 BPM, speed 6: 4725 samples a row at 44.1 kHz)
+    /// with one short blip on row 0 and nothing else
+    fn row0_blip_song() -> Song {
+        let mut song = live_song();
+        song.bpm = 140.0;
+        song.speed = 6;
+        let p = crate::synth::Patch {
+            amp: crate::synth::Adsr {
+                a: 0.0,
+                d: 0.01,
+                s: 0.0,
+                r: 0.001,
+            },
+            ..Default::default()
+        };
+        song.instruments[1].kind = InstrumentKind::Synth(p);
+        song.instruments[1].fx.clear();
+        let pat = &mut song.patterns[0];
+        pat.rows = 64;
+        for row in pat.cells.iter_mut() {
+            row.iter_mut().for_each(|c| *c = Cell::default());
+        }
+        pat.cells[0][0] = Cell {
+            note: 49,
+            instr: 2,
+            ..Default::default()
+        };
+        song.order = vec![0];
+        song.mixer.channels[0].send = [0.0; 2];
+        song.mixer.channels[0].duck = 0.0;
+        song
+    }
+
+    /// loudest sample in frames `a..b` of interleaved stereo
+    fn peak_frames(out: &[f32], a: usize, b: usize) -> f32 {
+        out[(2 * a).min(out.len())..(2 * b).min(out.len())]
+            .iter()
+            .fold(0.0f32, |m, x| m.max(x.abs()))
+    }
+
+    /// Offline render and WAV/MP3 export stop where the song ends: row 0 is
+    /// not played a second time into the release tail (it was: the wrap
+    /// to row 0 was processed before the render loop saw `song_ended`).
+    #[test]
+    fn offline_render_does_not_replay_row_0_after_the_end() {
+        let song = row0_blip_song();
+        let end = 64 * 4725;
+        let mut tl = song.clone();
+        crate::timeline::enter_timeline_mode(&mut tl);
+        let pr = crate::export::Progress::default();
+        let opts = crate::export::Opts {
+            tail_secs: 3.0,
+            ..Default::default()
+        };
+        for (what, s) in [("tracker", &song), ("timeline", &tl)] {
+            for (how, out) in [
+                ("render_song", render_song(s, 44100)),
+                ("export", crate::export::render(s, &opts, &pr).unwrap()),
+            ] {
+                // the row-0 note sounds at the start ...
+                assert!(peak_frames(&out, 0, 4725) > 2e-3, "{what} {how}: no row 0");
+                // ... is long gone before the end, and nothing starts after it
+                assert!(out.len() / 2 > end + 44100, "{what} {how}: no tail");
+                let after = peak_frames(&out, 4725, out.len() / 2);
+                assert!(after < 1e-3, "{what} {how}: onset after the end ({after})");
+            }
+        }
+    }
+
+    /// Live playback is unchanged: without `stop_at_end` the engine still
+    /// wraps round at the end and plays row 0 again (the app's own stop /
+    /// loop handling sits on top of that).
+    #[test]
+    fn live_playback_still_wraps_to_row_0_at_the_end() {
+        let song = row0_blip_song();
+        let mut e = Engine::new(44100.0);
+        assert!(!e.stop_at_end);
+        e.start(&song, 0, 0, false, 0);
+        let n = 64 * 4725 + 4000;
+        let mut out = vec![0.0f32; n * 2];
+        for c in out.chunks_mut(512) {
+            e.render(&song, c);
+        }
+        assert!(e.song_ended && e.playing);
+        let lat = e.latency();
+        assert!(peak_frames(&out, 64 * 4725 + lat, n) > 2e-3, "row 0 again");
+    }
+
     #[test]
     fn sidechain_ducking_pumps_after_key_notes() {
         let render = |duck: f32| {
