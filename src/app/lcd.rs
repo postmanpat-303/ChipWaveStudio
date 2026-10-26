@@ -284,8 +284,43 @@ fn pill(p: &egui::Painter, r: Rect, s: &str, on: bool, red: bool, flash: bool, p
     );
 }
 
-/// backlit glass: a dark frame (the theme's edge), the light gradient,
-/// an inner shadow along the top and a faint inner highlight
+/// a rounded rect coloured by any function of the position (a fan mesh
+/// like `theme::round_mesh`, for the backlight glow)
+fn fan(p: &egui::Painter, r: Rect, rad: f32, f: impl Fn(Pos2) -> Color32) {
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(r.center(), f(r.center()));
+    let rad = rad.clamp(0.0, r.width().min(r.height()) * 0.5);
+    let corners = [
+        (Pos2::new(r.left() + rad, r.top() + rad), 180.0f32),
+        (Pos2::new(r.right() - rad, r.top() + rad), 270.0),
+        (Pos2::new(r.right() - rad, r.bottom() - rad), 0.0),
+        (Pos2::new(r.left() + rad, r.bottom() - rad), 90.0),
+    ];
+    let mut n = 0u32;
+    for (o, a0) in corners {
+        for i in 0..=4 {
+            let a = (a0 + 22.5 * i as f32).to_radians();
+            let q = o + egui::vec2(a.cos(), a.sin()) * rad;
+            mesh.colored_vertex(q, f(q));
+            n += 1;
+        }
+    }
+    for i in 0..n {
+        mesh.add_triangle(0, 1 + i, 1 + (i + 1) % n);
+    }
+    p.add(egui::Shape::mesh(mesh));
+}
+
+/// the backlight's highlight colour at `a` (0..255): the glass's own tint,
+/// lightened, so the glow and shine follow the chosen colour
+pub(super) fn glow_col(pl: &Pal, a: f32) -> Color32 {
+    let c = mix(pl.bg_top, Color32::WHITE, 0.7);
+    Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), a.clamp(0.0, 255.0) as u8)
+}
+
+/// backlit glass: a dark frame (the theme's edge), the light gradient, a
+/// soft backlight glow in the middle, an inner shadow along the top, a
+/// faint inner highlight and a glassy shine across the top
 fn glass(p: &egui::Painter, r: Rect, pl: &Pal, hot: bool) {
     if th().light {
         p.rect_filled(r.expand(1.5), 7, Color32::from_white_alpha(150));
@@ -295,6 +330,15 @@ fn glass(p: &egui::Painter, r: Rect, pl: &Pal, hot: bool) {
     let mut mesh = egui::Mesh::default();
     theme::round_mesh(&mut mesh, inner, [4.5; 4], pl.bg_top, pl.bg_bot);
     p.add(egui::Shape::mesh(mesh));
+    // the backlight glow: brightest in the middle, fading to the edges
+    let (c, hw, hh) = (inner.center(), inner.width() * 0.5, inner.height() * 0.5);
+    fan(p, inner, 4.5, |q| {
+        let (dx, dy) = ((q.x - c.x) / hw, (q.y - c.y) / hh);
+        glow_col(
+            pl,
+            (1.0 - (dx * dx * 0.9 + dy * dy * 0.3).sqrt()).max(0.0) * 170.0,
+        )
+    });
     let shade = Rect::from_min_max(inner.min, Pos2::new(inner.right(), inner.top() + 5.0));
     let mut sm = egui::Mesh::default();
     theme::round_mesh(
@@ -311,6 +355,15 @@ fn glass(p: &egui::Painter, r: Rect, pl: &Pal, hot: bool) {
         Stroke::new(1.0, Color32::from_white_alpha(70)),
         egui::StrokeKind::Inside,
     );
+    // the shine: a glassy strip over the top 42 %
+    let strip = Rect::from_min_max(
+        inner.min + egui::vec2(1.0, 1.0),
+        Pos2::new(inner.right() - 1.0, inner.top() + inner.height() * 0.42),
+    );
+    let mut sm = egui::Mesh::default();
+    let (a, b) = (glow_col(pl, 150.0), glow_col(pl, 25.0));
+    theme::round_mesh(&mut sm, strip, [3.5, 3.5, 0.0, 0.0], a, b);
+    p.add(egui::Shape::mesh(sm));
     if hot {
         p.rect_stroke(
             r.expand(0.5),
