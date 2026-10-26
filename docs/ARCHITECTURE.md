@@ -55,8 +55,14 @@ and a `automation::Target` (the same knob as a small enum, used at run time).
   - an effect parameter: the device's `ParamInfo` table in `src/fx.rs`
     (`params()`).
   - a mixer value: `src/model.rs` (`Mixer`) plus a `Target` variant.
-- Today the same knob is also listed by name in a few places (MIDI learn
-  text, lane names, modulation names); keep them in step.
+- **The knob list** (`src/knobs.rs`) builds every knob of a song from those
+  tables, gives each one a name and range, and writes a value into the song.
+  MIDI learn, automation lane names, modulation names and generator knob
+  names all ask it. Its test (`knobs::tests`) fails if two knobs share an
+  id or an id does not read back to its knob, and
+  `params::tests::panel_knobs_agree_with_the_knob_list` fails if the
+  instrument panel and the knob list disagree about a range — so a knob
+  added to one table but not the other is caught.
 - Ranges: a knob's value is stored in real units (Hz, seconds) or as 0..1
   (effects, generators); automation and modulation always work in 0..1 and
   convert with `Target::to_real` / `Target::to_norm`.
@@ -84,7 +90,8 @@ and a `automation::Target` (the same knob as a small enum, used at run time).
   the same table), its tag in `params::type_tag`.
 - Saving: instrument files are `src/instfile.rs` (`.cwi`); presets are
   `src/presets.rs`. A new engine in a song is a reader-version bump.
-- Tests: add it to `params::tests::all_types()` so the panel tests cover it.
+- Tests: add it to `params::tests::all_types()` so the panel and knob-list
+  tests cover it.
 
 ## 4. Something from hardware (MIDI)
 
@@ -94,7 +101,7 @@ and a `automation::Target` (the same knob as a small enum, used at run time).
 - In the window, `src/app/midiview.rs` turns a control change into a knob
   edit: MIDI learn maps a CC number to a knob id
   (`MidiSettings::learn`, saved in `settings.toml`), then
-  `apply_learned` writes the value — the same write a dragged knob makes.
+  `knobs::set_norm` writes the value — the same write a dragged knob makes.
 
 ## 5. Something that must be saved
 
