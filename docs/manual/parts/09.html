@@ -1,0 +1,30 @@
+<section class="ch" id="ch9">
+<p class="kicker">CHAPTER 09</p>
+<h2>Automation and modulation</h2>
+<p class="lead">Automation draws how a knob changes over the song. Modulation makes a knob wobble on its own, in time with the music.</p>
+<figure class="wide"><img src="img/auto.png" alt="Automation lanes"><figcaption>Two automation lanes under the Bass track: the mixer volume, and the filter cutoff of the <i>Rolling Bass</i> sound.</figcaption></figure>
+<h3>Automation lanes</h3>
+<ol class="plain">
+<li><b>Open:</b> click the <span class="ui">A</span> button on a track header. The lanes appear under the track.</li>
+<li><b>Add a lane:</b> use <span class="ui">+ lane</span> under the open track, or right-click any knob › <span class="ui">Add automation lane</span>. You can automate the volume, pan, sends, instrument and effect knobs, plugin parameters, and more.</li>
+<li><b>Draw:</b> click to add a point and drag it to move it (it snaps; hold <kbd>Shift</kbd> for free movement). <kbd>Ctrl</kbd>-drag draws freehand. <kbd>Alt</kbd>-drag a line to bend it into a curve. Double-click a point to delete it.</li>
+<li><b>Lane header:</b> the dot turns the lane on or off, and <span class="ui">×</span> removes it (<kbd>Ctrl</kbd>+<kbd>Z</kbd> brings it back).</li>
+<li><b>Per clip:</b> right-click a lane inside a clip › <span class="ui">Add clip automation to this clip</span>. That automation then moves, loops and splits with the clip.</li>
+</ol>
+<p>Tempo changes live on the <b>Song / Master</b> track. Lanes play in your exports exactly as you hear them.</p>
+
+<h3>Quick modulation</h3>
+<p>Every knob that can be modulated has a small <b>dot</b>. Click it (or right-click › <span class="ui">Modulate with…</span>) and choose a source:</p>
+<table class="wide">
+<tr><th style="width:26%">Source</th><th>Controls</th></tr>
+<tr><td><b>LFO</b></td><td>Shape, <b>Speed</b> and Amount: a steady wobble.</td></tr>
+<tr><td><b>Envelope</b></td><td><b>Length</b>, <b>Attack</b> and Amount: a movement on each note.</td></tr>
+<tr><td><b>Random</b></td><td><b>Speed</b>, <b>Smooth</b> and Amount: wandering movement.</td></tr>
+<tr><td><b>Velocity</b>, <b>Mod wheel</b></td><td>Amount only.</td></tr>
+</table>
+<ul>
+<li><b>Speed</b> reads in plain words, such as "1/8 note", "1 beat (1/4 note)" or "2 bars". Untick <span class="ui">Sync to tempo</span> for a free speed in Hz.</li>
+<li><b>Amount</b> ("+25 %") is how far it moves the knob. <kbd>Ctrl</kbd>-drag a slider for fine steps, and double-click to reset it.</li>
+<li>Each instrument's <b>Movement</b> list shows everything that moves, for example "LFO 1 sine · 1 beat → Cutoff · +25 %". Click a row to edit it.</li>
+</ul>
+</section>

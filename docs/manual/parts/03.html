@@ -1,0 +1,57 @@
+<section class="ch" id="ch3">
+<p class="kicker">CHAPTER 03</p>
+<h2>A tour of the screen</h2>
+<p class="lead">This is ChipWave with the demo song <i>Neon Overdrive</i> open, in the default layout: the Timeline on top and the piano roll below.</p>
+<figure class="wide"><img src="img/overview.png" alt="The main window">
+<figcaption>The main window at 1366×768. (Audio was off while these screenshots were taken, so the display says NO AUDIO.)</figcaption></figure>
+<ol class="legend">
+<li data-n="1"><b>Menu bar:</b> File, Edit, View, Song and Help. The song's name is on the right, with a dot when there are unsaved changes.</li>
+<li data-n="2"><b>Transport:</b> go to start, Play / Stop, Record, Loop and the Metronome. The small arrow next to the Metronome sets the count-in.</li>
+<li data-n="3"><b>The display (LCD):</b> tempo, position, time and status lights. See below.</li>
+<li data-n="4"><b>Master:</b> the master level and meter. Click it to open the Master panel.</li>
+<li data-n="5"><b>MIDI light, Chord, Keys → Notes and Panic.</b> The piano button (<kbd>Ctrl</kbd>+<kbd>K</kbd>) lets you play notes on your computer keyboard. <span class="ui">Panic</span> (<kbd>Ctrl</kbd>+<kbd>.</kbd>) stops every sound.</li>
+<li data-n="6"><b>Clip Arranger:</b> launch parts of the song live (chapter 4). <kbd>Ctrl</kbd>+<kbd>8</kbd> swaps it for the Instruments list.</li>
+<li data-n="7"><b>Timeline header:</b> Follow, zoom, Fit, Bars / Time, Snap, Loop, + Marker and the play position.</li>
+<li data-n="8"><b>Track headers:</b> icon, name, <b>A</b> (automation lanes), <b>M</b> (mute), <b>S</b> (solo) and volume.</li>
+<li data-n="9"><b>Clips:</b> the parts of your song, laid out in time. Markers (Intro, Bridge…) sit above them.</li>
+<li data-n="10"><b>Lower panel:</b> <span class="ui">Notes</span> (piano roll) or <span class="ui">Rack</span> (instrument and effects).</li>
+<li data-n="11"><b>Piano roll:</b> the notes of the selected clip (chapter 5).</li>
+<li data-n="12"><b>View tab bar:</b> TIMELINE, MIX, FX and SAMPLE.</li>
+<li data-n="13"><b>Inspector and Browser</b> toggles (<kbd>I</kbd> and <kbd>Ctrl</kbd>+<kbd>B</kbd>).</li>
+<li data-n="14"><b>Status line:</b> hints and what just happened. The song length and peak level are on the right.</li>
+</ol>
+
+<h3>The top display</h3>
+<figure><img src="img/lcd.png" alt="The LCD display"></figure>
+<ol class="legend">
+<li data-n="1"><b>BPM:</b> drag up or down (Shift for fine steps), double-click to type, or click <span class="ui">TAP</span> four times or more in time.</li>
+<li data-n="2"><b>SIG:</b> the time signature.</li>
+<li data-n="3"><b>BAR · BEAT · STEP:</b> where the playhead is.</li>
+<li data-n="4"><b>TIME:</b> minutes, seconds and hundredths.</li>
+<li data-n="5"><b>LOOP</b> (<kbd>L</kbd>) with the loop range, and <b>REC</b>.</li>
+<li data-n="6"><b>CLICK:</b> the metronome. +1 or +2 is the count-in in bars (right-click to set it). <b>FOLLOW</b> makes the view page along with the playhead.</li>
+<li data-n="7"><b>DSP:</b> how hard the audio engine is working. The light turns amber after a dropout. The line below shows the audio status.</li>
+<li data-n="8"><b>MASTER:</b> the master volume and meter.</li>
+</ol>
+<div class="row">
+<figure class="half"><img src="img/lcdpop.png" alt="Display colour popup"><figcaption>Right-click the display to change its backlight colour.</figcaption></figure>
+<div class="half"><div class="tip"><b class="l">MAKE IT YOURS</b> The display has a soft glow and a glassy shine, tinted by its backlight colour. Pick one of the colours or any colour you like. <span class="ui">Settings › Look</span> has the same choice.</div></div>
+</div>
+
+<h3>The views</h3>
+<table>
+<tr><th>View</th><th>Open it with</th><th>What it's for</th></tr>
+<tr><td><b>Timeline</b></td><td><kbd>Ctrl</kbd>+<kbd>T</kbd></td><td>Arrange the song with tracks and clips (the main view).</td></tr>
+<tr><td><b>Mixer</b></td><td><kbd>Ctrl</kbd>+<kbd>3</kbd>, MIX tab</td><td>Levels, panning, sends, the master limiter and loudness.</td></tr>
+<tr><td><b>FX</b></td><td><kbd>Ctrl</kbd>+<kbd>4</kbd>, FX tab</td><td>The effects chain of the selected instrument.</td></tr>
+<tr><td><b>Sample</b></td><td><kbd>Ctrl</kbd>+<kbd>5</kbd>, SAMPLE tab</td><td>Import, view, loop and slice samples.</td></tr>
+<tr><td><b>Tracker</b></td><td><kbd>Ctrl</kbd>+<kbd>1</kbd></td><td>The classic row-by-row editor. It's hidden unless <span class="ui">Show Tracker (experimental)</span> is on in Settings.</td></tr>
+</table>
+<p><kbd>Ctrl</kbd>+<kbd>Tab</kbd> cycles through the views. If you rearrange the panels and get lost, <span class="ui">View › Reset to default layout</span> (<kbd>Ctrl</kbd>+<kbd>6</kbd>) brings everything back.</p>
+
+<div class="row">
+<figure class="half"><img src="img/browser.png" alt="Browser" style="max-height:105mm;width:auto"><figcaption>The Browser (<kbd>Ctrl</kbd>+<kbd>B</kbd>): instruments, effects, plugins, samples, songs and more. Drag anything onto the Timeline.</figcaption></figure>
+<figure class="half"><img src="img/inspector.png" alt="Inspector" style="max-height:105mm;width:auto"><figcaption>The Inspector (<kbd>I</kbd>) shows the clicked clip or track: name, colour, icon, volume, pan, sends and instrument.</figcaption></figure>
+</div>
+<figure class="mid"><img src="img/viewmenu.png" alt="View menu" style="max-height:95mm;width:auto"><figcaption>The View menu, with every view and panel and their shortcuts.</figcaption></figure>
+</section>

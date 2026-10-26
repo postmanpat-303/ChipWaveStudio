@@ -1,0 +1,47 @@
+<section class="ch" id="ch12">
+<p class="kicker">CHAPTER 12</p>
+<h2>Saving, loading and exporting</h2>
+<p class="lead">Your song is saved as one <code>.cwt</code> file. Export turns it into a WAV or MP3 you can share anywhere.</p>
+<div class="row">
+<figure class="half"><img src="img/filemenu.png" alt="File menu"><figcaption>The File menu.</figcaption></figure>
+<div class="half">
+<h3 style="margin-top:0">The File menu</h3>
+<ul>
+<li><b>New</b> <kbd>Ctrl</kbd>+<kbd>N</kbd>, <b>Open…</b> <kbd>Ctrl</kbd>+<kbd>O</kbd>.</li>
+<li><b>Demo songs ›</b> opens a ready-made song to explore.</li>
+<li><b>Recent ›</b> lists your last 20 songs. You can pin favourites.</li>
+<li><b>Save</b> <kbd>Ctrl</kbd>+<kbd>S</kbd>, <b>Save As…</b> <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>.</li>
+<li><b>Export… (WAV / MP3)</b> <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>, <b>Export MP3…</b>, and <b>Quick export WAV…</b> <kbd>Ctrl</kbd>+<kbd>E</kbd>.</li>
+<li><b>Export tracker-compatible copy…</b> saves a copy for ChipWave 0.2.4.0 and older.</li>
+<li><b>Instrument library…</b>, <b>Import / Export instrument (.cwi)…</b> and <b>Save / Load controller map…</b></li>
+<li><b>Quit</b> <kbd>Ctrl</kbd>+<kbd>Q</kbd>.</li>
+</ul>
+<p>A <b>•</b> in the window title means there are unsaved changes.</p>
+</div>
+</div>
+<h3>Exporting audio</h3>
+<figure class="mid"><img src="img/export.png" alt="Export audio dialog" style="max-width:58%"><figcaption>The Export audio dialog. (The folder path in the <i>Save to</i> box has been edited in this picture for privacy.)</figcaption></figure>
+<ol class="legend">
+<li data-n="1"><b>Format:</b> WAV (32-bit float, lossless) or MP3. For MP3, pick VBR or CBR and the quality with the slider (V2 is about 190 kbps).</li>
+<li data-n="2"><b>Sample rate:</b> 44.1 or 48 kHz.</li>
+<li data-n="3"><b>Range:</b> the whole song, the current block, or the loop region.</li>
+<li data-n="4"><b>Level:</b> normalise to −1.0 dBTP, with the master limiter on.</li>
+<li data-n="5"><b>Tail:</b> extra seconds at the end so echoes and reverb can fade out.</li>
+<li data-n="6"><b>Tags:</b> <span class="ui">Edit song info…</span> sets the title, artist and other details saved in the file.</li>
+<li data-n="7"><b>Save to:</b> the file name and folder (normally <code>Music\ChipWave</code>), with <span class="ui">Browse…</span>. Then press <span class="ui">Export</span>.</li>
+</ol>
+<div class="note"><b class="l">IN THIS VERSION</b> Export writes one stereo file of the whole mix. Separate files per track (stems) aren't available yet.</div>
+<h3>Your work is safe</h3>
+<ul>
+<li><b>Autosave</b> keeps a safety copy every 2 minutes by default, only when there are unsaved changes. It never overwrites your own file.</li>
+<li><b>Backups on save</b> keeps older copies (<code>song.cwt.bak</code>, <code>.bak2</code> …) each time you save. Choose 0–10 in Settings.</li>
+<li>If ChipWave ever closes unexpectedly, it offers to bring your work back the next time it starts: <span class="ui">Recover</span>, <span class="ui">Compare</span>, <span class="ui">Discard</span> or <span class="ui">Later</span>.</li>
+</ul>
+<p>Change all of these in <span class="ui">Settings › Files &amp; Safety</span>, which also shows the Recovery folder and the update check.</p>
+<table class="wide">
+<tr><th style="width:22%">System</th><th>Where ChipWave keeps its settings and safety copies</th></tr>
+<tr><td>Windows</td><td><code>%APPDATA%\ChipWave</code> and <code>%LOCALAPPDATA%\ChipWave</code></td></tr>
+<tr><td>macOS</td><td><code>~/Library/Application Support/ChipWave</code></td></tr>
+<tr><td>Linux</td><td><code>~/.config/chipwave</code> and <code>~/.local/share/chipwave</code></td></tr>
+</table>
+</section>

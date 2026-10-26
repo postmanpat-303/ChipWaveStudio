@@ -1153,6 +1153,51 @@ fn about_reduce_motion_has_no_rain() {
 }
 
 #[test]
+fn help_menu_and_about_open_the_user_manual() {
+    let mut h = harness();
+    click_exact(&mut h, "Help");
+    click_exact(&mut h, "User Manual");
+    assert_eq!(h.state().manual.opened, 1, "Help > User Manual opens it");
+    assert!(h.state().manual.err.is_none());
+    // the About page has a button for it too, beside the support links
+    h.state_mut().show_about = true;
+    frames(&mut h, 3);
+    click_exact(&mut h, "User manual (PDF)");
+    assert_eq!(h.state().manual.opened, 2, "About > User manual opens it");
+    // a failure shows the fallback window with the GitHub link
+    h.state_mut().show_about = false;
+    h.state_mut().manual.err = Some("couldn't start the PDF viewer (test)".into());
+    frames(&mut h, 3);
+    exact(
+        &h,
+        "Sorry, the user manual couldn't be opened on this computer.",
+    );
+    let r = exact(&h, "Open the manual on GitHub");
+    h.input_mut()
+        .events
+        .push(egui::Event::PointerMoved(r.center()));
+    frame(&mut h);
+    let mut urls = vec![];
+    for pressed in [true, false] {
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos: r.center(),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        });
+        frame(&mut h);
+        for c in &h.output().platform_output.commands {
+            if let egui::OutputCommand::OpenUrl(u) = c {
+                urls.push(u.url.clone());
+            }
+        }
+    }
+    assert_eq!(urls, [super::manual::MANUAL_URL]);
+    frames(&mut h, 2);
+    assert!(h.state().manual.err.is_none(), "closed after the link");
+}
+
+#[test]
 fn file_demo_songs_menu_and_help_load_demo_song() {
     let mut h = harness();
     // start from an empty song, then File > Demo songs > Lumen Drift

@@ -1,0 +1,41 @@
+<section class="ch" id="ch15">
+<p class="kicker">CHAPTER 15</p>
+<h2>Tips and troubleshooting</h2>
+<p class="lead">Most problems have a quick fix. Start here.</p>
+<h3>No sound</h3>
+<ol class="plain">
+<li>Open <span class="ui">Settings › Audio</span> and check the <b>Output device</b>. <i>System default</i> follows your computer's sound setting.</li>
+<li>Click <span class="ui">Play test tone</span>. You should hear a one-second beep (440 Hz).</li>
+<li>Still silent? Click <span class="ui">Restart audio</span>. This helps after you plug in headphones or an audio interface.</li>
+<li>Check that the track isn't muted (<b>M</b>) and that another track isn't soloed (<b>S</b>), and that the master fader is up.</li>
+</ol>
+<h3>Crackles, clicks or dropouts</h3>
+<ul>
+<li>Watch the <b>DSP</b> meter on the top display. It shows how hard the sound engine is working, and its light turns amber after a dropout.</li>
+<li>Choose a bigger <b>Buffer</b> in <span class="ui">Settings › Audio</span>. Sound takes a little longer to start, but it plays more smoothly. <i>Auto</i> lets ChipWave choose.</li>
+<li>Close other heavy programs, and bypass effects or plugins you don't need (the power button on each card, or <kbd>0</kbd> in the Rack).</li>
+<li>Exports are made separately from playback, so a crackle while playing doesn't end up in your exported file.</li>
+</ul>
+<h3>Stuck notes</h3>
+<p>Press <b>Panic</b> on the toolbar, or <kbd>Ctrl</kbd>+<kbd>.</kbd>. It stops every sound at once, plugins included.</p>
+<h3>Other problems</h3>
+<table class="wide">
+<tr><th style="width:34%">Problem</th><th>Try this</th></tr>
+<tr><td>A plugin doesn't show up</td><td>Check that it's CLAP or VST3 (not VST2), add its folder in <span class="ui">Settings › Plugins</span> and rescan. Look in the Browser's "skipped" list for the reason.</td></tr>
+<tr><td>A song says a plugin is missing</td><td>Install that plugin on this computer. The song keeps its settings in the meantime (chapter 11).</td></tr>
+<tr><td>ChipWave closed unexpectedly</td><td>Start it again and choose <span class="ui">Recover</span> (chapter 12).</td></tr>
+<tr><td>The window is too small or too big</td><td>Change the UI scale: <kbd>Ctrl</kbd>+<kbd>=</kbd>, <kbd>Ctrl</kbd>+<kbd>-</kbd>, <kbd>Ctrl</kbd>+<kbd>0</kbd>.</td></tr>
+<tr><td>The panels got jumbled</td><td><span class="ui">View › Reset to default layout</span> (<kbd>Ctrl</kbd>+<kbd>6</kbd>).</td></tr>
+<tr><td>Letters play notes instead of shortcuts</td><td>Keys → Notes is on. Press <kbd>Ctrl</kbd>+<kbd>K</kbd> to turn it off.</td></tr>
+<tr><td>macOS won't open the app</td><td>Control-click it and choose <span class="ui">Open</span>, or use the Terminal command in chapter 1.</td></tr>
+<tr><td>Animations are distracting</td><td>Turn on <span class="ui">Reduce motion</span> in Settings › Look.</td></tr>
+</table>
+<h3>Good habits</h3>
+<ul>
+<li>Save often with <kbd>Ctrl</kbd>+<kbd>S</kbd>, and use <span class="ui">Save As…</span> for big experiments.</li>
+<li>Keep the master limiter on, and leave some headroom on the faders.</li>
+<li>Use the Generators to get started, then change the notes so the song becomes yours.</li>
+<li>If you get stuck, every edit can be undone with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</li>
+</ul>
+<div class="note"><b class="l">NOT IN 0.2.16.0</b> Recording audio from a microphone, time-stretching samples, and separate stem exports aren't available yet.</div>
+</section>

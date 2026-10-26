@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 125] = [
+pub const VIEWS: [&str; 126] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -141,6 +141,7 @@ pub const VIEWS: [&str; 125] = [
     "record-idle",
     "record-playing",
     "record-metro-menu",
+    "help-menu",
     "record-countin",
     "record-lcd-master",
     "record-master",
