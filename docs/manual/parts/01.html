@@ -1,0 +1,55 @@
+<section class="ch" id="ch1">
+<p class="kicker">CHAPTER 01</p>
+<h2>Welcome and installing</h2>
+<p class="lead">ChipWave Studio is a free music studio for your computer. You arrange songs on a <b>Timeline</b> and play them with built-in synths, drum kits, a synthetic voice and samples. Generators write chords, melodies and bass lines with you, and a mixer with effects and a loudness meter gets the song ready to share. If you like old-school trackers, there's a Tracker under the hood too.</p>
+<p>It's open source (GPL-3.0-or-later), and it runs on Windows, macOS and Linux. There are no accounts, no subscriptions and no ads.</p>
+
+<div class="note"><b class="l">NEW IN 0.2.17.0</b>
+<ul>
+<li><b>This manual is built in:</b> <span class="ui">Help › User Manual</span>, or the button on the About page. No internet needed.</li>
+<li><b>Digital rain:</b> the About page appears out of falling code, straight away. Any key or click skips it.</li>
+<li><b>Exports end cleanly</b> at the end of your song, without the first row playing again.</li>
+</ul>
+Your songs open and play just as they did in 0.2.16.0.</div>
+
+<h3>Windows</h3>
+<ol class="plain">
+<li>Go to <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest">github.com/postmanpat-303/ChipWaveStudio/releases/latest</a>.</li>
+<li>Download <code>ChipWave-setup-x64.exe</code> (installer) or <code>ChipWave-windows-x64.zip</code> (portable: unzip it anywhere and run it).</li>
+<li>Run it. ChipWave isn't code-signed yet, so Windows SmartScreen may warn you. Click <span class="ui">More info</span>, then <span class="ui">Run anyway</span>.</li>
+</ol>
+
+<h3>macOS (Apple Silicon and Intel, macOS 11 or newer)</h3>
+<ol class="plain">
+<li>From the same releases page, download <code>ChipWave-macos-universal.dmg</code> (or the zip) and drag ChipWave into Applications.</li>
+<li>The app isn't notarised yet, so the first time, <b>Control-click</b> it and choose <span class="ui">Open</span>. If macOS still refuses, run this in Terminal:<br><code>xattr -dr com.apple.quarantine /Applications/ChipWave.app</code></li>
+<li>Shortcuts shown as <kbd>Ctrl</kbd> also work with <kbd>⌘ Cmd</kbd> (⌘S saves, ⌘Z undoes).</li>
+</ol>
+
+<h3>Linux</h3>
+<p>Build from source. Install Rust (from rustup.rs) and the ALSA development package (<code>libasound2-dev</code> on Debian and Ubuntu), then in the project folder run:</p>
+<pre>cargo run --release</pre>
+
+<h3>First start</h3>
+<p>ChipWave opens with a clean song on the Timeline. For a quick taste, choose <span class="ui">File › Demo songs</span>, pick one and press <kbd>Space</kbd>. The first time, ChipWave also offers to <b>find plugins</b>. You can scan automatically, choose folders, or skip (see chapter 11).</p>
+<div class="tip"><b class="l">UPDATES</b> <span class="ui">Help › Check for updates…</span> tells you when a new version is out. You can also turn on <span class="ui">Check for updates at startup</span> in <span class="ui">Settings › Files &amp; Safety</span>.</div>
+</section>
+
+<section class="ch" id="ch2">
+<p class="kicker">CHAPTER 02</p>
+<h2>Your first song in 10 minutes</h2>
+<p class="lead">This walk-through builds a short loop with drums, chords, bass and a melody, then exports it as an MP3. Don't worry about getting it "right": everything can be undone with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
+<ol class="steps">
+<li><b>Start fresh.</b> Choose <span class="ui">File › New</span> (<kbd>Ctrl</kbd>+<kbd>N</kbd>). You get an empty Timeline with only the <b>Song / Master</b> track. <span class="time">0:30</span></li>
+<li><b>Add drums.</b> Press <kbd>Ctrl</kbd>+<kbd>B</kbd> to show the <b>Browser</b>. On the <span class="ui">Instruments</span> tab, drag <b>Drum Kit</b> onto the empty Timeline. In the Drum Kit editor below, click <span class="ui">DICE KIT</span> until you like the sounds, paint a few steps, then click <span class="ui">ADD TO TRACK</span>. <span class="time">2:00</span></li>
+<li><b>Add a chord instrument.</b> Drag <b>WaveForge</b> (or <b>Synth</b>) from the Browser onto the Timeline. A new track appears. <span class="time">3:00</span></li>
+<li><b>Write chords.</b> Click <span class="ui">Chords…</span> under the tracks. Pick a <b>Style</b> (try <i>Synthwave</i>) and a <b>Key</b>, press <span class="ui">Preview</span>, and click <span class="ui">Another one</span> until it sounds good. Then click <span class="ui">Write to timeline</span>. <span class="time">5:00</span></li>
+<li><b>Add a bass line.</b> In the same generator panel, open the <b>Bass</b> tab, pick a style (for example <i>Octave pump</i>) and write it. It goes on a new "Bass" track. <span class="time">6:00</span></li>
+<li><b>Add a melody.</b> Open the <b>Melody</b> tab, try a few <span class="ui">Another one</span> rolls, and write it to a new "Melody" track. <span class="time">7:00</span></li>
+<li><b>Listen.</b> Press <kbd>Space</kbd> to play and stop. Press <kbd>L</kbd> to turn looping on or off, or Shift-drag the ruler to choose the loop. <span class="time">7:30</span></li>
+<li><b>Balance it.</b> Open the Mixer (<kbd>Ctrl</kbd>+<kbd>3</kbd> or the <span class="ui">MIX</span> tab) and pull the faders until nothing is too loud. The master limiter keeps peaks safe. <span class="time">8:30</span></li>
+<li><b>Save.</b> Press <kbd>Ctrl</kbd>+<kbd>S</kbd> and give your song a name. It's saved as a <code>.cwt</code> file. <span class="time">9:00</span></li>
+<li><b>Export.</b> Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>, choose <b>MP3</b> and click <span class="ui">Export</span>. Your song lands in <code>Music/ChipWave</code>. Done! <span class="time">10:00</span></li>
+</ol>
+<div class="tip"><b class="l">NO SOUND?</b> Check <span class="ui">Settings › Audio</span>: choose your output device and click <span class="ui">Play test tone</span>. Chapter 15 has more help.</div>
+</section>

@@ -127,7 +127,7 @@ pub struct Extra {
     #[serde(default = "yes")]
     pub open_in_timeline: bool,
     /// Settings › Look › Reduce motion: pie menus (the track pie) appear
-    /// and close without animation
+    /// and close without animation, and About opens without its rain
     #[serde(default)]
     pub reduce_motion: bool,
     /// Settings › Look › Pie menus: 0 Normal (30 % bigger than before 25

@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod about;
+mod aboutrain;
 mod action;
 pub(crate) use action::Action;
 #[cfg(test)]
@@ -93,6 +94,7 @@ mod lcd_tests;
 mod library;
 #[cfg(test)]
 mod looptransport_tests;
+mod manual;
 mod metroicon;
 mod midiimport;
 mod midiview;
@@ -398,6 +400,7 @@ pub struct App {
     show_help: bool,
     show_about: bool,
     about: about::AboutState,
+    manual: manual::ManualState,
     /// key events taken from egui before it can use them for focus navigation
     pending: Vec<egui::Event>,
     /// undo/redo keys pressed while a text field had focus: run next frame,
@@ -767,6 +770,7 @@ impl App {
             show_help: false,
             show_about: false,
             about: Default::default(),
+            manual: Default::default(),
             pending: vec![],
             deferred_keys: vec![],
             mouse_since_commit: false,
@@ -1135,6 +1139,7 @@ impl eframe::App for App {
 
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         self.shot_input(raw);
+        self.about_rain_skip(raw);
         // While no text field is being edited, the pattern editor owns the keyboard:
         // take key events away from egui (so Tab/arrows don't move widget focus).
         if let Some(log) = &mut self.key_log {

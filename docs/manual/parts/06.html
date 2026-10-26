@@ -1,0 +1,62 @@
+<section class="ch" id="ch6">
+<p class="kicker">CHAPTER 06</p>
+<h2>Instruments and sounds</h2>
+<p class="lead">Every sound in ChipWave is made inside the app. There are synths, drum machines, a synthetic voice and sample players, and none of them need anything else installed.</p>
+
+<h3>Finding a sound</h3>
+<p>Open the Browser (<kbd>Ctrl</kbd>+<kbd>B</kbd>) and pick the <span class="ui">Instruments</span> tab. Drag an instrument onto the Timeline to make a new track with it, or onto a track header to make that track play it. Press <span class="ui">Preview</span> at the bottom of the Browser to hear a sound first. The round track menu’s <span class="ui">Add › Instrument ›</span> ring makes a new track with a built-in instrument.</p>
+<table class="wide">
+<tr><th style="width:24%">Instrument</th><th>What it is</th></tr>
+<tr><td><b>WaveForge</b></td><td>A two-oscillator polyphonic synth for leads, pads and chords.</td></tr>
+<tr><td><b>Synth</b></td><td>ChipWave’s original synth: oscillator with unison, filter, envelopes and modulation.</td></tr>
+<tr><td><b>StringWave</b></td><td>A string ensemble with layers, a sub and a drone.</td></tr>
+<tr><td><b>Analog</b></td><td>A Moog-style voice: three oscillators, noise, ladder filter and glide.</td></tr>
+<tr><td><b>FM-4</b></td><td>Four-operator FM with 8 algorithms, for bells, keys and basses.</td></tr>
+<tr><td><b>Wavetable</b></td><td>A wavetable synth (supersaws, vowel basses, glassy keys).</td></tr>
+<tr><td><b>Grid</b></td><td>A modular patch you can wire up yourself.</td></tr>
+<tr><td><b>Noise</b></td><td>Risers, downlifters, impacts and textures.</td></tr>
+<tr><td><b>Chip FX</b></td><td>Retro game sound effects (based on sfxr).</td></tr>
+<tr><td><b>Drum Synth</b></td><td>Six kinds of synthesized drum, each with several models and eight macros.</td></tr>
+<tr><td><b>Drum Kit</b></td><td>Up to 32 drum pads with a step sequencer (see below).</td></tr>
+<tr><td><b>Voice</b></td><td>A synthetic voice that sings vowels, babbles and speaks words, with no recordings needed.</td></tr>
+<tr><td><b>Sample</b></td><td>Plays a WAV or other audio file you import (see below).</td></tr>
+</table>
+
+<h3>The Rack and the instrument editor</h3>
+<figure><img src="img/rack.png" alt="The Rack"><figcaption>The <span class="ui">Rack</span> side of the lower panel (<kbd>Ctrl</kbd>+<kbd>7</kbd>): the track's instrument card, then its effects.</figcaption></figure>
+<p>Click a track and its sound appears in the <b>Rack</b>: the instrument first, then its effects from left to right. The card shows the most useful knobs and a <span class="ui">Preset</span> menu. Click <span class="ui">Advanced ›</span> for the full editor.</p>
+<figure><img src="img/instr_tl.png" alt="Instrument editor"><figcaption>The instrument editor (<kbd>Ctrl</kbd>+<kbd>I</kbd>): macros on top, then Sound, Filter and Envelope.</figcaption></figure>
+<ul>
+<li><b>Macros</b> are big friendly knobs such as Bright, Width, Attack, Release, Motion and Drive. Each one moves several settings at once.</li>
+<li><span class="ui">ADVANCED ›</span> has the <b>Main</b>, <b>Modulation</b>, <b>FX</b> and <b>Advanced</b> tabs. <kbd>Ctrl</kbd>+<kbd>F</kbd> searches the instrument's parameters.</li>
+<li><b>A / B</b> compares two versions. B starts as a copy of A, so edit one, then switch to hear the other.</li>
+<li>Right-click any knob to <span class="ui">Reset to default</span>, <span class="ui">Add automation lane</span>, <span class="ui">MIDI learn</span> it or <span class="ui">Modulate with ›</span>.</li>
+<li>In the Rack, click a card to select it. <kbd>Del</kbd> removes it, <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates it and <kbd>0</kbd> bypasses it. Drag a title to reorder.</li>
+</ul>
+
+<h3>Drum Kit</h3>
+<figure><img src="img/drumkit.png" alt="Drum Kit editor"><figcaption>The Drum Kit editor: the step sequencer on the left, and pads on the right.</figcaption></figure>
+<ul>
+<li><span class="ui">Kits…</span> has 13 ready kits: Psy, 808, 909, Techno, Trap, Lo-fi, Chip, Acoustic-ish, Disco, Latin, DnB, Synthwave and Dembow. <span class="ui">DICE KIT</span> rolls brand-new sounds for every pad.</li>
+<li>Click the grid to paint steps, and use the velocity lane underneath for accents. Choose <span class="ui">STEPS</span> 16 / 32 / 64, add <span class="ui">Swing</span>, and press <span class="ui">PLAY LOOP</span> to hear it.</li>
+<li><span class="ui">+ NEW</span> and <span class="ui">DUP</span> make more patterns. <span class="ui">ADD TO TRACK</span> puts the pattern on the Timeline (the line above the grid tells you where). <span class="ui">UNIQUE</span> unlinks a copied pattern, and <span class="ui">CLEAR</span> empties it.</li>
+<li>The side tabs: <b>Pads</b> (click to hear and select, <span class="ui">+ ADD PAD</span> up to 32), <b>Sound</b> (edit the selected pad), <b>Generate</b> (a new groove by style, energy and fill) and <b>Round Robin</b> (small changes on each hit).</li>
+</ul>
+
+<h3>Voice</h3>
+<figure><img src="img/voice.png" alt="Voice instrument"><figcaption>The Voice instrument with the <i>Glitch Babble</i> preset.</figcaption></figure>
+<p>Voice makes synthetic "ahh, eee, ohh" vowels, babble, chops, stutters and even spoken words. Try the presets, then shape the sound with <b>Formant</b>, <b>Breath</b>, <b>Babble</b> and the <b>Register</b> menu. The Tract menu switches between <b>Formant</b> and <b>Throat</b> modes.</p>
+
+<h3>Samples</h3>
+<ul>
+<li>Import WAV (and other audio files) from the Browser's <span class="ui">Samples</span> tab or the Sample view (<kbd>Ctrl</kbd>+<kbd>5</kbd>). WAV, FLAC, MP3 and OGG files work.</li>
+<li><b>Slice</b> a loop by <b>Transients</b> (hits) or into an even <b>Grid</b> of 2–64 pieces. Alt+click adds a slice and right-click removes one. <span class="ui">To instruments</span> makes each slice its own sound.</li>
+</ul>
+
+<h3>Racks, presets and the library</h3>
+<ul>
+<li>A <b>rack</b> is one instrument made of up to four instruments that play together. Right-click an instrument card › <span class="ui">Make rack</span>, and use <span class="ui">Save rack…</span> to keep it in <b>My Racks</b> for any song.</li>
+<li><span class="ui">File › Instrument library…</span> holds your saved sounds. <span class="ui">Import instrument (.cwi)…</span> and <span class="ui">Export instrument (.cwi)…</span> share single instruments.</li>
+<li>Generators such as the Drum Synth and Drum Kit have <b>Dice</b> (roll new random settings), <b>Mutate</b> (nudge them a little) and <b>lock</b> (keep a knob as it is). Every roll has a seed, so you can get it back.</li>
+</ul>
+</section>

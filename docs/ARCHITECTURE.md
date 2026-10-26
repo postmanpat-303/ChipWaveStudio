@@ -121,7 +121,9 @@ and a `automation::Target` (the same knob as a small enum, used at run time).
   don't use the feature keep writing their old version.
 - Old songs must render bit-identically: the fingerprint test
   `render_hashes` (`src/render_hashes.rs`) renders every demo and fixture
-  (`tests/fixtures/`); its hashes must not change.
+  (`tests/fixtures/`); its hashes must not change. (They changed once, on
+  purpose, when render/export stopped replaying row 0 after the song end:
+  see the CHANGELOG. Everything before the end stayed bit-identical.)
 - App preferences (not songs) live in `src/settings.rs` (`settings.toml`);
   keyboard shortcuts in `src/keymap.rs` (`keymap.toml`).
 
