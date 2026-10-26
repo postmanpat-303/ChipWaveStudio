@@ -42,6 +42,7 @@ mod chipfx;
 mod chordgen;
 mod chords;
 mod credits;
+mod ctlmap;
 mod drives;
 mod drumkit;
 mod drumpat;
