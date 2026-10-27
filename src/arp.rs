@@ -299,6 +299,16 @@ impl Param {
         Param::Octaves,
         Param::Humanise,
     ];
+    /// the target id's last part
+    pub fn key(self) -> &'static str {
+        match self {
+            Param::Rate => "rate",
+            Param::Gate => "gate",
+            Param::Swing => "swing",
+            Param::Octaves => "octaves",
+            Param::Humanise => "humanise",
+        }
+    }
     pub fn name(self) -> &'static str {
         match self {
             Param::Rate => "Arp rate",
@@ -318,6 +328,17 @@ impl Param {
             Param::Humanise => a.humanise,
         }
         .clamp(0.0, 1.0)
+    }
+    /// set the Arp's own value from normalised `v` (a knob, a learned CC)
+    pub fn set(self, a: &mut Arp, v: f32) {
+        let v = v.clamp(0.0, 1.0);
+        match self {
+            Param::Rate => a.set_rate_index((v * (RATES.len() - 1) as f32).round() as usize),
+            Param::Gate => a.gate = 0.05 + v * 0.95,
+            Param::Swing => a.swing = v,
+            Param::Octaves => a.octaves = 1 + (v * 3.0).round() as u8,
+            Param::Humanise => a.humanise = v,
+        }
     }
     /// add the offset that takes `a` to normalised value `v`
     pub fn apply(self, a: &Arp, v: f32, m: &mut Mods) {
@@ -343,6 +364,24 @@ impl Param {
             Param::Octaves => format!("{}", 1 + (v * 3.0).round() as u8),
         }
     }
+}
+
+/// the modulation of instrument `i`'s Arp `a`: the song key mask `key`
+/// and the automated / modulated Arp values `over` (instrument, param,
+/// normalised value)
+pub fn mods_for(a: &Arp, i: usize, key: u16, over: &[(usize, usize, f32)]) -> Mods {
+    let mut m = Mods {
+        key,
+        ..Default::default()
+    };
+    for &(ii, k, v) in over {
+        if ii == i {
+            if let Some(p) = Param::ALL.get(k) {
+                p.apply(a, v, &mut m);
+            }
+        }
+    }
+    m
 }
 
 /// Euclidean rhythm (Bjorklund / Toussaint 2005): `hits` onsets spread as
@@ -1036,6 +1075,15 @@ pub fn bake(
 }
 
 /// the starting patterns: (name, settings)
+/// the named preset (melodic first, then the drum ones)
+pub fn preset(name: &str) -> Option<Arp> {
+    presets(false)
+        .into_iter()
+        .chain(presets(true))
+        .find(|p| p.0 == name)
+        .map(|p| p.1)
+}
+
 pub fn presets(kit: bool) -> Vec<(&'static str, Arp)> {
     let base = Arp::default();
     let with = |f: &dyn Fn(&mut Arp)| {

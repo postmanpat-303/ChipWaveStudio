@@ -129,6 +129,12 @@ pub fn get(song: &Song, t: Target) -> Option<Knob> {
                 k.choice = !info.choices.is_empty();
             }
         }
+        Target::Arp(i, p) => {
+            inst(i)?.arp.as_ref()?;
+            k.owner = Owner::Instrument(i);
+            k.device = Some("Arp".into());
+            k.name = crate::arp::Param::ALL.get(p)?.name().to_string();
+        }
         Target::Ret(r, p) => {
             song.mixer.returns.get(r)?;
             let info = crate::fx::params(ret_kind(r)).get(p)?;
@@ -321,6 +327,13 @@ pub fn set_norm(song: &mut Song, t: Target, n: f32) -> bool {
         Target::ModAmount(k) => match song.modulation.routes.get_mut(k) {
             Some(r) => r.amount = real,
             None => return false,
+        },
+        Target::Arp(i, k) => match (
+            song.instruments.get_mut(i).and_then(|x| x.arp.as_mut()),
+            crate::arp::Param::ALL.get(k),
+        ) {
+            (Some(a), Some(p)) => p.set(a, n),
+            _ => return false,
         },
     }
     true

@@ -190,6 +190,7 @@ impl App {
             | Target::Fx(i, ..)
             | Target::Macro(i, _)
             | Target::Gen(i, _)
+            | Target::Arp(i, _)
             | Target::Patch(i, _) => {
                 let slot = (i + 1) as u8;
                 let by_flag = self.with(|s| {
