@@ -425,7 +425,7 @@ fn length_32_shows_all_32_steps_on_a_laptop() {
         "{w16} -> {card:?}"
     );
     assert!(card.right() <= 1366.5 && card.bottom() <= 768.5, "{card:?}");
-    assert!(crate::theme::ts::TINY >= 10.0);
+    const { assert!(crate::theme::ts::TINY >= 10.0) };
     let rows = h.state().dev.arp_rows;
     let x32 = rows[3].left() + LABEL_W + 31.0 * COL_W + COL_W / 2.0;
     assert!(x32 < card.right(), "step 32 at {x32} past {card:?}");
