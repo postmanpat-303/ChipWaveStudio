@@ -328,6 +328,7 @@ impl Chan {
 mod audioclips;
 pub mod launch;
 mod layers;
+mod livearp;
 pub mod metro;
 mod notes;
 pub mod patprev;
@@ -425,6 +426,9 @@ pub struct AutoState {
     ret: Vec<(usize, usize, f32)>,
     /// automated plugin macros (instrument, macro 0-7, normalised value)
     macros: Vec<(usize, usize, f32)>,
+    /// automated / modulated Arp parameters (instrument, `arp::Param`
+    /// index, normalised value)
+    pub(super) arp: Vec<(usize, usize, f32)>,
     /// automated generator knobs per instrument (`< 0` = patch value);
     /// resized only when the instrument count changes
     gen: Vec<[f32; crate::gen::GEN_KNOBS]>,
@@ -495,6 +499,8 @@ pub struct Engine {
     pub test_tone: u32,
     tone_ph: f32,
     live: Live,
+    /// the Arp on live keys (src/engine/livearp.rs)
+    larp: livearp::LiveArp,
     /// master true-peak limiter and loudness meter (src/master.rs)
     lim: crate::master::Limiter,
     meter: crate::master::Loudness,
@@ -611,6 +617,7 @@ impl Engine {
                 fx: Vec::with_capacity(FX_OVER_CAP),
                 ret: Vec::with_capacity(FX_OVER_CAP),
                 macros: Vec::with_capacity(FX_OVER_CAP),
+                arp: Vec::with_capacity(FX_OVER_CAP),
                 pend: Vec::with_capacity(PEND_CAP),
                 mod_amt: vec![f32::NAN; crate::modulation::MAX_ROUTES],
                 ..Default::default()
@@ -624,6 +631,7 @@ impl Engine {
             test_tone: 0,
             tone_ph: 0.0,
             live: Live::new(),
+            larp: livearp::LiveArp::new(),
             plugins: crate::plugin::Rack::new(),
             strings: crate::strings::rack::Rack::new(sr),
             fx_plugins: crate::plugin::fxrack::FxRack::new(),
@@ -703,8 +711,16 @@ impl Engine {
         }
     }
 
-    /// Apply one live MIDI event (allocation-free).
+    /// Apply one live MIDI event (allocation-free): keys on an instrument
+    /// with an Arp go to the Arp.
     pub fn live_event(&mut self, song: &Song, ev: crate::midi::LiveEv) {
+        if !self.larp_take(song, ev) {
+            self.live_event_raw(song, ev);
+        }
+    }
+
+    /// one live event, straight to the instruments
+    fn live_event_raw(&mut self, song: &Song, ev: crate::midi::LiveEv) {
         use crate::midi::LiveEv;
         if let LiveEv::On {
             key,
@@ -922,7 +938,10 @@ impl Engine {
                         .filter(|v| v.active && v.down && v.key == key)
                 {
                     v.down = false;
-                    if lv.sustain {
+                    // the Arp's own notes end on their step, pedal or not
+                    let arp_out =
+                        (livearp::OUT_BASE..livearp::OUT_BASE + livearp::OUTS as u8).contains(&key);
+                    if lv.sustain && !arp_out {
                         v.held_by_pedal = true;
                     } else {
                         v.synth.amp.release();
@@ -1047,6 +1066,9 @@ impl Engine {
         self.held = 0;
         self.tl_span = None;
         self.nv.lmask = 0;
+        // tracker cells held in an Arp from the last play let go
+        let tm = std::mem::take(&mut self.nv.tmask);
+        self.nv.release_where(&mut self.plugins, tm);
         // rack layer voices exist before the first note (never while playing)
         self.nv.layers.ensure(song);
         // audio clips still fading from the last play end now
@@ -1131,6 +1153,9 @@ impl Engine {
                             (row as i64 * crate::timeline::ROW) as f64
                         };
                         self.nv.seek(&p, t);
+                        let nch = song.channels.min(MAX_CHANNELS);
+                        let jump = !self.playing;
+                        notes::arp_resync(&mut self.nv, &p, song, &mut self.chans, nch, t, jump);
                         // audio voices of unchanged clips play on; new
                         // clips under the playhead start (not while
                         // `start` sets up: it seeks right after)
@@ -1385,6 +1410,7 @@ impl Engine {
         for v in &mut self.live.v {
             v.active = false;
         }
+        self.larp.reset();
         self.nv.silence();
         self.av.silence();
         self.plugins.panic();
@@ -1439,6 +1465,7 @@ impl Engine {
         self.metro.cancel();
         self.cue = None;
         self.nv.lmask = 0;
+        self.nv.tmask = 0;
         self.nv.release_all(&mut self.plugins);
         self.av.release_all();
         self.plugins.all_off();
@@ -1526,6 +1553,10 @@ impl Engine {
         } else {
             self.chans[ch].instr
         };
+        // an instrument with an Arp: the cell goes to its stepper
+        if self.arp_cell(song, ch, cell, ci) {
+            return;
+        }
         // Voice patch stutter: every note repeats its first slice
         let auto_stut = match song.instruments.get(ci).map(|i| &i.kind) {
             Some(InstrumentKind::Voice(vp)) if vp.stutter_len > 0.0 && vp.stutter_repeats > 0 => {
@@ -1907,6 +1938,7 @@ impl Engine {
                 jump = true;
             }
             self.tl.row = next;
+            self.arp_cap();
             if jump {
                 self.tl_cursors(next);
                 self.notes_jump(song, next, false);
@@ -2074,6 +2106,7 @@ impl Engine {
         a.fx.clear();
         a.ret.clear();
         a.macros.clear();
+        a.arp.clear();
         a.pend.clear();
         a.send = [[None; 2]; MAX_CHANNELS];
         let ni = song.instruments.len();
@@ -2097,6 +2130,8 @@ impl Engine {
         if !lanes && !modded {
             a.patches.iter_mut().for_each(|p| *p = None);
             a.vals.clear();
+            self.nv.arp_key = song.info.key.map_or(0, |k| k.mask());
+            self.nv.arp_over.clear();
             return;
         }
         if modded {
@@ -2203,6 +2238,7 @@ impl Engine {
                 }
                 Target::Send(c, b) if c < MAX_CHANNELS && b < 2 => a.send[c][b] = Some(real),
                 Target::Macro(i, m) if a.macros.len() < FX_OVER_CAP => a.macros.push((i, m, real)),
+                Target::Arp(i, k) if a.arp.len() < FX_OVER_CAP => a.arp.push((i, k, real)),
                 Target::Gen(i, k) if i < a.gen.len() && k < crate::gen::GEN_KNOBS => {
                     a.gen[i][k] = real;
                     a.gen_on[i] = true;
@@ -2215,6 +2251,11 @@ impl Engine {
                 *p = None;
             }
         }
+        // the Arps' modulation and the song key (scale lock)
+        self.nv.arp_key = song.info.key.map_or(0, |k| k.mask());
+        self.nv.arp_over.clear();
+        let n = self.auto.arp.len().min(self.nv.arp_over.capacity());
+        self.nv.arp_over.extend_from_slice(&self.auto.arp[..n]);
     }
 
     /// Track and clip lanes at timeline row `pos` (innermost wins: a later
@@ -2503,7 +2544,7 @@ impl Engine {
             }
             self.live.rx = Some(rx);
         }
-        let live_on = self.live.v.iter().any(|v| v.active);
+        let live_on = self.live.v.iter().any(|v| v.active) || self.larp.active;
         // drum-pattern preview: aligned with the transport once per callback
         let pp_on = self.patprev.is_some();
         let pp_rate = self.pp_begin(song);
@@ -2570,6 +2611,9 @@ impl Engine {
                 stgt = self.send_targets(song);
             }
             self.auto.countdown -= 1;
+            if self.larp.active {
+                self.larp_tick(song);
+            }
             if self.playing {
                 // a tick lands on the first sample at or after its exact time
                 // (f64 accumulator: no drift, at most 1 sample of rounding)
@@ -2578,6 +2622,18 @@ impl Engine {
                     self.do_tick(song);
                 }
                 self.samples_to_tick -= 1.0;
+                if self.nv.tmask != 0 && self.playing {
+                    let lc = self.launch_clock();
+                    notes::tracker_arp(
+                        &mut self.nv,
+                        &mut self.mods.feed,
+                        song,
+                        &mut self.chans,
+                        &mut self.plugins,
+                        nch,
+                        lc,
+                    );
+                }
                 if let Some(p) = note_plan.as_deref() {
                     if self.playing && self.tl.on {
                         let t = self.tl_clock();
@@ -3247,6 +3303,7 @@ mod tests {
             song.channels = 1;
             song.patterns = vec![Pattern::new("b", ROWS, 1)];
             song.instruments = vec![Instrument {
+                arp: None,
                 name: "s".into(),
                 volume: 1.0,
                 transpose: 0,

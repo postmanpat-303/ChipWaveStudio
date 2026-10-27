@@ -217,6 +217,7 @@ fn kit_song(g: GenPatch) -> Vec<u32> {
     s.mixer.channels.resize(2, Default::default());
     let key = snare_key(&g);
     s.instruments.push(Instrument {
+        arp: None,
         name: "Kit".into(),
         volume: 0.8,
         transpose: 0,

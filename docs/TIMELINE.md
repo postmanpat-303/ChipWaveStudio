@@ -31,7 +31,7 @@ The toolbar shows which mode the song is in:
 |---|---|
 | Select | Click a clip. **Ctrl-click** or **Shift-click** adds or removes clips. Drag on empty space for a **box** selection (with Ctrl/Shift it adds). **Ctrl+A** selects every clip, **Esc** clears |
 | Move | Drag a clip (the whole selection moves, across tracks too). Moves snap to the grid by the clip's start. Hold **Shift** for single rows |
-| Copy | **Alt-drag**: copies follow the mouse and the originals stay. **Ctrl+D** duplicates the selection right after itself. Copies are **linked**: they play the same block, so editing the block changes all of them |
+| Copy | **Ctrl-drag**: independent copies (their own notes or block, as Ctrl+C / Ctrl+V) are made when the drag starts and follow the mouse; the originals stay. The pointer shows a copy cursor and a **+** badge. Ctrl counts at the start of the drag only. Copies snap like a move and can go to another track of the same kind (note and Tracker clips not onto audio tracks, audio clips only onto audio tracks; otherwise they keep their tracks). One undo step, *Duplicate clip*. **Alt-drag** makes **linked** copies (they play the same block, so editing the block changes all of them; undo step *Copy clip*). **Ctrl+D** duplicates the selection right after itself (linked) |
 | Overlaps | Moving or duplicating clips never asks: clips you move over are outlined **red** while you drag, and the status line says what plays there (of overlapping Tracker clips the one that starts later; note and audio clips play together). Drops from the Clip Arranger or the Browser show a preview and ask before covering anything (see [CLIP_ARRANGER.md](CLIP_ARRANGER.md#dropping-a-slot)) |
 | Make unique | **Ctrl+Shift+D**: the clip gets its own copy of its block ("Groove copy"), so editing it no longer changes the others |
 | Resize / loop | Drag a clip's **right edge**. Past the end of its block the block repeats (notches show each repeat) |
@@ -47,6 +47,13 @@ The toolbar shows which mode the song is in:
 
 Each gesture is one undo step (a drag records when you let go). The status line shows the position while dragging.
 
+### Loop region on the ruler
+- **Shift-drag** the ruler to draw a new loop region (it switches looping on).
+- **Drag an end** of the region to resize it: the pointer turns into a resize arrow and the end lights up. Ends snap to the grid; hold **Alt** (or Shift) for single rows. The region is never shorter than one grid step, and dragging an end past the other one swaps them cleanly. Undo step *Resize loop*.
+- **Drag the band** (the bar along the bottom of the ruler) to move the region with its length kept: grab cursor, snaps by its start. Undo step *Move loop*.
+- **Double-click the band** to select the clips in the loop.
+- Playback and exporting the loop region use the region as it is now.
+
 ### Snap
 The **snap** menu in the toolbar: **Auto** (bar, beat or row, whichever is at least about 10 pixels wide at this zoom), **Bar**, **Beat** or **Row**. Hold **Shift** while dragging for rows. The ruler snaps to the same grid (**Alt** = exact row).
 
@@ -55,8 +62,9 @@ What the modifiers do differs a little between the things you can drag (this is 
 
 | Dragging | Plain drag | Shift | Alt |
 |---|---|---|---|
-| Clips (move, edges) | the snap grid | rows | Alt-drag copies |
+| Clips (move, edges) | the snap grid | rows | Alt-drag: linked copies (Ctrl-drag: independent copies) |
 | Ruler (play marker) | the snap grid | Shift-drag sets the loop region | the exact row |
+| Loop region ends and band (ruler) | the snap grid | rows | rows |
 | Fade handles (audio clips) | free | rows | – |
 | Automation points | rows | free | Alt-drag a segment bends it |
 | Piano-roll notes | the roll's snap menu | Shift+click / Shift-drag add to the selection | – |

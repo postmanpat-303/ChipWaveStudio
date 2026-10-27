@@ -17,8 +17,11 @@ pub(super) enum DragEdit {
     Start(u32, Tick),
     /// marker index to tick
     Marker(usize, Tick),
-    /// loop region from, to
+    /// loop region from, to (Shift-drag: a new region, switched on)
     Loop(Tick, Tick),
+    /// loop region to exactly (from, to), on / off as it was (its edges or
+    /// band dragged)
+    LoopSet(Tick, Tick),
     /// audio clip id's fade in (true) / out handle to tick
     Fade(u32, bool, Tick),
 }
@@ -28,7 +31,8 @@ impl App {
         let Some(d) = self.tlv.drag.as_mut() else {
             return;
         };
-        let mut t = d.origin.clone();
+        let base = d.origin.clone();
+        let mut t = base.clone();
         let sels = self.tlv.sels.clone();
         let mut moved = false;
         let mut over = vec![];
@@ -36,8 +40,18 @@ impl App {
         let what = self.with(|s| {
             match e {
                 DragEdit::Move(dt, dtr) => {
-                    moved = dt != 0 || dtr != 0;
                     tl::move_clips(&mut t, &sels, dt, dtr, nch);
+                    // only onto tracks of their kind (audio on audio tracks,
+                    // notes and blocks on the others): else they keep their
+                    // tracks and move in time only
+                    let dtr = if dtr != 0 && !tl::all_fit(&t, &sels) {
+                        t = base.clone();
+                        tl::move_clips(&mut t, &sels, dt, 0, nch);
+                        0
+                    } else {
+                        dtr
+                    };
+                    moved = dt != 0 || dtr != 0;
                 }
                 DragEdit::End(id, at) => {
                     tl::set_end(&s.song, &mut t, id, at);
@@ -56,6 +70,10 @@ impl App {
                 DragEdit::Loop(a, b) => {
                     tl::set_loop(&mut t, a, b);
                     moved = true;
+                }
+                DragEdit::LoopSet(a, b) => {
+                    tl::set_loop_range(&mut t, a, b);
+                    moved = t.loop_range != base.loop_range;
                 }
                 DragEdit::Fade(id, inn, at) => {
                     if let Some(c) = t.clips.iter().find(|c| c.id == id) {
@@ -86,8 +104,18 @@ impl App {
             d.moved |= moved;
             let n = sels.len().max(1);
             named = match d.kind {
-                DragKind::Move { dup: false } => Some(Action::MoveClips(n)),
-                DragKind::Move { dup: true } => Some(Action::CopyClips(n)),
+                DragKind::Move { dup: false, .. } => Some(Action::MoveClips(n)),
+                DragKind::Move {
+                    dup: true,
+                    own: false,
+                } => Some(Action::CopyClips(n)),
+                DragKind::Move {
+                    dup: true,
+                    own: true,
+                } => Some(Action::DuplicateClips(n)),
+                DragKind::Loop(_) => Some(Action::SetLoop),
+                DragKind::LoopEdge(_) => Some(Action::ResizeLoop),
+                DragKind::LoopMove => Some(Action::MoveLoop),
                 DragKind::End(_) | DragKind::Start(_) => Some(Action::ResizeClip),
                 DragKind::Fade(..) => Some(Action::FadeClip),
                 _ => None,
@@ -113,13 +141,17 @@ impl App {
         let Some(d) = self.tlv.drag.take() else {
             return;
         };
-        let undo_copy = matches!(d.kind, DragKind::Move { dup: true }) && !d.moved;
+        let undo_copy = matches!(d.kind, DragKind::Move { dup: true, .. }) && !d.moved;
         let marker = matches!(d.kind, DragKind::Marker(_));
         if undo_copy || marker {
             self.with(|s| {
                 if undo_copy {
                     if let Some(b) = d.before.clone() {
                         s.song.timeline = Some(Box::new(b));
+                    }
+                    // a Ctrl-copy's own blocks go with it
+                    if let Some(n) = d.blocks {
+                        s.song.patterns.truncate(n);
                     }
                 }
                 if let Some(t) = s.song.timeline.as_deref_mut() {
@@ -160,6 +192,44 @@ impl App {
 
     /// Run a timeline edit. In tracker mode it asks to switch first (the
     /// edit runs after the switch).
+    /// "Bake Arp to notes" on the selected clips (one undo step)
+    pub(crate) fn tl_bake_arp(&mut self, sels: &[u32]) {
+        let slots: Vec<u8> = self.with(|s| {
+            let mut v: Vec<u8> = vec![];
+            for &id in sels {
+                for k in tl::arp_slots(&s.song, id) {
+                    if !v.contains(&k) {
+                        v.push(k);
+                    }
+                }
+            }
+            v
+        });
+        if slots.is_empty() {
+            self.status = "Bake Arp: the selected clips don't play through an Arp".into();
+            return;
+        }
+        let mut clips = 0;
+        let mut notes = 0;
+        for k in slots {
+            let r = self.with(|s| {
+                let r = tl::bake_arp(&mut s.song, k);
+                let Shared { song, engine, .. } = s;
+                engine.ensure_plan(song);
+                r
+            });
+            if let Some((a, c, n)) = r {
+                self.dev.arp_stash.insert(k as usize - 1, a);
+                clips += c;
+                notes += n;
+            }
+        }
+        self.status = format!(
+            "Baked the Arp into {clips} clip{}: {notes} notes you can edit; the Arp is off (its settings come back if you switch it on; Ctrl+Z undoes)",
+            if clips == 1 { "" } else { "s" }
+        );
+    }
+
     pub(crate) fn tl_apply(&mut self, op: TlOp) {
         if matches!(op, TlOp::Copy | TlOp::Cut) {
             return self.tl_copy(op == TlOp::Cut);
@@ -174,6 +244,7 @@ impl App {
                 | TlOp::Mute
                 | TlOp::MakeUnique
                 | TlOp::UseTrackInstr
+                | TlOp::BakeArp
                 | TlOp::Glue
                 | TlOp::LoopFromSelection
         );
@@ -186,6 +257,9 @@ impl App {
         if !mode {
             self.tlv.ask_switch = Some(Some(op));
             return;
+        }
+        if op == TlOp::BakeArp {
+            return self.tl_bake_arp(&sels);
         }
         if let TlOp::DrumPattern { pat, track, at } = op {
             self.pat_place_now(pat as usize, track, at);
@@ -251,7 +325,7 @@ impl App {
                         )
                     }
                 }
-                TlOp::SplitArm | TlOp::Copy | TlOp::Cut => String::new(),
+                TlOp::SplitArm | TlOp::Copy | TlOp::Cut | TlOp::BakeArp => String::new(),
                 TlOp::Duplicate => {
                     let t = song.timeline.as_deref_mut().unwrap();
                     let ids = tl::duplicate(t, &sels);
@@ -795,7 +869,9 @@ fn describe(t: &tl::Timeline, e: DragEdit) -> String {
         DragEdit::End(_, x) => format!("Clip end: {}", at(x)),
         DragEdit::Start(_, x) => format!("Clip start: {}", at(x)),
         DragEdit::Marker(_, x) => format!("Marker: {}", at(x)),
-        DragEdit::Loop(a, b) => format!("Loop: {} to {}", at(a.min(b)), at(a.max(b))),
+        DragEdit::Loop(a, b) | DragEdit::LoopSet(a, b) => {
+            format!("Loop: {} to {}", at(a.min(b)), at(a.max(b)))
+        }
         DragEdit::Fade(id, inn, _) => {
             let c = t.clips.iter().find(|c| c.id == id);
             let len = c.map_or(0, |c| if inn { c.fade_in } else { c.fade_out });

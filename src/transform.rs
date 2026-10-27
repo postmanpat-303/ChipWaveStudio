@@ -1120,6 +1120,7 @@ mod features {
         let mut p = crate::voice::preset(preset).unwrap();
         p.base.name = preset.into();
         let i = Instrument {
+            arp: None,
             name: preset.into(),
             volume: vol,
             transpose: 0,

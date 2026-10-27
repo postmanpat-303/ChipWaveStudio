@@ -569,6 +569,7 @@ mod features {
     fn voice(s: &mut Song, preset: &str, vol: f32) -> u8 {
         let p = crate::voice::preset(preset).unwrap();
         let i = Instrument {
+            arp: None,
             name: preset.into(),
             volume: vol,
             transpose: 0,
@@ -644,6 +645,7 @@ mod features {
         let mut slots = vec![];
         for (k, &(a, b)) in bounds.iter().enumerate() {
             let i = Instrument {
+                arp: None,
                 name: format!("Break {:02}", k + 1),
                 volume: 0.9,
                 transpose: 0,

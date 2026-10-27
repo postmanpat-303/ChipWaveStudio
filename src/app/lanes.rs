@@ -15,6 +15,9 @@ pub(crate) struct LaneMenu {
     pub(super) nl: usize,
     gens: Vec<Vec<(usize, String)>>,
     plugs: Vec<bool>,
+    /// instruments with an Arp (its rate / gate / swing / octaves /
+    /// humanise are lane targets)
+    arps: Vec<bool>,
     routes: Vec<(usize, String)>,
 }
 
@@ -190,6 +193,7 @@ impl App {
             | Target::Fx(i, ..)
             | Target::Macro(i, _)
             | Target::Gen(i, _)
+            | Target::Arp(i, _)
             | Target::Patch(i, _) => {
                 let slot = (i + 1) as u8;
                 let by_flag = self.with(|s| {
@@ -465,6 +469,8 @@ impl App {
                 .map(|i| matches!(i.kind, InstrumentKind::Plugin(_)))
                 .collect()
         });
+        let arps: Vec<bool> =
+            self.with(|s| s.song.instruments.iter().map(|i| i.arp.is_some()).collect());
         let routes = self.with(|s| {
             let m = &s.song.modulation;
             m.routes
@@ -490,6 +496,7 @@ impl App {
             nl,
             gens,
             plugs,
+            arps,
             routes,
         }
     }
@@ -643,6 +650,7 @@ pub(super) fn lane_menu_ui(
         nch,
         gens,
         plugs,
+        arps,
         routes,
         ..
     } = m;
@@ -679,6 +687,9 @@ pub(super) fn lane_menu_ui(
                     Target::Drive(i),
                     Target::Level(i),
                 ];
+            }
+            if arps.get(i).copied().unwrap_or(false) {
+                ts.extend((0..crate::arp::Param::ALL.len()).map(|k| Target::Arp(i, k)));
             }
             for t in ts {
                 let txt = match t {

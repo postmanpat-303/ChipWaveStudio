@@ -197,6 +197,7 @@ impl App {
         let inst = match kit {
             Some(k) => crate::drumpat::drumkit_instrument(k),
             None => b.make().map(|(name, kind)| Instrument {
+                arp: None,
                 name,
                 volume: 0.8,
                 transpose: 0,
@@ -270,6 +271,7 @@ impl App {
         let inst = match kit {
             Some(k) => crate::drumpat::drumkit_instrument(k),
             None => b.make().map(|(name, kind)| Instrument {
+                arp: None,
                 name,
                 volume: 0.8,
                 transpose: 0,

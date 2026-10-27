@@ -2080,6 +2080,7 @@ pub(super) fn loop_instrument() -> Instrument {
         }
     }
     Instrument {
+        arp: None,
         name: "Loop".into(),
         volume: 1.0,
         transpose: 0,

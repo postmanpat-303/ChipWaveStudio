@@ -714,6 +714,7 @@ pub fn import_wav(path: &Path) -> Result<Instrument, String> {
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "Sample".into());
     Ok(Instrument {
+        arp: None,
         name,
         volume: 1.0,
         transpose: 0,
@@ -1037,6 +1038,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
                 fx.push(d);
             }
             song.instruments.push(Instrument {
+                arp: None,
                 name: name.into(),
                 volume: real(i, "volume").unwrap_or(1.0),
                 transpose: int(i, "transpose", 0) as i8,
@@ -1082,6 +1084,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
                 fx.push(d);
             }
             song.instruments.push(Instrument {
+                arp: None,
                 name: name.into(),
                 volume: real(i, "volume").unwrap_or(1.0),
                 transpose: int(i, "transpose", 0) as i8,
@@ -1133,6 +1136,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
                     .unwrap_or_default(),
             };
             song.instruments.push(Instrument {
+                arp: None,
                 name: name.into(),
                 volume: real(i, "volume").unwrap_or(1.0),
                 transpose: int(i, "transpose", 0) as i8,
@@ -1165,6 +1169,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
             fx.push(d);
         }
         song.instruments.push(Instrument {
+            arp: None,
             name: name.into(),
             volume: real(i, "volume").unwrap_or(1.0),
             transpose: int(i, "transpose", 0) as i8,
@@ -1861,6 +1866,7 @@ mod tests {
             })
             .collect();
         s.instruments.push(Instrument {
+            arp: None,
             name: "Pluck sample".into(),
             volume: 1.0,
             transpose: 0,
@@ -1946,6 +1952,7 @@ mod tests {
         let f = dir.join("w.cwt");
         let mut s = demo_song();
         s.instruments.push(Instrument {
+            arp: None,
             name: "Broken".into(),
             volume: 1.0,
             transpose: 0,
@@ -1984,6 +1991,7 @@ mod tests {
         let mut s = demo_song();
         for (name, _, p) in crate::voice::presets() {
             s.instruments.push(Instrument {
+                arp: None,
                 name: name.into(),
                 volume: 0.7,
                 transpose: -12,

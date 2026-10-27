@@ -83,6 +83,7 @@ impl App {
                 None => {
                     let n = s.song.instruments.len();
                     s.song.instruments.push(Instrument {
+                        arp: None,
                         name: format!("Layer {}", n + 1),
                         volume: 0.8,
                         transpose: 0,

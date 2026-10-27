@@ -105,6 +105,24 @@ pub fn move_clips(tl: &mut Timeline, ids: &[u32], dt: Tick, dtrack: i32, tracks:
     tl.sort();
 }
 
+/// Whether clip `c` may sit on track `tr`: audio clips on audio tracks,
+/// note and Tracker clips on the others, nothing on the Master
+pub fn clip_fits(tl: &Timeline, c: &Clip, tr: usize) -> bool {
+    match tl.tracks.get(tr).map(|t| t.kind) {
+        Some(TrackKind::Master) => false,
+        Some(TrackKind::Audio) => c.audio().is_some(),
+        _ => c.audio().is_none(),
+    }
+}
+
+/// every clip of `ids` is on a track of its kind ([`clip_fits`])
+pub fn all_fit(tl: &Timeline, ids: &[u32]) -> bool {
+    tl.clips
+        .iter()
+        .filter(|c| ids.contains(&c.id))
+        .all(|c| clip_fits(tl, c, c.track as usize))
+}
+
 /// Drag the right edge: the clip ends at `end` (at least one row long).
 /// Past the end of its block the source loops (with notches).
 pub fn set_end(song: &Song, tl: &mut Timeline, id: u32, end: Tick) {
@@ -705,6 +723,41 @@ pub fn set_loop(tl: &mut Timeline, a: Tick, b: Tick) {
     tl.loop_on = true;
 }
 
+/// Set the loop region to exactly `(a, b)` (sorted, at least one row),
+/// leaving it on or off as it was: what dragging the ruler's loop band
+/// does.
+pub fn set_loop_range(tl: &mut Timeline, a: Tick, b: Tick) {
+    let (a, b) = (a.min(b).max(0), a.max(b).max(0));
+    tl.loop_range = Some((a, b.max(a + ROW)));
+}
+
+/// One end of the loop region `orig` dragged to `at`: the other end stays.
+/// Past the other end the two swap (the dragged edge becomes the other
+/// side); the region keeps at least `min` ticks (one snap unit).
+pub fn loop_edge(orig: (Tick, Tick), start: bool, at: Tick, min: Tick) -> (Tick, Tick) {
+    let min = min.max(ROW);
+    let other = if start { orig.1 } else { orig.0 };
+    let at = at.max(0);
+    if at < other {
+        let a = at.min(other - min);
+        if a < 0 {
+            (0, other.max(min))
+        } else {
+            (a, other)
+        }
+    } else {
+        (other, at.max(other + min))
+    }
+}
+
+/// The loop region `orig` moved by `dt` ticks, its length kept; its start
+/// on the grid `g` (`at` snaps the start) and never before 0.
+pub fn loop_shift(orig: (Tick, Tick), dt: Tick, g: Tick) -> (Tick, Tick) {
+    let len = orig.1 - orig.0;
+    let a = snap((orig.0 + dt).max(0), g).max(0);
+    (a, a + len)
+}
+
 // ------------------------------------------------------------ placing clips
 // (docs/unified/PLAN.md Stage 4a: one drop system, nothing overwritten
 // silently)
@@ -812,4 +865,109 @@ pub fn place_copy(
         let _ = make_unique(song, nid);
     }
     Some(nid)
+}
+
+/// The instrument slots (1-based) whose Arp plays note clip `id`'s notes
+/// (a note's own instrument, else the track's).
+pub fn arp_slots(song: &Song, id: u32) -> Vec<u8> {
+    let Some(tl) = song.timeline.as_deref() else {
+        return vec![];
+    };
+    let Some(i) = find(tl, id) else {
+        return vec![];
+    };
+    let ClipKind::Notes { data } = tl.clips[i].kind else {
+        return vec![];
+    };
+    let own = assigned_instr(song, tl.clips[i].track as usize);
+    let mut out: Vec<u8> = vec![];
+    for n in tl
+        .notes
+        .get(data as usize)
+        .map_or(&[][..], |d| &d.notes[..])
+    {
+        let k = if n.instr > 0 { n.instr } else { own };
+        let has = song
+            .instruments
+            .get((k as usize).wrapping_sub(1))
+            .is_some_and(|i| i.arp.is_some());
+        if has && !out.contains(&k) {
+            out.push(k);
+        }
+    }
+    out
+}
+
+/// "Bake Arp to notes": every note clip that plays through instrument
+/// `slot`'s Arp gets the notes the Arp plays instead of its held notes,
+/// then that Arp is switched off, so the song sounds the same and each note
+/// can be edited. Linked copies stay linked. Returns the Arp taken off
+/// (for the UI to keep) and (clips, notes) baked.
+pub fn bake_arp(song: &mut Song, slot: u8) -> Option<(crate::arp::Arp, usize, usize)> {
+    let inst = song.instruments.get((slot as usize).wrapping_sub(1))?;
+    let a = inst.arp.clone()?;
+    let kit = crate::drumkit::kit_of(inst).is_some();
+    let tl = song.timeline.as_deref()?;
+    // each note data once, with the song tick its start sits on
+    let mut todo: Vec<(usize, f64, u8)> = vec![];
+    let mut clips = 0;
+    for c in &tl.clips {
+        let ClipKind::Notes { data } = c.kind else {
+            continue;
+        };
+        let own = assigned_instr(song, c.track as usize);
+        let Some(d) = tl.notes.get(data as usize) else {
+            continue;
+        };
+        if !d
+            .notes
+            .iter()
+            .any(|n| (if n.instr > 0 { n.instr } else { own }) == slot)
+        {
+            continue;
+        }
+        clips += 1;
+        if !todo.iter().any(|t| t.0 == data as usize) {
+            todo.push((data as usize, (c.start - c.offset) as f64, own));
+        }
+    }
+    let tl = song.timeline.as_deref_mut()?;
+    let mut notes = 0;
+    for (data, origin, own) in todo {
+        let d = tl.notes[data].make_mut();
+        let plays = |n: &Note| (if n.instr > 0 { n.instr } else { own }) == slot;
+        let held: Vec<(f64, f64, u8, f32)> = d
+            .notes
+            .iter()
+            .filter(|n| plays(n))
+            .map(|n| {
+                (
+                    n.start as f64,
+                    (n.start + n.len.max(1)) as f64,
+                    n.key,
+                    n.vel as f32 / 65535.0,
+                )
+            })
+            .collect();
+        let instr = d.notes.iter().find(|n| plays(n)).map_or(0, |n| n.instr);
+        let until = d.len.max(1) as f64;
+        let baked = crate::arp::bake(&a, kit, origin, &held, until);
+        d.notes.retain(|n| !plays(n));
+        for (s, e, key, vel) in baked {
+            let start = s.round() as Tick;
+            let end = (e.round() as Tick).max(start + 1);
+            d.notes.push(Note {
+                start,
+                len: end - start,
+                key,
+                vel: (vel.clamp(0.0, 1.0) * 65535.0).round() as u16,
+                instr,
+                ..Default::default()
+            });
+            notes += 1;
+        }
+        d.notes.sort_by_key(|n| (n.start, n.key));
+    }
+    song.instruments[slot as usize - 1].arp = None;
+    Some((a, clips, notes))
 }

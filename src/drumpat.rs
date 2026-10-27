@@ -346,6 +346,7 @@ pub fn kit_instrument(name: &str) -> Option<Instrument> {
     let mut g = kit_patch(name)?;
     g.base.name = name.to_string();
     Some(Instrument {
+        arp: None,
         name: name.to_string(),
         volume: 0.85,
         transpose: 0,
@@ -360,6 +361,7 @@ pub fn drumkit_instrument(name: &str) -> Option<Instrument> {
     let mut g = crate::drumkit::preset(name)?;
     g.base.name = name.to_string();
     Some(Instrument {
+        arp: None,
         name: name.to_string(),
         volume: 0.85,
         transpose: 0,

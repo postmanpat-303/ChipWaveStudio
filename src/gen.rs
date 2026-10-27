@@ -2187,6 +2187,7 @@ mod features {
 
     fn add(s: &mut Song, name: &str, vol: f32, kind: InstrumentKind) -> u8 {
         let i = Instrument {
+            arp: None,
             name: name.into(),
             volume: vol,
             transpose: 0,

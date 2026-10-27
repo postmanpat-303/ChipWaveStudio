@@ -203,6 +203,7 @@ impl App {
         let slices = self.smp.slices.clone();
         let parts = self.with(|s| match s.song.instruments.get(idx) {
             Some(Instrument {
+                arp: None,
                 name,
                 kind:
                     InstrumentKind::Sample {
@@ -240,6 +241,7 @@ impl App {
             let first = s.song.instruments.len();
             for (k, (_, d)) in parts.iter().take(n).enumerate() {
                 s.song.instruments.push(Instrument {
+                    arp: None,
                     name: format!("{name} {:02}", k + 1),
                     volume: 1.0,
                     transpose: 0,
@@ -333,6 +335,7 @@ impl App {
                 .collect();
             let cur = match s.song.instruments.get(idx) {
                 Some(Instrument {
+                    arp: None,
                     name,
                     kind:
                         InstrumentKind::Sample {

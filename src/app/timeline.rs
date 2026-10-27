@@ -103,8 +103,10 @@ pub(crate) enum Snap {
 /// a mouse gesture in progress (timeline mode)
 #[derive(Clone, Debug)]
 enum DragKind {
-    /// move the selection (Alt at the start: copies)
-    Move { dup: bool },
+    /// move the selection; `dup`: copies made at the start move instead
+    /// (Alt: linked copies, the same blocks; `own`, Ctrl: independent
+    /// copies with their own notes and blocks)
+    Move { dup: bool, own: bool },
     /// right edge of clip `id`
     End(u32),
     /// left edge of clip `id`
@@ -115,6 +117,10 @@ enum DragKind {
     Marker(usize),
     /// Shift-drag on the ruler: loop region from this tick
     Loop(Tick),
+    /// the loop region's start (true) or end edge on the ruler
+    LoopEdge(bool),
+    /// the loop region by its band on the ruler (its length kept)
+    LoopMove,
     /// fade handle of audio clip `id` (true: fade in)
     Fade(u32, bool),
 }
@@ -126,6 +132,9 @@ struct Drag {
     origin: tl::Timeline,
     /// before Alt-copies were made (restored when the copy didn't move)
     before: Option<tl::Timeline>,
+    /// the song's block count before a Ctrl-copy gave its copies their own
+    /// blocks (cut back to it when the copy didn't move)
+    blocks: Option<usize>,
     grab_tick: f64,
     grab_y: f32,
     /// start of the clip under the mouse (moves snap by it)
@@ -152,6 +161,9 @@ pub(crate) enum TlOp {
     /// "Use the track's instrument": the selected note clips' notes
     /// without an instrument get their track's assigned one
     UseTrackInstr,
+    /// "Bake Arp to notes": the selected note clips' Arp written out as
+    /// notes (every clip it plays), then the Arp off
+    BakeArp,
     Glue,
     LoopFromSelection,
     ToggleLoop,
@@ -848,13 +860,13 @@ impl App {
             )
             .on_hover_text(if mode && !self.tracker_on() {
                 "This song is arranged here: clips on tracks (track = mixer channel). \
-                 Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
+                 Drag to move (Ctrl: copy, Alt: linked copy, Shift: by rows), drag an edge to trim or loop, \
                  S split (line, click to cut, Esc cancels), Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
                  Ctrl+Shift+D make unique. Double-click a clip to edit it in the piano roll, \
                  empty space to make a new note clip."
             } else if mode {
                 "This song is arranged here: clips on tracks (track = mixer channel). \
-                 Drag to move (Alt: copy, Shift: by rows), drag an edge to trim or loop, \
+                 Drag to move (Ctrl: copy, Alt: linked copy, Shift: by rows), drag an edge to trim or loop, \
                  S split (line, click to cut, Esc cancels), Ctrl+D duplicate, M mute, Del delete, Ctrl+J glue, \
                  Ctrl+Shift+D make unique. Double-click a clip to loop it (again: loop off); \
                  Alt+double-click or Enter opens it (piano roll or Tracker, as set in Settings), \
@@ -966,7 +978,7 @@ impl App {
             if ui
                 .selectable_label(mode && loop_on, "Loop")
                 .on_hover_text(if has_loop {
-                    "play the loop region over and over (L) · Shift-drag the ruler to set it · Ctrl+L: around the selection"
+                    "play the loop region over and over (L) · Shift-drag the ruler to set it, drag its ends to resize it and its band to move it · Ctrl+L: around the selection"
                 } else {
                     "no loop region yet: Shift-drag the ruler, or select clips and press Ctrl+L"
                 })
@@ -2051,6 +2063,12 @@ impl App {
                 )
                 .collect()
         });
+        // the ARP badge per instrument slot (index 0 = none)
+        let arps: Vec<Option<&'static str>> = self.with(|s| {
+            std::iter::once(None)
+                .chain((0..s.song.instruments.len()).map(|i| super::arpcard::badge(&s.song, i)))
+                .collect()
+        });
         let sub = |tr: usize| -> String {
             // Master / Song tracks sit past mixer channels — c.instr is nch long
             if c.instr.get(tr).is_none_or(|s| s.is_empty()) {
@@ -2166,6 +2184,36 @@ impl App {
             );
             let nw = num.size().x;
             np.galley(Pos2::new(tx, ty - num.size().y / 2.0), num, t.ink2);
+            // the ARP badge: this track's notes go through an Arp
+            let arp = match c.tl.tracks[tr].kind {
+                tl::TrackKind::Note => arps
+                    .get(c.instr_ix.get(tr).copied().unwrap_or(0) as usize)
+                    .copied()
+                    .flatten(),
+                _ => None,
+            };
+            let arp_w = if let Some(label) = arp {
+                let g = hp.layout_no_wrap(
+                    label.to_string(),
+                    crate::theme::label_font(crate::theme::ts::TINY),
+                    t.ink,
+                );
+                let br = Rect::from_min_size(
+                    Pos2::new(hr.right() - 138.0 - g.size().x - 8.0, ty - 7.0),
+                    egui::vec2(g.size().x + 8.0, 14.0),
+                );
+                hp.rect_filled(br, 3, t.accent.gamma_multiply(0.85));
+                hp.galley(br.center() - g.size() * 0.5, g, t.ink);
+                ui.interact(br, ui.make_persistent_id(("arp_badge", tr)), Sense::hover())
+                    .on_hover_text(if label == "ARP" {
+                        "this track's notes play through its Arp (Rack tab)"
+                    } else {
+                        "this track's pads play through Note repeat (Rack tab)"
+                    });
+                br.width() + 4.0
+            } else {
+                0.0
+            };
             if self.track_rename.as_ref().is_some_and(|r| r.0 == tr) && !self.pie_open() {
                 rename_at = Some(Rect::from_min_max(
                     Pos2::new(tx + nw + 2.0, ty - 10.0),
@@ -2185,7 +2233,7 @@ impl App {
                         crate::theme::prop(crate::theme::ts::BODY)
                     },
                     if cur { sel_ink(&t) } else { t.ink },
-                    hr.right() - 135.0 - (tx + nw + 5.0),
+                    hr.right() - 135.0 - arp_w - (tx + nw + 5.0),
                 );
             }
             if !one_line {
@@ -2628,7 +2676,7 @@ impl App {
         let rresp = ui
             .interact(ruler, ui.scope_id().with("tl_ruler"), Sense::click_and_drag())
             .on_hover_text(if mode {
-                "click: move the play marker here (snaps; jumps while playing) · drag: scrub · Shift-drag: set the loop region · Alt: exact row"
+                "click: move the play marker here (snaps; jumps while playing) · drag: scrub · Shift-drag: set the loop region · drag the loop's ends: resize it, its band: move it (snaps; Alt: by rows) · double-click the band: select its clips · Alt: exact row"
             } else {
                 "click: move the play marker here (jumps while playing) · drag: scrub · Alt: exact row"
             });
@@ -2639,14 +2687,6 @@ impl App {
             } else {
                 "markers (from the blocks' roles) · click: jump there"
             });
-        if rresp.hovered() || rresp.dragged() {
-            rp.rect_filled(ruler, 2, t.ink2.gamma_multiply(0.10));
-            ui.ctx().set_cursor_icon(if mods.shift && mode {
-                egui::CursorIcon::ResizeHorizontal
-            } else {
-                egui::CursorIcon::PointingHand
-            });
-        }
         // the marker under x (its flag or its label)
         let marker_at = |x: f32| {
             c.tl.markers.iter().rposition(|m| {
@@ -2658,6 +2698,8 @@ impl App {
         let mut seek_tl: Option<Tick> = None;
         let mut edit: Option<DragEdit> = None;
         let mut start_drag: Option<Drag> = None;
+        // a Ctrl-drag's clips to copy (independent) as the drag starts
+        let mut own_copy: Option<Vec<u32>> = None;
         let mut end_drag = false;
         let mut ops: Vec<TlOp> = vec![];
         let mut ask = false;
@@ -2666,19 +2708,73 @@ impl App {
             kind,
             origin: origin(),
             before: None,
+            blocks: None,
             grab_tick: tick_of(p.x),
             grab_y: p.y,
             anchor,
             moved: false,
         };
-        // ruler: seek, or Shift-drag the loop region
-        let looping = matches!(
-            self.tlv.drag.as_ref().map(|d| &d.kind),
-            Some(DragKind::Loop(_))
-        );
+        // ruler: seek, Shift-drag a new loop region, or drag the loop
+        // region's ends (resize) and band (move)
+        let loop_drag = self.tlv.drag.as_ref().and_then(|d| match d.kind {
+            DragKind::Loop(_) | DragKind::LoopEdge(_) | DragKind::LoopMove => Some(d.kind.clone()),
+            _ => None,
+        });
+        let looping = loop_drag.is_some();
+        // the part of the loop region at `p`: an end (its handle, 6 px either
+        // side, the ruler's height) or the band between them
+        let loop_hit = |p: Pos2| -> Option<DragKind> {
+            if !mode || !ruler.contains(p) {
+                return None;
+            }
+            let (a, b) = c.tl.loop_range?;
+            let (xa, xb) = (x_of(a as f64), x_of(b as f64));
+            let (da, db) = ((p.x - xa).abs(), (p.x - xb).abs());
+            if da.min(db) <= 6.0 {
+                let start = if p.x < xa {
+                    true
+                } else if p.x > xb {
+                    false
+                } else {
+                    da <= db
+                };
+                return Some(DragKind::LoopEdge(start));
+            }
+            let band_top = ruler.bottom() - if c.tl.loop_on { 11.0 } else { 6.0 };
+            (p.x > xa && p.x < xb && p.y >= band_top - 2.0).then_some(DragKind::LoopMove)
+        };
+        let hover_loop = if looping {
+            None
+        } else {
+            rresp.hover_pos().and_then(loop_hit)
+        };
+        if rresp.hovered() || rresp.dragged() {
+            rp.rect_filled(ruler, 2, t.ink2.gamma_multiply(0.10));
+            use egui::CursorIcon as Ci;
+            ui.ctx().set_cursor_icon(match (&loop_drag, &hover_loop) {
+                (Some(DragKind::LoopMove), _) => Ci::Grabbing,
+                (Some(_), _) => Ci::ResizeHorizontal,
+                _ if mods.shift && mode => Ci::ResizeHorizontal,
+                (None, Some(DragKind::LoopEdge(_))) => Ci::ResizeHorizontal,
+                (None, Some(_)) => Ci::Grab,
+                _ => Ci::PointingHand,
+            });
+        }
+        // the end under the mouse (or being dragged) lights up
+        if let (Some((a, b)), Some(DragKind::LoopEdge(start))) =
+            (c.tl.loop_range, loop_drag.as_ref().or(hover_loop.as_ref()))
+        {
+            let x = x_of(if *start { a } else { b } as f64);
+            rp.vline(x, ruler.y_range(), Stroke::new(3.0, t.acc_hot));
+        }
+        let press = if rresp.drag_started() {
+            ui.input(|i| i.pointer.press_origin())
+        } else {
+            None
+        };
         if rresp.drag_started() && mods.shift {
             if mode {
-                if let Some(p) = ui.input(|i| i.pointer.press_origin()) {
+                if let Some(p) = press {
                     // (Shift is the gesture here, so the grid stays coarse)
                     let a = tl::snap(tick_of(p.x).max(0.0) as Tick, self.tlv.grid_now);
                     start_drag = Some(new_drag(DragKind::Loop(a), p, 0));
@@ -2686,15 +2782,31 @@ impl App {
             } else {
                 ask = true;
             }
+        } else if let Some((kind, p)) = press.and_then(|p| loop_hit(p).map(|k| (k, p))) {
+            let a = c.tl.loop_range.map_or(0, |r| r.0);
+            start_drag = Some(new_drag(kind, p, a));
         } else if looping {
-            if let (Some(p), Some(DragKind::Loop(a))) = (
-                rresp.interact_pointer_pos(),
-                self.tlv.drag.as_ref().map(|d| d.kind.clone()),
-            ) {
-                edit = Some(DragEdit::Loop(
-                    a,
-                    tl::snap(tick_of(p.x).max(0.0) as Tick, self.tlv.grid_now),
-                ));
+            if let (Some(p), Some(d)) = (rresp.interact_pointer_pos(), self.tlv.drag.as_ref()) {
+                // on the snap grid; Alt (or Shift): by rows
+                let g = if mods.alt || mods.shift {
+                    ROW
+                } else {
+                    self.tlv.grid_now.max(ROW)
+                };
+                let tk = tick_of(p.x).max(0.0) as Tick;
+                let o = d.origin.loop_range.unwrap_or((0, g));
+                edit = match d.kind {
+                    DragKind::Loop(a) => Some(DragEdit::Loop(a, tl::snap(tk, self.tlv.grid_now))),
+                    DragKind::LoopEdge(start) => {
+                        let (a, b) = tl::loop_edge(o, start, tl::snap(tk, g), g);
+                        Some(DragEdit::LoopSet(a, b))
+                    }
+                    DragKind::LoopMove => {
+                        let (a, b) = tl::loop_shift(o, (tick_of(p.x) - d.grab_tick) as Tick, g);
+                        Some(DragEdit::LoopSet(a, b))
+                    }
+                    _ => None,
+                };
             }
         } else if rresp.clicked() || rresp.dragged() || rresp.drag_started() {
             if let Some(p) = rresp.interact_pointer_pos() {
@@ -2715,6 +2827,31 @@ impl App {
                         seek = Some(tgt);
                     }
                 }
+            }
+        }
+        // double-click the loop band: select the clips in the loop
+        if rresp.double_clicked() {
+            if let (Some(DragKind::LoopMove), Some((a, b))) = (
+                rresp
+                    .interact_pointer_pos()
+                    .or(rresp.hover_pos())
+                    .and_then(loop_hit),
+                c.tl.loop_range,
+            ) {
+                let ids: Vec<u32> =
+                    c.tl.clips
+                        .iter()
+                        .filter(|x| x.start < b && x.end() > a)
+                        .map(|x| x.id)
+                        .collect();
+                self.status = format!(
+                    "Selected the {} clip{} in the loop",
+                    ids.len(),
+                    if ids.len() == 1 { "" } else { "s" }
+                );
+                self.tlv.sel = ids.last().copied();
+                self.tlv.sels = ids;
+                seek_tl = None;
             }
         }
         if rresp.drag_stopped() && looping {
@@ -3028,8 +3165,11 @@ impl App {
                         let cl = &c.tl.clips[i];
                         let id = cl.id;
                         let mut sels = self.tlv.sels.clone();
+                        // Ctrl-drag copies: on a clip outside the selection
+                        // it copies just that clip (Shift still adds)
+                        let own = mods.command && !mods.alt;
                         if !sels.contains(&id) {
-                            if !add_mod {
+                            if !add_mod || (own && !mods.shift) {
                                 sels.clear();
                             }
                             sels.push(id);
@@ -3047,7 +3187,10 @@ impl App {
                                 sels = vec![id];
                                 DragKind::Fade(id, k == 3)
                             }
-                            _ => DragKind::Move { dup: mods.alt },
+                            _ => DragKind::Move {
+                                dup: mods.alt || own,
+                                own,
+                            },
                         };
                         let mut d = new_drag(kind.clone(), p, cl.start);
                         if let DragKind::End(_) = kind {
@@ -3064,6 +3207,12 @@ impl App {
                                 .cloned()
                                 .collect();
                             sels = tl::copies_at(&mut d.origin, &sel, 0);
+                            edit = Some(DragEdit::Move(0, 0));
+                        } else if own && matches!(kind, DragKind::Move { .. }) {
+                            // Ctrl-drag: independent copies (own notes and
+                            // blocks, as Ctrl+C / Ctrl+V) follow the mouse;
+                            // made below, where the song is to hand
+                            own_copy = Some(sels.clone());
                             edit = Some(DragEdit::Move(0, 0));
                         }
                         self.tlv.sel = Some(*sels.last().unwrap_or(&id));
@@ -3404,6 +3553,25 @@ impl App {
                         ui.close();
                     }
                 }
+                // "Bake Arp to notes": only when a selected clip plays
+                // through an Arp
+                let arp = self.with(|s| {
+                    self.tlv
+                        .sels
+                        .iter()
+                        .any(|&id| !tl::arp_slots(&s.song, id).is_empty())
+                });
+                if arp
+                    && ui
+                        .button("Bake Arp to notes")
+                        .on_hover_text(
+                            "write the notes the Arp plays into the clips (every clip of that instrument), then switch the Arp off: it sounds the same, and each note can be edited (one undo step)",
+                        )
+                        .clicked()
+                {
+                    ops.push(TlOp::BakeArp);
+                    ui.close();
+                }
                 ui.separator();
                 if ui
                     .add(egui::Button::new("Loop around the selection").shortcut_text("Ctrl+L"))
@@ -3517,7 +3685,7 @@ impl App {
                         "Tracker"
                     };
                     format!(
-                        "drag: move (Alt: copy) · edges: trim / loop · double-click: loop this clip (again: off) · Alt+double-click / Enter: {open} · right-click: more"
+                        "drag: move (Ctrl: copy, Alt: linked copy) · edges: trim / loop · double-click: loop this clip (again: off) · Alt+double-click / Enter: {open} · right-click: more"
                     )
                 } else {
                     dbl.to_string()
@@ -3563,11 +3731,60 @@ impl App {
         if ask && self.tlv.ask_switch.is_none() {
             self.tlv.ask_switch = Some(None);
         }
-        if let Some(d) = start_drag {
+        if let Some(mut d) = start_drag {
+            if let Some(src) = own_copy {
+                // the copies sit on the originals at first: they are what
+                // moves, the originals stay put
+                d.before = Some(d.origin.clone());
+                let origin = d.origin.clone();
+                let (ids, made, blocks) = self.with(|s| {
+                    let keep = s.song.timeline.replace(Box::new(origin));
+                    let blocks = s.song.patterns.len();
+                    let cb = tl::copy_clips(&s.song, &src);
+                    let (t0, top) = cb.origin();
+                    let out = tl::paste_clips(&mut s.song, &cb, top as usize, t0, false);
+                    let made = s.song.timeline.take();
+                    s.song.timeline = keep;
+                    (out.ids, made, blocks)
+                });
+                if let Some(made) = made {
+                    d.origin = *made;
+                }
+                d.blocks = Some(blocks);
+                self.tlv.sel = ids.last().copied();
+                self.tlv.sels = ids;
+            }
             self.tlv.drag = Some(d);
         }
         if let Some(e) = edit {
             self.timeline_drag_edit(e);
+        }
+        if let Some(DragKind::Move { dup: true, own }) = self.tlv.drag.as_ref().map(|d| &d.kind) {
+            // copying: the copy cursor and a "+" badge by the pointer
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Copy);
+            if let Some(p) = ui.ctx().pointer_latest_pos() {
+                let fp = ui.ctx().layer_painter(egui::LayerId::new(
+                    egui::Order::Tooltip,
+                    egui::Id::NULL.with("tl_copy_badge"),
+                ));
+                let c = p + egui::vec2(16.0, 18.0);
+                fp.circle_filled(c, 8.0, t.acc_hot);
+                fp.text(
+                    c,
+                    egui::Align2::CENTER_CENTER,
+                    "+",
+                    crate::theme::prop(14.0),
+                    t.crt_bot,
+                );
+                let tip = if *own { "copy" } else { "linked copy" };
+                fp.text(
+                    c + egui::vec2(12.0, 0.0),
+                    egui::Align2::LEFT_CENTER,
+                    tip,
+                    crate::theme::prop(crate::theme::ts::BODY),
+                    t.ink,
+                );
+            }
         }
         if !self.tlv.move_over.is_empty() && self.tlv.drag.is_some() {
             // moved over other clips: no question while dragging, but they
