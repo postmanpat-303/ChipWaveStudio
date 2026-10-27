@@ -389,11 +389,10 @@ pub fn mods_for(a: &Arp, i: usize, key: u16, over: &[(usize, usize, f32)]) -> Mo
 pub fn euclid(hits: usize, len: usize, rot: usize) -> Vec<bool> {
     let len = len.max(1);
     let hits = hits.min(len);
-    let mut v = vec![false; len];
-    for i in 0..len {
-        // the bucket form: step i is an onset when the running sum wraps
-        v[i] = hits > 0 && (i * hits) % len < hits;
-    }
+    // the bucket form: step i is an onset when the running sum wraps
+    let mut v: Vec<bool> = (0..len)
+        .map(|i| hits > 0 && (i * hits) % len < hits)
+        .collect();
     v.rotate_right(rot % len);
     v
 }

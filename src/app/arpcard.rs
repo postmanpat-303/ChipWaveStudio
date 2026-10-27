@@ -18,6 +18,9 @@ use super::knob::{self, KnobArgs, CELL};
 use super::*;
 use crate::arp::{self, Arp, Mode, StepKind, MAX_STEPS};
 
+/// one fold-out edit, applied after the panel is drawn
+type ArpEdit = Box<dyn FnOnce(&mut Arp)>;
+
 /// header height
 const HEAD: f32 = 24.0;
 /// the readout line
@@ -536,7 +539,7 @@ impl App {
                 t.ink2,
             );
         };
-        let mut edit: Option<Box<dyn FnOnce(&mut Arp)>> = None;
+        let mut edit: Option<ArpEdit> = None;
         if !kit {
             line(ui, &mut |ui| {
                 name(ui, "Octaves go");
