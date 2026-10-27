@@ -18,7 +18,7 @@ and the engine plays exactly as it did before.
   Up/Down and Random modes and could follow an external clock. The
   Jupiter-8 (1981) added a 1–4 octave range and Hold. The Juno-60 and
   Korg's Polysix (1981–82) made the arpeggiator standard on affordable
-  polysynths. The Polysix added **Latch**, which keeps the pattern going
+  polyphonic synths. The Polysix added **Latch**, which keeps the pattern going
   after you let go until you play a new chord. Clock-in jacks, and later
   MIDI clock, let the arp lock to a drum machine. That is where today's
   tempo-synced rates come from.
