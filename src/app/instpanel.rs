@@ -2014,6 +2014,8 @@ impl App {
             }
             (p.set)(inst, v);
             cx.changed = true;
+            // "Undo: Set Cutoff" (app/action.rs)
+            self.name_edit(Action::SetKnob(p.name.clone()));
             if let Some(tg) = p.target {
                 cx.touch = Some(tg);
             }
@@ -2104,6 +2106,7 @@ impl App {
                 {
                     (p.set)(inst, d);
                     cx.changed = true;
+                    self.name_edit(Action::SetKnob(p.name.clone()));
                     ui.close();
                 }
             }

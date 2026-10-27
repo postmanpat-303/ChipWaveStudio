@@ -215,7 +215,7 @@ Command line:
   ChipWave.exe --version
   ChipWave.exe --check-updates         ask GitHub whether a newer version is out
 
-Videos: promo https://youtu.be/ygVueHcGakw  (Short: https://youtu.be/I7ccA8p_Czc)
+Videos: promo https://youtu.be/j1w23Pkuodg  (Short: https://youtu.be/4sbt7f9bIdw)
         demos & promos https://www.youtube.com/@whatgoesaround1551
 
 Credits (full list with links: Help > About and THIRD_PARTY_LICENSES.txt):

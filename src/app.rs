@@ -11,6 +11,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod about;
+mod aboutrain;
+mod action;
+pub(crate) use action::Action;
 #[cfg(test)]
 mod acceptance_tests;
 mod advedit;
@@ -94,6 +97,7 @@ mod lcd_tests;
 mod library;
 #[cfg(test)]
 mod looptransport_tests;
+mod manual;
 mod metroicon;
 mod midiimport;
 mod midiview;
@@ -399,6 +403,7 @@ pub struct App {
     show_help: bool,
     show_about: bool,
     about: about::AboutState,
+    manual: manual::ManualState,
     /// key events taken from egui before it can use them for focus navigation
     pending: Vec<egui::Event>,
     /// undo/redo keys pressed while a text field had focus: run next frame,
@@ -768,6 +773,7 @@ impl App {
             show_help: false,
             show_about: false,
             about: Default::default(),
+            manual: Default::default(),
             pending: vec![],
             deferred_keys: vec![],
             mouse_since_commit: false,
@@ -836,9 +842,13 @@ impl App {
         if self.hist.commit(&s.song, std::time::Instant::now(), !mouse) {
             self.dirty = true;
             self.mouse_since_commit = false;
-        } else if mouse {
-            // e.g. a click that changes the song one frame later
-            self.mouse_since_commit = true;
+        } else {
+            // a step name whose edit never came is dropped (app/action.rs)
+            self.hist.idle();
+            if mouse {
+                // e.g. a click that changes the song one frame later
+                self.mouse_since_commit = true;
+            }
         }
     }
 
@@ -889,7 +899,12 @@ impl App {
                 self.hist.is_saved(&s.song)
             };
             self.dirty = !saved || self.plug.state_dirty;
-            self.status = if redo { "Redo".into() } else { "Undo".into() };
+            // the step just taken is now on the other stack: "Undo: Move clip"
+            self.status = if redo {
+                action::step_text("Redo", self.hist.undo_label())
+            } else {
+                action::step_text("Undo", self.hist.redo_label())
+            };
         } else {
             self.status = if redo {
                 "Nothing to redo".into()
@@ -940,6 +955,7 @@ impl App {
                 f(cell)
             }
         });
+        self.name_edit(Action::EditCell);
     }
 
     fn move_row(&mut self, d: isize) {
@@ -1126,6 +1142,7 @@ impl eframe::App for App {
 
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         self.shot_input(raw);
+        self.about_rain_skip(raw);
         // While no text field is being edited, the pattern editor owns the keyboard:
         // take key events away from egui (so Tab/arrows don't move widget focus).
         if let Some(log) = &mut self.key_log {

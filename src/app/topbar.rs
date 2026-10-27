@@ -450,6 +450,13 @@ impl App {
                     self.export_instrument(self.instr);
                 }
                 ui.separator();
+                if item(ui, "Save controller map…", "") {
+                    self.save_controller_map();
+                }
+                if item(ui, "Load controller map…", "") {
+                    self.load_controller_map();
+                }
+                ui.separator();
                 if item(ui, "Quit", "Ctrl+Q") {
                     self.request(crate::prompt::Pending::Quit, &ctx);
                 }
@@ -462,10 +469,17 @@ impl App {
                     self.hist.len(),
                     self.hist.bytes() as f64 / 1e6
                 );
+                // a named step reads "Undo: Move clip" (app/action.rs); the
+                // sample editor's own history stays plain
+                let (undo_t, redo_t) = if main {
+                    (self.undo_text(false), self.undo_text(true))
+                } else {
+                    ("Undo".to_string(), "Redo".to_string())
+                };
                 if ui
                     .add_enabled(
                         !main || self.hist.can_undo(),
-                        egui::Button::new("Undo").shortcut_text("Ctrl+Z"),
+                        egui::Button::new(undo_t).shortcut_text("Ctrl+Z"),
                     )
                     .on_hover_text(&info)
                     .clicked()
@@ -475,7 +489,7 @@ impl App {
                 if ui
                     .add_enabled(
                         !main || self.hist.can_redo(),
-                        egui::Button::new("Redo").shortcut_text("Ctrl+Y"),
+                        egui::Button::new(redo_t).shortcut_text("Ctrl+Y"),
                     )
                     .clicked()
                 {
@@ -824,7 +838,15 @@ impl App {
                     ui.menu_button("Block", |ui| self.block_len_menu(ui));
                 }
             });
-            ui.menu_button("Help", |ui| {
+            let help = ui.menu_button("Help", |ui| {
+                if ui
+                    .button("User Manual")
+                    .on_hover_text("the ChipWave Studio user manual (PDF, opens in your PDF viewer)")
+                    .clicked()
+                {
+                    self.open_manual();
+                    ui.close();
+                }
                 if item(ui, "Keys", "F12") {
                     self.show_help = !self.show_help;
                 }
@@ -847,6 +869,17 @@ impl App {
                     self.show_about = true;
                 }
             });
+            // the help-menu screenshot: the Help menu open
+            if self
+                .shot
+                .as_ref()
+                .is_some_and(|s| s.view == "help-menu" && s.frame > 10)
+            {
+                let id = egui::Popup::default_response_id(&help.response);
+                if !egui::Popup::is_id_open(ui.ctx(), id) {
+                    egui::Popup::open_id(ui.ctx(), id);
+                }
+            }
             // song title + unsaved marker on the right
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(10.0);
@@ -1428,6 +1461,7 @@ impl App {
 
     pub(super) fn dialogs(&mut self, ctx: &egui::Context) {
         self.about_window(ctx);
+        self.manual_window(ctx);
         if self.orphans.is_empty() {
             return;
         }

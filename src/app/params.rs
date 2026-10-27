@@ -3212,6 +3212,83 @@ pub(crate) mod tests {
         }
     }
 
+    /// The instrument panel and the knob list (`crate::knobs`) agree: every
+    /// automatable panel knob is a knob of the song with the same range,
+    /// and every volume / generator / FX knob the list offers for an
+    /// instrument is on its panel.
+    #[test]
+    fn panel_knobs_agree_with_the_knob_list() {
+        let mut checked = 0;
+        for (tag, i) in all_types() {
+            let mut song = crate::fileio::demo_song();
+            song.instruments.insert(0, i.clone());
+            let l = build(&i, 0, 0);
+            let mut on_panel = Vec::new();
+            for p in &l.params {
+                let Some(t) = p.target else { continue };
+                let k = crate::knobs::get(&song, t)
+                    .unwrap_or_else(|| panic!("{tag}: {} ({}) is not a knob", p.key, t.id()));
+                assert_eq!(
+                    crate::knobs::resolve(&song, &t.id()),
+                    Some(t),
+                    "{tag}: {}",
+                    p.key
+                );
+                on_panel.push(t);
+                let Ctl::Knob { lo, hi, log, .. } = p.ctl else {
+                    continue;
+                };
+                // the Volume knob (0..1) is the instrument volume; a Level lane
+                // is a 0..1.5 gain on top of it
+                if matches!(t, Target::Level(_)) {
+                    assert_eq!((lo, hi), (0.0, 1.0), "{tag}");
+                    continue;
+                }
+                assert_eq!(
+                    (lo, hi, log),
+                    (k.lo, k.hi, k.log),
+                    "{tag}: panel {} and knob {} ranges differ",
+                    p.key,
+                    t.id()
+                );
+                checked += 1;
+            }
+            for t in crate::knobs::targets(&song) {
+                // a panel shows a chosen few of the patch knobs, so only the
+                // generator and FX knobs must all be there
+                let ours = match t {
+                    Target::Level(x) => x == 0,
+                    // a kit panel shows one piece / pad at a time (knobs p*8..)
+                    Target::Gen(x, k) => {
+                        x == 0
+                            && (k < 8
+                                || !matches!(
+                                    &i.kind,
+                                    InstrumentKind::Gen(g) if matches!(
+                                        g.engine,
+                                        crate::gen::GenEngine::Kit(_) | crate::gen::GenEngine::Drums(_)
+                                    )
+                                ))
+                    }
+                    Target::Fx(x, _, p) => {
+                        x == 0
+                            && crate::knobs::get(&song, t).is_some_and(|k| !k.choice && !k.plugin)
+                            && p < crate::fx::MAX_PARAMS
+                    }
+                    _ => false,
+                };
+                if ours {
+                    assert!(
+                        on_panel.contains(&t),
+                        "{tag}: knob {} is not on the panel",
+                        t.id()
+                    );
+                }
+            }
+        }
+        assert!(checked > 100, "only {checked} knobs compared");
+    }
+
     #[test]
     fn generator_knobs_offer_add_automation_lane() {
         use crate::automation::Target;

@@ -152,12 +152,14 @@ fn knob_drag_changes_the_sound_and_one_ctrl_z_undoes_it() {
         after > before + 0.05,
         "dragging up raises it ({before} -> {after})"
     );
+    assert_eq!(h.state().undo_text(false), "Undo: Set Cutoff");
     key(&mut h, Key::Z, ctrl());
     frames(&mut h, 2);
     assert!(
         (analog_cutoff(&mut h) - before).abs() < 1e-6,
         "one Ctrl+Z undoes the drag"
     );
+    assert_eq!(h.state().status, "Undo: Set Cutoff");
 }
 
 #[test]

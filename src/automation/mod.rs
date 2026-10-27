@@ -375,6 +375,17 @@ impl Target {
         }
     }
 
+    /// What this target's 0..1 maps to in real units: (min, max,
+    /// logarithmic). Patch knobs use their `PATCH_PARAMS` row.
+    pub fn bounds(self) -> (f32, f32, bool) {
+        if let Target::Patch(_, k) = self {
+            if let Some(p) = crate::modulation::PATCH_PARAMS.get(k) {
+                return (p.lo, p.hi, p.log);
+            }
+        }
+        self.range()
+    }
+
     /// (min, max, logarithmic)
     fn range(self) -> (f32, f32, bool) {
         match self {

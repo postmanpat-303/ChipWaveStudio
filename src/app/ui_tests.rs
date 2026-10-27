@@ -397,6 +397,51 @@ fn speed_and_edit_menu_undo() {
     assert_eq!(song(&mut h, |s| s.speed), sp0, "Edit > Undo");
 }
 
+/// named edits (app/action.rs) show their name in the Edit menu; an edit
+/// not routed through them stays a plain "Undo"
+#[test]
+fn edit_menu_names_the_step() {
+    let mut h = harness();
+    let n0 = song(&mut h, |s| s.channel_names[0].clone());
+    h.state_mut().rename_track(0, "Bass line");
+    frames(&mut h, 2);
+    let e = rects(&h, Role::Button, Some("Edit"))[0];
+    click_at(&mut h, e.center());
+    let u = rects(&h, Role::Button, Some("Undo: Rename track Ctrl+Z"));
+    assert_eq!(u.len(), 1, "the menu names the step");
+    click_at(&mut h, u[0].center());
+    assert_eq!(song(&mut h, |s| s.channel_names[0].clone()), n0);
+    assert_eq!(h.state().status, "Undo: Rename track");
+    let e = rects(&h, Role::Button, Some("Edit"))[0];
+    click_at(&mut h, e.center());
+    assert_eq!(
+        rects(&h, Role::Button, Some("Redo: Rename track Ctrl+Y")).len(),
+        1
+    );
+    key(&mut h, Key::Escape, egui::Modifiers::NONE);
+    // add and delete a track: each its own named step
+    let ch = song(&mut h, |s| s.channels);
+    assert!(h.state_mut().track_add(ch));
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo: Add track");
+    h.state_mut().track_delete(ch);
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo: Delete track");
+    ctrl_z(&mut h);
+    assert_eq!(h.state().status, "Undo: Delete track");
+    assert_eq!(song(&mut h, |s| s.channels), ch + 1);
+    ctrl_z(&mut h);
+    assert_eq!(song(&mut h, |s| s.channels), ch);
+    // a Tracker cell
+    h.state_mut().edit_cell(|c| c.note = 49);
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo: Edit cell");
+    // an edit with no name yet: plain "Undo"
+    h.state_mut().with(|s| s.song.bpm += 1.0);
+    frames(&mut h, 2);
+    assert_eq!(h.state().undo_text(false), "Undo");
+}
+
 /// several quick mouse edits in a row (well under a second apart), then
 /// Ctrl+Z once per edit: each must come back on its own
 #[test]
@@ -1029,6 +1074,127 @@ fn about_window_is_centred_and_has_credit_tabs() {
     h.state_mut().show_about = true;
     frames(&mut h, 4);
     about_centred(&h);
+}
+
+/// the About window settles at once: it used to grow by a pixel every frame
+/// (and creep up the screen while re-centring) for seconds after opening
+#[test]
+fn about_window_settles_and_stops_growing() {
+    let mut h = harness();
+    h.state_mut().show_about = true;
+    frames(&mut h, 6);
+    let id = egui::Id::unique("about_chipwave_studio");
+    let first = egui::AreaState::load(&h.ctx, id).unwrap().rect();
+    frames(&mut h, 60);
+    let later = egui::AreaState::load(&h.ctx, id).unwrap().rect();
+    assert_eq!(first, later, "About window still moving or growing");
+    about_centred(&h);
+}
+
+/// About opens with the digital rain, which ends by itself, and the page
+/// is laid out (and settled) underneath it the whole time
+#[test]
+fn about_opens_with_rain_that_ends() {
+    let mut h = harness();
+    h.state_mut().show_about = true;
+    frames(&mut h, 2);
+    assert!(h.state().about.rain.is_some(), "no rain on opening");
+    frames(&mut h, 12); // 3 s of 0.25 s steps: well past the 1.6 s rain
+    assert!(h.state().about.rain.is_none(), "rain never ended");
+    about_centred(&h);
+}
+
+/// any key press or click skips the rain straight to the page
+#[test]
+fn about_rain_skips_on_key_or_click() {
+    let mut h = harness();
+    h.state_mut().show_about = true;
+    frames(&mut h, 2);
+    assert!(h.state().about.rain.is_some());
+    key(&mut h, Key::F20, egui::Modifiers::NONE);
+    assert!(h.state().about.rain.is_none(), "key press did not skip");
+    assert!(h.state().show_about);
+    // reopen, then a click
+    h.state_mut().show_about = false;
+    frames(&mut h, 2);
+    h.state_mut().show_about = true;
+    frames(&mut h, 2);
+    assert!(h.state().about.rain.is_some());
+    let c = egui::AreaState::load(&h.ctx, egui::Id::unique("about_chipwave_studio"))
+        .unwrap()
+        .rect()
+        .center();
+    h.input_mut().events.push(egui::Event::PointerMoved(c));
+    h.input_mut().events.push(egui::Event::PointerButton {
+        pos: c,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.input_mut().events.push(egui::Event::PointerButton {
+        pos: c,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    frame(&mut h);
+    assert!(h.state().about.rain.is_none(), "click did not skip");
+}
+
+/// Reduce motion opens About at once, with no rain
+#[test]
+fn about_reduce_motion_has_no_rain() {
+    let mut h = harness();
+    h.state_mut().extra.reduce_motion = true;
+    h.state_mut().show_about = true;
+    frames(&mut h, 2);
+    assert!(h.state().about.rain.is_none());
+    about_centred(&h);
+}
+
+#[test]
+fn help_menu_and_about_open_the_user_manual() {
+    let mut h = harness();
+    click_exact(&mut h, "Help");
+    click_exact(&mut h, "User Manual");
+    assert_eq!(h.state().manual.opened, 1, "Help > User Manual opens it");
+    assert!(h.state().manual.err.is_none());
+    // the About page has a button for it too, beside the support links
+    h.state_mut().show_about = true;
+    frames(&mut h, 3);
+    click_exact(&mut h, "User manual (PDF)");
+    assert_eq!(h.state().manual.opened, 2, "About > User manual opens it");
+    // a failure shows the fallback window with the GitHub link
+    h.state_mut().show_about = false;
+    h.state_mut().manual.err = Some("couldn't start the PDF viewer (test)".into());
+    frames(&mut h, 3);
+    exact(
+        &h,
+        "Sorry, the user manual couldn't be opened on this computer.",
+    );
+    let r = exact(&h, "Open the manual on GitHub");
+    h.input_mut()
+        .events
+        .push(egui::Event::PointerMoved(r.center()));
+    frame(&mut h);
+    let mut urls = vec![];
+    for pressed in [true, false] {
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos: r.center(),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        });
+        frame(&mut h);
+        for c in &h.output().platform_output.commands {
+            if let egui::OutputCommand::OpenUrl(u) = c {
+                urls.push(u.url.clone());
+            }
+        }
+    }
+    assert_eq!(urls, [super::manual::MANUAL_URL]);
+    frames(&mut h, 2);
+    assert!(h.state().manual.err.is_none(), "closed after the link");
 }
 
 #[test]
@@ -3270,4 +3436,47 @@ fn status_bar_tracker_readout_only_with_the_tracker() {
         .next()
         .is_some();
     assert!(both, "length and peak still there");
+}
+
+/// File > Save / Load controller map… are in the menu (on a 1366×768
+/// screen), and a loaded map replaces the MIDI learn list
+#[test]
+fn file_menu_has_controller_maps() {
+    let mut h = harness();
+    h.set_size(egui::vec2(1366.0, 768.0));
+    frames(&mut h, 2);
+    click_exact(&mut h, "File");
+    for name in ["Save controller map…", "Load controller map…"] {
+        let r = labelled(&h, name);
+        assert!(r.max.y <= 768.0 && r.max.x <= 1366.0, "{name} at {r:?}");
+        assert!(r.height() >= 13.0, "{name} too small: {r:?}");
+    }
+    h.state_mut().extra.midi.learn = vec![(1, "tempo".into())];
+    let text = crate::ctlmap::to_text(
+        "Desk",
+        &[
+            (74, "instrument.1.cutoff".into()),
+            (7, "mixer.ch.1.volume".into()),
+        ],
+    )
+    .unwrap();
+    let msg = h.state_mut().load_controller_text(&text);
+    assert!(
+        msg.contains("\"Desk\" loaded: 2 learned control(s)"),
+        "{msg}"
+    );
+    assert_eq!(
+        h.state().extra.midi.learn,
+        vec![
+            (74, "instrument.1.cutoff".to_string()),
+            (7, "mixer.ch.1.volume".to_string())
+        ]
+    );
+    let msg = h.state_mut().load_controller_text("name = 3");
+    assert!(msg.starts_with("Controller map not loaded"), "{msg}");
+    assert_eq!(
+        h.state().extra.midi.learn.len(),
+        2,
+        "a bad file changes nothing"
+    );
 }

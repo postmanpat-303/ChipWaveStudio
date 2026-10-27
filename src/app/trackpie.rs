@@ -2009,8 +2009,7 @@ impl App {
         let name = song.channel_names.get(tr).cloned().unwrap_or_default();
         match crate::chanops::remove_channel(&mut song, tr) {
             Ok(()) => {
-                self.snapshot();
-                self.with(|s| {
+                self.act(Action::DeleteTrack, |s| {
                     s.song = song;
                     let Shared { song, engine, .. } = s;
                     engine.ensure_plan(song);
@@ -2038,8 +2037,7 @@ impl App {
         if n.is_empty() || old.as_deref() == Some(n.as_str()) || old.is_none() {
             return;
         }
-        self.snapshot();
-        self.with(|s| {
+        self.act(Action::RenameTrack, |s| {
             if let Some(x) = s.song.channel_names.get_mut(tr) {
                 *x = n.clone();
             }

@@ -85,6 +85,34 @@ Edit mode off means play only: nothing is written.
 
 Learned moves are song edits. A continuous sweep becomes one undo step.
 
+### Controller maps
+
+**File > Save controller map…** saves the learned controls as a small text
+file, one per controller (by default in the settings folder under
+`Controllers`, named after the MIDI device). **File > Load controller map…**
+puts a saved map back: it replaces the learned list. The same two buttons sit
+under the list in Settings > MIDI.
+
+A map holds only CC numbers and knob ids, so it is plain data, not a script:
+
+```toml
+name = "My controller"
+version = 1
+
+[[map]]
+cc = 74
+id = "instrument.1.cutoff"
+
+[[map]]
+cc = 7
+id = "mixer.ch.1.volume"
+```
+
+When a map loads, an id the knob list doesn't know is skipped and named in
+the status bar. An id of a knob the open song doesn't have (say instrument 9
+in a song with 4) is kept, because another song may have it. Extra fields
+are ignored, so a newer map still loads what it can.
+
 ## How it works (for developers)
 
 - **`src/midi.rs`:**
@@ -93,8 +121,9 @@ Learned moves are song edits. A continuous sweep becomes one undo step.
   - `Config`: atomics written by the UI and read by the MIDI thread;
   - `Hub`: connections, hot-plug rescan, and two rtrb queues (engine and UI). A full queue drops events instead of blocking.
 - **`src/engine.rs`:** `Live`, the live voice pool and its own FX chain state. The queue is drained at the start of every `render`, and `live_event` doesn't allocate. The queue survives an audio device change.
-- **`src/app/midiview.rs`:** recording (step, live, chord spread), MIDI learn (`apply_learned`), the settings card, the toolbar light and its pressure meter.
+- **`src/app/midiview.rs`:** recording (step, live, chord spread), MIDI learn (`apply_learned`, which writes through the knob list `crate::knobs`), controller map save / load, the settings card, the toolbar light and its pressure meter.
 - **Pressure:** `LiveEv::Pressure` → `Engine::live_pressure` writes `NoteFeed::press` (per instrument) for `ModKind::Pressure`. Recorded curves live in each note's `ExprKind::Pressure` expression (`Note::press_push`, `press_set`, `pressure_at`); `plan::note_press_spans` turns them into `Plan::press` step points (a closing 0 at each note's end; notes skipped by a condition or chance drop theirs) and `engine/notes.rs` applies them, seek-stable. The plan key hashes them only when present, so songs without pressure render bit-identically. `src/app/noterec.rs::rec_pressure` records, `src/app/prlanes.rs` (Lane::Pressure) edits.
+- **`src/ctlmap.rs`:** the controller map file (`to_text`, `from_text`; tests `ctlmap::tests` and `ui_tests::file_menu_has_controller_maps`).
 - **`src/smf.rs`:** the Standard MIDI File reader (format 0/1, running status, meta/sysex skipped) used by `src/app/midiimport.rs`.
 - **Tests:**
   - parser and mapping (`midi::tests`), pressure (`pressure_messages_parse_and_translate`, `timeline::press_tests`, `app::prpress_tests`), .mid import (`smf::tests`, `app::midiimport::tests`);

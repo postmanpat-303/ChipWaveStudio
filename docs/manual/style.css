@@ -1,0 +1,106 @@
+@font-face{font-family:"Atkinson";src:url(../../assets/fonts/AtkinsonHyperlegibleNext-Regular.ttf);font-weight:400}
+@font-face{font-family:"Atkinson";src:url(../../assets/fonts/AtkinsonHyperlegibleNext-SemiBold.ttf);font-weight:600 700}
+@font-face{font-family:"AtkMono";src:url(../../assets/fonts/AtkinsonHyperlegibleMono-Medium.ttf);font-weight:400 500}
+@font-face{font-family:"AtkMono";src:url(../../assets/fonts/AtkinsonHyperlegibleMono-SemiBold.ttf);font-weight:600 700}
+@font-face{font-family:"InterF";src:url(../../assets/fonts/Inter-Regular.ttf)}
+:root{--cyan:#00d0ff;--mag:#ff2bd6;--vio:#7c4dff;--blue:#0a84ff;--mint:#b9f5d0;--ink:#1b1e27;--soft:#5a6072;--panel:#f3f5fa;--line:#dde2ee;--dark:#0e1118}
+@page{size:A4;margin:17mm 17mm 19mm 17mm;
+  @bottom-center{content:counter(page);font-family:"Atkinson";font-size:9pt;color:#7a8094}
+  @bottom-left{content:"ChipWave Studio 0.2.17.0 · User Manual";font-family:"Atkinson";font-size:8pt;color:#a0a6b6}
+  @bottom-right{content:"postmanpat-303.github.io/ChipWaveStudio";font-family:"Atkinson";font-size:8pt;color:#a0a6b6}}
+@page cover{margin:0;@bottom-center{content:none}@bottom-left{content:none}@bottom-right{content:none}}
+@page toc{@bottom-left{content:none}@bottom-right{content:none}}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:"Atkinson","InterF",sans-serif;font-size:10.75pt;line-height:1.5;color:var(--ink);margin:0}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+p{margin:0 0 .6em}
+ul,ol{margin:.2em 0 .7em;padding-left:1.3em}
+li{margin:.15em 0}
+strong{font-weight:600}
+kbd{font-family:"AtkMono",monospace;font-size:9pt;font-weight:500;background:#eef1f8;border:1px solid #c9cfdd;border-bottom-width:2px;border-radius:4px;padding:0 .35em;white-space:nowrap;color:#20242f}
+.ui{font-weight:600;color:#2a2f3d}
+/* cover */
+.cover{page:cover;height:297mm;width:210mm;position:relative;overflow:hidden;color:#fff;
+  background:radial-gradient(circle at 20% 15%,rgba(124,77,255,.55),transparent 45%),radial-gradient(circle at 85% 80%,rgba(255,43,214,.45),transparent 45%),radial-gradient(circle at 80% 20%,rgba(0,208,255,.35),transparent 40%),linear-gradient(160deg,#0b0d16,#141028 55%,#0b0d16)}
+.cover .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(0,208,255,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(0,208,255,.08) 1px,transparent 1px);background-size:12mm 12mm}
+.cover .wave{position:absolute;left:0;right:0;bottom:38mm;height:40mm;opacity:.9}
+.cover .inner{position:absolute;top:52mm;left:0;right:0;text-align:center}
+.cover img.icon{width:62mm;height:62mm;filter:drop-shadow(0 0 14mm rgba(0,208,255,.45))}
+.cover h1{font-size:34pt;letter-spacing:.02em;margin:9mm 0 0;font-weight:700;line-height:1.1}
+.cover h1 span{display:block;font-size:20pt;font-weight:400;letter-spacing:.32em;margin-top:3mm;color:var(--cyan)}
+.cover .ver{display:inline-block;margin-top:9mm;font-family:"AtkMono";font-weight:600;font-size:15pt;color:#0e1118;background:var(--mint);border-radius:3mm;padding:1.5mm 6mm;box-shadow:0 0 8mm rgba(185,245,208,.55),inset 0 -1mm 0 rgba(0,0,0,.12)}
+.cover .tag{position:absolute;bottom:18mm;left:0;right:0;text-align:center;font-size:12.5pt;color:#e9e6ff}
+.cover .tag b{color:var(--mag)}
+/* toc */
+.toc{page:toc;break-after:page}
+.toc h2{border:0}
+.toc ol{list-style:none;padding:0;margin:4mm 0 0;columns:1}
+.toc li{display:flex;align-items:baseline;margin:0;padding:1.6mm 0;border-bottom:1px dotted #c8cedc;font-size:11.5pt}
+.toc li .n{font-family:"AtkMono";font-weight:600;color:var(--mag);width:10mm}
+.toc li a{color:var(--ink);flex:1}
+.toc li .pg{font-family:"AtkMono";color:var(--soft);min-width:8mm;text-align:right}
+.toc li.sub{font-size:10pt;padding:.6mm 0 .6mm 10mm;border:0;color:var(--soft)}
+.toc li.sub a{color:var(--soft)}
+/* chapters */
+section.ch{break-before:page}
+.kicker{font-family:"AtkMono";font-weight:600;font-size:9pt;letter-spacing:.2em;color:var(--mag);margin:0}
+h2{font-size:22pt;line-height:1.15;margin:1mm 0 4mm;padding-bottom:2.5mm;border-bottom:3px solid transparent;border-image:linear-gradient(90deg,var(--cyan),var(--vio),var(--mag)) 1;font-weight:700}
+h3{font-size:13.5pt;margin:5mm 0 1.5mm;color:#262a7a;font-weight:700;break-after:avoid}
+h3::before{content:"";display:inline-block;width:2.2mm;height:2.2mm;border-radius:50%;background:var(--cyan);margin-right:2mm;vertical-align:middle;box-shadow:0 0 0 1mm rgba(0,208,255,.2)}
+h4{font-size:11pt;margin:3.5mm 0 1mm;break-after:avoid}
+.lead{font-size:12pt;color:#3b4052}
+figure{margin:3mm 0 4mm;break-inside:avoid}
+figure img{display:block;max-width:100%;border-radius:2mm;border:1px solid #20242f;box-shadow:0 1mm 3mm rgba(20,24,40,.18)}
+figure.c img{margin:0 auto}
+figcaption{font-size:9pt;color:var(--soft);margin-top:1.5mm;line-height:1.4}
+.row{display:flex;gap:5mm;align-items:flex-start}
+.row>*{flex:1}
+.tip,.note,.warn{border-radius:2mm;padding:2.5mm 4mm;margin:3mm 0;break-inside:avoid;font-size:10.5pt}
+.tip{background:#e8fbff;border-left:4px solid var(--cyan)}
+.note{background:#f1ecff;border-left:4px solid var(--vio)}
+.warn{background:#fff0fb;border-left:4px solid var(--mag)}
+.tip b.l,.note b.l,.warn b.l{font-family:"AtkMono";font-size:8.5pt;letter-spacing:.12em;margin-right:1.5mm}
+.tip b.l{color:#007a99}.note b.l{color:#5a32d6}.warn b.l{color:#c2009e}
+table{border-collapse:collapse;width:100%;margin:2mm 0 4mm;font-size:10.5pt;break-inside:auto}
+th{background:#1b1e2b;color:#fff;text-align:left;font-weight:600;padding:1.6mm 2.5mm}
+td{border-bottom:1px solid var(--line);padding:1.4mm 2.5mm;vertical-align:top}
+tr{break-inside:avoid}
+tbody tr:nth-child(even) td{background:#f7f8fc}
+td:first-child{white-space:nowrap}
+table.wide td:first-child{white-space:normal}
+.legend{list-style:none;padding:0;columns:2;column-gap:7mm;margin:2mm 0 4mm;font-size:10.5pt}
+.legend li{break-inside:avoid;padding-left:8mm;position:relative;margin:0 0 1.4mm}
+.legend li::before{content:attr(data-n);position:absolute;left:0;top:.1em;width:5.4mm;height:5.4mm;border-radius:50%;background:var(--mag);color:#fff;font-weight:700;font-size:8.5pt;text-align:center;line-height:5.4mm}
+.legend.one{columns:1}
+.steps{counter-reset:s;list-style:none;padding:0}
+.steps>li{counter-increment:s;position:relative;padding:2.5mm 0 2.5mm 13mm;border-bottom:1px solid var(--line);break-inside:avoid}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:2.5mm;width:9mm;height:9mm;border-radius:2.2mm;background:linear-gradient(135deg,var(--cyan),var(--vio));color:#fff;font-weight:700;font-size:13pt;text-align:center;line-height:9mm}
+.steps>li h4{margin:0 0 1mm}
+.time{float:right;font-family:"AtkMono";font-size:8.5pt;color:var(--soft)}
+.chips span{display:inline-block;background:#eef1f8;border:1px solid #d6dbe8;border-radius:10mm;padding:.2mm 2.6mm;margin:0 1mm 1.4mm 0;font-size:9.5pt}
+.support{background:linear-gradient(135deg,#141028,#0e1118);color:#fff;border-radius:3mm;padding:5mm 6mm;margin:4mm 0;break-inside:avoid}
+.support a{color:var(--cyan);font-weight:600}
+.support h3{color:#fff;margin-top:0}
+.btn{display:inline-block;margin:1.5mm 2mm 0 0;padding:1.6mm 4mm;border-radius:10mm;font-weight:700;color:#fff!important;background:var(--mag)}
+.btn.b{background:var(--blue)}.btn.c{background:#00a3c7}.btn.v{background:var(--vio)}
+.credits li{font-size:9.6pt;line-height:1.4}
+.small{font-size:9.5pt;color:var(--soft)}
+.avoid{break-inside:avoid}
+.pb{break-before:page}
+.credits li{font-size:10.5pt}
+.small{font-size:10pt}
+figcaption{font-size:9.5pt}
+figure.wide img{width:100%}
+figure.mid img{margin:0 auto}
+figure.mid figcaption{text-align:center}
+figure.half{flex:1;margin-top:0}
+.row>.half{flex:1}
+ol.plain{padding-left:1.4em}
+code,pre{font-family:"AtkMono",monospace;font-size:9.5pt}
+code{background:#eef1f8;border-radius:3px;padding:0 .3em}
+pre{background:var(--dark);color:var(--mint);border-radius:2mm;padding:2.5mm 4mm;margin:2mm 0 4mm}
+.tip ul,.note ul,.warn ul{margin:.3em 0 .3em}
+.toc .tip{font-size:10.5pt}
+h2{break-after:avoid}
+code{font-size:10pt}figcaption{font-size:10pt}figure.mid figcaption{font-size:10pt}

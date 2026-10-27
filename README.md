@@ -8,14 +8,14 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.15.0-00d0ff" alt="Version 0.2.15.0">
+  <img src="https://img.shields.io/badge/version-0.2.17.0-00d0ff" alt="Version 0.2.17.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/ygVueHcGakw"><img src="docs/screenshots/promo-studio.jpg" alt="Watch the ChipWave Studio promo on YouTube" width="640"></a>
-  <br><sub>▶ <a href="https://youtu.be/ygVueHcGakw">Watch the promo on YouTube</a> · <a href="https://youtu.be/I7ccA8p_Czc">Watch the Short</a> · more demos on <a href="https://www.youtube.com/@whatgoesaround1551">the channel</a></sub>
+  <a href="https://youtu.be/j1w23Pkuodg"><img src="docs/screenshots/promo-0216.jpg" alt="Watch the ChipWave Studio promo on YouTube" width="640"></a>
+  <br><sub>▶ <a href="https://youtu.be/j1w23Pkuodg">Watch the promo on YouTube</a> · <a href="https://youtu.be/4sbt7f9bIdw">Watch the Short</a> · more demos on <a href="https://www.youtube.com/@whatgoesaround1551">the channel</a></sub>
 </p>
 
 ```
@@ -36,7 +36,8 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.15.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.17.0</b></a> &nbsp;·&nbsp;
+  <a href="docs/manual/ChipWave-Studio-User-Manual.pdf"><b>User manual (PDF)</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
   <a href="#keys"><b>Keys</b></a> &nbsp;·&nbsp;
@@ -51,7 +52,43 @@
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.15.0: Chords that write to the timeline
+## New in 0.2.17.0: a built-in manual, a digital rain About page and cleaner exports
+
+- **The user manual is built in** ([PDF](docs/manual/ChipWave-Studio-User-Manual.pdf)): **Help > User Manual**, or the **User manual (PDF)** button on the About page, opens a friendly 38-page guide, from installing and your first song in 10 minutes to the mixer, MIDI, exporting and a shortcuts table. It's inside the app, so it works without the internet.
+- **About opens with digital rain**: green code falls and the About page appears as it goes, in about a second and a half. Press any key or click to skip it, and **Reduce motion** in Settings switches it off.
+- **About opens straight away**: the About window no longer grows and creeps up the screen for a few seconds after opening.
+- **Exports end cleanly**: saving a song to WAV or MP3 (and `--render`) now stops at the end of the song instead of playing the first row once more in the tail. Playing and looping in the app are unchanged.
+
+Songs play in the app exactly as in 0.2.16.0. Exported files are the same up to the end of the song; only that stray extra row after it is gone. Details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="60%"><img src="docs/screenshots/about-digital-rain.png" alt="Four frames of the About window opening: green digital rain falls and reveals the About page, top to bottom, until the page is fully shown"><br><b>Digital rain</b>: the About page appears as the code falls.</td>
+    <td width="40%"><img src="docs/screenshots/help-user-manual.png" alt="The Help menu open with User Manual at the top, above Keys, Load demo song, Check for updates and About ChipWave Studio"><br><b>Help > User Manual</b> opens the built-in PDF.</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.16.0: controller maps, named Undo and a glowing display</b></summary>
+
+
+- **Save and load controller maps** ([MIDI.md](docs/MIDI.md#controller-maps)): **File > Save controller map…** keeps the knobs you've MIDI-learned as a small file for your keyboard or controller, and **File > Load controller map…** puts them back. The same two buttons sit under the learned list in Settings > MIDI.
+- **Undo says what it will undo**: the Edit menu now reads, for example, **Undo: Move clip** or **Redo: Add note** for the most common edits (clips, notes, tracker cells, tracks and knobs).
+- **Glow and shine display**: the top LCD has a soft backlight glow in the middle and a glassy shine across the top, in whichever display colour you pick (Mint, Amber, Ice and the rest). The text stays easy to read on every colour.
+- **Behind the scenes**: every knob now comes from one shared list, so automation, MIDI learn, modulation and controller maps all name knobs the same way, and a new [ARCHITECTURE.md](docs/ARCHITECTURE.md) guide says which files a new knob, effect, instrument or saved setting goes in.
+
+Every song saves, plays and renders exactly as in 0.2.15.0. Known limits and details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/lcd-glow-shine-slate.png" alt="The top display in Slate with the new glow and shine glass in three backlight colours: Mint, Amber and Ice"><br><b>Glow and shine</b> in Mint, Amber and Ice (Slate).</td>
+    <td width="50%"><img src="docs/screenshots/midi-controller-map-amiga.png" alt="Settings, MIDI card in the Amiga theme: three learned controls (filter cutoff, resonance and channel 1 volume) with Save controller map and Load controller map buttons under the list"><br><b>Controller maps</b>: save and load your learned knobs (Amiga).</td>
+  </tr>
+</table>
+
+</details>
+
+<details><summary><b>New in 0.2.15.0: Chords that write to the timeline</b></summary>
+
 
 - **Write to timeline always writes** ([CHORDS.md](docs/CHORDS.md#generators-panel-chords-melody-and-bass)): the Chords, Melody and Bass generators were rebuilt so **Write to timeline** puts real notes on a melodic track every time, as one **Ctrl+Z**.
   - Pick the target on the WRITE card: **this track**, a **new track** below it, or **this clip**. A new clip starts at the loop start (or the play marker's bar), and the card and the status bar say exactly where the notes went.
@@ -68,6 +105,8 @@ Every song saves, plays and renders exactly as in 0.2.14.0. Known limits and det
     <td width="50%"><img src="docs/screenshots/chords-written-slate.png" alt="The Timeline in Slate after Write to timeline: a new track 06 Chords with an 8-bar clip at bars 33 to 40, open in the piano roll with its chord lane, and the status line naming the track and bars"><br><b>Written</b>: a new Chords track with the notes, one Ctrl+Z.</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.14.0: Round Robin, key pressure and clip copy and paste</b></summary>
 
@@ -536,6 +575,7 @@ scripts/screenshots.sh && scripts/record_gifs.sh       # regenerate the pictures
 ## Documentation
 
 - [ROADMAP.md](docs/ROADMAP.md) — things to add in the future, with good first picks; [CONTRIBUTING.md](CONTRIBUTING.md) — how to build, test and send a pull request
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — where does this go? Which files a new knob, effect, instrument, saved field or MIDI feature touches, and the audio-thread rules
 - [TRACKER.md](docs/TRACKER.md) — the core Tracker, keymap, 32 channels and all effect commands (00–43)
 - [PACKAGING.md](docs/PACKAGING.md) — Windows/Linux/macOS packages and CI
 - [MACOS.md](docs/MACOS.md): the universal Mac build, installing it, first launch, and building it

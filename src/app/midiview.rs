@@ -77,88 +77,22 @@ pub(super) fn default_cc_target(song: &crate::model::Song, instr: usize, cc: u8)
 }
 
 pub(super) fn apply_learned(s: &mut Shared, target: &str, n: f32) -> bool {
-    let Some(t) = Target::parse_in(target, &s.song) else {
+    // one knob list (crate::knobs) for MIDI learn, controller maps,
+    // automation and modulation
+    let Some(t) = crate::knobs::resolve(&s.song, target) else {
         return false;
     };
     let n = n.clamp(0.0, 1.0);
-    let real = t.to_real(n);
-    let song = &mut s.song;
     match t {
-        Target::Cutoff(i) | Target::Resonance(i) | Target::Drive(i) => {
-            let Some(InstrumentKind::Synth(p)) = song.instruments.get_mut(i).map(|x| &mut x.kind)
-            else {
-                return false;
-            };
-            match t {
-                Target::Cutoff(_) => p.cutoff = real,
-                Target::Resonance(_) => p.resonance = real,
-                _ => p.drive = real,
-            }
-        }
-        Target::Level(i) => match song.instruments.get_mut(i) {
-            Some(x) => x.volume = n,
-            None => return false,
-        },
-        Target::ChanVolume(c) => match song.mixer.channels.get_mut(c) {
-            Some(m) => m.volume = real,
-            None => return false,
-        },
-        Target::ChanPan(c) => match song.mixer.channels.get_mut(c) {
-            Some(m) => m.pan = real,
-            None => return false,
-        },
-        Target::Send(c, b) => match song.mixer.channels.get_mut(c) {
-            Some(m) if b < 2 => m.send[b] = n,
-            _ => return false,
-        },
-        Target::Macro(i, k) => return crate::plugin::set_macro_norm(s, i, k, n),
-        Target::Gen(i, k) => match song.instruments.get_mut(i).map(|x| &mut x.kind) {
-            Some(InstrumentKind::Gen(g)) => return crate::gen::set_gen_knob_norm(g, k, n),
-            _ => return false,
-        },
-        Target::Master => song.mixer.master = real,
+        Target::Macro(i, k) => crate::plugin::set_macro_norm(s, i, k, n),
         Target::Tempo => {
-            song.bpm = real.round();
-            let (b, sp) = (song.bpm, song.speed);
+            crate::knobs::set_norm(&mut s.song, t, n);
+            let (b, sp) = (s.song.bpm, s.song.speed);
             s.engine.set_tempo(b, sp);
+            true
         }
-        Target::Fx(i, d, p) => {
-            match song
-                .instruments
-                .get_mut(i)
-                .and_then(|x| x.fx.get_mut(d))
-                .and_then(|dv| dv.params.get_mut(p))
-            {
-                Some(v) => *v = n,
-                None => return false,
-            }
-        }
-        Target::Ret(b, p) => {
-            match song
-                .mixer
-                .returns
-                .get_mut(b)
-                .and_then(|r| r.device.params.get_mut(p))
-            {
-                Some(v) => *v = n,
-                None => return false,
-            }
-        }
-        Target::Patch(i, k) => {
-            let (Some(p), Some(pp)) = (
-                song.instruments.get_mut(i).and_then(|x| x.kind.patch_mut()),
-                crate::modulation::PATCH_PARAMS.get(k),
-            ) else {
-                return false;
-            };
-            (pp.set)(p, real);
-        }
-        Target::ModAmount(k) => match song.modulation.routes.get_mut(k) {
-            Some(r) => r.amount = real,
-            None => return false,
-        },
+        _ => crate::knobs::set_norm(&mut s.song, t, n),
     }
-    true
 }
 
 impl App {
@@ -434,6 +368,97 @@ impl App {
         }
     }
 
+    /// the controller's name for a map: the chosen MIDI device, else "Controller"
+    fn controller_name(&self) -> String {
+        match self.extra.midi.device.as_str() {
+            "" | "*" => "Controller".to_string(),
+            d => d.to_string(),
+        }
+    }
+
+    /// File > Save controller map…: the MIDI learn list as a small TOML file
+    /// (crate::ctlmap, docs/MIDI.md)
+    pub(super) fn save_controller_map(&mut self) {
+        let name = self.controller_name();
+        let text = match crate::ctlmap::to_text(&name, &self.extra.midi.learn) {
+            Ok(t) => t,
+            Err(e) => {
+                self.status = format!("Controller map not saved: {e}");
+                return;
+            }
+        };
+        let mut d = rfd::FileDialog::new()
+            .add_filter("Controller map", &[crate::ctlmap::EXT])
+            .set_file_name(format!("{}.{}", sanitize(&name), crate::ctlmap::EXT));
+        if let Some(dir) = crate::ctlmap::dir() {
+            let _ = std::fs::create_dir_all(&dir);
+            d = d.set_directory(dir);
+        }
+        let Some(mut p) = d.save_file() else {
+            return;
+        };
+        if p.extension().is_none() {
+            p.set_extension(crate::ctlmap::EXT);
+        }
+        self.status = match std::fs::write(&p, text) {
+            Ok(()) => format!(
+                "Controller map saved: {} learned control(s) in {}",
+                self.extra.midi.learn.len(),
+                p.display()
+            ),
+            Err(e) => format!("Controller map not saved: {e}"),
+        };
+    }
+
+    /// File > Load controller map…: replace the MIDI learn list with a saved
+    /// map; ids that are no knob are skipped and said so
+    pub(super) fn load_controller_map(&mut self) {
+        let mut d = rfd::FileDialog::new().add_filter("Controller map", &[crate::ctlmap::EXT]);
+        if let Some(dir) = crate::ctlmap::dir().filter(|d| d.is_dir()) {
+            d = d.set_directory(dir);
+        }
+        let Some(p) = d.pick_file() else {
+            return;
+        };
+        let text = match std::fs::read_to_string(&p) {
+            Ok(t) => t,
+            Err(e) => {
+                self.status = format!("Controller map not loaded: {e}");
+                return;
+            }
+        };
+        self.status = self.load_controller_text(&text);
+    }
+
+    /// apply a controller map's text; returns the status line
+    pub(super) fn load_controller_text(&mut self, text: &str) -> String {
+        let r = self.with(|s| crate::ctlmap::from_text(text, &s.song));
+        let (name, l) = match r {
+            Ok(x) => x,
+            Err(e) => return format!("Controller map not loaded: {e}"),
+        };
+        let n = l.learn.len();
+        self.extra.midi.learn = l.learn;
+        self.midi.learn = None;
+        self.save_settings();
+        self.midi_apply(false);
+        let mut msg = format!(
+            "Controller map \"{}\" loaded: {n} learned control(s)",
+            if name.is_empty() {
+                "unnamed"
+            } else {
+                name.as_str()
+            }
+        );
+        if l.absent > 0 {
+            msg += &format!(", {} for knobs this song doesn't have", l.absent);
+        }
+        if !l.skipped.is_empty() {
+            msg += &format!(", {} skipped ({})", l.skipped.len(), l.skipped.join(", "));
+        }
+        msg
+    }
+
     pub(super) fn midi_summary(&self) -> (Vec<String>, Option<String>) {
         let m = &self.extra.midi;
         let names = self.midi.hub.connected();
@@ -469,6 +494,7 @@ impl App {
     pub(super) fn midi_details(&mut self, ui: &mut egui::Ui) {
         let mut changed = false;
         let mut reconnect = false;
+        let mut map_io = None;
         let m = &mut self.extra.midi;
         egui::Grid::new("midi")
             .num_columns(2)
@@ -611,12 +637,33 @@ impl App {
                         m.learn.remove(k);
                         changed = true;
                     }
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button("Save controller map…")
+                            .on_hover_text("save these learned controls as a small file for this controller")
+                            .clicked()
+                        {
+                            map_io = Some(true);
+                        }
+                        if ui
+                            .button("Load controller map…")
+                            .on_hover_text("replace the learned controls with a saved controller map")
+                            .clicked()
+                        {
+                            map_io = Some(false);
+                        }
+                    });
                 });
                 ui.end_row();
             });
         if changed || reconnect {
             self.save_settings();
             self.midi_apply(reconnect);
+        }
+        match map_io {
+            Some(true) => self.save_controller_map(),
+            Some(false) => self.load_controller_map(),
+            None => {}
         }
     }
 }

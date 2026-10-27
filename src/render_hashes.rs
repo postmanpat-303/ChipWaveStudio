@@ -2,6 +2,9 @@
 //! converted to timeline mode). Not an expected-audio test: run it on two
 //! commits and diff the output to show UI work left the sound alone.
 //!   cargo test --bin chipwave render_hashes -- --ignored --nocapture
+//! The RENDER lines changed once on purpose (render/export stop at the song
+//! end instead of replaying row 0 into the tail; audio before the end is
+//! bit-identical). See docs/CHANGELOG.md.
 use std::hash::{Hash, Hasher};
 
 fn fingerprint(s: &crate::model::Song) -> (u64, usize) {

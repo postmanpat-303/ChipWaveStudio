@@ -1,0 +1,35 @@
+<section class="ch" id="ch11">
+<p class="kicker">CHAPTER 11</p>
+<h2>Plugins</h2>
+<p class="lead">ChipWave can load <b>CLAP</b> and <b>VST3</b> plugins, both instruments and effects. They play notes from your clips, go through the mixer and are saved inside your song.</p>
+<h3>Which plugins work</h3>
+<table class="wide">
+<tr><th style="width:22%">Format</th><th>In 0.2.17.0</th></tr>
+<tr><td>CLAP</td><td>Instruments and effects. The plugin's own editor opens embedded on Windows, or floating where the plugin offers a floating window.</td></tr>
+<tr><td>VST3</td><td>Instruments and effects. The plugin's own editor opens on Windows. On macOS and Linux, use ChipWave's parameter list instead.</td></tr>
+<tr><td>VST2</td><td>Not supported.</td></tr>
+<tr><td>LV2</td><td>Not supported (not planned yet).</td></tr>
+</table>
+<p>Many plugins ship both a CLAP and a VST3 version. Either works, and the Browser marks each one CLAP or VST3.</p>
+<h3>Finding your plugins</h3>
+<p>The first time you start ChipWave, it asks how to find your plugins. You can <b>scan automatically</b> (the standard folders, with an optional deeper search of the drive), <b>choose folders yourself</b>, or <b>skip for now</b>. You can run it again any time from <span class="ui">Settings › Plugins › Find plugins…</span> or the Browser's <span class="ui">••• › Find plugins…</span>.</p>
+<table class="wide">
+<tr><th style="width:22%">System</th><th>Standard folders</th></tr>
+<tr><td>Windows</td><td><code>%COMMONPROGRAMFILES%\CLAP</code>, <code>%LOCALAPPDATA%\Programs\Common\CLAP</code> and the matching <code>VST3</code> folders</td></tr>
+<tr><td>macOS</td><td><code>/Library/Audio/Plug-Ins/CLAP</code>, <code>~/Library/Audio/Plug-Ins/CLAP</code> and the matching <code>VST3</code> folders</td></tr>
+<tr><td>Linux</td><td><code>~/.clap</code>, <code>/usr/lib/clap</code>, <code>/usr/local/lib/clap</code> and <code>~/.vst3</code>, <code>/usr/lib/vst3</code>, <code>/usr/local/lib/vst3</code></td></tr>
+</table>
+<p>Keep your plugins somewhere else? Add the folder in <span class="ui">Settings › Plugins</span>, then rescan. After you install a new plugin, use the Browser's <span class="ui">••• › Rescan plugins</span>.</p>
+<div class="tip"><b class="l">FREE INSTRUMENTS</b> Browser › <span class="ui">••• › Get showcase instruments…</span> lists well-known free, open-source instruments such as Surge XT, Dexed, OB-Xf and Odin 2. Tick the ones you want and press <span class="ui">Download &amp; install</span>. Each download comes from its creator's own release and is checked before it's installed. When a creator only offers an installer, you get an <span class="ui">Open download page</span> button instead.</div>
+<h3>Using a plugin</h3>
+<ul>
+<li>Open the Browser (<kbd>Ctrl</kbd>+<kbd>B</kbd>) and pick the <span class="ui">VST &amp; CLAP</span> category. Drag a plugin onto the Timeline or a track, or double-click it. Plugins aren't previewed in the Browser.</li>
+<li>Effect plugins also appear on the Browser's <span class="ui">Effects</span> tab, and in the FX chain as <span class="ui">Plugin effect</span>.</li>
+<li>The plugin card has <span class="ui">Configure…</span> to open the plugin's own window, <span class="ui">Reload</span> to try again after a failure, eight <b>macros</b> you can point at any plugin parameter, and a searchable list of every parameter.</li>
+<li>The macros can be automated (chapter 9) and MIDI-learned (chapter 10).</li>
+</ul>
+<figure class="half"><img src="img/plugins.png" alt="Add plugin instrument window"><figcaption>The <i>Add plugin instrument</i> window, with Search and Rescan. On this test computer no plugins were installed, so it explains what to do next.</figcaption></figure>
+<h3>Safe scanning</h3>
+<p>Each plugin is tested in a separate process before ChipWave uses it. A plugin that crashes or hangs can't take ChipWave down with it. Plugins that crash, time out or aren't supported are listed as <b>skipped</b>, with the reason.</p>
+<div class="note"><b class="l">MISSING PLUGINS</b> If a song uses a plugin that isn't installed on this computer, the instrument stays in the song as a silent placeholder. Its settings are kept, so nothing is lost when you save. A warning lists the missing plugins when the song opens.</div>
+</section>

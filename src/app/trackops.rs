@@ -32,7 +32,11 @@ impl App {
         }
         self.snapshot();
         let name = format!("Track {}", at + 1);
-        self.track_insert(at, &name)
+        let ok = self.track_insert(at, &name);
+        if ok {
+            self.name_edit(Action::AddTrack);
+        }
+        ok
     }
 
     /// move track `from` to index `to` (header drag; undoable). The
@@ -50,6 +54,7 @@ impl App {
         if !ok {
             return;
         }
+        self.name_edit(Action::MoveTrack);
         // tracker mode: this session's own track heights move too (timeline
         // mode keeps them in the song's tracks, which move_channel moves)
         let v = &mut self.tlv.heights;
