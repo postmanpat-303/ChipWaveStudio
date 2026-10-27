@@ -85,8 +85,6 @@ pub(crate) struct DevUi {
     /// an Arp switched off, per instrument: its settings for the next
     /// switch-on (while ChipWave runs)
     pub(crate) arp_stash: std::collections::HashMap<usize, crate::arp::Arp>,
-    /// the Arp grid shows steps 17-32
-    pub(crate) arp_page: u8,
     /// the Arp card (or its slim "+ ARP" strip) this frame, and its grid
     /// rows (numbers, velocity, gate, accent, rest/tie, ratchet, transpose,
     /// chance)
@@ -127,7 +125,6 @@ impl Default for DevUi {
             tree: false,
             tabbed: false,
             arp_stash: Default::default(),
-            arp_page: 0,
             arp_card: Rect::NOTHING,
             arp_rows: [Rect::NOTHING; 8],
             arp_euclid: [5, 8, 0],

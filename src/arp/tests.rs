@@ -652,3 +652,39 @@ fn named_presets_exist() {
         assert!(!run(&a, false, &CEG, 0.0, 3000.0).is_empty(), "{n}");
     }
 }
+
+/// Length 32 plays all 32 steps: a rest on step 21 is heard at 32 (and
+/// skipped at 16, where the pattern wraps after step 16), and the pattern
+/// starts over on step 33; it survives a save as JSON
+#[test]
+fn length_32_plays_and_saves_all_32_steps() {
+    let notes = [(0.0, 240.0 * 40.0, 49)];
+    let mut a = Arp::default();
+    a.steps.resize(MAX_STEPS, Step::default());
+    a.steps[20].kind = StepKind::Rest;
+    a.steps[28].transpose = 12;
+    a.len = 32;
+    let h = run(&a, false, &notes, 0.0, 240.0 * 34.0 - 1.0);
+    let starts: Vec<i64> = h.iter().map(|h| (h.start / 240.0).round() as i64).collect();
+    assert!(!starts.contains(&20), "step 21 rests: {starts:?}");
+    assert!(starts.contains(&32) && starts.contains(&33), "{starts:?}");
+    let at = |k: i64| {
+        h.iter()
+            .find(|h| (h.start / 240.0).round() as i64 == k)
+            .map(|h| h.key)
+    };
+    assert_eq!(at(28), Some(49 + 12), "step 29 transposed");
+    assert_eq!(at(32), Some(49), "step 33 is step 1 again");
+    assert_eq!(h.len(), 33);
+    // at Length 16 steps 17-32 are not used: no rest at step 21
+    a.len = 16;
+    let h = run(&a, false, &notes, 0.0, 240.0 * 34.0 - 1.0);
+    assert_eq!(h.len(), 34);
+    // the JSON keeps the length and the steps past 16
+    a.len = 32;
+    let back: Arp = serde_json::from_str(&serde_json::to_string(&a).unwrap()).unwrap();
+    assert_eq!(back.len, 32);
+    assert_eq!(back.steps.len(), 32);
+    assert_eq!(back.steps[20].kind, StepKind::Rest);
+    assert_eq!(back.steps[28].transpose, 12);
+}

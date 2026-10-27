@@ -1,7 +1,7 @@
 //! The Arp card (0.2.16), asked for by Del (postmanpat): the first card in
 //! a track's Rack row, before its instrument. Mode, Octaves, Rate, Gate,
 //! Swing and Step velocity knobs, Latch and the Random seed on the left; the
-//! 16-step grid on the right (velocity, gate, accent, rest / tie, ratchet,
+//! 16-step grid (all 32 at Length 32) on the right (velocity, gate, accent, rest / tie, ratchet,
 //! transpose), with the playing step lit while the song plays and a
 //! plain-words readout on top. A Drum Kit gets the same card as Note repeat.
 //!
@@ -33,7 +33,7 @@ const KNOBS_W: f32 = 3.0 * CELL.x;
 pub(super) const LABEL_W: f32 = 56.0;
 /// one step column
 pub(super) const COL_W: f32 = 22.0;
-/// steps shown at once
+/// steps shown up to Length 16 (Length 32 widens the grid to all 32)
 const PAGE: usize = 16;
 const PAD: f32 = 8.0;
 /// the More fold-out's width
@@ -69,9 +69,19 @@ pub(super) fn arp_card_w(app: &App, idx: usize) -> f32 {
     }
 }
 
+/// the step columns the grid shows: 16, or all 32 at Length 32 (the card
+/// grows, so every step is on screen at once)
+pub(super) fn grid_cols(a: &Arp) -> usize {
+    if a.len as usize > PAGE {
+        MAX_STEPS
+    } else {
+        PAGE
+    }
+}
+
 fn card_w(a: &Arp) -> f32 {
     let base = if a.show_steps {
-        PAD + KNOBS_W + PAD + LABEL_W + COL_W * PAGE as f32 + PAD
+        PAD + KNOBS_W + PAD + LABEL_W + COL_W * grid_cols(a) as f32 + PAD
     } else {
         PAD + KNOBS_W + PAD
     };
@@ -303,7 +313,7 @@ impl App {
             let small = |s: &str| egui::RichText::new(s).size(crate::theme::ts::SMALL);
             for (steps, name, tip) in [
                 (false, "Simple", "the knobs only"),
-                (true, "Steps", "the knobs and the 16-step grid"),
+                (true, "Steps", "the knobs and the step grid"),
             ] {
                 if ui
                     .add(egui::Button::new(small(name)).selected(a.show_steps == steps))
@@ -323,9 +333,6 @@ impl App {
                         .clicked()
                     {
                         self.arp_edit(idx, |a| a.len = n);
-                        if n <= PAGE as u8 {
-                            self.dev.arp_page = 0;
-                        }
                     }
                 }
             }
@@ -691,12 +698,7 @@ impl App {
         let t = th();
         let p = ui.painter_at(r.expand(1.0));
         let len = a.len.clamp(1, MAX_STEPS as u8) as usize;
-        let page = if len > PAGE {
-            self.dev.arp_page.min(1) as usize
-        } else {
-            0
-        };
-        let first = page * PAGE;
+        let cols = grid_cols(a);
         // the rows' heights: velocity and gate share what is left
         let fixed = 14.0 + 5.0 * 15.0 + 7.0 * 3.0;
         let free = (r.height() - fixed).max(40.0);
@@ -738,27 +740,10 @@ impl App {
                 egui::vec2(COL_W - 2.0, row.height()),
             )
         };
-        // the 1-16 / 17-32 page switch on the numbers row
-        if len > PAGE {
-            let pr = Rect::from_min_size(rows[0].min, egui::vec2(LABEL_W - 4.0, 14.0));
-            let resp = ui
-                .interact(pr, ui.make_persistent_id(("arp_page", idx)), Sense::click())
-                .on_hover_text("show the other 16 steps");
-            p.text(
-                pr.left_center(),
-                egui::Align2::LEFT_CENTER,
-                if page == 0 { "1-16 ›" } else { "‹ 17-32" },
-                tiny.clone(),
-                t.accent,
-            );
-            if resp.clicked() {
-                self.dev.arp_page = 1 - page as u8;
-            }
-        }
         let pointer = ui.ctx().pointer_latest_pos();
         let mut edits: Vec<(usize, StepEdit)> = vec![];
-        for c in 0..PAGE {
-            let k = first + c;
+        for c in 0..cols {
+            let k = c;
             let used = k < len;
             let s = a.step(k);
             let on = now == Some(k);
@@ -796,8 +781,8 @@ impl App {
                     // a drag that started here draws across every column
                     if let Some(pp) = pointer {
                         let ck = ((pp.x - x0) / COL_W).floor();
-                        if (0.0..PAGE as f32).contains(&ck) {
-                            let kk = first + ck as usize;
+                        if (0.0..cols as f32).contains(&ck) {
+                            let kk = ck as usize;
                             let v = ((cr.bottom() - pp.y) / cr.height()).clamp(0.05, 1.0);
                             if kk < len {
                                 edits.push((kk, StepEdit::Bar(which, v)));

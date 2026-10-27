@@ -488,6 +488,23 @@ impl App {
                     let preset = std::env::var("CHIPWAVE_SHOT_ARP")
                         .unwrap_or_else(|_| "Gated trance".into());
                     self.shot_arp(ii, false, &preset);
+                    // CHIPWAVE_SHOT_ARP_LEN=8|16|32: the pattern length
+                    if let Some(n) = std::env::var("CHIPWAVE_SHOT_ARP_LEN")
+                        .ok()
+                        .and_then(|v| v.parse::<u8>().ok())
+                    {
+                        self.with(|s| {
+                            if let Some(a) =
+                                s.song.instruments.get_mut(ii).and_then(|i| i.arp.as_mut())
+                            {
+                                a.len = n.clamp(1, crate::arp::MAX_STEPS as u8);
+                                for k in [19, 23, 27] {
+                                    a.steps[k].kind = crate::arp::StepKind::Rest;
+                                }
+                                a.steps[30].ratchet = 2;
+                            }
+                        });
+                    }
                     if std::env::var_os("CHIPWAVE_SHOT_ARP_MORE").is_some() {
                         self.with(|s| {
                             s.song.info.key = crate::chords::parse_key("A minor");

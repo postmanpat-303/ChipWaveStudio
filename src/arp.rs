@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 /// held notes kept per stepper
 pub const MAX_HELD: usize = 16;
-/// pattern steps kept (the grid shows 16; the model allows 32)
+/// pattern steps kept (the grid shows 16, or all 32 at Length 32)
 pub const MAX_STEPS: usize = 32;
 /// notes one call can fire (a chord on a step, or several hits)
 pub const MAX_OUT: usize = 32;

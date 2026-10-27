@@ -396,3 +396,56 @@ fn write_the_arp2_demo_song() {
     song.info.key = crate::chords::parse_key("A minor");
     fileio::save_cwt(&song, std::path::Path::new(&out)).unwrap();
 }
+
+/// Del: "it didn't expand to 32 arps when selected". Length 32 widens the
+/// grid to all 32 steps at once (it used to keep 16 columns with a small
+/// "1-16 ›" page switch); the card still fits 1366x768 with 10 pt text,
+/// step 32's cells take clicks, and Length 16 narrows it again
+#[test]
+fn length_32_shows_all_32_steps_on_a_laptop() {
+    let mut h = devices();
+    let strip = h.state().dev.arp_card;
+    click_at(&mut h, strip.center());
+    frames(&mut h, 3);
+    let w16 = h.state().dev.arp_card.width();
+    let card = h.state().dev.arp_card;
+    let b32 = h
+        .query_all_by_label("32")
+        .map(|n| n.rect())
+        .find(|r| card.contains(r.center()))
+        .expect("the Length 32 button");
+    click_at(&mut h, b32.center());
+    frames(&mut h, 3);
+    let a = arp(&h, 7).unwrap();
+    assert_eq!(a.len, 32);
+    assert_eq!(a.steps.len(), crate::arp::MAX_STEPS);
+    let card = h.state().dev.arp_card;
+    assert!(
+        card.width() >= w16 + 16.0 * COL_W - 0.5,
+        "{w16} -> {card:?}"
+    );
+    assert!(card.right() <= 1366.5 && card.bottom() <= 768.5, "{card:?}");
+    assert!(crate::theme::ts::TINY >= 10.0);
+    let rows = h.state().dev.arp_rows;
+    let x32 = rows[3].left() + LABEL_W + 31.0 * COL_W + COL_W / 2.0;
+    assert!(x32 < card.right(), "step 32 at {x32} past {card:?}");
+    // step 32's accent cell: one click, one undo step
+    assert!(!a.step(31).accent);
+    click_at(&mut h, Pos2::new(x32, rows[3].center().y));
+    frames(&mut h, 3);
+    assert!(arp(&h, 7).unwrap().step(31).accent, "step 32 accented");
+    h.state_mut().do_undo(false);
+    frames(&mut h, 2);
+    assert!(!arp(&h, 7).unwrap().step(31).accent);
+    // back to 16: the card narrows to 16 columns
+    let card = h.state().dev.arp_card;
+    let b16 = h
+        .query_all_by_label("16")
+        .map(|n| n.rect())
+        .find(|r| card.contains(r.center()) && r.top() < card.top() + 30.0)
+        .expect("the Length 16 button");
+    click_at(&mut h, b16.center());
+    frames(&mut h, 3);
+    assert_eq!(arp(&h, 7).unwrap().len, 16);
+    assert!((h.state().dev.arp_card.width() - w16).abs() < 0.5);
+}
