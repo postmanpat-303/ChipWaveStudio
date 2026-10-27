@@ -174,6 +174,8 @@ mod timeline_m2_tests;
 #[cfg(test)]
 mod timeline_tests;
 #[cfg(test)]
+mod tldrag_tests;
+#[cfg(test)]
 mod tlselect_tests;
 mod topbar;
 mod trackauto;

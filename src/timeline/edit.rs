@@ -105,6 +105,24 @@ pub fn move_clips(tl: &mut Timeline, ids: &[u32], dt: Tick, dtrack: i32, tracks:
     tl.sort();
 }
 
+/// Whether clip `c` may sit on track `tr`: audio clips on audio tracks,
+/// note and Tracker clips on the others, nothing on the Master
+pub fn clip_fits(tl: &Timeline, c: &Clip, tr: usize) -> bool {
+    match tl.tracks.get(tr).map(|t| t.kind) {
+        Some(TrackKind::Master) => false,
+        Some(TrackKind::Audio) => c.audio().is_some(),
+        _ => c.audio().is_none(),
+    }
+}
+
+/// every clip of `ids` is on a track of its kind ([`clip_fits`])
+pub fn all_fit(tl: &Timeline, ids: &[u32]) -> bool {
+    tl.clips
+        .iter()
+        .filter(|c| ids.contains(&c.id))
+        .all(|c| clip_fits(tl, c, c.track as usize))
+}
+
 /// Drag the right edge: the clip ends at `end` (at least one row long).
 /// Past the end of its block the source loops (with notches).
 pub fn set_end(song: &Song, tl: &mut Timeline, id: u32, end: Tick) {
@@ -703,6 +721,41 @@ pub fn set_loop(tl: &mut Timeline, a: Tick, b: Tick) {
     let (a, b) = (a.min(b).max(0), a.max(b).max(0));
     tl.loop_range = Some((a, b.max(a + ROW)));
     tl.loop_on = true;
+}
+
+/// Set the loop region to exactly `(a, b)` (sorted, at least one row),
+/// leaving it on or off as it was: what dragging the ruler's loop band
+/// does.
+pub fn set_loop_range(tl: &mut Timeline, a: Tick, b: Tick) {
+    let (a, b) = (a.min(b).max(0), a.max(b).max(0));
+    tl.loop_range = Some((a, b.max(a + ROW)));
+}
+
+/// One end of the loop region `orig` dragged to `at`: the other end stays.
+/// Past the other end the two swap (the dragged edge becomes the other
+/// side); the region keeps at least `min` ticks (one snap unit).
+pub fn loop_edge(orig: (Tick, Tick), start: bool, at: Tick, min: Tick) -> (Tick, Tick) {
+    let min = min.max(ROW);
+    let other = if start { orig.1 } else { orig.0 };
+    let at = at.max(0);
+    if at < other {
+        let a = at.min(other - min);
+        if a < 0 {
+            (0, other.max(min))
+        } else {
+            (a, other)
+        }
+    } else {
+        (other, at.max(other + min))
+    }
+}
+
+/// The loop region `orig` moved by `dt` ticks, its length kept; its start
+/// on the grid `g` (`at` snaps the start) and never before 0.
+pub fn loop_shift(orig: (Tick, Tick), dt: Tick, g: Tick) -> (Tick, Tick) {
+    let len = orig.1 - orig.0;
+    let a = snap((orig.0 + dt).max(0), g).max(0);
+    (a, a + len)
 }
 
 // ------------------------------------------------------------ placing clips

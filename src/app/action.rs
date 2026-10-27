@@ -43,6 +43,12 @@ pub(crate) enum Action {
     DeleteTrack,
     MoveTrack,
     RenameTrack,
+    /// a new loop region (Shift-drag on the ruler)
+    SetLoop,
+    /// the loop region's start or end dragged
+    ResizeLoop,
+    /// the loop region dragged by its band
+    MoveLoop,
 }
 
 fn many(n: usize, one: &str, more: &str) -> String {
@@ -67,6 +73,9 @@ impl Action {
             Action::DuplicateClips(n) => many(*n, "Duplicate clip", "Duplicate clips"),
             Action::SplitClip => "Split clip".into(),
             Action::PasteClips => "Paste clips".into(),
+            Action::SetLoop => "Set loop".into(),
+            Action::ResizeLoop => "Resize loop".into(),
+            Action::MoveLoop => "Move loop".into(),
             Action::AddNote => "Add note".into(),
             Action::ResizeNotes => "Resize notes".into(),
             Action::MoveNotes => "Move notes".into(),
