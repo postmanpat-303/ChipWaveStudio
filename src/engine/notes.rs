@@ -201,11 +201,19 @@ pub(super) struct NoteState {
     /// tracks whose Arp holds notes (bit per track; 0 = none, and then no
     /// arp code runs)
     pub(super) arp_mask: u64,
+    /// tracks whose tracker cells play through their instrument's Arp
+    /// (stepped on the launch clock in tracker and timeline mode alike)
+    pub(super) tmask: u64,
     /// the Arp's hits of one call (kept here: no allocation while playing)
     hits: crate::arp::Hits,
     /// the Arp's steps stop short of this tick on arrangement tracks: the
     /// row where the loop (or the song) wraps
     pub(super) arp_cap: f64,
+    /// the song key's pitch-class mask (0 = none) and the automated /
+    /// modulated Arp parameters (instrument, param, value), set with the
+    /// automation (capacity reserved: no allocation while playing)
+    pub(super) arp_key: u16,
+    pub(super) arp_over: Vec<(usize, usize, f32)>,
     /// the Arp's notes played (tests): track, start tick, key
     #[cfg(test)]
     pub(super) arp_log: Vec<(usize, Tick, u8)>,
@@ -228,8 +236,11 @@ impl NoteState {
             layers: Default::default(),
             arp: [crate::arp::Stepper::default(); MAX_CHANNELS],
             arp_mask: 0,
+            tmask: 0,
             hits: Default::default(),
             arp_cap: f64::INFINITY,
+            arp_key: 0,
+            arp_over: Vec::with_capacity(64),
             #[cfg(test)]
             arp_log: vec![],
         }
@@ -294,6 +305,7 @@ impl NoteState {
     pub(super) fn silence(&mut self) {
         self.layers.silence();
         self.arp_clear(u64::MAX);
+        self.tmask = 0;
         for v in &mut self.v {
             v.active = false;
             v.down = false;
@@ -489,7 +501,7 @@ fn arp_step(
     t: f64,
     lc: f64,
 ) {
-    let launch = st.lmask >> ch & 1 == 1;
+    let launch = (st.lmask | st.tmask) >> ch & 1 == 1;
     let s = &st.arp[ch];
     let inst = song.instruments.get(s.idx);
     let Some(a) = inst
@@ -502,7 +514,7 @@ fn arp_step(
     };
     let kit = inst.is_some_and(|i| crate::drumkit::kit_of(i).is_some());
     let now = if launch { lc } else { t.min(st.arp_cap) };
-    let m = crate::arp::Mods::default();
+    let m = crate::arp::mods_for(a, st.arp[ch].idx, st.arp_key, &st.arp_over);
     st.arp[ch].advance(a, &m, kit, now, &mut st.hits);
     for k in 0..st.hits.n {
         let h = st.hits.h[k];
@@ -525,6 +537,58 @@ fn arp_step(
     }
 }
 
+/// The tracks whose tracker cells play through an Arp (`tmask`), at
+/// launch clock `lc` (once per sample while playing, tracker and timeline
+/// mode alike: the same cells play the same steps either way)
+#[allow(clippy::too_many_arguments)]
+pub(super) fn tracker_arp(
+    st: &mut NoteState,
+    feed: &mut crate::modulation::NoteFeed,
+    song: &Song,
+    chans: &mut [Chan],
+    plugins: &mut crate::plugin::Rack,
+    nch: usize,
+    lc: f64,
+) {
+    let mask = st.tmask
+        & if nch >= 64 {
+            u64::MAX
+        } else {
+            (1u64 << nch) - 1
+        };
+    st.layers.release_due(mask, lc);
+    let mut m = mask;
+    while m != 0 {
+        let ch = m.trailing_zeros() as usize;
+        m &= m - 1;
+        if ch >= MAX_CHANNELS {
+            break;
+        }
+        for k in ch * NOTE_VOICES..(ch + 1) * NOTE_VOICES {
+            let v = &mut st.v[k];
+            if v.active && v.down && lc >= v.off_at {
+                v.down = false;
+                if v.plug {
+                    plugins.live_off(PLUG_TAG + k as u16);
+                    v.active = false;
+                } else {
+                    v.synth.amp.release();
+                    v.synth.fenv.release();
+                }
+            }
+        }
+        if st.arp_mask >> ch & 1 == 1 {
+            // a step on the row line waits for that row's cells (its
+            // note-off or new chord): half a tick (~6 samples) behind
+            let t = lc - TRACKER_LAG;
+            arp_step(st, feed, song, chans, plugins, ch, t, t);
+        }
+    }
+}
+
+/// how far the tracker-cell Arp steps behind the clock, in ticks
+const TRACKER_LAG: f64 = 0.5;
+
 /// Seek / plan change at tick `t`: each arrangement track's Arp holds the
 /// notes it would hold had it played from the start (Latch included).
 /// `restart` = a jump (the steps from `t` on play); else it runs on.
@@ -539,7 +603,7 @@ pub(super) fn arp_resync(
 ) {
     #[allow(clippy::needless_range_loop)] // ch indexes st.cur, st.arp, plan.notes and chans
     for ch in 0..nch.min(MAX_CHANNELS) {
-        if st.lmask >> ch & 1 == 1 {
+        if (st.lmask | st.tmask) >> ch & 1 == 1 {
             continue;
         }
         let Some(spans) = plan.notes.get(ch) else {
@@ -741,11 +805,14 @@ pub(super) fn note_events(
 ) {
     st.clock = t;
     let lmask = st.lmask;
-    st.layers.events(nch, t, lc, lmask);
+    // tracker cells through an Arp end on the launch clock (`tracker_arp`)
+    let lm = lmask | st.tmask;
+    st.layers
+        .events(nch, t, if lmask != 0 { lc } else { 0.0 }, lm);
     if st.any {
         for (k, v) in st.v[..nch * NOTE_VOICES].iter_mut().enumerate() {
             // launcher notes end on the launch clock
-            let now = if lmask != 0 && lmask >> (k / NOTE_VOICES) & 1 == 1 {
+            let now = if lm != 0 && lm >> (k / NOTE_VOICES) & 1 == 1 {
                 lc
             } else {
                 t
@@ -782,7 +849,7 @@ pub(super) fn note_events(
                 note_on(st, feed, song, chans, plugins, ch, n);
             }
         }
-        if st.arp_mask >> ch & 1 == 1 {
+        if st.arp_mask >> ch & 1 == 1 && st.tmask >> ch & 1 == 0 {
             arp_step(st, feed, song, chans, plugins, ch, t, lc);
         }
         // recorded key pressure: the Pressure modulators of the note's
@@ -934,6 +1001,86 @@ pub(super) fn restrike(
 }
 
 impl Engine {
+    /// A tracker cell on track `ch` (instrument `idx`): true when the
+    /// instrument's Arp takes it. A note joins the stepper (a 0xy arpeggio
+    /// adds note+x and note+y as a chord; the cell's volume is the
+    /// velocity) and the notes before it let go; a note-off lets go of the
+    /// held notes (Latch keeps them). No Arp: false, nothing changes.
+    pub(super) fn arp_cell(&mut self, song: &Song, ch: usize, cell: &Cell, idx: usize) -> bool {
+        if ch >= MAX_CHANNELS.min(64) {
+            return false;
+        }
+        let bit = 1u64 << ch;
+        let new_note = cell.note > 0 && cell.note != NOTE_OFF;
+        if !new_note && cell.note != NOTE_OFF {
+            return false;
+        }
+        let Some(a) = song.instruments.get(idx).and_then(|i| i.arp.as_ref()) else {
+            if self.nv.tmask & bit != 0 {
+                // the Arp was switched off, or another instrument plays here
+                self.nv.release_where(&mut self.plugins, bit);
+                self.nv.tmask &= !bit;
+            }
+            return false;
+        };
+        let lc = self.launch_clock();
+        if cell.note == NOTE_OFF {
+            if self.nv.tmask & bit == 0 {
+                return false;
+            }
+            self.nv.arp[ch].release_open(lc);
+            return true;
+        }
+        let c = &mut self.chans[ch];
+        if c.active && c.gate {
+            // the track's own voice gives way to the Arp's
+            c.gate = false;
+            c.synth.amp.release();
+            c.synth.fenv.release();
+        }
+        c.instr = idx;
+        c.vol = song.instruments[idx].volume;
+        let st = &mut self.nv;
+        let s = &mut st.arp[ch];
+        if !s.is_empty() && (s.idx != idx || !s.launch) {
+            s.clear();
+        }
+        s.release_open(lc);
+        s.idx = idx;
+        s.launch = true;
+        let vel = if cell.vol > 0 {
+            ((cell.vol - 1) as f32 / 64.0).min(1.0)
+        } else {
+            1.0
+        };
+        let mut keys = [cell.note, 0, 0];
+        let mut n = 1;
+        if cell.fx == 0 && cell.fxp != 0 {
+            for d in [cell.fxp >> 4, cell.fxp & 15] {
+                if d > 0 {
+                    keys[n] = (cell.note + d).min(120);
+                    n += 1;
+                }
+            }
+        }
+        for &k in &keys[..n] {
+            s.add(
+                a.latch,
+                crate::arp::Held {
+                    key: k,
+                    vel,
+                    instr: (idx + 1).min(255) as u8,
+                    start: lc,
+                    end: f64::INFINITY,
+                    ..Default::default()
+                },
+            );
+        }
+        st.arp_mask |= bit;
+        st.tmask |= bit;
+        true
+    }
+
     /// the timeline position in ticks, inside the current row (row clock)
     pub(super) fn tl_clock(&self) -> f64 {
         let tl = self.tick_len().max(1.0);

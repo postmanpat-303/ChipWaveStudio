@@ -1619,6 +1619,8 @@ pub use plan::*;
 #[cfg(test)]
 mod arp_tests;
 #[cfg(test)]
+mod arp_tracker_tests;
+#[cfg(test)]
 mod follow_tests;
 #[cfg(test)]
 mod launcher_tests;

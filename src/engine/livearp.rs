@@ -4,13 +4,13 @@
 //! position while the song plays and on a free clock at the song tempo
 //! while stopped; a jump of the clock lets its notes go (no stuck notes).
 use super::*;
-use crate::arp::{Held, Hits, Mods, Stepper};
+use crate::arp::{Held, Hits, Stepper};
 use crate::midi::LiveEv;
 
 /// live note ids of the Arp's notes: OUT_BASE + slot (MIDI keys use
 /// 0..=127, the computer keyboard 180 and up)
 pub(super) const OUT_BASE: u8 = 128;
-const OUTS: usize = 32;
+pub(super) const OUTS: usize = 32;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Dom {
@@ -32,6 +32,8 @@ pub(super) struct LiveArp {
     /// the free clock (ticks) while stopped
     free: f64,
     hits: Hits,
+    /// the sustain pedal is down (kept over a cleared stepper)
+    pedal: bool,
     /// keys held or notes sounding (nothing runs otherwise)
     pub(super) active: bool,
     /// the notes played (tests): tracker note
@@ -51,6 +53,7 @@ impl LiveArp {
             clock: 0.0,
             free: 0.0,
             hits: Hits::default(),
+            pedal: false,
             active: false,
             #[cfg(test)]
             log: vec![],
@@ -128,6 +131,7 @@ impl Engine {
                 self.larp.instr = instr;
                 self.larp.ch = ch;
                 self.larp.st.idx = i;
+                self.larp.st.pedal = self.larp.pedal;
                 self.larp.st.add(
                     latch,
                     Held {
@@ -154,7 +158,22 @@ impl Engine {
                 }
                 false
             }
+            LiveEv::Sustain(down) => {
+                // the pedal holds the Arp's released keys (the voices get
+                // it too: keys on other instruments)
+                self.larp.pedal = down;
+                if self.larp.active {
+                    let latch = song
+                        .instruments
+                        .get(self.larp.st.idx)
+                        .and_then(|x| x.arp.as_ref())
+                        .is_some_and(|a| a.latch);
+                    self.larp.st.sustain(down, latch);
+                }
+                false
+            }
             LiveEv::AllOff => {
+                self.larp.pedal = false;
                 if self.larp.active {
                     self.larp_flush(song);
                     self.larp.reset();
@@ -203,7 +222,8 @@ impl Engine {
             }
         }
         let lv = &mut self.larp;
-        lv.st.advance(a, &Mods::default(), kit, clock, &mut lv.hits);
+        let m = crate::arp::mods_for(a, i, self.nv.arp_key, &self.nv.arp_over);
+        lv.st.advance(a, &m, kit, clock, &mut lv.hits);
         for k in 0..self.larp.hits.n {
             let h = self.larp.hits.h[k];
             let s = self.larp.next;
@@ -308,6 +328,53 @@ mod tests {
         assert_eq!(e.larp.log.len(), before, "keys up: no more notes");
         assert_eq!(down(&e), 0, "and nothing hangs on");
         assert!(!e.larp.active);
+    }
+
+    #[test]
+    fn live_sustain_pedal_holds_the_arp_keys_until_it_comes_up() {
+        let s = song();
+        let mut e = Engine::new(SR);
+        e.bpm = 120.0;
+        e.live_event(&s, on(60));
+        e.live_event(&s, on(64));
+        run(&mut e, &s, 256);
+        e.live_event(&s, LiveEv::Sustain(true));
+        e.live_event(&s, LiveEv::Off { key: 60 });
+        e.live_event(&s, LiveEv::Off { key: 64 });
+        run(&mut e, &s, 4 * STEP);
+        assert_eq!(
+            e.larp.log[..4],
+            [n(60), n(64), n(60), n(64)],
+            "the pedal holds them"
+        );
+        assert!(down(&e) <= 1, "the Arp's own notes still end on their step");
+        e.live_event(&s, LiveEv::Sustain(false));
+        let k = e.larp.log.len();
+        run(&mut e, &s, 3 * STEP);
+        assert_eq!(e.larp.log.len(), k, "pedal up: they go");
+        assert_eq!(down(&e), 0);
+        assert!(!e.larp.active);
+    }
+
+    #[test]
+    fn live_arp_follows_the_song_key() {
+        let mut s = song();
+        s.info.key = crate::chords::parse_key("A minor");
+        {
+            let a = s.instruments[0].arp.as_mut().unwrap();
+            a.scale_lock = true;
+        }
+        let mut e = Engine::new(SR);
+        e.bpm = 120.0;
+        e.live_event(&s, on(61)); // C#: not in A minor
+        run(&mut e, &s, 3 * STEP);
+        assert!(!e.larp.log.is_empty());
+        let key = s.info.key.unwrap();
+        assert!(e
+            .larp
+            .log
+            .iter()
+            .all(|&k| key.contains(crate::chords::pc_of(k))));
     }
 
     #[test]
