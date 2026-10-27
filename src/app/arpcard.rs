@@ -5,6 +5,11 @@
 //! transpose), with the playing step lit while the song plays and a
 //! plain-words readout on top. A Drum Kit gets the same card as Note repeat.
 //!
+//! arp2: a Chance row in the grid (seeded per-step probability) and a
+//! "More" fold-out on the right for the advanced settings: how the octaves
+//! go, Retrigger / Free-run, Scale lock (the song key), Humanise, the
+//! Euclid fill and the chip fast-chord rates.
+//!
 //! Switching it off sets the instrument's `arp` to None (nothing is saved,
 //! the engine takes its old path) and keeps the settings here for the next
 //! switch-on while ChipWave runs. Every edit is a song change, so undo has
@@ -28,6 +33,14 @@ pub(super) const COL_W: f32 = 22.0;
 /// steps shown at once
 const PAGE: usize = 16;
 const PAD: f32 = 8.0;
+/// the More fold-out's width
+pub(super) const MORE_W: f32 = 214.0;
+/// the chances a Chance cell's click steps through
+const CHANCES: [f32; 5] = [1.0, 0.75, 0.5, 0.25, 0.1];
+
+/// the Mode and Rate knobs' last positions
+const MODE_MAX: f32 = (Mode::ALL.len() - 1) as f32;
+const RATE_MAX: f32 = (arp::RATES.len() - 1) as f32;
 
 /// the transpose values a click steps through
 const TRANSPOSE: [i8; 7] = [0, 12, 7, 5, -5, -12, 24];
@@ -54,11 +67,12 @@ pub(super) fn arp_card_w(app: &App, idx: usize) -> f32 {
 }
 
 fn card_w(a: &Arp) -> f32 {
-    if a.show_steps {
+    let base = if a.show_steps {
         PAD + KNOBS_W + PAD + LABEL_W + COL_W * PAGE as f32 + PAD
     } else {
         PAD + KNOBS_W + PAD
-    }
+    };
+    base + if a.show_more { MORE_W + PAD } else { 0.0 }
 }
 
 /// the name the card goes by
@@ -185,7 +199,8 @@ impl App {
                 .with_angle(-std::f32::consts::FRAC_PI_2),
             );
             self.dev.arp_card = rect;
-            self.dev.arp_rows = [Rect::NOTHING; 7];
+            self.dev.arp_rows = [Rect::NOTHING; 8];
+            self.dev.arp_more = Rect::NOTHING;
             if resp.clicked() {
                 self.arp_set_on(idx, true);
             }
@@ -194,7 +209,8 @@ impl App {
         let w = card_w(&a);
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
         self.dev.arp_card = rect;
-        self.dev.arp_rows = [Rect::NOTHING; 7];
+        self.dev.arp_rows = [Rect::NOTHING; 8];
+        self.dev.arp_more = Rect::NOTHING;
         let p = ui.painter_at(rect.expand(2.0));
         p.rect_filled(rect, 8, t.cart_top);
         p.rect_stroke(
@@ -243,6 +259,20 @@ impl App {
         );
         let kr = Rect::from_min_size(body.min, egui::vec2(KNOBS_W, body.height()));
         self.arp_knobs(ui, kr, idx, &a, kit);
+        let mut body = body;
+        if a.show_more {
+            let mr = Rect::from_min_max(Pos2::new(body.right() - MORE_W, body.top()), body.max);
+            body.max.x = mr.left() - PAD;
+            p.line_segment(
+                [
+                    Pos2::new(mr.left() - PAD / 2.0, mr.top()),
+                    Pos2::new(mr.left() - PAD / 2.0, mr.bottom()),
+                ],
+                Stroke::new(1.0, t.line2),
+            );
+            self.dev.arp_more = mr;
+            self.arp_more(ui, mr, idx, &a, kit);
+        }
         if a.show_steps {
             let gr = Rect::from_min_max(Pos2::new(kr.right() + PAD, body.top()), body.max);
             let now = self.with(|s| super::timeline::tl_head(&s.engine));
@@ -297,6 +327,18 @@ impl App {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .add(
+                        egui::Button::new(small(if a.show_more { "More ◂" } else { "More ▸" }))
+                            .selected(a.show_more),
+                    )
+                    .on_hover_text(
+                        "the advanced settings: octave walk, retrigger, scale lock, humanise, Euclid fill, fast-chord rates",
+                    )
+                    .clicked()
+                {
+                    self.arp_edit(idx, |a| a.show_more = !a.show_more);
+                }
                 ui.menu_button(small("Preset ▾"), |ui| {
                     for (name, p) in arp::presets(kit) {
                         if ui.button(name).clicked() {
@@ -324,10 +366,10 @@ impl App {
         if !kit {
             ks.push((
                 "Mode",
-                mi as f32 / 6.0,
+                mi as f32 / MODE_MAX,
                 a.mode.name().into(),
                 0.0,
-                6.0,
+                MODE_MAX,
                 "the order the held notes play in",
             ));
             ks.push((
@@ -341,11 +383,11 @@ impl App {
         }
         ks.push((
             "Rate",
-            ri as f32 / 11.0,
+            ri as f32 / RATE_MAX,
             arp::rate_name(a.div, a.feel),
-            7.0 / 11.0,
-            11.0,
-            "how fast: 1/4 to 1/32, T = triplet, . = dotted",
+            7.0 / RATE_MAX,
+            RATE_MAX,
+            "how fast, in time with the song: 1/4 to 1/128, T = triplet, . = dotted; 1/64 and up are the chip fast-chord rates",
         ));
         ks.push((
             "Gate",
@@ -405,9 +447,9 @@ impl App {
             if changed {
                 let v = v.clamp(0.0, 1.0);
                 self.arp_edit(idx, |a| match name {
-                    "Mode" => a.mode = Mode::ALL[(v * 6.0).round() as usize],
+                    "Mode" => a.mode = Mode::ALL[(v * MODE_MAX).round() as usize],
                     "Octaves" => a.octaves = 1 + (v * 3.0).round() as u8,
-                    "Rate" => a.set_rate_index((v * 11.0).round() as usize),
+                    "Rate" => a.set_rate_index((v * RATE_MAX).round() as usize),
                     "Gate" => a.gate = 0.05 + v * 0.95,
                     "Swing" => a.swing = v,
                     _ => a.vel_depth = v,
@@ -446,6 +488,173 @@ impl App {
         });
     }
 
+    /// the More fold-out: the advanced settings, one line each
+    fn arp_more(&mut self, ui: &mut egui::Ui, r: Rect, idx: usize, a: &Arp, kit: bool) {
+        let t = th();
+        let key = self.with(|s| s.song.info.key);
+        let small = |s: &str| egui::RichText::new(s).size(crate::theme::ts::SMALL);
+        let line_h = 22.0;
+        let mut y = r.top();
+        let mut line = |ui: &mut egui::Ui, f: &mut dyn FnMut(&mut egui::Ui)| {
+            let lr = Rect::from_min_size(Pos2::new(r.left(), y), egui::vec2(r.width(), line_h));
+            y += line_h + 2.0;
+            if lr.bottom() <= r.bottom() + 0.5 {
+                sub(ui, lr, |ui| {
+                    ui.spacing_mut().item_spacing.x = 3.0;
+                    ui.spacing_mut().button_padding = egui::vec2(4.0, 1.0);
+                    f(ui)
+                });
+            }
+        };
+        let name = |ui: &mut egui::Ui, s: &str| {
+            let (nr, _) = ui.allocate_exact_size(egui::vec2(58.0, 18.0), Sense::hover());
+            ui.painter().text(
+                nr.left_center(),
+                egui::Align2::LEFT_CENTER,
+                s,
+                crate::theme::prop(crate::theme::ts::SMALL),
+                t.ink2,
+            );
+        };
+        let mut edit: Option<Box<dyn FnOnce(&mut Arp)>> = None;
+        if !kit {
+            line(ui, &mut |ui| {
+                name(ui, "Octaves go");
+                for m in arp::OctMode::ALL {
+                    if ui
+                        .add(egui::Button::new(small(m.name())).selected(a.oct_mode == m))
+                        .on_hover_text(match m {
+                            arp::OctMode::Up => "each pass of the run goes an octave up",
+                            arp::OctMode::Down => "each pass goes an octave down",
+                            arp::OctMode::Bounce => "up the octaves and back down",
+                        })
+                        .clicked()
+                    {
+                        edit = Some(Box::new(move |a| a.oct_mode = m));
+                    }
+                }
+            });
+        }
+        line(ui, &mut |ui| {
+            name(ui, "Pattern");
+            for (on, txt, tip) in [
+                (
+                    true,
+                    "Retrigger",
+                    "a new note starts the pattern and the run from step 1",
+                ),
+                (
+                    false,
+                    "Free-run",
+                    "the pattern runs on the song grid; new notes join it where it is",
+                ),
+            ] {
+                if ui
+                    .add(egui::Button::new(small(txt)).selected(a.retrig == on))
+                    .on_hover_text(tip)
+                    .clicked()
+                {
+                    edit = Some(Box::new(move |a| a.retrig = on));
+                }
+            }
+        });
+        if !kit {
+            line(ui, &mut |ui| {
+                name(ui, "Scale lock");
+                let words = match key {
+                    Some(k) => k.name(),
+                    None => "set a song key".into(),
+                };
+                if ui
+                    .add(egui::Button::new(small(if a.scale_lock { "On" } else { "Off" })).selected(a.scale_lock))
+                    .on_hover_text(
+                        "keep every note and step transpose in the song's key (Song info › Key); transposes count scale steps",
+                    )
+                    .clicked()
+                {
+                    edit = Some(Box::new(|a| a.scale_lock = !a.scale_lock));
+                }
+                ui.label(small(&words).color(if key.is_some() { t.ink } else { t.ochre }));
+            });
+        }
+        line(ui, &mut |ui| {
+            name(ui, "Humanise");
+            for v in [0.0f32, 0.1, 0.25, 0.5] {
+                let on = (a.humanise - v).abs() < 0.01;
+                if ui
+                    .add(egui::Button::new(small(&format!("{}%", (v * 100.0) as u32))).selected(on))
+                    .on_hover_text(
+                        "seeded velocity variation: the same every play (the Seed changes it)",
+                    )
+                    .clicked()
+                {
+                    edit = Some(Box::new(move |a| a.humanise = v));
+                }
+            }
+        });
+        let mut eu = self.dev.arp_euclid;
+        let mut fill = false;
+        line(ui, &mut |ui| {
+            name(ui, "Euclid");
+            let mut hits = eu[0] as u32;
+            let mut len = eu[1] as u32;
+            let mut rot = eu[2] as u32;
+            ui.add(egui::DragValue::new(&mut hits).range(1..=len.max(1)))
+                .on_hover_text("hits: the steps that play");
+            ui.label(small("/"));
+            ui.add(egui::DragValue::new(&mut len).range(1..=MAX_STEPS as u32))
+                .on_hover_text("over this many steps (the pattern's new length)");
+            ui.label(small("↻"));
+            ui.add(egui::DragValue::new(&mut rot).range(0..=len.saturating_sub(1)))
+                .on_hover_text("turn the pattern by this many steps");
+            eu = [
+                hits.min(len) as u8,
+                len as u8,
+                rot.min(len.saturating_sub(1)) as u8,
+            ];
+            fill = ui
+                .add(egui::Button::new(small("Fill")))
+                .on_hover_text(
+                    "spread the hits as evenly as they go over the steps; the rest rest (Ctrl+Z undoes)",
+                )
+                .clicked();
+        });
+        self.dev.arp_euclid = eu;
+        if fill {
+            let [h, l, ro] = eu;
+            edit = Some(Box::new(move |a| {
+                a.euclid_fill(h as usize, l as usize, ro as usize)
+            }));
+            self.status = format!("{}: Euclid {h}/{l} filled", arp_title(kit));
+        }
+        line(ui, &mut |ui| {
+            name(ui, "Fast chord");
+            for (div, feel) in [
+                (64u8, arp::Feel::Straight),
+                (64, arp::Feel::Triplet),
+                (128, arp::Feel::Straight),
+            ] {
+                let on = a.div == div && a.feel == feel;
+                if ui
+                    .add(egui::Button::new(small(&arp::rate_name(div, feel))).selected(on))
+                    .on_hover_text(
+                        "chip fast-chord rates: the held chord flickers into one buzzy tone (1/96 at 125 BPM is one 50 Hz frame, as on the C64)",
+                    )
+                    .clicked()
+                {
+                    edit = Some(Box::new(move |a| {
+                        a.div = div;
+                        a.feel = feel;
+                        a.gate = 1.0;
+                    }));
+                }
+            }
+        });
+        if let Some(f) = edit {
+            self.arp_edit(idx, f);
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn arp_grid(
         &mut self,
@@ -466,21 +675,22 @@ impl App {
         };
         let first = page * PAGE;
         // the rows' heights: velocity and gate share what is left
-        let fixed = 14.0 + 4.0 * 16.0 + 6.0 * 3.0;
+        let fixed = 14.0 + 5.0 * 15.0 + 7.0 * 3.0;
         let free = (r.height() - fixed).max(40.0);
         let vel_h = (free * 0.6).floor();
         let gate_h = free - vel_h;
-        let names: [(&str, f32); 7] = [
+        let names: [(&str, f32); 8] = [
             ("", 14.0),
             ("Velocity", vel_h),
             ("Gate", gate_h),
-            ("Accent", 16.0),
-            ("Rest / tie", 16.0),
-            ("Ratchet", 16.0),
-            (if kit { "" } else { "Transpose" }, 16.0),
+            ("Accent", 15.0),
+            ("Rest / tie", 15.0),
+            ("Ratchet", 15.0),
+            (if kit { "" } else { "Transpose" }, 15.0),
+            ("Chance", 15.0),
         ];
         let mut y = r.top();
-        let mut rows = [Rect::NOTHING; 7];
+        let mut rows = [Rect::NOTHING; 8];
         for (k, (name, h)) in names.iter().enumerate() {
             rows[k] = Rect::from_min_size(Pos2::new(r.left(), y), egui::vec2(r.width(), *h));
             if !name.is_empty() {
@@ -492,7 +702,9 @@ impl App {
                     t.ink2,
                 );
             }
-            y += h + 3.0;
+            if *h > 0.0 {
+                y += h + 3.0;
+            }
         }
         self.dev.arp_rows = rows;
         let x0 = r.left() + LABEL_W;
@@ -690,10 +902,48 @@ impl App {
                     }
                 }
             }
+            // chance (seeded: the same steps drop out every play)
+            let cr = col(c, rows[7]);
+            let ch = s.chance.clamp(0.0, 1.0);
+            p.rect_filled(cr, 2, t.crt_top);
+            if ch < 1.0 {
+                let hv = (cr.height() * ch).max(2.0);
+                p.rect_filled(
+                    Rect::from_min_max(Pos2::new(cr.left(), cr.bottom() - hv), cr.max),
+                    2,
+                    dim(t.acc_deep),
+                );
+            }
+            crate::theme::text_fit(
+                &p,
+                cr.center(),
+                egui::Align2::CENTER_CENTER,
+                &format!("{}", (ch * 100.0).round()),
+                tiny.clone(),
+                dim(if ch < 1.0 { t.ink } else { t.ink2 }),
+                cr.width(),
+            );
+            let resp = ui
+                .interact(cr, ui.make_persistent_id(("arp_ch", idx, k)), Sense::click())
+                .on_hover_text(
+                    "chance the step plays, %: click for 100 → 75 → 50 → 25 → 10 (right-click goes back); the wheel moves by 5. Seeded, so the song plays the same every time",
+                );
+            if used && resp.clicked() {
+                edits.push((k, StepEdit::Chance(1)));
+            }
+            if used && resp.secondary_clicked() {
+                edits.push((k, StepEdit::Chance(-1)));
+            }
+            if used && resp.hovered() {
+                let d = ui.input(|i| i.smooth_scroll_delta.y);
+                if d.abs() > 0.5 {
+                    edits.push((k, StepEdit::ChanceBy(d.signum() * 0.05)));
+                }
+            }
             // the playing step: a box down the column
             if on {
                 let top = col(c, rows[0]).top() - 1.0;
-                let bot = rows[if kit { 5 } else { 6 }].bottom() + 1.0;
+                let bot = rows[7].bottom() + 1.0;
                 p.rect_stroke(
                     Rect::from_min_max(
                         Pos2::new(x0 + c as f32 * COL_W, top),
@@ -725,6 +975,9 @@ pub(crate) enum StepEdit {
     Ratchet(i8),
     /// None: the next of [`TRANSPOSE`]; Some(d): by d semitones
     Transpose(Option<i8>),
+    /// the next (1) or last (-1) of [`CHANCES`]
+    Chance(i8),
+    ChanceBy(f32),
 }
 
 pub(crate) fn apply(s: &mut arp::Step, e: StepEdit) {
@@ -748,6 +1001,15 @@ pub(crate) fn apply(s: &mut arp::Step, e: StepEdit) {
             s.transpose = TRANSPOSE[i.map_or(0, |i| (i + 1) % TRANSPOSE.len())];
         }
         StepEdit::Transpose(Some(d)) => s.transpose = (s.transpose + d).clamp(-24, 24),
+        StepEdit::Chance(d) => {
+            let n = CHANCES.len() as i8;
+            let i = CHANCES
+                .iter()
+                .position(|&v| (v - s.chance).abs() < 0.01)
+                .map_or(if d > 0 { -1 } else { 0 }, |i| i as i8);
+            s.chance = CHANCES[(i + d).rem_euclid(n) as usize];
+        }
+        StepEdit::ChanceBy(d) => s.chance = ((s.chance + d) * 20.0).round().clamp(1.0, 20.0) / 20.0,
     }
 }
 

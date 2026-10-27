@@ -6,6 +6,7 @@ use super::ui_tests::{click_at, frame, harness_with, key};
 use super::*;
 use crate::timeline as tl;
 use egui::Key;
+use egui_kittest::kittest::Queryable;
 use egui_kittest::Harness;
 
 fn frames(h: &mut Harness<'static, App>, n: usize) {
@@ -208,4 +209,71 @@ fn write_the_arp_demo_song() {
     a.steps[14].transpose = 12;
     song.instruments[slot as usize - 1].arp = Some(a);
     fileio::save_cwt(&song, std::path::Path::new(&out)).unwrap();
+}
+
+#[test]
+fn the_more_fold_out_fits_a_laptop_and_its_edits_land() {
+    let mut h = devices();
+    let strip = h.state().dev.arp_card.center();
+    click_at(&mut h, strip);
+    frames(&mut h, 3);
+    assert!(arp(&h, 7).is_some());
+    h.get_by_label("More ▸").click();
+    frames(&mut h, 3);
+    let a = arp(&h, 7).unwrap();
+    assert!(a.show_more, "More opens the fold-out");
+    let card = h.state().dev.arp_card;
+    let more = h.state().dev.arp_more;
+    assert!(more.width() > 150.0, "{more:?}");
+    assert!(card.right() <= 1366.5 && card.bottom() <= 768.5, "{card:?}");
+    assert!(card.contains_rect(more), "{more:?} in {card:?}");
+    // the grid keeps all 8 rows (Chance the last) inside the card
+    let rows = h.state().dev.arp_rows;
+    for r in &rows[1..] {
+        assert!(r.height() >= 12.0, "{rows:?}");
+        assert!(r.bottom() <= card.bottom() + 0.5, "{r:?} {card:?}");
+        assert!(r.right() <= more.left(), "{r:?} {more:?}");
+    }
+    // the fold-out's lines are all there
+    for l in [
+        "Bounce",
+        "Retrigger",
+        "Free-run",
+        "set a song key",
+        "25%",
+        "Fill",
+        "1/96",
+    ] {
+        assert!(h.query_by_label(l).is_some(), "{l}");
+    }
+    // Euclid 5/8 Fill: five hits over eight steps, the pattern 8 long
+    h.get_by_label("Fill").click();
+    frames(&mut h, 3);
+    let a = arp(&h, 7).unwrap();
+    assert_eq!(a.len, 8);
+    let hits = (0..8)
+        .filter(|&k| a.step(k).kind == crate::arp::StepKind::Play)
+        .count();
+    assert_eq!(hits, 5);
+    // one undo step
+    h.state_mut().do_undo(false);
+    frames(&mut h, 2);
+    assert_eq!(arp(&h, 7).unwrap().len, 16);
+    // Bounce and the 1/96 fast chord
+    h.get_by_label("Bounce").click();
+    frames(&mut h, 2);
+    h.get_by_label("1/96").click();
+    frames(&mut h, 2);
+    let a = arp(&h, 7).unwrap();
+    assert_eq!(a.oct_mode, crate::arp::OctMode::Bounce);
+    assert_eq!((a.div, a.feel), (64, crate::arp::Feel::Triplet));
+    // a Chance cell: 100 -> 75
+    let rows = h.state().dev.arp_rows;
+    let at = Pos2::new(
+        rows[7].left() + LABEL_W + 2.0 * COL_W + COL_W / 2.0,
+        rows[7].center().y,
+    );
+    click_at(&mut h, at);
+    frames(&mut h, 2);
+    assert!((arp(&h, 7).unwrap().step(2).chance - 0.75).abs() < 1e-3);
 }

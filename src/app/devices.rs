@@ -88,9 +88,14 @@ pub(crate) struct DevUi {
     /// the Arp grid shows steps 17-32
     pub(crate) arp_page: u8,
     /// the Arp card (or its slim "+ ARP" strip) this frame, and its grid
-    /// rows (numbers, velocity, gate, accent, rest/tie, ratchet, transpose)
+    /// rows (numbers, velocity, gate, accent, rest/tie, ratchet, transpose,
+    /// chance)
     pub(crate) arp_card: Rect,
-    pub(crate) arp_rows: [Rect; 7],
+    pub(crate) arp_rows: [Rect; 8],
+    /// the More panel's Euclid fill: hits, length, rotation
+    pub(crate) arp_euclid: [u8; 3],
+    /// the More panel this frame (tests and shots)
+    pub(crate) arp_more: Rect,
 }
 
 impl Default for DevUi {
@@ -124,7 +129,9 @@ impl Default for DevUi {
             arp_stash: Default::default(),
             arp_page: 0,
             arp_card: Rect::NOTHING,
-            arp_rows: [Rect::NOTHING; 7],
+            arp_rows: [Rect::NOTHING; 8],
+            arp_euclid: [5, 8, 0],
+            arp_more: Rect::NOTHING,
         }
     }
 }

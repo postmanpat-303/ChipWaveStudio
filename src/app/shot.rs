@@ -483,7 +483,26 @@ impl App {
                     // the Arp on the pad (Gated trance, a ratchet and a
                     // transposed step), playing
                     self.extra.browser_open = false;
-                    self.shot_arp(ii, false, "Gated trance");
+                    // CHIPWAVE_SHOT_ARP=<preset>; CHIPWAVE_SHOT_ARP_MORE: the
+                    // More fold-out open, a few step chances, a song key
+                    let preset = std::env::var("CHIPWAVE_SHOT_ARP")
+                        .unwrap_or_else(|_| "Gated trance".into());
+                    self.shot_arp(ii, false, &preset);
+                    if std::env::var_os("CHIPWAVE_SHOT_ARP_MORE").is_some() {
+                        self.with(|s| {
+                            s.song.info.key = crate::chords::parse_key("A minor");
+                            if let Some(a) =
+                                s.song.instruments.get_mut(ii).and_then(|i| i.arp.as_mut())
+                            {
+                                a.show_more = true;
+                                a.scale_lock = true;
+                                a.humanise = 0.1;
+                                for (k, c) in [(3, 0.5), (7, 0.75), (11, 0.25), (15, 0.5)] {
+                                    a.steps[k].chance = c;
+                                }
+                            }
+                        });
+                    }
                 }
                 if view == "instskin-chains" {
                     self.extra.chains_cards = true;

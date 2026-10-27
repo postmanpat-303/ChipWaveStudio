@@ -1076,6 +1076,7 @@ pub fn bake(
 
 /// the starting patterns: (name, settings)
 /// the named preset (melodic first, then the drum ones)
+#[cfg(test)]
 pub fn preset(name: &str) -> Option<Arp> {
     presets(false)
         .into_iter()
