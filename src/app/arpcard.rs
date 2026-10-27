@@ -34,7 +34,7 @@ pub(super) const COL_W: f32 = 22.0;
 const PAGE: usize = 16;
 const PAD: f32 = 8.0;
 /// the More fold-out's width
-pub(super) const MORE_W: f32 = 214.0;
+pub(super) const MORE_W: f32 = 236.0;
 /// the chances a Chance cell's click steps through
 const CHANCES: [f32; 5] = [1.0, 0.75, 0.5, 0.25, 0.1];
 
