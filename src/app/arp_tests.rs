@@ -277,3 +277,94 @@ fn the_more_fold_out_fits_a_laptop_and_its_edits_land() {
     frames(&mut h, 2);
     assert!((arp(&h, 7).unwrap().step(2).chance - 0.75).abs() < 1e-3);
 }
+
+/// the arp2 MP3 demo's song (CHIPWAVE_ARP2_DEMO=<out.cwt>, --ignored):
+/// Am-F-C-G (two bars a chord) five times over the demo's first 8 bars of
+/// drums and bass, a new named preset each time: Trance Gate 16ths, Chip
+/// Fast Chord, Synthwave Octaves, Euclid 5/8 Pluck, Probability Sparkle
+#[test]
+#[ignore]
+fn write_the_arp2_demo_song() {
+    let Some(out) = std::env::var_os("CHIPWAVE_ARP2_DEMO") else {
+        return;
+    };
+    let presets = [
+        "Trance Gate 16ths",
+        "Chip Fast Chord",
+        "Synthwave Octaves",
+        "Euclid 5/8 Pluck",
+        "Probability Sparkle",
+    ];
+    let mut song = fileio::demo_song();
+    let (t, _) = crate::timeline::from_order(&song);
+    song.timeline = Some(Box::new(t));
+    let bar = 4 * tl::PPQ;
+    let sec = 8 * bar;
+    let tr = {
+        let t = song.timeline.as_deref_mut().unwrap();
+        t.clips.retain(|c| c.start < sec);
+        for c in &mut t.clips {
+            c.len = c.len.min(sec - c.start);
+        }
+        t.end = 0;
+        t.markers.clear();
+        let pads: Vec<usize> = (0..t.tracks.len())
+            .filter(|&i| t.tracks[i].name.contains("Pad"))
+            .collect();
+        t.clips.retain(|c| !pads.contains(&(c.track as usize)));
+        // the 8 bars again under each preset
+        let base = t.clips.clone();
+        for k in 1..presets.len() as i64 {
+            for c in &base {
+                let mut c = c.clone();
+                c.id = t.new_id();
+                c.start += k * sec;
+                t.clips.push(c);
+            }
+        }
+        pads[0]
+    };
+    let pluck = song
+        .instruments
+        .iter()
+        .position(|i| i.name.contains("Pluck"))
+        .expect("the demo's pluck");
+    // one copy of the pluck per preset (the Arp lives on the instrument)
+    let mut slots = vec![];
+    for (k, name) in presets.iter().enumerate() {
+        let mut i = song.instruments[pluck].clone();
+        i.name = format!("Arp {}", k + 1);
+        i.arp = Some(crate::arp::preset(name).unwrap_or_else(|| panic!("{name}")));
+        song.instruments.push(i);
+        slots.push(song.instruments.len() as u8);
+    }
+    let id = tl::new_note_clip(&mut song, tr, 0).unwrap();
+    let t = song.timeline.as_deref_mut().unwrap();
+    let c = t.clips.iter_mut().find(|c| c.id == id).unwrap();
+    let total = sec * presets.len() as i64;
+    c.len = total;
+    let tl::ClipKind::Notes { data } = c.kind else {
+        unreachable!()
+    };
+    let d = t.notes[data as usize].make_mut();
+    d.len = total;
+    for (p, &slot) in slots.iter().enumerate() {
+        for (k, chord) in [[57u8, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]]
+            .iter()
+            .enumerate()
+        {
+            for key in chord {
+                d.notes.push(tl::Note {
+                    start: p as i64 * sec + k as i64 * 2 * bar,
+                    len: 2 * bar,
+                    key: *key,
+                    vel: 0xD000,
+                    instr: slot,
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    song.info.key = crate::chords::parse_key("A minor");
+    fileio::save_cwt(&song, std::path::Path::new(&out)).unwrap();
+}
