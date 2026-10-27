@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.18.0" date="2026-10-27">
+      <description><p>The Arp: a note effect at the start of a track's Rack that plays held notes one at a time in time with the song, with modes, octaves, tempo-synced rates, swing, latch, a step grid of 8, 16 or 32 steps, Euclid fill, scale lock and named presets. The loop range on the ruler can now be resized by dragging its ends and moved by dragging its band, on the snap grid. Ctrl-drag a clip to copy it, leaving the original in place. A new demo song, Tallest Morning, is uplifting melodic house built on StringWave.</p></description>
+    </release>
     <release version="0.2.17.0" date="2026-10-26">
       <description><p>The user manual is now built in: Help, User Manual or the button on the About page opens it as a PDF, even offline. The About page opens straight away with a short digital rain that reveals the page as it falls; any key or click skips it, and Reduce motion turns it off. WAV and MP3 exports now stop cleanly at the end of the song instead of playing the first row again in the tail.</p></description>
     </release>

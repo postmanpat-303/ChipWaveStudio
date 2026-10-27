@@ -1,12 +1,12 @@
 // ChipWave Studio - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-/// Display version (Cargo: 0.2.17+fix.0 -> "0.2.17.0"; the updater compares it part by part).
-pub const VERSION: &str = "0.2.17.0";
+/// Display version (Cargo: 0.2.18+fix.0 -> "0.2.18.0"; the updater compares it part by part).
+pub const VERSION: &str = "0.2.18.0";
 
 /// The version as shown (About, window title): a test build (the pack
 /// scripts set CW_BUILD, e.g. "combo2 8bdf40c") reads
-/// "0.2.13.0 · test build (combo2 8bdf40c)"; a release build just "0.2.17.0".
+/// "0.2.13.0 · test build (combo2 8bdf40c)"; a release build just "0.2.18.0".
 pub fn version_label() -> String {
     version_label_for(option_env!("CW_BUILD"))
 }
