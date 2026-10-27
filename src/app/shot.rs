@@ -2740,21 +2740,23 @@ impl App {
         let bar: Tick = 4 * PPQ;
         let x = |a: &App, t: Tick| a.tlv.x_of(t);
         let ruler = self.tlv.ruler;
-        let from: Pos2;
-        let to: Pos2;
         let mut mods = egui::Modifiers::NONE;
-        match m.as_str() {
+        let (from, to): (Pos2, Pos2) = match m.as_str() {
             "loop-hover" | "loop-resize" => {
-                from = Pos2::new(x(self, 8 * bar) + 1.0, ruler.center().y);
-                to = if m == "loop-hover" {
+                let from = Pos2::new(x(self, 8 * bar) + 1.0, ruler.center().y);
+                let to = if m == "loop-hover" {
                     from
                 } else {
                     Pos2::new(x(self, 10 * bar) + 4.0, ruler.center().y)
                 };
+                (from, to)
             }
             "band" => {
-                from = Pos2::new(x(self, 6 * bar), ruler.bottom() - 4.0);
-                to = from + egui::vec2(x(self, 2 * bar) - x(self, 0) + 3.0, 0.0);
+                let from = Pos2::new(x(self, 6 * bar), ruler.bottom() - 4.0);
+                (
+                    from,
+                    from + egui::vec2(x(self, 2 * bar) - x(self, 0) + 3.0, 0.0),
+                )
             }
             "ctrl-copy" => {
                 let Some(c) = self.tlv.cache.as_ref() else {
@@ -2770,11 +2772,14 @@ impl App {
                     return;
                 };
                 mods = egui::Modifiers::COMMAND;
-                from = Pos2::new(r.left() + 30.0, r.center().y);
-                to = from + egui::vec2(x(self, 4 * bar) - x(self, 0) + 5.0, r.height());
+                let from = Pos2::new(r.left() + 30.0, r.center().y);
+                (
+                    from,
+                    from + egui::vec2(x(self, 4 * bar) - x(self, 0) + 5.0, r.height()),
+                )
             }
             _ => return,
-        }
+        };
         let start = SETUP_AT + 24;
         let mut sc: Vec<(u32, egui::Event)> = vec![(start, egui::Event::PointerMoved(from))];
         if m != "loop-hover" {
