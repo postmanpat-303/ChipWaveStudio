@@ -786,6 +786,11 @@ pub const DEMOS: &[(&str, &str, &str)] = &[
         "music by Martin Galway (Commodore 64), arranged by Del (postmanpat): melodic chiptune, G minor, 125 BPM (only Chip FX, the effects and a Drum Kit)",
         include_str!("../demos/oceans_11.cwt.toml"),
     ),
+    (
+        "Tallest Morning",
+        "uplifting melodic house, D major, 126 BPM (StringWave echo chord stabs and pads, a macro rise, LFO and envelope modulation, sidechain pumping)",
+        include_str!("../demos/tallest_morning.cwt.toml"),
+    ),
 ];
 
 /// demo `i` of `DEMOS` (falls back to the first)
@@ -1373,6 +1378,35 @@ mod tests {
         // ~3:25: 22 blocks of 64 lines at 104 BPM
         let secs = s.order.len() as f32 * 64.0 * 60.0 / (104.0 * 4.0);
         assert!((180.0..240.0).contains(&secs), "{secs}");
+    }
+    /// the uplifting house demo "Tallest Morning": in File > Demo songs, with
+    /// StringWave stabs and pads, song modulation and automated route depths
+    #[test]
+    fn tallest_morning_demo_loads_from_menu() {
+        use crate::gen::GenEngine;
+        let i = DEMOS
+            .iter()
+            .position(|d| d.0 == "Tallest Morning")
+            .expect("uplifting demo registered in File > Demo songs");
+        let s = demo_song_n(i);
+        assert!(s.title.starts_with("Tallest Morning"));
+        assert_eq!(s.bpm, 126.0);
+        assert_eq!(s.channels, 16);
+        assert_eq!(s.mixer.duck_key, 0);
+        assert!(s.mixer.limiter.enabled && s.mixer.limiter.ceiling_db <= -1.0);
+        let strings = s
+            .instruments
+            .iter()
+            .filter(|x| matches!(&x.kind, InstrumentKind::Gen(g) if matches!(g.engine, GenEngine::Strings(_))))
+            .count();
+        assert_eq!(strings, 2, "StringWave stabs and pad");
+        assert!(s.modulation.mods.len() >= 6);
+        assert!(s.modulation.routes.len() >= 10);
+        assert!(s.automation.iter().any(|l| l.target.starts_with("mod.")));
+        assert!(s.automation.iter().any(|l| l.target.contains(".gen.")));
+        // 2:00-2:45: 18 blocks of 64 lines at 126 BPM
+        let secs = s.order.len() as f32 * 64.0 * 60.0 / (126.0 * 4.0);
+        assert!((120.0..165.0).contains(&secs), "{secs}");
     }
     /// the chiptune demo "Oceans 11": in File > Demo songs, and made only
     /// from Chip FX instruments, one Drum Kit and built-in effects
