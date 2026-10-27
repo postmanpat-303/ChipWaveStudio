@@ -1658,7 +1658,11 @@ impl App {
             self.shot_keys();
             self.shot_lcd();
             self.shot_loop();
+            self.shot_tldrag(false);
             self.shot_kit_after(ctx);
+        }
+        if f == SETUP_AT + 18 {
+            self.shot_tldrag(true);
         }
         if view == "split-preview" && f == SETUP_AT + 12 {
             self.shot_split();
@@ -2705,6 +2709,99 @@ impl App {
             _ => {}
         }
         self.dirty = false;
+    }
+
+    /// CHIPWAVE_SHOT_TLDRAG=loop-hover | loop-resize | band | ctrl-copy
+    /// (view timeline-mode): the loop region over bars 5-8 with the pointer
+    /// on its end (hover), dragging its end out by two bars, dragging its
+    /// band, or Ctrl-dragging a clip (held mid-drag: the copy cursor and +)
+    fn shot_tldrag(&mut self, script: bool) {
+        use crate::timeline::{Tick, PPQ};
+        let Ok(m) = std::env::var("CHIPWAVE_SHOT_TLDRAG") else {
+            return;
+        };
+        if !script {
+            // first: the region and the zoom (the positions are read a few
+            // frames later, once they are drawn)
+            self.with(|s| {
+                s.engine.stop();
+                if let Some(t) = s.song.timeline.as_deref_mut() {
+                    t.loop_range = Some((4 * 4 * PPQ, 8 * 4 * PPQ));
+                    t.loop_on = true;
+                }
+            });
+            self.follow = false;
+            self.tlv.zoom = 14.0;
+            self.tlv.scroll = 0.0;
+            self.tlv.sels.clear();
+            self.tlv.sel = None;
+            return;
+        }
+        let bar: Tick = 4 * PPQ;
+        let x = |a: &App, t: Tick| a.tlv.x_of(t);
+        let ruler = self.tlv.ruler;
+        let from: Pos2;
+        let to: Pos2;
+        let mut mods = egui::Modifiers::NONE;
+        match m.as_str() {
+            "loop-hover" | "loop-resize" => {
+                from = Pos2::new(x(self, 8 * bar) + 1.0, ruler.center().y);
+                to = if m == "loop-hover" {
+                    from
+                } else {
+                    Pos2::new(x(self, 10 * bar) + 4.0, ruler.center().y)
+                };
+            }
+            "band" => {
+                from = Pos2::new(x(self, 6 * bar), ruler.bottom() - 4.0);
+                to = from + egui::vec2(x(self, 2 * bar) - x(self, 0) + 3.0, 0.0);
+            }
+            "ctrl-copy" => {
+                let Some(c) = self.tlv.cache.as_ref() else {
+                    return;
+                };
+                let Some(r) =
+                    c.tl.clips
+                        .iter()
+                        .filter(|x| x.track == 0 && x.audio().is_none() && x.len >= 2 * bar)
+                        .min_by_key(|x| x.start)
+                        .and_then(|x| self.tlv.clip_rect(x.id))
+                else {
+                    return;
+                };
+                mods = egui::Modifiers::COMMAND;
+                from = Pos2::new(r.left() + 30.0, r.center().y);
+                to = from + egui::vec2(x(self, 4 * bar) - x(self, 0) + 5.0, r.height());
+            }
+            _ => return,
+        }
+        let start = SETUP_AT + 24;
+        let mut sc: Vec<(u32, egui::Event)> = vec![(start, egui::Event::PointerMoved(from))];
+        if m != "loop-hover" {
+            sc.push((
+                start + 2,
+                egui::Event::PointerButton {
+                    pos: from,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: mods,
+                },
+            ));
+            for k in 1..=12 {
+                let p = from + (to - from) * (k as f32 / 12.0);
+                sc.push((start + 3 + k * 2, egui::Event::PointerMoved(p)));
+            }
+        }
+        // held through the capture
+        for f in start..CAPTURE_AT + 10 {
+            sc.push((f, egui::Event::ModifiersChanged(mods)));
+            if m == "loop-hover" {
+                sc.push((f, egui::Event::PointerMoved(from)));
+            }
+        }
+        if let Some(sh) = &mut self.shot {
+            sh.script = sc;
+        }
     }
 
     fn shot_split(&mut self) {
