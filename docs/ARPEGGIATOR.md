@@ -68,7 +68,7 @@ The simple controls are on the card's left. The advanced ones are in
 | Per-step chance, seeded so every play is the same | grid › **Chance** row |
 | Pattern length 8 / 16 / 32 | header **Length** |
 | Named presets: Trance Gate 16ths, Chip Fast Chord, Synthwave Octaves, Euclid 5/8 Pluck, Converge Glass, In-key Runs, Probability Sparkle, and more | header **Preset ▾** |
-| Rate, Gate, Swing, Octaves and Humanise as automation and modulation targets (`instrument.N.arp.rate` and so on) | right-click the knob for a lane or modulator, or pick it in the lane/mod target list |
+| Rate, Gate, Swing, Octaves and Humanise as automation and modulation targets (`instrument.N.arp.rate` and so on) | right-click the Rate, Gate, Swing or Octaves knob › **Add automation lane**, or drop a modulator chip on it; all five (with Humanise) are in Automation › **+ Lane** |
 | Bake the Arp's steps into the note clip (the Arp switches off; one undo step) | timeline clip menu › **Bake Arp to notes** |
 
 ### Tracker cells

@@ -420,6 +420,7 @@ impl App {
             );
             let mut v = v0;
             let mut changed = false;
+            let mut resp = None;
             sub(ui, cr, |ui| {
                 let o = knob::knob(
                     ui,
@@ -443,7 +444,26 @@ impl App {
                     },
                 );
                 changed = o.changed;
+                resp = Some(o.resp);
             });
+            // Rate, Gate, Swing and Octaves are automation and modulation
+            // targets: drop a modulator on the knob, right-click for a lane
+            let param = match name {
+                "Rate" => Some(arp::Param::Rate),
+                "Gate" => Some(arp::Param::Gate),
+                "Swing" => Some(arp::Param::Swing),
+                "Octaves" => Some(arp::Param::Octaves),
+                _ => None,
+            };
+            if let (Some(r), Some(p)) = (resp, param) {
+                let pi = arp::Param::ALL.iter().position(|q| *q == p).unwrap_or(0);
+                let t = crate::automation::Target::Arp(idx, pi);
+                let mut lane = false;
+                self.mod_slider(ui, &r, &t.id(), v0, Some(&mut lane));
+                if lane {
+                    self.add_lane(t);
+                }
+            }
             if changed {
                 let v = v.clamp(0.0, 1.0);
                 self.arp_edit(idx, |a| match name {

@@ -82,7 +82,7 @@ fn note_data(h: &Harness<'static, App>) -> tl::NoteClipData {
     })
 }
 
-fn right_click(h: &mut Harness<'static, App>, p: Pos2) {
+pub(super) fn right_click(h: &mut Harness<'static, App>, p: Pos2) {
     with_mods(h, egui::Modifiers::NONE, egui::Event::PointerMoved(p));
     for pressed in [true, false] {
         with_mods(

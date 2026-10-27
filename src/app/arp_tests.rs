@@ -278,6 +278,34 @@ fn the_more_fold_out_fits_a_laptop_and_its_edits_land() {
     assert!((arp(&h, 7).unwrap().step(2).chance - 0.75).abs() < 1e-3);
 }
 
+/// the Arp's Rate knob: right-click > "Add automation lane" adds a lane
+/// on Target::Arp (rate), and the lane plays the rate
+#[test]
+fn the_rate_knob_offers_an_automation_lane() {
+    let mut h = devices();
+    let strip = h.state().dev.arp_card.center();
+    click_at(&mut h, strip);
+    frames(&mut h, 3);
+    assert!(arp(&h, 7).is_some());
+    let n0 = h.state().with(|s| s.song.automation.len());
+    let card = h.state().dev.arp_card;
+    let at = h
+        .query_all_by_label("Rate")
+        .map(|n| n.rect().center())
+        .find(|p| card.contains(*p))
+        .expect("the Arp's Rate knob");
+    super::workflow_tests::right_click(&mut h, at);
+    frames(&mut h, 2);
+    h.get_by_label("Add automation lane").click();
+    frames(&mut h, 3);
+    let ids: Vec<String> = h
+        .state()
+        .with(|s| s.song.automation.iter().map(|l| l.target.clone()).collect());
+    assert_eq!(ids.len(), n0 + 1, "{ids:?}");
+    let want = crate::automation::Target::Arp(6, 0).id();
+    assert!(ids.contains(&want), "{want} not in {ids:?}");
+}
+
 /// the arp2 MP3 demo's song (CHIPWAVE_ARP2_DEMO=<out.cwt>, --ignored):
 /// Am-F-C-G (two bars a chord) five times over the demo's first 8 bars of
 /// drums and bass, a new named preset each time: Trance Gate 16ths, Chip
