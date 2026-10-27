@@ -349,3 +349,306 @@ fn old_json_has_no_arp_and_defaults_fill_in() {
     assert_eq!(a.mode, Mode::Down);
     assert_eq!(a.steps.len(), 16);
 }
+
+// ---------------------------------------------------------------- arp2
+
+fn preset(name: &str) -> Arp {
+    presets(false)
+        .into_iter()
+        .find(|p| p.0 == name)
+        .unwrap_or_else(|| panic!("no preset {name}"))
+        .1
+}
+
+#[test]
+fn converge_and_diverge() {
+    let mut a = Arp {
+        mode: Mode::Converge,
+        ..Default::default()
+    };
+    let cegb = [
+        (0.0, 3840.0, 49),
+        (0.0, 3840.0, 53),
+        (0.0, 3840.0, 56),
+        (0.0, 3840.0, 60),
+    ];
+    let take = |a: &Arp| keys(&run(a, false, &cegb, 0.0, 240.0 * 8.0 - 1.0));
+    assert_eq!(take(&a), [49, 60, 53, 56, 49, 60, 53, 56]);
+    a.mode = Mode::Diverge;
+    assert_eq!(take(&a), [56, 53, 60, 49, 56, 53, 60, 49]);
+}
+
+#[test]
+fn octave_modes() {
+    let mut a = Arp {
+        octaves: 2,
+        oct_mode: OctMode::Down,
+        ..Default::default()
+    };
+    let k = keys(&run(&a, false, &CEG, 0.0, 240.0 * 7.0 - 1.0));
+    assert_eq!(k, [49, 53, 56, 37, 41, 44, 49]);
+    a.octaves = 3;
+    a.oct_mode = OctMode::Bounce;
+    let one = [(0.0, 9000.0, 49)];
+    let k = keys(&run(&a, false, &one, 0.0, 240.0 * 6.0 - 1.0));
+    assert_eq!(k, [49, 61, 73, 61, 49, 61]);
+    // Chord mode walks the octaves too
+    a.mode = Mode::Chord;
+    a.oct_mode = OctMode::Down;
+    a.octaves = 2;
+    let k = keys(&run(&a, false, &CEG, 0.0, 240.0 * 2.0 - 1.0));
+    assert_eq!(k, [49, 53, 56, 37, 41, 44]);
+}
+
+#[test]
+fn fast_chord_rates_and_names() {
+    for (div, feel, len) in [
+        (64, Feel::Straight, 60.0),
+        (64, Feel::Triplet, 40.0),
+        (128, Feel::Straight, 30.0),
+    ] {
+        let a = Arp {
+            div,
+            feel,
+            ..Default::default()
+        };
+        let h = run(&a, false, &CEG, 0.0, 400.0);
+        assert!((h[1].start - h[0].start - len).abs() < 1e-6, "{div}");
+    }
+    assert_eq!(rate_name(64, Feel::Triplet), "1/96");
+    // the old rate table is the start of the new one (saved rates stay)
+    assert_eq!(RATES[7], (16, Feel::Straight));
+    assert_eq!(RATES.len(), 15);
+    // Chip Fast Chord: C E G cycling on every 1/96 (one 50 Hz frame at 125 BPM)
+    let a = preset("Chip Fast Chord");
+    let h = run(&a, false, &CEG, 0.0, 40.0 * 6.0 - 1.0);
+    assert_eq!(keys(&h), [49, 53, 56, 49, 53, 56]);
+    assert!((h[1].start - 40.0).abs() < 1e-6);
+    let frame = 60.0 / 125.0 * (40.0 / 960.0);
+    assert!((frame - 0.02f64).abs() < 1e-9, "1/96 at 125 BPM is 20 ms");
+}
+
+#[test]
+fn step_probability_is_seeded() {
+    let mut a = Arp::default();
+    for s in &mut a.steps {
+        s.chance = 0.5;
+    }
+    let long = [(0.0, 240.0 * 400.0, 49)];
+    let h1 = run(&a, false, &long, 0.0, 240.0 * 400.0 - 1.0);
+    let h2 = run(&a, false, &long, 0.0, 240.0 * 400.0 - 1.0);
+    assert_eq!(h1, h2, "the same every play");
+    assert!((150..250).contains(&h1.len()), "about half: {}", h1.len());
+    // a seek lands on the same steps
+    let tail = run(&a, false, &long, 240.0 * 100.0 - 1.0, 240.0 * 400.0 - 1.0);
+    let want: Vec<_> = h1
+        .iter()
+        .filter(|h| h.start >= 240.0 * 100.0)
+        .copied()
+        .collect();
+    assert_eq!(
+        tail.iter().map(|h| h.start).collect::<Vec<_>>(),
+        want.iter().map(|h| h.start).collect::<Vec<_>>()
+    );
+    // a new seed is another pattern; 0 % never plays, 100 % always
+    a.seed = 99;
+    assert_ne!(run(&a, false, &long, 0.0, 240.0 * 400.0 - 1.0), h1);
+    a.steps[0].chance = 0.0;
+    a.len = 1;
+    assert!(run(&a, false, &long, 0.0, 9000.0).is_empty());
+    a.steps[0].chance = 1.0;
+    assert_eq!(run(&a, false, &long, 0.0, 240.0 * 10.0 - 1.0).len(), 10);
+}
+
+#[test]
+fn humanise_varies_velocity_seeded() {
+    let mut a = Arp::default();
+    let h = run(&a, false, &CEG, 0.0, 3000.0);
+    assert!(h.iter().all(|h| h.vel == 1.0));
+    a.humanise = 1.0;
+    for s in &mut a.steps {
+        s.vel = 0.6;
+    }
+    let h = run(&a, false, &CEG, 0.0, 3000.0);
+    let v: Vec<f32> = h.iter().map(|h| h.vel).collect();
+    assert!(v.iter().any(|&x| (x - 0.6).abs() > 0.02), "{v:?}");
+    assert!(v
+        .iter()
+        .all(|&x| (0.6 * 0.6 - 1e-4..=0.6 * 1.4 + 1e-4).contains(&x)));
+    assert_eq!(run(&a, false, &CEG, 0.0, 3000.0), h);
+    // modulation adds humanise
+    let mut m = Mods::default();
+    a.humanise = 0.0;
+    Param::Humanise.apply(&a, 1.0, &mut m);
+    assert!((m.humanise - 1.0).abs() < 1e-6);
+}
+
+#[test]
+fn euclid_fills_steps() {
+    let e = |h, l, r| -> String {
+        euclid(h, l, r)
+            .iter()
+            .map(|&b| if b { 'x' } else { '.' })
+            .collect()
+    };
+    assert_eq!(e(3, 8, 0), "x..x..x.");
+    assert_eq!(e(4, 16, 0), "x...x...x...x...");
+    assert_eq!(e(5, 8, 0).matches('x').count(), 5);
+    assert_eq!(e(3, 8, 1), ".x..x..x");
+    assert_eq!(e(0, 4, 0), "....");
+    assert_eq!(e(9, 4, 0), "xxxx");
+    let mut a = Arp::default();
+    a.euclid_fill(3, 8, 0);
+    assert_eq!(a.len, 8);
+    let h = run(&a, false, &CEG, 0.0, 240.0 * 8.0 - 1.0);
+    let starts: Vec<f64> = h.iter().map(|h| h.start).collect();
+    assert_eq!(starts, [0.0, 720.0, 1440.0]);
+    // the run moves on only on played steps
+    assert_eq!(keys(&h), [49, 53, 56]);
+    let p = preset("Euclid 5/8 Pluck");
+    assert_eq!(p.len, 8);
+}
+
+#[test]
+fn sustain_pedal_holds_released_keys() {
+    let a = Arp::default();
+    let mut st = Stepper::default();
+    let mut hits = Hits::default();
+    let key = |k: u8| Held {
+        key: k,
+        vel: 1.0,
+        start: 0.0,
+        end: f64::INFINITY,
+        id: k,
+        ..Default::default()
+    };
+    st.add(false, key(49));
+    st.add(false, key(53));
+    st.sustain(true, false);
+    st.release(49, false);
+    st.release(53, false);
+    let mut out = vec![];
+    let mut t = 0.0;
+    while t < 950.0 {
+        t += 10.0;
+        st.advance(&a, &Mods::default(), false, t, &mut hits);
+        out.extend_from_slice(hits.as_slice());
+    }
+    assert_eq!(keys(&out), [49, 53, 49, 53], "the pedal holds them");
+    // a key played under the pedal joins
+    st.add(
+        false,
+        Held {
+            start: t,
+            ..key(56)
+        },
+    );
+    st.release(56, false);
+    assert_eq!(st.held().len(), 3);
+    st.sustain(false, false);
+    assert!(st.is_empty(), "pedal up lets go");
+    // with Latch the pedal-up notes stay (until a new chord)
+    st.add(false, key(49));
+    st.sustain(true, true);
+    st.release(49, true);
+    st.sustain(false, true);
+    assert_eq!(st.held().len(), 1);
+    assert!(st.held()[0].up);
+}
+
+#[test]
+fn scale_lock_keeps_steps_in_key() {
+    // C major
+    let cmaj = crate::chords::Key::new(0, crate::chords::Scale::Major).mask();
+    assert_eq!(scale_step(49, 1, cmaj), 51); // C -> D
+    assert_eq!(scale_step(49, 2, cmaj), 53); // C -> E
+    assert_eq!(scale_step(49, -1, cmaj), 48); // C -> B
+    assert_eq!(scale_step(50, 0, cmaj), 49); // C# snaps to C
+    assert_eq!(scale_step(49, 7, cmaj), 61); // an octave in steps
+    let mut a = Arp {
+        len: 4,
+        ..Default::default()
+    };
+    for (k, s) in a.steps.iter_mut().enumerate().take(4) {
+        s.transpose = k as i8;
+    }
+    let go = |a: &Arp, key: u16| {
+        let mut st = Stepper::default();
+        let mut hits = Hits::default();
+        st.add(false, held(0.0, 9000.0, 49));
+        let m = Mods {
+            key,
+            ..Default::default()
+        };
+        let mut out = vec![];
+        let mut t = 0.0;
+        while t < 959.0 {
+            t += 7.0;
+            st.advance(a, &m, false, t, &mut hits);
+            out.extend_from_slice(hits.as_slice());
+        }
+        keys(&out)
+    };
+    assert_eq!(go(&a, cmaj), [49, 50, 51, 52], "lock off: semitones");
+    a.scale_lock = true;
+    assert_eq!(go(&a, cmaj), [49, 51, 53, 54], "C D E F");
+    let amin = crate::chords::Key::new(9, crate::chords::Scale::MinorPentatonic).mask();
+    assert_eq!(go(&a, amin), [49, 51, 53, 56], "C D E G");
+    assert_eq!(go(&a, 0), [49, 50, 51, 52], "no song key: semitones");
+}
+
+#[test]
+fn retrigger_restarts_the_pattern() {
+    let mut a = Arp::default();
+    for (k, s) in a.steps.iter_mut().enumerate() {
+        s.vel = if k == 0 { 1.0 } else { 0.5 };
+    }
+    // a note from step 3 on
+    let late = [(720.0, 3000.0, 49)];
+    let free = run(&a, false, &late, 0.0, 1500.0);
+    assert_eq!(free[0].start, 720.0);
+    assert!((free[0].vel - 0.5).abs() < 1e-6, "free: song step 3");
+    a.retrig = true;
+    let re = run(&a, false, &late, 0.0, 1500.0);
+    assert_eq!(re[0].start, 720.0);
+    assert!((re[0].vel - 1.0).abs() < 1e-6, "retrigger: step 1");
+    // a new note later restarts the run and the pattern
+    let two = [(0.0, 3840.0, 49), (0.0, 3840.0, 53), (960.0, 3840.0, 56)];
+    let h = run(&a, false, &two, 0.0, 960.0 + 239.0);
+    let at = h.iter().find(|h| h.start == 960.0).unwrap();
+    assert!((at.vel - 1.0).abs() < 1e-6);
+    assert_eq!(at.key, 49, "the run starts again from the bottom");
+}
+
+#[test]
+fn mod_params_round_trip() {
+    let a = Arp::default();
+    for p in Param::ALL {
+        let mut m = Mods::default();
+        p.apply(&a, p.norm(&a), &mut m);
+        assert_eq!(a.eff(&m), a.eff(&Mods::default()), "{p:?} at its own value");
+        assert!(!p.name().is_empty() && !p.show(0.5).is_empty());
+    }
+    let mut m = Mods::default();
+    Param::Rate.apply(&a, 1.0, &mut m);
+    assert!((a.eff(&m).0 - 30.0).abs() < 1e-6, "rate to the fastest");
+    let mut m = Mods::default();
+    Param::Octaves.apply(&a, 1.0, &mut m);
+    assert_eq!(a.eff(&m).3, 4);
+}
+
+#[test]
+fn named_presets_exist() {
+    for n in [
+        "Trance Gate 16ths",
+        "Chip Fast Chord",
+        "Synthwave Octaves",
+        "Euclid 5/8 Pluck",
+        "Converge Glass",
+        "In-key Runs",
+        "Probability Sparkle",
+    ] {
+        let a = preset(n);
+        assert!(!run(&a, false, &CEG, 0.0, 3000.0).is_empty(), "{n}");
+    }
+}
