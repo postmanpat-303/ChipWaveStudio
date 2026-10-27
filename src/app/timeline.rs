@@ -3773,7 +3773,7 @@ impl App {
                     c,
                     egui::Align2::CENTER_CENTER,
                     "+",
-                    egui::FontId::proportional(14.0),
+                    crate::theme::prop(14.0),
                     t.crt_bot,
                 );
                 let tip = if *own { "copy" } else { "linked copy" };
@@ -3781,7 +3781,7 @@ impl App {
                     c + egui::vec2(12.0, 0.0),
                     egui::Align2::LEFT_CENTER,
                     tip,
-                    egui::FontId::proportional(13.0),
+                    crate::theme::prop(crate::theme::ts::BODY),
                     t.ink,
                 );
             }
