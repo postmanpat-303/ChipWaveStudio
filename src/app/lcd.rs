@@ -79,6 +79,9 @@ pub(super) struct LcdUi {
     pub pop_rect: Rect,
     /// screenshots only: the LOOP and REC pills show lit (CHIPWAVE_SHOT_LCD=on)
     pub shot_lit: bool,
+    /// the display and the Master cell are drawn compact (the top bar
+    /// sets it each frame when the full ones would not fit)
+    pub narrow: bool,
 }
 
 impl Default for LcdUi {
@@ -93,6 +96,7 @@ impl Default for LcdUi {
             master_rect: Rect::NOTHING,
             pop_rect: Rect::NOTHING,
             shot_lit: false,
+            narrow: false,
         }
     }
 }
@@ -205,6 +209,15 @@ const MID: f32 = 15.0;
 pub(super) fn lcd_h() -> f32 {
     let px = crate::theme::ts::px;
     (px(CAP) * 1.25 + px(BIG) * 1.0 + 7.0).max(42.0).round()
+}
+
+/// the compact Master cell's width (full / compact)
+pub(super) fn master_w(narrow: bool) -> f32 {
+    if narrow {
+        150.0
+    } else {
+        176.0
+    }
 }
 
 /// the width of `s` in the display's digits (Atkinson Hyperlegible Mono)
@@ -375,6 +388,24 @@ fn glass(p: &egui::Painter, r: Rect, pl: &Pal, hot: bool) {
 }
 
 /// what the display shows this frame
+/// the display's cells and widths (`lcd_cols`)
+struct LcdCols {
+    show_spd: bool,
+    show_time: bool,
+    show_sig: bool,
+    w_bpm: f32,
+    w_spd: f32,
+    w_sig: f32,
+    w_pos: f32,
+    w_time: f32,
+    ph: f32,
+    col1: f32,
+    col2: f32,
+    w_state: f32,
+    gap: f32,
+    w: f32,
+}
+
 struct LcdState {
     playing: bool,
     tl_mode: bool,
@@ -498,11 +529,84 @@ impl App {
         }
     }
 
-    /// the LCD display in the toolbar
-    /// the Tracker view's toolbar has more in it (octave, edit mode, step):
-    /// under 1560 px wide the display and the Master cell go compact
-    fn lcd_narrow(&self, ctx: &egui::Context) -> bool {
-        self.view == View::Pattern && ctx.content_rect().width() < 1560.0
+    /// the display and the Master cell go compact when the full ones do not
+    /// fit beside the centred top-bar panel (the top bar decides, each frame)
+    fn lcd_narrow(&self, _ctx: &egui::Context) -> bool {
+        self.lcd.narrow
+    }
+
+    /// the display's width, full or compact (the top bar lays out with it)
+    pub(super) fn lcd_display_w(&self, p: &egui::Painter, narrow: bool) -> f32 {
+        let tl_mode = self.with(|s| s.song.timeline.is_some());
+        self.lcd_cols(p, narrow, tl_mode).w
+    }
+
+    /// the display's cells and their widths
+    fn lcd_cols(&self, mp: &egui::Painter, narrow: bool, tl_mode: bool) -> LcdCols {
+        // the Speed cell shows in the Tracker view (ticks per row is a
+        // tracker setting; the Song menu has it everywhere)
+        let show_spd = self.view == View::Pattern;
+        // the Tracker view has no clock (TIME); compact (`lcd_narrow`) drops
+        // the signature and draws the load cell without its bar
+        let show_time = !show_spd;
+        let show_sig = !narrow;
+        let h = lcd_h();
+        let w_bpm = num_w(mp, "000.00", BIG) + 4.0;
+        let w_spd = if show_spd {
+            num_w(mp, "00", BIG) + 6.0
+        } else {
+            0.0
+        };
+        let w_sig = if show_sig {
+            num_w(mp, "00/0", MID).max(lab_w(mp, "SIG") + 4.0)
+        } else {
+            0.0
+        };
+        let w_pos = if tl_mode {
+            num_w(mp, "000.0.0", BIG).max(lab_w(mp, "BAR · BEAT · STEP"))
+        } else {
+            num_w(mp, "000.00", BIG).max(lab_w(mp, "POS · ROW"))
+        };
+        let w_time = if show_time {
+            num_w(mp, "00:00.00", MID)
+        } else {
+            0.0
+        };
+        // the pills: two columns (LOOP / REC, CLICK / FOLLOW)
+        let ph = ((h - 11.0) / 2.0).floor();
+        let pill_w = |s: &str| lab_w(mp, s) + ph + 8.0;
+        let col1 = pill_w(if narrow { "LOOP" } else { "LOOP 00–00" }).max(pill_w("ARMED"));
+        let col2 = pill_w("CLICK +0").max(pill_w("FOLLOW"));
+        let w_state = col1 + 4.0 + col2;
+        let w_load = if narrow {
+            lab_w(mp, "BUF 000 MAX") + 4.0
+        } else {
+            lab_w(mp, "BUF") + 34.0 + lab_w(mp, "000 ms") + 10.0
+        };
+        let gap = if narrow { 9.0 } else { 13.0 };
+        let cells = 3.0
+            + [show_spd, show_sig, show_time]
+                .iter()
+                .filter(|b| **b)
+                .count() as f32;
+        let w =
+            10.0 + w_bpm + w_spd + w_sig + w_pos + w_time + w_state + w_load + gap * cells + 10.0;
+        LcdCols {
+            show_spd,
+            show_time,
+            show_sig,
+            w_bpm,
+            w_spd,
+            w_sig,
+            w_pos,
+            w_time,
+            ph,
+            col1,
+            col2,
+            w_state,
+            gap,
+            w,
+        }
     }
 
     pub(super) fn lcd_display(&mut self, ui: &mut egui::Ui) {
@@ -513,57 +617,25 @@ impl App {
         if st.playing || st.count_left.is_some() {
             ui.ctx().request_repaint();
         }
-        // the Speed cell shows in the Tracker view (ticks per row is a
-        // tracker setting; the Song menu has it everywhere)
-        let show_spd = self.view == View::Pattern;
-        // the Tracker view has no clock (TIME), and its toolbar has more
-        // (octave, edit mode, step): narrower than 1560 px it drops the
-        // signature and draws the load cell without its bar
-        let show_time = !show_spd;
         let narrow = self.lcd_narrow(ui.ctx());
-        let show_sig = !narrow;
         let h = lcd_h();
         let mp = ui.painter().clone();
-        let w_bpm = num_w(&mp, "000.00", BIG) + 4.0;
-        let w_spd = if show_spd {
-            num_w(&mp, "00", BIG) + 6.0
-        } else {
-            0.0
-        };
-        let w_sig = if show_sig {
-            num_w(&mp, "00/0", MID).max(lab_w(&mp, "SIG") + 4.0)
-        } else {
-            0.0
-        };
-        let w_pos = if st.tl_mode {
-            num_w(&mp, "000.0.0", BIG).max(lab_w(&mp, "BAR · BEAT · STEP"))
-        } else {
-            num_w(&mp, "000.00", BIG).max(lab_w(&mp, "POS · ROW"))
-        };
-        let w_time = if show_time {
-            num_w(&mp, "00:00.00", MID)
-        } else {
-            0.0
-        };
-        // the pills: two columns (LOOP / REC, CLICK / FOLLOW)
-        let ph = ((h - 11.0) / 2.0).floor();
-        let pill_w = |s: &str| lab_w(&mp, s) + ph + 8.0;
-        let col1 = pill_w(if narrow { "LOOP" } else { "LOOP 00–00" }).max(pill_w("ARMED"));
-        let col2 = pill_w("CLICK +0").max(pill_w("FOLLOW"));
-        let w_state = col1 + 4.0 + col2;
-        let w_load = if narrow {
-            lab_w(&mp, "BUF 000 MAX") + 4.0
-        } else {
-            lab_w(&mp, "BUF") + 34.0 + lab_w(&mp, "000 ms") + 10.0
-        };
-        let gap = if narrow { 9.0 } else { 13.0 };
-        let cells = 3.0
-            + [show_spd, show_sig, show_time]
-                .iter()
-                .filter(|b| **b)
-                .count() as f32;
-        let w =
-            10.0 + w_bpm + w_spd + w_sig + w_pos + w_time + w_state + w_load + gap * cells + 10.0;
+        let LcdCols {
+            show_spd,
+            show_time,
+            show_sig,
+            w_bpm,
+            w_spd,
+            w_sig,
+            w_pos,
+            w_time,
+            ph,
+            col1,
+            col2,
+            w_state,
+            gap,
+            w,
+        } = self.lcd_cols(&mp, narrow, st.tl_mode);
         let id = ui.make_persistent_id("lcd_display");
         let (r, resp) = ui.allocate_exact_size(egui::vec2(w, h), Sense::click());
         self.lcd.rect = r;
@@ -1145,11 +1217,7 @@ impl App {
             self.ca.hist_step(dt, peaks[0].max(peaks[1]));
         }
         let hold = self.lcd.hold;
-        let w = if self.lcd_narrow(ui.ctx()) {
-            150.0
-        } else {
-            176.0
-        };
+        let w = master_w(self.lcd_narrow(ui.ctx()));
         let (r, resp) = ui.allocate_exact_size(egui::vec2(w, lcd_h()), Sense::click());
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Master meter"));
         self.lcd.master_rect = r;

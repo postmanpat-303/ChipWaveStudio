@@ -268,6 +268,10 @@ pub struct Extra {
     /// "" = Cyan
     #[serde(default)]
     pub lcd_colour: String,
+    /// the top bar's panel order, left to right ("display", "transport",
+    /// "master"); empty: the default (Display, Transport centred, Master)
+    #[serde(default)]
+    pub topbar: Vec<String>,
 }
 
 fn tree_w() -> f32 {
@@ -360,6 +364,7 @@ impl Default for Extra {
             chains_closed: vec![],
             lcd_toolbar: true,
             lcd_colour: String::new(),
+            topbar: vec![],
         }
     }
 }
