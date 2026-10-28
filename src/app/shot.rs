@@ -1657,6 +1657,7 @@ impl App {
         if f == SETUP_AT + 12 {
             self.shot_keys();
             self.shot_lcd();
+            self.shot_topbar();
             self.shot_loop();
             self.shot_tldrag(false);
             self.shot_kit_after(ctx);
@@ -2969,6 +2970,44 @@ impl App {
             self.ch = 1;
             self.instr = self.track_instr(1);
             self.set_lower(1);
+        }
+    }
+
+    /// CHIPWAVE_SHOT_TOPBAR=transport,master,display: the top bar's panel
+    /// order; CHIPWAVE_SHOT_TOPBAR_DRAG=<slot>: that panel's grip dragged
+    /// to the gap after the next panel and held (the ghost and the marker)
+    fn shot_topbar(&mut self) {
+        if let Ok(o) = std::env::var("CHIPWAVE_SHOT_TOPBAR") {
+            self.extra.topbar = o.split(',').map(|k| k.trim().to_string()).collect();
+        }
+        let Some(i) = std::env::var("CHIPWAVE_SHOT_TOPBAR_DRAG")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|i| *i < 2)
+        else {
+            return;
+        };
+        let (a, b) = (self.tb.rects[i], self.tb.rects[i + 1]);
+        let from = Pos2::new(a.left() - super::tbpanels::GRIP / 2.0, a.center().y);
+        let to = Pos2::new(b.right() + 30.0, a.center().y);
+        let mut sc = vec![
+            (SETUP_AT + 30, egui::Event::PointerMoved(from)),
+            (
+                SETUP_AT + 32,
+                egui::Event::PointerButton {
+                    pos: from,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+            ),
+        ];
+        for k in 1..=10u32 {
+            let p = from + (to - from) * (k as f32 / 10.0);
+            sc.push((SETUP_AT + 34 + k * 2, egui::Event::PointerMoved(p)));
+        }
+        if let Some(sh) = &mut self.shot {
+            sh.script = sc;
         }
     }
 
