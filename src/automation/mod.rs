@@ -143,6 +143,9 @@ pub enum Target {
     /// depth of modulation route K (0-based; id `mod.K.amount`, 1-based),
     /// -1..1 (normalised 0..1 = -100 %..+100 %)
     ModAmount(usize),
+    /// an instrument's Arp parameter: instrument, `arp::Param::ALL` index
+    /// (id `instrument.N.arp.<rate|gate|swing|octaves|humanise>`)
+    Arp(usize, usize),
 }
 
 /// The value a target has in the song, normalised 0..1 (the base that
@@ -184,6 +187,9 @@ pub fn song_norm(song: &crate::model::Song, t: Target) -> Option<f32> {
             _ => return None,
         },
         Target::ModAmount(k) => t.to_norm(song.modulation.routes.get(k)?.amount),
+        Target::Arp(i, k) => crate::arp::Param::ALL
+            .get(k)?
+            .norm(song.instruments.get(i)?.arp.as_ref()?),
     })
 }
 
@@ -266,6 +272,13 @@ impl Target {
             ["mod", k, "amount"] => num(k)
                 .filter(|k| *k < crate::modulation::MAX_ROUTES)
                 .map(Target::ModAmount),
+            ["instrument", n, "arp", key] => {
+                let i = num(n)?;
+                crate::arp::Param::ALL
+                    .iter()
+                    .position(|p| p.key() == *key)
+                    .map(|k| Target::Arp(i, k))
+            }
             ["instrument", n, "patch", key] => {
                 let i = num(n)?;
                 crate::modulation::patch_param_id(key).map(|k| Target::Patch(i, k))
@@ -327,6 +340,11 @@ impl Target {
                     .unwrap_or_default()
             ),
             Target::ModAmount(k) => format!("mod.{}.amount", k + 1),
+            Target::Arp(i, k) => format!(
+                "instrument.{}.arp.{}",
+                i + 1,
+                crate::arp::Param::ALL.get(k).map_or("rate", |p| p.key())
+            ),
         }
     }
 
@@ -371,6 +389,10 @@ impl Target {
             )
             .unwrap_or_default(),
             Target::Send(..) | Target::Macro(..) => format!("{:.0} %", n * 100.0),
+            Target::Arp(_, k) => crate::arp::Param::ALL
+                .get(k)
+                .map(|p| p.show(n))
+                .unwrap_or_default(),
             _ => self.format(n),
         }
     }
@@ -394,6 +416,7 @@ impl Target {
             | Target::Send(..)
             | Target::Macro(..)
             | Target::Gen(..)
+            | Target::Arp(..)
             | Target::Patch(..) => (0.0, 1.0, false),
             Target::ModAmount(_) => (-1.0, 1.0, false),
             Target::Cutoff(_) => (20.0, 18000.0, true),
@@ -457,6 +480,7 @@ impl Target {
                 .map(|p| p.name)
                 .unwrap_or("Patch"),
             Target::ModAmount(_) => "Modulation amount",
+            Target::Arp(_, k) => crate::arp::Param::ALL.get(k).map_or("Arp", |p| p.name()),
         }
     }
 

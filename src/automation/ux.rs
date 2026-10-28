@@ -53,9 +53,11 @@ impl Target {
             }
             Target::Ret(_, 0) => Family::Mix,
             Target::Send(..) => Family::Mix,
-            Target::Drive(_) | Target::Gen(..) | Target::Patch(..) | Target::Ret(..) => {
-                Family::Other
-            }
+            Target::Drive(_)
+            | Target::Gen(..)
+            | Target::Patch(..)
+            | Target::Ret(..)
+            | Target::Arp(..) => Family::Other,
         }
     }
 
@@ -204,6 +206,13 @@ impl Target {
                 (format!("{} · {dev}", iname(i)), pn)
             }
             Target::Macro(i, k) => (iname(i), format!("Macro {}", k + 1)),
+            Target::Arp(i, k) => (
+                format!("{} · Arp", iname(i)),
+                crate::arp::Param::ALL
+                    .get(k)
+                    .map_or("Arp", |p| p.name())
+                    .to_string(),
+            ),
             Target::Gen(i, k) => {
                 let pn =
                     crate::knobs::name(song, self).unwrap_or_else(|| format!("Knob {}", k + 1));
@@ -266,6 +275,7 @@ impl Target {
             | Target::Fx(..)
             | Target::Ret(..)
             | Target::Gen(..)
+            | Target::Arp(..)
             | Target::Patch(..) => &[(0.0, "0"), (0.5, "50"), (1.0, "100")],
             Target::ModAmount(_) => &[(0.0, "-100"), (0.5, "0"), (1.0, "+100")],
         }
@@ -313,6 +323,7 @@ mod tests {
     fn filter_fx_cutoff_family() {
         let mut s = song();
         s.instruments.push(Instrument {
+            arp: None,
             name: "Bass".into(),
             volume: 1.0,
             transpose: 0,

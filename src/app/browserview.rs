@@ -183,6 +183,7 @@ fn hash_of<T: std::hash::Hash>(v: &T) -> u64 {
 /// a plugin instrument for a scanned plugin
 pub(crate) fn plugin_instrument(f: &crate::plugin::scan::Found) -> Instrument {
     Instrument {
+        arp: None,
         name: f.desc.name.clone(),
         volume: 0.8,
         transpose: 0,
@@ -636,6 +637,7 @@ impl App {
             Act::Preview => {
                 if let Some((name, kind)) = b.make() {
                     let inst = Instrument {
+                        arp: None,
                         name,
                         volume: 0.8,
                         transpose: 0,

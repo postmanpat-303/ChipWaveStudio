@@ -187,6 +187,24 @@ impl Layers {
         }
     }
 
+    /// release the held layer notes of the tracks in `mask` that end by
+    /// `now` (tracker cells through an Arp: the launch clock)
+    pub(super) fn release_due(&mut self, mask: u64, now: f64) {
+        if !self.any {
+            return;
+        }
+        for (ch, b) in self.banks.iter_mut().enumerate() {
+            if mask >> ch.min(63) & 1 == 0 {
+                continue;
+            }
+            for v in b.v.iter_mut() {
+                if v.active && v.down && now >= v.off_at {
+                    Self::release(v);
+                }
+            }
+        }
+    }
+
     /// release the held layer notes of the tracks in `mask`
     pub(super) fn release_where(&mut self, mask: u64) {
         for (ch, b) in self.banks.iter_mut().enumerate() {

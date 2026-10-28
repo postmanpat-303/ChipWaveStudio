@@ -43,6 +43,7 @@ pub(super) fn synth_song(two: bool) -> Song {
     };
     for (k, inst) in s.instruments.iter_mut().enumerate() {
         *inst = Instrument {
+            arp: None,
             name: format!("Saw {k}"),
             volume: 0.8,
             transpose: 0,

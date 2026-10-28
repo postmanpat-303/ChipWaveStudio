@@ -19,6 +19,9 @@ mod acceptance_tests;
 mod advedit;
 #[cfg(test)]
 mod advedit_tests;
+#[cfg(test)]
+mod arp_tests;
+mod arpcard;
 mod arranger;
 #[cfg(test)]
 mod audioclip_tests;
@@ -170,6 +173,8 @@ mod timeline;
 mod timeline_m2_tests;
 #[cfg(test)]
 mod timeline_tests;
+#[cfg(test)]
+mod tldrag_tests;
 #[cfg(test)]
 mod tlselect_tests;
 mod topbar;

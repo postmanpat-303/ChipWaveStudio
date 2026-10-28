@@ -584,6 +584,7 @@ impl App {
                 transpose: 0,
                 fx: vec![],
                 kind,
+                arp: None,
             })
     }
 
@@ -2094,6 +2095,7 @@ impl App {
                     return false;
                 };
                 Instrument {
+                    arp: None,
                     name,
                     volume: 0.8,
                     transpose: 0,

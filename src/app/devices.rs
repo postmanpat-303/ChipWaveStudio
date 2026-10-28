@@ -82,6 +82,18 @@ pub(crate) struct DevUi {
     /// drawing a Rack card: its side tab has power, remove and "…", so
     /// the card's header leaves them out
     pub(crate) tabbed: bool,
+    /// an Arp switched off, per instrument: its settings for the next
+    /// switch-on (while ChipWave runs)
+    pub(crate) arp_stash: std::collections::HashMap<usize, crate::arp::Arp>,
+    /// the Arp card (or its slim "+ ARP" strip) this frame, and its grid
+    /// rows (numbers, velocity, gate, accent, rest/tie, ratchet, transpose,
+    /// chance)
+    pub(crate) arp_card: Rect,
+    pub(crate) arp_rows: [Rect; 8],
+    /// the More panel's Euclid fill: hits, length, rotation
+    pub(crate) arp_euclid: [u8; 3],
+    /// the More panel this frame (tests and shots)
+    pub(crate) arp_more: Rect,
 }
 
 impl Default for DevUi {
@@ -112,6 +124,11 @@ impl Default for DevUi {
             focus: false,
             tree: false,
             tabbed: false,
+            arp_stash: Default::default(),
+            arp_card: Rect::NOTHING,
+            arp_rows: [Rect::NOTHING; 8],
+            arp_euclid: [5, 8, 0],
+            arp_more: Rect::NOTHING,
         }
     }
 }
@@ -358,8 +375,11 @@ impl App {
                 super::rackview::inst_card_w(self, idx)
             };
             let full = chain.len() - chain.iter().filter(|d| d.collapsed).count();
+            let aw = super::arpcard::arp_card_w(self, idx);
             let fixed = 16.0
                 + iw
+                + aw
+                + if aw > 0.0 { GAP } else { 0.0 }
                 + plus_w(chain.is_empty())
                 + GAP * (chain.len() + 1) as f32
                 + SLIM * slim as f32
@@ -383,6 +403,11 @@ impl App {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.add_space(4.0);
+                    // the Arp (or Note repeat) plays the notes into the
+                    // instrument, so it comes first
+                    if self.devices_arp_card(ui, h, idx).is_some() {
+                        chevron(ui, h);
+                    }
                     self.dev.tabbed = true;
                     let (tab, _) = ui.allocate_exact_size(egui::vec2(TAB_W, h), Sense::hover());
                     let r = self.devices_inst_card(ui, h, idx);
@@ -1687,7 +1712,7 @@ pub(crate) fn drop_index(vertical: bool, cards: &[Rect], p: Pos2) -> usize {
 }
 
 /// a power button; true when clicked
-fn power(ui: &egui::Ui, p: &egui::Painter, r: Rect, id: egui::Id, on: bool) -> bool {
+pub(super) fn power(ui: &egui::Ui, p: &egui::Painter, r: Rect, id: egui::Id, on: bool) -> bool {
     let t = th();
     let resp =
         ui.interact(r, id, Sense::click())

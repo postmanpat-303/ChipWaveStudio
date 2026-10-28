@@ -196,6 +196,27 @@ pub(super) struct NoteState {
     pub(super) stops: u64,
     /// rack layers (empty until a song has a rack)
     pub(super) layers: super::layers::Layers,
+    /// per track: the Arp's held notes (src/arp.rs)
+    pub(super) arp: [crate::arp::Stepper; MAX_CHANNELS],
+    /// tracks whose Arp holds notes (bit per track; 0 = none, and then no
+    /// arp code runs)
+    pub(super) arp_mask: u64,
+    /// tracks whose tracker cells play through their instrument's Arp
+    /// (stepped on the launch clock in tracker and timeline mode alike)
+    pub(super) tmask: u64,
+    /// the Arp's hits of one call (kept here: no allocation while playing)
+    hits: crate::arp::Hits,
+    /// the Arp's steps stop short of this tick on arrangement tracks: the
+    /// row where the loop (or the song) wraps
+    pub(super) arp_cap: f64,
+    /// the song key's pitch-class mask (0 = none) and the automated /
+    /// modulated Arp parameters (instrument, param, value), set with the
+    /// automation (capacity reserved: no allocation while playing)
+    pub(super) arp_key: u16,
+    pub(super) arp_over: Vec<(usize, usize, f32)>,
+    /// the Arp's notes played (tests): track, start tick, key
+    #[cfg(test)]
+    pub(super) arp_log: Vec<(usize, Tick, u8)>,
 }
 
 impl NoteState {
@@ -213,7 +234,29 @@ impl NoteState {
             fk: [0; MAX_CHANNELS],
             stops: 0,
             layers: Default::default(),
+            arp: [crate::arp::Stepper::default(); MAX_CHANNELS],
+            arp_mask: 0,
+            tmask: 0,
+            hits: Default::default(),
+            arp_cap: f64::INFINITY,
+            arp_key: 0,
+            arp_over: Vec::with_capacity(64),
+            #[cfg(test)]
+            arp_log: vec![],
         }
+    }
+
+    /// drop the Arp notes of the tracks in `mask`
+    pub(super) fn arp_clear(&mut self, mask: u64) {
+        let mut m = self.arp_mask & mask;
+        while m != 0 {
+            let ch = m.trailing_zeros() as usize;
+            m &= m - 1;
+            if ch < MAX_CHANNELS {
+                self.arp[ch].clear();
+            }
+        }
+        self.arp_mask &= !mask;
     }
 
     /// put the cursors on the first notes at or after tick `t`
@@ -241,6 +284,7 @@ impl NoteState {
     /// release the held notes of the tracks in `mask` (bit per track)
     pub(super) fn release_where(&mut self, plugins: &mut crate::plugin::Rack, mask: u64) {
         self.layers.release_where(mask);
+        self.arp_clear(mask);
         for (k, v) in self.v.iter_mut().enumerate() {
             if mask >> (k / NOTE_VOICES).min(63) & 1 == 0 {
                 continue;
@@ -260,6 +304,8 @@ impl NoteState {
 
     pub(super) fn silence(&mut self) {
         self.layers.silence();
+        self.arp_clear(u64::MAX);
+        self.tmask = 0;
         for v in &mut self.v {
             v.active = false;
             v.down = false;
@@ -375,10 +421,235 @@ pub(super) fn poly_reuse(sv: &mut SynthVoice, vel: f32, retrigger: bool) {
     }
 }
 
+/// the instrument (0-based) a span plays on track `c`
+fn span_instr(n_instr: u8, c: &Chan) -> usize {
+    if n_instr > 0 {
+        n_instr as usize - 1
+    } else if c.instr != usize::MAX {
+        c.instr
+    } else {
+        0
+    }
+}
+
+/// Note `n` on track `ch`: to the Arp when its instrument has one (the
+/// Arp plays it, [`arp_step`]), else straight to the instrument.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn note_on(
+    st: &mut NoteState,
+    feed: &mut crate::modulation::NoteFeed,
+    song: &Song,
+    chans: &mut [Chan],
+    plugins: &mut crate::plugin::Rack,
+    ch: usize,
+    n: &NoteSpan,
+) {
+    let idx = span_instr(n.instr, &chans[ch]);
+    if let Some(a) = song.instruments.get(idx).and_then(|i| i.arp.as_ref()) {
+        if ch < MAX_CHANNELS {
+            arp_hold(st, &mut chans[ch], a, ch, idx, n);
+            return;
+        }
+    }
+    note_play(st, feed, song, chans, plugins, ch, n);
+}
+
+/// note `n` goes down in track `ch`'s Arp (instrument `idx`)
+fn arp_hold(
+    st: &mut NoteState,
+    c: &mut Chan,
+    a: &crate::arp::Arp,
+    ch: usize,
+    idx: usize,
+    n: &NoteSpan,
+) {
+    if c.instr == usize::MAX {
+        c.instr = idx;
+    }
+    let launch = st.lmask >> ch & 1 == 1;
+    let s = &mut st.arp[ch];
+    if !s.is_empty() && (s.idx != idx || s.launch != launch) {
+        s.clear();
+    }
+    s.idx = idx;
+    s.launch = launch;
+    s.add(
+        a.latch,
+        crate::arp::Held {
+            key: n.key,
+            vel: n.vel,
+            instr: n.instr,
+            tune: n.tune,
+            start: n.start as f64,
+            end: n.end as f64,
+            ..Default::default()
+        },
+    );
+    st.arp_mask |= 1u64 << ch;
+}
+
+/// Track `ch`'s Arp at tick `t` (launch clock `lc` for a launcher clip):
+/// the steps due play on its instrument.
+#[allow(clippy::too_many_arguments)]
+fn arp_step(
+    st: &mut NoteState,
+    feed: &mut crate::modulation::NoteFeed,
+    song: &Song,
+    chans: &mut [Chan],
+    plugins: &mut crate::plugin::Rack,
+    ch: usize,
+    t: f64,
+    lc: f64,
+) {
+    let launch = (st.lmask | st.tmask) >> ch & 1 == 1;
+    let s = &st.arp[ch];
+    let inst = song.instruments.get(s.idx);
+    let Some(a) = inst
+        .and_then(|i| i.arp.as_ref())
+        .filter(|_| s.launch == launch)
+    else {
+        // the Arp was switched off (or the track changed clocks)
+        st.arp_clear(1u64 << ch);
+        return;
+    };
+    let kit = inst.is_some_and(|i| crate::drumkit::kit_of(i).is_some());
+    let now = if launch { lc } else { t.min(st.arp_cap) };
+    let m = crate::arp::mods_for(a, st.arp[ch].idx, st.arp_key, &st.arp_over);
+    st.arp[ch].advance(a, &m, kit, now, &mut st.hits);
+    for k in 0..st.hits.n {
+        let h = st.hits.h[k];
+        let start = h.start.floor() as Tick;
+        let span = NoteSpan {
+            start,
+            end: (h.end.ceil() as Tick).max(start + 1),
+            key: h.key,
+            vel: h.vel,
+            instr: h.instr,
+            tune: h.tune,
+            hit: h.n,
+        };
+        #[cfg(test)]
+        st.arp_log.push((ch, start, h.key));
+        note_play(st, feed, song, chans, plugins, ch, &span);
+    }
+    if st.arp[ch].is_empty() {
+        st.arp_mask &= !(1u64 << ch);
+    }
+}
+
+/// The tracks whose tracker cells play through an Arp (`tmask`), at
+/// launch clock `lc` (once per sample while playing, tracker and timeline
+/// mode alike: the same cells play the same steps either way)
+#[allow(clippy::too_many_arguments)]
+pub(super) fn tracker_arp(
+    st: &mut NoteState,
+    feed: &mut crate::modulation::NoteFeed,
+    song: &Song,
+    chans: &mut [Chan],
+    plugins: &mut crate::plugin::Rack,
+    nch: usize,
+    lc: f64,
+) {
+    let mask = st.tmask
+        & if nch >= 64 {
+            u64::MAX
+        } else {
+            (1u64 << nch) - 1
+        };
+    st.layers.release_due(mask, lc);
+    let mut m = mask;
+    while m != 0 {
+        let ch = m.trailing_zeros() as usize;
+        m &= m - 1;
+        if ch >= MAX_CHANNELS {
+            break;
+        }
+        for k in ch * NOTE_VOICES..(ch + 1) * NOTE_VOICES {
+            let v = &mut st.v[k];
+            if v.active && v.down && lc >= v.off_at {
+                v.down = false;
+                if v.plug {
+                    plugins.live_off(PLUG_TAG + k as u16);
+                    v.active = false;
+                } else {
+                    v.synth.amp.release();
+                    v.synth.fenv.release();
+                }
+            }
+        }
+        if st.arp_mask >> ch & 1 == 1 {
+            // a step on the row line waits for that row's cells (its
+            // note-off or new chord): half a tick (~6 samples) behind
+            let t = lc - TRACKER_LAG;
+            arp_step(st, feed, song, chans, plugins, ch, t, t);
+        }
+    }
+}
+
+/// how far the tracker-cell Arp steps behind the clock, in ticks
+const TRACKER_LAG: f64 = 0.5;
+
+/// Seek / plan change at tick `t`: each arrangement track's Arp holds the
+/// notes it would hold had it played from the start (Latch included).
+/// `restart` = a jump (the steps from `t` on play); else it runs on.
+pub(super) fn arp_resync(
+    st: &mut NoteState,
+    plan: &Plan,
+    song: &Song,
+    chans: &mut [Chan],
+    nch: usize,
+    t: f64,
+    restart: bool,
+) {
+    #[allow(clippy::needless_range_loop)] // ch indexes st.cur, st.arp, plan.notes and chans
+    for ch in 0..nch.min(MAX_CHANNELS) {
+        if (st.lmask | st.tmask) >> ch & 1 == 1 {
+            continue;
+        }
+        let Some(spans) = plan.notes.get(ch) else {
+            continue;
+        };
+        let upto = st.cur[ch].min(spans.len());
+        let last = st.arp[ch].last;
+        let had = st.arp_mask >> ch & 1 == 1;
+        if had {
+            st.arp_clear(1u64 << ch);
+        }
+        for n in &spans[..upto] {
+            if (n.start as f64) >= t {
+                continue;
+            }
+            let idx = span_instr(n.instr, &chans[ch]);
+            let Some(a) = song.instruments.get(idx).and_then(|i| i.arp.as_ref()) else {
+                continue;
+            };
+            if !a.latch && (n.end as f64) <= t {
+                continue;
+            }
+            arp_hold(st, &mut chans[ch], a, ch, idx, n);
+        }
+        if st.arp_mask >> ch & 1 == 0 {
+            continue;
+        }
+        let s = &mut st.arp[ch];
+        let latch = song
+            .instruments
+            .get(s.idx)
+            .and_then(|i| i.arp.as_ref())
+            .is_some_and(|a| a.latch);
+        s.expire(t, latch);
+        if restart || !had || last.is_nan() {
+            s.reset(t);
+        } else {
+            s.last = last;
+        }
+    }
+}
+
 /// Start note `n` on track `ch`: a free voice, else the oldest released
 /// one, else the oldest (voice stealing).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn note_on(
+pub(super) fn note_play(
     st: &mut NoteState,
     feed: &mut crate::modulation::NoteFeed,
     song: &Song,
@@ -534,11 +805,14 @@ pub(super) fn note_events(
 ) {
     st.clock = t;
     let lmask = st.lmask;
-    st.layers.events(nch, t, lc, lmask);
+    // tracker cells through an Arp end on the launch clock (`tracker_arp`)
+    let lm = lmask | st.tmask;
+    st.layers
+        .events(nch, t, if lmask != 0 { lc } else { 0.0 }, lm);
     if st.any {
         for (k, v) in st.v[..nch * NOTE_VOICES].iter_mut().enumerate() {
             // launcher notes end on the launch clock
-            let now = if lmask != 0 && lmask >> (k / NOTE_VOICES) & 1 == 1 {
+            let now = if lm != 0 && lm >> (k / NOTE_VOICES) & 1 == 1 {
                 lc
             } else {
                 t
@@ -558,6 +832,9 @@ pub(super) fn note_events(
     for ch in 0..nch {
         if lmask != 0 && lmask >> ch & 1 == 1 {
             launch_events(st, feed, plan, song, chans, plugins, ch, lc);
+            if st.arp_mask >> ch & 1 == 1 {
+                arp_step(st, feed, song, chans, plugins, ch, t, lc);
+            }
             continue;
         }
         let Some(spans) = plan.notes.get(ch) else {
@@ -571,6 +848,9 @@ pub(super) fn note_events(
             if (n.end as f64) > t {
                 note_on(st, feed, song, chans, plugins, ch, n);
             }
+        }
+        if st.arp_mask >> ch & 1 == 1 && st.tmask >> ch & 1 == 0 {
+            arp_step(st, feed, song, chans, plugins, ch, t, lc);
         }
         // recorded key pressure: the Pressure modulators of the note's
         // instrument follow it (empty for almost every song)
@@ -708,7 +988,7 @@ pub(super) fn restrike(
                     0
                 };
                 let sustains = song.instruments.get(idx).is_some_and(|i| {
-                    matches!(i.kind, InstrumentKind::Plugin(_))
+                    i.arp.is_none() && matches!(i.kind, InstrumentKind::Plugin(_))
                         || crate::strings::rack::patch(song, idx).is_some()
                         || i.kind.patch().is_some_and(|p| p.amp.s >= 0.05)
                 });
@@ -721,6 +1001,86 @@ pub(super) fn restrike(
 }
 
 impl Engine {
+    /// A tracker cell on track `ch` (instrument `idx`): true when the
+    /// instrument's Arp takes it. A note joins the stepper (a 0xy arpeggio
+    /// adds note+x and note+y as a chord; the cell's volume is the
+    /// velocity) and the notes before it let go; a note-off lets go of the
+    /// held notes (Latch keeps them). No Arp: false, nothing changes.
+    pub(super) fn arp_cell(&mut self, song: &Song, ch: usize, cell: &Cell, idx: usize) -> bool {
+        if ch >= MAX_CHANNELS.min(64) {
+            return false;
+        }
+        let bit = 1u64 << ch;
+        let new_note = cell.note > 0 && cell.note != NOTE_OFF;
+        if !new_note && cell.note != NOTE_OFF {
+            return false;
+        }
+        let Some(a) = song.instruments.get(idx).and_then(|i| i.arp.as_ref()) else {
+            if self.nv.tmask & bit != 0 {
+                // the Arp was switched off, or another instrument plays here
+                self.nv.release_where(&mut self.plugins, bit);
+                self.nv.tmask &= !bit;
+            }
+            return false;
+        };
+        let lc = self.launch_clock();
+        if cell.note == NOTE_OFF {
+            if self.nv.tmask & bit == 0 {
+                return false;
+            }
+            self.nv.arp[ch].release_open(lc);
+            return true;
+        }
+        let c = &mut self.chans[ch];
+        if c.active && c.gate {
+            // the track's own voice gives way to the Arp's
+            c.gate = false;
+            c.synth.amp.release();
+            c.synth.fenv.release();
+        }
+        c.instr = idx;
+        c.vol = song.instruments[idx].volume;
+        let st = &mut self.nv;
+        let s = &mut st.arp[ch];
+        if !s.is_empty() && (s.idx != idx || !s.launch) {
+            s.clear();
+        }
+        s.release_open(lc);
+        s.idx = idx;
+        s.launch = true;
+        let vel = if cell.vol > 0 {
+            ((cell.vol - 1) as f32 / 64.0).min(1.0)
+        } else {
+            1.0
+        };
+        let mut keys = [cell.note, 0, 0];
+        let mut n = 1;
+        if cell.fx == 0 && cell.fxp != 0 {
+            for d in [cell.fxp >> 4, cell.fxp & 15] {
+                if d > 0 {
+                    keys[n] = (cell.note + d).min(120);
+                    n += 1;
+                }
+            }
+        }
+        for &k in &keys[..n] {
+            s.add(
+                a.latch,
+                crate::arp::Held {
+                    key: k,
+                    vel,
+                    instr: (idx + 1).min(255) as u8,
+                    start: lc,
+                    end: f64::INFINITY,
+                    ..Default::default()
+                },
+            );
+        }
+        st.arp_mask |= bit;
+        st.tmask |= bit;
+        true
+    }
+
     /// the timeline position in ticks, inside the current row (row clock)
     pub(super) fn tl_clock(&self) -> f64 {
         let tl = self.tick_len().max(1.0);
@@ -741,6 +1101,23 @@ impl Engine {
         (self.tl.on && self.playing).then(|| self.tl_clock())
     }
 
+    /// the wrap ahead of the playing row: the Arp stops short of it (a
+    /// step on the loop end would sound before the jump back)
+    pub(super) fn arp_cap(&mut self) {
+        let (end, lp) = match self.tl.plan.as_deref() {
+            Some(p) => (p.end, p.loop_rows),
+            None => (0, None),
+        };
+        let lp = self.tl_span.or(lp);
+        let nn = self.tl.row + 1;
+        let wrap = lp.is_some_and(|(_, b)| nn == b) || nn >= end;
+        self.nv.arp_cap = if wrap {
+            (nn as i64 * ROW) as f64 - 1e-7
+        } else {
+            f64::INFINITY
+        };
+    }
+
     /// note voices: release, and find the notes from timeline row `row`
     pub(super) fn notes_jump(&mut self, song: &Song, row: usize, strike: bool) {
         // launcher clips play on through a jump of the arrangement
@@ -751,9 +1128,14 @@ impl Engine {
         };
         let t = (row as i64 * ROW) as f64;
         self.nv.seek(&plan, t);
+        self.arp_cap();
         if plan.has_audio() || self.av.any {
             let (sr, playing) = (self.sr, self.playing && self.tl.on);
             self.av.seek(&plan, t, sr, playing, false);
+        }
+        if plan.has_notes() {
+            let nch = song.channels.min(MAX_CHANNELS);
+            arp_resync(&mut self.nv, &plan, song, &mut self.chans, nch, t, true);
         }
         if strike && plan.has_notes() {
             let nch = song.channels.min(MAX_CHANNELS);
@@ -774,6 +1156,18 @@ impl Engine {
     #[cfg(test)]
     pub fn audio_voices(&self, track: usize) -> usize {
         self.av.sounding(track)
+    }
+
+    /// the Arp's notes since the last call: (track, start tick, key)
+    #[cfg(test)]
+    pub fn arp_log(&mut self) -> Vec<(usize, Tick, u8)> {
+        std::mem::take(&mut self.nv.arp_log)
+    }
+
+    /// the Arp of `track` holds notes (tests)
+    #[cfg(test)]
+    pub fn arp_holding(&self, track: usize) -> bool {
+        self.nv.arp_mask >> track & 1 == 1
     }
 
     /// sounding note-clip voices on `track` (tests)

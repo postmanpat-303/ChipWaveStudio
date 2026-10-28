@@ -714,6 +714,7 @@ pub fn import_wav(path: &Path) -> Result<Instrument, String> {
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "Sample".into());
     Ok(Instrument {
+        arp: None,
         name,
         volume: 1.0,
         transpose: 0,
@@ -785,6 +786,11 @@ pub const DEMOS: &[(&str, &str, &str)] = &[
         "Oceans 11",
         "music by Martin Galway (Commodore 64), arranged by Del (postmanpat): melodic chiptune, G minor, 125 BPM (only Chip FX, the effects and a Drum Kit)",
         include_str!("../demos/oceans_11.cwt.toml"),
+    ),
+    (
+        "Tallest Morning",
+        "uplifting melodic house, D major, 126 BPM (StringWave echo chord stabs and pads, a macro rise, LFO and envelope modulation, sidechain pumping)",
+        include_str!("../demos/tallest_morning.cwt.toml"),
     ),
 ];
 
@@ -1032,6 +1038,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
                 fx.push(d);
             }
             song.instruments.push(Instrument {
+                arp: None,
                 name: name.into(),
                 volume: real(i, "volume").unwrap_or(1.0),
                 transpose: int(i, "transpose", 0) as i8,
@@ -1077,6 +1084,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
                 fx.push(d);
             }
             song.instruments.push(Instrument {
+                arp: None,
                 name: name.into(),
                 volume: real(i, "volume").unwrap_or(1.0),
                 transpose: int(i, "transpose", 0) as i8,
@@ -1128,6 +1136,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
                     .unwrap_or_default(),
             };
             song.instruments.push(Instrument {
+                arp: None,
                 name: name.into(),
                 volume: real(i, "volume").unwrap_or(1.0),
                 transpose: int(i, "transpose", 0) as i8,
@@ -1160,6 +1169,7 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
             fx.push(d);
         }
         song.instruments.push(Instrument {
+            arp: None,
             name: name.into(),
             volume: real(i, "volume").unwrap_or(1.0),
             transpose: int(i, "transpose", 0) as i8,
@@ -1373,6 +1383,35 @@ mod tests {
         // ~3:25: 22 blocks of 64 lines at 104 BPM
         let secs = s.order.len() as f32 * 64.0 * 60.0 / (104.0 * 4.0);
         assert!((180.0..240.0).contains(&secs), "{secs}");
+    }
+    /// the uplifting house demo "Tallest Morning": in File > Demo songs, with
+    /// StringWave stabs and pads, song modulation and automated route depths
+    #[test]
+    fn tallest_morning_demo_loads_from_menu() {
+        use crate::gen::GenEngine;
+        let i = DEMOS
+            .iter()
+            .position(|d| d.0 == "Tallest Morning")
+            .expect("uplifting demo registered in File > Demo songs");
+        let s = demo_song_n(i);
+        assert!(s.title.starts_with("Tallest Morning"));
+        assert_eq!(s.bpm, 126.0);
+        assert_eq!(s.channels, 16);
+        assert_eq!(s.mixer.duck_key, 0);
+        assert!(s.mixer.limiter.enabled && s.mixer.limiter.ceiling_db <= -1.0);
+        let strings = s
+            .instruments
+            .iter()
+            .filter(|x| matches!(&x.kind, InstrumentKind::Gen(g) if matches!(g.engine, GenEngine::Strings(_))))
+            .count();
+        assert_eq!(strings, 2, "StringWave stabs and pad");
+        assert!(s.modulation.mods.len() >= 6);
+        assert!(s.modulation.routes.len() >= 10);
+        assert!(s.automation.iter().any(|l| l.target.starts_with("mod.")));
+        assert!(s.automation.iter().any(|l| l.target.contains(".gen.")));
+        // 2:00-2:45: 18 blocks of 64 lines at 126 BPM
+        let secs = s.order.len() as f32 * 64.0 * 60.0 / (126.0 * 4.0);
+        assert!((120.0..165.0).contains(&secs), "{secs}");
     }
     /// the chiptune demo "Oceans 11": in File > Demo songs, and made only
     /// from Chip FX instruments, one Drum Kit and built-in effects
@@ -1827,6 +1866,7 @@ mod tests {
             })
             .collect();
         s.instruments.push(Instrument {
+            arp: None,
             name: "Pluck sample".into(),
             volume: 1.0,
             transpose: 0,
@@ -1912,6 +1952,7 @@ mod tests {
         let f = dir.join("w.cwt");
         let mut s = demo_song();
         s.instruments.push(Instrument {
+            arp: None,
             name: "Broken".into(),
             volume: 1.0,
             transpose: 0,
@@ -1950,6 +1991,7 @@ mod tests {
         let mut s = demo_song();
         for (name, _, p) in crate::voice::presets() {
             s.instruments.push(Instrument {
+                arp: None,
                 name: name.into(),
                 volume: 0.7,
                 transpose: -12,

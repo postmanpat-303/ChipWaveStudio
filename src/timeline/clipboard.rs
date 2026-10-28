@@ -115,11 +115,7 @@ pub fn paste_clips(
         let Some(tl) = song.timeline.as_deref() else {
             return out;
         };
-        let kind_ok = match tl.tracks.get(tr).map(|t| t.kind) {
-            Some(TrackKind::Master) => false,
-            Some(TrackKind::Audio) => c.audio().is_some(),
-            _ => c.audio().is_none(),
-        };
+        let kind_ok = clip_fits(tl, c, tr);
         if tr >= nch || !kind_ok {
             out.left_out += 1;
             continue;

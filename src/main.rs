@@ -1,12 +1,12 @@
 // ChipWave Studio - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-/// Display version (Cargo: 0.2.17+fix.0 -> "0.2.17.0"; the updater compares it part by part).
-pub const VERSION: &str = "0.2.17.0";
+/// Display version (Cargo: 0.2.18+fix.0 -> "0.2.18.0"; the updater compares it part by part).
+pub const VERSION: &str = "0.2.18.0";
 
 /// The version as shown (About, window title): a test build (the pack
 /// scripts set CW_BUILD, e.g. "combo2 8bdf40c") reads
-/// "0.2.13.0 · test build (combo2 8bdf40c)"; a release build just "0.2.17.0".
+/// "0.2.13.0 · test build (combo2 8bdf40c)"; a release build just "0.2.18.0".
 pub fn version_label() -> String {
     version_label_for(option_env!("CW_BUILD"))
 }
@@ -31,6 +31,7 @@ fn a_test_build_says_so_next_to_the_version() {
 
 mod advedit;
 mod app;
+mod arp;
 mod arrange;
 mod audio;
 mod audiofile;
@@ -470,6 +471,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         for name in ["Talk Ka-Ta", "Throat Speech"] {
             if let Some(p) = voice::preset(name) {
                 s.instruments.push(model::Instrument {
+                    arp: None,
                     name: name.into(),
                     volume: 1.0,
                     transpose: 0,
@@ -527,6 +529,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         let rows = s.patterns[0].cells.len();
         for (k, (name, _, g)) in presets.iter().enumerate() {
             s.instruments.push(model::Instrument {
+                arp: None,
                 name: (*name).into(),
                 volume: 0.8,
                 transpose: 0,
@@ -550,6 +553,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
                 ..Default::default()
             };
             s.instruments.push(model::Instrument {
+                arp: None,
                 name: fm.name().into(),
                 volume: 0.6,
                 transpose: 0,
@@ -593,6 +597,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
         for (k, name) in names.iter().enumerate() {
             if let Some(p) = voice::preset(name) {
                 s.instruments.push(model::Instrument {
+                    arp: None,
                     name: (*name).into(),
                     volume: 0.8,
                     transpose: 0,
@@ -870,6 +875,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
                 w.user[1] = Some(u);
                 w.tables[1] = gen_wave::USER;
                 s.instruments.push(model::Instrument {
+                    arp: None,
                     name: "Wave".into(),
                     volume: 0.8,
                     transpose: 0,
@@ -919,6 +925,7 @@ fn self_test(out: Option<PathBuf>) -> i32 {
             let pk = y.iter().fold(0.0f32, |m, x| m.max(x.abs()));
             peaks.push((name, pk, y.iter().all(|x| x.is_finite())));
             s.instruments.push(model::Instrument {
+                arp: None,
                 name: name.into(),
                 volume: 0.8,
                 transpose: 0,

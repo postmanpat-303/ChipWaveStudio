@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 126] = [
+pub const VIEWS: [&str; 128] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -94,6 +94,8 @@ pub const VIEWS: [&str; 126] = [
     "showcase-progress",
     "devices",
     "devices-drop",
+    "devices-arp",
+    "devices-repeat",
     "timeline-instrument",
     "timeline-drumkit",
     "trackpie",
@@ -397,6 +399,7 @@ impl App {
             }
             "devices"
             | "devices-drop"
+            | "devices-arp"
             | "timeline-instrument"
             | "instskin-waveforge"
             | "instskin-chains"
@@ -476,6 +479,48 @@ impl App {
                 self.extra.browser_open = std::env::var_os("CHIPWAVE_SHOT_NO_BROWSER").is_none();
                 self.br.filter.tab = crate::browser::Tab::Effects;
                 self.br_refresh();
+                if view == "devices-arp" {
+                    // the Arp on the pad (Gated trance, a ratchet and a
+                    // transposed step), playing
+                    self.extra.browser_open = false;
+                    // CHIPWAVE_SHOT_ARP=<preset>; CHIPWAVE_SHOT_ARP_MORE: the
+                    // More fold-out open, a few step chances, a song key
+                    let preset = std::env::var("CHIPWAVE_SHOT_ARP")
+                        .unwrap_or_else(|_| "Gated trance".into());
+                    self.shot_arp(ii, false, &preset);
+                    // CHIPWAVE_SHOT_ARP_LEN=8|16|32: the pattern length
+                    if let Some(n) = std::env::var("CHIPWAVE_SHOT_ARP_LEN")
+                        .ok()
+                        .and_then(|v| v.parse::<u8>().ok())
+                    {
+                        self.with(|s| {
+                            if let Some(a) =
+                                s.song.instruments.get_mut(ii).and_then(|i| i.arp.as_mut())
+                            {
+                                a.len = n.clamp(1, crate::arp::MAX_STEPS as u8);
+                                for k in [19, 23, 27] {
+                                    a.steps[k].kind = crate::arp::StepKind::Rest;
+                                }
+                                a.steps[30].ratchet = 2;
+                            }
+                        });
+                    }
+                    if std::env::var_os("CHIPWAVE_SHOT_ARP_MORE").is_some() {
+                        self.with(|s| {
+                            s.song.info.key = crate::chords::parse_key("A minor");
+                            if let Some(a) =
+                                s.song.instruments.get_mut(ii).and_then(|i| i.arp.as_mut())
+                            {
+                                a.show_more = true;
+                                a.scale_lock = true;
+                                a.humanise = 0.1;
+                                for (k, c) in [(3, 0.5), (7, 0.75), (11, 0.25), (15, 0.5)] {
+                                    a.steps[k].chance = c;
+                                }
+                            }
+                        });
+                    }
+                }
                 if view == "instskin-chains" {
                     self.extra.chains_cards = true;
                     self.extra.browser_open = false;
@@ -716,6 +761,25 @@ impl App {
             // the Drum Kit editor: a library pattern dropped on a new track
             // (CHIPWAVE_SHOT_PAT=<name>, default "Full-on Drive"); the
             // generator's result when CHIPWAVE_SHOT_DK=generate (=added: then Add to track; =sound: the Sound tab)
+            // Note repeat on a Drum Kit track (Ratchet fill), playing
+            "devices-repeat" => {
+                self.enter_timeline();
+                if let Some(i) = crate::drumpat::PATTERNS
+                    .iter()
+                    .position(|p| p.name == "Full-on Drive")
+                {
+                    self.pat_place_now(i, u8::MAX, 0);
+                }
+                self.enter_timeline();
+                self.default_layout();
+                self.dev.follow_ch = self.ch;
+                self.dev.tree = false;
+                self.set_lower(4);
+                self.extra.lower_h = 430.0;
+                self.extra.browser_open = false;
+                let ii = (self.instr as usize).saturating_sub(1);
+                self.shot_arp(ii, true, "Ratchet fill");
+            }
             "timeline-drumkit" => {
                 self.enter_timeline();
                 let name = std::env::var("CHIPWAVE_SHOT_PAT").unwrap_or("Full-on Drive".into());
@@ -1156,6 +1220,8 @@ impl App {
                 | "about"
                 | "library"
                 | "chords"
+                | "devices-arp"
+                | "devices-repeat"
                 | "slice"
                 | "timeline-new"
                 | "timeline-switch"
@@ -1592,7 +1658,11 @@ impl App {
             self.shot_keys();
             self.shot_lcd();
             self.shot_loop();
+            self.shot_tldrag(false);
             self.shot_kit_after(ctx);
+        }
+        if f == SETUP_AT + 18 {
+            self.shot_tldrag(true);
         }
         if view == "split-preview" && f == SETUP_AT + 12 {
             self.shot_split();
@@ -2641,6 +2711,104 @@ impl App {
         self.dirty = false;
     }
 
+    /// CHIPWAVE_SHOT_TLDRAG=loop-hover | loop-resize | band | ctrl-copy
+    /// (view timeline-mode): the loop region over bars 5-8 with the pointer
+    /// on its end (hover), dragging its end out by two bars, dragging its
+    /// band, or Ctrl-dragging a clip (held mid-drag: the copy cursor and +)
+    fn shot_tldrag(&mut self, script: bool) {
+        use crate::timeline::{Tick, PPQ};
+        let Ok(m) = std::env::var("CHIPWAVE_SHOT_TLDRAG") else {
+            return;
+        };
+        if !script {
+            // first: the region and the zoom (the positions are read a few
+            // frames later, once they are drawn)
+            self.with(|s| {
+                s.engine.stop();
+                if let Some(t) = s.song.timeline.as_deref_mut() {
+                    t.loop_range = Some((4 * 4 * PPQ, 8 * 4 * PPQ));
+                    t.loop_on = true;
+                }
+            });
+            self.follow = false;
+            self.tlv.zoom = 14.0;
+            self.tlv.scroll = 0.0;
+            self.tlv.sels.clear();
+            self.tlv.sel = None;
+            return;
+        }
+        let bar: Tick = 4 * PPQ;
+        let x = |a: &App, t: Tick| a.tlv.x_of(t);
+        let ruler = self.tlv.ruler;
+        let mut mods = egui::Modifiers::NONE;
+        let (from, to): (Pos2, Pos2) = match m.as_str() {
+            "loop-hover" | "loop-resize" => {
+                let from = Pos2::new(x(self, 8 * bar) + 1.0, ruler.center().y);
+                let to = if m == "loop-hover" {
+                    from
+                } else {
+                    Pos2::new(x(self, 10 * bar) + 4.0, ruler.center().y)
+                };
+                (from, to)
+            }
+            "band" => {
+                let from = Pos2::new(x(self, 6 * bar), ruler.bottom() - 4.0);
+                (
+                    from,
+                    from + egui::vec2(x(self, 2 * bar) - x(self, 0) + 3.0, 0.0),
+                )
+            }
+            "ctrl-copy" => {
+                let Some(c) = self.tlv.cache.as_ref() else {
+                    return;
+                };
+                let Some(r) =
+                    c.tl.clips
+                        .iter()
+                        .filter(|x| x.track == 0 && x.audio().is_none() && x.len >= 2 * bar)
+                        .min_by_key(|x| x.start)
+                        .and_then(|x| self.tlv.clip_rect(x.id))
+                else {
+                    return;
+                };
+                mods = egui::Modifiers::COMMAND;
+                let from = Pos2::new(r.left() + 30.0, r.center().y);
+                (
+                    from,
+                    from + egui::vec2(x(self, 4 * bar) - x(self, 0) + 5.0, r.height()),
+                )
+            }
+            _ => return,
+        };
+        let start = SETUP_AT + 24;
+        let mut sc: Vec<(u32, egui::Event)> = vec![(start, egui::Event::PointerMoved(from))];
+        if m != "loop-hover" {
+            sc.push((
+                start + 2,
+                egui::Event::PointerButton {
+                    pos: from,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: mods,
+                },
+            ));
+            for k in 1..=12 {
+                let p = from + (to - from) * (k as f32 / 12.0);
+                sc.push((start + 3 + k * 2, egui::Event::PointerMoved(p)));
+            }
+        }
+        // held through the capture
+        for f in start..CAPTURE_AT + 10 {
+            sc.push((f, egui::Event::ModifiersChanged(mods)));
+            if m == "loop-hover" {
+                sc.push((f, egui::Event::PointerMoved(from)));
+            }
+        }
+        if let Some(sh) = &mut self.shot {
+            sh.script = sc;
+        }
+    }
+
     fn shot_split(&mut self) {
         let Some(c) = self.tlv.cache.as_ref() else {
             return;
@@ -3320,5 +3488,29 @@ impl App {
                 }
             });
         }
+    }
+}
+
+impl App {
+    /// a starting pattern on instrument `ii`'s Arp (Note repeat on a kit)
+    /// for the screenshots, with a ratchet and (melodic) a transposed step
+    fn shot_arp(&mut self, ii: usize, kit: bool, preset: &str) {
+        let mut a = crate::arp::presets(kit)
+            .into_iter()
+            .find(|p| p.0 == preset)
+            .map(|p| p.1)
+            .unwrap_or_default();
+        a.show_steps = true;
+        a.steps.resize(32, crate::arp::Step::default());
+        a.steps[6].ratchet = 3;
+        if !kit {
+            a.steps[10].transpose = 12;
+            a.steps[14].transpose = 7;
+        }
+        self.with(|s| {
+            if let Some(i) = s.song.instruments.get_mut(ii) {
+                i.arp = Some(a);
+            }
+        });
     }
 }

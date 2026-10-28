@@ -360,6 +360,10 @@ pub struct Instrument {
     #[serde(default)]
     pub fx: Vec<crate::fx::Device>,
     pub kind: InstrumentKind,
+    /// the Arp in front of it (None = off: older songs, and saves stay
+    /// as they were)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arp: Option<crate::arp::Arp>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -903,6 +907,7 @@ impl Song {
             return None;
         }
         let layer = Instrument {
+            arp: None,
             name: inst.name.clone(),
             volume: 1.0,
             transpose: 0,
@@ -1057,6 +1062,7 @@ mod tests {
 
     fn inst(name: &str) -> Instrument {
         Instrument {
+            arp: None,
             name: name.into(),
             volume: 1.0,
             transpose: 0,

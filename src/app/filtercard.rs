@@ -137,6 +137,7 @@ mod tests {
     #[test]
     fn synth_maps_to_patch_filter_and_38xx() {
         let inst = Instrument {
+            arp: None,
             name: "Bass".into(),
             volume: 1.0,
             transpose: 0,
@@ -154,6 +155,7 @@ mod tests {
     #[test]
     fn sample_has_no_filter_card() {
         let inst = Instrument {
+            arp: None,
             name: "Smp".into(),
             volume: 1.0,
             transpose: 0,
