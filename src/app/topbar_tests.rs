@@ -449,3 +449,59 @@ fn the_display_and_master_panels_have_all_theirs() {
         }
     }
 }
+
+/// the three panels are exactly as tall as the display (`lcd::lcd_h`) and
+/// level with each other, and the transport buttons and the Master meter
+/// sit in their middles, in every view, toolbar style, view bar setting,
+/// order and width (the panels' heights do not depend on the theme)
+#[test]
+fn the_three_panels_are_the_same_height() {
+    let want = super::lcd::lcd_h();
+    for w in [1366.0, 1920.0] {
+        for lcd in [true, false] {
+            for view_bar in [true, false] {
+                for view in [View::Timeline, View::Pattern, View::Mixer, View::Fx] {
+                    for o in [tp::DEFAULT, [Part::Master, Part::Display, Part::Transport]] {
+                        let mut h = tl_at(w, view);
+                        h.state_mut().extra.lcd_toolbar = lcd;
+                        h.state_mut().extra.view_bar = view_bar;
+                        // the classic toolbar shows the Master while the
+                        // Clip Arranger is hidden
+                        h.state_mut().extra.side_hidden = !lcd;
+                        h.state_mut().extra.topbar = tp::keys_of(o);
+                        frames(&mut h, 6);
+                        let what = format!("{w} lcd {lcd} view bar {view_bar} {view:?} {o:?}");
+                        let rs = h.state().tb.rects;
+                        let shown: Vec<(Part, egui::Rect)> = o
+                            .iter()
+                            .zip(rs)
+                            .filter(|(_, r)| r.is_positive())
+                            .map(|(p, r)| (*p, r))
+                            .collect();
+                        assert!(shown.len() >= 2, "{what}: {shown:?}");
+                        let top = shown[0].1.top();
+                        for (p, r) in &shown {
+                            assert!(
+                                (r.height() - want).abs() <= 0.5 && (r.top() - top).abs() <= 0.5,
+                                "{what}: {p:?} {r:?} (want {want} tall, top {top}) in {shown:?}"
+                            );
+                        }
+                        let (_, tr) = shown.iter().find(|(p, _)| *p == Part::Transport).unwrap();
+                        let b = starts(&h, "play marker to the start");
+                        assert!(
+                            (b.center().y - tr.center().y).abs() <= 1.0,
+                            "{what}: transport buttons {b:?} not centred in {tr:?}"
+                        );
+                        if let Some((_, mr)) = shown.iter().find(|(p, _)| *p == Part::Master) {
+                            let m = h.state().lcd.master_rect;
+                            assert!(
+                                (m.center().y - mr.center().y).abs() <= 1.0,
+                                "{what}: master {m:?} not centred in {mr:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
