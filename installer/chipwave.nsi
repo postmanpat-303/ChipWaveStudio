@@ -99,6 +99,16 @@ Function RemoveOldFolder
   ${IfNot} ${FileExists} "$0\ChipWave.exe"
     Return
   ${EndIf}
+  ; The old path is the junction an earlier setup left (CreateCompatJunction): it points at the
+  ; install just written, so deleting "through" it deleted the new ChipWave.exe and left an empty
+  ; folder on every reinstall. Leave a junction (FILE_ATTRIBUTE_REPARSE_POINT 0x400) alone.
+  System::Call 'kernel32::GetFileAttributesW(w r0) i .r1'
+  ${If} $1 != -1
+    IntOp $1 $1 & 0x400
+    ${If} $1 != 0
+      Return
+    ${EndIf}
+  ${EndIf}
   Delete "$0\ChipWave.exe"
   Delete "$0\README.txt"
   Delete "$0\LICENSE.txt"
