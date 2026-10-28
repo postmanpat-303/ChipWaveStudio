@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.18.0-00d0ff" alt="Version 0.2.18.0">
+  <img src="https://img.shields.io/badge/version-0.2.18.1-00d0ff" alt="Version 0.2.18.1">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -53,6 +53,8 @@ All pictures on this page are real captures of the current build (no mockups). T
 
 <a id="new"></a>
 ## New in 0.2.18.0: the Arp, an adjustable loop and Ctrl+drag copies
+
+> **0.2.18.1** fixes the Windows installer: reinstalling or upgrading could leave the install folder empty. If ChipWave 0.2.18.0 stopped opening from its shortcut, install 0.2.18.1.
 
 - **The Arp** ([ARPEGGIATOR.md](docs/ARPEGGIATOR.md)): a note effect at the start of a track's Rack that plays the notes you hold one at a time, in time with the song. Up, Down, Up-down, Converge, Diverge, Random, As played and Chord modes; 1–4 octaves; tempo-synced rates from 1/4 to 1/128 with triplets, dotted values and chip-style fast chords; gate, swing and Latch. A step grid of **8, 16 or 32 steps** sets velocity, gate, accent, rest or tie, ratchets, transpose and chance per step, and **More ▸** adds Euclid fill, scale lock to the song key, humanise and free-run. Named presets, automation and modulation on Rate, Gate, Swing, Octaves and Humanise, and **Bake Arp to notes** on the clip menu. Tracker cells play through it too, and a Drum Kit gets it as **Note repeat**.
 - **An adjustable loop range** ([TIMELINE.md](docs/TIMELINE.md#loop-region-on-the-ruler)): drag either end of the loop on the ruler to resize it, or drag the band between them to move it. It snaps to the grid (hold Alt for single rows), and double-clicking the band selects the clips inside it. Playback and loop export use the new range, and each change is one Undo step.

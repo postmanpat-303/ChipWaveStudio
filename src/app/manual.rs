@@ -17,7 +17,7 @@ pub(crate) const MANUAL_PDF: &[u8] =
 /// the same PDF on GitHub (the fallback link when it can't be opened here)
 pub(super) const MANUAL_URL: &str = "https://github.com/postmanpat-303/ChipWaveStudio/blob/main/docs/manual/ChipWave-Studio-User-Manual.pdf";
 
-/// "ChipWave-Studio-User-Manual-0.2.18.0.pdf": one file per app version
+/// "ChipWave-Studio-User-Manual-0.2.18.1.pdf": one file per app version
 pub(crate) fn file_name() -> String {
     format!("ChipWave-Studio-User-Manual-{}.pdf", crate::VERSION)
 }
