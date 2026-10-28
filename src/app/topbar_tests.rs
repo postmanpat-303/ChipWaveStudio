@@ -336,3 +336,116 @@ fn every_view_keeps_its_controls() {
     assert!(h.state().tb.extras.is_positive());
     no_overlap(&h, "classic, view switch");
 }
+
+fn starts(h: &Harness<'static, App>, prefix: &str) -> egui::Rect {
+    h.query_all_by(|n| n.label().is_some_and(|l| l.starts_with(prefix)))
+        .next()
+        .unwrap_or_else(|| panic!("no widget starting {prefix:?}"))
+        .rect()
+}
+
+/// timeline mode (where Record, Loop and the Metronome live, as on main)
+fn tl_at(w: f32, view: View) -> Harness<'static, App> {
+    let mut h = super::unified_tests::tl_song(fileio::demo_song());
+    h.state_mut().extra.reduce_motion = true;
+    h.state_mut().view = view;
+    h.set_size(egui::vec2(w, 768.0));
+    frames(&mut h, 6);
+    h
+}
+
+/// the Transport panel has every control main's toolbar had, in main's
+/// order (to the start, Play, Record, Loop, Metronome, its ▾), all inside
+/// the panel, in every order, toolbar style and width
+#[test]
+fn the_transport_panel_has_all_its_controls() {
+    let ctl = [
+        "play marker to the start",
+        "Play",
+        "Record (R)",
+        "Loop (L)",
+        "Metronome",
+        "Metronome options",
+    ];
+    for w in [1366.0, 1920.0] {
+        for lcd in [true, false] {
+            for o in [tp::DEFAULT, [Part::Transport, Part::Master, Part::Display]] {
+                let mut h = tl_at(w, View::Timeline);
+                h.state_mut().extra.lcd_toolbar = lcd;
+                h.state_mut().extra.topbar = tp::keys_of(o);
+                frames(&mut h, 6);
+                let what = format!("{w} lcd {lcd} {o:?}");
+                let slot = o.iter().position(|p| *p == Part::Transport).unwrap();
+                let pr = h.state().tb.rects[slot].expand(1.0);
+                let mut last = f32::MIN;
+                for c in ctl {
+                    let r = if c == "Metronome" {
+                        exact(&h, c)
+                    } else {
+                        starts(&h, c)
+                    };
+                    assert!(
+                        pr.contains_rect(r),
+                        "{what}: {c} {r:?} outside the panel {pr:?}"
+                    );
+                    assert!(r.left() > last, "{what}: {c} out of order");
+                    last = r.left();
+                }
+                no_overlap(&h, &what);
+            }
+        }
+    }
+    // a song in tracker mode: Record, Loop and the Metronome are timeline
+    // features (hidden there on main too); the Tracker adds Play block
+    let h = at(1366.0, View::Pattern);
+    let pr = h.state().tb.rects[1].expand(1.0);
+    for c in ["Play block", "play marker to the start", "Play song"] {
+        assert!(pr.contains_rect(starts(&h, c)), "tracker mode: {c}");
+    }
+}
+
+/// the Display and the Master lost nothing: every readout and control of
+/// the display (main's lcd_tests cover what each one does) and the Master
+/// meter, inside their panels
+#[test]
+fn the_display_and_master_panels_have_all_theirs() {
+    for (w, view) in [
+        (1366.0, View::Timeline),
+        (1920.0, View::Timeline),
+        (1366.0, View::Pattern),
+    ] {
+        for o in [tp::DEFAULT, [Part::Master, Part::Display, Part::Transport]] {
+            let mut h = tl_at(w, view);
+            h.state_mut().extra.topbar = tp::keys_of(o);
+            frames(&mut h, 6);
+            let what = format!("{w} {view:?} {o:?}");
+            let ds = o.iter().position(|p| *p == Part::Display).unwrap();
+            let ms = o.iter().position(|p| *p == Part::Master).unwrap();
+            let (dr, mr) = (
+                h.state().tb.rects[ds].expand(1.0),
+                h.state().tb.rects[ms].expand(1.0),
+            );
+            assert!(dr.contains_rect(h.state().lcd.rect), "{what}: display");
+            assert!(
+                mr.contains_rect(h.state().lcd.master_rect),
+                "{what}: master"
+            );
+            assert!(mr.contains_rect(exact(&h, "Master meter")), "{what}");
+            let d = h.state().lcd.rect.expand(1.0);
+            for c in ["Tempo", "TAP", "LOOP", "CLICK", "FOLLOW"] {
+                let n: Vec<egui::Rect> = h
+                    .query_all_by(|n| n.label().is_some_and(|l| l.starts_with(c)))
+                    .map(|n| n.rect())
+                    .filter(|r| d.contains_rect(*r))
+                    .collect();
+                assert!(
+                    !n.is_empty(),
+                    "{what}: the display's {c} in {d:?}: {:?}",
+                    h.query_all_by(|n| n.label().is_some_and(|l| l.starts_with(c)))
+                        .map(|n| n.rect())
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+}
