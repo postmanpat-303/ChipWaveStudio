@@ -236,6 +236,17 @@ fn segmented(ui: &mut egui::Ui, items: &[(&str, &str)], cur: usize) -> Option<us
 const DROP_ORANGE: Color32 = Color32::from_rgb(0xFF, 0x8C, 0x1A);
 
 fn group(ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
+    group_sized(ui, caption, None, add);
+}
+
+/// a top bar panel's group: as tall as the display (`lcd::lcd_h`, the
+/// Master's height too), its controls centred vertically in it
+fn panel_group(ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
+    group_sized(ui, caption, Some(super::lcd::lcd_h()), add);
+}
+
+/// `group`, `h` tall (outside, frame included) when given
+fn group_sized(ui: &mut egui::Ui, caption: &str, h: Option<f32>, add: impl FnOnce(&mut egui::Ui)) {
     let ember = th().ember;
     egui::Frame::new()
         .fill(if ember {
@@ -250,11 +261,27 @@ fn group(ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
         })
         .corner_radius(if ember { 5 } else { 7 })
         .inner_margin(egui::Margin::symmetric(8, 3))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 5.0;
-                add(ui);
-            });
+        .show(ui, |ui| match h {
+            None => {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 5.0;
+                    add(ui);
+                });
+            }
+            Some(h) => {
+                // inside the 3 px margins and the 1 px stroke
+                let inner = (h - 8.0).max(0.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(ui.available_width(), inner),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.set_min_height(inner);
+                        ui.set_max_height(inner);
+                        ui.spacing_mut().item_spacing.x = 5.0;
+                        add(ui);
+                    },
+                );
+            }
         })
         .response
         .on_hover_text(caption);
@@ -1090,7 +1117,7 @@ impl App {
         }
     }
 
-    /// the panels' grips (six dots left of a panel, shown on hover): drag
+    /// the panels' grips (six dots left of a panel, always shown): drag
     /// one to move its panel; a ghost follows the pointer and an orange
     /// marker shows where it lands. The order saves (UI settings are not
     /// part of Undo); Settings › Look › Top bar resets it.
@@ -1125,20 +1152,26 @@ impl App {
             let dragging = self.tb.drag == Some(i);
             let near = pointer.is_some_and(|q| pr.union(grip).expand(2.0).contains(q));
             let lit = dragging || resp.hovered();
-            if (near && self.tb.drag.is_none()) || dragging {
-                // six dots: two columns of three
-                let col = if lit { t.accent } else { hdr_dim() };
-                let c = grip.center();
-                for dx in [-2.5f32, 2.5] {
-                    for dy in [-5.0f32, 0.0, 5.0] {
-                        ui.painter().circle_filled(c + egui::vec2(dx, dy), 1.6, col);
-                    }
+            // six dots (two columns of three), always there so the grip is
+            // easy to find: faint at rest, brighter near the panel, the
+            // accent colour under the pointer or while dragging
+            let col = if lit {
+                t.accent
+            } else if near && self.tb.drag.is_none() {
+                hdr_text()
+            } else {
+                hdr_dim()
+            };
+            let c = grip.center();
+            for dx in [-2.5f32, 2.5] {
+                for dy in [-5.0f32, 0.0, 5.0] {
+                    ui.painter().circle_filled(c + egui::vec2(dx, dy), 1.6, col);
                 }
             }
             let resp = resp
                 .on_hover_cursor(egui::CursorIcon::Grab)
                 .on_hover_text(format!(
-                    "drag to move the {} panel (Settings › Look › Top bar resets the order)",
+                    "Drag to move the {} panel\nSettings › Look › Top bar resets the order",
                     part.name()
                 ));
             if dragging {
@@ -1228,7 +1261,7 @@ impl App {
         let tracker = self.view == View::Pattern;
         // the LCD toolbar (0.2.10): an icon-only transport
         let lcd = self.lcd_on();
-        group(ui, "TRANSPORT", |ui| {
+        panel_group(ui, "TRANSPORT", |ui| {
             let loop_on = playing && self.with(|s| s.engine.loop_pattern);
             // Play block is a tracker control: shown in the Tracker view
             // (Space still loops the block everywhere)
@@ -1398,7 +1431,7 @@ impl App {
             return;
         }
         let mut tempo_r = None;
-        group(ui, "TEMPO", |ui| {
+        panel_group(ui, "TEMPO", |ui| {
             let (mut bpm, mut speed) = self.with(|s| (s.song.bpm, s.song.speed));
             ui.label(egui::RichText::new("BPM").color(hdr_text()));
             let r = ui
