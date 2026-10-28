@@ -2,6 +2,13 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.18.1: installer fix
+
+Released 2026-10-28.
+
+- Fixed: reinstalling or upgrading could leave the install folder empty. If ChipWave 0.2.18.0 stopped opening from its shortcut, install 0.2.18.1.
+- Why: the Windows setup leaves a junction at the old `C:\Program Files\ChipWave Tracker` path that points at the `ChipWave Studio` folder. When the setup ran again, it took that junction for an old install and deleted the files through it, so it deleted the ChipWave.exe it had just written. The setup now leaves a junction alone (`installer/chipwave.nsi`, `RemoveOldFolder`). Nothing else changed: the app is the same as 0.2.18.0, and every song plays and renders exactly as before.
+
 ## 0.2.18.0: the Arp, an adjustable loop range, Ctrl-drag copies, Tallest Morning
 
 Released 2026-10-27. Highlights:

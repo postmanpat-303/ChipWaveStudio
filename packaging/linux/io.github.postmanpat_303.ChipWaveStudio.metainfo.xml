@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.18.1" date="2026-10-28">
+      <description><p>Fixed: reinstalling or upgrading on Windows could leave the install folder empty. If ChipWave 0.2.18.0 stopped opening from its shortcut, install 0.2.18.1.</p></description>
+    </release>
     <release version="0.2.18.0" date="2026-10-27">
       <description><p>The Arp: a note effect at the start of a track's Rack that plays held notes one at a time in time with the song, with modes, octaves, tempo-synced rates, swing, latch, a step grid of 8, 16 or 32 steps, Euclid fill, scale lock and named presets. The loop range on the ruler can now be resized by dragging its ends and moved by dragging its band, on the snap grid. Ctrl-drag a clip to copy it, leaving the original in place. A new demo song, Tallest Morning, is uplifting melodic house built on StringWave.</p></description>
     </release>
