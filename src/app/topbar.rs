@@ -1149,8 +1149,12 @@ impl App {
                     // the panel stays put, dimmed, while its ghost moves
                     ui.painter()
                         .rect_filled(pr.expand(2.0), 6, t.hdr_bot.gamma_multiply(0.7));
+                    // kept inside the window
+                    let win = ui.ctx().content_rect();
+                    let half = (pr.width() / 2.0).min(win.width() / 2.0);
+                    let gx = q.x.clamp(win.left() + half, win.right() - half);
                     let ghost = egui::Rect::from_center_size(
-                        egui::pos2(q.x, pr.center().y + 4.0),
+                        egui::pos2(gx, pr.center().y + 4.0),
                         pr.size(),
                     );
                     let fp = ui.ctx().layer_painter(egui::LayerId::new(

@@ -2975,10 +2975,22 @@ impl App {
 
     /// CHIPWAVE_SHOT_TOPBAR=transport,master,display: the top bar's panel
     /// order; CHIPWAVE_SHOT_TOPBAR_DRAG=<slot>: that panel's grip dragged
-    /// to the gap after the next panel and held (the ghost and the marker)
+    /// to the gap after the next panel and held (the ghost and the marker);
+    /// CHIPWAVE_SHOT_TB_LOOK=classic,noviewbar,<display colour>: the top
+    /// bar's other looks
     fn shot_topbar(&mut self) {
         if let Ok(o) = std::env::var("CHIPWAVE_SHOT_TOPBAR") {
             self.extra.topbar = o.split(',').map(|k| k.trim().to_string()).collect();
+        }
+        if let Ok(o) = std::env::var("CHIPWAVE_SHOT_TB_LOOK") {
+            for k in o.split(',').map(str::trim) {
+                match k {
+                    "classic" => self.extra.lcd_toolbar = false,
+                    "noviewbar" => self.extra.view_bar = false,
+                    "" => {}
+                    c => self.extra.lcd_colour = c.to_string(),
+                }
+            }
         }
         let Some(i) = std::env::var("CHIPWAVE_SHOT_TOPBAR_DRAG")
             .ok()
