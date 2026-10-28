@@ -179,6 +179,8 @@ mod tldrag_tests;
 #[cfg(test)]
 mod tlselect_tests;
 mod topbar;
+#[cfg(test)]
+mod topbar_tests;
 mod trackauto;
 mod trackops;
 mod trackpie;
