@@ -568,6 +568,22 @@ impl App {
                     });
                 });
                 ui.end_row();
+                ui.label("Top bar");
+                ui.horizontal(|ui| {
+                    let o = super::tbpanels::order_of(&self.extra.topbar);
+                    ui.label(egui::RichText::new(super::tbpanels::names(o)).color(th().ink2))
+                        .on_hover_text(
+                            "the top bar's panels, left to right (the middle one is centred): drag the dots at a panel's left, which show on hover, to move it",
+                        );
+                    if ui
+                        .add_enabled(o != super::tbpanels::DEFAULT, egui::Button::new("Reset top bar"))
+                        .on_hover_text("back to Display, Transport (centred), Master")
+                        .clicked()
+                    {
+                        self.set_topbar(super::tbpanels::DEFAULT);
+                    }
+                });
+                ui.end_row();
                 ui.label("Recording");
                 ui.horizontal(|ui| {
                     for (v, name, tip) in [
