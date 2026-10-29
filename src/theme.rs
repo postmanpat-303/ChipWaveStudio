@@ -3,7 +3,9 @@
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke};
 
 pub mod instskin;
+pub mod knobstyle;
 pub use instskin::{active as active_skin, instskin, is_builtin, skin_or, SkinScope};
+pub use knobstyle::{knob_style, set_knob_style, KnobStyle};
 
 pub const fn hex(c: u32) -> Color32 {
     Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
@@ -1134,6 +1136,18 @@ impl KnobFace {
 
 /// Paint a knob of radius `rad` (the value arc's radius) centred on `c`.
 pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
+    let style = knob_style();
+    if style != KnobStyle::Classic {
+        let f = knobstyle::Face {
+            frac: k.frac,
+            from: k.from,
+            dim: k.dim,
+            locked: k.locked,
+            steps: k.steps,
+        };
+        knobstyle::paint(p, c, rad, f, style);
+        return;
+    }
     let t = th();
     let v = k.frac.clamp(0.0, 1.0);
     if t.ember {

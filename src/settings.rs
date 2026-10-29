@@ -144,6 +144,11 @@ pub struct Extra {
     /// before the polish pass)
     #[serde(default)]
     pub flat_ui: bool,
+    /// Knob style (Settings › Look): 0 = Classic, the theme's own knob
+    /// (default), then Flat ring, Chicken-head, LED ring, Brushed metal,
+    /// Pixel (`theme::KnobStyle`); unknown numbers read as Classic
+    #[serde(default)]
+    pub knob_style: u8,
     /// piano roll chord lane: right-click opens a list menu instead of the
     /// pie (Settings › Chord menus)
     #[serde(default)]
@@ -329,6 +334,7 @@ impl Default for Extra {
             pie_size: 0,
             dblclick_roll: true,
             flat_ui: false,
+            knob_style: 0,
             chord_list_menu: false,
             browser_open: true,
             browser_w: browser_w(),
@@ -574,5 +580,30 @@ mod tests {
             back.extra.default_chains_view();
             assert_eq!(back.extra.chains_cards, cards);
         }
+    }
+
+    #[test]
+    fn knob_style_defaults_to_classic_and_round_trips() {
+        // settings from before the option, and new users: Classic
+        let e: Extra = toml::from_str("flat_ui = false").unwrap();
+        assert_eq!(e.knob_style, 0);
+        assert_eq!(Extra::default().knob_style, 0);
+        assert_eq!(
+            crate::theme::KnobStyle::from_u8(e.knob_style),
+            crate::theme::KnobStyle::Classic
+        );
+        for n in 0..6u8 {
+            let mut s = Settings::default();
+            s.extra.knob_style = n;
+            let back: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
+            assert_eq!(back.extra.knob_style, n);
+        }
+        // the theme saves by name: The Matrix comes back as itself
+        let s = Settings {
+            theme: crate::theme::MATRIX.name.into(),
+            ..Default::default()
+        };
+        let back: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back.theme().name, "The Matrix");
     }
 }

@@ -1103,6 +1103,13 @@ fn screenshot(args: &[String], i: usize) -> i32 {
         ..Default::default()
     };
     st.extra.update_check = false;
+    // CHIPWAVE_SHOT_KNOB=0..5: a knob style (Settings › Look) for the shot
+    if let Some(n) = std::env::var("CHIPWAVE_SHOT_KNOB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        st.extra.knob_style = n;
+    }
     // --zoom 1.5 (UI scale) / --text 1.2 (Text size)
     if let Some(z) = flag("--zoom").and_then(|s| s.parse::<f32>().ok()) {
         st.zoom = settings::snap_zoom(z);

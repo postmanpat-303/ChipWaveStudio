@@ -401,6 +401,16 @@ impl App {
                     changed |= a.changed() || b.changed();
                 });
                 ui.end_row();
+                ui.label("Knob style");
+                ui.horizontal_wrapped(|ui| {
+                    for st in theme::KnobStyle::ALL {
+                        changed |= ui
+                            .selectable_value(&mut self.extra.knob_style, st as u8, st.name())
+                            .on_hover_text(st.hint())
+                            .changed();
+                    }
+                });
+                ui.end_row();
                 ui.label("Motion");
                 changed |= ui
                     .checkbox(&mut self.extra.reduce_motion, "Reduce motion")

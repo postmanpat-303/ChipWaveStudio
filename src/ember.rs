@@ -494,106 +494,126 @@ pub fn knob_studio(p: &Painter, c: Pos2, rad: f32, k: &StudioKnob) {
     let orange = crate::theme::skin_or(t.acc_hot);
     let readout = crate::theme::active_skin().map_or(orange, |s| s.text);
     let small = rad < 18.0;
-    // dot ring
-    let n = if k.dots > 1 {
-        k.dots
-    } else if rad >= 24.0 {
-        15
-    } else if rad >= 16.0 {
-        11
-    } else {
-        9
-    };
     let dr = studio_dot(rad);
     let ring = rad + studio_gap(rad);
     let lit_col = if k.locked { t.ink2 } else { orange };
-    for i in 0..n {
-        let f = i as f32 / (n - 1) as f32;
-        let half = 0.5 / (n - 1) as f32;
-        let lit = if k.bipolar {
-            let (a, b) = if frac < 0.5 { (frac, 0.5) } else { (0.5, frac) };
-            f >= a - half && f <= b + half
-        } else {
-            frac > 0.004 && f <= frac + half
+    let style = crate::theme::knob_style();
+    if style != crate::theme::KnobStyle::Classic {
+        // another face (Settings › Look › Knob style) in the same footprint;
+        // the labels below stay as they are
+        let face = crate::theme::knobstyle::Face {
+            frac,
+            from: if k.bipolar { 0.5 } else { 0.0 },
+            dim: 1.0,
+            locked: k.locked,
+            steps: if k.dots > 1 { (k.dots - 1) as f32 } else { 0.0 },
         };
-        let q = at(c, ring, knob_angle(f));
-        if lit {
-            p.circle_filled(q, dr, lit_col);
+        crate::theme::knobstyle::paint(
+            p,
+            c,
+            ring + dr - crate::theme::knobstyle::REACH,
+            face,
+            style,
+        );
+    } else {
+        // dot ring
+        let n = if k.dots > 1 {
+            k.dots
+        } else if rad >= 24.0 {
+            15
+        } else if rad >= 16.0 {
+            11
         } else {
-            p.circle_filled(q, dr, hex(0x101113));
-            p.circle_stroke(q, dr, Stroke::new(0.6, Color32::from_white_alpha(10)));
+            9
+        };
+        for i in 0..n {
+            let f = i as f32 / (n - 1) as f32;
+            let half = 0.5 / (n - 1) as f32;
+            let lit = if k.bipolar {
+                let (a, b) = if frac < 0.5 { (frac, 0.5) } else { (0.5, frac) };
+                f >= a - half && f <= b + half
+            } else {
+                frac > 0.004 && f <= frac + half
+            };
+            let q = at(c, ring, knob_angle(f));
+            if lit {
+                p.circle_filled(q, dr, lit_col);
+            } else {
+                p.circle_filled(q, dr, hex(0x101113));
+                p.circle_stroke(q, dr, Stroke::new(0.6, Color32::from_white_alpha(10)));
+            }
         }
+        // drop shadow and bezel: a matte ring, lit a touch from above
+        p.circle_filled(
+            c + Vec2::new(0.0, rad * 0.06 + 0.5),
+            rad + 0.5,
+            Color32::from_black_alpha(130),
+        );
+        disc(p, c, rad, false, |y| {
+            stops(&[(0.0, hex(0x2C2E31)), (1.0, hex(0x151618))], y)
+        });
+        p.circle_stroke(
+            c,
+            rad - 0.5,
+            Stroke::new(1.0, Color32::from_black_alpha(150)),
+        );
+        // the cap: a ridged (gently scalloped) edge, matte, lit from above
+        let cap = rad * 0.84;
+        let lobes = if small { 8 } else { 10 };
+        let amp = if small { 0.025 } else { 0.035 };
+        let seg = ((cap * 2.4) as usize).clamp(40, 160);
+        let edge = |i: usize| {
+            let a = i as f32 / seg as f32 * std::f32::consts::TAU;
+            let r = cap * (1.0 - amp + amp * (a * lobes as f32).cos());
+            at(c, r, a)
+        };
+        let shade = |q: Pos2, r: f32| {
+            let y = ((q.y - (c.y - r)) / (2.0 * r)).clamp(0.0, 1.0);
+            stops(
+                &[
+                    (0.0, hex(0x3B3D41)),
+                    (0.45, hex(0x26282B)),
+                    (1.0, hex(0x121315)),
+                ],
+                y,
+            )
+        };
+        let mut m = egui::Mesh::default();
+        m.colored_vertex(c, shade(c, cap));
+        for i in 0..seg {
+            let q = edge(i);
+            m.colored_vertex(q, shade(q, cap));
+        }
+        for i in 0..seg as u32 {
+            m.add_triangle(0, 1 + i, 1 + (i + 1) % seg as u32);
+        }
+        p.add(egui::Shape::mesh(m));
+        let outline: Vec<Pos2> = (0..seg).map(edge).collect();
+        p.add(egui::Shape::closed_line(
+            outline,
+            Stroke::new(1.0, Color32::from_black_alpha(170)),
+        ));
+        // a soft rim light along the top of the cap
+        let rim: Vec<Pos2> = (0..=16)
+            .map(|i| at(c, cap - 1.2, (215.0 + 110.0 * i as f32 / 16.0).to_radians()))
+            .collect();
+        p.add(egui::Shape::line(
+            rim,
+            Stroke::new(1.0, Color32::from_white_alpha(22)),
+        ));
+        // the face: a shallow dish, darker at the top
+        let face = rad * 0.58;
+        disc(p, c, face, false, |y| {
+            stops(&[(0.0, hex(0x17181A)), (1.0, hex(0x2A2C2F))], y)
+        });
+        p.circle_stroke(c, face, Stroke::new(1.0, Color32::from_black_alpha(120)));
+        // the pointer: one thin orange line across the cap's rim
+        let a = knob_angle(frac);
+        p.line_segment(
+            [at(c, face + rad * 0.04, a), at(c, cap - rad * 0.03, a)],
+            Stroke::new((rad * 0.075).clamp(1.3, 2.4), lit_col),
+        );
     }
-    // drop shadow and bezel: a matte ring, lit a touch from above
-    p.circle_filled(
-        c + Vec2::new(0.0, rad * 0.06 + 0.5),
-        rad + 0.5,
-        Color32::from_black_alpha(130),
-    );
-    disc(p, c, rad, false, |y| {
-        stops(&[(0.0, hex(0x2C2E31)), (1.0, hex(0x151618))], y)
-    });
-    p.circle_stroke(
-        c,
-        rad - 0.5,
-        Stroke::new(1.0, Color32::from_black_alpha(150)),
-    );
-    // the cap: a ridged (gently scalloped) edge, matte, lit from above
-    let cap = rad * 0.84;
-    let lobes = if small { 8 } else { 10 };
-    let amp = if small { 0.025 } else { 0.035 };
-    let seg = ((cap * 2.4) as usize).clamp(40, 160);
-    let edge = |i: usize| {
-        let a = i as f32 / seg as f32 * std::f32::consts::TAU;
-        let r = cap * (1.0 - amp + amp * (a * lobes as f32).cos());
-        at(c, r, a)
-    };
-    let shade = |q: Pos2, r: f32| {
-        let y = ((q.y - (c.y - r)) / (2.0 * r)).clamp(0.0, 1.0);
-        stops(
-            &[
-                (0.0, hex(0x3B3D41)),
-                (0.45, hex(0x26282B)),
-                (1.0, hex(0x121315)),
-            ],
-            y,
-        )
-    };
-    let mut m = egui::Mesh::default();
-    m.colored_vertex(c, shade(c, cap));
-    for i in 0..seg {
-        let q = edge(i);
-        m.colored_vertex(q, shade(q, cap));
-    }
-    for i in 0..seg as u32 {
-        m.add_triangle(0, 1 + i, 1 + (i + 1) % seg as u32);
-    }
-    p.add(egui::Shape::mesh(m));
-    let outline: Vec<Pos2> = (0..seg).map(edge).collect();
-    p.add(egui::Shape::closed_line(
-        outline,
-        Stroke::new(1.0, Color32::from_black_alpha(170)),
-    ));
-    // a soft rim light along the top of the cap
-    let rim: Vec<Pos2> = (0..=16)
-        .map(|i| at(c, cap - 1.2, (215.0 + 110.0 * i as f32 / 16.0).to_radians()))
-        .collect();
-    p.add(egui::Shape::line(
-        rim,
-        Stroke::new(1.0, Color32::from_white_alpha(22)),
-    ));
-    // the face: a shallow dish, darker at the top
-    let face = rad * 0.58;
-    disc(p, c, face, false, |y| {
-        stops(&[(0.0, hex(0x17181A)), (1.0, hex(0x2A2C2F))], y)
-    });
-    p.circle_stroke(c, face, Stroke::new(1.0, Color32::from_black_alpha(120)));
-    // the pointer: one thin orange line across the cap's rim
-    let a = knob_angle(frac);
-    p.line_segment(
-        [at(c, face + rad * 0.04, a), at(c, cap - rad * 0.03, a)],
-        Stroke::new((rad * 0.075).clamp(1.3, 2.4), lit_col),
-    );
     // labels outside: scale numbers, or min / max at the bottom
     let lf = label_font((rad * 0.42).clamp(10.0, 13.0));
     if !small && !k.scale.is_empty() {
