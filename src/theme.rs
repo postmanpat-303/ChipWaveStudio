@@ -1136,7 +1136,11 @@ impl KnobFace {
 
 /// Paint a knob of radius `rad` (the value arc's radius) centred on `c`.
 pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
-    let style = knob_style();
+    knob_face_as(p, c, rad, k, knob_style());
+}
+
+/// `knob_face` in a given knob style (the previews in Settings › Look)
+pub fn knob_face_as(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace, style: KnobStyle) {
     if style != KnobStyle::Classic {
         let f = knobstyle::Face {
             frac: k.frac,
@@ -1153,7 +1157,7 @@ pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
     if t.ember {
         // the studio knob in the old footprint; stepped knobs get a dot per step
         let steps = k.steps.round() as usize;
-        crate::ember::knob_studio(
+        crate::ember::knob_studio_as(
             p,
             c,
             crate::ember::studio_rad(rad + 2.5),
@@ -1169,6 +1173,7 @@ pub fn knob_face(p: &egui::Painter, c: Pos2, rad: f32, k: KnobFace) {
                 locked: k.locked,
                 ..Default::default()
             },
+            KnobStyle::Classic,
         );
         return;
     }

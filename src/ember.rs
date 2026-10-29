@@ -484,6 +484,17 @@ pub fn studio_rad(outer: f32) -> f32 {
 /// at 1.2 x and the labels at about 1.55 x it. Readable from `rad` 11 up:
 /// under 18 the scale and end labels are left out.
 pub fn knob_studio(p: &Painter, c: Pos2, rad: f32, k: &StudioKnob) {
+    knob_studio_as(p, c, rad, k, crate::theme::knob_style());
+}
+
+/// `knob_studio` with a given knob style (the Settings previews show each)
+pub fn knob_studio_as(
+    p: &Painter,
+    c: Pos2,
+    rad: f32,
+    k: &StudioKnob,
+    style: crate::theme::KnobStyle,
+) {
     let t = th();
     let mut kp = p.clone();
     if k.dim < 1.0 {
@@ -497,7 +508,6 @@ pub fn knob_studio(p: &Painter, c: Pos2, rad: f32, k: &StudioKnob) {
     let dr = studio_dot(rad);
     let ring = rad + studio_gap(rad);
     let lit_col = if k.locked { t.ink2 } else { orange };
-    let style = crate::theme::knob_style();
     if style != crate::theme::KnobStyle::Classic {
         // another face (Settings › Look › Knob style) in the same footprint;
         // the labels below stay as they are
