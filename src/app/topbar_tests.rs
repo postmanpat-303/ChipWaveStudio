@@ -231,12 +231,28 @@ fn reset_top_bar_in_settings_look_puts_the_default_back() {
 fn the_display_goes_compact_only_when_the_full_one_does_not_fit() {
     let h = at(1920.0, View::Timeline);
     assert!(!h.state().lcd.narrow);
+    assert!(!h.state().lcd.mid);
     let full = h.state().lcd.rect.width();
     let master_full = h.state().lcd.master_rect.width();
+    // 1366 px: the in-between display (the signature, the loop's bars and
+    // the buffer's ms stay) beside the full Master
     let h = at(1366.0, View::Timeline);
+    assert!(h.state().lcd.mid);
+    assert!(!h.state().lcd.narrow);
+    let mid = h.state().lcd.rect.width();
+    assert!(mid < full);
+    assert_eq!(h.state().lcd.master_rect.width(), master_full);
+    no_overlap(&h, "1366 in-between");
+    // narrower still: the compact display and Master
+    let h = at(1100.0, View::Timeline);
     assert!(h.state().lcd.narrow);
-    assert!(h.state().lcd.rect.width() < full);
+    assert!(!h.state().lcd.mid);
+    assert!(h.state().lcd.rect.width() < mid);
     assert!(h.state().lcd.master_rect.width() < master_full);
+    // the app's own widths at 1366 (fonts as shipped; the transport 210):
+    // full 646 no, in-between 532 yes
+    assert!(!tp::fits(0.0, 1366.0, 683.0, [646.0, 210.0, 176.0]));
+    assert!(tp::fits(0.0, 1366.0, 683.0, [533.0, 210.0, 176.0]));
     assert!(tp::fits(0.0, 1920.0, 960.0, [646.0, 230.0, 176.0]));
     assert!(!tp::fits(0.0, 1366.0, 683.0, [646.0, 230.0, 176.0]));
     assert!(tp::fits(0.0, 1366.0, 683.0, [523.0, 230.0, 150.0]));

@@ -1003,12 +1003,12 @@ impl App {
         let mid = ui.ctx().content_rect().center().x;
         let shown = |a: &Self, p: Part| p != Part::Master || a.master_in_toolbar();
         let mp = ui.painter().clone();
-        let widths = |a: &Self, narrow: bool| {
+        let widths = |a: &Self, narrow: bool, mid: bool| {
             order.map(|p| {
                 if !shown(a, p) {
                     0.0
                 } else if p == Part::Display && lcd {
-                    a.lcd_display_w(&mp, narrow)
+                    a.lcd_display_w(&mp, narrow, mid)
                 } else if p == Part::Master {
                     super::lcd::master_w(narrow)
                 } else {
@@ -1022,10 +1022,16 @@ impl App {
                 }
             })
         };
-        // the compact display and Master when the full ones do not fit
-        let narrow = !tp::fits(left, right, mid, widths(self, false));
+        // the full display and Master when they fit, else the in-between
+        // display (the full Master), else the compact ones
+        let fit =
+            |a: &Self, narrow: bool, m: bool| tp::fits(left, right, mid, widths(a, narrow, m));
+        let full_fits = fit(self, false, false);
+        let mid_fits = !full_fits && fit(self, false, true);
+        let narrow = !full_fits && !mid_fits;
         self.lcd.narrow = narrow;
-        let w = widths(self, narrow);
+        self.lcd.mid = mid_fits;
+        let w = widths(self, narrow, mid_fits);
         let x = tp::slots(left, right, mid, w);
         let h = super::lcd::lcd_h().max(self.tb.h);
         let (row, _) = ui.allocate_exact_size(egui::vec2(full.width(), h), Sense::hover());

@@ -82,6 +82,10 @@ pub(super) struct LcdUi {
     /// the display and the Master cell are drawn compact (the top bar
     /// sets it each frame when the full ones would not fit)
     pub narrow: bool,
+    /// the in-between display (1366 px windows): the signature, the loop's
+    /// bars and the buffer's ms stay; tighter cells, no load meters, and
+    /// the signature beside TIME's caption (the top bar sets it each frame)
+    pub mid: bool,
 }
 
 impl Default for LcdUi {
@@ -97,6 +101,7 @@ impl Default for LcdUi {
             pop_rect: Rect::NOTHING,
             shot_lit: false,
             narrow: false,
+            mid: false,
         }
     }
 }
@@ -203,6 +208,10 @@ const CAP: f32 = crate::theme::ts::SMALL;
 /// BPM and the position; SIG / SPD / TIME
 const BIG: f32 = 21.0;
 const MID: f32 = 15.0;
+
+/// the display's inner margin left and right (full / compact; in-between)
+const PAD: f32 = 10.0;
+const PAD_MID: f32 = 7.0;
 
 /// the display's height: a caption row and a big value row (follows the
 /// Text size; 42 at 100 %)
@@ -393,6 +402,8 @@ struct LcdCols {
     show_spd: bool,
     show_time: bool,
     show_sig: bool,
+    /// the signature on TIME's caption row (the in-between display)
+    sig_in_time: bool,
     w_bpm: f32,
     w_spd: f32,
     w_sig: f32,
@@ -535,21 +546,25 @@ impl App {
         self.lcd.narrow
     }
 
-    /// the display's width, full or compact (the top bar lays out with it)
-    pub(super) fn lcd_display_w(&self, p: &egui::Painter, narrow: bool) -> f32 {
+    /// the display's width, full, in-between (`mid`) or compact (the top
+    /// bar lays out with it)
+    pub(super) fn lcd_display_w(&self, p: &egui::Painter, narrow: bool, mid: bool) -> f32 {
         let tl_mode = self.with(|s| s.song.timeline.is_some());
-        self.lcd_cols(p, narrow, tl_mode).w
+        self.lcd_cols(p, narrow, mid && !narrow, tl_mode).w
     }
 
     /// the display's cells and their widths
-    fn lcd_cols(&self, mp: &egui::Painter, narrow: bool, tl_mode: bool) -> LcdCols {
+    fn lcd_cols(&self, mp: &egui::Painter, narrow: bool, mid: bool, tl_mode: bool) -> LcdCols {
         // the Speed cell shows in the Tracker view (ticks per row is a
         // tracker setting; the Song menu has it everywhere)
         let show_spd = self.view == View::Pattern;
         // the Tracker view has no clock (TIME); compact (`lcd_narrow`) drops
         // the signature and draws the load cell without its bar
         let show_time = !show_spd;
-        let show_sig = !narrow;
+        // in-between: the signature rides on TIME's caption row (its own
+        // cell when there is no TIME)
+        let sig_in_time = mid && show_time;
+        let show_sig = !narrow && !sig_in_time;
         let h = lcd_h();
         let w_bpm = num_w(mp, "000.00", BIG) + 4.0;
         let w_spd = if show_spd {
@@ -578,23 +593,33 @@ impl App {
         let col1 = pill_w(if narrow { "LOOP" } else { "LOOP 00–00" }).max(pill_w("ARMED"));
         let col2 = pill_w("CLICK +0").max(pill_w("FOLLOW"));
         let w_state = col1 + 4.0 + col2;
-        let w_load = if narrow {
+        let w_load = if mid {
+            lab_w(mp, "BUF 000 ms") + 4.0
+        } else if narrow {
             lab_w(mp, "BUF 000 MAX") + 4.0
         } else {
             lab_w(mp, "BUF") + 34.0 + lab_w(mp, "000 ms") + 10.0
         };
-        let gap = if narrow { 9.0 } else { 13.0 };
+        // in-between: tighter cells and edges, so 1366 px windows keep it
+        let gap = if mid {
+            8.0
+        } else if narrow {
+            9.0
+        } else {
+            13.0
+        };
+        let pad = if mid { PAD_MID } else { PAD };
         let cells = 3.0
             + [show_spd, show_sig, show_time]
                 .iter()
                 .filter(|b| **b)
                 .count() as f32;
-        let w =
-            10.0 + w_bpm + w_spd + w_sig + w_pos + w_time + w_state + w_load + gap * cells + 10.0;
+        let w = pad + w_bpm + w_spd + w_sig + w_pos + w_time + w_state + w_load + gap * cells + pad;
         LcdCols {
             show_spd,
             show_time,
             show_sig,
+            sig_in_time,
             w_bpm,
             w_spd,
             w_sig,
@@ -618,12 +643,14 @@ impl App {
             ui.ctx().request_repaint();
         }
         let narrow = self.lcd_narrow(ui.ctx());
+        let mid = self.lcd.mid && !narrow;
         let h = lcd_h();
         let mp = ui.painter().clone();
         let LcdCols {
             show_spd,
             show_time,
             show_sig,
+            sig_in_time,
             w_bpm,
             w_spd,
             w_sig,
@@ -635,7 +662,7 @@ impl App {
             w_state,
             gap,
             w,
-        } = self.lcd_cols(&mp, narrow, st.tl_mode);
+        } = self.lcd_cols(&mp, narrow, mid, st.tl_mode);
         let id = ui.make_persistent_id("lcd_display");
         let (r, resp) = ui.allocate_exact_size(egui::vec2(w, h), Sense::click());
         self.lcd.rect = r;
@@ -644,7 +671,7 @@ impl App {
         let top = r.top() + 4.0;
         // the values sit on the display's foot
         let foot = r.bottom() - 4.0;
-        let mut x = r.left() + 10.0;
+        let mut x = r.left() + if mid { PAD_MID } else { PAD };
         let div = |p: &egui::Painter, x: f32| {
             p.vline(
                 x,
@@ -771,6 +798,16 @@ impl App {
         // 4. clock mm:ss.cs (the Timeline's time)
         if show_time {
             lab(&p, Pos2::new(x, top), "TIME", pl.label);
+            // the in-between display: the signature at the caption's end
+            if sig_in_time {
+                p.text(
+                    Pos2::new(x + w_time, top),
+                    egui::Align2::RIGHT_TOP,
+                    format!("{}/{}", st.sig.0, st.sig.1),
+                    theme::label_font(CAP),
+                    pl.lit,
+                );
+            }
             let ts = if st.tl_mode {
                 let cs = (st.secs * 100.0).floor() as u64;
                 format!("{:02}:{:02}.{:02}", cs / 6000, cs / 100 % 60, cs % 100)
@@ -870,7 +907,7 @@ impl App {
                 col,
             );
         };
-        if narrow {
+        if narrow || mid {
             let pct = match st.load {
                 Some(_) => format!("DSP {dsp:.0}%"),
                 None => "DSP --".into(),
@@ -883,7 +920,10 @@ impl App {
                 pl.label,
             );
             let bt = match st.load {
+                // in-between: the ms; at its largest just MAX (the tip has it)
+                Some(_) if maxed && mid => "BUF MAX".into(),
                 Some(_) if maxed => format!("BUF {buf:.0} MAX"),
+                Some(_) if mid => format!("BUF {buf:.0} ms"),
                 Some(_) => format!("BUF {buf:.0}"),
                 None => "NO AUDIO".into(),
             };
@@ -936,7 +976,7 @@ impl App {
             }
         }
         // the underrun light: amber after an underrun (by BUF's meter)
-        if xr > 0 && !narrow {
+        if xr > 0 && !narrow && !mid {
             let xc = Pos2::new(x + cap_l + 41.0, row(y2));
             p.circle_filled(xc, 2.6, pl.warn);
         }
