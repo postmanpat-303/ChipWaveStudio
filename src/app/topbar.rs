@@ -232,7 +232,21 @@ fn segmented(ui: &mut egui::Ui, items: &[(&str, &str)], cur: usize) -> Option<us
 
 /// a toolbar group (calmer header: no visible caption; it's the
 /// group's hover text)
+/// the top bar's drop marker (every theme and LCD colour)
+const DROP_ORANGE: Color32 = Color32::from_rgb(0xFF, 0x8C, 0x1A);
+
 fn group(ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
+    group_sized(ui, caption, None, add);
+}
+
+/// a top bar panel's group: as tall as the display (`lcd::lcd_h`, the
+/// Master's height too), its controls centred vertically in it
+fn panel_group(ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
+    group_sized(ui, caption, Some(super::lcd::lcd_h()), add);
+}
+
+/// `group`, `h` tall (outside, frame included) when given
+fn group_sized(ui: &mut egui::Ui, caption: &str, h: Option<f32>, add: impl FnOnce(&mut egui::Ui)) {
     let ember = th().ember;
     egui::Frame::new()
         .fill(if ember {
@@ -247,11 +261,27 @@ fn group(ui: &mut egui::Ui, caption: &str, add: impl FnOnce(&mut egui::Ui)) {
         })
         .corner_radius(if ember { 5 } else { 7 })
         .inner_margin(egui::Margin::symmetric(8, 3))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 5.0;
-                add(ui);
-            });
+        .show(ui, |ui| match h {
+            None => {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 5.0;
+                    add(ui);
+                });
+            }
+            Some(h) => {
+                // inside the 3 px margins and the 1 px stroke
+                let inner = (h - 8.0).max(0.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(ui.available_width(), inner),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.set_min_height(inner);
+                        ui.set_max_height(inner);
+                        ui.spacing_mut().item_spacing.x = 5.0;
+                        add(ui);
+                    },
+                );
+            }
         })
         .response
         .on_hover_text(caption);
@@ -880,9 +910,12 @@ impl App {
                     egui::Popup::open_id(ui.ctx(), id);
                 }
             }
-            // song title + unsaved marker on the right
+            // song title + unsaved marker on the right...
+            // and, at the far right, the status cluster (Panic, Keys →
+            // Notes, Chord, MIDI; it was the toolbar's right end)
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_space(10.0);
+                self.status_cluster(ui);
+                ui.separator();
                 self.update_badge(ui);
                 let title = self.with(|s| s.song.title.clone());
                 let file = self
@@ -956,507 +989,786 @@ impl App {
         self.dirty = true;
     }
 
+    /// the top bar: the Display, the Transport and the Master, the middle
+    /// one centred on the window and the outer ones at its edges (in the
+    /// saved order; drag a panel's grip to move it), then the view's extra
+    /// controls in a free gap or on a second row (app/tbpanels.rs)
     pub(super) fn toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);
-            ui.add_space(6.0);
-            let playing = self.with(|s| s.engine.playing);
-            let t = th();
-            // tracker-only controls (Play block, Octave, Edit / Step) show
-            // in the Tracker view; their keys work everywhere
-            let tracker = self.view == View::Pattern;
-            // the LCD toolbar (0.2.10): icon-only transport, then the
-            // display (tempo, position, lamps, load) and the compact Master
-            let lcd = self.lcd_on();
-            group(ui, "TRANSPORT", |ui| {
-                let loop_on = playing && self.with(|s| s.engine.loop_pattern);
-                // Play block is a tracker control: shown in the Tracker view
-                // (Space still loops the block everywhere)
-                if tracker
-                    && tool_button_opt(ui, Ic::Play, "Play block", loop_on, t.accent, 0.0, lcd)
+        use super::tbpanels::{self as tp, Part};
+        let lcd = self.lcd_on();
+        let order = tp::order_of(&self.extra.topbar);
+        let full = ui.max_rect();
+        let (left, right) = (full.left(), full.right());
+        // the window's middle, not the panel's (they are the same today)
+        let mid = ui.ctx().content_rect().center().x;
+        let shown = |a: &Self, p: Part| p != Part::Master || a.master_in_toolbar();
+        let mp = ui.painter().clone();
+        let widths = |a: &Self, narrow: bool, mid: bool| {
+            order.map(|p| {
+                if !shown(a, p) {
+                    0.0
+                } else if p == Part::Display && lcd {
+                    a.lcd_display_w(&mp, narrow, mid)
+                } else if p == Part::Master {
+                    super::lcd::master_w(narrow)
+                } else {
+                    // drawn last frame (a first guess before that)
+                    let w = a.tb.w[p.idx()];
+                    if w > 0.0 {
+                        w
+                    } else {
+                        240.0
+                    }
+                }
+            })
+        };
+        // the full display and Master when they fit, else the in-between
+        // display (the full Master), else the compact ones
+        let fit =
+            |a: &Self, narrow: bool, m: bool| tp::fits(left, right, mid, widths(a, narrow, m));
+        let full_fits = fit(self, false, false);
+        let mid_fits = !full_fits && fit(self, false, true);
+        let narrow = !full_fits && !mid_fits;
+        self.lcd.narrow = narrow;
+        self.lcd.mid = mid_fits;
+        let w = widths(self, narrow, mid_fits);
+        let x = tp::slots(left, right, mid, w);
+        let h = super::lcd::lcd_h().max(self.tb.h);
+        let (row, _) = ui.allocate_exact_size(egui::vec2(full.width(), h), Sense::hover());
+        let mut tall = 0.0f32;
+        let mut rects = [egui::Rect::NOTHING; 3];
+        for (i, p) in order.into_iter().enumerate() {
+            if !shown(self, p) {
+                self.tb.w[p.idx()] = 0.0;
+                continue;
+            }
+            // room to its right up to the next panel (or the edge), so a
+            // panel that grew this frame is not squeezed
+            let r = egui::Rect::from_min_max(
+                egui::pos2(x[i], row.top()),
+                egui::pos2(x[i] + w[i].max(1.0) + 200.0, row.bottom()),
+            );
+            let inner = ui.scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(r)
+                    .layout(egui::Layout::left_to_right(egui::Align::Center)),
+                |ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);
+                    match p {
+                        Part::Display => self.tb_display(ui),
+                        Part::Transport => self.tb_transport(ui),
+                        Part::Master => self.lcd_master(ui),
+                    }
+                },
+            );
+            let got = inner.response.rect;
+            rects[i] = got;
+            tall = tall.max(got.height());
+            let old = self.tb.w[p.idx()];
+            self.tb.w[p.idx()] = got.width();
+            // a measured panel changed size: lay out again before showing
+            if (old - got.width()).abs() > 0.5 && !(p == Part::Display && lcd) && p != Part::Master
+            {
+                ui.ctx().request_discard("top bar panel width");
+            }
+        }
+        self.tb.h = tall;
+        self.tb.rects = rects;
+        self.tb_grips(ui, order, row, x, w);
+        // the view's extra controls (Octave, Edit / Step, View): in a free
+        // gap beside the panels, else on a second row
+        let we = self.tb.extras_w;
+        let spot = tp::extras_x(tp::gaps(left, right, mid, w), we);
+        self.tb.second_row = spot.is_none();
+        let r = match spot {
+            Some(ex) => {
+                egui::Rect::from_min_max(egui::pos2(ex, row.top()), egui::pos2(right, row.bottom()))
+            }
+            None => {
+                let (r2, _) = ui.allocate_exact_size(
+                    egui::vec2(
+                        full.width(),
+                        if we > 0.0 { self.tb.h.max(24.0) } else { 0.0 },
+                    ),
+                    Sense::hover(),
+                );
+                egui::Rect::from_min_max(
+                    egui::pos2(left + tp::EDGE + tp::GRIP, r2.top()),
+                    egui::pos2(right, r2.bottom()),
+                )
+            }
+        };
+        let inner = ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(r)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+            |ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);
+                self.tb_extras(ui)
+            },
+        );
+        let got = if inner.inner {
+            inner.response.rect.width()
+        } else {
+            0.0
+        };
+        self.tb.extras = if inner.inner {
+            inner.response.rect
+        } else {
+            egui::Rect::NOTHING
+        };
+        if (got - self.tb.extras_w).abs() > 0.5 {
+            self.tb.extras_w = got;
+            ui.ctx().request_discard("top bar extras width");
+        }
+    }
+
+    /// the panels' grips (six dots left of a panel, always shown): drag
+    /// one to move its panel; a ghost follows the pointer and an orange
+    /// marker shows where it lands. The order saves (UI settings are not
+    /// part of Undo); Settings › Look › Top bar resets it.
+    fn tb_grips(
+        &mut self,
+        ui: &mut egui::Ui,
+        order: [super::tbpanels::Part; 3],
+        row: egui::Rect,
+        x: [f32; 3],
+        w: [f32; 3],
+    ) {
+        use super::tbpanels as tp;
+        let t = th();
+        let pointer = ui.ctx().pointer_latest_pos();
+        let centres = [0, 1, 2].map(|i| x[i] + w[i] / 2.0);
+        for i in 0..3 {
+            if w[i] <= 0.0 {
+                continue;
+            }
+            let part = order[i];
+            let pr = self.tb.rects[i];
+            let grip = egui::Rect::from_min_max(
+                egui::pos2(pr.left() - tp::GRIP + 1.0, row.top()),
+                egui::pos2(pr.left() - 1.0, row.bottom()),
+            );
+            let resp = ui.interact(grip, ui.scope_id().with(("tb_grip", i)), Sense::drag());
+            let name = format!("Move the {} panel", part.name());
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
+            if resp.drag_started() {
+                self.tb.drag = Some(i);
+            }
+            let dragging = self.tb.drag == Some(i);
+            let near = pointer.is_some_and(|q| pr.union(grip).expand(2.0).contains(q));
+            let lit = dragging || resp.hovered();
+            // six dots (two columns of three), always there so the grip is
+            // easy to find: faint at rest, brighter near the panel, the
+            // accent colour under the pointer or while dragging
+            let col = if lit {
+                t.accent
+            } else if near && self.tb.drag.is_none() {
+                hdr_text()
+            } else {
+                hdr_dim()
+            };
+            let c = grip.center();
+            for dx in [-2.5f32, 2.5] {
+                for dy in [-5.0f32, 0.0, 5.0] {
+                    ui.painter().circle_filled(c + egui::vec2(dx, dy), 1.6, col);
+                }
+            }
+            let resp = resp
+                .on_hover_cursor(egui::CursorIcon::Grab)
+                .on_hover_text(format!(
+                    "Drag to move the {} panel\nSettings › Look › Top bar resets the order",
+                    part.name()
+                ));
+            if dragging {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                if let Some(q) = pointer {
+                    let gap = tp::drop_gap(centres, q.x);
+                    let new = tp::reorder(order, i, gap);
+                    // the panel stays put, dimmed, while its ghost moves
+                    ui.painter()
+                        .rect_filled(pr.expand(2.0), 6, t.hdr_bot.gamma_multiply(0.7));
+                    // kept inside the window
+                    let win = ui.ctx().content_rect();
+                    let half = (pr.width() / 2.0).min(win.width() / 2.0);
+                    let gx = q.x.clamp(win.left() + half, win.right() - half);
+                    let ghost = egui::Rect::from_center_size(
+                        egui::pos2(gx, pr.center().y + 4.0),
+                        pr.size(),
+                    );
+                    let fp = ui.ctx().layer_painter(egui::LayerId::new(
+                        egui::Order::Tooltip,
+                        ui.scope_id().with("tb_ghost"),
+                    ));
+                    // see-through, so the panels under it still show
+                    fp.rect(
+                        ghost,
+                        6,
+                        t.accent.gamma_multiply(0.18),
+                        Stroke::new(1.5, t.accent),
+                        egui::StrokeKind::Inside,
+                    );
+                    // its name on a small tag
+                    let font = crate::theme::prop(crate::theme::ts::BODY);
+                    let gl = fp.layout_no_wrap(part.name().to_string(), font, hdr_text());
+                    let tag = egui::Rect::from_center_size(
+                        ghost.center(),
+                        gl.size() + egui::vec2(16.0, 6.0),
+                    );
+                    fp.rect_filled(tag, 4, t.hdr_bot);
+                    fp.galley(tag.center() - gl.size() / 2.0, gl, hdr_text());
+                    if new != order {
+                        // the drop marker, in the gap the panel goes into
+                        let end = |k: usize| x[k] + w[k];
+                        let mx = match gap {
+                            0 => x[0] - tp::GRIP - 2.0,
+                            3 => end(2) + 4.0,
+                            g => (end(g - 1) + x[g] - tp::GRIP) / 2.0,
+                        }
+                        .clamp(row.left() + 2.0, row.right() - 2.0);
+                        fp.rect_filled(
+                            egui::Rect::from_center_size(
+                                egui::pos2(mx, row.center().y),
+                                egui::vec2(3.0, row.height() + 6.0),
+                            ),
+                            1.5,
+                            DROP_ORANGE,
+                        );
+                    }
+                    if resp.drag_stopped() && new != order {
+                        self.set_topbar(new);
+                    }
+                }
+            }
+            if resp.drag_stopped() {
+                self.tb.drag = None;
+            }
+        }
+    }
+
+    /// set (and save) the top bar's panel order
+    pub(super) fn set_topbar(&mut self, o: [super::tbpanels::Part; 3]) {
+        use super::tbpanels as tp;
+        self.extra.topbar = tp::keys_of(o);
+        self.save_settings();
+        self.status = if o == tp::DEFAULT {
+            format!("Top bar reset: {}", tp::names(o))
+        } else {
+            format!("Top bar: {}", tp::names(o))
+        };
+    }
+
+    /// the Transport panel: play block (Tracker), to the start, play / stop,
+    /// record, loop, metronome, the position (classic)
+    fn tb_transport(&mut self, ui: &mut egui::Ui) {
+        let playing = self.with(|s| s.engine.playing);
+        let t = th();
+        // Play block is a tracker control (its keys work everywhere)
+        let tracker = self.view == View::Pattern;
+        // the LCD toolbar (0.2.10): an icon-only transport
+        let lcd = self.lcd_on();
+        panel_group(ui, "TRANSPORT", |ui| {
+            let loop_on = playing && self.with(|s| s.engine.loop_pattern);
+            // Play block is a tracker control: shown in the Tracker view
+            // (Space still loops the block everywhere)
+            if tracker
+                && tool_button_opt(ui, Ic::Play, "Play block", loop_on, t.accent, 0.0, lcd)
                     .on_hover_text("loop the current block (Space)")
                     .clicked()
-                {
-                    if playing {
-                        self.with(|s| s.engine.stop());
-                    }
-                    self.play(3);
+            {
+                if playing {
+                    self.with(|s| s.engine.stop());
                 }
-                // the one transport (the view bar's copy is gone): to the
-                // start, play, stop, and where the playhead is
-                let tl_mode = self.with(|s| s.song.timeline.is_some());
+                self.play(3);
+            }
+            // the one transport (the view bar's copy is gone): to the
+            // start, play, stop, and where the playhead is
+            let tl_mode = self.with(|s| s.song.timeline.is_some());
+            if super::viewbar::transport_button(
+                ui,
+                super::viewbar::Tr::Start,
+                false,
+                // the Loop button's off ink (the header's text is white
+                // on Amiga's white buttons)
+                th().ink2.gamma_multiply(0.75),
+                "play marker to the start",
+            ) {
+                if tl_mode {
+                    self.timeline_seek(0);
+                } else {
+                    self.seek_to((0, 0));
+                }
+            }
+            // one Play / Stop toggle (Space does the same): a play icon
+            // while stopped, a stop icon and accent-lit while playing
+            let play_label = if self.tracker_on() {
+                "Play song"
+            } else {
+                "Play"
+            };
+            let (ic, label, tip) = if playing {
+                (
+                    Ic::Stop,
+                    "Stop",
+                    "Stop (Space): stop playback. The go-to-start button moves the play marker back to bar 1.",
+                )
+            } else if self.tracker_on() {
+                (
+                    Ic::PlaySong,
+                    play_label,
+                    "Play song (Space; Shift+Space in the Tracker): play from the play marker (click the ruler to move it; the go-to-start button moves it back to bar 1). Click again or Space to stop.",
+                )
+            } else {
+                (
+                    Ic::Play,
+                    play_label,
+                    "Play (Space): play from the play marker (click the ruler to move it; the go-to-start button moves it back to bar 1). Click again or Space to stop.",
+                )
+            };
+            // as wide as its widest label, so it does not jump
+            let font = egui::TextStyle::Button.resolve(ui.style());
+            let min_w = [play_label, "Stop"]
+                .iter()
+                .map(|l| {
+                    ui.painter()
+                        .layout_no_wrap(l.to_string(), font.clone(), Color32::PLACEHOLDER)
+                        .size()
+                        .x
+                })
+                .fold(0.0f32, f32::max)
+                + 44.0;
+            if tool_button_opt(ui, ic, label, playing, t.accent, min_w, lcd)
+                .on_hover_text(tip)
+                .clicked()
+            {
+                if playing {
+                    self.with(|s| s.engine.stop());
+                } else {
+                    self.play(0);
+                }
+            }
+            // Record: live into the Timeline, at the time you play
+            if tl_mode {
+                let rec = self.recording();
+                let tip = if rec {
+                    "Recording - click (or R) to stop recording; playback goes on".to_string()
+                } else {
+                    format!(
+                        "Record (R): the armed (or selected) track records what you play on the MIDI keyboard or with Keys → Notes (Ctrl+K), in time{}",
+                        match self.extra.count_in_bars() {
+                            0 => "",
+                            1 => ", after a bar's count-in",
+                            _ => ", after a 2-bar count-in",
+                        }
+                    )
+                };
+                // counting in: Record blinks (twice a second) until the take starts
+                let counting = self.with(|s| s.engine.count_in_left()).is_some();
+                let blink_off = counting && {
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(60));
+                    (ui.input(|i| i.time) * 4.0) as u64 % 2 == 1
+                };
+                let tip = if counting {
+                    "Counting in - recording starts after the count-in; click (or R) to cancel"
+                        .to_string()
+                } else {
+                    tip
+                };
                 if super::viewbar::transport_button(
                     ui,
-                    super::viewbar::Tr::Start,
-                    false,
-                    // the Loop button's off ink (the header's text is white
-                    // on Amiga's white buttons)
-                    th().ink2.gamma_multiply(0.75),
-                    "play marker to the start",
+                    super::viewbar::Tr::Record,
+                    rec && !blink_off,
+                    if blink_off {
+                        t.brick.gamma_multiply(0.35)
+                    } else if rec {
+                        t.brick
+                    } else {
+                        t.brick.gamma_multiply(0.7)
+                    },
+                    &tip,
                 ) {
-                    if tl_mode {
-                        self.timeline_seek(0);
-                    } else {
-                        self.seek_to((0, 0));
-                    }
+                    self.rec_toggle();
                 }
-                // one Play / Stop toggle (Space does the same): a play icon
-                // while stopped, a stop icon and accent-lit while playing
-                let play_label = if self.tracker_on() { "Play song" } else { "Play" };
-                let (ic, label, tip) = if playing {
-                    (
-                        Ic::Stop,
-                        "Stop",
-                        "Stop (Space): stop playback. The go-to-start button moves the play marker back to bar 1.",
-                    )
-                } else if self.tracker_on() {
-                    (
-                        Ic::PlaySong,
-                        play_label,
-                        "Play song (Space; Shift+Space in the Tracker): play from the play marker (click the ruler to move it; the go-to-start button moves it back to bar 1). Click again or Space to stop.",
-                    )
-                } else {
-                    (
-                        Ic::Play,
-                        play_label,
-                        "Play (Space): play from the play marker (click the ruler to move it; the go-to-start button moves it back to bar 1). Click again or Space to stop.",
-                    )
-                };
-                // as wide as its widest label, so it does not jump
-                let font = egui::TextStyle::Button.resolve(ui.style());
-                let min_w = [play_label, "Stop"]
-                    .iter()
-                    .map(|l| {
-                        ui.painter()
-                            .layout_no_wrap(l.to_string(), font.clone(), Color32::PLACEHOLDER)
-                            .size()
-                            .x
-                    })
-                    .fold(0.0f32, f32::max)
-                    + 44.0;
-                if tool_button_opt(ui, ic, label, playing, t.accent, min_w, lcd)
-                    .on_hover_text(tip)
-                    .clicked()
-                {
-                    if playing {
-                        self.with(|s| s.engine.stop());
+                if rec && !lcd {
+                    let rec_txt = if t.ember {
+                        // Slate: a lit (glowing) red tally
+                        egui::RichText::new("REC")
+                            .font(theme::label_font(crate::theme::ts::BODY))
+                            .color(crate::ember::RED)
                     } else {
-                        self.play(0);
-                    }
-                }
-                // Record: live into the Timeline, at the time you play
-                if tl_mode {
-                    let rec = self.recording();
-                    let tip = if rec {
-                        "Recording - click (or R) to stop recording; playback goes on".to_string()
-                    } else {
-                        format!(
-                            "Record (R): the armed (or selected) track records what you play on the MIDI keyboard or with Keys → Notes (Ctrl+K), in time{}",
-                            match self.extra.count_in_bars() {
-                                0 => "",
-                                1 => ", after a bar's count-in",
-                                _ => ", after a 2-bar count-in",
-                            }
-                        )
+                        egui::RichText::new("REC").small().strong().color(t.brick)
                     };
-                    // counting in: Record blinks (twice a second) until the take starts
-                    let counting = self.with(|s| s.engine.count_in_left()).is_some();
-                    let blink_off = counting && {
-                        ui.ctx()
-                            .request_repaint_after(std::time::Duration::from_millis(60));
-                        (ui.input(|i| i.time) * 4.0) as u64 % 2 == 1
-                    };
-                    let tip = if counting {
-                        "Counting in - recording starts after the count-in; click (or R) to cancel".to_string()
-                    } else {
-                        tip
-                    };
-                    if super::viewbar::transport_button(
-                        ui,
-                        super::viewbar::Tr::Record,
-                        rec && !blink_off,
-                        if blink_off {
-                            t.brick.gamma_multiply(0.35)
-                        } else if rec {
-                            t.brick
-                        } else {
-                            t.brick.gamma_multiply(0.7)
-                        },
-                        &tip,
-                    ) {
-                        self.rec_toggle();
-                    }
-                    if rec && !lcd {
-                        let rec_txt = if t.ember {
-                            // Slate: a lit (glowing) red tally
-                            egui::RichText::new("REC")
-                                .font(theme::label_font(crate::theme::ts::BODY))
-                                .color(crate::ember::RED)
-                        } else {
-                            egui::RichText::new("REC").small().strong().color(t.brick)
-                        };
-                        ui.label(rec_txt)
-                            .on_hover_text("recording: R or the Record button stops it");
-                    }
-                    self.loop_toggle(ui);
-                    self.metronome_toggle(ui);
+                    ui.label(rec_txt)
+                        .on_hover_text("recording: R or the Record button stops it");
                 }
-                let left = self.with(|s| s.engine.count_in_left());
-                if lcd {
-                    // the display shows the position and the count-in
-                } else if let Some(n) = left {
-                    // the countdown, in the playhead's place: Count-in 4, 3, 2, 1
-                    ui.label(
-                        egui::RichText::new(format!("Count-in {n}"))
-                            .monospace()
-                            .strong()
-                            .color(t.brick),
-                    )
-                    .on_hover_text("beats left before recording starts");
-                } else {
-                    let (pos, _) = self.view_bar_position(playing);
-                    ui.label(
-                        egui::RichText::new(pos)
-                            .monospace()
-                            .color(if playing { t.play } else { hdr_text() }),
-                    )
-                    .on_hover_text("playhead (stopped: the play marker)");
-                }
-            });
+                self.loop_toggle(ui);
+                self.metronome_toggle(ui);
+            }
+            let left = self.with(|s| s.engine.count_in_left());
             if lcd {
-                self.lcd_display(ui);
-            }
-            // (classic toolbar: only while the Clip Arranger, which holds the
-            // Master panel, is hidden; the meter's popover has the panel)
-            if self.master_in_toolbar() {
-                self.lcd_master(ui);
-            }
-            let mut tempo_r = None;
-            // the LCD has the tempo (and the Speed in the Tracker view)
-            group_if(!lcd, ui, "TEMPO", |ui| {
-                let (mut bpm, mut speed) = self.with(|s| (s.song.bpm, s.song.speed));
-                ui.label(egui::RichText::new("BPM").color(hdr_text()));
-                let r = ui
-                    .add(
-                        egui::DragValue::new(&mut bpm)
-                            .range(30.0..=300.0)
-                            .speed(0.5),
-                    )
-                    .on_hover_text("tempo in beats per minute (drag or type)");
-                let c1 = r.changed();
-                tempo_r = Some(r);
-                ui.label(egui::RichText::new("Speed").color(hdr_text()));
-                let c2 = ui
-                    .add(egui::DragValue::new(&mut speed).range(1..=32))
-                    .on_hover_text("ticks per row (effect 09xx sets it in the Tracker)")
-                    .changed();
-                if c1 || c2 {
-                    self.set_tempo(bpm, speed);
-                }
-            });
-            if let Some(r) = tempo_r {
-                self.learn_menu(&r, crate::automation::Target::Tempo);
-            }
-            group_if(tracker, ui, "OCTAVE", |ui| {
-                if ui
-                    .button(" − ")
-                    .on_hover_text("octave down (numpad -)")
-                    .clicked()
-                {
-                    self.set_octave(self.octave as i32 - 1);
-                }
+                // the display shows the position and the count-in
+            } else if let Some(n) = left {
+                // the countdown, in the playhead's place: Count-in 4, 3, 2, 1
                 ui.label(
-                    egui::RichText::new(format!("{}", self.octave))
+                    egui::RichText::new(format!("Count-in {n}"))
                         .monospace()
                         .strong()
-                        .size(crate::theme::ts::px(crate::theme::ts::HEADING))
-                        .color(if t.light { Color32::WHITE } else { t.value }),
+                        .color(t.brick),
                 )
-                .on_hover_text("base octave for note entry (F1-F8)");
-                if ui
-                    .button(" + ")
-                    .on_hover_text("octave up (numpad +)")
-                    .clicked()
-                {
-                    self.set_octave(self.octave as i32 + 1);
-                }
-            });
-            group_if(tracker, ui, "EDIT", |ui| {
-                let label = if self.edit {
-                    "Edit mode ON"
+                .on_hover_text("beats left before recording starts");
+            } else {
+                let (pos, _) = self.view_bar_position(playing);
+                ui.label(egui::RichText::new(pos).monospace().color(if playing {
+                    t.play
                 } else {
-                    "Edit mode off"
-                };
-                if tool_button(
-                    ui,
-                    Ic::Edit,
-                    label,
-                    self.edit,
-                    if self.edit { t.brick } else { t.ink2 },
+                    hdr_text()
+                }))
+                .on_hover_text("playhead (stopped: the play marker)");
+            }
+        });
+    }
+
+    /// the Display panel: the LCD (tempo, position, lamps, load), or the
+    /// classic toolbar's BPM and Speed
+    fn tb_display(&mut self, ui: &mut egui::Ui) {
+        if self.lcd_on() {
+            self.lcd_display(ui);
+            return;
+        }
+        let mut tempo_r = None;
+        panel_group(ui, "TEMPO", |ui| {
+            let (mut bpm, mut speed) = self.with(|s| (s.song.bpm, s.song.speed));
+            ui.label(egui::RichText::new("BPM").color(hdr_text()));
+            let r = ui
+                .add(
+                    egui::DragValue::new(&mut bpm)
+                        .range(30.0..=300.0)
+                        .speed(0.5),
                 )
-                .on_hover_text("typing enters notes when on (Esc toggles)")
+                .on_hover_text("tempo in beats per minute (drag or type)");
+            let c1 = r.changed();
+            tempo_r = Some(r);
+            ui.label(egui::RichText::new("Speed").color(hdr_text()));
+            let c2 = ui
+                .add(egui::DragValue::new(&mut speed).range(1..=32))
+                .on_hover_text("ticks per row (effect 09xx sets it in the Tracker)")
+                .changed();
+            if c1 || c2 {
+                self.set_tempo(bpm, speed);
+            }
+        });
+        if let Some(r) = tempo_r {
+            self.learn_menu(&r, crate::automation::Target::Tempo);
+        }
+    }
+
+    /// the view's extra controls: Octave and Edit / Step (the Tracker), the
+    /// view switch (while the view tab bar is hidden); false: none shown
+    fn tb_extras(&mut self, ui: &mut egui::Ui) -> bool {
+        let t = th();
+        let tracker = self.view == View::Pattern;
+        group_if(tracker, ui, "OCTAVE", |ui| {
+            if ui
+                .button(" − ")
+                .on_hover_text("octave down (numpad -)")
                 .clicked()
-                {
-                    self.edit = !self.edit;
-                }
-                ui.label(egui::RichText::new("Step").color(hdr_text()));
-                ui.add(egui::DragValue::new(&mut self.step).range(0..=16))
-                    .on_hover_text("rows the cursor moves after entering a note");
-            });
-            group_if(!self.extra.view_bar, ui, "VIEW", |ui| {
-                let views = self.views_shown();
-                let cur = views
-                    .iter()
-                    .position(|v| v.0 == self.view)
-                    .unwrap_or(usize::MAX);
-                let items: Vec<(&str, &str)> = views.iter().map(|v| (v.1, v.2)).collect();
-                if let Some(i) = segmented(ui, &items, cur) {
-                    self.view = views[i].0;
-                    self.arr_focus = false;
-                }
-                // the Browser panel on the right (docs/BROWSER.md)
-                let on = if self.extra.browser_open { 0 } else { usize::MAX };
-                if segmented(ui, &[("Browser", "show / hide the Browser on the right (Ctrl+B)")], on).is_some() {
-                    self.toggle_browser();
-                }
-            });
-            let (lit, midi_tip) = self.midi_light(ui.input(|i| i.time));
-            if lit {
-                ui.ctx()
-                    .request_repaint_after(std::time::Duration::from_millis(160));
+            {
+                self.set_octave(self.octave as i32 - 1);
             }
-            // the right-hand status cluster (latency, Rec, Chord, MIDI) goes on
-            // its own row when it does not fit next to the groups (it used to
-            // overlap the view tabs at ~1600 px with the latency text shown)
-            let right_id = ui.scope_id().with("toolbar_right_w");
-            let right_w = ui
-                .ctx()
-                .data(|d| d.get_temp::<f32>(right_id))
-                .unwrap_or(340.0);
-            if ui.available_size_before_wrap().x < right_w + 12.0 {
-                ui.end_row();
+            ui.label(
+                egui::RichText::new(format!("{}", self.octave))
+                    .monospace()
+                    .strong()
+                    .size(crate::theme::ts::px(crate::theme::ts::HEADING))
+                    .color(if t.light { Color32::WHITE } else { t.value }),
+            )
+            .on_hover_text("base octave for note entry (F1-F8)");
+            if ui
+                .button(" + ")
+                .on_hover_text("octave up (numpad +)")
+                .clicked()
+            {
+                self.set_octave(self.octave as i32 + 1);
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let right_edge = ui.max_rect().right();
-                ui.add_space(10.0);
-                // PANIC (0.2.3.16): far right, small, never a focus target
-                if ui
-                    .add(
-                        egui::Button::new(egui::RichText::new("Panic").small().color(
-                            // the button face, not the header, is behind it
-                            crate::theme::on2(ui.visuals().widgets.inactive.weak_bg_fill),
-                        ))
-                            .small()
-                            .min_size(egui::vec2(0.0, 16.0)),
-                    )
-                    .on_hover_text("Panic: stop all sound (Ctrl+.)")
-                    .clicked()
-                {
-                    self.panic();
-                }
-                ui.add_space(6.0);
-                // the LCD shows the buffer and underruns itself
-                if let Some(a) = self.audio.as_ref().filter(|_| !lcd) {
-                    let u = a.stats.underruns.load(std::sync::atomic::Ordering::Relaxed);
-                    let txt = format!(
-                        "{:.0} ms{} · {} underruns",
-                        a.latency_ms(),
-                        if a.latency_maxed() { " (max)" } else { "" },
-                        u
-                    );
-                    let col = match (u > 0, t.light) {
-                        (true, true) => Color32::from_rgb(255, 200, 160),
-                        (true, false) => t.brick,
-                        _ => hdr_dim(),
-                    };
-                    ui.label(egui::RichText::new(txt).small().monospace().color(col))
-                        .on_hover_text(audio_tip(a));
-                }
-                // Keys → Notes (musical typing): one icon button, a drawn
-                // piano keyboard, lit while on; the hover says what it does
-                // with its octave, velocity and keys
-                let on = self.typing.on;
-                let h = ui.spacing().interact_size.y.max(18.0);
-                let (ir, resp) = ui.allocate_exact_size(egui::vec2(h * 1.6, h), Sense::click());
-                resp.widget_info(|| {
-                    egui::WidgetInfo::selected(
-                        egui::Role::Button,
-                        ui.is_enabled(),
-                        on,
-                        "Keys → Notes",
-                    )
-                });
-                self.kb_rect = ir;
-                {
-                    let sel = ui.visuals().selection;
-                    let v = ui.style().interact_selectable(&resp, on);
-                    let p = ui.painter();
-                    let col = if on {
-                        sel.stroke.color
-                    } else if resp.hovered() {
-                        v.fg_stroke.color
-                    } else {
-                        hdr_dim()
-                    };
-                    if on {
-                        p.rect(
-                            ir,
-                            4,
-                            sel.bg_fill,
-                            egui::Stroke::new(1.0, sel.stroke.color.gamma_multiply(0.6)),
+        });
+        group_if(tracker, ui, "EDIT", |ui| {
+            let label = if self.edit {
+                "Edit mode ON"
+            } else {
+                "Edit mode off"
+            };
+            if tool_button(
+                ui,
+                Ic::Edit,
+                label,
+                self.edit,
+                if self.edit { t.brick } else { t.ink2 },
+            )
+            .on_hover_text("typing enters notes when on (Esc toggles)")
+            .clicked()
+            {
+                self.edit = !self.edit;
+            }
+            ui.label(egui::RichText::new("Step").color(hdr_text()));
+            ui.add(egui::DragValue::new(&mut self.step).range(0..=16))
+                .on_hover_text("rows the cursor moves after entering a note");
+        });
+        group_if(!self.extra.view_bar, ui, "VIEW", |ui| {
+            let views = self.views_shown();
+            let cur = views
+                .iter()
+                .position(|v| v.0 == self.view)
+                .unwrap_or(usize::MAX);
+            let items: Vec<(&str, &str)> = views.iter().map(|v| (v.1, v.2)).collect();
+            if let Some(i) = segmented(ui, &items, cur) {
+                self.view = views[i].0;
+                self.arr_focus = false;
+            }
+            // the Browser panel on the right (docs/BROWSER.md)
+            let on = if self.extra.browser_open {
+                0
+            } else {
+                usize::MAX
+            };
+            if segmented(
+                ui,
+                &[("Browser", "show / hide the Browser on the right (Ctrl+B)")],
+                on,
+            )
+            .is_some()
+            {
+                self.toggle_browser();
+            }
+        });
+        tracker || !self.extra.view_bar
+    }
+
+    /// the status cluster at the menu bar's right (laid out right to left):
+    /// Panic, the latency (classic), Keys → Notes, the Tracker's record
+    /// mode, Chord and the MIDI light
+    fn status_cluster(&mut self, ui: &mut egui::Ui) {
+        let t = th();
+        let lcd = self.lcd_on();
+        let (lit, midi_tip) = self.midi_light(ui.input(|i| i.time));
+        if lit {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(160));
+        }
+        ui.add_space(10.0);
+        // PANIC (0.2.3.16): far right, small, never a focus target
+        if ui
+            .add(
+                egui::Button::new(egui::RichText::new("Panic").small().color(
+                    // the button face, not the header, is behind it
+                    crate::theme::on2(ui.visuals().widgets.inactive.weak_bg_fill),
+                ))
+                .small()
+                .min_size(egui::vec2(0.0, 16.0)),
+            )
+            .on_hover_text("Panic: stop all sound (Ctrl+.)")
+            .clicked()
+        {
+            self.panic();
+        }
+        ui.add_space(6.0);
+        // the LCD shows the buffer and underruns itself
+        if let Some(a) = self.audio.as_ref().filter(|_| !lcd) {
+            let u = a.stats.underruns.load(std::sync::atomic::Ordering::Relaxed);
+            let txt = format!(
+                "{:.0} ms{} · {} underruns",
+                a.latency_ms(),
+                if a.latency_maxed() { " (max)" } else { "" },
+                u
+            );
+            let col = match (u > 0, t.light) {
+                (true, true) => Color32::from_rgb(255, 200, 160),
+                (true, false) => t.brick,
+                _ => hdr_dim(),
+            };
+            ui.label(egui::RichText::new(txt).small().monospace().color(col))
+                .on_hover_text(audio_tip(a));
+        }
+        // Keys → Notes (musical typing): one icon button, a drawn
+        // piano keyboard, lit while on; the hover says what it does
+        // with its octave, velocity and keys
+        let on = self.typing.on;
+        let h = ui.spacing().interact_size.y.max(18.0);
+        let (ir, resp) = ui.allocate_exact_size(egui::vec2(h * 1.6, h), Sense::click());
+        resp.widget_info(|| {
+            egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), on, "Keys → Notes")
+        });
+        self.kb_rect = ir;
+        {
+            let sel = ui.visuals().selection;
+            let v = ui.style().interact_selectable(&resp, on);
+            let p = ui.painter();
+            let col = if on {
+                sel.stroke.color
+            } else if resp.hovered() {
+                v.fg_stroke.color
+            } else {
+                hdr_dim()
+            };
+            if on {
+                p.rect(
+                    ir,
+                    4,
+                    sel.bg_fill,
+                    egui::Stroke::new(1.0, sel.stroke.color.gamma_multiply(0.6)),
+                    egui::StrokeKind::Inside,
+                );
+            } else if resp.hovered() {
+                p.rect_filled(ir, 4, v.weak_bg_fill);
+            }
+            // the Browser's MIDI keyboard icon: five white keys and
+            // three black ones, scaled to the button
+            let kh = (ir.height() * 0.62).round();
+            let kw = (kh * 1.75).round();
+            let r = egui::Rect::from_center_size(ir.center(), egui::vec2(kw, kh));
+            let r = egui::Rect::from_min_size(r.min.round(), r.size());
+            let st = egui::Stroke::new(1.0, col);
+            p.rect_stroke(r, 1, st, egui::StrokeKind::Inside);
+            let w = r.width() / 5.0;
+            for k in 1..5 {
+                let x = (r.left() + w * k as f32).round() + 0.5;
+                p.line_segment([egui::pos2(x, r.top()), egui::pos2(x, r.bottom())], st);
+            }
+            let bw = (w * 0.6).max(2.0);
+            for k in [1, 2, 4] {
+                let x = (r.left() + w * k as f32).round() + 0.5;
+                p.rect_filled(
+                    egui::Rect::from_min_size(
+                        egui::pos2(x - bw / 2.0, r.top()),
+                        egui::vec2(bw, (r.height() * 0.58).round()),
+                    ),
+                    0,
+                    col,
+                );
+            }
+        }
+        let tip = keys_tip(on, &self.typing_label());
+        let resp = resp.on_hover_ui(|ui| {
+            ui.label(
+                egui::RichText::new(tip.0)
+                    .strong()
+                    .color(ui.visuals().selection.stroke.color)
+                    .background_color(ui.visuals().selection.bg_fill),
+            );
+            ui.label(egui::RichText::new(tip.1).small());
+        });
+        if resp.clicked() {
+            self.typing_toggle();
+        }
+        let tracker_rec = self.tracker_on();
+        // MIDI quick toggles (laid out right to left: shown as light, Chord, Rec)
+        let m = &mut self.extra.midi;
+        let rec_txt = if m.live_record {
+            "Rec live"
+        } else {
+            "Rec step"
+        };
+        let armed = self.edit;
+        let rec_col = if armed { t.brick } else { hdr_dim() };
+        let mut toggled = false;
+        // the Tracker's MIDI record mode (the Timeline has Record)
+        if tracker_rec
+            && ui
+            .selectable_label(
+                false,
+                egui::RichText::new(rec_txt).small().color(rec_col),
+            )
+            .on_hover_text(format!(
+                "MIDI record mode: {}\nclick to switch live / step\n(records only when edit mode is on: {})",
+                if m.live_record {
+                    "LIVE - while the song plays, notes go to the playing row"
+                } else {
+                    "STEP - notes always go to the cursor, which moves by Step"
+                },
+                if armed { "on" } else { "off" }
+            ))
+            .clicked()
+        {
+            m.live_record = !m.live_record;
+            toggled = true;
+        }
+        if ui
+            .selectable_label(
+                m.chord_spread,
+                egui::RichText::new("Chord").small().color(if m.chord_spread {
+                    crate::theme::on(ui.visuals().selection.bg_fill)
+                } else {
+                    hdr_dim()
+                }),
+            )
+            .on_hover_text(format!(
+                "MIDI chord spread: {}\nwhen on, the notes of a chord go into the cursor channel and the channels to its right",
+                if m.chord_spread { "on" } else { "off" }
+            ))
+            .clicked()
+        {
+            m.chord_spread = !m.chord_spread;
+            toggled = true;
+        }
+        if toggled {
+            self.save_settings();
+            self.midi_apply(false);
+        }
+        // MIDI activity light
+        let connected = !self.midi.hub.connected().is_empty();
+        let (r, resp) = ui.allocate_exact_size(egui::vec2(46.0, 18.0), Sense::click());
+        let dot = r.left_center() + egui::vec2(7.0, 0.0);
+        let col = if lit {
+            hex(0x6FE08A)
+        } else if connected {
+            hex(0x2F6B3E)
+        } else {
+            hdr_dim().gamma_multiply(0.5)
+        };
+        ui.painter().circle_filled(dot, 5.0, col);
+        ui.painter().text(
+            dot + egui::vec2(9.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            "MIDI",
+            crate::theme::prop(crate::theme::ts::SMALL),
+            hdr_dim(),
+        );
+        let meter = self.midi_press_meter();
+        // the hover card is custom UI, so name the light for screen
+        // readers as its plain tip did
+        let name = format!("{midi_tip}\nclick: MIDI settings");
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
+        if resp
+            .on_hover_ui(|ui| {
+                ui.label(&midi_tip);
+                // the live pressure meter (aftertouch keyboards)
+                if let Some((v, txt)) = &meter {
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(50));
+                    ui.horizontal(|ui| {
+                        let (r, _) = ui.allocate_exact_size(egui::vec2(90.0, 10.0), Sense::hover());
+                        let vis = ui.visuals();
+                        ui.painter().rect_filled(r, 2.0, vis.extreme_bg_color);
+                        let mut f = r;
+                        f.set_width(r.width() * v.clamp(0.0, 1.0));
+                        ui.painter().rect_filled(f, 2.0, vis.selection.bg_fill);
+                        ui.painter().rect_stroke(
+                            r,
+                            2.0,
+                            vis.widgets.noninteractive.bg_stroke,
                             egui::StrokeKind::Inside,
                         );
-                    } else if resp.hovered() {
-                        p.rect_filled(ir, 4, v.weak_bg_fill);
-                    }
-                    // the Browser's MIDI keyboard icon: five white keys and
-                    // three black ones, scaled to the button
-                    let kh = (ir.height() * 0.62).round();
-                    let kw = (kh * 1.75).round();
-                    let r = egui::Rect::from_center_size(ir.center(), egui::vec2(kw, kh));
-                    let r = egui::Rect::from_min_size(r.min.round(), r.size());
-                    let st = egui::Stroke::new(1.0, col);
-                    p.rect_stroke(r, 1, st, egui::StrokeKind::Inside);
-                    let w = r.width() / 5.0;
-                    for k in 1..5 {
-                        let x = (r.left() + w * k as f32).round() + 0.5;
-                        p.line_segment([egui::pos2(x, r.top()), egui::pos2(x, r.bottom())], st);
-                    }
-                    let bw = (w * 0.6).max(2.0);
-                    for k in [1, 2, 4] {
-                        let x = (r.left() + w * k as f32).round() + 0.5;
-                        p.rect_filled(
-                            egui::Rect::from_min_size(
-                                egui::pos2(x - bw / 2.0, r.top()),
-                                egui::vec2(bw, (r.height() * 0.58).round()),
-                            ),
-                            0,
-                            col,
-                        );
-                    }
+                        ui.label(txt);
+                    });
                 }
-                let tip = keys_tip(on, &self.typing_label());
-                let resp = resp.on_hover_ui(|ui| {
-                    ui.label(
-                        egui::RichText::new(tip.0)
-                            .strong()
-                            .color(ui.visuals().selection.stroke.color)
-                            .background_color(ui.visuals().selection.bg_fill),
-                    );
-                    ui.label(egui::RichText::new(tip.1).small());
-                });
-                if resp.clicked() {
-                    self.typing_toggle();
-                }
-                let tracker_rec = self.tracker_on();
-                // MIDI quick toggles (laid out right to left: shown as light, Chord, Rec)
-                let m = &mut self.extra.midi;
-                let rec_txt = if m.live_record { "Rec live" } else { "Rec step" };
-                let armed = self.edit;
-                let rec_col = if armed { t.brick } else { hdr_dim() };
-                let mut toggled = false;
-                // the Tracker's MIDI record mode (the Timeline has Record)
-                if tracker_rec
-                    && ui
-                    .selectable_label(
-                        false,
-                        egui::RichText::new(rec_txt).small().color(rec_col),
-                    )
-                    .on_hover_text(format!(
-                        "MIDI record mode: {}\nclick to switch live / step\n(records only when edit mode is on: {})",
-                        if m.live_record {
-                            "LIVE - while the song plays, notes go to the playing row"
-                        } else {
-                            "STEP - notes always go to the cursor, which moves by Step"
-                        },
-                        if armed { "on" } else { "off" }
-                    ))
-                    .clicked()
-                {
-                    m.live_record = !m.live_record;
-                    toggled = true;
-                }
-                if ui
-                    .selectable_label(
-                        m.chord_spread,
-                        egui::RichText::new("Chord").small().color(if m.chord_spread {
-                            crate::theme::on(ui.visuals().selection.bg_fill)
-                        } else {
-                            hdr_dim()
-                        }),
-                    )
-                    .on_hover_text(format!(
-                        "MIDI chord spread: {}\nwhen on, the notes of a chord go into the cursor channel and the channels to its right",
-                        if m.chord_spread { "on" } else { "off" }
-                    ))
-                    .clicked()
-                {
-                    m.chord_spread = !m.chord_spread;
-                    toggled = true;
-                }
-                if toggled {
-                    self.save_settings();
-                    self.midi_apply(false);
-                }
-                // MIDI activity light
-                let connected = !self.midi.hub.connected().is_empty();
-                let (r, resp) = ui.allocate_exact_size(egui::vec2(46.0, 18.0), Sense::click());
-                let dot = r.left_center() + egui::vec2(7.0, 0.0);
-                let col = if lit {
-                    hex(0x6FE08A)
-                } else if connected {
-                    hex(0x2F6B3E)
-                } else {
-                    hdr_dim().gamma_multiply(0.5)
-                };
-                ui.painter().circle_filled(dot, 5.0, col);
-                ui.painter().text(
-                    dot + egui::vec2(9.0, 0.0),
-                    egui::Align2::LEFT_CENTER,
-                    "MIDI",
-                    crate::theme::prop(crate::theme::ts::SMALL),
-                    hdr_dim(),
-                );
-                let meter = self.midi_press_meter();
-                // the hover card is custom UI, so name the light for screen
-                // readers as its plain tip did
-                let name = format!("{midi_tip}\nclick: MIDI settings");
-                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
-                if resp
-                    .on_hover_ui(|ui| {
-                        ui.label(&midi_tip);
-                        // the live pressure meter (aftertouch keyboards)
-                        if let Some((v, txt)) = &meter {
-                            ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
-                            ui.horizontal(|ui| {
-                                let (r, _) =
-                                    ui.allocate_exact_size(egui::vec2(90.0, 10.0), Sense::hover());
-                                let vis = ui.visuals();
-                                ui.painter().rect_filled(r, 2.0, vis.extreme_bg_color);
-                                let mut f = r;
-                                f.set_width(r.width() * v.clamp(0.0, 1.0));
-                                ui.painter().rect_filled(f, 2.0, vis.selection.bg_fill);
-                                ui.painter().rect_stroke(
-                                    r,
-                                    2.0,
-                                    vis.widgets.noninteractive.bg_stroke,
-                                    egui::StrokeKind::Inside,
-                                );
-                                ui.label(txt);
-                            });
-                        }
-                        ui.label("click: MIDI settings");
-                    })
-                    .clicked()
-                {
-                    self.view = View::Settings;
-                    self.set_card = 4;
-                    self.set_open = Some(4);
-                }
-                let used = right_edge - ui.min_rect().left();
-                ui.ctx().data_mut(|d| d.insert_temp(right_id, used));
-            });
-        });
+                ui.label("click: MIDI settings");
+            })
+            .clicked()
+        {
+            self.view = View::Settings;
+            self.set_card = 4;
+            self.set_open = Some(4);
+        }
     }
 
     pub(super) fn dialogs(&mut self, ctx: &egui::Context) {

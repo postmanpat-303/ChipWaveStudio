@@ -1,12 +1,12 @@
 // ChipWave Studio - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-/// Display version (Cargo: 0.2.18+fix.1 -> "0.2.18.1"; the updater compares it part by part).
-pub const VERSION: &str = "0.2.18.1";
+/// Display version (Cargo: 0.2.19+fix.0 -> "0.2.19.0"; the updater compares it part by part).
+pub const VERSION: &str = "0.2.19.0";
 
 /// The version as shown (About, window title): a test build (the pack
 /// scripts set CW_BUILD, e.g. "combo2 8bdf40c") reads
-/// "0.2.13.0 · test build (combo2 8bdf40c)"; a release build just "0.2.18.1".
+/// "0.2.13.0 · test build (combo2 8bdf40c)"; a release build just "0.2.19.0".
 pub fn version_label() -> String {
     version_label_for(option_env!("CW_BUILD"))
 }
@@ -1047,7 +1047,7 @@ fn play_test(secs: u64) -> i32 {
     }
 }
 
-/// `--screenshot <out.png> [--view v] [--theme slate|dark|amiga] [--size WxH]`
+/// `--screenshot <out.png> [--view v] [--theme slate|dark|amiga|matrix] [--size WxH]`
 /// (developer flag for the README screenshots; see src/app/shot.rs)
 fn screenshot(args: &[String], i: usize) -> i32 {
     let flag = |name: &str| {
@@ -1058,7 +1058,7 @@ fn screenshot(args: &[String], i: usize) -> i32 {
     };
     let Some(out) = args.get(i + 1).filter(|a| !a.starts_with("--")) else {
         eprintln!(
-            "usage: --screenshot <out.png> [--view {}] [--theme slate|dark|amiga] [--size 1600x900] [--zoom 0.9..1.5] [--text 0.9..1.5] [--song file.cwt|file.cwt.toml]",
+            "usage: --screenshot <out.png> [--view {}] [--theme slate|dark|amiga|matrix] [--size 1600x900] [--zoom 0.9..1.5] [--text 0.9..1.5] [--song file.cwt|file.cwt.toml]",
             app::shot::VIEWS.join("|")
         );
         return 2;
@@ -1080,6 +1080,7 @@ fn screenshot(args: &[String], i: usize) -> i32 {
     let theme_flag = flag("--theme").map(|t| t.to_ascii_lowercase());
     let amiga = theme_flag.as_deref().is_some_and(|t| t.starts_with('a'));
     let dark = theme_flag.as_deref().is_some_and(|t| t.starts_with('d'));
+    let matrix = theme_flag.as_deref().is_some_and(|t| t.starts_with('m'));
     // isolated settings / recovery folder, so the user's own settings are untouched
     let tmp = std::env::temp_dir().join(format!("chipwave-shot-{}", std::process::id()));
     std::env::set_var("XDG_CONFIG_HOME", &tmp);
@@ -1090,6 +1091,8 @@ fn screenshot(args: &[String], i: usize) -> i32 {
     let mut st = settings::Settings {
         theme: if amiga {
             theme::AMIGA.name
+        } else if matrix {
+            theme::MATRIX.name
         } else if dark {
             theme::DARK.name
         } else {
@@ -1100,6 +1103,13 @@ fn screenshot(args: &[String], i: usize) -> i32 {
         ..Default::default()
     };
     st.extra.update_check = false;
+    // CHIPWAVE_SHOT_KNOB=0..5: a knob style (Settings › Look) for the shot
+    if let Some(n) = std::env::var("CHIPWAVE_SHOT_KNOB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        st.extra.knob_style = n;
+    }
     // --zoom 1.5 (UI scale) / --text 1.2 (Text size)
     if let Some(z) = flag("--zoom").and_then(|s| s.parse::<f32>().ok()) {
         st.zoom = settings::snap_zoom(z);

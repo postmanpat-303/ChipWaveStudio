@@ -51,6 +51,7 @@ impl App {
 
     pub(super) fn apply_theme(&self, ctx: &egui::Context) {
         theme::set_polished(!self.extra.flat_ui);
+        theme::set_knob_style(theme::KnobStyle::from_u8(self.extra.knob_style));
         theme::ts::set_text_scale(self.extra.text_scale());
         theme::apply(ctx, theme::with_accent(self.theme, &self.extra.accent));
     }

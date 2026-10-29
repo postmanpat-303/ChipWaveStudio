@@ -6,6 +6,11 @@ use egui_kittest::kittest::Queryable;
 use egui_kittest::Harness;
 
 pub(super) fn harness_with(song: Song) -> Harness<'static, App> {
+    harness_sized(song, egui::vec2(1700.0, 1000.0))
+}
+
+/// `harness_with` in a window of this size (points)
+fn harness_sized(song: Song, size: egui::Vec2) -> Harness<'static, App> {
     let shared: SharedRef = Arc::new(Mutex::new(Shared {
         song,
         engine: Engine::new(48000.0),
@@ -13,7 +18,7 @@ pub(super) fn harness_with(song: Song) -> Harness<'static, App> {
     }));
     let app = App::new(shared, None, None, None, String::new(), None, vec![]);
     let mut h = Harness::builder()
-        .with_size(egui::vec2(1700.0, 1000.0))
+        .with_size(size)
         .with_accessibility_check(false)
         .build_eframe(|_cc| app);
     // the existing UI tests cover the Tracker too (Settings › Show Tracker)
@@ -3478,5 +3483,45 @@ fn file_menu_has_controller_maps() {
         h.state().extra.midi.learn.len(),
         2,
         "a bad file changes nothing"
+    );
+}
+
+/// Settings › Look: the six Knob style options are small knob previews in
+/// one row at 1366x768, the row below starts under them, and a click picks one
+#[test]
+fn knob_style_previews_fit_one_row_and_pick_on_click() {
+    let mut h = harness_sized(fileio::demo_song(), egui::vec2(1366.0, 768.0));
+    h.state_mut().view = View::Settings;
+    h.state_mut().set_card = 1;
+    h.state_mut().set_open = Some(1);
+    frames(&mut h, 4);
+    let opts: Vec<Rect> = crate::theme::KnobStyle::ALL
+        .iter()
+        .map(|st| {
+            let r = rects(&h, Role::Button, Some(st.name()));
+            assert_eq!(r.len(), 1, "one {} option", st.name());
+            r[0]
+        })
+        .collect();
+    for r in &opts {
+        assert!((r.top() - opts[0].top()).abs() < 0.5, "one row: {opts:?}");
+        assert!(r.height() >= 40.0, "room for a knob over the name: {r:?}");
+        assert!(r.right() <= 1366.0, "on screen: {r:?}");
+        assert!(r.bottom() <= 768.0, "on screen: {r:?}");
+    }
+    let below = rects(&h, Role::CheckBox, Some("Reduce motion"));
+    assert_eq!(below.len(), 1);
+    assert!(
+        below[0].top() >= opts[0].bottom(),
+        "the Motion row {:?} overlaps the knobs {:?}",
+        below[0],
+        opts[0]
+    );
+    h.get_by(|n| n.role() == Role::Button && n.label().as_deref() == Some("Pixel"))
+        .click();
+    frames(&mut h, 2);
+    assert_eq!(
+        h.state().extra.knob_style,
+        crate::theme::KnobStyle::Pixel as u8
     );
 }

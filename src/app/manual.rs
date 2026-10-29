@@ -17,7 +17,7 @@ pub(crate) const MANUAL_PDF: &[u8] =
 /// the same PDF on GitHub (the fallback link when it can't be opened here)
 pub(super) const MANUAL_URL: &str = "https://github.com/postmanpat-303/ChipWaveStudio/blob/main/docs/manual/ChipWave-Studio-User-Manual.pdf";
 
-/// "ChipWave-Studio-User-Manual-0.2.18.1.pdf": one file per app version
+/// "ChipWave-Studio-User-Manual-0.2.19.0.pdf": one file per app version
 pub(crate) fn file_name() -> String {
     format!("ChipWave-Studio-User-Manual-{}.pdf", crate::VERSION)
 }
@@ -143,6 +143,20 @@ mod tests {
         assert!(file_name().starts_with("ChipWave-Studio-User-Manual-"));
         assert!(file_name().ends_with(&format!("{}.pdf", crate::VERSION)));
         assert!(MANUAL_URL.ends_with("docs/manual/ChipWave-Studio-User-Manual.pdf"));
+    }
+
+    #[test]
+    fn the_built_in_manual_is_for_this_version() {
+        // docs/manual/build.sh takes the version from Cargo.toml; a stale PDF
+        // (built before a version bump) fails here
+        let title = format!("/Title (ChipWave Studio {} User Manual)", crate::VERSION);
+        assert!(
+            MANUAL_PDF
+                .windows(title.len())
+                .any(|w| w == title.as_bytes()),
+            "the manual's title says {}: rerun docs/manual/build.sh",
+            crate::VERSION
+        );
     }
 
     #[test]

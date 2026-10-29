@@ -168,6 +168,7 @@ mod stabilise_tests;
 mod stage3_tests;
 #[cfg(test)]
 mod stringsview_tests;
+mod tbpanels;
 mod timeline;
 #[cfg(test)]
 mod timeline_m2_tests;
@@ -178,6 +179,8 @@ mod tldrag_tests;
 #[cfg(test)]
 mod tlselect_tests;
 mod topbar;
+#[cfg(test)]
+mod topbar_tests;
 mod trackauto;
 mod trackops;
 mod trackpie;
@@ -437,6 +440,8 @@ pub struct App {
     pub(crate) typing: typing::Typing,
     /// the toolbar's Keys → Notes button (screenshots hover it)
     kb_rect: egui::Rect,
+    /// the top bar's panels: last drawn, their sizes, a drag (app/tbpanels.rs)
+    pub(crate) tb: tbpanels::TopBarUi,
     /// "made with a newer ChipWave Studio" message (open refused)
     too_new: Option<String>,
     /// the left Inspector (I; app/inspector.rs)
@@ -791,6 +796,7 @@ impl App {
             noterec: Default::default(),
             typing: Default::default(),
             kb_rect: egui::Rect::NOTHING,
+            tb: Default::default(),
             too_new: None,
             insp: Default::default(),
             pie: None,

@@ -2899,16 +2899,26 @@ impl App {
 
 /// Selected notes: an orange fill (darker for quiet notes, so velocity
 /// still reads), a lighter outline and dark text. Theme-aware: Amiga's
-/// light chrome gets a deeper orange.
+/// light chrome gets a deeper orange, The Matrix its green accent.
 pub(crate) fn sel_note_colours(t: &crate::theme::Theme, vel: f32) -> (Color32, Color32, Color32) {
     if t.ember {
         // acc-hot with a white rim (plus a bloom where they are drawn)
         let fill = crate::theme::mix(t.accent, t.acc_hot, 0.35 + 0.65 * vel.clamp(0.0, 1.0));
-        return (
-            fill,
-            Color32::from_rgb(0xFF, 0xF1, 0xD6),
-            Color32::from_rgb(0x20, 0x14, 0x08),
-        );
+        // (The Matrix: its green accent, so a green-white rim and ink)
+        let green = t.name == crate::theme::MATRIX.name;
+        return if green {
+            (
+                fill,
+                Color32::from_rgb(0xE8, 0xFF, 0xEE),
+                Color32::from_rgb(0x04, 0x14, 0x0A),
+            )
+        } else {
+            (
+                fill,
+                Color32::from_rgb(0xFF, 0xF1, 0xD6),
+                Color32::from_rgb(0x20, 0x14, 0x08),
+            )
+        };
     }
     let (lo, hi, edge) = if t.light {
         (

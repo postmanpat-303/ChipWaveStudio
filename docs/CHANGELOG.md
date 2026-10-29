@@ -2,6 +2,21 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.19.0: a movable top bar, The Matrix theme, knob styles
+
+Released 2026-10-29. Highlights:
+
+- **A movable top bar:** the top bar is now three panels, the **Display**, the **Transport** (to the start, Play, Record, Loop, Metronome and its ▾) and the **Master**. Drag a panel by its grip (faint dots at its left edge, brighter near the panel, accent under the pointer, "Drag to move the … panel") to reorder them; the order is saved in the settings. The middle panel is centred on the window, all three are the display's height with their controls centred, and the drag ghost stays inside the window. **Settings › Look › Top bar** shows the order, and **Reset top bar** puts back Display, Transport (centred), Master. MIDI, Chord, the keys and Panic moved to the right of the menu bar.
+- **An in-between display for 1366 px windows:** when the full display doesn't fit, it first drops the load meters (DSP and BUF stay as text, with the signature, loop bars and buffer ms) and only then goes compact.
+- **The Matrix theme:** Slate's studio look in phosphor green on near-black; ChipWave's own instrument panels turn teal instead of violet. Clips keep their track colours.
+- **Knob style** in **Settings › Look**: Classic (each theme's own knob, the default), Flat ring, Chicken-head, LED ring, Brushed metal or Pixel, for every knob in the app. Each option shows a small live knob drawn in that style in the current theme's colours; click one to use it.
+- **The user manual** takes its version from `Cargo.toml` (cover, footer and text are always current, and a test checks the built-in PDF matches the app version), with new sections on moving the top bar's panels, The Matrix and the knob styles, and a new Settings picture.
+- Includes the 0.2.18.1 installer fix.
+- The song format, playback and rendering are unchanged: every `RENDER` and `GEN` fingerprint line is identical to 0.2.18.1.
+
+### Known limits
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
+
 ## 0.2.18.1: installer fix
 
 Released 2026-10-28.

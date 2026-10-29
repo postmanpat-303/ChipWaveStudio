@@ -597,7 +597,7 @@ dependencies = [
 
 [[package]]
 name = "chipwave"
-version = "0.2.18+fix.1"
+version = "0.2.19+fix.0"
 dependencies = [
  "base64 0.22.1",
  "clap-sys",

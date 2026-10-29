@@ -27,7 +27,11 @@ fn selected_notes_get_their_own_colour_in_both_themes_and_keep_velocity() {
         let (loud, edge, ink) = sel_note_colours(&th, 1.0);
         let (quiet, _, _) = sel_note_colours(&th, 0.2);
         assert_ne!(loud, th.note, "{}", th.name);
-        assert!(loud.r() > loud.b() + 80, "orange: {loud:?}");
+        if th.name == crate::theme::MATRIX.name {
+            assert!(loud.g() > loud.r() + 80, "green: {loud:?}");
+        } else {
+            assert!(loud.r() > loud.b() + 80, "orange: {loud:?}");
+        }
         assert!(
             crate::theme::luma(quiet) < crate::theme::luma(loud),
             "velocity reads"
