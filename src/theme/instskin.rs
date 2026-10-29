@@ -42,10 +42,13 @@ fn rgba(c: u32, a: u8) -> Color32 {
 impl InstSkin {
     /// the violet skin for `t`: Slate and Dark Circuit get a light violet,
     /// Amiga's light Workbench a deeper plum (and a lighter curve for its
-    /// navy picture wells)
+    /// navy picture wells). The Matrix gets teal: violet fought its green,
+    /// and teal still sets the built-ins apart from the green accent.
     pub fn for_theme(t: &Theme) -> Self {
         // (tint, text, wash, wash alpha, edge alpha)
-        let (tint, text, wash, wa, ea): (u32, u32, u32, u8, u8) = if t.light {
+        let (tint, text, wash, wa, ea): (u32, u32, u32, u8, u8) = if t.name == super::MATRIX.name {
+            (0x4FD8C8, 0x9FEFE4, 0x4FD8C8, 22, 110)
+        } else if t.light {
             (0x7B3FC4, 0x4E1F8A, 0x8A4FD8, 36, 150)
         } else if t.ember {
             (0xA78BFA, 0xC4B5FD, 0xA78BFA, 26, 110)
@@ -211,6 +214,13 @@ mod tests {
         assert_eq!(a.tint, crate::theme::hex(0x7B3FC4));
         // the navy wells get a lighter curve than the plum tint
         assert!(a.bright.r() > a.tint.r());
+        // The Matrix: teal, readable on its panels and apart from its accent
+        let m = InstSkin::for_theme(&crate::theme::MATRIX);
+        assert_eq!(m.tint, crate::theme::hex(0x4FD8C8));
+        for bg in [crate::theme::MATRIX.cart_top, crate::theme::MATRIX.pill] {
+            assert!(crate::theme::contrast(m.text, bg) >= 4.5);
+        }
+        assert_ne!(m.tint, crate::theme::MATRIX.accent);
     }
 
     #[test]

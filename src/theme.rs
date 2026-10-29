@@ -187,7 +187,51 @@ pub const AMIGA: Theme = Theme {
     line2: hex(0x6A7078),
 };
 
-pub const THEMES: [Theme; 3] = [SLATE, DARK, AMIGA];
+/// "The Matrix": Slate's studio skin (the same panels, knobs and LED dots)
+/// on near-black green with a code-rain green accent (Del's pick B of the
+/// three mockups, 29 Oct 2026). Built-in instruments get a teal skin
+/// instead of the violet one (`instskin`), so they still stand apart.
+pub const MATRIX: Theme = Theme {
+    name: "The Matrix",
+    light: false,
+    border: hex(0x050A07),
+    bg_top: hex(0x0F1612),
+    bg_bot: hex(0x0A100C),
+    cart_top: hex(0x18231C),
+    cart_bot: hex(0x121B15),
+    pill: hex(0x22322A),
+    hdr_top: hex(0x16211A),
+    hdr_bot: hex(0x121B15),
+    crt_top: hex(0x07100B),
+    crt_bot: hex(0x040A06),
+    crt_grid: hex(0x14241A),
+    ink: hex(0xE2F5E8),
+    ink2: hex(0x9CC2A8),
+    value: hex(0x5CFF8E),
+    slate: hex(0x2C4034),
+    brick: hex(0xC4623F),
+    sage: hex(0x5CFF8E),
+    ochre: hex(0x28FF6E),
+    note: hex(0xE2F5E8),
+    instr: hex(0x5CFF8E),
+    vol: hex(0x7FC8D6),
+    fx: hex(0xC8E06C),
+    empty: hex(0x34483C),
+    play: hex(0x28FF6E),
+    sel: hex(0x1A3A26),
+    accent: hex(0x28FF6E),
+    focus_ring: hex(0xE2F5E8),
+    selection_outline: hex(0x8CFFAE),
+    ember: true,
+    acc_deep: hex(0x0B9A3A),
+    acc_hot: hex(0x8CFFAE),
+    led_off: hex(0x14301E),
+    dot_off: hex(0x2A3E31),
+    edge: hex(0x050A07),
+    line2: hex(0x4E6E58),
+};
+
+pub const THEMES: [Theme; 4] = [SLATE, DARK, AMIGA, MATRIX];
 
 static CURRENT: std::sync::RwLock<Theme> = std::sync::RwLock::new(SLATE);
 /// Interface style: Polished (default: soft depth, gradients, shadows) or

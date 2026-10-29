@@ -1047,7 +1047,7 @@ fn play_test(secs: u64) -> i32 {
     }
 }
 
-/// `--screenshot <out.png> [--view v] [--theme slate|dark|amiga] [--size WxH]`
+/// `--screenshot <out.png> [--view v] [--theme slate|dark|amiga|matrix] [--size WxH]`
 /// (developer flag for the README screenshots; see src/app/shot.rs)
 fn screenshot(args: &[String], i: usize) -> i32 {
     let flag = |name: &str| {
@@ -1058,7 +1058,7 @@ fn screenshot(args: &[String], i: usize) -> i32 {
     };
     let Some(out) = args.get(i + 1).filter(|a| !a.starts_with("--")) else {
         eprintln!(
-            "usage: --screenshot <out.png> [--view {}] [--theme slate|dark|amiga] [--size 1600x900] [--zoom 0.9..1.5] [--text 0.9..1.5] [--song file.cwt|file.cwt.toml]",
+            "usage: --screenshot <out.png> [--view {}] [--theme slate|dark|amiga|matrix] [--size 1600x900] [--zoom 0.9..1.5] [--text 0.9..1.5] [--song file.cwt|file.cwt.toml]",
             app::shot::VIEWS.join("|")
         );
         return 2;
@@ -1080,6 +1080,7 @@ fn screenshot(args: &[String], i: usize) -> i32 {
     let theme_flag = flag("--theme").map(|t| t.to_ascii_lowercase());
     let amiga = theme_flag.as_deref().is_some_and(|t| t.starts_with('a'));
     let dark = theme_flag.as_deref().is_some_and(|t| t.starts_with('d'));
+    let matrix = theme_flag.as_deref().is_some_and(|t| t.starts_with('m'));
     // isolated settings / recovery folder, so the user's own settings are untouched
     let tmp = std::env::temp_dir().join(format!("chipwave-shot-{}", std::process::id()));
     std::env::set_var("XDG_CONFIG_HOME", &tmp);
@@ -1090,6 +1091,8 @@ fn screenshot(args: &[String], i: usize) -> i32 {
     let mut st = settings::Settings {
         theme: if amiga {
             theme::AMIGA.name
+        } else if matrix {
+            theme::MATRIX.name
         } else if dark {
             theme::DARK.name
         } else {
