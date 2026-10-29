@@ -3525,4 +3525,3 @@ fn knob_style_previews_fit_one_row_and_pick_on_click() {
         crate::theme::KnobStyle::Pixel as u8
     );
 }
-
