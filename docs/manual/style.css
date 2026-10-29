@@ -6,7 +6,7 @@
 :root{--cyan:#00d0ff;--mag:#ff2bd6;--vio:#7c4dff;--blue:#0a84ff;--mint:#b9f5d0;--ink:#1b1e27;--soft:#5a6072;--panel:#f3f5fa;--line:#dde2ee;--dark:#0e1118}
 @page{size:A4;margin:17mm 17mm 19mm 17mm;
   @bottom-center{content:counter(page);font-family:"Atkinson";font-size:9pt;color:#7a8094}
-  @bottom-left{content:"ChipWave Studio 0.2.18.0 · User Manual";font-family:"Atkinson";font-size:8pt;color:#a0a6b6}
+  @bottom-left{content:"ChipWave Studio @VERSION@ · User Manual";font-family:"Atkinson";font-size:8pt;color:#a0a6b6}
   @bottom-right{content:"postmanpat-303.github.io/ChipWaveStudio";font-family:"Atkinson";font-size:8pt;color:#a0a6b6}}
 @page cover{margin:0;@bottom-center{content:none}@bottom-left{content:none}@bottom-right{content:none}}
 @page toc{@bottom-left{content:none}@bottom-right{content:none}}

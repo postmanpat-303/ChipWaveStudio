@@ -146,6 +146,20 @@ mod tests {
     }
 
     #[test]
+    fn the_built_in_manual_is_for_this_version() {
+        // docs/manual/build.sh takes the version from Cargo.toml; a stale PDF
+        // (built before a version bump) fails here
+        let title = format!("/Title (ChipWave Studio {} User Manual)", crate::VERSION);
+        assert!(
+            MANUAL_PDF
+                .windows(title.len())
+                .any(|w| w == title.as_bytes()),
+            "the manual's title says {}: rerun docs/manual/build.sh",
+            crate::VERSION
+        );
+    }
+
+    #[test]
     fn the_manual_is_written_once_and_refreshed_when_it_differs() {
         let dir = std::env::temp_dir().join(format!("cw-manual-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
