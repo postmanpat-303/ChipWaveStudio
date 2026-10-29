@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.18.1-00d0ff" alt="Version 0.2.18.1">
+  <img src="https://img.shields.io/badge/version-0.2.19.0-00d0ff" alt="Version 0.2.19.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.18.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.19.0</b></a> &nbsp;·&nbsp;
   <a href="docs/manual/ChipWave-Studio-User-Manual.pdf"><b>User manual (PDF)</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
@@ -52,7 +52,29 @@
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.18.0: the Arp, an adjustable loop and Ctrl+drag copies
+## New in 0.2.19.0: a movable top bar, The Matrix theme and knob styles
+
+- **A movable top bar**: the top bar is now three panels, the **Display**, the **Transport** and the **Master**. Drag a panel by the grip at its left edge to put them in the order you like; the order is saved. The Transport sits in the centre of the window by default, the three panels are the same height, and **Reset top bar** in **Settings › Look** puts everything back. MIDI, Chord, the keys and Panic now sit at the right of the menu bar.
+- **An in-between display size** for 1366-pixel-wide screens: the display drops its load meters (DSP and BUF stay as text) before it goes compact.
+- **The Matrix**: a new theme with Slate's studio look in phosphor green on near-black, and teal panels for ChipWave's own instruments.
+- **Knob style** in **Settings › Look**: Classic, Flat ring, Chicken-head, LED ring, Brushed metal or Pixel, for every knob in the app. Each option shows a small live knob in that style, so you can see it before you pick it.
+- **The user manual is updated**: it always shows the version you have, and has new sections on the top bar, The Matrix and the knob styles.
+- Includes the **0.2.18.1** installer fix.
+
+Songs open, play and render exactly as in 0.2.18.1. Details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/topbar-1920.png" alt="ChipWave in the Slate theme at 1920 by 1080: the top bar with the Display on the left, the Transport centred and the Master on the right, each the same height, over the Timeline and a synth in the Rack"><br><b>The top bar</b>: Display, Transport (centred) and Master (Slate).</td>
+    <td width="50%"><img src="docs/manual/img/matrix.png" alt="The Matrix theme: the studio in phosphor green on near-black, with a ChipWave synth open in teal in the lower panel"><br><b>The Matrix</b> theme.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/manual/img/knob_styles.png" alt="The six knob styles: Classic, Flat ring, Chicken-head, LED ring, Brushed metal and Pixel"><br><b>Knob styles</b>: Classic, Flat ring, Chicken-head; LED ring, Brushed metal, Pixel.</td>
+    <td width="50%"><img src="docs/manual/img/settings.png" alt="Settings, Look: the Knob style row with a small live knob drawn in each of the six styles"><br><b>Settings › Look</b> with a live sample of each knob style.</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.18.0: the Arp, an adjustable loop and Ctrl+drag copies</b></summary>
 
 > **0.2.18.1** fixes the Windows installer: reinstalling or upgrading could leave the install folder empty. If ChipWave 0.2.18.0 stopped opening from its shortcut, install 0.2.18.1.
 
@@ -70,6 +92,8 @@ Songs without an Arp play and render exactly as in 0.2.17.0, and the song format
     <td width="50%"><img src="docs/screenshots/timeline-ctrl-copy.png" alt="The Timeline mid-drag: a copy of the Intro clip follows the mouse onto the next track with a plus copy badge, while the original stays in place"><br><b>Ctrl+drag</b> makes a copy; the original stays.</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.17.0: a built-in manual, a digital rain About page and cleaner exports</b></summary>
 
