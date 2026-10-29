@@ -402,12 +402,16 @@ impl App {
                 });
                 ui.end_row();
                 ui.label("Knob style");
-                ui.horizontal_wrapped(|ui| {
+                // top-aligned so the tall options wrap without riding over the next row
+                let wrap = egui::Layout::left_to_right(egui::Align::Min).with_main_wrap(true);
+                ui.with_layout(wrap, |ui| {
+                    // each option: a small live knob in that style over its name
                     for st in theme::KnobStyle::ALL {
-                        changed |= ui
-                            .selectable_value(&mut self.extra.knob_style, st as u8, st.name())
-                            .on_hover_text(st.hint())
-                            .changed();
+                        let on = self.extra.knob_style == st as u8;
+                        if knob_style_option(ui, st, on).on_hover_text(st.hint()).clicked() && !on {
+                            self.extra.knob_style = st as u8;
+                            changed = true;
+                        }
                     }
                 });
                 ui.end_row();
@@ -971,4 +975,58 @@ impl App {
             self.save_settings();
         }
     }
+}
+
+/// the value the Knob style previews show
+pub(super) const KNOB_SAMPLE: f32 = 0.65;
+
+/// One Knob style option in Settings › Look: a live knob drawn in `style`
+/// (the real knob painter, in the current theme's colours, at
+/// `KNOB_SAMPLE`) with the name under it; one click target, highlighted
+/// like a selectable label when chosen.
+pub(super) fn knob_style_option(
+    ui: &mut egui::Ui,
+    style: theme::KnobStyle,
+    selected: bool,
+) -> egui::Response {
+    // the value arc's radius: the knob paints about 4 px past it (28 px)
+    const RAD: f32 = 10.0;
+    const KNOB_H: f32 = 30.0;
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let galley =
+        ui.painter()
+            .layout_no_wrap(style.name().to_owned(), font, egui::Color32::PLACEHOLDER);
+    let pad = egui::vec2(8.0, 4.0);
+    let w = galley.size().x.max(KNOB_H) + pad.x * 2.0;
+    let h = pad.y + KNOB_H + 2.0 + galley.size().y + pad.y;
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::click());
+    resp.widget_info(|| {
+        egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), selected, style.name())
+    });
+    if ui.is_rect_visible(rect) {
+        let vis = ui.style().interact_selectable(&resp, selected);
+        if selected || resp.hovered() || resp.has_focus() {
+            ui.painter().rect(
+                rect,
+                vis.corner_radius,
+                vis.weak_bg_fill,
+                vis.bg_stroke,
+                egui::StrokeKind::Inside,
+            );
+        }
+        let c = egui::pos2(rect.center().x, rect.top() + pad.y + KNOB_H / 2.0);
+        theme::knob_face_as(
+            ui.painter(),
+            c,
+            RAD,
+            theme::KnobFace::new(KNOB_SAMPLE),
+            style,
+        );
+        let tp = egui::pos2(
+            rect.center().x - galley.size().x / 2.0,
+            rect.bottom() - pad.y - galley.size().y,
+        );
+        ui.painter().galley(tp, galley, vis.text_color());
+    }
+    resp
 }
