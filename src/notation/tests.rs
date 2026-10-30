@@ -701,3 +701,22 @@ fn demos_render_to_pdf_with_lilypond_when_installed() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// writes every demo as .musicxml and .ly to $CW_NOTATION_OUT (samples for
+/// a manual check: `cargo test --bin chipwave write_demo_samples -- --ignored`)
+#[test]
+#[ignore]
+fn write_demo_samples() {
+    let Some(dir) = std::env::var_os("CW_NOTATION_OUT") else {
+        return;
+    };
+    let dir = std::path::PathBuf::from(dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for n in 0..crate::fileio::DEMOS.len() {
+        let s = crate::fileio::demo_song_n(n);
+        let sc = build(&s, &default_opts(&s, ""));
+        let name = s.title.split(" (").next().unwrap_or("demo").to_string();
+        std::fs::write(dir.join(format!("{name}.musicxml")), to_musicxml(&sc)).unwrap();
+        std::fs::write(dir.join(format!("{name}.ly")), to_ly(&sc)).unwrap();
+    }
+}

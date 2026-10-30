@@ -148,7 +148,18 @@ pub fn to_ly(sc: &Score) -> String {
         let _ = writeln!(s, "  composer = \"{}\"", esc(sc.composer.trim()));
     }
     s.push_str("  tagline = \"Exported from ChipWave Studio\"\n}\n\n");
-    s.push_str("\\paper {\n  #(set-paper-size \"a4\")\n}\n\n\\score {\n  <<\n");
+    // room for the longest part name left of the first system (about 2 mm
+    // a letter at the default size)
+    let longest = sc
+        .parts
+        .iter()
+        .map(|p| p.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    let indent = (longest as f32 * 2.0 + 4.0).clamp(15.0, 45.0);
+    s.push_str(&format!(
+        "\\paper {{\n  #(set-paper-size \"a4\")\n  indent = {indent:.0}\\mm\n}}\n\n\\score {{\n  <<\n"
+    ));
     if sc.parts.is_empty() {
         // an empty score still shows the bars
         let st = Staff {
