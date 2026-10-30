@@ -12,6 +12,7 @@
 <li><b>Recent ›</b> lists your last 20 songs. You can pin favourites.</li>
 <li><b>Save</b> <kbd>Ctrl</kbd>+<kbd>S</kbd>, <b>Save As…</b> <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>.</li>
 <li><b>Export… (WAV / MP3)</b> <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>, <b>Export MP3…</b>, and <b>Quick export WAV…</b> <kbd>Ctrl</kbd>+<kbd>E</kbd>.</li>
+<li><b>Export sheet music…</b> writes the song as a printable score.</li>
 <li><b>Export tracker-compatible copy…</b> saves a copy for ChipWave 0.2.4.0 and older.</li>
 <li><b>Instrument library…</b>, <b>Import / Export instrument (.cwi)…</b> and <b>Save / Load controller map…</b></li>
 <li><b>Quit</b> <kbd>Ctrl</kbd>+<kbd>Q</kbd>.</li>
@@ -31,6 +32,18 @@
 <li data-n="7"><b>Save to:</b> the file name and folder (normally <code>Music\ChipWave</code>), with <span class="ui">Browse…</span>. Then press <span class="ui">Export</span>.</li>
 </ol>
 <div class="note"><b class="l">IN THIS VERSION</b> Export writes one stereo file of the whole mix. Separate files per track (stems) aren't available yet.</div>
+<h3>Exporting sheet music</h3>
+<p><span class="ui">File › Export sheet music…</span> turns the notes of your song into a score. It works for timeline songs and tracker songs, and it never changes the song itself.</p>
+<ul>
+<li><b>Format:</b> <b>MusicXML</b> opens in notation programs such as MuseScore. <b>LilyPond (.ly)</b> is a text score. <b>PDF</b> is ready to print.</li>
+<li><b>PDF needs LilyPond</b>, a free program from <code>lilypond.org</code>. ChipWave doesn't include it. Install it, and ChipWave finds it, or press <span class="ui">Find LilyPond…</span> to pick <code>lilypond.exe</code>. Without it, the PDF box is greyed out and a red note tells you why.</li>
+<li><b>Bars:</b> the whole song, or bars from–to.</li>
+<li><b>Rhythm:</b> the grid notes snap to (1/16 is a good start). <span class="ui">One staff per instrument</span> joins tracks that use the same instrument. <span class="ui">Include drums</span> adds a drum staff with all drum tracks on it.</li>
+<li><b>Key:</b> from the song, none, or any key you choose. Time signatures, tempo and markers come from the song.</li>
+<li><b>Title</b> starts as the song's title. <b>Composer</b> is blank unless you type one; ChipWave remembers it for next time.</li>
+<li><b>Parts:</b> tick the parts to include. Bass parts get a bass clef, and very high or low parts get an octave clef.</li>
+</ul>
+<div class="note"><b class="l">IN THIS VERSION</b> Notes are shown one voice per staff, without triplets, dynamics or lyrics. A note that is still sounding when the next one starts is shortened. Tempo changes made with tracker effect commands are not shown.</div>
 <h3>Your work is safe</h3>
 <ul>
 <li><b>Autosave</b> keeps a safety copy every 2 minutes by default, only when there are unsaved changes. It never overwrites your own file.</li>
