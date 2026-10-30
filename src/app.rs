@@ -118,6 +118,7 @@ mod objpie;
 mod objpie_tests;
 #[cfg(test)]
 mod opentl_tests;
+mod overlaps;
 mod params;
 mod pattern;
 #[cfg(test)]
