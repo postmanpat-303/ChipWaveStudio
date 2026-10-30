@@ -67,6 +67,7 @@ mod melodygen;
 mod midi;
 mod model;
 mod modulation;
+mod notation;
 mod plugin;
 mod poly;
 mod presets;
