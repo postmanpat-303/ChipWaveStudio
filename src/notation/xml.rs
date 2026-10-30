@@ -41,6 +41,7 @@ fn inst_id(pid: &str, d: Drum) -> String {
     format!("{pid}-I{}", d.info().gm as u32 + 1)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn note(
     s: &mut String,
     key: KeySig,
