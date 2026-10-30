@@ -608,18 +608,41 @@ fn every_demo_exports_valid_files() {
 }
 
 #[test]
-fn composer_is_the_song_artist_or_the_setting_never_made_up() {
+fn composer_is_the_setting_or_blank_never_made_up() {
     let mut s = song(1);
     pitched(&mut s);
-    assert_eq!(default_opts(&s, "").composer, "");
-    assert_eq!(default_opts(&s, "  Me ").composer, "Me");
     s.info.artist = "Song Artist".into();
-    assert_eq!(default_opts(&s, "Me").composer, "Song Artist");
-    let sc = build(&s, &default_opts(&s, ""));
-    assert!(to_ly(&sc).contains("composer = \"Song Artist\""));
+    assert_eq!(default_opts(&s, "").composer, "", "blank setting: blank");
+    assert_eq!(default_opts(&s, "  Me ").composer, "Me");
+    let sc = build(&s, &default_opts(&s, "Me"));
+    assert!(to_ly(&sc).contains("composer = \"Me\""));
+    assert!(to_musicxml(&sc).contains("<creator type=\"composer\">Me</creator>"));
     // no composer: no composer line
-    s.info.artist.clear();
-    assert!(!to_ly(&build(&s, &default_opts(&s, ""))).contains("composer"));
+    let sc = build(&s, &default_opts(&s, ""));
+    assert!(!to_ly(&sc).contains("composer"));
+    assert!(!to_musicxml(&sc).contains("type=\"composer\""));
+    // the demos never put a name in
+    for n in 0..crate::fileio::DEMOS.len() {
+        assert_eq!(
+            default_opts(&crate::fileio::demo_song_n(n), "").composer,
+            ""
+        );
+    }
+}
+
+#[test]
+fn drum_tracks_share_one_drum_staff_when_merged() {
+    let s = crate::fileio::demo_song_n(5);
+    let merged = default_opts(&s, "").parts;
+    let drums: Vec<_> = merged.iter().filter(|p| p.drums).collect();
+    assert_eq!(drums.len(), 1, "{merged:?}");
+    assert_eq!(drums[0].name, "Drums");
+    assert!(drums[0].tracks.len() > 1);
+    let apart = reparts(&s, false, &merged);
+    assert!(apart.iter().filter(|p| p.drums).count() > 1);
+    let sc = build(&s, &default_opts(&s, ""));
+    check_score(&sc);
+    assert_eq!(sc.parts.iter().filter(|p| p.drums).count(), 1);
 }
 
 #[test]

@@ -450,6 +450,14 @@ impl App {
                 if item(ui, "Quick export WAV…", "Ctrl+E") {
                     self.export_wav();
                 }
+                if ui
+                    .button("Export sheet music…")
+                    .on_hover_text("the notes as a score: MusicXML, LilyPond, or a PDF")
+                    .clicked()
+                {
+                    self.open_notation();
+                    ui.close();
+                }
                 let tl_mode = self.with(|s| s.song.timeline.is_some());
                 if ui
                     .add_enabled(tl_mode, egui::Button::new("Export tracker-compatible copy…"))

@@ -112,6 +112,7 @@ mod myracks_tests;
 mod narrow_tests;
 #[cfg(test)]
 mod newsong_tests;
+mod notationdlg;
 mod noterec;
 mod objpie;
 #[cfg(test)]
@@ -308,6 +309,8 @@ pub struct App {
     rebinding: Option<crate::keymap::Action>,
     bind_msg: String,
     export_dlg: Option<dialogs::ExportDlg>,
+    /// File > Export sheet music… dialog
+    notation_dlg: Option<notationdlg::NotationDlg>,
     /// Song > Fill to length dialog state
     fill: Option<fillview::FillState>,
     /// chord helper window (0.2.3.9)
@@ -718,6 +721,7 @@ impl App {
             rebinding: None,
             bind_msg: String::new(),
             export_dlg: None,
+            notation_dlg: None,
             fill: None,
             chords: Default::default(),
             library: Default::default(),

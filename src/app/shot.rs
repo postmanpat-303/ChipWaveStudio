@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 128] = [
+pub const VIEWS: [&str; 129] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -165,6 +165,7 @@ pub const VIEWS: [&str; 128] = [
     "metronome-mockup",
     "rack-compact",
     "rack-empty",
+    "notation",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -965,6 +966,24 @@ impl App {
                 }
             }
             "library" => self.open_library(),
+            "notation" => {
+                // CHIPWAVE_SHOT_DEMO=<n>: that demo; CHIPWAVE_SHOT_NO_LILYPOND=1:
+                // as if LilyPond were not installed
+                if let Some(n) = std::env::var("CHIPWAVE_SHOT_DEMO")
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                {
+                    self.load_demo(n);
+                }
+                self.open_notation();
+                if std::env::var("CHIPWAVE_SHOT_NO_LILYPOND").is_ok() {
+                    if let Some(d) = &mut self.notation_dlg {
+                        d.lilypond = None;
+                        d.pdf = false;
+                        d.ly = true;
+                    }
+                }
+            }
             "chords" => {
                 self.chords.open = true;
                 self.detect_key();

@@ -13,7 +13,7 @@ pub(super) struct ExportDlg {
     result: Option<Result<String, String>>,
 }
 
-fn music_dir() -> PathBuf {
+pub(super) fn music_dir() -> PathBuf {
     let home = std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))
         .map(PathBuf::from)
@@ -210,6 +210,9 @@ impl App {
             }
             return true;
         }
+        if self.notation_key(key) {
+            return true;
+        }
         if let Some(d) = &mut self.export_dlg {
             let running = d.job.is_some();
             match key {
@@ -381,6 +384,8 @@ impl App {
             }
             self.show_info = open;
         }
+        // ---------------------------------------------------- sheet music
+        self.notation_dialog(ctx);
         // ---------------------------------------------------- export
         let Some(mut d) = self.export_dlg.take() else {
             return;

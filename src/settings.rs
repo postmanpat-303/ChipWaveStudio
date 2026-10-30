@@ -55,6 +55,13 @@ pub struct Extra {
     /// last export folder
     #[serde(default)]
     pub export_dir: String,
+    /// LilyPond (a program or its folder) for sheet music PDFs; empty =
+    /// look in the usual places
+    #[serde(default)]
+    pub lilypond_path: String,
+    /// composer written on sheet music when the song has no artist
+    #[serde(default)]
+    pub notation_composer: String,
     /// MIDI keyboard input (0.2.3)
     #[serde(default)]
     pub midi: crate::midi::MidiSettings,
@@ -311,6 +318,8 @@ impl Default for Extra {
             backups: 1,
             song_dir: String::new(),
             export_dir: String::new(),
+            lilypond_path: String::new(),
+            notation_composer: String::new(),
             midi: Default::default(),
             update_check: true,
             update_last: 0,

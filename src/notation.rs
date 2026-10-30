@@ -39,7 +39,6 @@ pub struct Ev {
 /// the notes of one track
 #[derive(Clone, Debug, Default)]
 pub struct TrackNotes {
-    pub index: usize,
     pub name: String,
     pub events: Vec<Ev>,
     pub muted: bool,
@@ -299,7 +298,6 @@ pub fn extract(song: &Song, t: &Timeline) -> Vec<TrackNotes> {
             track.name.clone()
         };
         out.push(TrackNotes {
-            index: tr,
             name,
             events: evs,
             muted,
@@ -352,9 +350,11 @@ pub fn parts(song: &Song, tracks: &[TrackNotes], merge: bool) -> Vec<PartSpec> {
         let sfx = t.events.iter().all(|e| is_sfx(song, e.instr));
         let mi = main_instr(&t.events);
         if merge && mi != 0 {
+            // every drum track shares one drum staff; other tracks share a
+            // staff with the tracks on the same instrument
             if let Some((_, p)) = out
                 .iter_mut()
-                .find(|(m, p)| *m == mi && p.drums == drums && p.sfx == sfx)
+                .find(|(m, p)| p.drums == drums && p.sfx == sfx && (*m == mi || (drums && !sfx)))
             {
                 p.tracks.push(i);
                 p.notes += t.events.len();
@@ -377,8 +377,11 @@ pub fn parts(song: &Song, tracks: &[TrackNotes], merge: bool) -> Vec<PartSpec> {
         ));
     }
     // a part merged from several tracks is named after its instrument
+    // (drums: "Drums")
     for (mi, p) in out.iter_mut() {
-        if p.tracks.len() > 1 {
+        if p.tracks.len() > 1 && p.drums {
+            p.name = "Drums".into();
+        } else if p.tracks.len() > 1 {
             if let Some(inst) = song.instruments.get((*mi as usize).wrapping_sub(1)) {
                 if !inst.name.trim().is_empty() {
                     p.name = inst.name.clone();
@@ -1170,19 +1173,15 @@ pub fn build(song: &Song, o: &Opts) -> Score {
     }
 }
 
-/// the dialog's starting choices for a song: title, composer (the song's
-/// artist, else `composer`), and its parts
+/// the dialog's starting choices for a song: its title, the composer
+/// from Settings (`composer`; blank stays blank, nothing is made up) and
+/// its parts
 pub fn default_opts(song: &Song, composer: &str) -> Opts {
     let t = timeline_of(song);
     let tracks = extract(song, &t);
-    let artist = song.info.artist.trim();
     Opts {
         title: song.title.trim().to_string(),
-        composer: if artist.is_empty() {
-            composer.trim().to_string()
-        } else {
-            artist.to_string()
-        },
+        composer: composer.trim().to_string(),
         parts: parts(song, &tracks, true),
         ..Default::default()
     }
