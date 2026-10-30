@@ -61,11 +61,11 @@ fn arp_state(app: &App, idx: usize) -> Option<(Option<Arp>, bool)> {
 }
 
 /// the card's width in the Rack row (0: none)
-pub(super) fn arp_card_w(app: &App, idx: usize) -> f32 {
+pub(super) fn arp_card_w(app: &App, idx: usize, ui: &egui::Ui) -> f32 {
     match arp_state(app, idx) {
         None => 0.0,
         Some((None, _)) => SLIM,
-        Some((Some(a), _)) => card_w(&a),
+        Some((Some(a), kit)) => card_w(&a, head_w(ui, &a, kit)),
     }
 }
 
@@ -79,12 +79,45 @@ pub(super) fn grid_cols(a: &Arp) -> usize {
     }
 }
 
-fn card_w(a: &Arp) -> f32 {
+/// header button padding and spacing (as `arp_head` sets them)
+const HEAD_PAD: f32 = 5.0;
+const HEAD_GAP: f32 = 4.0;
+
+fn small(s: &str) -> egui::RichText {
+    egui::RichText::new(s).size(crate::theme::ts::SMALL)
+}
+
+fn title(kit: bool) -> egui::RichText {
+    egui::RichText::new(arp_title(kit).to_uppercase())
+        .font(crate::theme::label_font(crate::theme::ts::LABEL))
+}
+
+/// the width the header's controls need side by side, measured from their
+/// text (hdrfix: the Simple card was narrower than its header, so Preset
+/// and More painted over Simple / Steps)
+fn head_w(ui: &egui::Ui, a: &Arp, kit: bool) -> f32 {
+    use super::fit::{button_w, text_w};
+    let b = |s: &str| button_w(ui, small(s), HEAD_PAD) + HEAD_GAP;
+    let mut w = 20.0 + HEAD_GAP + text_w(ui, title(kit)) + HEAD_GAP + 4.0;
+    w += b("Simple") + b("Steps");
+    if a.show_steps {
+        w += 6.0 + text_w(ui, small("Length")) + HEAD_GAP;
+        w += ["8", "16", "32"].iter().map(|n| b(n)).sum::<f32>();
+    }
+    // a clear gap, then Preset ▾ and More (its wider label)
+    w += 8.0 + b("Preset ▾") + b("More ▸").max(b("More ◂"));
+    // the header sits 6 pt inside the card on each side
+    w + 12.0
+}
+
+fn card_w(a: &Arp, head: f32) -> f32 {
     let base = if a.show_steps {
         PAD + KNOBS_W + PAD + LABEL_W + COL_W * grid_cols(a) as f32 + PAD
     } else {
         PAD + KNOBS_W + PAD
     };
+    // never narrower than the header's controls
+    let base = base.max(head.ceil());
     base + if a.show_more { MORE_W + PAD } else { 0.0 }
 }
 
@@ -219,7 +252,7 @@ impl App {
             }
             return Some(rect);
         };
-        let w = card_w(&a);
+        let w = card_w(&a, head_w(ui, &a, kit));
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
         self.dev.arp_card = rect;
         self.dev.arp_rows = [Rect::NOTHING; 8];
@@ -297,20 +330,15 @@ impl App {
     fn arp_head(&mut self, ui: &mut egui::Ui, r: Rect, idx: usize, a: &Arp, kit: bool) {
         let t = th();
         sub(ui, r, |ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            ui.spacing_mut().button_padding = egui::vec2(5.0, 1.0);
+            ui.spacing_mut().item_spacing.x = HEAD_GAP;
+            ui.spacing_mut().button_padding = egui::vec2(HEAD_PAD, 1.0);
             let (pr, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), Sense::hover());
             let id = ui.make_persistent_id(("arp_power", idx));
             if super::devices::power(ui, &ui.painter_at(pr.expand(4.0)), pr, id, true) {
                 self.arp_set_on(idx, false);
             }
-            ui.label(
-                egui::RichText::new(arp_title(kit).to_uppercase())
-                    .font(crate::theme::label_font(crate::theme::ts::LABEL))
-                    .color(t.ink),
-            );
+            ui.label(title(kit).color(t.ink));
             ui.add_space(4.0);
-            let small = |s: &str| egui::RichText::new(s).size(crate::theme::ts::SMALL);
             for (steps, name, tip) in [
                 (false, "Simple", "the knobs only"),
                 (true, "Steps", "the knobs and the step grid"),
@@ -492,8 +520,8 @@ impl App {
             egui::vec2(r.width(), 20.0),
         );
         sub(ui, lr, |ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            ui.spacing_mut().button_padding = egui::vec2(5.0, 1.0);
+            ui.spacing_mut().item_spacing.x = HEAD_GAP;
+            ui.spacing_mut().button_padding = egui::vec2(HEAD_PAD, 1.0);
             let small = |s: &str| egui::RichText::new(s).size(crate::theme::ts::SMALL);
             if ui
                 .add(egui::Button::new(small("Latch")).selected(a.latch))

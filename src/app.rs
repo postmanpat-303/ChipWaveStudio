@@ -65,6 +65,7 @@ mod edit;
 mod file;
 mod fillview;
 mod filtercard;
+mod fit;
 mod focus;
 #[cfg(test)]
 mod focus_tests;
