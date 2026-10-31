@@ -836,3 +836,50 @@ fn stringwave_panel_and_advanced_fit_a_laptop() {
         );
     }
 }
+
+/// a short lower panel (150-230 px): the simple card's section knobs never
+/// ride up over the MACROS row; the card scrolls instead
+#[test]
+fn a_short_lower_panel_keeps_the_section_knobs_below_the_macros() {
+    for lower_h in [150.0, 190.0, 230.0] {
+        for (ty, inst) in params::tests::all_types() {
+            let mut h = with_inst(inst);
+            h.state_mut().show_instrument_panel();
+            h.state_mut().extra.lower_h = lower_h;
+            frames(&mut h, 3);
+            if h.state().ip.advanced {
+                continue;
+            }
+            let sliders: Vec<(String, Rect)> = h
+                .query_all_by(|n| n.role() == Role::Slider)
+                .map(|n| {
+                    (
+                        egui_kittest::kittest::NodeT::accesskit_node(&n)
+                            .label()
+                            .unwrap_or_default()
+                            .to_string(),
+                        n.rect(),
+                    )
+                })
+                .collect();
+            let macro_bottom = sliders
+                .iter()
+                .filter(|(l, _)| l.ends_with(" macro"))
+                .map(|(_, r)| r.bottom())
+                .fold(f32::NEG_INFINITY, f32::max);
+            if macro_bottom == f32::NEG_INFINITY {
+                continue;
+            }
+            for (l, r) in sliders.iter().filter(|(l, _)| !l.ends_with(" macro")) {
+                // (only the simple card's own knobs: below its header)
+                if r.top() < macro_bottom - 120.0 {
+                    continue;
+                }
+                assert!(
+                    r.top() >= macro_bottom - 1.0,
+                    "{ty} at {lower_h} px: {l} {r:?} overlaps the macros (bottom {macro_bottom})"
+                );
+            }
+        }
+    }
+}

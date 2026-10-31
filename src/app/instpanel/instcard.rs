@@ -983,6 +983,35 @@ pub(super) fn frame(ui: &egui::Ui, r: Rect, title: &str) {
     );
 }
 
+/// the least height of the simple card under its header: the macros row,
+/// then the section titles over one row of knobs (or the custom controls
+/// beside them). Below this the card scrolls rather than overlap.
+fn simple_min_h(l: &Layout, sp: &Spec) -> f32 {
+    let mut h = 0.0;
+    if !macros(l, sp).is_empty() || matches!(sp.macros, Macros::Plugin) {
+        h += if matches!(sp.macros, Macros::Plugin) {
+            MACRO_H + 10.0
+        } else {
+            MACRO_H
+        } + GAP;
+    }
+    if sp.secs.is_empty() {
+        return h + 48.0;
+    }
+    let ch = sp
+        .secs
+        .iter()
+        .map(|s| {
+            s.customs
+                .iter()
+                .filter_map(|c| l.find(c).and_then(|p| p.custom()))
+                .map(|c| custom_size(c, CELL.y).1.max(0.0))
+                .sum::<f32>()
+        })
+        .fold(0.0, f32::max);
+    h + SEC_HEAD + 2.0 + CELL.y.max(ch) + 6.0 + 4.0
+}
+
 /// draw `f` in a child ui at `r` without moving the parent's cursor
 fn inside<R>(
     ui: &mut egui::Ui,
@@ -1139,12 +1168,48 @@ impl App {
             });
         });
         ui.add_space(4.0);
-        let area = ui.available_rect_before_wrap();
-        let area = Rect::from_min_max(
-            area.min + egui::vec2(4.0, 0.0),
-            area.max - egui::vec2(4.0, 4.0),
-        );
-        ui.allocate_rect(area, Sense::hover());
+        let avail = ui.available_rect_before_wrap();
+        let min_h = simple_min_h(l, sp);
+        if avail.height() - 4.0 >= min_h {
+            let area = Rect::from_min_max(
+                avail.min + egui::vec2(4.0, 0.0),
+                avail.max - egui::vec2(4.0, 4.0),
+            );
+            ui.allocate_rect(area, Sense::hover());
+            self.simple_body(ui, l, inst, cx, area);
+        } else {
+            // a short lower panel: the card keeps its least height (macros
+            // over one row of section knobs) and scrolls, instead of the
+            // section knobs riding up over the macros
+            egui::ScrollArea::vertical()
+                .id_salt(("simple_card", idx))
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    let a = ui.available_rect_before_wrap();
+                    let area = Rect::from_min_size(
+                        a.min + egui::vec2(4.0, 0.0),
+                        egui::vec2((a.width() - 8.0).max(0.0), min_h),
+                    );
+                    ui.allocate_rect(area, Sense::hover());
+                    ui.add_space(4.0);
+                    self.simple_body(ui, l, inst, cx, area);
+                });
+        }
+    }
+
+    /// the simple card under its header: the macros, then the sections,
+    /// laid out in `area` (already allocated)
+    fn simple_body(
+        &mut self,
+        ui: &mut egui::Ui,
+        l: &Layout,
+        inst: &mut Instrument,
+        cx: &mut Cx,
+        area: Rect,
+    ) {
+        let t = th();
+        let idx = cx.idx;
+        let sp = spec(cx.tag);
         let ms = macros(l, sp);
         let plugin_macros = matches!(sp.macros, Macros::Plugin);
         let has_macros = !ms.is_empty() || plugin_macros;
