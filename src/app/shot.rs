@@ -1279,6 +1279,10 @@ impl App {
         {
             self.extra.lower_h = h;
         }
+        // CHIPWAVE_SHOT_WASH=0: the timeline lanes without their wash
+        if std::env::var("CHIPWAVE_SHOT_WASH").as_deref() == Ok("0") {
+            self.extra.lane_wash = false;
+        }
         // CHIPWAVE_SHOT_FLAT=1: the Flat interface style
         if std::env::var_os("CHIPWAVE_SHOT_FLAT").is_some() {
             self.extra.flat_ui = true;
