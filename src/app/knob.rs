@@ -578,13 +578,26 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
                     if carrier { t.crt_bot } else { t.ink },
                 );
             }
-            p.text(
-                Pos2::new(inner.right(), inner.bottom() + 2.0),
-                egui::Align2::RIGHT_BOTTOM,
-                name,
+            // the algorithm's name only where it fits under the boxes; the
+            // Algorithm menu below the diagram shows it anyway
+            let g = p.layout_no_wrap(
+                name.to_string(),
                 crate::theme::mono(crate::theme::ts::TINY),
                 t.ink2,
             );
+            let boxes_bottom = inner.center().y + 4.0 + 7.0;
+            if inner.bottom() + 2.0 - g.size().y >= boxes_bottom + 1.0
+                && g.size().x <= inner.width()
+            {
+                p.galley(
+                    Pos2::new(
+                        inner.right() - g.size().x,
+                        inner.bottom() + 2.0 - g.size().y,
+                    ),
+                    g,
+                    t.ink2,
+                );
+            }
         }
     }
 }
