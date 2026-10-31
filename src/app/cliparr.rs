@@ -1239,19 +1239,15 @@ impl App {
                 t.ink
             };
             play_tri(&p, Pos2::new(sr.left() + 10.0, sr.center().y), 4.5, ink);
-            let g = p.layout_no_wrap(
-                name.clone(),
+            // a long scene name ends in "…" (the tooltip has it whole)
+            crate::theme::text_fit(
+                &p,
+                Pos2::new(sr.left() + 18.0, sr.center().y),
+                egui::Align2::LEFT_CENTER,
+                name,
                 crate::theme::prop(crate::theme::ts::LABEL),
                 ink,
-            );
-            let clip = Rect::from_min_max(
-                Pos2::new(sr.left() + 18.0, sr.top()),
-                Pos2::new(sr.right() - 3.0, sr.bottom()),
-            );
-            p.with_clip_rect(clip).galley(
-                Pos2::new(clip.left(), sr.center().y - g.size().y / 2.0),
-                g,
-                ink,
+                sr.width() - 21.0,
             );
             self.ca.scene_rects.push((b, sr));
         }

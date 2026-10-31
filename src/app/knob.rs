@@ -139,11 +139,15 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     );
     // modulation: a ring per route (value → value + depth) with a handle
     // that sets the depth, and the live modulated value as a dot
+    // (hdrfix: thicker, and lifted to read against the panel in every
+    // theme; the hue stays the route's)
+    let panel = [t.cart_top, t.cart_bot];
     let mut ring_drag = None;
     for (j, rg) in a.rings.iter().enumerate().take(3) {
-        let r = RAD + if t.ember { 6.0 } else { 4.5 } + j as f32 * 3.0;
+        let r = RAD + if t.ember { 6.0 } else { 4.5 } + j as f32 * 3.5;
         let to = (*v + rg.amount).clamp(0.0, 1.0);
-        arc_r(*v, to, rg.col, if rg.selected { 2.5 } else { 1.8 }, r);
+        let col = crate::theme::legible(rg.col, &panel, 3.0);
+        arc_r(*v, to, col, if rg.selected { 3.4 } else { 2.6 }, r);
         let hp = pt(a0 + span * to, r);
         let hr = ui.interact(
             Rect::from_center_size(hp, egui::vec2(9.0, 9.0)),
@@ -151,7 +155,7 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
             Sense::drag(),
         );
         let big = hr.hovered() || hr.dragged();
-        p.circle_filled(hp, if big { 3.5 } else { 2.5 }, rg.col);
+        p.circle_filled(hp, if big { 4.0 } else { 3.0 }, col);
         if hr.dragged() {
             let d = hr.drag_delta();
             ring_drag = Some((rg.route, (d.x - d.y) * 0.005 * fine));
@@ -171,10 +175,36 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         p.circle_filled(lp, 3.6, led);
         p.circle_stroke(lp, 3.6, Stroke::new(1.0, Color32::from_black_alpha(160)));
     }
+    // Slate's caption runs along the top: the badge and the lock sit under
+    // it, beside the knob (long captions like FEEDBACK stay clear)
+    let corner_y = if t.ember {
+        kc.y - RAD - 1.0
+    } else {
+        cell.top() + 1.0
+    };
+    // the macro badge (M1 …) in the accent, lifted to 4.5:1 against the
+    // panel (hdrfix: it was dim grey), measured so the dot sits clear of it
+    let mark = crate::theme::legible(t.accent, &panel, 4.5);
+    let badge_font = crate::theme::mono(crate::theme::ts::TINY);
+    let badge_r = a.badge.map(|b| {
+        p.text(
+            Pos2::new(cell.left() + 0.5, corner_y),
+            egui::Align2::LEFT_TOP,
+            b,
+            badge_font.clone(),
+            mark.gamma_multiply(dim),
+        )
+    });
     // quick-mod: a small dot mirroring the LED (click: "Modulate … with")
     let mut dot_clicked = false;
     if let Some(dc) = a.mod_dot.filter(|_| a.enabled) {
-        let dp = Pos2::new(kc.x - RAD + 1.0, kc.y - RAD + 2.0);
+        let mut dp = Pos2::new(kc.x - RAD + 1.0, kc.y - RAD + 2.0);
+        if let Some(br) = badge_r {
+            // right of the badge where they would touch (5 = dot radius + gap)
+            if br.right() + 5.0 > dp.x - 4.5 && br.bottom() > dp.y - 4.5 {
+                dp.x = br.right() + 5.0;
+            }
+        }
         let dr = ui
             .interact(
                 Rect::from_center_size(dp, egui::vec2(12.0, 12.0)),
@@ -187,21 +217,24 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
             ));
         dot_clicked = dr.clicked();
         let hot = dr.hovered();
+        // filled (in what moves it) once a modulation is assigned, else a
+        // ring in the accent: both at 4.5:1 against the panel (hdrfix)
         match dc {
             Some(c) => {
-                p.circle_filled(dp, if hot { 4.2 } else { 3.4 }, c);
-                p.circle_stroke(dp, 3.4, Stroke::new(1.0, Color32::from_black_alpha(140)));
+                let c = crate::theme::legible(c, &panel, 4.5);
+                let r = if hot { 4.6 } else { 4.0 };
+                p.circle_filled(dp, r, c);
+                p.circle_stroke(
+                    dp,
+                    r,
+                    Stroke::new(1.0, crate::theme::on(t.cart_top).gamma_multiply(0.6)),
+                );
             }
             None => {
-                let c = if hot {
-                    t.accent
-                } else {
-                    t.ink2.gamma_multiply(0.55)
-                };
                 if hot {
-                    p.circle_filled(dp, 4.2, t.accent.gamma_multiply(0.35));
+                    p.circle_filled(dp, 4.4, mark.gamma_multiply(0.35));
                 }
-                p.circle_stroke(dp, 3.0, Stroke::new(1.2, c));
+                p.circle_stroke(dp, 3.4, Stroke::new(if hot { 2.0 } else { 1.6 }, mark));
             }
         }
         let dn = format!("Modulate {}", a.name);
@@ -240,6 +273,16 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
     } else {
         kc.y + RAD + 3.0
     };
+    // Slate's caption sits where the outer modulation rings pass over the
+    // top of the knob: a panel-coloured backing keeps it readable (hdrfix)
+    if t.ember && !a.rings.is_empty() {
+        let gr = g.rect.translate(egui::vec2(cell.center().x, name_y));
+        p.rect_filled(
+            gr.expand2(egui::vec2(2.0, 0.0)),
+            2.0,
+            crate::theme::mix(t.cart_top, t.cart_bot, 0.4),
+        );
+    }
     p.galley(Pos2::new(cell.center().x, name_y), g, name_col);
     let mono = crate::theme::shrink_to_fit(&p, &a.value_text, mono, CELL.x);
     let mut job = egui::text::LayoutJob::simple_singleline(
@@ -256,22 +299,6 @@ pub(super) fn knob(ui: &mut egui::Ui, id: egui::Id, v: &mut f32, a: KnobArgs) ->
         kc.y + RAD + 16.0
     };
     p.galley(Pos2::new(cell.center().x, val_y), g, t.value);
-    // Slate's caption runs along the top: the badge and the lock sit under
-    // it, beside the knob (long captions like FEEDBACK stay clear)
-    let corner_y = if t.ember {
-        kc.y - RAD - 1.0
-    } else {
-        cell.top() + 1.0
-    };
-    if let Some(b) = a.badge {
-        p.text(
-            Pos2::new(cell.left() + 0.5, corner_y),
-            egui::Align2::LEFT_TOP,
-            b,
-            crate::theme::mono(crate::theme::ts::TINY),
-            t.ink2.gamma_multiply(0.9),
-        );
-    }
     // the Dice lock: a tiny padlock in the top-right corner
     let mut lock_clicked = false;
     if let Some(l) = a.locked {
@@ -551,13 +578,26 @@ pub(super) fn draw_viz(p: &egui::Painter, r: Rect, v: &Viz) {
                     if carrier { t.crt_bot } else { t.ink },
                 );
             }
-            p.text(
-                Pos2::new(inner.right(), inner.bottom() + 2.0),
-                egui::Align2::RIGHT_BOTTOM,
-                name,
+            // the algorithm's name only where it fits under the boxes; the
+            // Algorithm menu below the diagram shows it anyway
+            let g = p.layout_no_wrap(
+                name.to_string(),
                 crate::theme::mono(crate::theme::ts::TINY),
                 t.ink2,
             );
+            let boxes_bottom = inner.center().y + 4.0 + 7.0;
+            if inner.bottom() + 2.0 - g.size().y >= boxes_bottom + 1.0
+                && g.size().x <= inner.width()
+            {
+                p.galley(
+                    Pos2::new(
+                        inner.right() - g.size().x,
+                        inner.bottom() + 2.0 - g.size().y,
+                    ),
+                    g,
+                    t.ink2,
+                );
+            }
         }
     }
 }

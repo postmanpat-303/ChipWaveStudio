@@ -640,21 +640,18 @@ impl App {
                         );
                     }
                     let tp = ui.painter_at(cr.shrink(2.0));
-                    tp.text(
-                        cr.left_top() + egui::vec2(6.0, 3.0),
-                        egui::Align2::LEFT_TOP,
-                        format!("{b:02} {name}"),
-                        crate::theme::prop(crate::theme::ts::COMPACT),
-                        Color32::WHITE,
-                    );
-                    // role badge (muted palette), top-right
+                    // role badge (muted palette), top-right, measured; the
+                    // name stops before it with "…" (hdrfix: the badge used
+                    // to be painted over the end of a long name)
+                    let mut name_r = cr.right() - 4.0;
                     if let Some(r) = role {
                         let txt = if cr.width() > 70.0 {
                             r.name()
                         } else {
                             r.short()
                         };
-                        let w = txt.len() as f32 * 6.5 + 8.0;
+                        let bf = crate::theme::prop(crate::theme::ts::TINY);
+                        let w = crate::theme::text_w(&tp, txt, bf.clone()) + 10.0;
                         let br = Rect::from_min_size(
                             Pos2::new(cr.right() - w - 4.0, cr.top() + 3.0),
                             egui::vec2(w, 14.0),
@@ -665,11 +662,22 @@ impl App {
                                 br.center(),
                                 egui::Align2::CENTER_CENTER,
                                 txt,
-                                crate::theme::prop(crate::theme::ts::TINY),
+                                bf,
                                 Color32::from_rgb(0x16, 0x18, 0x1b),
                             );
+                            name_r = br.left() - 4.0;
                         }
                     }
+                    let np = cr.left_top() + egui::vec2(6.0, 3.0);
+                    crate::theme::text_fit(
+                        &tp,
+                        np,
+                        egui::Align2::LEFT_TOP,
+                        &format!("{b:02} {name}"),
+                        crate::theme::prop(crate::theme::ts::COMPACT),
+                        Color32::WHITE,
+                        name_r - np.x,
+                    );
                     if *der {
                         tp.text(
                             cr.left_bottom() + egui::vec2(6.0, -3.0),

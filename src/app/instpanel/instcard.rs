@@ -1645,6 +1645,7 @@ impl App {
     /// an edit context for the Rack card's controls (as the key knobs')
     fn rack_cx(&mut self, idx: usize, inst: &Instrument) -> Cx {
         let mut cx = Cx {
+            ctl_w: CTL_W,
             idx,
             tag: params::type_tag(&inst.kind),
             words: vec![],

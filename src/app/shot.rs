@@ -505,6 +505,16 @@ impl App {
                             }
                         });
                     }
+                    // CHIPWAVE_SHOT_ARP_SIMPLE: the card in Simple (knobs only)
+                    if std::env::var_os("CHIPWAVE_SHOT_ARP_SIMPLE").is_some() {
+                        self.with(|s| {
+                            if let Some(a) =
+                                s.song.instruments.get_mut(ii).and_then(|i| i.arp.as_mut())
+                            {
+                                a.show_steps = false;
+                            }
+                        });
+                    }
                     if std::env::var_os("CHIPWAVE_SHOT_ARP_MORE").is_some() {
                         self.with(|s| {
                             s.song.info.key = crate::chords::parse_key("A minor");
@@ -1514,6 +1524,7 @@ impl App {
         let (f, view) = (sh.frame, sh.view.clone());
         ctx.request_repaint();
         if f == 1 {
+            super::overlaps::install(ctx);
             // CHIPWAVE_SHOT_BROWSER_W=<pt>: the Browser at that width, from
             // its first frame (a panel keeps the width it first opened at)
             if let Some(w) = std::env::var("CHIPWAVE_SHOT_BROWSER_W")
@@ -1698,6 +1709,7 @@ impl App {
             return;
         }
         if f == CAPTURE_AT {
+            super::overlaps::arm();
             let Some(sh) = &self.shot else { return };
             let slot = sh.image.clone();
             let c = ctx.clone();

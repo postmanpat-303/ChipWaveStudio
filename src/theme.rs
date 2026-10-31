@@ -288,6 +288,30 @@ pub fn on(bg: Color32) -> Color32 {
 pub fn on2(bg: Color32) -> Color32 {
     pick(th().ink2, LIGHT_INK2, DARK_INK2, bg)
 }
+/// `c` itself where it reaches `min` contrast against every one of `bgs`,
+/// else `c` moved toward light or dark ink (whichever the surfaces suit)
+/// just far enough that it does: a mark keeps its hue (an accent, a
+/// modulation colour) but never sinks into the panel (hdrfix)
+pub fn legible(c: Color32, bgs: &[Color32], min: f32) -> Color32 {
+    let worst = |x: Color32| {
+        bgs.iter()
+            .map(|&b| contrast(x, b))
+            .fold(f32::INFINITY, f32::min)
+    };
+    let lum = bgs.iter().map(|&b| luminance(b)).sum::<f32>() / bgs.len().max(1) as f32;
+    let to = if worst(LIGHT_INK) >= worst(DARK_INK) && lum < 0.5 {
+        LIGHT_INK
+    } else if worst(DARK_INK) > worst(LIGHT_INK) {
+        DARK_INK
+    } else {
+        LIGHT_INK
+    };
+    (0..=20)
+        .map(|i| mix(c, to, i as f32 / 20.0))
+        .find(|&m| worst(m) >= min)
+        .unwrap_or(to)
+}
+
 fn pick(own: Color32, light: Color32, dark: Color32, bg: Color32) -> Color32 {
     if contrast(own, bg) >= 4.5 {
         own
@@ -1406,5 +1430,35 @@ mod type_tests {
             "raw FontId (use theme::prop / mono / label_font / num_font):\n{}",
             bad.join("\n")
         );
+    }
+}
+
+#[cfg(test)]
+mod legible_tests {
+    use super::*;
+
+    /// the modulation marks (accent badge and dot, route rings) reach their
+    /// contrast against both ends of the panel gradient in every theme
+    #[test]
+    fn mod_marks_read_on_every_panel() {
+        let routes = [
+            Color32::from_rgb(0xB0, 0x7C, 0xFF),
+            Color32::from_rgb(0x30, 0x30, 0x48),
+            Color32::from_rgb(0xF0, 0xF0, 0xF0),
+        ];
+        for t in THEMES {
+            let bgs = [t.cart_top, t.cart_bot];
+            for (c, min) in [(t.accent, 4.5)]
+                .into_iter()
+                .chain(routes.iter().map(|&c| (c, 3.0)))
+            {
+                let l = legible(c, &bgs, min);
+                for b in bgs {
+                    assert!(contrast(l, b) >= min, "{} {:?} on {:?}", t.name, l, b);
+                }
+            }
+            // a colour that already reads is left alone
+            assert_eq!(legible(t.ink, &bgs, 1.0), t.ink);
+        }
     }
 }

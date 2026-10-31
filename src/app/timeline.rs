@@ -1829,12 +1829,15 @@ impl App {
         }
         for (r, p, txt, colr) in texts {
             let tp = lp.with_clip_rect(r.intersect(lanes).shrink(1.0));
-            tp.text(
+            // a short clip ends its name with "…" instead of mid-letter
+            crate::theme::text_fit(
+                &tp,
                 p,
                 egui::Align2::LEFT_CENTER,
-                txt,
+                &txt,
                 crate::theme::prop(crate::theme::ts::SMALL),
                 colr,
+                r.right() - 3.0 - p.x,
             );
         }
         // ---- the docked Song / Master footer: covers the mixer tracks that
@@ -1865,7 +1868,9 @@ impl App {
                 .map(|n| n.tick)
                 .find(|&tk| tk > m.tick)
                 .unwrap_or(song_end.max(m.tick + bar_ticks));
-            if next < v0 || m.tick > v1 {
+            // markers on one tick share a band and a label (hdrfix: their
+            // names were painted over each other)
+            if next < v0 || m.tick > v1 || c.tl.markers[..i].iter().any(|o| o.tick == m.tick) {
                 continue;
             }
             let x = x_of(m.tick as f64);
@@ -1887,12 +1892,24 @@ impl App {
             );
             let lx = x.max(marks.left() + 2.0) + 6.0;
             if lx < band.right() - 6.0 || nm == 1 {
-                mp.with_clip_rect(band.intersect(marks)).text(
+                let names: Vec<&str> = c.tl.markers[i..]
+                    .iter()
+                    .filter(|o| o.tick == m.tick && !o.name.is_empty())
+                    .map(|o| o.name.as_str())
+                    .collect();
+                // cut with "…" at the next marker instead of mid-letter
+                crate::theme::text_fit(
+                    &mp.with_clip_rect(band.intersect(marks)),
                     Pos2::new(lx, marks.center().y),
                     egui::Align2::LEFT_CENTER,
-                    &m.name,
+                    &names.join(" · "),
                     crate::theme::prop(crate::theme::ts::SMALL),
                     crt_ink_hi,
+                    if nm == 1 {
+                        f32::INFINITY
+                    } else {
+                        band.right() - 3.0 - lx
+                    },
                 );
             }
             lp.vline(

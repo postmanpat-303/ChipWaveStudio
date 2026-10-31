@@ -125,6 +125,32 @@ struct Cx {
     mod_out: super::modview::ModOut,
     /// the simple card: no Dice lock buttons on its knobs
     no_locks: bool,
+    /// width of one choice/toggle control in the card being drawn
+    /// (measured per card, at least CTL_W)
+    ctl_w: f32,
+}
+
+/// the width a choice control needs in full: its caption, the menu showing
+/// its longest option, and the Dice lock button (if any), with the gaps
+/// between them (toggles keep the standard width)
+fn ctl_need(ui: &egui::Ui, p: &Param) -> f32 {
+    let Ctl::Choice(opts) = &p.ctl else {
+        return CTL_W;
+    };
+    let sp = ui.spacing();
+    let gap = 4.0;
+    let cap = super::fit::text_w(ui, egui::RichText::new(p.caption()).small());
+    let longest = opts
+        .iter()
+        .map(|o| super::fit::text_w(ui, o.as_str()))
+        .fold(0.0f32, f32::max);
+    let menu = longest + sp.icon_width + sp.icon_spacing + 2.0 * sp.button_padding.x;
+    let lock = if p.lock.is_some() {
+        super::fit::button_w(ui, egui::RichText::new("lock").small(), sp.button_padding.x) + gap
+    } else {
+        gap + 4.0
+    };
+    6.0 + cap + gap + menu.max(60.0) + lock + 2.0
 }
 
 fn matches(words: &[String], p: &Param) -> bool {
@@ -1179,6 +1205,7 @@ impl App {
             .map(String::from)
             .collect();
         let mut cx = Cx {
+            ctl_w: CTL_W,
             idx,
             tag,
             words,
@@ -1757,15 +1784,22 @@ impl App {
         };
         let nk = knobs.len() as f32;
         let nc = ctls.len() as f32;
+        // a choice row (caption, menu at its longest option, lock) is measured
+        // so the card is wide enough for it instead of the lock falling off
+        let ctl_w = ctls
+            .iter()
+            .map(|p| ctl_need(ui, p))
+            .fold(CTL_W, f32::max)
+            .min(CTL_W + 80.0);
         let min_w = if nc > 0.0 {
-            CTL_W + 12.0
+            ctl_w + 12.0
         } else {
             CELL.x + 16.0
         };
         let mut w = min_w.max(cw + 12.0);
         let mut cols = 1.0f32;
         for _ in 0..3 {
-            let per = ((w - 12.0) / CTL_W).floor().max(1.0);
+            let per = ((w - 12.0) / ctl_w).floor().max(1.0);
             let ctl_h = (nc / per).ceil() * 25.0;
             let free = card_h - HEAD_H - viz_h - ctl_h - chh - 14.0;
             let rows = (free / CELL.y).floor().max(1.0);
@@ -1869,12 +1903,14 @@ impl App {
                             self.custom_ui(ui, *k, inst, cx, card_h);
                         }
                         if !ctls.is_empty() {
+                            cx.ctl_w = ctl_w;
                             ui.horizontal_wrapped(|ui| {
                                 ui.spacing_mut().item_spacing = egui::vec2(4.0, 3.0);
                                 for p in &ctls {
                                     self.ctl_ui(ui, p, inst, cx);
                                 }
                             });
+                            cx.ctl_w = CTL_W;
                         }
                         if !knobs.is_empty() {
                             let per = cols.max(1.0) as usize;
@@ -2188,8 +2224,9 @@ impl App {
         let on = p.is_on(inst);
         let hl = matches(&cx.words, p);
         let v = (p.get)(inst);
-        ui.allocate_ui(egui::vec2(CTL_W - 6.0, 22.0), |ui| {
-            ui.set_width(CTL_W - 6.0);
+        let ctl_w = cx.ctl_w;
+        ui.allocate_ui(egui::vec2(ctl_w - 6.0, 22.0), |ui| {
+            ui.set_width(ctl_w - 6.0);
             ui.horizontal(|ui| {
                 ui.add_enabled_ui(on, |ui| match &p.ctl {
                     Ctl::Choice(opts) => {
@@ -2204,22 +2241,48 @@ impl App {
                             lr.on_hover_text(&p.tip)
                         };
                         let cur = v.round().max(0.0) as usize;
-                        let lw = (CTL_W
-                            - 6.0
-                            - lr.rect.width()
-                            - if p.lock.is_some() { 36.0 } else { 10.0 })
-                        .max(60.0);
-                        let cr = egui::ComboBox::from_id_salt(("ipc", cx.idx, &p.key))
-                            .width(lw)
-                            .selected_text(p.text(v))
-                            .show_ui(ui, |ui| {
-                                for (k, o) in opts.iter().enumerate() {
-                                    if ui.selectable_label(cur == k, o).clicked() && cur != k {
-                                        (p.set)(inst, k as f32);
-                                        cx.changed = true;
-                                    }
-                                }
-                            });
+                        // the lock button is measured (its text, padding and the
+                        // gap before it) so it stays inside the card
+                        let gap = ui.spacing().item_spacing.x;
+                        let lock_w = if p.lock.is_some() {
+                            super::fit::button_w(
+                                ui,
+                                egui::RichText::new("lock").small(),
+                                ui.spacing().button_padding.x,
+                            ) + gap
+                        } else {
+                            gap + 4.0
+                        };
+                        let lw = (ctl_w - 6.0 - lr.rect.width() - gap - lock_w).max(60.0);
+                        // the menu keeps to its measured width: a long choice
+                        // ends in … (full text on hover) instead of pushing the
+                        // lock out of the card
+                        let shown = p.text(v);
+                        let need = super::fit::text_w(ui, shown.as_str())
+                            + ui.spacing().icon_width
+                            + ui.spacing().icon_spacing
+                            + 2.0 * ui.spacing().button_padding.x;
+                        let mut cr = ui
+                            .allocate_ui(egui::vec2(lw, 22.0), |ui| {
+                                egui::ComboBox::from_id_salt(("ipc", cx.idx, &p.key))
+                                    .width(lw)
+                                    .truncate()
+                                    .selected_text(shown.as_str())
+                                    .show_ui(ui, |ui| {
+                                        for (k, o) in opts.iter().enumerate() {
+                                            if ui.selectable_label(cur == k, o).clicked()
+                                                && cur != k
+                                            {
+                                                (p.set)(inst, k as f32);
+                                                cx.changed = true;
+                                            }
+                                        }
+                                    })
+                            })
+                            .inner;
+                        if need > lw {
+                            cr.response = cr.response.on_hover_text(shown.as_str());
+                        }
                         let nm = p.name.clone();
                         cr.response.widget_info(|| {
                             egui::WidgetInfo::labeled(egui::Role::ComboBox, true, &nm)
@@ -2638,6 +2701,7 @@ impl App {
         let mut inst = inst;
         let layout = params::build(&inst, idx, self.gen_ui.sel.min(7));
         let mut cx = Cx {
+            ctl_w: CTL_W,
             idx,
             tag: params::type_tag(&inst.kind),
             words: vec![],

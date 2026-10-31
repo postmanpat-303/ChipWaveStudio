@@ -65,6 +65,7 @@ mod edit;
 mod file;
 mod fillview;
 mod filtercard;
+mod fit;
 mod focus;
 #[cfg(test)]
 mod focus_tests;
@@ -118,6 +119,7 @@ mod objpie;
 mod objpie_tests;
 #[cfg(test)]
 mod opentl_tests;
+mod overlaps;
 mod params;
 mod pattern;
 #[cfg(test)]

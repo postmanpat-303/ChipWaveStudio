@@ -533,9 +533,11 @@ impl App {
             let y = rect.bottom() + 1.5 + j as f32 * 3.0;
             let to = n + rg.amount;
             let p = ui.painter();
+            // lifted to read against the panel, as the knob rings (hdrfix)
+            let col = crate::theme::legible(rg.col, &[t.cart_top, t.cart_bot], 3.0);
             p.line_segment(
                 [Pos2::new(x(n.min(to)), y), Pos2::new(x(n.max(to)), y)],
-                Stroke::new(2.0, rg.col),
+                Stroke::new(2.4, col),
             );
             let hp = Pos2::new(x(to), y);
             let hr = ui.interact(
@@ -550,7 +552,7 @@ impl App {
                 } else {
                     2.5
                 },
-                rg.col,
+                col,
             );
             if hr.dragged() {
                 let d = hr.drag_delta().x / rect.width().max(1.0);

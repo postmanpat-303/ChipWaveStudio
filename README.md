@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.19.0-00d0ff" alt="Version 0.2.19.0">
+  <img src="https://img.shields.io/badge/version-0.2.20.0-00d0ff" alt="Version 0.2.20.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.19.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.20.0</b></a> &nbsp;·&nbsp;
   <a href="docs/manual/ChipWave-Studio-User-Manual.pdf"><b>User manual (PDF)</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
@@ -52,7 +52,22 @@
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.19.0: a movable top bar, The Matrix theme and knob styles
+## New in 0.2.20.0: text that fits, and modulation you can see
+
+- **The Arp card's header fits**: in the Rack on a 1366-pixel screen (or narrower), "Simple" and "Steps" no longer disappear under "Preset ▾" and "More". The card measures its header and makes room for it, at full text size.
+- **Text that fits across the app**: Timeline markers on the same beat share one label, and clip, marker and scene names end in "…" instead of being cut mid-letter. Arranger role badges, automation scale labels, the Browser's empty-list hint, the FM algorithm picture and instrument card choices no longer overlap or get cut off.
+- **Modulation you can see**: the M1–M8 badges and dots on knobs are drawn in the theme's accent colour at a readable contrast, the dot fills in once a modulation is assigned, and the modulation rings are thicker and brighter, in every theme and knob style.
+
+Songs open, play and render exactly as in 0.2.19.0. Details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/arp-header-before-after.png" alt="The Arp card header in the Rack at 1366 by 768, before and after: before, Simple is cut off under Preset; after, ARP, Simple, Steps, Preset and More all fit"><br><b>The Arp card header</b> at 1366×768: before and after (Slate).</td>
+    <td width="50%"><img src="docs/screenshots/mod-markers-before-after.png" alt="Knobs with modulation in all six knob styles, before and after: after, the badges and dots are in the accent colour, assigned dots are filled and the rings are thicker"><br><b>Modulation markers</b> in the six knob styles: before and after (Slate).</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.19.0: a movable top bar, The Matrix theme and knob styles</b></summary>
 
 - **A movable top bar**: the top bar is now three panels, the **Display**, the **Transport** and the **Master**. Drag a panel by the grip at its left edge to put them in the order you like; the order is saved. The Transport sits in the centre of the window by default, the three panels are the same height, and **Reset top bar** in **Settings › Look** puts everything back. MIDI, Chord, the keys and Panic now sit at the right of the menu bar.
 - **An in-between display size** for 1366-pixel-wide screens: the display drops its load meters (DSP and BUF stay as text) before it goes compact.
@@ -73,6 +88,8 @@ Songs open, play and render exactly as in 0.2.18.1. Details in the [CHANGELOG](d
     <td width="50%"><img src="docs/manual/img/settings.png" alt="Settings, Look: the Knob style row with a small live knob drawn in each of the six styles"><br><b>Settings › Look</b> with a live sample of each knob style.</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.18.0: the Arp, an adjustable loop and Ctrl+drag copies</b></summary>
 

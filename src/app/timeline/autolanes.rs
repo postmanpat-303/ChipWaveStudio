@@ -612,18 +612,36 @@ pub(crate) fn lanes_ui(
                 );
                 lp.rect_filled(sr, 0, Color32::from_black_alpha(90));
                 if let Some(tg) = Target::parse(tgt).or_else(|| Target::parse_in(tgt, song)) {
-                    for &(nv, lab) in tg.scale_ticks() {
+                    let ticks = tg.scale_ticks();
+                    let font = crate::theme::mono(crate::theme::ts::TINY);
+                    // a label only where it clears the ones already drawn
+                    // (the two ends first): in a short lane the middle ones
+                    // stacked into each other (hdrfix)
+                    let gap = font.size * 1.15;
+                    let mut drawn: Vec<f32> = Vec::with_capacity(ticks.len());
+                    let n = ticks.len();
+                    let order = (0..n)
+                        .filter(|&k| k == 0 || k + 1 == n)
+                        .chain(1..n.saturating_sub(1));
+                    for k in order {
+                        let (nv, lab) = ticks[k];
                         let yy = y_of(inner, nv);
                         lp.hline(
                             egui::Rangef::new(sr.right() - 6.0, row.right()),
                             yy,
                             Stroke::new(1.0, t.crt_grid.gamma_multiply(0.7)),
                         );
+                        // inside the row, not over the next lane's scale
+                        let ly = yy.max(row.top() + gap * 0.5).min(row.bottom() - gap * 0.5);
+                        if drawn.iter().any(|&d| (d - ly).abs() < gap) {
+                            continue;
+                        }
+                        drawn.push(ly);
                         lp.text(
-                            Pos2::new(sr.right() - 4.0, yy),
+                            Pos2::new(sr.right() - 4.0, ly),
                             egui::Align2::RIGHT_CENTER,
                             lab,
-                            crate::theme::mono(crate::theme::ts::TINY),
+                            font.clone(),
                             t.ink2,
                         );
                     }

@@ -375,7 +375,7 @@ impl App {
                 super::rackview::inst_card_w(self, idx)
             };
             let full = chain.len() - chain.iter().filter(|d| d.collapsed).count();
-            let aw = super::arpcard::arp_card_w(self, idx);
+            let aw = super::arpcard::arp_card_w(self, idx, ui);
             let fixed = 16.0
                 + iw
                 + aw
