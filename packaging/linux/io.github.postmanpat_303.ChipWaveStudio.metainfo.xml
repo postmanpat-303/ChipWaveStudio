@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.20.0" date="2026-10-31">
+      <description><p>Text no longer overlaps or gets cut off: the Arp card header in the Rack fits at 1366 pixels and narrower, and Timeline markers, clip and scene names, Arranger badges, automation scale labels, the Browser hint, the FM algorithm picture and instrument card choices were fixed too. Modulation markers on knobs are easier to see: accent-coloured badges, a filled dot once a modulation is assigned, and thicker, brighter rings.</p></description>
+    </release>
     <release version="0.2.19.0" date="2026-10-29">
       <description><p>The top bar is now three movable panels: drag the Display, Transport and Master by their grips to reorder them, with the Transport centred by default and Reset top bar in Settings, Look. An in-between display size fits 1366 pixel wide windows. A new theme, The Matrix, in phosphor green. Knob style in Settings, Look draws every knob as Classic, Flat ring, Chicken-head, LED ring, Brushed metal or Pixel, with a live sample of each. The user manual always shows the current version and has new sections.</p></description>
     </release>

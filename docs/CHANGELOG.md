@@ -2,6 +2,27 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.20.0: text that fits, and modulation you can see
+
+Released 2026-10-31. Highlights:
+
+- **The Arp card's header fits:** in the Rack at 1366×768 and narrower, "Simple" and "Steps" were cut off under "Preset ▾" and "More". The card now measures its header in the real font, Text size and UI scale, and is at least that wide, so nothing overlaps and the text stays full size.
+- **Text that fits everywhere else too**, found by a new overlap check in the screenshot mode that was run over every main view at 1366×768 and 1600×900 in Slate and The Matrix:
+  - Timeline: markers on the same beat share one label ("Hook · Marker 9"), and marker and clip names end in "…" instead of being cut mid-letter.
+  - Arranger: the section role badge is measured, and the name stops before it.
+  - Clip launcher: long scene names end in "…".
+  - Automation lanes: scale labels no longer sit on top of each other or spill out of short lanes.
+  - Browser: the hint in an empty list ("No plugins found yet…") sits at the top of the list, not under the Preview bar.
+  - FM: the algorithm's name is drawn on the picture only where it fits under the operator boxes (the menu below always shows it).
+  - Instrument cards: choice rows are measured (caption, longest choice, lock), so the lock button stays inside the card; a long choice ends in "…" with the full text on hover.
+- **Modulation markers you can see:** the M1–M8 badges and the slot dot on knobs use the theme's accent at a contrast of at least 4.5:1, the dot is filled once a modulation is assigned (hollow when not), and the modulation rings are thicker (2.6 px, 3.4 px when selected) and brighter. The same goes for the depth bars in the Modulate view. A test checks the contrast in all four themes, and every knob style was checked.
+- The song format, playback and rendering are unchanged: every `RENDER` and `GEN` fingerprint line is identical to 0.2.19.0.
+
+### Known limits
+- Text cut at the edge of a scrolling area (the tracker's channels, the instrument card row) is left as is: scrolling shows it.
+- With the Classic knob style the modulation dot can sit on the first ring; with Chicken-head it touches the knob rim.
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux.
+
 ## 0.2.19.0: a movable top bar, The Matrix theme, knob styles
 
 Released 2026-10-29. Highlights:
