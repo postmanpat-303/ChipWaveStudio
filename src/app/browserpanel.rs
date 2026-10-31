@@ -979,7 +979,12 @@ impl App {
                 Tab::Plugins => "No plugins found yet: ••• › Find plugins… searches your drive, or ••• › Get showcase instruments…",
                 _ => "No matches: clear the search or a filter",
             };
-            ui.add(egui::Label::new(egui::RichText::new(msg).small().color(t.ink2)).wrap());
+            // inside the (empty) list, not after it: the list already
+            // takes the height down to the preview bar (hdrfix: the hint
+            // was painted under the bar)
+            let r = out.inner_rect.shrink2(egui::vec2(6.0, 6.0));
+            let mut c = ui.new_child(egui::UiBuilder::new().max_rect(r));
+            c.add(egui::Label::new(egui::RichText::new(msg).small().color(t.ink2)).wrap());
         }
         // ---- preview bar (the colour key is its "?")
         self.br_preview_bar(ui, ch, &mut ops);
