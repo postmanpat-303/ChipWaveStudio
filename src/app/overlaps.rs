@@ -127,6 +127,11 @@ fn report(ctx: &egui::Context) -> String {
                 out += &format!("CLIPPED [{lname}] {:?} {}\n", a.text, at(a.full));
             }
             for b in &rows[i + 1..] {
+                // the same text a few px off is a glow or shadow, not a clash
+                let d = a.full.min - b.full.min;
+                if a.text == b.text && d.x.abs() <= 3.0 && d.y.abs() <= 3.0 {
+                    continue;
+                }
                 let x = a.vis.intersect(b.vis);
                 if x.width() > 2.0 && x.height() > 2.0 {
                     n += 1;
