@@ -128,8 +128,9 @@ fn report(ctx: &egui::Context) -> String {
             }
             for b in &rows[i + 1..] {
                 // the same text a few px off is a glow or shadow, not a clash
-                let d = a.full.min - b.full.min;
-                if a.text == b.text && d.x.abs() <= 3.0 && d.y.abs() <= 3.0 {
+                // (an LCD glow is the same text at another size: compare centres)
+                let d = a.full.center() - b.full.center();
+                if a.text == b.text && d.x.abs() <= 4.0 && d.y.abs() <= 4.0 {
                     continue;
                 }
                 let x = a.vis.intersect(b.vis);
