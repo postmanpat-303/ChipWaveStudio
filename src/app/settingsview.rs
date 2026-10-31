@@ -401,6 +401,14 @@ impl App {
                     changed |= a.changed() || b.changed();
                 });
                 ui.end_row();
+                ui.label("Timeline");
+                changed |= ui
+                    .checkbox(&mut self.extra.lane_wash, "Soft colour wash behind the lanes")
+                    .on_hover_text(
+                        "a very faint diagonal blend from the theme's accent to a second theme colour behind the clips and grid (off: a flat background)",
+                    )
+                    .changed();
+                ui.end_row();
                 ui.label("Knob style");
                 // top-aligned so the tall options wrap without riding over the next row
                 let wrap = egui::Layout::left_to_right(egui::Align::Min).with_main_wrap(true);
