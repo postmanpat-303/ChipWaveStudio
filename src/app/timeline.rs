@@ -773,26 +773,37 @@ fn hue_sat(c: Color32) -> (f32, f32) {
     (h * 60.0, d / mx)
 }
 
-/// the lane wash's second colour: the theme's `vol` colour, or the first
-/// other theme colour that does not clash with the accent (too near its
-/// hue to read as two colours, or too grey); else a lighter accent
+/// the lane wash's second colour: of the theme's colours (vol, fx, instr,
+/// value, play) the one furthest round the colour wheel from the accent, so
+/// the two ends read as two colours (green accents: orange or gold, not a
+/// near-green cyan); grey ones (saturation under 0.2) are skipped, and if
+/// none is at least 35° away: a lighter accent
 pub(super) fn wash_second(t: &crate::theme::Theme) -> Color32 {
     let (ha, _) = hue_sat(t.accent);
+    let dist = |c: Color32| {
+        let d = (hue_sat(c).0 - ha).abs();
+        d.min(360.0 - d)
+    };
     [t.vol, t.fx, t.instr, t.value, t.play]
         .into_iter()
-        .find(|&c| {
-            let (h, sat) = hue_sat(c);
-            let d = (h - ha).abs();
-            sat >= 0.2 && d.min(360.0 - d) >= 35.0
-        })
+        .filter(|&c| hue_sat(c).1 >= 0.2 && dist(c) >= 35.0)
+        // the first of equals wins (max_by keeps the last)
+        .rev()
+        .max_by(|&a, &b| dist(a).total_cmp(&dist(b)))
         .unwrap_or_else(|| crate::theme::tone(t.accent, 0.5))
 }
 
-/// the lanes' background wash (Settings › Look › Timeline): a faint
-/// diagonal blend, 4 %, from the accent (top left) to a second theme colour
-/// (bottom right), as one mesh. `r` is the area (already inset) and `cr` its
+/// the lanes' background wash (Settings › Look › Timeline): a soft
+/// diagonal blend at `strength` (0..1, 0.14 by default) from the accent
+/// (top left) to a second theme colour (bottom right), as one mesh. `r`
+/// is the area (already inset) and `cr` its
 /// corner radius: the corners are cut round so the wash stays inside them
-pub(super) fn lane_wash(r: Rect, cr: f32, t: &crate::theme::Theme) -> Option<egui::Mesh> {
+pub(super) fn lane_wash(
+    r: Rect,
+    cr: f32,
+    t: &crate::theme::Theme,
+    strength: f32,
+) -> Option<egui::Mesh> {
     let cr = cr.max(0.0).min(r.width() / 2.0).min(r.height() / 2.0);
     if r.width() < 4.0 * cr.max(1.0) || r.height() < 4.0 * cr.max(1.0) {
         return None;
@@ -801,7 +812,7 @@ pub(super) fn lane_wash(r: Rect, cr: f32, t: &crate::theme::Theme) -> Option<egu
     let col = |p: Pos2| -> Color32 {
         let u = (p.x - r.left()) / r.width();
         let v = (p.y - r.top()) / r.height();
-        crate::theme::mix(a, b, 0.75 * u + 0.25 * v).gamma_multiply(0.04)
+        crate::theme::mix(a, b, 0.75 * u + 0.25 * v).gamma_multiply(strength)
     };
     // columns / rows: the edges, the corner insets, then evenly between
     let line = |lo: f32, hi: f32, n: usize| -> Vec<f32> {
@@ -1301,8 +1312,9 @@ impl App {
         let lp = ui.painter_at(lanes);
         // the lane wash (Settings › Look › Timeline): behind the grid,
         // clips, markers, loop and playhead; not on an empty arrangement
-        if self.extra.lane_wash && n_clips > 0 {
-            if let Some(m) = lane_wash(lanes.shrink(1.0), 3.0, &t) {
+        let wash = self.extra.lane_wash_pct.min(crate::settings::LANE_WASH_MAX);
+        if wash > 0 && n_clips > 0 {
+            if let Some(m) = lane_wash(lanes.shrink(1.0), 3.0, &t, wash as f32 / 100.0) {
                 lp.add(egui::Shape::mesh(m));
             }
         }
@@ -4688,19 +4700,23 @@ mod wash_tests {
     }
 
     #[test]
-    fn the_wash_goes_from_the_accent_to_vol_unless_they_clash() {
-        for n in ["Slate", "The Matrix", "Dark"] {
-            let t = theme(n);
-            assert_eq!(wash_second(&t), t.vol, "{n}");
-        }
-        // a cyan accent on the cyan vol colour: another colour is picked
+    fn the_wash_goes_from_the_accent_to_the_furthest_theme_colour() {
+        // the colour furthest from the accent: Slate's orange to its cyan,
+        // Dark's green to its orange, The Matrix's green to its lime gold
+        let t = theme("Slate");
+        assert_eq!(wash_second(&t), t.vol);
+        let t = theme("Dark");
+        assert_eq!(wash_second(&t), t.play);
+        let t = theme("The Matrix");
+        assert_eq!(wash_second(&t), t.fx);
+        // a cyan accent on the cyan vol colour: another colour, well away
         let t = theme::with_accent(theme("Slate"), "Cyan");
         let c = wash_second(&t);
         assert_ne!(c, t.vol);
         let (ha, _) = hue_sat(t.accent);
         let (hc, _) = hue_sat(c);
         let d = (ha - hc).abs();
-        assert!(d.min(360.0 - d) >= 35.0);
+        assert!(d.min(360.0 - d) >= 90.0);
         // every theme with every accent: the two colours differ
         for t in theme::THEMES {
             for (a, _) in theme::ACCENTS {
@@ -4711,18 +4727,36 @@ mod wash_tests {
     }
 
     #[test]
-    fn the_wash_is_faint_and_stays_inside_the_rounded_lanes() {
+    fn the_wash_is_soft_visible_and_stays_inside_the_rounded_lanes() {
         let lanes = Rect::from_min_size(Pos2::new(100.0, 50.0), egui::vec2(800.0, 300.0));
         let r = lanes.shrink(1.0);
         let t = theme("Slate");
-        let m = lane_wash(r, 3.0, &t).unwrap();
+        let def = crate::settings::LANE_WASH_DEFAULT as f32 / 100.0;
+        let max = crate::settings::LANE_WASH_MAX as f32 / 100.0;
+        // the strongest setting stays a wash: alpha at most 30 % of 255
+        let strong = lane_wash(r, 3.0, &t, max).unwrap();
+        assert!(strong.vertices.iter().all(|v| v.color.a() <= 77));
+        let m = lane_wash(r, 3.0, &t, def).unwrap();
         assert!(m.is_valid());
+        // the default: the two ends are clearly different colours
+        let near = |p: Pos2| {
+            m.vertices
+                .iter()
+                .min_by(|a, b| a.pos.distance(p).total_cmp(&b.pos.distance(p)))
+                .unwrap()
+                .color
+        };
+        let (c0, c1) = (near(r.left_top()), near(r.right_bottom()));
+        let d = (c0.r() as i32 - c1.r() as i32).abs()
+            + (c0.g() as i32 - c1.g() as i32).abs()
+            + (c0.b() as i32 - c1.b() as i32).abs();
+        assert!(d >= 20, "{c0:?} {c1:?}");
         // (the drawn vertices: the grid's four outer corner points are unused)
         let drawn: Vec<_> = m.indices.iter().map(|&i| m.vertices[i as usize]).collect();
         for v in &drawn {
             assert!(r.expand(0.01).contains(v.pos), "{:?}", v.pos);
-            // 4 %: premultiplied alpha about 10 of 255
-            assert!(v.color.a() <= 11, "{:?}", v.color);
+            // 14 %: premultiplied alpha about 36 of 255
+            assert!(v.color.a() as f32 <= 255.0 * def + 1.0, "{:?}", v.color);
             // inside the rounded corners (radius 3 inset 1 px from 4)
             let cx = v.pos.x.clamp(r.left() + 3.0, r.right() - 3.0);
             let cy = v.pos.y.clamp(r.top() + 3.0, r.bottom() - 3.0);
@@ -4741,7 +4775,8 @@ mod wash_tests {
         assert!(lane_wash(
             Rect::from_min_size(Pos2::ZERO, egui::vec2(8.0, 8.0)),
             3.0,
-            &t
+            &t,
+            def
         )
         .is_none());
     }

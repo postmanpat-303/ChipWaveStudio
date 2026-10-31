@@ -1279,9 +1279,12 @@ impl App {
         {
             self.extra.lower_h = h;
         }
-        // CHIPWAVE_SHOT_WASH=0: the timeline lanes without their wash
-        if std::env::var("CHIPWAVE_SHOT_WASH").as_deref() == Ok("0") {
-            self.extra.lane_wash = false;
+        // CHIPWAVE_SHOT_WASH=<0..30>: the lane wash's strength in % (0: off)
+        if let Some(p) = std::env::var("CHIPWAVE_SHOT_WASH")
+            .ok()
+            .and_then(|v| v.parse::<u8>().ok())
+        {
+            self.extra.lane_wash_pct = p.min(crate::settings::LANE_WASH_MAX);
         }
         // CHIPWAVE_SHOT_FLAT=1: the Flat interface style
         if std::env::var_os("CHIPWAVE_SHOT_FLAT").is_some() {

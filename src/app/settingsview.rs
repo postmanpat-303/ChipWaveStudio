@@ -401,13 +401,43 @@ impl App {
                     changed |= a.changed() || b.changed();
                 });
                 ui.end_row();
-                ui.label("Timeline");
-                changed |= ui
-                    .checkbox(&mut self.extra.lane_wash, "Soft colour wash behind the lanes")
-                    .on_hover_text(
-                        "a very faint diagonal blend from the theme's accent to a second theme colour behind the clips and grid (off: a flat background)",
-                    )
-                    .changed();
+                ui.label("Timeline wash");
+                {
+                    use crate::settings::{LANE_WASH_MAX, LANE_WASH_MIN};
+                    // one notch below the minimum is Off (stored as 0)
+                    let off = LANE_WASH_MIN - 1;
+                    let mut v = match self.extra.lane_wash_pct {
+                        0 => off,
+                        p => p.clamp(LANE_WASH_MIN, LANE_WASH_MAX),
+                    };
+                    let r = ui
+                        .add(
+                            egui::Slider::new(&mut v, off..=LANE_WASH_MAX)
+                                .step_by(1.0)
+                                .custom_formatter(move |x, _| {
+                                    if x < LANE_WASH_MIN as f64 {
+                                        "Off".to_string()
+                                    } else {
+                                        format!("{x:.0} %")
+                                    }
+                                })
+                                .custom_parser(move |s| {
+                                    let s = s.trim().trim_end_matches('%').trim();
+                                    if s.eq_ignore_ascii_case("off") {
+                                        Some(off as f64)
+                                    } else {
+                                        s.parse::<f64>().ok()
+                                    }
+                                }),
+                        )
+                        .on_hover_text(
+                            "a soft diagonal blend from the theme's accent to a second theme colour behind the clips and grid. All the way left: Off (a flat background)",
+                        );
+                    if r.changed() {
+                        self.extra.lane_wash_pct = if v < LANE_WASH_MIN { 0 } else { v };
+                        changed = true;
+                    }
+                }
                 ui.end_row();
                 ui.label("Knob style");
                 // top-aligned so the tall options wrap without riding over the next row

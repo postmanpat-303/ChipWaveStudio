@@ -277,10 +277,20 @@ pub struct Extra {
     /// "master"); empty: the default (Display, Transport centred, Master)
     #[serde(default)]
     pub topbar: Vec<String>,
-    /// a faint diagonal wash (accent to a second theme colour) behind the
-    /// timeline's lanes (0.2.21); off: the flat lane background
-    #[serde(default = "yes")]
-    pub lane_wash: bool,
+    /// the strength in % of the diagonal wash (accent to a second theme
+    /// colour) behind the timeline's lanes (0.2.21): 0 off, else
+    /// LANE_WASH_MIN..=LANE_WASH_MAX
+    #[serde(default = "lane_wash_default")]
+    pub lane_wash_pct: u8,
+}
+
+/// the lane wash's strength range and default, in % (Settings › Look)
+pub const LANE_WASH_MIN: u8 = 5;
+pub const LANE_WASH_MAX: u8 = 30;
+pub const LANE_WASH_DEFAULT: u8 = 14;
+
+fn lane_wash_default() -> u8 {
+    LANE_WASH_DEFAULT
 }
 
 fn tree_w() -> f32 {
@@ -375,7 +385,7 @@ impl Default for Extra {
             lcd_toolbar: true,
             lcd_colour: String::new(),
             topbar: vec![],
-            lane_wash: true,
+            lane_wash_pct: LANE_WASH_DEFAULT,
         }
     }
 }
@@ -548,15 +558,23 @@ mod tests {
     }
 
     #[test]
-    fn the_lane_wash_is_on_by_default_and_its_switch_is_saved() {
-        assert!(Extra::default().lane_wash);
-        // settings from before 0.2.21 (no lane_wash) load with it on
-        let old: Settings = toml::from_str("zoom = 1.0\ntheme = \"Dark\"\n").unwrap();
-        assert!(old.extra.lane_wash);
-        let mut s = Settings::default();
-        s.extra.lane_wash = false;
-        let back: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
-        assert!(!back.extra.lane_wash);
+    fn the_lane_wash_strength_has_a_default_and_is_saved() {
+        assert_eq!(Extra::default().lane_wash_pct, LANE_WASH_DEFAULT);
+        // settings from before 0.2.21 (no lane_wash_pct), and the first test
+        // build's on/off switch, load with the default strength
+        for txt in [
+            "zoom = 1.0\ntheme = \"Dark\"\n",
+            "zoom = 1.0\ntheme = \"Dark\"\n[extra]\nlane_wash = false\n",
+        ] {
+            let old: Settings = toml::from_str(txt).unwrap();
+            assert_eq!(old.extra.lane_wash_pct, LANE_WASH_DEFAULT, "{txt}");
+        }
+        for pct in [0, LANE_WASH_MIN, 22, LANE_WASH_MAX] {
+            let mut s = Settings::default();
+            s.extra.lane_wash_pct = pct;
+            let back: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
+            assert_eq!(back.extra.lane_wash_pct, pct);
+        }
     }
 
     #[test]
