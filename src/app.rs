@@ -99,6 +99,8 @@ mod library;
 #[cfg(test)]
 mod looptransport_tests;
 mod manual;
+#[cfg(test)]
+mod memsoak_tests;
 mod metroicon;
 mod midiimport;
 mod midiview;

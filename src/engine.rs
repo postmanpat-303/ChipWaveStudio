@@ -3100,6 +3100,27 @@ pub fn write_wav(path: &std::path::Path, data: &[f32], sr: u32) -> Result<(), St
 pub(crate) mod alloc_count {
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::cell::Cell;
+    use std::sync::atomic::{AtomicIsize, Ordering};
+
+    /// heap bytes in use by the whole test process, and the most seen
+    /// (memory tests run alone, `--test-threads=1`, to read these)
+    static LIVE: AtomicIsize = AtomicIsize::new(0);
+    static PEAK: AtomicIsize = AtomicIsize::new(0);
+    fn grow(d: isize) {
+        let now = LIVE.fetch_add(d, Ordering::Relaxed) + d;
+        PEAK.fetch_max(now, Ordering::Relaxed);
+    }
+    /// heap bytes in use now
+    pub fn live() -> isize {
+        LIVE.load(Ordering::Relaxed)
+    }
+    /// most heap bytes in use since the last `reset_peak`
+    pub fn peak() -> isize {
+        PEAK.load(Ordering::Relaxed)
+    }
+    pub fn reset_peak() {
+        PEAK.store(live(), Ordering::Relaxed);
+    }
 
     thread_local! {
         static ON: Cell<bool> = const { Cell::new(false) };
@@ -3113,10 +3134,23 @@ pub(crate) mod alloc_count {
                     COUNT.with(|c| c.set(c.get() + 1));
                 }
             });
+            grow(l.size() as isize);
             // SAFETY: forwards to the system allocator with the same layout
             unsafe { System.alloc(l) }
         }
+        unsafe fn alloc_zeroed(&self, l: Layout) -> *mut u8 {
+            let _ = ON.try_with(|on| {
+                if on.get() {
+                    COUNT.with(|c| c.set(c.get() + 1));
+                }
+            });
+            grow(l.size() as isize);
+            // SAFETY: forwards to the system allocator with the same layout
+            // (calloc: big zeroed blocks stay untouched, as in the release build)
+            unsafe { System.alloc_zeroed(l) }
+        }
         unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            LIVE.fetch_sub(l.size() as isize, Ordering::Relaxed);
             // SAFETY: p was allocated by System with this layout
             unsafe { System.dealloc(p, l) }
         }
@@ -3126,6 +3160,7 @@ pub(crate) mod alloc_count {
                     COUNT.with(|c| c.set(c.get() + 1));
                 }
             });
+            grow(n as isize - l.size() as isize);
             // SAFETY: same contract as GlobalAlloc::realloc
             unsafe { System.realloc(p, l, n) }
         }
