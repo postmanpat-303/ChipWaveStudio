@@ -769,12 +769,13 @@ pub(super) fn note_play(
     v.instr = idx;
     v.freq = note_freq(key) * 2f32.powf(n.tune / 12.0);
     v.vol = vol;
-    v.synth = SynthVoice::new();
+    v.synth.renew(SynthVoice::new());
     v.synth.gen.hit = n.hit;
     if poly.is_some() {
         // velocity goes to the synth (Vel > amp), not the voice volume
         v.vol = inst.volume;
-        v.synth = poly_voice(n.vel, from, st.age.wrapping_mul(0x9E37_79B9));
+        v.synth
+            .renew(poly_voice(n.vel, from, st.age.wrapping_mul(0x9E37_79B9)));
     }
     if let InstrumentKind::Voice(vp) = &inst.kind {
         if let Some(w) = vp.words.first() {

@@ -145,7 +145,7 @@ impl Layers {
             v.instr = l.slot;
             v.freq = freq;
             v.vol = vol;
-            v.synth = synth;
+            v.synth.renew(synth);
             v.pos = 0.0;
             v.active = true;
             v.down = true;

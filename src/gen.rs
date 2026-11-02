@@ -987,8 +987,9 @@ fn dec(t: f32, t60: f32) -> f32 {
     (-t * 6.907_755 / t60.max(1e-4)).exp()
 }
 
-/// per-voice generator state (fixed size, `Copy`: cloned freely, never allocates)
-#[derive(Clone, Copy)]
+/// per-voice generator state (fixed size but for the Grid's Delay lines,
+/// made on first use and kept by the voice: see `SynthVoice::keep_lines`)
+#[derive(Clone)]
 pub struct GenState {
     t: f32,
     ph: [f32; 6],
@@ -1071,6 +1072,26 @@ impl Default for GenState {
 }
 
 impl GenState {
+    /// this fresh state takes `old`'s Grid Delay lines (cleared)
+    pub fn adopt_lines(&mut self, old: &mut GenState) {
+        self.gd.adopt_lines(&mut old.gd);
+    }
+
+    /// move the Grid Delay lines out (none left behind)
+    pub fn take_lines(&mut self) -> crate::grid::Lines {
+        std::mem::take(&mut self.gd.dl)
+    }
+
+    /// give this state Grid Delay lines (their contents as they are)
+    pub fn put_lines(&mut self, l: crate::grid::Lines) {
+        self.gd.dl = l;
+    }
+
+    #[cfg(test)]
+    pub fn grid_lines_made(&self) -> bool {
+        self.gd.lines_made()
+    }
+
     pub fn seed(&mut self, s: u32) {
         self.nz = s | 1;
         self.nz_r = s.rotate_left(11) ^ 0x6A09_E667 | 1;

@@ -1773,7 +1773,7 @@ impl FxState {
             Dsp::Stage(st) => **st = crate::transform::FxStage::default(),
             Dsp::Phaser(ph) => *ph = Default::default(),
             Dsp::FreqShift(f) => *f = Default::default(),
-            Dsp::Grid(b) => b.1 = Default::default(),
+            Dsp::Grid(b) => b.1.reset(),
             Dsp::Split(sp) => sp.reset(d),
             Dsp::Eq { c, z, last, n } => {
                 *c = [Biquad::FLAT; 4];

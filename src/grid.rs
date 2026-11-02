@@ -1261,8 +1261,31 @@ fn compile(g: &GridP, fp: u64) -> Plan {
     p
 }
 
-/// per-voice Grid state (fixed size; lives in `GenState`)
-#[derive(Clone, Copy)]
+/// the Delay modules' lines, made on the first Delay sample: most voices
+/// never run a Grid Delay, and inline the lines cost 32 KB in every voice
+/// of every engine. A voice re-used for a new note keeps its lines
+/// ([`GridState::adopt_lines`]), so playing allocates nothing once each
+/// voice has played a Delay.
+#[derive(Clone, Default)]
+pub struct Lines(Option<Box<[[f32; DELAY_LEN]]>>);
+
+impl Lines {
+    /// the lines (zeroed when first made)
+    #[inline]
+    fn get(&mut self) -> &mut [[f32; DELAY_LEN]] {
+        self.0
+            .get_or_insert_with(|| vec![[0.0; DELAY_LEN]; MAX_DELAYS].into_boxed_slice())
+    }
+
+    #[cfg(test)]
+    pub fn made(&self) -> bool {
+        self.0.is_some()
+    }
+}
+
+/// per-voice Grid state (lives in `GenState`; the Delay lines are made on
+/// first use)
+#[derive(Clone)]
 pub struct GridState {
     plan: Plan,
     started: bool,
@@ -1272,7 +1295,7 @@ pub struct GridState {
     /// real knob values (control rate)
     pv: [[f32; MAX_P]; MAX_MODULES],
     lad: [crate::ladder::Ladder; MAX_LADDERS],
-    dl: [[f32; DELAY_LEN]; MAX_DELAYS],
+    pub(crate) dl: Lines,
     dw: [usize; MAX_DELAYS],
     nz: u32,
     tick: u32,
@@ -1294,7 +1317,7 @@ impl Default for GridState {
             st: [[0.0; 4]; MAX_MODULES],
             pv: [[0.0; MAX_P]; MAX_MODULES],
             lad: [Default::default(); MAX_LADDERS],
-            dl: [[0.0; DELAY_LEN]; MAX_DELAYS],
+            dl: Lines::default(),
             dw: [0; MAX_DELAYS],
             nz: 0x2545_F491,
             tick: 0,
@@ -1343,6 +1366,32 @@ fn fold(x: f32) -> f32 {
 }
 
 impl GridState {
+    /// this fresh state takes `old`'s Delay lines, cleared (a voice re-used
+    /// for a new note: no allocation while playing; a fresh state's lines
+    /// are silent either way)
+    pub fn adopt_lines(&mut self, old: &mut GridState) {
+        if self.dl.0.is_none() {
+            if let Some(mut b) = old.dl.0.take() {
+                for l in b.iter_mut() {
+                    l.fill(0.0);
+                }
+                self.dl.0 = Some(b);
+            }
+        }
+    }
+
+    /// back to a fresh state, keeping the Delay lines (cleared)
+    pub fn reset(&mut self) {
+        let mut f = GridState::default();
+        f.adopt_lines(self);
+        *self = f;
+    }
+
+    #[cfg(test)]
+    pub fn lines_made(&self) -> bool {
+        self.dl.made()
+    }
+
     /// re-read the knobs (control rate)
     fn read_knobs(&mut self, g: &GridP, ov: &Ov) {
         let p = &self.plan;
@@ -1655,7 +1704,7 @@ impl GridState {
                     if r < MAX_DELAYS {
                         let d = (pv[0] * 0.001 * sr * (-x[1]).exp2())
                             .clamp(1.0, (DELAY_LEN - 2) as f32);
-                        let line = &mut self.dl[r];
+                        let line = &mut self.dl.get()[r];
                         let w = self.dw[r];
                         let rp = w as f32 + DELAY_LEN as f32 - d;
                         let i0 = rp.floor() as usize;

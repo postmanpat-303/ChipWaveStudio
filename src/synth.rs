@@ -492,6 +492,20 @@ impl SynthVoice {
         }
     }
 
+    /// this fresh voice, given the Grid Delay lines of `old` (the voice it
+    /// replaces), cleared: re-using a voice slot allocates nothing
+    pub fn keep_lines(mut self, old: &mut SynthVoice) -> SynthVoice {
+        self.gen.adopt_lines(&mut old.gen);
+        self
+    }
+
+    /// replace this voice with `fresh` for a new note (keeping its Grid
+    /// Delay lines, cleared)
+    pub fn renew(&mut self, fresh: SynthVoice) {
+        let f = fresh.keep_lines(self);
+        *self = f;
+    }
+
     /// a fresh voice whose noise differs from the last hit (no "machine gun"
     /// repetition of the exact same noise burst on every drum hit)
     pub fn seeded(seed: u32) -> Self {

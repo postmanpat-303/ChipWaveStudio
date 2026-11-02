@@ -277,6 +277,11 @@ fn sw_sample(
 impl Chan {
     /// Move the sounding voice into the tail slot so it fades out (no click).
     fn fade_to_tail(&mut self) {
+        // the voice's Grid Delay lines move to the tail instead of being
+        // copied (no allocation); the channel keeps the old tail's lines
+        // for its next note, which clears them (`SynthVoice::renew`)
+        let lines = self.synth.gen.take_lines();
+        let spare = self.tail.synth.gen.take_lines();
         self.tail = Tail {
             instr: self.instr,
             freq: self.freq,
@@ -285,6 +290,8 @@ impl Chan {
             pos: self.pos,
             gain: 1.0,
         };
+        self.tail.synth.gen.put_lines(lines);
+        self.synth.gen.put_lines(spare);
         self.active = false;
     }
 
@@ -922,7 +929,8 @@ impl Engine {
                             }
                         }
                         sv
-                    },
+                    }
+                    .keep_lines(&mut v.synth),
                     pos: 0.0,
                     active: true,
                     down: true,
@@ -1627,7 +1635,7 @@ impl Engine {
                 .seed
                 .wrapping_mul(1_664_525)
                 .wrapping_add(1_013_904_223);
-            c.synth = SynthVoice::seeded(self.seed);
+            c.synth.renew(SynthVoice::seeded(self.seed));
             c.synth.gen.hit = c.hits.next(cell.note);
             c.pos = 0.0;
             c.active = true;
@@ -5507,3 +5515,5 @@ mod tests {
         assert!(max_abs(&buf) < 1e-6);
     }
 }
+#[cfg(test)]
+mod gridmem_tests;

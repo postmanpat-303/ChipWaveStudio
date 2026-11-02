@@ -172,7 +172,7 @@ impl PatPreview {
                     .unwrap_or(0)
             });
         let v = &mut self.voices[slot];
-        v.synth = SynthVoice::seeded(self.seed);
+        v.synth.renew(SynthVoice::seeded(self.seed));
         v.synth.gen.hit = self.hits.next(key);
         v.freq = note_freq(key);
         v.vol = 0.85 * g;
