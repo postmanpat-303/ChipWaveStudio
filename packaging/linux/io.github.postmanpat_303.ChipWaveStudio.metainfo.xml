@@ -27,6 +27,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.21.0" date="2026-11-07">
+      <description><p>Right-click menus now offer the next step for a track, clip, lane, Rack instrument or effect, in the same eight places. Empty places stay empty, and Remove asks again. Add track asks for an instrument, a drum pattern, audio or an empty track, and an instrument or drum pattern opens the Rack. Save, Save As and Export are on the song title and on Song / Master. Songs open and play as in 0.2.20.0.</p></description>
+    </release>
     <release version="0.2.20.0" date="2026-10-31">
       <description><p>Text no longer overlaps or gets cut off: the Arp card header in the Rack fits at 1366 pixels and narrower, and Timeline markers, clip and scene names, Arranger badges, automation scale labels, the Browser hint, the FM algorithm picture and instrument card choices were fixed too. Modulation markers on knobs are easier to see: accent-coloured badges, a filled dot once a modulation is assigned, and thicker, brighter rings.</p></description>
     </release>

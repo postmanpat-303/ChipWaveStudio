@@ -232,7 +232,26 @@ fn a_new_track_exports_audible_audio() {
         });
     });
     let song = h.state().with(|s| s.song.clone());
-    let path = std::path::PathBuf::from("/tmp/chipwave-workflow-export.wav");
+    // the title menu is Save, Save As… and Export…; Save uses the app's save path
+    h.get_by_label("Untitled •").click();
+    frames(&mut h, 2);
+    assert!(h.query_by_label("Save").is_some());
+    assert!(h.query_by_label("Save As…").is_some());
+    assert!(h.query_by_label("Export…").is_some());
+    let cwt = std::env::temp_dir().join(format!("chipwave-workflow-{}.cwt", std::process::id()));
+    let _ = std::fs::remove_file(&cwt);
+    h.state_mut().path = Some(cwt.clone());
+    assert!(h.state_mut().save_and_wait(), "the song saves");
+    let loaded = fileio::load_cwt(&cwt).expect("the saved song opens");
+    assert!(
+        loaded
+            .timeline
+            .as_ref()
+            .is_some_and(|t| t.clips.iter().any(|c| c.notes().is_some())),
+        "the saved song still has the note clip"
+    );
+    let _ = std::fs::remove_file(&cwt);
+    let path = std::env::temp_dir().join("chipwave-workflow-export.wav");
     let opts = crate::export::Opts {
         format: crate::export::Format::Wav,
         scope: crate::export::Scope::Song,
@@ -248,7 +267,10 @@ fn a_new_track_exports_audible_audio() {
     assert!(samples.len() > 1000, "{}", samples.len());
     let peak = samples.iter().fold(0.0f32, |a, x| a.max(x.abs()));
     assert!(peak > 100.0, "silent export, peak {peak}");
-    let _ = std::fs::copy(&path, "/opt/cursor/artifacts/workflow-export.wav");
+    let artifacts = std::path::Path::new("/opt/cursor/artifacts");
+    if artifacts.is_dir() {
+        let _ = std::fs::copy(&path, artifacts.join("workflow-export.wav"));
+    }
 }
 
 #[test]
