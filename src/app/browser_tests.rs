@@ -359,6 +359,12 @@ fn add_track_button_and_the_32_track_limit() {
         .rect();
     super::ui_tests::click_at(&mut h, b.center());
     frames(&mut h, 2);
+    assert!(matches!(
+        h.state().opie.as_ref().map(|p| p.1),
+        Some(super::objpie::PieFor::NewTrack)
+    ));
+    super::objpie_tests::pick(&mut h, "Empty track", None);
+    frames(&mut h, 2);
     assert_eq!(song(&mut h, |s| s.channels), n0 + 1);
     ctrl(&mut h, Key::Z);
     frames(&mut h, 2);

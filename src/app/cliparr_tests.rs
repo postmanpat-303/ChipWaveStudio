@@ -322,8 +322,9 @@ fn a_new_song_with_note_and_drum_kit_clips_shows_and_launches_them() {
     h.state_mut().new_song();
     frames(&mut h, 3);
     for _ in 0..2 {
-        h.get_by_label("+ Add track").click();
-        frames(&mut h, 3);
+        let n = h.state().with(|s| s.song.channels);
+        h.state_mut().track_add(n);
+        frames(&mut h, 2);
     }
     h.state_mut().view = View::Timeline;
     // track 01: a take of 4 bars at bar 1 and another at bar 5; track 02:

@@ -150,7 +150,13 @@ fn add_track_on_a_clean_song() {
     use egui_kittest::kittest::Queryable;
     let mut h = clean();
     h.get_by_label("+ Add track").click();
-    frames(&mut h, 3);
+    frames(&mut h, 2);
+    assert!(matches!(
+        h.state().opie.as_ref().map(|p| p.1),
+        Some(super::objpie::PieFor::NewTrack)
+    ));
+    super::objpie_tests::pick(&mut h, "Empty track", None);
+    frames(&mut h, 2);
     let kinds = song(&mut h, |s| {
         s.timeline
             .as_ref()

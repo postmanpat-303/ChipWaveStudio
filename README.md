@@ -6,9 +6,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0a84ff" alt="Windows | macOS | Linux">
+  <img src="https://img.shields.io/badge/Free%20for%20Windows%20%26%20Mac%2C%20Linux%20coming%20soon-0a84ff" alt="Free for Windows & Mac, Linux coming soon">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.20.0-00d0ff" alt="Version 0.2.20.0">
+  <img src="https://img.shields.io/badge/version-0.2.21.0-00d0ff" alt="Version 0.2.21.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -24,7 +24,7 @@
  ├──────┬─────────────┬─────────────┬──────────────────┬───────────────────┤
  │  00  │ A-2 01 .. … │ ... .. .. … │ ... .. .. ....   │ free music studio │
  │  01  │ ... .. .. … │ A-2 02 38 … │ ... .. .. ....   │ sequencer + synth │
- │  02  │ ... .. .. … │ ... .. .. … │ C-5 03 38 0814   │ Windows · Linux   │
+ │  02  │ ... .. .. … │ ... .. .. … │ C-5 03 38 0814   │ Windows · Mac     │
  └──────┴─────────────┴─────────────┴──────────────────┴───────────────────┘
 ```
 
@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.20.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.21.0</b></a> &nbsp;·&nbsp;
   <a href="docs/manual/ChipWave-Studio-User-Manual.pdf"><b>User manual (PDF)</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
@@ -45,14 +45,30 @@
   <a href="https://github.com/postmanpat-303/BigWaveRadio"><b>BigWave Radio</b></a> (sister project)
 </p>
 
-**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **StringWave**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Build each track's sound in the **Rack**, a row of the instrument and its effects under the Timeline, stack sounds into **racks**, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and for those who love the classic way there is an optional OctaMED-style **Tracker** view. Up to 32 tracks per song. Written in Rust with egui and cpal, for Windows, macOS (universal: Apple Silicon + Intel) and Linux. Early version, in active development.
+**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **StringWave**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Build each track's sound in the **Rack**, a row of the instrument and its effects under the Timeline, stack sounds into **racks**, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and an optional pattern editor is there for the classic way of working. Up to 32 tracks per song. Written in Rust with egui and cpal. Free for Windows & Mac, Linux coming soon. Early version, in active development.
 
 > **ChipWave Studio was called ChipWave Tracker until 0.2.3.19.** It was renamed in 0.2.4.0 to tell it apart from an unrelated iOS app called "ChipWave". Same app, same settings, same `.cwt` songs; the old GitHub links redirect here. Website: **[postmanpat-303.github.io/ChipWaveStudio](https://postmanpat-303.github.io/ChipWaveStudio/)**. Details: [docs/RENAME.md](docs/RENAME.md).
 
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
-## New in 0.2.20.0: text that fits, and modulation you can see
+## New in 0.2.21.0: menus for the next step of a song
+
+- **Eight places, every time.** Right-click a track, a clip, an empty lane, a Rack instrument or effect, or an automation lane. Make, repeat, edit, sound, time, look, hear and remove stay in the same places. Empty places stay empty. A › choice replaces the ring, and Back is always the lower left.
+- **It acts on what you clicked.** The selection does not move until you choose. Esc, or a click in the middle, cancels. Remove… asks again before it deletes.
+- **+ Add track** asks for an instrument, a drum pattern, audio or an empty track. An instrument or a drum pattern opens the Rack. Browse… still reaches Voice, Wavetable, Grid, Noise, plugins and the library.
+- **Save and Export** are on the song title (Save, Save As…, Export…) and on a right-click of Song / Master.
+
+Songs open, play and render exactly as in 0.2.20.0. Details in the [CHANGELOG](docs/CHANGELOG.md).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/workflow-add-track.png" alt="A new song at laptop size with the Add track menu open: Instrument, Drum pattern, Audio track and Empty track"><br><b>+ Add track</b> on a new song.</td>
+    <td width="50%"><img src="docs/screenshots/workflow-insert.png" alt="The Rack under the Timeline with the insert menu open: EQ, Compressor, Delay, Reverb, Filter, Chorus and Browse"><br><b>Add effect</b> on the instrument in the Rack.</td>
+  </tr>
+</table>
+
+<details><summary><b>New in 0.2.20.0: text that fits, and modulation you can see</b></summary>
 
 - **The Arp card's header fits**: in the Rack on a 1366-pixel screen (or narrower), "Simple" and "Steps" no longer disappear under "Preset ▾" and "More". The card measures its header and makes room for it, at full text size.
 - **Text that fits across the app**: Timeline markers on the same beat share one label, and clip, marker and scene names end in "…" instead of being cut mid-letter. Arranger role badges, automation scale labels, the Browser's empty-list hint, the FM algorithm picture and instrument card choices no longer overlap or get cut off.
@@ -66,6 +82,8 @@ Songs open, play and render exactly as in 0.2.19.0. Details in the [CHANGELOG](d
     <td width="50%"><img src="docs/screenshots/mod-markers-before-after.png" alt="Knobs with modulation in all six knob styles, before and after: after, the badges and dots are in the accent colour, assigned dots are filled and the rings are thicker"><br><b>Modulation markers</b> in the six knob styles: before and after (Slate).</td>
   </tr>
 </table>
+
+</details>
 
 <details><summary><b>New in 0.2.19.0: a movable top bar, The Matrix theme and knob styles</b></summary>
 

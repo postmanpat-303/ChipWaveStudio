@@ -36,6 +36,7 @@ pub(crate) fn r_in() -> f32 {
     R_IN0 * super::piesize::k()
 }
 /// room kept between the pie (with its rim arc) and the window edge
+#[allow(dead_code)]
 pub(crate) const MARGIN: f32 = 10.0;
 /// a right-button drag longer than this, released on a segment, chooses it
 pub(crate) const DRAG_CHOOSE_PX: f32 = 12.0;
@@ -802,6 +803,7 @@ pub(crate) fn seg_angle(i: usize) -> f32 {
 
 /// the pie's centre for a click at `p`: moved in so the whole pie and its
 /// Add rings (with their rim arc and `MARGIN`) are inside `screen`
+#[allow(dead_code)]
 pub(crate) fn clamp_centre(p: Pos2, screen: Rect) -> Pos2 {
     super::radial::clamp_disc(p, screen, super::trackring::r_fit())
 }
@@ -947,7 +949,29 @@ const SAVE_CPU_TIP: &str = "Save CPU (freeze / deactivate a track): coming soon 
 impl App {
     /// open the pie for track `tr` at `at` (`press`: by a right press that
     /// may be held, so releasing on a segment chooses it)
-    pub(crate) fn open_track_pie(&mut self, tr: usize, at: Pos2, press: bool, ctx: &egui::Context) {
+    /// the header menu: the compass, on the track that was clicked.
+    /// Cancelling does not change which track is selected
+    pub(crate) fn open_track_pie(
+        &mut self,
+        tr: usize,
+        at: Pos2,
+        _press: bool,
+        ctx: &egui::Context,
+    ) {
+        self.track_rename = None;
+        self.pie = None;
+        self.open_obj_pie(super::objpie::PieFor::Track(tr), at, ctx);
+    }
+
+    /// the previous nine-wedge track pie, kept for its tests
+    #[allow(dead_code)]
+    pub(crate) fn open_legacy_pie(
+        &mut self,
+        tr: usize,
+        at: Pos2,
+        press: bool,
+        ctx: &egui::Context,
+    ) {
         let name = self.with(|s| s.song.channel_names.get(tr).cloned().unwrap_or_default());
         let screen = ctx.content_rect();
         self.ch = tr;
@@ -975,7 +999,15 @@ impl App {
     /// right-click on the empty area below the tracks (or an empty lane):
     /// the New track ring (Instrument track ›, Drum pattern ›, Audio, Empty,
     /// Browse…) at `at`; every choice adds a track at the end
-    pub(crate) fn open_add_pie(&mut self, at: Pos2, press: bool, ctx: &egui::Context) {
+    pub(crate) fn open_add_pie(&mut self, at: Pos2, _press: bool, ctx: &egui::Context) {
+        self.track_rename = None;
+        self.pie = None;
+        self.open_obj_pie(super::objpie::PieFor::NewTrack, at, ctx);
+    }
+
+    /// the previous empty-area ring, kept for its tests
+    #[allow(dead_code)]
+    pub(crate) fn open_legacy_add_pie(&mut self, at: Pos2, press: bool, ctx: &egui::Context) {
         let n = self.with(|s| s.song.channels);
         let screen = ctx.content_rect();
         let now = ctx.input(|i| i.time);

@@ -143,7 +143,7 @@ fn scenario_a_drum_kit_pattern_launcher_drag_duplicate_render() {
     // the clip's pie: To launcher (a linked copy in a slot of track 02)
     let p = at(&h, 1, BAR / 4);
     right_click(&mut h, p);
-    pick(&mut h, "To launcher", None);
+    pick(&mut h, "Arrange ›", Some("To launcher"));
     frames(&mut h, 3);
     assert!(
         h.state().ca.launch,
@@ -294,7 +294,7 @@ fn scenario_c_chords_two_launcher_versions_place_one() {
     // To launcher, then its pie's Variation in the launcher
     let p = at(&h, 0, BAR / 4);
     right_click(&mut h, p);
-    pick(&mut h, "To launcher", None);
+    pick(&mut h, "Arrange ›", Some("To launcher"));
     frames(&mut h, 3);
     let l1 = h.state().with(|s| {
         tl::launch_at(s.song.timeline.as_deref().unwrap(), 0, 0)
@@ -336,7 +336,7 @@ fn scenario_c_chords_two_launcher_versions_place_one() {
     // Make unique on the placed one, then save / load keeps it apart
     let p = at(&h, 0, c.start + BAR / 4);
     right_click(&mut h, p);
-    pick(&mut h, "Make unique", None);
+    pick(&mut h, "Repeat ›", Some("Make unique"));
     let c2 = clip(&h, c.id);
     assert_ne!(c2.notes(), Some(d2));
     let s = song(&h);

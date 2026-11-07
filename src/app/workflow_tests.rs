@@ -269,7 +269,7 @@ fn pie_harness(at: Pos2) -> Harness<'static, App> {
     h.state_mut().view = View::Timeline;
     frames(&mut h, 3);
     let ctx = h.ctx.clone();
-    h.state_mut().open_track_pie(0, at, false, &ctx);
+    h.state_mut().open_legacy_pie(0, at, false, &ctx);
     frames(&mut h, 20);
     h
 }
@@ -420,14 +420,14 @@ fn submenu_switching_and_closing_stay_predictable() {
     // Esc closes
     let ctx = h.ctx.clone();
     h.state_mut()
-        .open_track_pie(0, Pos2::new(600.0, 400.0), false, &ctx);
+        .open_legacy_pie(0, Pos2::new(600.0, 400.0), false, &ctx);
     frames(&mut h, 5);
     key(&mut h, Key::Escape, egui::Modifiers::NONE);
     frames(&mut h, 10);
     assert!(h.state().pie.is_none(), "Esc closes it");
     // a click outside the pie and its panel closes
     h.state_mut()
-        .open_track_pie(0, Pos2::new(600.0, 400.0), false, &ctx);
+        .open_legacy_pie(0, Pos2::new(600.0, 400.0), false, &ctx);
     frames(&mut h, 5);
     onto(&mut h, ci);
     click_at(&mut h, Pos2::new(1500.0, 900.0));
@@ -1257,8 +1257,8 @@ fn new_clip_setup() -> Harness<'static, App> {
     h.state_mut().extra.show_tracker = false;
     h.state_mut().view = View::Timeline;
     frames(&mut h, 3);
-    h.get_by_label("+ Add track").click();
-    frames(&mut h, 3);
+    h.state_mut().track_add(0);
+    frames(&mut h, 2);
     let (_, row) = h.state().tlv.track_rects(0).expect("the new track");
     let lanes = h.state().tlv.lanes;
     dbl_at(&mut h, Pos2::new(lanes.left() + 40.0, row.center().y));

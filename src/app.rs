@@ -47,6 +47,9 @@ mod cliparr;
 mod cliparr_tests;
 #[cfg(test)]
 mod clipcopy_tests;
+mod compass;
+#[cfg(test)]
+mod compass_tests;
 #[cfg(test)]
 mod dblloop_tests;
 mod devcards;
@@ -346,6 +349,8 @@ pub struct App {
     opie_req: Option<(objpie::PieFor, Pos2)>,
     /// where the last object pie was (popovers it opens appear there)
     opie_at: Option<Pos2>,
+    /// rings the compass replaced, so Back can return
+    pie_stack: Vec<(String, String, Vec<radial::RadialItem>)>,
     /// recovery copies put off with "Later" (archived on a clean exit)
     orphans_later: Vec<PathBuf>,
     allow_close: bool,
@@ -736,6 +741,7 @@ impl App {
             show_info: false,
             prompt: None,
             opie: None,
+            pie_stack: Vec::new(),
             clip_rename: None,
             opie_req: None,
             opie_at: None,

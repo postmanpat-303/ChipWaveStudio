@@ -988,6 +988,7 @@ impl App {
             let ev = pie.show(ctx);
             let mut keep = true;
             match (ev, on) {
+                (RadialEv::Deeper(_), _) => {}
                 (RadialEv::Cancel, _) => keep = false,
                 (RadialEv::Hover(i, Some(c)), PieOn::Lane(at)) if i < cg::PIE_STYLES.len() => {
                     let marks = self.cl_gen_pie(cg::PIE_STYLES[i], c, at);

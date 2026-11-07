@@ -2,6 +2,23 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.21.0: menus for the next step of a song
+
+Released 2026-11-07. Highlights:
+
+- **One menu, eight places.** Right-click a track, a clip, an empty lane, a Rack instrument or effect, an automation lane, or Song / Master. The places stay put: make, repeat, edit, sound, time, look, hear, remove. Empty places stay empty so the others do not slide. A choice marked › replaces the ring, and Back is always the lower left.
+- **The menu names what you clicked.** It does not change the selection until you choose. Esc, or a click in the middle, cancels. If the clicked clip is one of several already selected, the centre says how many and the edit applies to all of them.
+- **Remove… asks again.** The first click only opens the confirm ring. Delete is the second click.
+- **+ Add track** asks for an instrument, a drum pattern, an audio track or an empty track. An instrument or a drum pattern opens the Rack. WaveForge, StringWave, FM-4, Analog, Synth and Chip FX are on the instrument ring. Voice, Wavetable, Grid, Noise, plugins and the library stay under Browse…. Drum kits on the ring are 909, Psy, Techno, Trap and Lo-fi, plus Drum Synth. More kits… keeps the rest, including Acoustic-ish.
+- **Inserts stay on the instrument.** The effect ring offers EQ, Compressor, Delay, Reverb, Filter and Chorus, with Browse… for the others. Those are not the Master limiter and not the send returns. Row speed stays under Look. An effect's Add lane lists that effect's knobs.
+- **Save and Export are easier to find.** Click the song title for Save, Save As… and Export…. Right-click Song / Master for Master…, Export… and Save.
+- Shortcuts, the list menus (Settings › Clip menus › List, the Rack ⋮ button, + lane, and the audio-clip gain slider) and the chord pie are unchanged. The previous nine-wedge track pie remains in the code for its tests.
+- The song format, playback and rendering are unchanged: every `RENDER` and `GEN` fingerprint line is identical to 0.2.20.0.
+
+### Known limits
+- The Mac build is only tested on CI, and this Windows installer was built and checked on Linux (Wine ran `--version` and `--self-test` on the packaged exe; the installer itself was not executed).
+- A Linux download isn't ready yet.
+
 ## 0.2.20.0: text that fits, and modulation you can see
 
 Released 2026-10-31. Highlights:

@@ -181,10 +181,11 @@ pub(super) fn notes_song() -> (Harness<'static, App>, u32) {
     frames(&mut h, 2);
     h.state_mut().new_song();
     frames(&mut h, 3);
-    for _ in 0..2 {
-        h.get_by_label("+ Add track").click();
-        frames(&mut h, 3);
-    }
+    // two empty tracks, the same end state as + Add track › Empty track
+    h.state_mut().track_add(0);
+    frames(&mut h, 2);
+    h.state_mut().track_add(1);
+    frames(&mut h, 2);
     h.state_mut().view = View::Timeline;
     h.state_mut().tlv.snap = super::timeline::Snap::Bar;
     let id = h.state().with(|s| {

@@ -36,7 +36,7 @@ impl Shot {
 }
 
 /// views `--view` accepts
-pub const VIEWS: [&str; 128] = [
+pub const VIEWS: [&str; 136] = [
     "pattern",
     "advedit",
     "advedit-headers",
@@ -165,6 +165,14 @@ pub const VIEWS: [&str; 128] = [
     "metronome-mockup",
     "rack-compact",
     "rack-empty",
+    "workflow-blank",
+    "workflow-track",
+    "workflow-clip",
+    "workflow-rack",
+    "workflow-fx",
+    "workflow-lane",
+    "workflow-master",
+    "workflow-insert",
 ];
 const SETUP_AT: u32 = 4;
 const CAPTURE_AT: u32 = 150;
@@ -859,7 +867,7 @@ impl App {
                     }
                 }
             }
-            "timeline-new" => {
+            "timeline-new" | "workflow-blank" => {
                 self.new_song();
                 self.dirty = false;
             }
@@ -1651,6 +1659,13 @@ impl App {
         if view.starts_with("tracks-") && view.contains("pie") && f == SETUP_AT + 12 {
             self.shot_tracks_pie(ctx, &view);
         }
+        if view.starts_with("workflow-") && f == SETUP_AT + 12 {
+            self.shot_workflow(ctx, &view);
+        }
+        // the clip menu needs the timeline cache from a drawn frame
+        if view == "workflow-clip" && f == SETUP_AT + 24 {
+            self.shot_workflow_clip(ctx);
+        }
         if view == "timeline" && f == SETUP_AT + 12 {
             self.shot_tracksize();
         }
@@ -2338,6 +2353,120 @@ impl App {
 }
 
 impl App {
+    /// the note-clip menu, after the timeline has drawn its cache
+    fn shot_workflow_clip(&mut self, ctx: &egui::Context) {
+        use super::objpie::PieFor;
+        let id = self.with(|s| {
+            s.song
+                .timeline
+                .as_deref()
+                .and_then(|t| t.clips.iter().find(|c| c.audio().is_none()).map(|c| c.id))
+        });
+        let Some(id) = id else { return };
+        self.open_obj_pie(PieFor::Clip(id), Pos2::new(860.0, 320.0), ctx);
+    }
+
+    /// running-app pictures of the eight-place menus
+    fn shot_workflow(&mut self, ctx: &egui::Context, view: &str) {
+        use super::objpie::PieFor;
+        self.view = View::Timeline;
+        self.extra.full_height = false;
+        match view {
+            "workflow-blank" => {
+                self.new_song();
+                self.open_obj_pie(PieFor::NewTrack, Pos2::new(980.0, 300.0), ctx);
+            }
+            "workflow-track" => {
+                self.enter_timeline();
+                // track 02 is the bass: New pattern, Sounds, Lanes
+                let tr = 1.min(self.with(|s| {
+                    s.song
+                        .timeline
+                        .as_deref()
+                        .map(|t| t.tracks.len().saturating_sub(1))
+                        .unwrap_or(0)
+                }));
+                self.open_obj_pie(PieFor::Track(tr), Pos2::new(980.0, 280.0), ctx);
+            }
+            "workflow-clip" => {
+                self.enter_timeline();
+            }
+            "workflow-rack" => {
+                self.enter_timeline();
+                self.ch = 0;
+                let idx = self.track_slot(0).saturating_sub(1) as usize;
+                self.set_lower(4);
+                self.open_obj_pie(PieFor::RackInst(idx), Pos2::new(560.0, 560.0), ctx);
+            }
+            "workflow-fx" => {
+                self.enter_timeline();
+                self.set_lower(4);
+                if let Some((idx, i)) = self.with(|s| {
+                    s.song
+                        .instruments
+                        .iter()
+                        .enumerate()
+                        .find_map(|(n, inst)| (!inst.fx.is_empty()).then_some((n, 0)))
+                }) {
+                    self.ch = idx.min(self.with(|s| s.song.channels.saturating_sub(1)));
+                    self.open_obj_pie(PieFor::RackFx(idx, i), Pos2::new(820.0, 560.0), ctx);
+                }
+            }
+            "workflow-lane" => {
+                self.enter_timeline();
+                self.shot_automation(16);
+                let found = self.with(|s| {
+                    let t = s.song.timeline.as_deref()?;
+                    t.tracks
+                        .iter()
+                        .enumerate()
+                        .find_map(|(tr, track)| (!track.auto.is_empty()).then_some((tr, 0)))
+                });
+                if let Some((tr, lane)) = found {
+                    self.open_obj_pie(
+                        PieFor::Auto {
+                            track: tr,
+                            lane,
+                            point: None,
+                            clip: None,
+                            has_clip_lane: false,
+                            tick: 0,
+                        },
+                        Pos2::new(900.0, 360.0),
+                        ctx,
+                    );
+                }
+            }
+            "workflow-master" => {
+                self.enter_timeline();
+                // below the toolbar so Master… stays inside the window
+                self.open_obj_pie(PieFor::Master, Pos2::new(980.0, 360.0), ctx);
+            }
+            "workflow-insert" => {
+                self.enter_timeline();
+                self.set_lower(4);
+                let idx = self.track_slot(1).saturating_sub(1) as usize;
+                let at = Pos2::new(680.0, 520.0);
+                self.open_obj_pie(PieFor::RackInst(idx), at, ctx);
+                if let Some((mut pie, on)) = self.opie.take() {
+                    if let Some((t, s, items)) = self.compass_page(on, "effects") {
+                        self.pie_stack.push((
+                            pie.title.clone(),
+                            pie.sub.clone(),
+                            pie.items.clone(),
+                        ));
+                        pie.replace(t, s, items);
+                        pie.clamp_to(ctx.content_rect());
+                        self.opie = Some((pie, on));
+                    } else {
+                        self.opie = Some((pie, on));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// `--view tracks-addpie[-kits|-instr]`: the Add pie on the empty
     /// space under the tracks (-kits: its Drum pattern ring, -instr: its
     /// Instrument ring); `tracks-trackpie[-kits]`: the drum track 03's pie,

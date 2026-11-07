@@ -278,8 +278,8 @@ impl App {
         }
     }
 
-    /// Browser › Effects, from the `+` card
-    fn devices_open_effects(&mut self) {
+    /// Browser › Effects, from the `+` card or the Rack's Add effect › Browse…
+    pub(crate) fn devices_open_effects(&mut self) {
         if !self.extra.browser_open {
             self.toggle_browser();
         }
@@ -552,6 +552,16 @@ impl App {
             self.dev.card_w
         };
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
+        let pie_bg = ui.interact(
+            rect,
+            egui::Id::unique(("rack_inst_pie", idx)),
+            Sense::click(),
+        );
+        if pie_bg.secondary_clicked() {
+            if let Some(p) = pie_bg.interact_pointer_pos() {
+                self.opie_req = Some((super::objpie::PieFor::RackInst(idx), p));
+            }
+        }
         let p = ui.painter_at(rect.expand(2.0));
         let accent = t.accent;
         if t.ember {
@@ -868,7 +878,11 @@ impl App {
                 self.dev.drag = Some(i);
             }
             if tabbed {
-                r.context_menu(|ui| self.rack_menu(ui, owner, Pick::Fx(i), ops));
+                if r.secondary_clicked() {
+                    if let Some(p) = r.interact_pointer_pos() {
+                        self.opie_req = Some((super::objpie::PieFor::RackFx(owner, i), p));
+                    }
+                }
             } else {
                 r.context_menu(|ui| menu(ui, ops));
             }
@@ -949,8 +963,10 @@ impl App {
         if nr.double_clicked() {
             ops.push(FxOp::Collapse(i));
         }
-        if tabbed {
-            nr.context_menu(|ui| self.rack_menu(ui, owner, Pick::Fx(i), ops));
+        if tabbed && nr.secondary_clicked() {
+            if let Some(p) = nr.interact_pointer_pos() {
+                self.opie_req = Some((super::objpie::PieFor::RackFx(owner, i), p));
+            }
         }
         if !tabbed {
             nr.context_menu(|ui| menu(ui, ops));

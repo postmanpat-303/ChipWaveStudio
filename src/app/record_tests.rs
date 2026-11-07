@@ -54,8 +54,9 @@ fn new_song(n: usize) -> Harness<'static, App> {
     h.state_mut().new_song();
     frames(&mut h, 3);
     for _ in 0..n {
-        h.get_by_label("+ Add track").click();
-        frames(&mut h, 3);
+        let nch = h.state().with(|s| s.song.channels);
+        h.state_mut().track_add(nch);
+        frames(&mut h, 2);
     }
     h
 }
@@ -633,8 +634,9 @@ fn song_master_sits_at_the_bottom_after_add_track() {
         "the gap is no track"
     );
     // a new track goes above Master
-    h.get_by_label("+ Add track").click();
-    frames(&mut h, 3);
+    let n = h.state().with(|s| s.song.channels);
+    assert!(h.state_mut().track_add(n));
+    frames(&mut h, 2);
     h.state().with(|s| {
         let t = s.song.timeline.as_deref().unwrap();
         assert_eq!(t.tracks.len(), 4);
@@ -670,11 +672,11 @@ fn song_master_is_docked_at_the_bottom_of_the_track_list() {
     );
     // many tracks: the list scrolls, Master stays put
     for _ in 0..14 {
-        h.get_by_label("+ Add track").click();
-        frames(&mut h, 2);
-        if h.query_by_label("+ Add track").is_none() {
+        let n = h.state().with(|s| s.song.channels);
+        if !h.state_mut().track_add(n) {
             break;
         }
+        frames(&mut h, 1);
     }
     h.state_mut().tlv.scroll_y = 0.0;
     frames(&mut h, 2);

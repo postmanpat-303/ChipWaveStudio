@@ -360,7 +360,7 @@ fn the_step_grid_pie_fills_clears_and_duplicates() {
         .all(|x| x.key == key && dk::step_of(x.start).is_multiple_of(4)));
     // Clear > This lane
     super::super::objpie_tests::right_click(&mut h, r.center());
-    super::super::objpie_tests::pick(&mut h, "Clear", Some("This lane"));
+    super::super::objpie_tests::pick(&mut h, "Remove…", Some("This lane"));
     assert!(notes(&h, id).is_empty());
     h.state_mut().undo(false);
     frames(&mut h, 2);

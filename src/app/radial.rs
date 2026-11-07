@@ -32,6 +32,13 @@ pub(crate) struct RadialItem {
     /// shown greyed: hovering lights nothing, picking it does nothing
     /// (the pie's owner says why on the status line)
     pub dim: bool,
+    /// compass pies: fixed place, 0 at 12 o'clock, clockwise. None on the
+    /// older equal-wedge pies (chords, knobs)
+    pub slot: Option<u8>,
+    /// compass: choosing this wedge replaces the ring instead of acting
+    pub goes: bool,
+    /// stable id for the action (the label is only what is drawn)
+    pub key: String,
 }
 
 impl RadialItem {
@@ -40,12 +47,34 @@ impl RadialItem {
         icon: Option<RIcon>,
         children: Vec<String>,
     ) -> Self {
+        let label = label.into();
         Self {
-            label: label.into(),
+            key: label.clone(),
+            label,
             icon,
             children,
             dim: false,
+            slot: None,
+            goes: false,
         }
+    }
+
+    pub(crate) fn at(mut self, slot: u8) -> Self {
+        self.slot = Some(slot);
+        self
+    }
+
+    pub(crate) fn goes(mut self) -> Self {
+        self.goes = true;
+        if !self.label.contains('›') && !self.label.ends_with('…') {
+            self.label.push_str(" ›");
+        }
+        self
+    }
+
+    pub(crate) fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = key.into();
+        self
     }
 
     /// greyed (see `dim`)
@@ -62,6 +91,8 @@ pub(crate) enum RadialEv {
     Hover(usize, Option<usize>),
     /// chosen (the menu has closed)
     Pick(usize, Option<usize>),
+    /// compass: this wedge replaces the ring. The pie stays open
+    Deeper(usize),
     Cancel,
 }
 
@@ -77,6 +108,8 @@ pub(crate) struct Radial {
     frames: u32,
     /// accent colour for the hovered wedge (defaults to the theme's)
     pub accent: Option<Color32>,
+    /// eight fixed places, gaps where a place is empty, one ring
+    pub compass: bool,
 }
 
 // the radii at Settings › Look › Pie menus › Small (the old size); the
@@ -92,6 +125,21 @@ pub(crate) fn r_mid() -> f32 {
 }
 pub(crate) fn r_out() -> f32 {
     R_OUT0 * super::piesize::k()
+}
+
+/// single-ring compass radii (Small). Eight labels at 11pt fit the chord
+const COMPASS_IN0: f32 = 58.0;
+const COMPASS_OUT0: f32 = 172.0;
+pub(crate) fn compass_rin() -> f32 {
+    COMPASS_IN0 * super::piesize::k()
+}
+pub(crate) fn compass_rout() -> f32 {
+    COMPASS_OUT0 * super::piesize::k()
+}
+/// label size for a compass wedge: grows with the pie, never under 11pt
+/// before Text size (the type scale then keeps it at or above 10pt)
+pub(crate) fn compass_label_pt() -> f32 {
+    (11.0 * super::piesize::k()).max(11.0)
 }
 
 impl Radial {
@@ -110,7 +158,48 @@ impl Radial {
             hover_child: None,
             frames: 0,
             accent: None,
+            compass: false,
         }
+    }
+
+    /// the eight-place menu. `items` carry [`RadialItem::slot`]
+    pub(crate) fn compass(
+        at: Pos2,
+        title: impl Into<String>,
+        sub: impl Into<String>,
+        items: Vec<RadialItem>,
+    ) -> Self {
+        let mut s = Self::new(at, title, sub, items);
+        s.compass = true;
+        s
+    }
+
+    /// swap the ring in place (a › wedge, or Back). The click that opened
+    /// the new ring is not also a choice
+    pub(crate) fn replace(
+        &mut self,
+        title: impl Into<String>,
+        sub: impl Into<String>,
+        items: Vec<RadialItem>,
+    ) {
+        self.title = title.into();
+        self.sub = sub.into();
+        self.items = items;
+        self.hover = None;
+        self.hover_child = None;
+        self.frames = 0;
+        self.compass = true;
+    }
+
+    /// where a test or a pointer should press wedge `i`
+    #[cfg(test)]
+    pub(crate) fn hit_point(&self, i: usize) -> Pos2 {
+        let r = if self.compass {
+            (compass_rin() + compass_rout()) / 2.0
+        } else {
+            (r_in() + r_mid()) / 2.0
+        };
+        self.wedge_centre(i, r)
     }
 
     fn wedge(&self) -> f32 {
@@ -118,7 +207,12 @@ impl Radial {
     }
     /// centre angle of item `i` (0 = top, clockwise)
     fn angle_of(&self, i: usize) -> f32 {
-        -PI / 2.0 + i as f32 * self.wedge()
+        if self.compass {
+            let s = self.items.get(i).and_then(|it| it.slot).unwrap_or(i as u8);
+            -PI / 2.0 + s as f32 * TAU / 8.0
+        } else {
+            -PI / 2.0 + i as f32 * self.wedge()
+        }
     }
     /// (from, to) angles of item `i`'s outer ring and the width of one child
     fn ring_span(&self, i: usize) -> (f32, f32, f32) {
@@ -141,7 +235,11 @@ impl Radial {
     }
     /// keep the disc on screen
     pub(crate) fn clamp_to(&mut self, screen: Rect) {
-        let r = r_out() + 4.0;
+        let r = if self.compass {
+            compass_rout() + 8.0
+        } else {
+            r_out() + 4.0
+        };
         self.at.x = self.at.x.clamp(
             screen.left() + r,
             (screen.right() - r).max(screen.left() + r),
@@ -154,6 +252,9 @@ impl Radial {
 
     /// what is under `p`: (item, child)
     pub(crate) fn hit(&self, p: Pos2) -> Option<(usize, Option<usize>)> {
+        if self.compass {
+            return self.hit_compass(p);
+        }
         let d = p - self.at;
         let r = d.length();
         if r < r_in() || r > r_out() || self.items.is_empty() {
@@ -175,6 +276,25 @@ impl Radial {
         let w = self.wedge();
         let k = (norm(a - (-PI / 2.0 - w / 2.0)).rem_euclid(TAU) / w).floor() as usize;
         Some((k.min(self.items.len() - 1), None))
+    }
+
+    /// which of the eight places `p` is in, if it is inside the ring
+    fn compass_slot_at(&self, p: Pos2) -> Option<u8> {
+        let d = p - self.at;
+        let r = d.length();
+        if r < compass_rin() || r > compass_rout() + 4.0 {
+            return None;
+        }
+        let step = TAU / 8.0;
+        let ang = (d.y.atan2(d.x) + PI / 2.0).rem_euclid(TAU);
+        let slot = ((ang + step / 2.0).rem_euclid(TAU) / step).floor() as u8 % 8;
+        Some(slot)
+    }
+
+    fn hit_compass(&self, p: Pos2) -> Option<(usize, Option<usize>)> {
+        let slot = self.compass_slot_at(p)?;
+        let i = self.items.iter().position(|it| it.slot == Some(slot))?;
+        Some((i, None))
     }
 
     /// draw and handle input; call every frame while open
@@ -219,6 +339,12 @@ impl Radial {
             }
             if clicked && self.frames > 1 {
                 ev = match self.hit(p) {
+                    Some((i, None))
+                        if self.compass
+                            && self.items.get(i).is_some_and(|it| it.goes && !it.dim) =>
+                    {
+                        RadialEv::Deeper(i)
+                    }
                     Some((i, c)) => RadialEv::Pick(i, c),
                     None => RadialEv::Cancel,
                 };
@@ -234,6 +360,10 @@ impl Radial {
     }
 
     pub(crate) fn paint(&self, ctx: &egui::Context) {
+        if self.compass {
+            self.paint_compass(ctx);
+            return;
+        }
         let t = th();
         let p = ctx.layer_painter(egui::LayerId::new(
             egui::Order::Tooltip,
@@ -390,6 +520,125 @@ impl Radial {
     }
 }
 
+impl Radial {
+    fn paint_compass(&self, ctx: &egui::Context) {
+        let t = th();
+        let p = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Tooltip,
+            egui::Id::unique("radial_menu"),
+        ));
+        let c = self.at;
+        let accent = self.accent.unwrap_or(t.accent);
+        let ink = t.ink;
+        let rin = compass_rin();
+        let rout = compass_rout();
+        let step = TAU / 8.0;
+        p.circle_filled(
+            c + egui::vec2(0.0, 3.0),
+            rout + 2.0,
+            Color32::from_black_alpha(70),
+        );
+        let font = crate::theme::prop(compass_label_pt());
+        for it in &self.items {
+            let Some(slot) = it.slot else { continue };
+            let mid = -PI / 2.0 + slot as f32 * step;
+            let a0 = mid - step / 2.0 + 0.02;
+            let a1 = mid + step / 2.0 - 0.02;
+            let on = self
+                .hover
+                .is_some_and(|i| self.items.get(i).is_some_and(|h| h.slot == Some(slot)))
+                && !it.dim;
+            let fill = if it.key == "remove"
+                || it.label.starts_with("Delete")
+                || it.label.starts_with("Remove effect")
+            {
+                Color32::from_rgb(0x3A, 0x28, 0x28)
+            } else if on {
+                Color32::from_rgba_unmultiplied(0x4A, 0x52, 0x5B, 235)
+            } else {
+                Color32::from_rgba_unmultiplied(0x2A, 0x2E, 0x33, 235)
+            };
+            sector(&p, c, rin, rout, a0, a1, fill);
+            if on {
+                arc(
+                    &p,
+                    c,
+                    rout - 2.0,
+                    a0 + 0.02,
+                    a1 - 0.02,
+                    Stroke::new(3.0, accent),
+                );
+            }
+            let col = if it.dim {
+                ink.gamma_multiply(0.42)
+            } else if it.label.starts_with("Delete") {
+                Color32::from_rgb(0xE0, 0x64, 0x5A)
+            } else if on && !t.light {
+                Color32::WHITE
+            } else {
+                ink
+            };
+            let at = c + egui::vec2(mid.cos(), mid.sin()) * ((rin + rout) / 2.0);
+            let chord = 2.0 * ((rin + rout) / 2.0) * (step / 2.0).sin() * 0.90;
+            paint_fitted(&p, at, &it.label, font.clone(), col, chord);
+        }
+        p.circle_filled(c, rin - 3.0, Color32::from_rgb(0x1F, 0x22, 0x26));
+        p.circle_stroke(
+            c,
+            rin - 3.0,
+            Stroke::new(1.0, Color32::from_white_alpha(40)),
+        );
+        let title_f = crate::theme::prop(crate::theme::ts::LABEL.max(11.0));
+        let sub_f = crate::theme::prop(crate::theme::ts::SMALL);
+        p.text(
+            c - egui::vec2(0.0, 8.0),
+            egui::Align2::CENTER_CENTER,
+            &self.title,
+            title_f,
+            t.ink2,
+        );
+        p.text(
+            c + egui::vec2(0.0, 10.0),
+            egui::Align2::CENTER_CENTER,
+            &self.sub,
+            sub_f,
+            ink,
+        );
+    }
+}
+
+/// one line, or two when the line would cross into the next wedge
+fn paint_fitted(
+    p: &egui::Painter,
+    at: Pos2,
+    label: &str,
+    font: egui::FontId,
+    col: Color32,
+    chord: f32,
+) {
+    let width = |s: &str| p.layout_no_wrap(s.to_string(), font.clone(), col).size().x;
+    if width(label) <= chord || !label.contains(' ') {
+        p.text(at, egui::Align2::CENTER_CENTER, label, font, col);
+        return;
+    }
+    let (a, b) = label.split_once(' ').unwrap();
+    let small = font.clone();
+    p.text(
+        at - egui::vec2(0.0, 8.0),
+        egui::Align2::CENTER_CENTER,
+        a,
+        small.clone(),
+        col,
+    );
+    p.text(
+        at + egui::vec2(0.0, 8.0),
+        egui::Align2::CENTER_CENTER,
+        b,
+        small,
+        col,
+    );
+}
+
 /// a filled annular sector, as convex quads
 pub(crate) fn sector(
     p: &egui::Painter,
@@ -543,7 +792,9 @@ pub(crate) fn slot_at(a0: f32, n: usize, a: f32) -> usize {
 }
 
 /// `p` moved in so a disc of radius `r` around it is inside `screen`
-/// (centred on an axis the screen is too small for)
+/// (centred on an axis the screen is too small for). The compass clamps
+/// with its own radius; the nine-wedge pie still uses this.
+#[allow(dead_code)]
 pub(crate) fn clamp_disc(p: Pos2, screen: Rect, r: f32) -> Pos2 {
     let c = |v: f32, lo: f32, hi: f32| {
         if hi < lo {

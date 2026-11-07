@@ -35,7 +35,7 @@ fn harness_tl() -> Harness<'static, App> {
 fn open(h: &mut Harness<'static, App>, tr: usize) {
     let ctx = h.ctx.clone();
     h.state_mut()
-        .open_track_pie(tr, Pos2::new(600.0, 400.0), false, &ctx);
+        .open_legacy_pie(tr, Pos2::new(600.0, 400.0), false, &ctx);
     frames(h, 2);
 }
 
@@ -398,59 +398,38 @@ fn press(h: &mut Harness<'static, App>, p: Pos2, b: egui::PointerButton, down: b
 }
 
 #[test]
-fn right_click_a_header_opens_it_and_drag_release_chooses() {
+fn right_click_a_header_opens_the_compass_and_cancel_keeps_the_selection() {
     let mut h = harness_tl();
+    let before = h.state().ch;
     let lanes = h.state().tlv.lanes;
     let head = Pos2::new(lanes.left() - 150.0, lanes.top() + 70.0);
-    // a click: opens and stays open
     press(&mut h, head, egui::PointerButton::Secondary, true);
     press(&mut h, head, egui::PointerButton::Secondary, false);
     frames(&mut h, 2);
-    assert!(h.state().pie_open(), "right-click opens the pie");
-    let tr = h.state().pie.as_ref().unwrap().track;
-    let c = h.state().pie.as_ref().unwrap().centre;
+    let (pie, on) = h.state().opie.clone().expect("the compass");
+    assert!(pie.compass);
+    assert!(matches!(on, super::objpie::PieFor::Track(_)));
+    assert_eq!(h.state().ch, before, "opening does not retarget");
     // the centre cancels
-    press(&mut h, c, egui::PointerButton::Primary, true);
-    press(&mut h, c, egui::PointerButton::Primary, false);
+    press(&mut h, pie.at, egui::PointerButton::Primary, true);
+    press(&mut h, pie.at, egui::PointerButton::Primary, false);
     frames(&mut h, 3);
-    assert!(h.state().pie.is_none(), "the centre cancels");
-    // press, drag onto Devices, release: chosen
+    assert!(h.state().opie.is_none(), "the centre cancels");
+    assert_eq!(h.state().ch, before);
+    // Open Rack acts on the clicked track
     press(&mut h, head, egui::PointerButton::Secondary, true);
+    press(&mut h, head, egui::PointerButton::Secondary, false);
     frames(&mut h, 2);
-    let c = h.state().pie.as_ref().unwrap().centre;
-    let dev = SEGS.iter().position(|s| *s == Seg::Devices).unwrap();
-    let a = seg_angle(dev);
-    let on = c + egui::vec2(a.cos(), a.sin()) * (r_in() + r_out()) / 2.0;
-    h.input_mut().events.push(egui::Event::PointerMoved(on));
-    frames(&mut h, 2);
-    assert_eq!(
-        h.state().pie.as_ref().unwrap().key,
-        Some(dev),
-        "hover highlights"
-    );
-    press(&mut h, on, egui::PointerButton::Secondary, false);
-    frames(&mut h, 3);
-    assert!(h.state().pie.is_none());
-    assert!(h.state().devices_visible());
+    let tr = match h.state().opie.as_ref().map(|p| p.1) {
+        Some(super::objpie::PieFor::Track(tr)) => tr,
+        other => panic!("{other:?}"),
+    };
+    super::objpie_tests::pick(&mut h, "Mute", None);
+    assert!(h.state().opie.is_none());
     assert_eq!(h.state().ch, tr);
-    // a click outside cancels; nothing behind reacts
-    open(&mut h, 2);
-    let n = song(&h, |s| s.channels);
-    press(
-        &mut h,
-        Pos2::new(5.0, 5.0),
-        egui::PointerButton::Primary,
-        true,
-    );
-    press(
-        &mut h,
-        Pos2::new(5.0, 5.0),
-        egui::PointerButton::Primary,
-        false,
-    );
-    frames(&mut h, 3);
-    assert!(h.state().pie.is_none());
-    assert_eq!(song(&h, |s| s.channels), n);
+    assert!(h
+        .state()
+        .with(|s| s.song.mixer.channels.get(tr).is_some_and(|m| m.mute)));
 }
 
 #[test]
@@ -491,8 +470,11 @@ fn the_tracker_header_opens_it_too_and_shows_the_icon() {
     press(&mut h, p, egui::PointerButton::Secondary, true);
     press(&mut h, p, egui::PointerButton::Secondary, false);
     frames(&mut h, 2);
-    assert!(h.state().pie_open());
-    assert_eq!(h.state().pie.as_ref().unwrap().track, 1);
+    assert!(matches!(
+        h.state().opie.as_ref().map(|p| p.1),
+        Some(super::objpie::PieFor::Track(1))
+    ));
+    assert_ne!(h.state().ch, 1, "the menu does not steal the selection");
 }
 
 /// right-click on the empty space under the last track (in the list and in
@@ -529,17 +511,35 @@ fn right_click_the_empty_area_opens_the_add_pie() {
         press(&mut h, p, egui::PointerButton::Secondary, true);
         press(&mut h, p, egui::PointerButton::Secondary, false);
         frames(&mut h, 2);
-        let pie = h.state().pie.as_ref().map(|p| (p.empty, p.ring.is_some()));
-        assert_eq!(pie, Some((true, true)), "the Add pie at {p:?}");
-        assert_eq!(h.state().ring_now().unwrap().3[0].label, "Instrument track");
-        h.state_mut().pie = None;
+        assert!(
+            matches!(
+                h.state().opie.as_ref().map(|p| p.1),
+                Some(super::objpie::PieFor::NewTrack)
+            ),
+            "the new-track menu at {p:?}"
+        );
+        let labels: Vec<_> = h
+            .state()
+            .opie
+            .as_ref()
+            .unwrap()
+            .0
+            .items
+            .iter()
+            .map(|i| i.label.clone())
+            .collect();
+        assert!(labels.iter().any(|l| l.starts_with("Instrument")));
+        assert!(labels.iter().any(|l| l.starts_with("Drum")));
+        assert!(!labels.iter().any(|l| l.contains("FX track")));
+        h.state_mut().opie = None;
         frames(&mut h, 2);
     }
-    // a header: the track's own pie
     let head = Pos2::new(heads.left() + 60.0, heads.top() + lay.top[0] + 10.0 - sy);
     press(&mut h, head, egui::PointerButton::Secondary, true);
     press(&mut h, head, egui::PointerButton::Secondary, false);
     frames(&mut h, 2);
-    let pie = h.state().pie.as_ref().map(|p| (p.empty, p.track));
-    assert_eq!(pie, Some((false, 0)), "the track pie");
+    assert!(matches!(
+        h.state().opie.as_ref().map(|p| p.1),
+        Some(super::objpie::PieFor::Track(0))
+    ));
 }
