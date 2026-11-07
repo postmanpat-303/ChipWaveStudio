@@ -2,4 +2,10 @@ target/
 dist/pkg/
 dist/*.zip
 dist/*.exe
+dist/*.deb
+dist/*.rpm
+dist/*.AppImage
+dist/*.tar.gz
+dist/SHA256SUMS*.txt
+dist/linux/
 dist/mac/

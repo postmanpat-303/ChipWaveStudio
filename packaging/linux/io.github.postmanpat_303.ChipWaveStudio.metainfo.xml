@@ -4,14 +4,14 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>ChipWave Studio</name>
-  <summary>Free music DAW and tracker with built-in synths</summary>
+  <summary>Free music studio with built-in synths</summary>
   <developer id="io.github.postmanpat_303">
     <name>Del (postmanpat)</name>
   </developer>
   <description>
-    <p>ChipWave Studio (formerly ChipWave Tracker) is an OctaMED-inspired music tracker:
-    a fast keyboard-driven pattern editor with a built-in synth, Voice instrument, macro-knob
-    generators, CLAP plugin hosting, an arranger, a mixer with effects and WAV/MP3 export.</p>
+    <p>ChipWave Studio is a free music studio: a Timeline, a Clip Arranger, a piano roll,
+    a Drum Kit step sequencer, built-in synths, a synthetic Voice, an optional pattern editor,
+    CLAP and VST3 plugins, a mixer with effects, and WAV/MP3 export.</p>
   </description>
   <launchable type="desktop-id">io.github.postmanpat_303.ChipWaveStudio.desktop</launchable>
   <provides>

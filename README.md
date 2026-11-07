@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
-  <img src="https://img.shields.io/badge/Free%20for%20Windows%20%26%20Mac%2C%20Linux%20coming%20soon-0a84ff" alt="Free for Windows & Mac, Linux coming soon">
+  <img src="https://img.shields.io/badge/Free%20for%20Windows%2C%20Mac%20%26%20Linux-0a84ff" alt="Free for Windows, Mac & Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
   <img src="https://img.shields.io/badge/version-0.2.21.0-00d0ff" alt="Version 0.2.21.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
@@ -45,7 +45,7 @@
   <a href="https://github.com/postmanpat-303/BigWaveRadio"><b>BigWave Radio</b></a> (sister project)
 </p>
 
-**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **StringWave**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Build each track's sound in the **Rack**, a row of the instrument and its effects under the Timeline, stack sounds into **racks**, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and an optional pattern editor is there for the classic way of working. Up to 32 tracks per song. Written in Rust with egui and cpal. Free for Windows & Mac, Linux coming soon. Early version, in active development.
+**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **StringWave**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Build each track's sound in the **Rack**, a row of the instrument and its effects under the Timeline, stack sounds into **racks**, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and an optional pattern editor is there for the classic way of working. Up to 32 tracks per song. Written in Rust with egui and cpal. Free for Windows, Mac & Linux. The Windows and Mac files on the latest release are 0.2.20.0. Linux x86_64 packages are 0.2.21.0, on a separate release so those Windows and Mac links stay put. See [Linux install](docs/LINUX.md). Early version, in active development.
 
 > **ChipWave Studio was called ChipWave Tracker until 0.2.3.19.** It was renamed in 0.2.4.0 to tell it apart from an unrelated iOS app called "ChipWave". Same app, same settings, same `.cwt` songs; the old GitHub links redirect here. Website: **[postmanpat-303.github.io/ChipWaveStudio](https://postmanpat-303.github.io/ChipWaveStudio/)**. Details: [docs/RENAME.md](docs/RENAME.md).
 
