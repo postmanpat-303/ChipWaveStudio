@@ -104,6 +104,16 @@ pub(crate) enum AutoOp {
     SetWriteMode(usize, WriteMode),
     /// clip lane combine mode
     SetClipMode(u32, String, ClipMode),
+    /// right-click on a lane: the compass (the + lane list stays)
+    OpenPie {
+        track: usize,
+        lane: usize,
+        point: Option<usize>,
+        clip: Option<u32>,
+        has_clip_lane: bool,
+        tick: crate::timeline::Tick,
+        at: Pos2,
+    },
     Snapshot,
     StartDrag(AutoDrag),
     EndDrag,
@@ -1176,6 +1186,30 @@ pub(crate) fn lanes_ui(
             }
             if resp.secondary_clicked() {
                 if let Some(p) = resp.interact_pointer_pos() {
+                    let tk = tick_of(p.x).max(0.0) as Tick;
+                    let (lane_i, _) = lane_at(p.x);
+                    let point = point_at(p, &lane_i);
+                    let under = c
+                        .idx
+                        .visible(&c.tl, tr, tk, tk + 1)
+                        .map(|i| &c.tl.clips[i])
+                        .max_by_key(|cl| (cl.start, cl.id));
+                    let (clip, has_clip_lane) = under
+                        .map(|cl| (Some(cl.id), clip_lane(cl, tgt).is_some()))
+                        .unwrap_or((None, false));
+                    ops.push(AutoOp::OpenPie {
+                        track: tr,
+                        lane: k,
+                        point,
+                        clip,
+                        has_clip_lane,
+                        tick: tk,
+                        at: p,
+                    });
+                }
+            }
+            if false && resp.secondary_clicked() {
+                if let Some(p) = resp.interact_pointer_pos() {
                     let (r, _) = lane_at(p.x);
                     let tk = tick_of(p.x).max(0.0) as Tick;
                     let under = c
@@ -1229,8 +1263,12 @@ pub(crate) fn lanes_ui(
                     );
                 }
             }
-            let ctx_here = menu_ctx.filter(|m| m.track == tr && m.lane.target() == tgt);
-            resp.context_menu(|ui| {
+            // The lane body uses the compass. This list stays in the source
+            // so the same actions can be brought back; the header's menu
+            // and + lane still open lists.
+            if false {
+                let ctx_here = menu_ctx.filter(|m| m.track == tr && m.lane.target() == tgt);
+                resp.context_menu(|ui| {
                 let Some(m) = ctx_here else {
                     ui.label("…");
                     return;
@@ -1295,6 +1333,7 @@ pub(crate) fn lanes_ui(
                     ui.close();
                 }
             });
+            }
         }
     }
 }
@@ -1393,6 +1432,28 @@ impl App {
     pub(crate) fn auto_op(&mut self, op: AutoOp) {
         let mode = self.with(|s| s.song.timeline.is_some());
         match op {
+            AutoOp::OpenPie {
+                track,
+                lane,
+                point,
+                clip,
+                has_clip_lane,
+                tick,
+                at,
+            } => {
+                self.opie_req = Some((
+                    super::objpie::PieFor::Auto {
+                        track,
+                        lane,
+                        point,
+                        clip,
+                        has_clip_lane,
+                        tick,
+                    },
+                    at,
+                ));
+                return;
+            }
             AutoOp::Toggle(tr) if !mode => {
                 let _ = tr;
                 self.tlv.ask_switch = Some(None);

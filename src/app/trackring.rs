@@ -22,7 +22,9 @@ pub(crate) fn r2() -> f32 {
     r_out() + 112.0 * super::piesize::k()
 }
 /// the pie's centre keeps this far from the window's edges, so every ring
-/// fits on screen (1366x768 too) without moving the pie under the pointer
+/// fits on screen (1366x768 too) without moving the pie under the pointer.
+/// The compass uses its own radius; the nine-wedge pie still uses this.
+#[allow(dead_code)]
 pub(crate) fn r_fit() -> f32 {
     r2() + 4.0 * super::piesize::k() + MARGIN
 }

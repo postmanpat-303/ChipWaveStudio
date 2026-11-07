@@ -2049,6 +2049,7 @@ impl App {
         let mut head_ops: Vec<HeadOp> = vec![];
         let mut rename_at: Option<Rect> = None;
         let mut pie_at: Option<(usize, Pos2)> = None;
+        let mut master_pie: Option<Pos2> = None;
         // right-click on the empty area (no track there): the Add pie
         let mut add_pie_at: Option<(Pos2, bool)> = None;
         let mut hd = self.tlv.head_drag;
@@ -2425,18 +2426,19 @@ impl App {
             }
             let nresp = ui
                 .interact(nr, ui.scope_id().with(("tl_head", tr)), Sense::click_and_drag())
-                .on_hover_text(if self.tracker_on() {
-                    "select this track (the Tracker's cursor channel) · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, devices, routing, organize, delete)"
-                } else {
-                    "select this track · drag up or down: reorder · right-click: the track menu (rename, colour, icon, add, edit, devices, routing, organize, delete)"
-                });
+                .on_hover_text(
+                    "select this track · drag up or down: reorder · right-click: what to do next with this track",
+                );
             let is_master = c.tl.tracks[tr].kind == tl::TrackKind::Master;
-            if !is_master
-                && nresp.hovered()
+            if nresp.hovered()
                 && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Secondary))
             {
                 if let Some(p) = ui.input(|i| i.pointer.interact_pos()) {
-                    pie_at = Some((tr, p));
+                    if is_master {
+                        master_pie = Some(p);
+                    } else {
+                        pie_at = Some((tr, p));
+                    }
                 }
             }
             if nresp.clicked() {
@@ -2492,63 +2494,10 @@ impl App {
                     }
                 }
             }
-            let ntracks = c.tl.tracks.len();
-            if !is_master {
-                continue;
-            }
-            // the Song / Master row keeps the small menu (add a track)
-            nresp.context_menu(|ui| {
-                ui.label(egui::RichText::new(format!("Track {:02}", tr + 1)).strong());
-                let full = ntracks >= MAX_CHANNELS;
-                let tip = "all 32 tracks are used (the channel limit)";
-                if ui
-                    .add_enabled(!full, egui::Button::new("Add track above"))
-                    .on_disabled_hover_text(tip)
-                    .clicked()
-                {
-                    head_ops.push(HeadOp::Add(tr));
-                    ui.close();
-                }
-                if ui
-                    .add_enabled(!full, egui::Button::new("Add track below"))
-                    .on_disabled_hover_text(tip)
-                    .clicked()
-                {
-                    head_ops.push(HeadOp::Add(tr + 1));
-                    ui.close();
-                }
-                if ui
-                    .add_enabled(!full, egui::Button::new("Add track with instrument…"))
-                    .on_hover_text(
-                        "opens the Browser's Instruments tab: double-click one to make the track",
-                    )
-                    .on_disabled_hover_text(tip)
-                    .clicked()
-                {
-                    head_ops.push(HeadOp::AddWith(tr + 1));
-                    ui.close();
-                }
-                ui.separator();
-                ui.label(egui::RichText::new(format!("Track {:02} speed", tr + 1)).strong());
-                ui.label(
-                    egui::RichText::new("ticks per row for this track's effects (timeline mode)")
-                        .small(),
-                );
-                for (v, l) in [
-                    (0u8, "Follow the song"),
-                    (2, "2"),
-                    (3, "3"),
-                    (4, "4"),
-                    (6, "6"),
-                    (8, "8"),
-                    (12, "12"),
-                ] {
-                    if ui.radio(speed == v, l).clicked() {
-                        head_ops.push(HeadOp::Speed(tr, v));
-                        ui.close();
-                    }
-                }
-            });
+            // Song / Master: the compass (Master…, Export…, Save). A new
+            // track is + Add track or a right-click on empty space. Row
+            // speed for pattern commands is on each instrument's Look ›.
+            let _ = (is_master, speed);
         }
         ui.set_clip_rect(ui_clip);
         // ---- header drag: the insertion line
@@ -2623,10 +2572,10 @@ impl App {
                 let r = if full {
                     r.on_hover_text("all 32 tracks are used (the channel limit)")
                 } else {
-                    r.on_hover_text("a new empty track below the last one · drop an instrument from the Browser here for a track that plays it")
+                    r.on_hover_text("choose an instrument track, a drum pattern, an audio track or an empty track")
                 };
                 if r.clicked() {
-                    head_ops.push(HeadOp::Add(n));
+                    add_pie_at = Some((r.rect.center(), false));
                 }
                 // the chord generator (it works without a track or clip)
                 let gr =
@@ -3876,7 +3825,10 @@ impl App {
         if let Some(r) = rename_at {
             self.rename_field(ui, r);
         }
-        if let Some((tr, p)) = pie_at {
+        if let Some(p) = master_pie {
+            let ctx = ui.ctx().clone();
+            self.open_obj_pie(super::objpie::PieFor::Master, p, &ctx);
+        } else if let Some((tr, p)) = pie_at {
             let ctx = ui.ctx().clone();
             self.open_track_pie(tr, p, true, &ctx);
         } else if let Some((p, press)) = add_pie_at {
@@ -4227,14 +4179,18 @@ enum HeadOp {
     Select(usize, bool),
     /// a clip, an empty lane spot or a rubber band picked this track
     Pick(usize),
+    #[allow(dead_code)]
     Speed(usize, u8),
     /// drag reorder: track, new index
     Move(usize, usize),
     /// a header's bottom edge: track, height (0 = the default)
     Height(usize, f32),
-    /// an empty track at this index
+    /// an empty track at this index (the + Add track button opens the
+    /// compass instead; this stays for the header handler)
+    #[allow(dead_code)]
     Add(usize),
     /// a track at this index with the instrument picked in the Browser
+    #[allow(dead_code)]
     AddWith(usize),
     /// "Chords…" beside + Add track: the Generators panel for the
     /// selected track (none: a new track)

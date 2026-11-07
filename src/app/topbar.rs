@@ -925,15 +925,26 @@ impl App {
                     .map(|f| f.to_string_lossy().to_string())
                     .unwrap_or_else(|| "not saved yet".into());
                 ui.label(egui::RichText::new(file).small().color(hdr_dim()));
-                ui.label(
-                    egui::RichText::new(format!("{}{}", title, if self.dirty { " •" } else { "" }))
-                        .strong()
-                        .color(hdr_text()),
-                )
+                let song_label = format!("{}{}", title, if self.dirty { " •" } else { "" });
+                ui.menu_button(song_label, |ui| {
+                    if ui.button("Save").clicked() {
+                        self.save(false);
+                        ui.close();
+                    }
+                    if ui.button("Save As…").clicked() {
+                        self.save(true);
+                        ui.close();
+                    }
+                    if ui.button("Export…").clicked() {
+                        self.open_export();
+                        ui.close();
+                    }
+                })
+                .response
                 .on_hover_text(if self.dirty {
-                    "unsaved changes"
+                    "unsaved changes · click for Save, Save As… or Export…"
                 } else {
-                    "saved"
+                    "saved · click for Save, Save As… or Export…"
                 });
             });
         });

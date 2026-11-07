@@ -25,6 +25,25 @@ pub(crate) enum PieFor {
         track: usize,
         pad: usize,
     },
+    /// a track header (the clicked track, not the one that was selected)
+    Track(usize),
+    /// right-click below the tracks, or + Add track
+    NewTrack,
+    /// the Song / Master header
+    Master,
+    /// Rack instrument card (instrument index)
+    RackInst(usize),
+    /// Rack insert card (instrument index, effect index)
+    RackFx(usize, usize),
+    /// a timeline automation lane under one track
+    Auto {
+        track: usize,
+        lane: usize,
+        point: Option<usize>,
+        clip: Option<u32>,
+        has_clip_lane: bool,
+        tick: crate::timeline::Tick,
+    },
 }
 
 /// clip colours offered (the track palette's first eight)
@@ -39,6 +58,7 @@ pub(crate) const COLOURS: [(&str, u32); 8] = [
     ("Pink", 0xA8679A),
 ];
 
+#[allow(dead_code)]
 fn colour_children() -> Vec<String> {
     std::iter::once("Auto".to_string())
         .chain(COLOURS.iter().map(|c| c.0.to_string()))
@@ -54,6 +74,7 @@ pub(crate) struct ClipRename {
 }
 
 /// Timeline clip pie wedges (with `block`: a Tracker clip, no launcher)
+#[allow(dead_code)] // the list menu and the old wedge list; the compass replaced the pie
 pub(crate) fn clip_items(block: bool, tracker: bool) -> Vec<RadialItem> {
     let mut edit = vec!["Piano roll".to_string()];
     if block && tracker {
@@ -96,7 +117,8 @@ pub(crate) fn clip_items(block: bool, tracker: bool) -> Vec<RadialItem> {
 }
 
 /// the Variations wedge (note clips): its ring depends on how many takes
-/// the clip has
+/// the clip has. The compass uses its own page; this stays for the old pie.
+#[allow(dead_code)]
 pub(crate) fn var_item(n: usize) -> RadialItem {
     let mut ch = vec![];
     if n < crate::timeline::rr::MAX_VARS {
@@ -110,6 +132,7 @@ pub(crate) fn var_item(n: usize) -> RadialItem {
 
 /// empty Timeline lane pie wedges: Paste here (greyed "Nothing copied"
 /// while the clip clipboard is empty), new clips, import, marker
+#[allow(dead_code)]
 pub(crate) fn lane_items(can_paste: bool, tracker: bool, capture: bool) -> Vec<RadialItem> {
     let mut v = vec![if can_paste {
         RadialItem::new(
@@ -139,6 +162,7 @@ pub(crate) fn lane_items(can_paste: bool, tracker: bool, capture: bool) -> Vec<R
 }
 
 /// launcher clip pie wedges
+#[allow(dead_code)]
 pub(crate) fn launch_items() -> Vec<RadialItem> {
     vec![
         RadialItem::new("Play", Some(RIcon::Play), vec![]),
@@ -163,6 +187,7 @@ pub(crate) fn launch_items() -> Vec<RadialItem> {
 }
 
 /// Drum Kit step grid pie wedges
+#[allow(dead_code)]
 pub(crate) fn drum_items() -> Vec<RadialItem> {
     vec![
         RadialItem::new("Play", Some(RIcon::Play), vec![]),
@@ -195,77 +220,13 @@ impl App {
 
     /// open a pie at `at`
     pub(crate) fn open_obj_pie(&mut self, on: PieFor, at: Pos2, ctx: &egui::Context) {
-        let (items, title, sub) = match on {
-            PieFor::Clip(id) => {
-                let Some((c, name)) = self.tlv.clip_label(id) else {
-                    return;
-                };
-                let (a, b) = self.with(|s| {
-                    s.song
-                        .timeline
-                        .as_deref()
-                        .zip(c.notes())
-                        .map_or((0, 0), |(t, d)| tl::linked(t, d))
-                });
-                let sub = if a + b > 1 {
-                    format!("track {:02} · linked ×{}", c.track + 1, a + b)
-                } else {
-                    format!("track {:02}", c.track + 1)
-                };
-                let mut items = clip_items(c.block().is_some(), self.tracker_on());
-                if let Some(d) = c.notes() {
-                    items.push(var_item(self.var_count(d)));
-                }
-                (items, name, sub)
-            }
-            PieFor::Launch(id) => {
-                let Some(c) = self.with(|s| {
-                    s.song
-                        .timeline
-                        .as_deref()
-                        .and_then(|t| t.launch_clip(id))
-                        .map(|l| (l.clip.track, launch_name(t_of(s), &l.clip)))
-                }) else {
-                    return;
-                };
-                let mut items = launch_items();
-                if let Some(d) = self.launch_data(id) {
-                    items.push(var_item(self.var_count(d)));
-                }
-                (items, c.1, format!("launcher · track {:02}", c.0 + 1))
-            }
-            PieFor::Lane { track, at } => {
-                let (name, place) = self.with(|s| {
-                    let t = s.song.timeline.as_deref();
-                    let name = t
-                        .and_then(|t| t.tracks.get(track))
-                        .map(|x| x.name.clone())
-                        .filter(|n| !n.is_empty())
-                        .unwrap_or_else(|| format!("Track {:02}", track + 1));
-                    let p = t.map(|t| t.bar_pos(at));
-                    (
-                        name,
-                        p.map_or(String::new(), |p| format!("bar {}.{}", p.bar, p.beat)),
-                    )
-                });
-                (
-                    lane_items(
-                        !self.tlv.clipboard.is_empty(),
-                        self.tracker_on(),
-                        !self.noterec.recent.is_empty(),
-                    ),
-                    name,
-                    format!("track {:02} · {place}", track + 1),
-                )
-            }
-            PieFor::Drum { pad, .. } => (
-                drum_items(),
-                "PATTERN".to_string(),
-                format!("pad lane {}", pad + 1),
-            ),
+        let Some((title, sub, items)) = self.compass_root(on) else {
+            return;
         };
-        let mut pie = Radial::new(at, title, sub, items);
+        self.pie_stack.clear();
+        let mut pie = Radial::compass(at, title, sub, items);
         pie.clamp_to(ctx.content_rect());
+        self.opie_at = Some(at);
         self.opie = Some((pie, on));
     }
 
@@ -276,7 +237,20 @@ impl App {
         }
         if let Some((mut pie, on)) = self.opie.take() {
             match pie.show(ctx) {
-                RadialEv::Cancel => {}
+                RadialEv::Cancel => {
+                    self.pie_stack.clear();
+                }
+                RadialEv::Deeper(i) => {
+                    let key = pie.items.get(i).map(|x| x.key.clone()).unwrap_or_default();
+                    let cur = (pie.title.clone(), pie.sub.clone(), pie.items.clone());
+                    if let Some((t, s, items)) = self.compass_page(on, &key) {
+                        self.pie_stack.push(cur);
+                        pie.replace(t, s, items);
+                    } else {
+                        self.status = "Choose one of the names on the ring".into();
+                    }
+                    self.opie = Some((pie, on));
+                }
                 RadialEv::Pick(i, _) if pie.items.get(i).is_some_and(|x| x.dim) => {
                     // greyed: stays open, says why
                     self.status = "Nothing copied: select clips and press Ctrl+C (or Copy in a clip's pie) first".into();
@@ -287,14 +261,27 @@ impl App {
                     self.opie = Some((pie, on));
                 }
                 RadialEv::Pick(i, c) => {
-                    let label = pie
-                        .items
-                        .get(i)
-                        .map(|x| x.label.clone())
-                        .unwrap_or_default();
-                    let child = c.and_then(|c| pie.items.get(i)?.children.get(c).cloned());
+                    let key = pie.items.get(i).map(|x| x.key.clone()).unwrap_or_default();
                     self.opie_at = Some(pie.at);
-                    self.obj_pie_pick(on, &label, child.as_deref());
+                    if pie.compass {
+                        if key == "back" {
+                            if let Some((t, s, items)) = self.pie_stack.pop() {
+                                pie.replace(t, s, items);
+                                self.opie = Some((pie, on));
+                            }
+                        } else {
+                            self.pie_stack.clear();
+                            self.compass_act(on, &key);
+                        }
+                    } else {
+                        let label = pie
+                            .items
+                            .get(i)
+                            .map(|x| x.label.clone())
+                            .unwrap_or_default();
+                        let child = c.and_then(|c| pie.items.get(i)?.children.get(c).cloned());
+                        self.obj_pie_pick(on, &label, child.as_deref());
+                    }
                 }
                 _ => self.opie = Some((pie, on)),
             }
@@ -329,6 +316,12 @@ impl App {
                 track,
                 pad,
             } => self.drum_pie_pick(clip, data, track, pad, label, child),
+            PieFor::Track(_)
+            | PieFor::NewTrack
+            | PieFor::Master
+            | PieFor::RackInst(_)
+            | PieFor::RackFx(_, _)
+            | PieFor::Auto { .. } => {}
         }
     }
 
@@ -390,6 +383,7 @@ impl App {
     }
 
     /// note data of launcher clip `id`
+    #[allow(dead_code)]
     fn launch_data(&self, id: u32) -> Option<usize> {
         self.with(|s| s.song.timeline.as_deref()?.launch_clip(id)?.clip.notes())
     }
@@ -442,7 +436,7 @@ impl App {
     }
 
     /// track and scene of a launcher clip
-    fn launch_where(&self, id: u32) -> Option<(usize, usize)> {
+    pub(crate) fn launch_where(&self, id: u32) -> Option<(usize, usize)> {
         self.with(|s| {
             let l = s.song.timeline.as_deref()?.launch_clip(id)?;
             Some((l.clip.track as usize, l.scene as usize))
@@ -695,6 +689,7 @@ impl App {
     }
 }
 
+#[allow(dead_code)]
 fn t_of(s: &Shared) -> &tl::Timeline {
     s.song.timeline.as_deref().expect("timeline")
 }
