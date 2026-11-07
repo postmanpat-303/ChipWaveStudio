@@ -1,6 +1,8 @@
 # Linux desktop integration
 
-Files for a Linux package (none is built by CI yet):
+`scripts/package-linux.sh` builds the x86_64 `.deb`, `.rpm`, AppImage and portable archive from a binary compiled on Ubuntu 22.04 (glibc 2.35). Install notes are in [docs/LINUX.md](../../docs/LINUX.md).
+
+Files:
 
 - `io.github.postmanpat_303.ChipWaveStudio.desktop` → `share/applications/`
 - `io.github.postmanpat_303.ChipWaveStudio.metainfo.xml` → `share/metainfo/` (AppStream)
