@@ -8,7 +8,6 @@ use super::ui_tests::key;
 use super::unified_tests::{at, clip, frames, notes_song, BAR};
 use super::*;
 use crate::timeline::{self as tl, Tick, PPQ};
-use egui_kittest::kittest::Queryable;
 use egui_kittest::Harness;
 
 const CMD: egui::Modifiers = egui::Modifiers::COMMAND;
@@ -48,8 +47,9 @@ fn notes_of(h: &Harness<'static, App>, c: &tl::Clip) -> Vec<tl::Note> {
 fn song4() -> (Harness<'static, App>, u32) {
     let (mut h, a) = notes_song();
     while h.state().with(|s| s.song.channels) < 4 {
-        h.get_by_label("+ Add track").click();
-        frames(&mut h, 3);
+        let n = h.state().with(|s| s.song.channels);
+        h.state_mut().track_add(n);
+        frames(&mut h, 2);
     }
     h.state_mut().undo_reset();
     (h, a)
@@ -272,9 +272,18 @@ fn clip_pie_copies_and_the_empty_lane_pie_pastes_here() {
         matches!(on, Some(PieFor::Lane { track: 1, at }) if (5 * BAR..6 * BAR).contains(&at)),
         "{on:?}"
     );
-    let first = h.state().opie.as_ref().unwrap().0.items[0].clone();
-    assert_eq!(first.label, "Nothing copied");
-    assert!(first.dim);
+    let dimmed = h
+        .state()
+        .opie
+        .as_ref()
+        .unwrap()
+        .0
+        .items
+        .iter()
+        .find(|i| i.dim)
+        .cloned()
+        .expect("a greyed wedge");
+    assert_eq!(dimmed.label, "Nothing copied");
     h.state_mut().opie = None;
     frames(&mut h, 2);
     // the clip's pie: Copy
@@ -291,10 +300,10 @@ fn clip_pie_copies_and_the_empty_lane_pie_pastes_here() {
         .iter()
         .map(|x| x.label.clone())
         .collect();
-    for want in ["Copy", "Cut", "Duplicate", "Delete", "Make unique"] {
+    for want in ["Repeat ›", "Remove…"] {
         assert!(labels.iter().any(|x| x == want), "{want} in {labels:?}");
     }
-    pick(&mut h, "Copy", None);
+    pick(&mut h, "Repeat ›", Some("Copy"));
     assert!(
         h.state().status.starts_with("Copied 1 clip"),
         "{}",
@@ -304,10 +313,15 @@ fn clip_pie_copies_and_the_empty_lane_pie_pastes_here() {
     let n = clips(&h).len();
     let p = at(&h, 1, 5 * BAR + PPQ);
     right_click(&mut h, p);
-    assert_eq!(
-        h.state().opie.as_ref().unwrap().0.items[0].label,
-        "Paste here"
-    );
+    assert!(h
+        .state()
+        .opie
+        .as_ref()
+        .unwrap()
+        .0
+        .items
+        .iter()
+        .any(|i| i.label.starts_with("Paste here")));
     pick(&mut h, "Paste here", Some("Independent copy"));
     let all = clips(&h);
     assert_eq!(all.len(), n + 1, "{}", h.state().status);
@@ -431,10 +445,8 @@ fn a_linked_clips_pie_has_copy_and_cut() {
         .iter()
         .map(|x| x.label.clone())
         .collect();
-    for want in ["Copy", "Cut"] {
-        assert!(labels.iter().any(|x| x == want), "{want} in {labels:?}");
-    }
-    pick(&mut h, "Copy", None);
+    assert!(labels.iter().any(|x| x == "Repeat ›"), "{labels:?}");
+    pick(&mut h, "Repeat ›", Some("Copy"));
     assert!(
         h.state().status.starts_with("Copied 1 clip"),
         "{}",

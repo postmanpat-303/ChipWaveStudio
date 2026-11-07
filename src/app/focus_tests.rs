@@ -60,8 +60,8 @@ fn new_song_with_notes() -> Harness<'static, App> {
     let mut h = focus(fileio::demo_song());
     h.state_mut().new_song();
     frames(&mut h, 3);
-    h.get_by_label("+ Add track").click();
-    frames(&mut h, 3);
+    h.state_mut().track_add(0);
+    frames(&mut h, 2);
     h.state().with(|s| {
         let id = tl::new_note_clip(&mut s.song, 0, 0).unwrap();
         let t = s.song.timeline.as_deref_mut().unwrap();
@@ -217,8 +217,8 @@ fn double_click_makes_a_note_clip_and_clicks_on_one_time_build_a_chord() {
     let mut h = focus(fileio::demo_song());
     h.state_mut().new_song();
     frames(&mut h, 3);
-    h.get_by_label("+ Add track").click();
-    frames(&mut h, 3);
+    h.state_mut().track_add(0);
+    frames(&mut h, 2);
     // double-click empty space on the track: a note clip (not a block)
     let (_, row) = h.state().tlv.track_rects(0).expect("track 0");
     let p = Pos2::new(h.state().tlv.x_of(tl::PPQ * 2), row.center().y);
@@ -585,9 +585,10 @@ fn nothing_in_the_roll_follows_the_tracker_cursor_block() {
     let mut h = new_song_with_notes();
     h.state_mut().tlv.sel = None;
     h.state_mut().tlv.sels.clear();
-    h.get_by_label("+ Add track").click();
-    frames(&mut h, 3);
-    h.state_mut().ch = 1;
+    let n = h.state().with(|s| s.song.channels);
+    h.state_mut().track_add(n);
+    frames(&mut h, 2);
+    h.state_mut().ch = n;
     h.state_mut().tlv.sel = None;
     frames(&mut h, 2);
     assert_eq!(h.state().pr_target(), None);

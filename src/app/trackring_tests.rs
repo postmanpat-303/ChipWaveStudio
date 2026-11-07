@@ -30,7 +30,7 @@ fn harness_tl() -> Harness<'static, App> {
 fn open(h: &mut Harness<'static, App>, tr: usize) {
     let ctx = h.ctx.clone();
     h.state_mut()
-        .open_track_pie(tr, Pos2::new(600.0, 400.0), false, &ctx);
+        .open_legacy_pie(tr, Pos2::new(600.0, 400.0), false, &ctx);
     frames(h, 2);
 }
 
@@ -618,7 +618,7 @@ fn rings_go_in_and_back() {
     // a disabled slot only says why (the empty-area pie's FX track)
     h.state_mut().pie = None;
     h.state_mut()
-        .open_add_pie(Pos2::new(600.0, 400.0), false, &ctx);
+        .open_legacy_add_pie(Pos2::new(600.0, 400.0), false, &ctx);
     frames(&mut h, 2);
     assert_eq!(level(&h), Some(Level::Add));
     for _ in 0..4 {
@@ -772,7 +772,7 @@ fn the_empty_area_pie_adds_tracks_at_the_end() {
     // the pie opens on its ring with no track segments
     let ctx = h.ctx.clone();
     h.state_mut()
-        .open_add_pie(Pos2::new(600.0, 400.0), false, &ctx);
+        .open_legacy_add_pie(Pos2::new(600.0, 400.0), false, &ctx);
     frames(&mut h, 2);
     assert!(h.state().pie.as_ref().is_some_and(|p| p.empty));
     assert_eq!(

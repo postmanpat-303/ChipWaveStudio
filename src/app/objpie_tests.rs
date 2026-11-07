@@ -30,13 +30,38 @@ pub(super) fn pick(h: &mut Harness<'static, App>, label: &str, child: Option<&st
     let i = pie
         .items
         .iter()
-        .position(|x| x.label == label)
-        .unwrap_or_else(|| panic!("no wedge {label}"));
-    let w = pie.wedge_centre(i, (super::radial::r_in() + super::radial::r_mid()) / 2.0);
+        .position(|x| x.label == label || x.label.trim_end_matches(" ›") == label)
+        .unwrap_or_else(|| {
+            panic!(
+                "no wedge {label} in {:?}",
+                pie.items.iter().map(|x| &x.label).collect::<Vec<_>>()
+            )
+        });
+    let w = pie.hit_point(i);
     h.input_mut().events.push(egui::Event::PointerMoved(w));
     frames(h, 2);
-    let p = match child {
-        Some(c) => {
+    let goes = pie.items[i].goes;
+    match (goes, child) {
+        (true, Some(c)) => {
+            click_at(h, w);
+            frames(h, 3);
+            let (pie, _) = h.state().opie.clone().expect("the next ring");
+            let i = pie
+                .items
+                .iter()
+                .position(|x| x.label == c || x.label.trim_end_matches(" ›") == c)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "no {c} in {:?}",
+                        pie.items.iter().map(|x| &x.label).collect::<Vec<_>>()
+                    )
+                });
+            let p = pie.hit_point(i);
+            h.input_mut().events.push(egui::Event::PointerMoved(p));
+            frames(h, 2);
+            click_at(h, p);
+        }
+        (_, Some(c)) => {
             let k = pie.items[i]
                 .children
                 .iter()
@@ -45,11 +70,10 @@ pub(super) fn pick(h: &mut Harness<'static, App>, label: &str, child: Option<&st
             let p = pie.child_centre(i, k);
             h.input_mut().events.push(egui::Event::PointerMoved(p));
             frames(h, 2);
-            p
+            click_at(h, p);
         }
-        None => w,
-    };
-    click_at(h, p);
+        _ => click_at(h, w),
+    }
     frames(h, 3);
 }
 
@@ -80,18 +104,18 @@ fn right_click_a_clip_opens_its_pie_colour_rename_duplicate() {
         .iter()
         .map(|x| x.label.clone())
         .collect();
-    for want in [
-        "Edit",
-        "Duplicate",
-        "Colour",
-        "Rename",
-        "To launcher",
-        "Delete",
-    ] {
+    for want in ["Edit notes", "Repeat ›", "Arrange ›", "Look ›", "Remove…"] {
         assert!(labels.iter().any(|x| x == want), "{want} in {labels:?}");
     }
-    // Colour > Blue
-    pick(&mut h, "Colour", Some("Blue"));
+    assert!(
+        !labels
+            .iter()
+            .any(|x| x == "Delete" || x.starts_with("Delete")),
+        "the first ring does not delete"
+    );
+    // Look › Colour › Blue (Blue is on the first colour ring)
+    pick(&mut h, "Look ›", Some("Colour ›"));
+    pick(&mut h, "Blue", None);
     assert!(h.state().opie.is_none(), "picking closes it");
     assert_eq!(clip(&h, a).colour, Some(0x5A86B4));
     h.state_mut().undo(false);
@@ -100,7 +124,7 @@ fn right_click_a_clip_opens_its_pie_colour_rename_duplicate() {
     // Rename: the window, typed, Enter
     let p = at(&h, 0, BAR / 2);
     right_click(&mut h, p);
-    pick(&mut h, "Rename", None);
+    pick(&mut h, "Look ›", Some("Rename"));
     assert!(h.state().clip_rename.is_some());
     h.state_mut().clip_rename.as_mut().unwrap().text = "Verse riff".into();
     frames(&mut h, 1);
@@ -113,7 +137,7 @@ fn right_click_a_clip_opens_its_pie_colour_rename_duplicate() {
     let n0 = n_clips(&h);
     let p = at(&h, 0, BAR / 2);
     right_click(&mut h, p);
-    pick(&mut h, "Duplicate", Some("Independent copy"));
+    pick(&mut h, "Repeat ›", Some("Own copy"));
     assert_eq!(n_clips(&h), n0 + 1, "{}", h.state().status);
     let b = h.state().tlv.sel.unwrap();
     assert_ne!(b, a);
@@ -166,14 +190,15 @@ fn a_launcher_clip_pie_places_it_after_the_last_clip() {
         Some(PieFor::Launch(lid))
     );
     // Rename and Colour reach the launcher clip too
-    pick(&mut h, "Colour", Some("Green"));
+    pick(&mut h, "Look ›", Some("Colour ›"));
+    pick(&mut h, "Green", None);
     let l = h
         .state()
         .with(|s| s.song.timeline.as_deref().unwrap().launcher[0].clip.clone());
     assert_eq!(l.colour, Some(0x6E9A58));
     let n0 = n_clips(&h);
     right_click(&mut h, sr.center() + egui::vec2(10.0, 0.0));
-    pick(&mut h, "Place", Some("After the last clip"));
+    pick(&mut h, "Place ›", Some("After the last clip"));
     assert_eq!(n_clips(&h), n0 + 1, "{}", h.state().status);
     let c = super::unified_tests::newest(&h);
     assert_eq!(
@@ -270,7 +295,8 @@ fn colour_on_a_linked_clip_shows_at_once_on_every_copy_and_undoes() {
     };
     let p = at(&h, 0, BAR / 2);
     right_click(&mut h, p);
-    pick(&mut h, "Colour", Some("Red"));
+    pick(&mut h, "Look ›", Some("Colour ›"));
+    pick(&mut h, "Red", None);
     let red = clip(&h, a).colour;
     assert!(red.is_some(), "{}", h.state().status);
     assert_eq!(clip(&h, b).colour, red, "the linked copy too");
