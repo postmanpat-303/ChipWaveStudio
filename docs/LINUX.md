@@ -1,6 +1,6 @@
 # ChipWave Studio on Linux
 
-Linux packages are **x86_64 only**. There is no ARM build. They are app version **0.2.21.0**, published on the release `linux-v0.2.21.0`. That release is not “latest”: the Windows and Mac downloads stay on their own release until a Mac build of this version exists.
+Linux packages are **x86_64 only**. There is no ARM build. They are app version **0.2.21.0**, published on the release `linux-v0.2.21.0`. The Windows and Mac files of this version are the latest release, `v0.2.21.0`. The Linux release is kept as its own download.
 
 The binary is built on **Ubuntu 22.04** and needs **glibc 2.35 or newer**.
 
