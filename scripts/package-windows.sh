@@ -37,6 +37,7 @@ if command -v makensis >/dev/null; then
   # app title as a test build. A release build leaves it unset.
   BUILD_ARG=()
   if [ -n "${CW_BUILD:-}" ]; then
+    echo "test build label: $CW_BUILD"
     BUILD_ARG=(-DBUILD="$CW_BUILD")
   fi
   (cd installer && makensis -V2 -DVERSION="$VER" -DVIVERSION="$VI" -DPKGDIR=../dist/pkg \

@@ -34,9 +34,11 @@ Unicode true
 !ifdef BUILD
   Name "${APPNAME} ${VERSION} TEST (${BUILD})"
   BrandingText "${APPNAME} ${VERSION} TEST (${BUILD})"
+  !define PRODUCT "${APPNAME} ${VERSION} TEST (${BUILD})"
 !else
   Name "${APPNAME} ${VERSION}"
   BrandingText "${APPNAME} ${VERSION}"
+  !define PRODUCT "${APPNAME}"
 !endif
 OutFile "${OUTFILE}"
 InstallDir "$PROGRAMFILES64\${INSTFOLDER}"
@@ -48,7 +50,8 @@ SetCompressor /SOLID lzma
   !define VIVERSION "${VERSION}"
 !endif
 VIProductVersion "${VIVERSION}"
-VIAddVersionKey "ProductName" "${APPNAME}"
+VIAddVersionKey "ProductName" "${PRODUCT}"
+VIAddVersionKey "Comments" "${PRODUCT}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "FileDescription" "${APPNAME} setup"
