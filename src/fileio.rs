@@ -1346,6 +1346,65 @@ pub fn song_from_text(text: &str) -> Result<Song, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// a standalone sketch, not one of the built-in demos
+    #[test]
+    fn hypnotic_matrix_sketch_is_not_a_bundled_demo() {
+        let names: Vec<_> = DEMOS.iter().map(|d| d.0).collect();
+        assert_eq!(
+            names,
+            vec![
+                "Lumen Drift",
+                "Hollow Ritual",
+                "Velvet Mirrorball",
+                "Chrome Throat",
+                "Oceans 11",
+                "Tallest Morning",
+            ]
+        );
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("sketches/hypnotic_matrix.cwt.toml");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let s = song_from_text(&text).unwrap();
+        assert!(s.title.starts_with("Hypnotic Matrix"));
+        assert_eq!(s.info.artist, "Del (postmanpat)");
+        assert!((s.bpm - 140.7).abs() < 0.05, "{}", s.bpm);
+        let secs = s.order.len() as f32 * 64.0 * 60.0 / (s.bpm * 4.0);
+        assert!((250.0..255.0).contains(&secs), "{secs}");
+        // the repeating figure starts once the intro grid is underway, and the
+        // G# bass is the loud section, not the whole song
+        assert!(s.patterns.iter().any(|p| p.name == "Matrix"));
+        assert!(text.contains("G#2"));
+        assert!(text.contains("A-2"));
+        let dir = std::env::temp_dir().join(format!("cw-hm-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("hypnotic.cwt");
+        save_cwt(&s, &out).unwrap();
+        let back = load_cwt(&out).unwrap();
+        assert_eq!(back.title, s.title);
+        assert_eq!(back.order, s.order);
+        assert_eq!(back.bpm, s.bpm);
+        let a = crate::engine::render_song(
+            &{
+                let mut t = s.clone();
+                t.order.truncate(1);
+                t
+            },
+            11025,
+        );
+        let b = crate::engine::render_song(
+            &{
+                let mut t = back;
+                t.order.truncate(1);
+                t
+            },
+            11025,
+        );
+        assert_eq!(a.len(), b.len());
+        assert_eq!(a, b);
+        assert!(a.iter().all(|x| x.is_finite()));
+        let peak = a.iter().fold(0f32, |m, x| m.max(x.abs()));
+        assert!(peak > 0.01 && peak <= 1.0, "{peak}");
+    }
     /// the extra dark psy demo parses, and File > Open's text path loads it
     #[test]
     fn dark_psy_demo_loads() {
