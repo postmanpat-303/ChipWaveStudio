@@ -1477,11 +1477,11 @@ mod tests {
                 .value;
             bass_tgt.to_real(n)
         };
+        let opened = at(8.0 * 64.0);
         assert!(
-            at(0.0) < 200.0 && at(8.0 * 64.0) > 800.0,
-            "filter opens over 32 bars: {} -> {}",
-            at(0.0),
-            at(8.0 * 64.0)
+            at(0.0) < 120.0 && opened > 450.0 && opened < 800.0,
+            "filter opens over 32 bars but stays soft: {} -> {opened}",
+            at(0.0)
         );
 
         // render the opening with the bass soloed, and compare the top of the

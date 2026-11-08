@@ -9,8 +9,8 @@ Each block is 4 bars (6.6 s).
 
 | Bars | Clock | What plays |
 |---|---|---|
-| 1–16 | 0:00 | Kick and rolling bass, filter nearly closed, resonance high |
-| 17–32 | 0:26 | Same roll, with A-Phrygian turns. Filter still opening |
+| 1–16 | 0:00 | Kick, and two short bass pulses in the gap after each kick. Filter nearly closed |
+| 17–32 | 0:26 | Same pulse, with A-Phrygian turns. Filter still opening, staying under 750 Hz |
 | 33–48 | 0:53 | Offbeat closed hats enter. Filter is open |
 | 49–64 | 1:19 | Shaker under the roll |
 | 65–80 | 1:46 | StringWave pad (A and E) |
@@ -28,7 +28,7 @@ Each block is 4 bars (6.6 s).
 ## Sounds
 
 - Deep Kick: built-in trance kick, low drive
-- Sable Bass: saw plus a quiet square, ladder low-pass, high-pass at 48 Hz, ducked by the kick
+- Sable Bass: sine plus a quiet triangle (not a saw). Each hit is two 16ths after the kick, amp decay 45 ms, sustain 0, release 28 ms. Low-pass sweeps about 70 Hz to 620 Hz over the first 32 bars and never goes to a bright buzz. High-pass at 42 Hz, fader −9 dB, a small send to the high-passed echo. Ducked by the kick.
 - Closed Hat, Open Hat, Dust (shaker), Rim
 - Phrygian Riff: square wave, short glide, its own low-pass lane
 - Night Pad: StringWave Slow Swell Orchestra, cutoff and reverb lanes, a slow LFO once it enters

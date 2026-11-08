@@ -2,8 +2,9 @@
 """Generate demos/sable_current.cwt.toml, the demo "Sable Current".
 
 An original dark psytrance instrumental in A Phrygian at 145 BPM, about 7:04.
-Kick and a rolling bass alone for the first 32 bars, with a resonant low-pass
-opening across that whole span. A dark StringWave pad enters later. The middle
+Kick and short bass pulses alone for the first 32 bars. The bass is a sine
+with a quiet triangle, gated short, and a resonant low-pass opens across
+those 32 bars without climbing into a bright buzz. A dark StringWave pad enters later. The middle
 drops the kick and the roll for one long resonant sweep, then the roll returns.
 Native instruments, Rack filters and song automation only: no samples.
 
@@ -46,20 +47,24 @@ def kick(b, bars=range(4), vol=0x38, stop=None):
             b.put(r, KICK, "A-2", I_KICK, vol)
 
 
-def roll(b, bars=range(4), vol=0x36, turn=False):
-    """three 16ths after every kick. A Phrygian colour on the last beat when turn."""
+def roll(b, bars=range(4), vol=0x2A, turn=False):
+    """Two short pulses in the gap after the kick, not a held saw on every 16th.
+    The 16th inside the kick is empty so the kick's attack is alone."""
     for bar in bars:
         for beat in range(4):
             if turn and bar == 3 and beat == 3:
-                notes = ("A#3", "A-3", "G-3")
+                notes = ("A#3", "G-3")
             elif turn and bar == 1 and beat == 2:
-                notes = ("A-3", "A-3", "E-3")
+                notes = ("A-3", "E-3")
             else:
-                notes = ("A-3", "A-3", "A-3")
+                notes = ("A-3", "A-3")
+            base = bar * B + beat * 4
             for k, n in enumerate(notes):
-                # the 16th inside the kick is quieter; the duck does the rest
-                v = vol - 8 if k == 0 else vol
-                b.put(bar * B + beat * 4 + 1 + k, BASS, n, I_BASS, rng.jitter(v, 1))
+                b.put(base + 2 + k, BASS, n, I_BASS, rng.jitter(vol, 1))
+            # release before the next kick
+            end = base + 4
+            if end < ROWS:
+                b.off(end, BASS)
 
 
 def hats(b, bars=range(4), vol=0x18, sixteenths=False):
@@ -150,10 +155,10 @@ kick(b); roll(b, turn=True); hats(b, vol=0x14)
 D, b = blk("Shaker under the roll", "intro")
 kick(b); roll(b, turn=True); hats(b, vol=0x18); shaker(b, vol=0x12, step=2)
 E, b = blk("Pad enters", "build")
-kick(b); roll(b, vol=0x34, turn=True); hats(b, vol=0x1A); shaker(b, vol=0x12, step=2)
+kick(b); roll(b, vol=0x2C, turn=True); hats(b, vol=0x1A); shaker(b, vol=0x12, step=2)
 pad(b, vol=0x28)
 F, b = blk("Pad leans on the flat two", "build")
-kick(b); roll(b, vol=0x34, turn=True); hats(b, vol=0x1A); open_hat(b, vol=0x16)
+kick(b); roll(b, vol=0x2C, turn=True); hats(b, vol=0x1A); open_hat(b, vol=0x16)
 pad(b, "A#3", "F-4", vol=0x2A)
 G, b = blk("First riff", "drop")
 kick(b); roll(b, turn=True); hats(b, vol=0x1C); shaker(b, vol=0x14, step=2); rim(b, vol=0x1E)
@@ -162,10 +167,10 @@ H, b = blk("Riff answers", "drop")
 kick(b); roll(b, turn=True); hats(b, vol=0x1C, sixteenths=True); open_hat(b, vol=0x18)
 rim(b, vol=0x20); pad(b, vol=0x24); riff(b, RIFF_B, 0x30)
 I, b = blk("Full current", "drop")
-kick(b); roll(b, vol=0x38, turn=True); hats(b, vol=0x1E, sixteenths=True)
+kick(b); roll(b, vol=0x2C, turn=True); hats(b, vol=0x1E, sixteenths=True)
 open_hat(b, vol=0x1A, beats=(1, 3)); rim(b, vol=0x22); pad(b, vol=0x24); riff(b, RIFF_A, 0x32)
 J, b = blk("Full current, fill", "drop")
-kick(b); roll(b, vol=0x38, turn=True); hats(b, vol=0x1C, sixteenths=True)
+kick(b); roll(b, vol=0x2C, turn=True); hats(b, vol=0x1C, sixteenths=True)
 open_hat(b, vol=0x18); rim(b, bars=range(3), vol=0x20); fill(b); pad(b, vol=0x22)
 riff(b, RIFF_B, 0x30)
 K, b = blk("The room", "breakdown")
@@ -182,20 +187,20 @@ pad(b, vol=0x28)
 b.off(0, SWEEP)
 b.put(0, FX, "C-4", I_FX, 0x28)
 O, b = blk("Roll returns", "drop")
-kick(b, vol=0x3A); roll(b, vol=0x34, turn=False)
+kick(b, vol=0x3A); roll(b, vol=0x28, turn=False)
 P, b = blk("Hats return", "drop")
 kick(b); roll(b, turn=True); hats(b, vol=0x16)
 Q, b = blk("Riff returns", "drop")
 kick(b); roll(b, turn=True); hats(b, vol=0x1C); shaker(b, vol=0x12, step=2)
 pad(b, vol=0x26); riff(b, RIFF_C, 0x30)
 R, b = blk("Open water", "drop")
-kick(b); roll(b, vol=0x38, turn=True); hats(b, vol=0x20, sixteenths=True)
+kick(b); roll(b, vol=0x2C, turn=True); hats(b, vol=0x20, sixteenths=True)
 open_hat(b, vol=0x1C, beats=(1, 3)); rim(b); pad(b, vol=0x26); riff(b, RIFF_C, 0x34)
 S, b = blk("Peel back", "outro")
 kick(b, bars=range(3)); roll(b, bars=range(3), turn=True); hats(b, bars=range(2), vol=0x14)
 pad(b, vol=0x24)
 T, b = blk("Last current", "outro")
-kick(b, bars=range(2), vol=0x30); roll(b, bars=range(2), vol=0x2C, turn=False)
+kick(b, bars=range(2), vol=0x30); roll(b, bars=range(2), vol=0x26, turn=False)
 pad(b, bars=range(1), vol=0x20)
 for ch in (PAD, PADR):
     b.off(16 + 8, ch)
@@ -244,25 +249,27 @@ gain = 0.9
 slot = 2
 name = "Sable Bass"
 patch = "builtin:init"
-wave = "saw"
+# sine body, a quiet triangle for the harmonics the filter reveals.
+# not a detuned saw: the open filter stays soft.
+wave = "sine"
 octave = -1
-osc2 = { wave = "square", semi = 0, level = 0.35 }
-detune = 6.0
-filter_model = "ladder"
-slope = 24
-cutoff = 140.0
-resonance = 0.62
-env_amount = 0.08
+osc2 = { wave = "triangle", semi = 0, level = 0.16 }
+detune = 0.0
+filter_model = "svf"
+slope = 12
+cutoff = 80.0
+resonance = 0.28
+env_amount = 0.0
 filter_attack = 0.001
-filter_decay = 0.12
-filter_sustain = 0.55
+filter_decay = 0.04
+filter_sustain = 0.0
 attack = 0.001
-decay = 0.16
-sustain = 0.7
-release = 0.05
-gain = 0.85
-# fx 1 = HP so the kick keeps the bottom
-fx = [{ kind = "Filter", mode = 1.0, cutoff = 48.0, resonance = 0.0 }]
+decay = 0.045
+sustain = 0.0
+release = 0.028
+gain = 0.62
+# fx 1 = HP so the kick keeps the very bottom
+fx = [{ kind = "Filter", mode = 1.0, cutoff = 42.0, resonance = 0.0 }]
 [[instrument]]
 slot = 3
 name = "Closed Hat"
@@ -353,7 +360,8 @@ target_lufs = -14.0
 ''')
 chans = [
     ("Kick", -1.0, 0.0, 0.0, 0.0, 0.0),
-    ("Bass", -2.5, 0.0, 0.0, 0.0, 0.78),
+    # quiet in the mix; a little send to the high-passed echo, no reverb
+    ("Bass", -9.0, 0.0, 0.07, 0.0, 0.55),
     ("Hat", -14.0, 0.15, 0.0, 0.04, 0.0),
     ("Open Hat", -16.0, -0.25, 0.05, 0.08, 0.1),
     ("Dust", -16.0, 0.35, 0.0, 0.05, 0.15),
@@ -401,13 +409,14 @@ peak = at(R)
 outro = at(S)
 last = at(T)
 
+# opens across the first 32 bars, and stays under 750 Hz so the mids stay soft
 lane("instrument.2.cutoff", "Sable Bass - resonant LP", [
-    (0, 90.0), (intro_end, 4200.0), (hats_end, 1800.0), (riff_at, 1400.0),
-    (groove, 1450.0), (room, 180.0, "step"), (back, 170.0),
-    (back + 8 * B, 880.0), (peak, 1600.0), (outro, 700.0), (total, 160.0)])
+    (0, 70.0), (intro_end, 620.0), (hats_end, 540.0), (riff_at, 480.0),
+    (groove, 640.0), (room, 80.0, "step"), (back, 90.0),
+    (back + 8 * B, 500.0), (peak, 680.0), (outro, 220.0), (total, 80.0)])
 lane("instrument.2.resonance", "Sable Bass - resonance", [
-    (0, 0.78), (intro_end, 0.5), (groove, 0.38), (room, 0.7),
-    (back, 0.66), (peak, 0.34), (total, 0.72)], curve="linear")
+    (0, 0.42), (intro_end, 0.26), (groove, 0.22), (room, 0.3),
+    (back, 0.36), (peak, 0.2), (total, 0.34)], curve="linear")
 lane("instrument.3.fx.1.cutoff", "Closed Hat - HP", [
     (0, 7000.0), (at(C), 2200.0), (groove, 4000.0), (room, 5000.0),
     (back, 2400.0), (peak, 3600.0), (total, 5000.0)])
