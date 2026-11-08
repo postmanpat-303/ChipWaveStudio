@@ -792,6 +792,11 @@ pub const DEMOS: &[(&str, &str, &str)] = &[
         "uplifting melodic house, D major, 126 BPM (StringWave echo chord stabs and pads, a macro rise, LFO and envelope modulation, sidechain pumping)",
         include_str!("../demos/tallest_morning.cwt.toml"),
     ),
+    (
+        "Sable Current",
+        "dark psytrance, A Phrygian, 145 BPM (a long resonant bass opening, a night pad, one breakdown sweep)",
+        include_str!("../demos/sable_current.cwt.toml"),
+    ),
 ];
 
 /// demo `i` of `DEMOS` (falls back to the first)
@@ -1412,6 +1417,282 @@ mod tests {
         // 2:00-2:45: 18 blocks of 64 lines at 126 BPM
         let secs = s.order.len() as f32 * 64.0 * 60.0 / (126.0 * 4.0);
         assert!((120.0..165.0).contains(&secs), "{secs}");
+    }
+    /// "Sable Current": long dark psy in the demo menu. The resonant bass filter
+    /// actually opens across the first 32 bars (not only as a lane label), the
+    /// breakdown sweep gets brighter, and a saved .cwt reopens as the same song.
+    #[test]
+    fn sable_current_demo_loads_and_the_filter_opens() {
+        let names: Vec<_> = DEMOS.iter().map(|d| d.0).collect();
+        assert_eq!(
+            &names[..6],
+            &[
+                "Lumen Drift",
+                "Hollow Ritual",
+                "Velvet Mirrorball",
+                "Chrome Throat",
+                "Oceans 11",
+                "Tallest Morning",
+            ]
+        );
+        let i = names.iter().position(|n| *n == "Sable Current").unwrap();
+        let text = DEMOS[i].2;
+        let s = demo_song_n(i);
+        assert!(s.title.starts_with("Sable Current"));
+        assert_eq!(s.info.artist, "Del (postmanpat)");
+        assert_eq!(s.bpm, 145.0);
+        assert_eq!(s.channels, 11);
+        assert_eq!(s.mixer.duck_key, 0);
+        assert!(s.mixer.channels[1].duck > 0.5, "bass ducked off the kick");
+        assert!(s.mixer.limiter.enabled && s.mixer.limiter.ceiling_db <= -1.0);
+        assert!(s.instruments.iter().any(|x| x.name == "Sable Bass"));
+        assert!(s.instruments.iter().any(|x| x.name == "Night Pad"));
+        assert!(s.instruments.iter().any(|x| x.name == "Eerie Sweep"));
+        assert_eq!(s.automation.len(), text.matches("[[automation]]").count());
+        let secs = s.order.len() as f32 * 64.0 * 60.0 / (145.0 * 4.0);
+        // 44 blocks: the theme is at bar 33, not after a 2:39 intro
+        assert!((280.0..310.0).contains(&secs), "{secs}");
+        let theme_at = s
+            .order
+            .iter()
+            .position(|&b| s.patterns[b].name == "Theme, first bleeps")
+            .unwrap();
+        assert_eq!(theme_at, 8, "theme should start once 32 bars have played");
+        // first 32 bars are kick + bass only
+        for pat in &s.patterns[..2] {
+            for row in &pat.cells {
+                for (ch, cell) in row.iter().enumerate() {
+                    if ch > 1 {
+                        assert_eq!(cell.note, 0, "{} ch {ch}", pat.name);
+                    }
+                }
+            }
+        }
+        let bass = s
+            .automation
+            .iter()
+            .find(|l| l.label == "Sable Bass - resonant LP")
+            .unwrap();
+        let bass_tgt = crate::automation::Target::parse(&bass.target).unwrap();
+        let at = |pos: f32| {
+            let n = bass
+                .points
+                .iter()
+                .filter(|p| p.pos <= pos)
+                .max_by(|a, b| a.pos.partial_cmp(&b.pos).unwrap())
+                .unwrap()
+                .value;
+            bass_tgt.to_real(n)
+        };
+        let opened = at(8.0 * 64.0);
+        assert!(
+            at(0.0) < 120.0 && opened > 450.0 && opened < 800.0,
+            "filter opens over 32 bars but stays soft: {} -> {opened}",
+            at(0.0)
+        );
+        // one bass note per beat, a second only on a phrase end, never three
+        let mut doubles = 0usize;
+        let mut with_bass = 0usize;
+        for pat in &s.patterns {
+            let mut per_beat = vec![0u8; pat.rows / 4];
+            for (r, row) in pat.cells.iter().enumerate() {
+                let n = row[1].note;
+                if n > 0 && n != crate::model::NOTE_OFF {
+                    per_beat[r / 4] += 1;
+                }
+            }
+            for (beat, n) in per_beat.iter().copied().enumerate() {
+                assert!(n <= 2, "{} beat {beat} has {n} bass notes", pat.name);
+                if n == 2 {
+                    doubles += 1;
+                }
+                if n > 0 {
+                    with_bass += 1;
+                }
+            }
+            if matches!(
+                pat.name.as_str(),
+                "Current, closed"
+                    | "Current, a turn"
+                    | "Theme, first bleeps"
+                    | "Roll returns"
+                    | "Hats return"
+                    | "Last current"
+            ) {
+                assert!(
+                    per_beat.iter().all(|&n| n == 1 || n == 0),
+                    "{} should stay at one note per beat: {per_beat:?}",
+                    pat.name
+                );
+            }
+        }
+        assert!(doubles > 0, "the occasional second note is missing");
+        assert!(
+            doubles * 10 < with_bass,
+            "too many double beats: {doubles} of {with_bass}"
+        );
+        let bleep = s
+            .instruments
+            .iter()
+            .find(|i| i.name == "Phrygian Bleep")
+            .unwrap()
+            .kind
+            .patch()
+            .unwrap();
+        assert!(bleep.amp.s == 0.0 && bleep.amp.d <= 0.06 && bleep.amp.r <= 0.04);
+        let mut played = s.clone();
+        crate::timeline::enter_timeline_mode(&mut played);
+        let tl = played.timeline.as_ref().unwrap();
+        let mut bass_clips: Vec<_> = tl
+            .clips
+            .iter()
+            .filter(|c| c.track == 1)
+            .map(|c| (c.start, c.end()))
+            .collect();
+        bass_clips.sort();
+        for w in bass_clips.windows(2) {
+            assert!(w[0].1 <= w[1].0, "bass clips overlap {:?} {:?}", w[0], w[1]);
+        }
+
+        // render the opening with the bass soloed, and compare the top of the
+        // first 4 bars with the last 4 of those 32. A real low-pass opening
+        // puts more energy above 700 Hz at the end.
+        let mut solo = s.clone();
+        solo.order.truncate(8);
+        for p in &mut solo.patterns {
+            for row in &mut p.cells {
+                for (ch, cell) in row.iter_mut().enumerate() {
+                    if ch != 1 {
+                        *cell = Default::default();
+                    }
+                }
+            }
+        }
+        let sr = 22050;
+        let audio = crate::engine::render_song(&solo, sr);
+        assert!(audio.iter().all(|x| x.is_finite()));
+        let peak = audio.iter().fold(0f32, |m, x| m.max(x.abs()));
+        assert!(peak <= 1.0 && peak > 0.05, "bass peak {peak}");
+        let bar = (4.0 * 60.0 / 145.0 * sr as f32) as usize * 2;
+        let hp = |slice: &[f32], hz: f32| {
+            // high-pass RMS. The bass check uses 250 Hz (above the 110 Hz
+            // fundamental). The sweep check uses 2 kHz, above where the arc starts.
+            let rc = 1.0 / (2.0 * std::f32::consts::PI * hz);
+            let a = rc / (rc + 1.0 / sr as f32);
+            let mut y = 0.0;
+            let mut prev = 0.0;
+            let mut acc = 0.0;
+            for pair in slice.chunks(2) {
+                let x = 0.5 * (pair[0] + pair.get(1).copied().unwrap_or(0.0));
+                y = a * (y + x - prev);
+                prev = x;
+                acc += y * y;
+            }
+            (acc / (slice.len() as f32 / 2.0)).sqrt()
+        };
+        let early = hp(&audio[..bar * 4], 250.0);
+        // render_song appends a release tail; the last 4 bars of the opening
+        // are the samples just before that tail
+        let song_n = (32.0 * 4.0 * 60.0 / 145.0 * sr as f32) as usize * 2;
+        let late = hp(&audio[song_n - bar * 4..song_n], 250.0);
+        let mut frozen = solo.clone();
+        frozen
+            .automation
+            .retain(|l| l.label != "Sable Bass - resonant LP");
+        let frozen_audio = crate::engine::render_song(&frozen, sr);
+        let frozen_late = hp(&frozen_audio[song_n - bar * 4..song_n], 250.0);
+        assert!(
+            late > early * 1.5 && late > frozen_late * 1.5,
+            "bass filter did not open: early {early} late {late} frozen {frozen_late}"
+        );
+
+        // the breakdown has no kick notes, and the sweep lane climbs
+        let sweep_pat = s
+            .patterns
+            .iter()
+            .position(|p| p.name == "One sweep")
+            .unwrap();
+        let room = s
+            .patterns
+            .iter()
+            .position(|p| p.name == "The room")
+            .unwrap();
+        for id in [room, sweep_pat] {
+            for row in &s.patterns[id].cells {
+                assert_eq!(row[0].note, 0, "breakdown still has a kick");
+            }
+        }
+        let sweep = s
+            .automation
+            .iter()
+            .find(|l| l.label == "Eerie Sweep - one arc")
+            .unwrap();
+        let sweep_tgt = crate::automation::Target::parse(&sweep.target).unwrap();
+        let hz: Vec<f32> = sweep
+            .points
+            .iter()
+            .map(|p| sweep_tgt.to_real(p.value))
+            .collect();
+        let lo = hz.iter().copied().fold(f32::MAX, f32::min);
+        let hi = hz.iter().copied().fold(0.0, f32::max);
+        assert!(hi > lo * 8.0, "sweep {lo} Hz -> {hi} Hz");
+        let sweep_at = s.order.iter().position(|&p| p == sweep_pat).unwrap();
+        let mut sw = s.clone();
+        sw.order.truncate(sweep_at + 4);
+        for p in &mut sw.patterns {
+            for row in &mut p.cells {
+                for (ch, cell) in row.iter_mut().enumerate() {
+                    if ch != 8 {
+                        *cell = Default::default();
+                    }
+                }
+            }
+        }
+        let sw_audio = crate::engine::render_song(&sw, sr);
+        let sw_bar = bar;
+        // skip the note attack: four bars in, the arc is still closed (~220 Hz)
+        let closed_off = (sweep_at + 1) * sw_bar * 4;
+        let sw_closed = hp(&sw_audio[closed_off..closed_off + sw_bar * 2], 2000.0);
+        let peak_off = (sweep_at + 3) * sw_bar * 4;
+        let sw_peak = hp(&sw_audio[peak_off..peak_off + sw_bar * 2], 2000.0);
+        let mut frozen_sw = sw.clone();
+        frozen_sw
+            .automation
+            .retain(|l| l.label != "Eerie Sweep - one arc");
+        let frozen_sw_audio = crate::engine::render_song(&frozen_sw, sr);
+        let frozen_peak = hp(&frozen_sw_audio[peak_off..peak_off + sw_bar * 2], 2000.0);
+        assert!(
+            sw_peak > sw_closed * 2.0 && sw_peak > frozen_peak * 2.0,
+            "sweep did not rise: closed {sw_closed} peak {sw_peak} frozen {frozen_peak}"
+        );
+
+        let dir = std::env::temp_dir().join(format!("cw-sable-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sable.cwt");
+        save_cwt(&s, &path).unwrap();
+        let back = load_cwt(&path).unwrap();
+        assert_eq!(back.title, s.title);
+        assert_eq!(back.bpm, s.bpm);
+        assert_eq!(back.order, s.order);
+        assert_eq!(back.automation.len(), s.automation.len());
+        assert_eq!(back.patterns.len(), s.patterns.len());
+        let a = crate::engine::render_song(
+            &{
+                let mut t = s.clone();
+                t.order.truncate(1);
+                t
+            },
+            11025,
+        );
+        let b = crate::engine::render_song(
+            &{
+                let mut t = back.clone();
+                t.order.truncate(1);
+                t
+            },
+            11025,
+        );
+        assert_eq!(a, b, "reopened song renders the first block the same");
     }
     /// the chiptune demo "Oceans 11": in File > Demo songs, and made only
     /// from Chip FX instruments, one Drum Kit and built-in effects
