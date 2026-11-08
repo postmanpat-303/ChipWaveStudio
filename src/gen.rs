@@ -544,6 +544,9 @@ pub enum GenEngine {
     /// effects and limiter; rendered by its own per-channel engine
     /// (`strings::rack`), not by the voice synth. File tag "Strings".
     Strings(crate::strings::StringsP),
+    /// Acid Bass: monophonic bass. The voice is `openrb-303` (GPL-3.0-only).
+    /// File tag "Acid". The panel name is Acid Bass.
+    Acid(crate::acid::Patch),
 }
 
 impl GenEngine {
@@ -559,6 +562,7 @@ impl GenEngine {
                 | GenEngine::Grid(_)
                 | GenEngine::Poly(_)
                 | GenEngine::Strings(_)
+                | GenEngine::Acid(_)
         )
     }
 }
@@ -633,6 +637,7 @@ impl GenPatch {
             GenEngine::Poly(x) => x.fix(),
             GenEngine::Drums(k) => k.fix(),
             GenEngine::Strings(x) => x.fix(),
+            GenEngine::Acid(x) => x.fix(),
         }
         self.sync_poly();
         self.mutate = if self.mutate.is_finite() {
@@ -681,6 +686,7 @@ impl GenPatch {
             GenEngine::Grid(x) => x.dice(seed),
             GenEngine::Poly(x) => x.dice(seed),
             GenEngine::Strings(x) => x.dice(seed),
+            GenEngine::Acid(x) => x.dice(seed),
             _ => {
                 if let Some(d) = self.drum_mut(sel) {
                     roll(d, seed)
@@ -701,6 +707,7 @@ impl GenPatch {
             GenEngine::Grid(x) => x.dice(seed),
             GenEngine::Poly(x) => x.dice(seed),
             GenEngine::Strings(x) => x.dice(seed),
+            GenEngine::Acid(x) => x.dice(seed),
             GenEngine::Kit(k) => {
                 for (i, d) in k.pieces.iter_mut().enumerate() {
                     roll(d, seed.wrapping_add((i as u32).wrapping_mul(0x9E37_79B9)));
@@ -728,6 +735,7 @@ impl GenPatch {
             GenEngine::Grid(x) => return x.mutate(a, seed),
             GenEngine::Poly(x) => return x.mutate(a, seed),
             GenEngine::Strings(x) => return x.mutate(a, seed),
+            GenEngine::Acid(x) => return x.mutate(a, seed),
             _ => {}
         }
         let Some(d) = self.drum_mut(sel) else {
@@ -855,6 +863,11 @@ pub fn gen_knobs(g: &GenPatch) -> Vec<(usize, String)> {
         GenEngine::Strings(_) => (0..crate::strings::SN)
             .map(|k| (k, crate::strings::knob_label(k)))
             .collect(),
+        GenEngine::Acid(_) => crate::acid::KNOBS
+            .iter()
+            .enumerate()
+            .map(|(k, d)| (k, d.name.to_string()))
+            .collect(),
         GenEngine::Grid(x) => x.knobs(),
         // pad p macro m = knob p*8+m (pads past GEN_KNOBS/8 are not automatable yet)
         GenEngine::Drums(k) => k
@@ -886,6 +899,7 @@ pub fn gen_knob_def(g: &GenPatch, k: usize) -> Option<&'static MacroDef> {
         GenEngine::Wave(_) => crate::gen_wave::WAVE.get(k),
         GenEngine::Poly(_) => crate::poly::POLY.get(k),
         GenEngine::Strings(_) => crate::strings::STRINGS.get(k),
+        GenEngine::Acid(_) => crate::acid::KNOBS.get(k),
         GenEngine::Grid(x) => x.knob_def(k),
         GenEngine::Drums(kp) if k < GEN_KNOBS => kp.pads.get(k / 8)?.drum.kind.macros().get(k % 8),
         GenEngine::Drums(_) => None,
@@ -904,6 +918,7 @@ pub fn gen_knob_norm(g: &GenPatch, k: usize) -> Option<f32> {
         GenEngine::Wave(w) => w.p.get(k).copied(),
         GenEngine::Poly(x) => x.p.get(k).copied(),
         GenEngine::Strings(x) => x.p.get(k).copied(),
+        GenEngine::Acid(x) => x.p.get(k).copied(),
         GenEngine::Grid(x) => x.p.get(k).copied(),
         GenEngine::Drums(kp) if k < GEN_KNOBS => {
             kp.pads.get(k / 8)?.drum.macros.get(k % 8).copied()
@@ -936,6 +951,7 @@ pub fn set_gen_knob_norm(g: &mut GenPatch, k: usize, v: f32) -> bool {
         GenEngine::Wave(w) => w.p.get_mut(k),
         GenEngine::Poly(x) => x.p.get_mut(k),
         GenEngine::Strings(x) => x.p.get_mut(k),
+        GenEngine::Acid(x) => x.p.get_mut(k),
         GenEngine::Grid(x) => x.p.get_mut(k),
         GenEngine::Drums(kp) => match kp.pads.get_mut(k / 8) {
             Some(p) if k < GEN_KNOBS => p.drum.macros.get_mut(k % 8),
@@ -1028,6 +1044,10 @@ pub struct GenState {
     pub(crate) ps: crate::poly::PolyState,
     /// note velocity 0..1 (the Grid's Note module)
     pub vel: f32,
+    /// Acid Bass voice (silent for every other engine)
+    acid: crate::acid::Rt,
+    /// 3D accent amount for this note, 0 when the note is not accented
+    pub note_accent: f32,
     /// note held (own-envelope engines release on false)
     pub gate: bool,
 }
@@ -1063,7 +1083,9 @@ impl Default for GenState {
             wv: Default::default(),
             gd: Default::default(),
             ps: Default::default(),
+            acid: Default::default(),
             vel: 1.0,
+            note_accent: 0.0,
             gate: true,
             done: false,
         }
@@ -1083,6 +1105,13 @@ impl GenState {
             return (0.0, 0.0, false);
         }
         let gate = self.gate;
+        if let GenEngine::Acid(a) = &g.engine {
+            let y = self.acid.render(a, ov, freq, sr, gate, self.note_accent);
+            if self.acid.finished {
+                self.done = true;
+            }
+            return (y, y, false);
+        }
         let own = match &g.engine {
             GenEngine::Analog(a) => Some(self.an.render(a, ov, freq, sr, gate)),
             GenEngine::Fm(f) => Some(self.fm.render(f, ov, freq, sr, gate)),
@@ -1128,7 +1157,8 @@ impl GenState {
             | GenEngine::Wave(_)
             | GenEngine::Grid(_)
             | GenEngine::Poly(_)
-            | GenEngine::Strings(_) => {
+            | GenEngine::Strings(_)
+            | GenEngine::Acid(_) => {
                 unreachable!()
             }
             GenEngine::Drum(d) => (
@@ -1795,6 +1825,7 @@ pub fn presets() -> Vec<(&'static str, &'static str, GenPatch)> {
         g.base.legato = legato;
         v.push((n, tip, g));
     }
+    v.push(crate::acid::preset());
     for (n, tip, x) in crate::strings::presets::presets() {
         v.push((
             n,

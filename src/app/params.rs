@@ -288,6 +288,7 @@ pub(crate) fn type_tag(k: &InstrumentKind) -> &'static str {
             GenEngine::Poly(_) => crate::poly::POLY_DISPLAY_NAME,
             GenEngine::Drums(_) => "Drum Kit",
             GenEngine::Strings(_) => crate::strings::STRINGS_DISPLAY_NAME,
+            GenEngine::Acid(_) => "Acid Bass",
         },
     }
 }
@@ -311,6 +312,7 @@ fallback!(d_nz, crate::gen2::NoiseP, Default::default());
 fallback!(d_wv, crate::gen_wave::WaveP, Default::default());
 fallback!(d_ps, crate::poly::PolyP, Default::default());
 fallback!(d_sw, crate::strings::StringsP, Default::default());
+fallback!(d_ab, crate::acid::Patch, Default::default());
 fallback!(d_gd, crate::grid::GridP, crate::grid::GridP::empty());
 fallback!(d_sfx, crate::chipfx::SfxP, Default::default());
 
@@ -378,6 +380,7 @@ engine_acc!(wv, wv_mut, Wave, crate::gen_wave::WaveP, d_wv);
 engine_acc!(gd, gd_mut, Grid, crate::grid::GridP, d_gd);
 engine_acc!(ps, ps_mut, Poly, crate::poly::PolyP, d_ps);
 engine_acc!(sw, sw_mut, Strings, crate::strings::StringsP, d_sw);
+engine_acc!(ab, ab_mut, Acid, crate::acid::Patch, d_ab);
 engine_acc!(sfx, sfx_mut, ChipFx, crate::chipfx::SfxP, d_sfx);
 
 fn drum(i: &Instrument, sel: usize) -> DrumP {
@@ -1678,6 +1681,7 @@ fn generator(b: &mut B, g: &GenPatch, sel: usize) {
         GenEngine::Poly(_) => polysynth(b),
         GenEngine::Drums(_) => drums(b, g, sel),
         GenEngine::Strings(_) => stringwave(b),
+        GenEngine::Acid(_) => acid_bass(b),
     }
     if !g.engine.own_env() {
         // release + optional filter (drums, kit, chip FX)
@@ -2063,6 +2067,14 @@ fn analog(b: &mut B) {
     .tip("portamento time (with Legato, or 3C in the Tracker)");
     b.toggle("gen.legato", "Legato", fldb!(pa, pa_mut, legato))
         .tip("overlapping notes glide instead of retriggering (mono)");
+}
+
+fn acid_bass(b: &mut B) {
+    use crate::acid::KNOBS;
+    b.card(Tab::Main, "Acid Bass").note = "3C slide, 3D accent".into();
+    for k in 0..crate::acid::N {
+        gen_knob!(b, "ab", ab, ab_mut, KNOBS, k);
+    }
 }
 
 fn fm4(b: &mut B) {
@@ -2910,6 +2922,7 @@ pub(crate) mod tests {
             ("Analog", gen("Psy Rolling Bass")),
             ("FM-4", gen("Metallic Bell")),
             ("Noise", gen("White Riser")),
+            ("Acid Bass", gen("Acid Bass")),
             ("Wave", gen("Wave Supersaw")),
             ("Grid", gen("Grid Saw Bass")),
             (
@@ -3084,6 +3097,10 @@ pub(crate) mod tests {
             "FM-4" => {
                 r.extend(s(&["gen.dice", "fm.algo", "fm.level"]));
                 r.extend((0..crate::gen2::FN).map(|k| format!("fm.{k}")));
+            }
+            "Acid Bass" => {
+                r.extend(s(&["gen.dice"]));
+                r.extend((0..crate::acid::N).map(|k| format!("ab.{k}")));
             }
             "Noise" => {
                 r.extend(s(&[

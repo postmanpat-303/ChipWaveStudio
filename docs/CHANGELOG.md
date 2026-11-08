@@ -2,6 +2,10 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## Unreleased
+
+- **Acid Bass**, a monophonic bass instrument for this test build. The oscillator and filter are the OpenRB-338 bass-line voice (GPL-3.0-only, commit cbca449), with ChipWave notes, 3C slide and 3D accent. No drum samples or panel art are included. It is not a hardware clone, and ChipWave is not affiliated with any instrument brand. See `third_party/openrb-303/NOTICE`.
+
 ## 0.2.21.0: menus for the next step of a song
 
 Released 2026-11-07. Highlights:

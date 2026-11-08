@@ -29,6 +29,7 @@ fn a_test_build_says_so_next_to_the_version() {
     );
 }
 
+mod acid;
 mod advedit;
 mod app;
 mod arp;
@@ -1214,7 +1215,7 @@ fn main() {
         std::process::exit(plugin::thumb::cli_capture(&args));
     }
     if args.iter().any(|a| a == "--version") {
-        println!("ChipWave Studio {}", crate::VERSION);
+        println!("ChipWave Studio {}", crate::version_label());
         return;
     }
     if let Some(i) = args.iter().position(|a| a == "--screenshot") {

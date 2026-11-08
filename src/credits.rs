@@ -97,6 +97,10 @@ pub const CREDITS: &[Credit] = &[
         "Independent implementation, no code copied",
         "https://dood.al/pinktrombone/"),
     // Synthesis & generators
+    c(Synthesis, "OpenRB-338", "the OpenRB-338 authors",
+        "Acid Bass: the bass-line oscillator and filter", "GPL-3.0-only",
+        "Voice only, from commit cbca449. No drum samples, artwork or sequencer. Not a hardware clone and not affiliated with any brand",
+        "https://github.com/pingw33n/openrb-338"),
     c(Synthesis, crate::strings_name!(), "Del (postmanpat)",
         concat!("The ", crate::strings_name!(), " string-ensemble instrument, built in from its author's own synth"), "MIT",
         "Ported by its author; MIT notice in THIRD_PARTY_LICENSES", ""),

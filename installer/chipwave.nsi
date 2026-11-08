@@ -31,13 +31,18 @@ Unicode true
 ; ChipWave Tracker's shortcuts, removed when installing over it
 !define OLDNAME "ChipWave Tracker"
 
-Name "${APPNAME} ${VERSION}"
+!ifdef BUILD
+  Name "${APPNAME} ${VERSION} TEST (${BUILD})"
+  BrandingText "${APPNAME} ${VERSION} TEST (${BUILD})"
+!else
+  Name "${APPNAME} ${VERSION}"
+  BrandingText "${APPNAME} ${VERSION}"
+!endif
 OutFile "${OUTFILE}"
 InstallDir "$PROGRAMFILES64\${INSTFOLDER}"
 InstallDirRegKey HKLM "${REGKEY}" "InstallDir"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
-BrandingText "${APPNAME} ${VERSION}"
 
 !ifndef VIVERSION
   !define VIVERSION "${VERSION}"

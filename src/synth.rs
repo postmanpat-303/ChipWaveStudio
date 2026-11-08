@@ -544,6 +544,7 @@ impl SynthVoice {
         let own = gp.engine.own_env();
         self.gen.gate = self.amp.gate();
         self.gen.vel = self.vel;
+        self.gen.note_accent = self.accent;
         // 38xx etc. on the engine's own ladder (Analog: Cutoff = knob 0,
         // Res = knob 1; Wave: knobs 2 and 3, when its filter is on;
         // poly synth: knobs 0 and 1)
@@ -618,13 +619,20 @@ impl SynthVoice {
             (l, r)
         };
         let acc = self.accent.clamp(0.0, 1.0);
-        // own-envelope generators: the amp envelope only carries the gate
+        // own-envelope generators: the amp envelope only carries the gate.
+        // Acid Bass accents inside the voice, so the patch accent is not
+        // applied a second time.
         let env = if own {
             1.0
         } else {
             self.amp.next(&p.amp, dt_s)
         };
-        let g = env * p.gain * (1.0 + 0.5 * acc);
+        let accent_gain = if matches!(gp.engine, crate::gen::GenEngine::Acid(_)) {
+            1.0
+        } else {
+            1.0 + 0.5 * acc
+        };
+        let g = env * p.gain * accent_gain;
         (yl * g, yr * g)
     }
 
