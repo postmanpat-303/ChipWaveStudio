@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Generate demos/sable_current.cwt.toml, the demo "Sable Current".
 
-An original dark psytrance instrumental in A Phrygian at 145 BPM, about 7:04.
-Kick and short bass pulses alone for the first 32 bars. The bass is a sine
-with a quiet triangle, gated short, and a resonant low-pass opens across
-those 32 bars without climbing into a bright buzz. A dark StringWave pad enters later. The middle
-drops the kick and the roll for one long resonant sweep, then the roll returns.
+An original dark psytrance instrumental in A Phrygian at 145 BPM.
+Kick and one short bass note per beat for 32 bars while a soft low-pass opens.
+The bleep theme enters at bar 33. A breakdown and the return are still there.
 Native instruments, Rack filters and song automation only: no samples.
 
   python3 scripts/make_sable_current.py > demos/sable_current.cwt.toml
@@ -47,24 +45,26 @@ def kick(b, bars=range(4), vol=0x38, stop=None):
             b.put(r, KICK, "A-2", I_KICK, vol)
 
 
-def roll(b, bars=range(4), vol=0x2A, turn=False):
-    """Two short pulses in the gap after the kick, not a held saw on every 16th.
-    The 16th inside the kick is empty so the kick's attack is alone."""
+def roll(b, bars=range(4), vol=0x2A, turn=False, extra=False):
+    """One short off-beat note per beat. extra=True adds a second note on the
+    last beat of the 4-bar phrase only. Never more than two notes in a beat."""
     for bar in bars:
         for beat in range(4):
-            if turn and bar == 3 and beat == 3:
-                notes = ("A#3", "G-3")
-            elif turn and bar == 1 and beat == 2:
-                notes = ("A-3", "E-3")
-            else:
-                notes = ("A-3", "A-3")
             base = bar * B + beat * 4
-            for k, n in enumerate(notes):
-                b.put(base + 2 + k, BASS, n, I_BASS, rng.jitter(vol, 1))
-            # release before the next kick
-            end = base + 4
-            if end < ROWS:
-                b.off(end, BASS)
+            if extra and bar == 3 and beat == 3:
+                b.put(base + 2, BASS, "A#3", I_BASS, rng.jitter(vol, 1))
+                b.put(base + 3, BASS, "G-3", I_BASS, rng.jitter(max(1, vol - 4), 1))
+                if base + 4 < ROWS:
+                    b.off(base + 4, BASS)
+                continue
+            n = "A-3"
+            if turn and bar == 3 and beat == 3:
+                n = "A#3"
+            elif turn and bar == 1 and beat == 2:
+                n = "E-3"
+            b.put(base + 2, BASS, n, I_BASS, rng.jitter(vol, 1))
+            if base + 3 < ROWS:
+                b.off(base + 3, BASS)
 
 
 def hats(b, bars=range(4), vol=0x18, sixteenths=False):
@@ -116,24 +116,23 @@ def riff(b, phrase, vol=0x30):
         note(b, row, RIFF, name, I_RIFF, rng.jitter(vol, 1), ln)
 
 
-# two answering phrases, A Phrygian, written for this song
+# short bleeps with space between them, A Phrygian, one row long
 RIFF_A = [
-    (0, "A-4", 3), (4, "C-5", 2), (8, "A#4", 3), (12, "A-4", 2),
-    (16, "G-4", 3), (20, "A-4", 2), (24, "E-4", 3), (28, "F-4", 2),
-    (36, "C-5", 2), (40, "A#4", 2), (44, "A-4", 3), (48, "E-4", 4),
-    (56, "A-4", 2), (60, "A#4", 3),
+    (0, "A-4", 1), (6, "C-5", 1), (12, "A#4", 1),
+    (20, "G-4", 1), (26, "F-4", 1),
+    (36, "C-5", 1), (44, "A-4", 1),
+    (52, "E-4", 1), (60, "A-4", 1),
 ]
 RIFF_B = [
-    (0, "E-5", 2), (4, "C-5", 2), (8, "A#4", 4), (14, "A-4", 2),
-    (18, "G-4", 2), (22, "F-4", 2), (26, "E-4", 4),
-    (32, "A-4", 2), (36, "C-5", 2), (40, "D-5", 2), (44, "C-5", 2), (48, "A#4", 4),
-    (56, "G-4", 2), (60, "A-4", 3),
+    (2, "C-5", 1), (8, "A#4", 1), (16, "G-4", 1),
+    (24, "E-4", 1), (30, "F-4", 1),
+    (40, "A-4", 1), (46, "C-5", 1), (54, "A#4", 1),
+    (62, "A-4", 1),
 ]
 RIFF_C = [
-    (2, "C-5", 2), (6, "A#4", 2), (10, "A-4", 4),
-    (18, "F-4", 2), (22, "E-4", 2), (26, "F-4", 2), (30, "A-4", 2),
-    (34, "C-5", 3), (40, "E-5", 2), (44, "C-5", 2), (48, "A#4", 6),
-    (58, "A-4", 4),
+    (4, "E-4", 1), (10, "F-4", 1), (18, "A-4", 1),
+    (26, "C-5", 1), (34, "A#4", 1), (42, "G-4", 1),
+    (50, "E-4", 1), (58, "A-4", 1),
 ]
 
 blocks = []
@@ -145,34 +144,37 @@ def blk(name, role):
     return len(blocks) - 1, b
 
 
-# ---- arrangement: 64 plays of a 4-bar block = 256 bars, 7:04 at 145 BPM ----
+# ---- arrangement ----
+# 32 bars of kick + one bass note, then the bleep theme. Not the old 2:39 wait.
 A, b = blk("Current, closed", "intro")
 kick(b); roll(b, turn=False)
 TURN, b = blk("Current, a turn", "intro")
 kick(b); roll(b, turn=True)
-C, b = blk("Offbeat dust", "intro")
-kick(b); roll(b, turn=True); hats(b, vol=0x14)
-D, b = blk("Shaker under the roll", "intro")
-kick(b); roll(b, turn=True); hats(b, vol=0x18); shaker(b, vol=0x12, step=2)
+EARLY, b = blk("Theme, first bleeps", "build")
+kick(b); roll(b, turn=False); hats(b, vol=0x12)
+riff(b, RIFF_A, 0x20)
+ANS, b = blk("Theme, answer", "build")
+kick(b); roll(b, turn=True); hats(b, vol=0x16); open_hat(b, vol=0x12, beats=(3,))
+riff(b, RIFF_B, 0x24)
 E, b = blk("Pad enters", "build")
 kick(b); roll(b, vol=0x2C, turn=True); hats(b, vol=0x1A); shaker(b, vol=0x12, step=2)
-pad(b, vol=0x28)
+pad(b, vol=0x28); riff(b, RIFF_A, 0x22)
 F, b = blk("Pad leans on the flat two", "build")
 kick(b); roll(b, vol=0x2C, turn=True); hats(b, vol=0x1A); open_hat(b, vol=0x16)
-pad(b, "A#3", "F-4", vol=0x2A)
+pad(b, "A#3", "F-4", vol=0x2A); riff(b, RIFF_B, 0x24)
 G, b = blk("First riff", "drop")
-kick(b); roll(b, turn=True); hats(b, vol=0x1C); shaker(b, vol=0x14, step=2); rim(b, vol=0x1E)
-pad(b, vol=0x26); riff(b, RIFF_A, 0x2E)
+kick(b); roll(b, turn=True, extra=True); hats(b, vol=0x1C); shaker(b, vol=0x14, step=2); rim(b, vol=0x1E)
+pad(b, vol=0x26); riff(b, RIFF_A, 0x28)
 H, b = blk("Riff answers", "drop")
-kick(b); roll(b, turn=True); hats(b, vol=0x1C, sixteenths=True); open_hat(b, vol=0x18)
-rim(b, vol=0x20); pad(b, vol=0x24); riff(b, RIFF_B, 0x30)
+kick(b); roll(b, turn=True, extra=True); hats(b, vol=0x1C, sixteenths=True); open_hat(b, vol=0x18)
+rim(b, vol=0x20); pad(b, vol=0x24); riff(b, RIFF_B, 0x2A)
 I, b = blk("Full current", "drop")
-kick(b); roll(b, vol=0x2C, turn=True); hats(b, vol=0x1E, sixteenths=True)
-open_hat(b, vol=0x1A, beats=(1, 3)); rim(b, vol=0x22); pad(b, vol=0x24); riff(b, RIFF_A, 0x32)
+kick(b); roll(b, vol=0x2C, turn=True, extra=True); hats(b, vol=0x1E, sixteenths=True)
+open_hat(b, vol=0x1A, beats=(1, 3)); rim(b, vol=0x22); pad(b, vol=0x24); riff(b, RIFF_A, 0x2C)
 J, b = blk("Full current, fill", "drop")
-kick(b); roll(b, vol=0x2C, turn=True); hats(b, vol=0x1C, sixteenths=True)
+kick(b); roll(b, vol=0x2C, turn=True, extra=True); hats(b, vol=0x1C, sixteenths=True)
 open_hat(b, vol=0x18); rim(b, bars=range(3), vol=0x20); fill(b); pad(b, vol=0x22)
-riff(b, RIFF_B, 0x30)
+riff(b, RIFF_B, 0x2A)
 K, b = blk("The room", "breakdown")
 pad(b, vol=0x30)
 note(b, 0, RIFF, "E-5", I_RIFF, 0x18, 8)
@@ -191,10 +193,10 @@ kick(b, vol=0x3A); roll(b, vol=0x28, turn=False)
 P, b = blk("Hats return", "drop")
 kick(b); roll(b, turn=True); hats(b, vol=0x16)
 Q, b = blk("Riff returns", "drop")
-kick(b); roll(b, turn=True); hats(b, vol=0x1C); shaker(b, vol=0x12, step=2)
-pad(b, vol=0x26); riff(b, RIFF_C, 0x30)
+kick(b); roll(b, turn=True, extra=True); hats(b, vol=0x1C); shaker(b, vol=0x12, step=2)
+pad(b, vol=0x26); riff(b, RIFF_C, 0x28)
 R, b = blk("Open water", "drop")
-kick(b); roll(b, vol=0x2C, turn=True); hats(b, vol=0x20, sixteenths=True)
+kick(b); roll(b, vol=0x2C, turn=True, extra=True); hats(b, vol=0x20, sixteenths=True)
 open_hat(b, vol=0x1C, beats=(1, 3)); rim(b); pad(b, vol=0x26); riff(b, RIFF_C, 0x34)
 S, b = blk("Peel back", "outro")
 kick(b, bars=range(3)); roll(b, bars=range(3), turn=True); hats(b, bars=range(2), vol=0x14)
@@ -206,12 +208,14 @@ for ch in (PAD, PADR):
     b.off(16 + 8, ch)
 
 ORDER = (
-    [A] * 4 + [TURN] * 4 + [C] * 4 + [D] * 4 + [E] * 4 + [F] * 4
-    + [G] * 4 + [H] * 4 + [I] * 4 + [J] * 4
+    [A] * 4 + [TURN] * 4
+    + [EARLY] * 2 + [ANS] * 2
+    + [E] * 2 + [F] * 2
+    + [G] * 2 + [H] * 2 + [I] * 2 + [J] * 2
     + [K] * 2 + [L] + [M] * 3 + [N] * 2
-    + [O] * 2 + [P] * 2 + [Q] * 4 + [R] * 4 + [S] * 2 + [T] * 2
+    + [O] * 2 + [P] * 2 + [Q] * 2 + [R] * 2 + [S] * 2 + [T] * 2
 )
-assert len(ORDER) == 64, len(ORDER)
+assert len(ORDER) == 44, len(ORDER)
 
 
 def at(block, nth=0):
@@ -289,21 +293,24 @@ decay = 0.05
 gain = 0.7
 [[instrument]]
 slot = 6
-name = "Phrygian Riff"
+name = "Phrygian Bleep"
 patch = "builtin:init"
-wave = "square"
-osc2 = { wave = "saw", semi = -12, level = 0.2 }
-cutoff = 900.0
-resonance = 0.45
-env_amount = 0.35
-filter_decay = 0.12
-attack = 0.002
-decay = 0.14
-sustain = 0.35
-release = 0.08
-glide_ms = 40.0
-gain = 0.55
-fx = [{ kind = "Filter", mode = 1.0, cutoff = 180.0, resonance = 0.05 }]
+wave = "triangle"
+osc2 = { wave = "pulse", semi = 0, level = 0.18 }
+cutoff = 420.0
+resonance = 0.2
+env_amount = 0.1
+filter_attack = 0.001
+filter_decay = 0.04
+filter_sustain = 0.0
+attack = 0.001
+decay = 0.05
+sustain = 0.0
+release = 0.025
+glide_ms = 0.0
+gain = 0.4
+# fx 1 = HP, dark and short; the synth low-pass does the movement
+fx = [{ kind = "Filter", mode = 1.0, cutoff = 240.0, resonance = 0.0 }]
 ''')
 PAD_KNOBS = {
     "aa": 0.42, "ad": 0.55, "as": 0.8, "ar": 0.5,
@@ -365,7 +372,7 @@ chans = [
     ("Hat", -14.0, 0.15, 0.0, 0.04, 0.0),
     ("Open Hat", -16.0, -0.25, 0.05, 0.08, 0.1),
     ("Dust", -16.0, 0.35, 0.0, 0.05, 0.15),
-    ("Riff", -8.0, -0.2, 0.22, 0.2, 0.4),
+    ("Riff", -10.0, -0.2, 0.06, 0.12, 0.4),
     ("Pad L", -10.0, -0.55, 0.05, 0.45, 0.55),
     ("Pad R", -10.0, 0.55, 0.05, 0.45, 0.55),
     ("Sweep", -8.0, 0.0, 0.15, 0.4, 0.0),
@@ -396,9 +403,9 @@ level = 1.2
 ''')
 emit_blocks(blocks, ORDER, "# row | kick | bass | hat | open hat | dust | riff | pad L | pad R | sweep | fall | rim")
 
-intro_end = at(C)          # 32 bars: filter has opened
-hats_end = at(E)           # pad enters
-riff_at = at(G)
+intro_end = at(EARLY)      # bar 33: the 32-bar bass sweep has opened
+hats_end = at(E)           # pad under the theme
+riff_at = at(EARLY)
 groove = at(I)
 room = at(K)
 sweep = at(L)
@@ -411,14 +418,14 @@ last = at(T)
 
 # opens across the first 32 bars, and stays under 750 Hz so the mids stay soft
 lane("instrument.2.cutoff", "Sable Bass - resonant LP", [
-    (0, 70.0), (intro_end, 620.0), (hats_end, 540.0), (riff_at, 480.0),
+    (0, 70.0), (intro_end, 620.0), (hats_end, 540.0),
     (groove, 640.0), (room, 80.0, "step"), (back, 90.0),
     (back + 8 * B, 500.0), (peak, 680.0), (outro, 220.0), (total, 80.0)])
 lane("instrument.2.resonance", "Sable Bass - resonance", [
     (0, 0.42), (intro_end, 0.26), (groove, 0.22), (room, 0.3),
     (back, 0.36), (peak, 0.2), (total, 0.34)], curve="linear")
 lane("instrument.3.fx.1.cutoff", "Closed Hat - HP", [
-    (0, 7000.0), (at(C), 2200.0), (groove, 4000.0), (room, 5000.0),
+    (0, 7000.0), (at(EARLY), 2800.0), (groove, 4000.0), (room, 5000.0),
     (back, 2400.0), (peak, 3600.0), (total, 5000.0)])
 lane(f"instrument.7.gen.{GEN_CUTOFF}", "Night Pad - cutoff", [
     (0, u("cutoff", 400)), (hats_end, u("cutoff", 500)),
@@ -427,10 +434,10 @@ lane(f"instrument.7.gen.{GEN_CUTOFF}", "Night Pad - cutoff", [
     (peak, u("cutoff", 1600)), (total, u("cutoff", 450))])
 lane(f"instrument.7.gen.{GEN_REV}", "Night Pad - reverb", [
     (0, 0.4), (hats_end, 0.55), (room, 0.75), (back, 0.5), (total, 0.7)])
-lane("instrument.6.cutoff", "Phrygian Riff - LP", [
-    (0, 400.0), (riff_at, 500.0), (riff_at + 16 * B, 1800.0),
-    (groove, 1400.0), (room, 300.0, "step"), (riff2, 600.0),
-    (peak, 2200.0), (outro, 800.0), (total, 400.0)])
+lane("instrument.6.cutoff", "Phrygian Bleep - LP", [
+    (0, 280.0), (riff_at, 360.0), (riff_at + 8 * B, 780.0),
+    (groove, 640.0), (room, 240.0, "step"), (riff2, 420.0),
+    (peak, 980.0), (outro, 360.0), (total, 260.0)])
 lane("instrument.8.cutoff", "Eerie Sweep - one arc", [
     (0, 300.0), (sweep, 260.0), (sweep + 4 * B, 220.0),
     (sweep + 12 * B, 7400.0), (fall, 420.0), (back, 300.0)])

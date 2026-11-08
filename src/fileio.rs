@@ -1450,7 +1450,14 @@ mod tests {
         assert!(s.instruments.iter().any(|x| x.name == "Eerie Sweep"));
         assert_eq!(s.automation.len(), text.matches("[[automation]]").count());
         let secs = s.order.len() as f32 * 64.0 * 60.0 / (145.0 * 4.0);
-        assert!((400.0..450.0).contains(&secs), "{secs}");
+        // 44 blocks: the theme is at bar 33, not after a 2:39 intro
+        assert!((280.0..310.0).contains(&secs), "{secs}");
+        let theme_at = s
+            .order
+            .iter()
+            .position(|&b| s.patterns[b].name == "Theme, first bleeps")
+            .unwrap();
+        assert_eq!(theme_at, 8, "theme should start once 32 bars have played");
         // first 32 bars are kick + bass only
         for pat in &s.patterns[..2] {
             for row in &pat.cells {
@@ -1483,6 +1490,69 @@ mod tests {
             "filter opens over 32 bars but stays soft: {} -> {opened}",
             at(0.0)
         );
+        // one bass note per beat, a second only on a phrase end, never three
+        let mut doubles = 0usize;
+        let mut with_bass = 0usize;
+        for pat in &s.patterns {
+            let mut per_beat = vec![0u8; pat.rows / 4];
+            for (r, row) in pat.cells.iter().enumerate() {
+                let n = row[1].note;
+                if n > 0 && n != crate::model::NOTE_OFF {
+                    per_beat[r / 4] += 1;
+                }
+            }
+            for (beat, n) in per_beat.iter().copied().enumerate() {
+                assert!(n <= 2, "{} beat {beat} has {n} bass notes", pat.name);
+                if n == 2 {
+                    doubles += 1;
+                }
+                if n > 0 {
+                    with_bass += 1;
+                }
+            }
+            if matches!(
+                pat.name.as_str(),
+                "Current, closed"
+                    | "Current, a turn"
+                    | "Theme, first bleeps"
+                    | "Roll returns"
+                    | "Hats return"
+                    | "Last current"
+            ) {
+                assert!(
+                    per_beat.iter().all(|&n| n == 1 || n == 0),
+                    "{} should stay at one note per beat: {per_beat:?}",
+                    pat.name
+                );
+            }
+        }
+        assert!(doubles > 0, "the occasional second note is missing");
+        assert!(
+            doubles * 10 < with_bass,
+            "too many double beats: {doubles} of {with_bass}"
+        );
+        let bleep = s
+            .instruments
+            .iter()
+            .find(|i| i.name == "Phrygian Bleep")
+            .unwrap()
+            .kind
+            .patch()
+            .unwrap();
+        assert!(bleep.amp.s == 0.0 && bleep.amp.d <= 0.06 && bleep.amp.r <= 0.04);
+        let mut played = s.clone();
+        crate::timeline::enter_timeline_mode(&mut played);
+        let tl = played.timeline.as_ref().unwrap();
+        let mut bass_clips: Vec<_> = tl
+            .clips
+            .iter()
+            .filter(|c| c.track == 1)
+            .map(|c| (c.start, c.end()))
+            .collect();
+        bass_clips.sort();
+        for w in bass_clips.windows(2) {
+            assert!(w[0].1 <= w[1].0, "bass clips overlap {:?} {:?}", w[0], w[1]);
+        }
 
         // render the opening with the bass soloed, and compare the top of the
         // first 4 bars with the last 4 of those 32. A real low-pass opening
