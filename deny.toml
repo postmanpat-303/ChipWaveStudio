@@ -9,9 +9,11 @@ exclude-dev = true
 yanked = "warn"
 
 [licenses]
-# everything here is compatible with shipping a GPL-3.0-or-later binary
+# ChipWave's own code is GPL-3.0-or-later. openrb-303 is GPL-3.0-only, so a
+# build that includes Acid Bass is distributed under GPL-3.0 only.
 allow = [
     "GPL-3.0-or-later",
+    "GPL-3.0-only",
     "LGPL-3.0",
     "MIT",
     "Apache-2.0",
