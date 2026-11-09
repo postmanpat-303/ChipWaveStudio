@@ -35,7 +35,7 @@
 
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
-  <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
+  <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/download/v0.2.21.0/ChipWave-macos-universal.dmg"><b>⬇ macOS 0.2.21.0</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>; 0.2.22.0 Mac build is not up yet)</sub> &nbsp;·&nbsp;
   <a href="#new"><b>New in 0.2.22.0</b></a> &nbsp;·&nbsp;
   <a href="docs/manual/ChipWave-Studio-User-Manual.pdf"><b>User manual (PDF)</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
@@ -45,7 +45,7 @@
   <a href="https://github.com/postmanpat-303/BigWaveRadio"><b>BigWave Radio</b></a> (sister project)
 </p>
 
-**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **StringWave**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Build each track's sound in the **Rack**, a row of the instrument and its effects under the Timeline, stack sounds into **racks**, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and an optional pattern editor is there for the classic way of working. Up to 32 tracks per song. Written in Rust with egui and cpal. Free for Windows, Mac & Linux. The latest Windows and Mac release is 0.2.21.0. Linux x86_64 packages of the same version are on the separate release `linux-v0.2.21.0`. See [Linux install](docs/LINUX.md). Early version, in active development.
+**ChipWave Studio** is a free music sequencer with a retro heart. Try ideas in the **Clip Arranger**, lay them out as clips on the **Timeline**, write melodies in the **piano roll** and beats in the **Drum Kit**'s step sequencer, then shape every sound with **WaveForge**, **StringWave**, **FM-4**, **Chip FX**, Analog, a synthetic Voice and more. Build each track's sound in the **Rack**, a row of the instrument and its effects under the Timeline, stack sounds into **racks**, add effects and automation, mix with sidechain ducking and a true-peak limiter, and export WAV or MP3. CLAP and VST3 plugins and MIDI keyboards work too, and an optional pattern editor is there for the classic way of working. Up to 32 tracks per song. Written in Rust with egui and cpal. Free for Windows, Mac & Linux. The latest Windows and Linux release is 0.2.22.0 (`v0.2.22.0`). The Mac download is still 0.2.21.0: the 0.2.22.0 Mac packaging workflow could not be started (HTTP 403) and was not bypassed. See [Linux install](docs/LINUX.md). Early version, in active development.
 
 > **ChipWave Studio was called ChipWave Tracker until 0.2.3.19.** It was renamed in 0.2.4.0 to tell it apart from an unrelated iOS app called "ChipWave". Same app, same settings, same `.cwt` songs; the old GitHub links redirect here. Website: **[postmanpat-303.github.io/ChipWaveStudio](https://postmanpat-303.github.io/ChipWaveStudio/)**. Details: [docs/RENAME.md](docs/RENAME.md).
 
@@ -585,9 +585,9 @@ The palettes, generated from the colour values in [`src/theme.rs`](src/theme.rs)
 
 Get the **Windows** installer [`ChipWave-setup-x64.exe`](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-setup-x64.exe) or the portable [`ChipWave-windows-x64.zip`](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-windows-x64.zip) from the [latest release](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest) (these links always fetch the newest version; older versions are on the [releases page](https://github.com/postmanpat-303/ChipWaveStudio/releases)). Already on 0.2.3.5 or later? **Help > Check for updates…** offers it. The exe isn't code-signed yet, so SmartScreen may warn: click “More info”, then “Run anyway”. The app opens with a clean song (the same as File > New); to hear what it can do, open **File > Demo songs** and press **Space**.
 
-**macOS**: the universal disk image [`ChipWave-macos-universal.dmg`](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg) runs on both Apple Silicon and Intel Macs, macOS 11 or later (or get the zip, [`ChipWave-macos-universal.zip`](https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.zip)). It isn't notarised, so open it the first time with Control-click → **Open** (or `xattr -dr com.apple.quarantine /Applications/ChipWave.app`). See [MACOS.md](docs/MACOS.md).
+**macOS 0.2.21.0**: the universal disk image [`ChipWave-macos-universal.dmg`](https://github.com/postmanpat-303/ChipWaveStudio/releases/download/v0.2.21.0/ChipWave-macos-universal.dmg) runs on both Apple Silicon and Intel Macs, macOS 11 or later (or the zip, [`ChipWave-macos-universal.zip`](https://github.com/postmanpat-303/ChipWaveStudio/releases/download/v0.2.21.0/ChipWave-macos-universal.zip)). There is no 0.2.22.0 Mac package yet. It isn't notarised, so open it the first time with Control-click → **Open** (or `xattr -dr com.apple.quarantine /Applications/ChipWave.app`). See [MACOS.md](docs/MACOS.md).
 
-On Linux, build it from source (below).
+**Linux x86_64 0.2.22.0**: `.deb`, `.rpm`, AppImage and a portable archive are on the [0.2.22.0 release](https://github.com/postmanpat-303/ChipWaveStudio/releases/tag/v0.2.22.0). They need glibc 2.35 or newer. There is no ARM build. See [Linux install](docs/LINUX.md). You can also build from source (below).
 
 ```
  ═══[ 04 ]═══ KEYS ═════════════════════════════════════════════════════════

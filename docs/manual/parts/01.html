@@ -2,7 +2,7 @@
 <p class="kicker">CHAPTER 01</p>
 <h2>Welcome and installing</h2>
 <p class="lead">ChipWave Studio is a free music studio for your computer. You arrange songs on a <b>Timeline</b> and play them with built-in synths, drum kits, a synthetic voice and samples. Generators write chords, melodies and bass lines with you, and a mixer with effects and a loudness meter gets the song ready to share. If you like old-school trackers, there's a Tracker under the hood too.</p>
-<p>It's open source (GPL-3.0-or-later). Free for Windows, Mac &amp; Linux. The latest Windows and Mac download is 0.2.21.0. Linux x86_64 packages of the same version are listed separately. The Mac app is ad-hoc signed and not notarised. There are no accounts, no subscriptions and no ads.</p>
+<p>It's open source. ChipWave's own code is GPL-3.0-or-later. Acid Bass includes the OpenRB-338 voice, which is GPL-3.0-only, so a build that includes it is distributed under GPL-3.0 only. Free for Windows, Mac &amp; Linux. The latest Windows and Linux download is 0.2.22.0. The Mac download is still 0.2.21.0 (ad-hoc signed, not notarised); a 0.2.22.0 Mac package was not published. There are no accounts, no subscriptions and no ads.</p>
 
 <div class="note"><b class="l">NEW IN 0.2.22.0</b>
 <ul>
@@ -32,7 +32,7 @@ Your songs open and play just as they did in 0.2.20.0.</div>
 </ol>
 
 <h3>Linux (x86_64)</h3>
-<p>Download the <code>.deb</code>, <code>.rpm</code>, AppImage or portable archive from the Linux release <code>linux-v0.2.21.0</code>. They need glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36, openSUSE Leap 15.6). There is no ARM build, and the packages are not signed. Install notes are in the repository file <code>docs/LINUX.md</code>. You can also build from source: install Rust (from rustup.rs) and the ALSA development package (<code>libasound2-dev</code> on Debian and Ubuntu), then in the project folder run:</p>
+<p>Download the <code>.deb</code>, <code>.rpm</code>, AppImage or portable archive from the release <code>v0.2.22.0</code>. They need glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36, openSUSE Leap 15.6). There is no ARM build, and the packages are not signed. Install notes are in the repository file <code>docs/LINUX.md</code>. You can also build from source: install Rust (from rustup.rs) and the ALSA development package (<code>libasound2-dev</code> on Debian and Ubuntu), then in the project folder run:</p>
 <pre>cargo run --release</pre>
 
 <h3>First start</h3>
