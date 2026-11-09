@@ -372,6 +372,29 @@ impl App {
                         .size(crate::theme::ts::px(crate::theme::ts::BODY))
                         .color(muted()),
                 );
+                // Visible on the About page, not only in the Credits list.
+                // Wording follows OpenRB-338's own notice and the commit author.
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    ui.label(
+                        egui::RichText::new("Acid Bass voice by")
+                            .size(crate::theme::ts::px(crate::theme::ts::BODY))
+                            .color(muted()),
+                    );
+                    link(
+                        ui,
+                        egui::RichText::new("pingw33n")
+                            .size(crate::theme::ts::px(crate::theme::ts::BODY)),
+                        "https://github.com/pingw33n/openrb-338",
+                    );
+                    ui.label(
+                        egui::RichText::new(
+                            "and the OpenRB-338 authors. Copyright (C) 2026 the OpenRB-338 authors. GPL-3.0-only.",
+                        )
+                        .size(crate::theme::ts::px(crate::theme::ts::BODY))
+                        .color(muted()),
+                    );
+                });
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
                     link(
@@ -620,7 +643,12 @@ impl App {
                     "ChipWave Studio is free software: you can redistribute it and/or modify it \
                      under the terms of the GNU General Public License, version 3 or (at your \
                      option) any later version. It comes with ABSOLUTELY NO WARRANTY. The licence \
-                     text is installed next to the app as LICENSE.txt.",
+                     text is installed next to the app as LICENSE.txt. Acid Bass includes the \
+                     OpenRB-338 bass-line voice by pingw33n and the OpenRB-338 authors, \
+                     Copyright (C) 2026 the OpenRB-338 authors, which is GPL-3.0 only. A build \
+                     that includes that voice is distributed under GPL-3.0 only. The modified \
+                     source is in third_party/openrb-303 of the ChipWave repository, and the \
+                     release tag is the corresponding source for that build.",
                 )
                 .size(crate::theme::ts::px(crate::theme::ts::BODY)),
             )

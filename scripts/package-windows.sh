@@ -33,8 +33,15 @@ echo "dist/ChipWave-windows-x64.zip"
 if command -v makensis >/dev/null; then
   # NSIS VIProductVersion needs four numbers (0.2.3 -> 0.2.3.0)
   VI=$(echo "$VER" | awk -F. '{printf "%d.%d.%d.%d", $1, $2, $3, $4}')
+  # CW_BUILD (for example "acidbass abc1234") labels the installer and the
+  # app title as a test build. A release build leaves it unset.
+  BUILD_ARG=()
+  if [ -n "${CW_BUILD:-}" ]; then
+    echo "test build label: $CW_BUILD"
+    BUILD_ARG=(-DBUILD="$CW_BUILD")
+  fi
   (cd installer && makensis -V2 -DVERSION="$VER" -DVIVERSION="$VI" -DPKGDIR=../dist/pkg \
-    -DOUTFILE="../dist/ChipWave-$VER-setup-x64.exe" chipwave.nsi)
+    -DOUTFILE="../dist/ChipWave-$VER-setup-x64.exe" "${BUILD_ARG[@]}" chipwave.nsi)
   python3 scripts/check-ico.py "dist/ChipWave-$VER-setup-x64.exe"
   echo "dist/ChipWave-$VER-setup-x64.exe"
   cp "dist/ChipWave-$VER-setup-x64.exe" dist/ChipWave-setup-x64.exe

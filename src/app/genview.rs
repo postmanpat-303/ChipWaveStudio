@@ -170,6 +170,8 @@ pub(super) fn gen_panel(
                 concat!("GENERATOR · ", crate::poly_name!())
             } else if matches!(g.engine, GenEngine::Strings(_)) {
                 concat!("GENERATOR · ", crate::strings_name!())
+            } else if matches!(g.engine, GenEngine::Acid(_)) {
+                "GENERATOR · ACID BASS"
             } else {
                 "GENERATOR · DRUM SYNTH"
             })
@@ -450,6 +452,43 @@ fn g2_choices(ui: &mut egui::Ui, g: &mut GenPatch) -> bool {
                     .changed();
             });
         }
+        GenEngine::Acid(a) => {
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label("Wave");
+                let saw = a.p[crate::acid::K_WAVE] < 0.5;
+                if ui.selectable_label(saw, "Saw").clicked() && !saw {
+                    a.p[crate::acid::K_WAVE] = 0.0;
+                    ch = true;
+                }
+                if ui.selectable_label(!saw, "Square").clicked() && saw {
+                    a.p[crate::acid::K_WAVE] = 1.0;
+                    ch = true;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label("Model");
+                let vintage = a.p[crate::acid::K_MODEL] >= 0.5;
+                if ui.selectable_label(!vintage, "2.0").clicked() && vintage {
+                    a.p[crate::acid::K_MODEL] = 0.0;
+                    ch = true;
+                }
+                if ui.selectable_label(vintage, "Vintage").clicked() && !vintage {
+                    a.p[crate::acid::K_MODEL] = 1.0;
+                    ch = true;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(
+                    egui::RichText::new(
+                        "Slide is 3C, accent is 3D. The slide time is the voice's own.",
+                    )
+                    .small(),
+                );
+            });
+        }
         GenEngine::Fm(f) => {
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
@@ -572,6 +611,17 @@ fn g2_knobs(ui: &mut egui::Ui, g: &mut GenPatch) -> bool {
             crate::gen_wave::WN,
             "wv",
         ),
+        GenEngine::Acid(a) => {
+            return knob_rows(
+                ui,
+                &mut a.p,
+                &crate::acid::KNOBS,
+                &mut a.locks,
+                &(0..crate::acid::N).collect::<Vec<_>>(),
+                4,
+                "ab",
+            );
+        }
         _ => return false,
     };
     ch |= knob_rows(ui, p, defs, locks, &macros, 4, tag);

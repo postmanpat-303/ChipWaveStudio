@@ -1,12 +1,12 @@
 // ChipWave Studio - GPL-3.0-or-later
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-/// Display version (Cargo: 0.2.21+fix.0 -> "0.2.21.0"; the updater compares it part by part).
-pub const VERSION: &str = "0.2.21.0";
+/// Display version (Cargo: 0.2.22+fix.0 -> "0.2.22.0"; the updater compares it part by part).
+pub const VERSION: &str = "0.2.22.0";
 
 /// The version as shown (About, window title): a test build (the pack
 /// scripts set CW_BUILD, e.g. "combo2 8bdf40c") reads
-/// "0.2.13.0 · test build (combo2 8bdf40c)"; a release build just "0.2.21.0".
+/// "0.2.13.0 · test build (combo2 8bdf40c)"; a release build just "0.2.22.0".
 pub fn version_label() -> String {
     version_label_for(option_env!("CW_BUILD"))
 }
@@ -29,6 +29,7 @@ fn a_test_build_says_so_next_to_the_version() {
     );
 }
 
+mod acid;
 mod advedit;
 mod app;
 mod arp;
@@ -1214,7 +1215,7 @@ fn main() {
         std::process::exit(plugin::thumb::cli_capture(&args));
     }
     if args.iter().any(|a| a == "--version") {
-        println!("ChipWave Studio {}", crate::VERSION);
+        println!("ChipWave Studio {}", crate::version_label());
         return;
     }
     if let Some(i) = args.iter().position(|a| a == "--screenshot") {

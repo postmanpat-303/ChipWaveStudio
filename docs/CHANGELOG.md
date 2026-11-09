@@ -2,6 +2,16 @@
 
 Newest first. Older screenshots mentioned below live in `dist/`.
 
+## 0.2.22.0: Acid Bass
+
+Released 2026-11-09.
+
+- **Acid Bass**, a monophonic bass instrument. The oscillator and filter are the OpenRB-338 bass-line voice by pingw33n and the OpenRB-338 authors (GPL-3.0-only, commit cbca449, Copyright (C) 2026 the OpenRB-338 authors). ChipWave drives it with notes, 3C slide and 3D accent. The modified source is `third_party/openrb-303`. No drum samples, panel artwork, sequencer or mixer are included. It is not a hardware clone, and ChipWave is not affiliated with any instrument brand.
+- Songs that use Acid Bass write reader version 9. Older songs still open, and they still write their old reader version.
+- The voice runs at 44100 Hz and is resampled for other device rates. A bit-exact match to OpenRB-338 is not claimed. 3Cxx selects a slide; the slide speed is the voice's own curve.
+
+## Unreleased
+
 ## 0.2.21.0: menus for the next step of a song
 
 Released 2026-11-07. Highlights:

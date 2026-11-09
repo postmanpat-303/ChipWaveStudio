@@ -199,6 +199,28 @@ Generators (src/gen.rs, src/ladder.rs, 0.2.3.12):
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
 
+- Acid Bass (src/acid.rs, third_party/openrb-303) is the bass-line voice from
+  OpenRB-338 by pingw33n and the OpenRB-338 authors, GPL-3.0-only, commit
+  cbca4492c0224dffaa477346bc8860559f3d853f
+  https://github.com/pingw33n/openrb-338
+  Copyright (C) 2026 the OpenRB-338 authors.
+  The commit was authored by pingw33n. That is the name on the upstream
+  commit; no separate legal name is published on the GitHub account.
+  The vendored source is third_party/openrb-303 (see NOTICE there): the
+  oscillator, filter, envelope, accent and glide, and the three lookup
+  tables those need (pitch, filter, cutoff smoother), built with libm
+  0.2.16. Not included: Standard.rbm, every drum sample, panel artwork,
+  the sequencer, the song format, mod decryption, the delay, the mixer
+  and the 808/909. ChipWave maps notes, the tracker effects 3C (slide)
+  and 3D (accent), and resamples from the voice's 44100 Hz blocks.
+  This is not a claim of hardware accuracy, and ChipWave is not
+  affiliated with Propellerhead Software, Reason Studios, or any
+  instrument brand. The name on the panel is Acid Bass.
+  The voice crate is GPL-3.0-only. ChipWave's other files keep their own
+  headers. A binary that includes Acid Bass is distributed under
+  GPL-3.0 only (the "or later" term does not apply to that combination).
+  This note is not legal advice.
+
 - Analog, FM-4 and Noise generators (src/gen2.rs, 0.2.3.14) are written from
   scratch for ChipWave; no code from the projects below is copied. They were
   informed by, and ChipWave gratefully credits:

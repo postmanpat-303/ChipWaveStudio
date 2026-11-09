@@ -213,15 +213,17 @@ pub(crate) enum Builtin {
     DrumSynth,
     ChipFx,
     Voice,
+    AcidBass,
 }
 
 impl Builtin {
-    pub(crate) const ALL: [Builtin; 12] = [
+    pub(crate) const ALL: [Builtin; 13] = [
         Builtin::WaveForge,
         Builtin::DrumKit,
         Builtin::StringWave,
         Builtin::Synth,
         Builtin::Analog,
+        Builtin::AcidBass,
         Builtin::Fm4,
         Builtin::Wavetable,
         Builtin::Grid,
@@ -249,6 +251,7 @@ impl Builtin {
             Builtin::DrumSynth => "Drum Synth",
             Builtin::ChipFx => "Chip FX",
             Builtin::Voice => "Voice",
+            Builtin::AcidBass => "Acid Bass",
         }
     }
     pub(crate) fn tip(self) -> &'static str {
@@ -268,6 +271,7 @@ impl Builtin {
             Builtin::DrumSynth => "Drum Synth: a synthesized kit on the keys · starts on Psy Kit",
             Builtin::ChipFx => "Chip FX: sfxr game sounds · starts on Blip",
             Builtin::Voice => "Voice: synthetic vowels and words · starts on Choir Eee",
+            Builtin::AcidBass => "Acid Bass · monophonic bass · slide is 3C, accent is 3D",
         }
     }
     /// the browser row's glyph (`glyphs::glyph_for`)
@@ -281,6 +285,7 @@ impl Builtin {
             Builtin::Noise => "Noise",
             Builtin::ChipFx => "Chip FX",
             Builtin::Voice => "Voice",
+            Builtin::AcidBass => "Analog",
         }
     }
     /// a fresh instrument: its name and kind, on a playable preset (the
@@ -323,6 +328,7 @@ impl Builtin {
             Builtin::Noise => gen(|e| matches!(e, G::Noise(_)), "White Riser"),
             Builtin::DrumSynth => gen(|e| matches!(e, G::Kit(_)), "Psy Kit"),
             Builtin::ChipFx => gen(|e| matches!(e, G::ChipFx(_)), "Blip"),
+            Builtin::AcidBass => gen(|e| matches!(e, G::Acid(_)), "Acid Bass"),
             Builtin::Voice => Some(match crate::voice::preset("Choir Eee") {
                 Some(mut v) => {
                     v.base.name = "Choir Eee".into();

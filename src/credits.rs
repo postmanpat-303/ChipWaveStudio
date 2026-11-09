@@ -97,6 +97,10 @@ pub const CREDITS: &[Credit] = &[
         "Independent implementation, no code copied",
         "https://dood.al/pinktrombone/"),
     // Synthesis & generators
+    c(Synthesis, "OpenRB-338", "pingw33n and the OpenRB-338 authors",
+        "Acid Bass: the bass-line oscillator and filter, adapted", "GPL-3.0-only",
+        "Copyright (C) 2026 the OpenRB-338 authors. Commit cbca449 by pingw33n. Modified source is in third_party/openrb-303 (sequencer removed; ChipWave maps notes, 3C and 3D, and resamples from 44100 Hz). No drum samples, panel artwork, sequencer or mixer. Not a hardware clone and not affiliated with any brand",
+        "https://github.com/pingw33n/openrb-338"),
     c(Synthesis, crate::strings_name!(), "Del (postmanpat)",
         concat!("The ", crate::strings_name!(), " string-ensemble instrument, built in from its author's own synth"), "MIT",
         "Ported by its author; MIT notice in THIRD_PARTY_LICENSES", ""),
@@ -521,6 +525,13 @@ mod tests {
         }
         // never the full name
         assert!(!lower.contains("derek") && !lower.contains("heasley"));
+        let acid = CREDITS.iter().find(|c| c.name == "OpenRB-338").unwrap();
+        assert!(acid.by.contains("pingw33n") && acid.by.contains("OpenRB-338 authors"));
+        assert!(acid
+            .note
+            .contains("Copyright (C) 2026 the OpenRB-338 authors"));
+        assert_eq!(acid.licence, "GPL-3.0-only");
+        assert_eq!(acid.url, "https://github.com/pingw33n/openrb-338");
     }
 
     #[test]

@@ -1,0 +1,13 @@
+[package]
+name = "openrb-303"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+description = "Bass-line voice adapted from OpenRB-338 (GPL-3.0-only). Not the whole program."
+repository = "https://github.com/pingw33n/openrb-338"
+
+[dependencies]
+# Pinned. The table builders use libm's pow, cos and exp so the tables do not
+# follow the platform libm. This is the version OpenRB-338 pins.
+libm = "=0.2.16"

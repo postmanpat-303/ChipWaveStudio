@@ -451,6 +451,7 @@ fn engine_name(e: &crate::gen::GenEngine) -> &'static str {
         G::Poly(_) => crate::poly::POLY_DISPLAY_NAME,
         G::Drums(_) => "Drum Kit",
         G::Strings(_) => crate::strings::STRINGS_DISPLAY_NAME,
+        G::Acid(_) => "Acid Bass",
     }
 }
 

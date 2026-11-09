@@ -266,6 +266,33 @@ fn osc2_on(l: &Layout, i: &Instrument) -> bool {
 fn osc3_on(l: &Layout, i: &Instrument) -> bool {
     val(l, i, "an.10") > 0.0
 }
+const ACID: Spec = Spec {
+    macros: Macros::None,
+    secs: &[
+        s(
+            "Filter",
+            None,
+            &[],
+            &[
+                ("ab.1", None),
+                ("ab.2", None),
+                ("ab.3", None),
+                ("ab.4", None),
+            ],
+        ),
+        s(
+            "Voice",
+            None,
+            &[],
+            &[
+                ("ab.0", None),
+                ("ab.5", None),
+                ("ab.6", None),
+                ("ab.7", None),
+            ],
+        ),
+    ],
+};
 const ANALOG: Spec = Spec {
     macros: Macros::Curated(ANALOG_MACROS),
     secs: &[
@@ -552,6 +579,7 @@ pub(crate) fn spec(tag: &str) -> &'static Spec {
         "Synth" | "Moog" => &SYNTH,
         "Voice" => &VOICE,
         "Analog" => &ANALOG,
+        "Acid Bass" => &ACID,
         "Wave" => &WAVE,
         "Drum" => &DRUM,
         "Kit" => &KIT,

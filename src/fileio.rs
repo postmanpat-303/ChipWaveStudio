@@ -164,7 +164,9 @@ pub fn save_cwt(song: &Song, path: &Path) -> Result<(), String> {
                 t.tracks.iter().any(|x| !x.auto.is_empty())
                     || t.clips.iter().any(|c| !c.auto.is_empty())
             });
-        let min_reader = if needs_reader_8(song) {
+        let min_reader = if needs_reader_9(song) {
+            9
+        } else if needs_reader_8(song) {
             8
         } else if needs_reader_7(song) {
             7
@@ -428,8 +430,16 @@ pub fn sanitize_modulation(
 /// with a new generator engine (WaveForge, Drum Kit) write 5; songs with
 /// Clip Arranger clips of their own (launcher clips) write 6; songs with a
 /// Split (Nested Device Chains) or a rack instrument write 7; songs with a
-/// StringWave instrument write 8.
-pub const READER_VERSION: u32 = 8;
+/// StringWave instrument write 8; songs with an Acid Bass instrument write 9.
+pub const READER_VERSION: u32 = 9;
+
+/// Version 9: an Acid Bass instrument (`GenEngine::Acid`), which an older
+/// reader does not know. Every other song keeps writing its old version.
+pub fn needs_reader_9(song: &Song) -> bool {
+    song.instruments.iter().any(|i| {
+        matches!(&i.kind, InstrumentKind::Gen(g) if matches!(g.engine, crate::gen::GenEngine::Acid(_)))
+    })
+}
 
 /// Version 8: a StringWave instrument (a generator engine an older reader
 /// does not know). Every other song keeps writing its old version.
@@ -1661,12 +1671,12 @@ mod tests {
         with_manifest(
             &src,
             &newer,
-            Some("format = \"chipwave-song\"\nformat_version = 4\nmin_reader_version = 9\n"),
+            Some("format = \"chipwave-song\"\nformat_version = 4\nmin_reader_version = 10\n"),
         );
         let e = load_cwt(&newer).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(
-            e.contains("reader version 9") && e.contains("Check for updates"),
+            e.contains("reader version 10") && e.contains("Check for updates"),
             "{e}"
         );
         // a missing or odd manifest is treated as version 1
@@ -1678,7 +1688,7 @@ mod tests {
         // text songs: the same rule
         let t = include_str!("../demos/first_run.cwt.toml");
         assert!(song_from_text(t).is_ok());
-        let e = song_from_text(&format!("min_reader_version = 9\n{t}")).unwrap_err();
+        let e = song_from_text(&format!("min_reader_version = 10\n{t}")).unwrap_err();
         assert!(is_too_new(&e), "{e}");
         assert!(!is_too_new("zip error"));
         std::fs::remove_dir_all(&dir).ok();

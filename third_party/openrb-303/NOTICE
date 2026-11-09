@@ -1,0 +1,85 @@
+OpenRB-303 — bass-line voice adapted from OpenRB-338
+==========================================================
+
+Source
+  Project:  OpenRB-338
+  URL:      https://github.com/pingw33n/openrb-338
+  Commit:   cbca4492c0224dffaa477346bc8860559f3d853f
+  Licence:  GNU General Public License v3.0 only (GPL-3.0-only)
+  Copyright: Copyright (C) 2026 the OpenRB-338 authors
+  Commit author: pingw33n (https://github.com/pingw33n)
+  The copyright line above is the project's own notice. pingw33n is the
+  author of the upstream commit this directory was taken from. GitHub
+  does not publish a legal name for that account, so none is added here.
+  The GPL-3.0 licence text is the LICENSE file in this directory.
+
+This is not OpenRB-338, and it is not a product of Propellerhead Software
+or Reason Studios. ReBirth RB-338 is a trademark of Propellerhead Software
+(now Reason Studios). Nothing here is a hardware clone, and ChipWave is
+not affiliated with those names. The instrument ChipWave shows is called
+Acid Bass.
+
+What was copied, and from which files
+  crates/orb-engine/src/tb303.rs
+    The voice: oscillator, 18 dB filter, envelope, accent, glide, the
+    2.0 block (`process_20`) and the Vintage block (`process_vintage`),
+    note on, note off, silence, the live parameter write, and the
+    model switch. The arithmetic is the upstream arithmetic, including
+    the f64 evaluation and the f32 stores.
+    Removed from that file before it was vendored: the 32 patterns, the
+    step sequencer (`step`), SongDevice, ChannelDevice, song mode, and
+    pattern load. Those functions are not compiled.
+  crates/orb-engine/src/tables/mod.rs
+    Only `tb303_pitch`, `tb303_filter`, `tb303_smoother`, and the
+    private `smoother()` helper those three use, plus the constants and
+    the f32 store (`st`) they use. The builders call libm's `pow`, `cos`
+    and `exp`.
+
+Transitive files that were reviewed and not copied
+  The voice functions call only the three tables above and helpers in
+  the same file (`square_n`, `clamp_c`, `st`, `Voice::sample`). They do
+  not call the drum engines, the delay, the mixer, the distortion, the
+  PCF filters, the sample player, or the sequencer.
+  The table builders call only libm. They do not read Standard.rbm or
+  any other asset.
+  libm 0.2.16 is a normal dependency (MIT), pinned to the version
+  OpenRB-338 pins, and is not vendored as source.
+
+What was deliberately left out
+  assets/Standard.rbm and every drum sample
+  panel artwork and the orb-ui / orb-ui-art crates
+  the sequencer, the song format, and the rbs / rbm crates
+  mod decryption
+  the global delay, the mixer, the compressor, and the distortion
+  the PCF filters and the 808 / 909 engines and their tables
+  orb-cli, orb-player, and orb-testkit
+
+Adaptations (not in the upstream file)
+  The pattern memory and the device traits are gone, so this crate
+  cannot load a ReBirth song or run the original sequencer.
+  Three table indexes are saturated so a value outside the upstream
+  range cannot panic the audio thread. Inside the ranges the voice
+  already produces, the index is the upstream index. The sites are
+  marked ADAPT in src/voice.rs.
+  ChipWave, outside this crate, maps notes onto this voice, turns the
+  tracker effects 3C and 3D into slide and accent, trims the level, and
+  resamples from the voice's 44100 Hz blocks to the device rate. That
+  code is ChipWave's and is not part of OpenRB-338. It is not claimed
+  to match any recording bit for bit. OpenRB-338's own bit-exact claim
+  is about its full engine; this extract has not been checked against
+  a ReBirth export.
+  One mapping note: the voice glides when the previous note's slide
+  flag is set (a 303 pattern puts the flag on the note you leave).
+  ChipWave's 3C is on the note you land on, so ChipWave raises the flag
+  before that note and clears it again. The glide arithmetic is unchanged.
+
+Licence consequence
+  This crate is GPL-3.0-only. ChipWave's other source files keep their
+  own headers (GPL-3.0-or-later, and the notices of their own authors).
+  Nothing in this directory relicences those files.
+  A ChipWave binary that links this crate is a combined work. The
+  reading followed here (not legal advice) is that the binary is
+  distributed under GPL-3.0 only, because this component is GPL-3.0
+  only and does not offer the "or any later version" term.
+  The source of this component is in this directory of the ChipWave
+  repository, which is the corresponding source for the voice.

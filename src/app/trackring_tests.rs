@@ -254,6 +254,7 @@ fn the_track_pie_follows_what_the_track_plays() {
         "StringWave",
         "Synth",
         "Analog",
+        "Acid Bass",
         "FM-4",
         "Wavetable",
         "Grid",

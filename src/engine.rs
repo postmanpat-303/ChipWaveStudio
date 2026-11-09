@@ -592,6 +592,8 @@ impl Engine {
     pub fn new(sr: f32) -> Self {
         // the built-in wavetables (once per process, off the audio thread)
         crate::wavetable::init();
+        // Acid Bass tables, so the audio thread only reads them
+        openrb_303::warm();
         Self {
             sr,
             playing: false,
@@ -1607,9 +1609,24 @@ impl Engine {
                 .get(c.instr)
                 .map(|i| i.transpose)
                 .unwrap_or(0);
-            c.glide_to = note_freq((cell.note as i32 + t as i32).clamp(1, 127) as u8);
-            // exponential approach in log frequency, ~99 % there after glide_s
-            c.glide_k = 1.0 - (-4.6 / (glide_s.max(0.001) * self.sr)).exp();
+            let dest = note_freq((cell.note as i32 + t as i32).clamp(1, 127) as u8);
+            let acid = matches!(
+                song.instruments.get(c.instr).map(|i| &i.kind),
+                Some(crate::model::InstrumentKind::Gen(g))
+                    if matches!(g.engine, crate::gen::GenEngine::Acid(_))
+            );
+            if acid {
+                // The voice glides on its own curve. 3Cxx (except 3C00) and
+                // Legato mean "slide"; the xx time is not the voice's speed.
+                // Accent is cleared here so only a 3D on this row accents it.
+                c.freq = dest;
+                c.glide_to = 0.0;
+                c.synth.accent = 0.0;
+            } else {
+                c.glide_to = dest;
+                // exponential approach in log frequency, ~99 % there after glide_s
+                c.glide_k = 1.0 - (-4.6 / (glide_s.max(0.001) * self.sr)).exp();
+            }
         } else if cell.note > 0 && c.instr != usize::MAX {
             c.gate = true;
             c.glide_to = 0.0;
