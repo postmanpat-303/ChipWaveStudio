@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-egui%20%2B%20cpal-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/Free%20for%20Windows%2C%20Mac%20%26%20Linux-0a84ff" alt="Free for Windows, Mac & Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0-ff2bd6" alt="GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.21.0-00d0ff" alt="Version 0.2.21.0">
+  <img src="https://img.shields.io/badge/version-0.2.22.0-00d0ff" alt="Version 0.2.22.0">
   <a href="https://www.youtube.com/@whatgoesaround1551"><img src="https://img.shields.io/badge/YouTube-demos%20%26%20promos-ff0000?logo=youtube&logoColor=white" alt="YouTube: demos and promos"></a>
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><img src="https://img.shields.io/github/v/release/postmanpat-303/ChipWaveStudio?label=release&color=7c4dff" alt="Latest release"></a>
 </p>
@@ -36,7 +36,7 @@
 <p align="center">
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest"><b>⬇ Download latest for Windows</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/postmanpat-303/ChipWaveStudio/releases/latest/download/ChipWave-macos-universal.dmg"><b>⬇ macOS</b></a> <sub>(<a href="docs/MACOS.md">first launch</a>)</sub> &nbsp;·&nbsp;
-  <a href="#new"><b>New in 0.2.21.0</b></a> &nbsp;·&nbsp;
+  <a href="#new"><b>New in 0.2.22.0</b></a> &nbsp;·&nbsp;
   <a href="docs/manual/ChipWave-Studio-User-Manual.pdf"><b>User manual (PDF)</b></a> &nbsp;·&nbsp;
   <a href="#features"><b>Features</b></a> &nbsp;·&nbsp;
   <a href="#themes"><b>Themes</b></a> &nbsp;·&nbsp;
@@ -52,6 +52,12 @@
 All pictures on this page are real captures of the current build (no mockups). They were made with `scripts/screenshots.sh` and `scripts/record_gifs.sh`.
 
 <a id="new"></a>
+## New in 0.2.22.0: Acid Bass
+
+- **Acid Bass** is a monophonic bass in the Rack and on Add track. Slide with 3C, accent with 3D, and automate cutoff, resonance, envelope, decay, accent, wave and the 2.0 / Vintage model.
+- The voice is from [OpenRB-338](https://github.com/pingw33n/openrb-338) by pingw33n and the OpenRB-338 authors, Copyright (C) 2026 the OpenRB-338 authors, GPL-3.0-only, commit cbca449. ChipWave's adaptation is in `third_party/openrb-303`. No drum samples, panel artwork, sequencer or mixer are included. It is not a hardware clone, and ChipWave is not affiliated with any instrument brand.
+- Older songs open as before. A song that uses Acid Bass needs ChipWave 0.2.22.0 or later.
+
 ## New in 0.2.21.0: menus for the next step of a song
 
 - **Eight places, every time.** Right-click a track, a clip, an empty lane, a Rack instrument or effect, or an automation lane. Make, repeat, edit, sound, time, look, hear and remove stay in the same places. Empty places stay empty. A › choice replaces the ring, and Back is always the lower left.

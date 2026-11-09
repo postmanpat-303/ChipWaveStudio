@@ -200,10 +200,12 @@ Generators (src/gen.rs, src/ladder.rs, 0.2.3.12):
   SOFTWARE.
 
 - Acid Bass (src/acid.rs, third_party/openrb-303) is the bass-line voice from
-  OpenRB-338 by the OpenRB-338 authors, GPL-3.0-only, commit
+  OpenRB-338 by pingw33n and the OpenRB-338 authors, GPL-3.0-only, commit
   cbca4492c0224dffaa477346bc8860559f3d853f
   https://github.com/pingw33n/openrb-338
   Copyright (C) 2026 the OpenRB-338 authors.
+  The commit was authored by pingw33n. That is the name on the upstream
+  commit; no separate legal name is published on the GitHub account.
   The vendored source is third_party/openrb-303 (see NOTICE there): the
   oscillator, filter, envelope, accent and glide, and the three lookup
   tables those need (pitch, filter, cutoff smoother), built with libm
